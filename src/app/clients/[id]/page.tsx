@@ -7,52 +7,46 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import React, { use, useEffect, useState } from 'react';
+import React, { use, useEffect } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 
 export default function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { userInfo, loading: authLoading } = useAuth();
-  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
 
   const client = clients.find((c) => c.id === id);
 
-  useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-
-    if (!userInfo) {
-      return;
-    }
-    
-    if (!client) {
-      notFound();
-      return;
-    }
-
-    const isOwner = client.ownerId === userInfo.id;
-    const isAdmin = userInfo.role === 'Administracion';
-    const isJefe = userInfo.role === 'Jefe';
-    
-    if (isOwner || isAdmin || isJefe) {
-      setHasAccess(true);
-    } else {
-      setHasAccess(false);
-      router.push('/clients');
-    }
-  }, [authLoading, userInfo, id, router]); // Se elimina 'client' de las dependencias
-
-
-  if (authLoading || hasAccess === null) {
+  if (authLoading) {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
   }
 
-  if (!client || !hasAccess) {
+  if (!userInfo) {
+    // This case should be handled by the AuthProvider, but as a fallback:
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
   }
-  
+
+  if (!client) {
+    notFound();
+    return null;
+  }
+
+  const isOwner = client.ownerId === userInfo.id;
+  const isAdmin = userInfo.role === 'Administracion';
+  const isJefe = userInfo.role === 'Jefe';
+  const hasAccess = isOwner || isAdmin || isJefe;
+
+  if (!hasAccess) {
+     // We use useEffect to redirect on the client side after the initial render.
+     // This prevents errors and ensures navigation happens correctly.
+    useEffect(() => {
+        router.push('/clients');
+    }, [router]);
+
+    // Render a loading state while redirecting
+    return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
+  }
+
   const clientOpportunities = opportunities.filter(
     (o) => o.clientId === client.id
   );
