@@ -1,30 +1,7 @@
 'use server';
 
-import {
-  forecastSales as forecastSalesFlow,
-  type SalesForecastingInput,
-  type SalesForecastingOutput,
-} from '@/ai/flows/sales-forecasting';
 import { opportunities } from './data';
 
-type ForecastResult = {
-  success: boolean;
-  data?: SalesForecastingOutput;
-  error?: string;
-};
-
-export async function getSalesForecast(
-  input: SalesForecastingInput
-): Promise<ForecastResult> {
-  try {
-    const result = await forecastSalesFlow(input);
-    return { success: true, data: result };
-  } catch (error) {
-    console.error('Error during sales forecasting:', error);
-    // In a real app, you might want to log this error to a monitoring service
-    return { success: false, error: 'An unexpected error occurred while generating the forecast.' };
-  }
-}
 
 export function getMockForecastingData() {
   const pipelineData = JSON.stringify(

@@ -9,7 +9,7 @@ import {
   SidebarMenuButton,
   SidebarFooter,
 } from '@/components/ui/sidebar';
-import { Home, Kanban, Users, Target, Settings, LifeBuoy } from 'lucide-react';
+import { Home, Kanban, Users, Settings, LifeBuoy } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
@@ -17,7 +17,6 @@ const menuItems = [
   { href: '/', label: 'Dashboard', icon: Home },
   { href: '/opportunities', label: 'Opportunities', icon: Kanban },
   { href: '/clients', label: 'Clients', icon: Users },
-  { href: '/forecasting', label: 'Forecasting', icon: Target },
 ];
 
 export function AppSidebar() {
