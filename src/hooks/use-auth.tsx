@@ -2,32 +2,43 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
+import { users } from '@/lib/data';
+import type { User } from '@/lib/types';
 
 interface AuthContextType {
-  user: User | null;
+  user: FirebaseUser | null;
+  userInfo: User | null;
   loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  userInfo: null,
   loading: true,
 });
 
 const publicRoutes = ['/login', '/register'];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userInfo, setUserInfo] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        const appUser = users.find(u => u.email === firebaseUser.email);
+        setUserInfo(appUser || null);
+      } else {
+        setUserInfo(null);
+      }
       setLoading(false);
     });
 
@@ -67,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (user || isPublicRoute) {
     return (
-      <AuthContext.Provider value={{ user, loading }}>
+      <AuthContext.Provider value={{ user, userInfo, loading }}>
         {children}
       </AuthContext.Provider>
     );

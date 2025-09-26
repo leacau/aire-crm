@@ -29,7 +29,7 @@ export default function ClientsPage() {
               <TableRow>
                 <TableHead className="w-[80px]">Avatar</TableHead>
                 <TableHead>Compañía</TableHead>
-                <TableHead>Contacto</TableHead>
+                <TableHead>Contacto Principal</TableHead>
                 <TableHead>Negocios Abiertos</TableHead>
                 <TableHead>Valor Total</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
@@ -38,7 +38,7 @@ export default function ClientsPage() {
             <TableBody>
               {clients.map((client) => {
                 const clientOpps = opportunities.filter(
-                  (opp) => opp.clientId === client.id && opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost'
+                  (opp) => opp.clientId === client.id && opp.stage !== 'Cerrado - Ganado' && opp.stage !== 'Cerrado - Perdido'
                 );
                 const totalValue = clientOpps.reduce(
                   (acc, opp) => acc + opp.value,

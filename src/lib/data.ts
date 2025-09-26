@@ -1,9 +1,10 @@
 import type { User, Client, Opportunity, OpportunityStage, Activity, Person } from './types';
 
 export const users: User[] = [
-  { id: 'user-1', name: 'Alex Morgan', avatarUrl: 'https://picsum.photos/seed/user1/40/40', initials: 'AM' },
-  { id: 'user-2', name: 'Ben Carter', avatarUrl: 'https://picsum.photos/seed/user2/40/40', initials: 'BC' },
-  { id: 'user-3', name: 'Chloe Davis', avatarUrl: 'https://picsum.photos/seed/user3/40/40', initials: 'CD' },
+  { id: 'user-1', name: 'Alex Morgan', email: 'alex.morgan@example.com', avatarUrl: 'https://picsum.photos/seed/user1/40/40', initials: 'AM', role: 'Asesor' },
+  { id: 'user-2', name: 'Ben Carter', email: 'ben.carter@example.com', avatarUrl: 'https://picsum.photos/seed/user2/40/40', initials: 'BC', role: 'Asesor' },
+  { id: 'user-3', name: 'Chloe Davis', email: 'chloe.davis@example.com', avatarUrl: 'https://picsum.photos/seed/user3/40/40', initials: 'CD', role: 'Jefe' },
+  { id: 'user-4', name: 'David Evans', email: 'david.evans@example.com', avatarUrl: 'https://picsum.photos/seed/user4/40/40', initials: 'DE', role: 'Administracion' },
 ];
 
 export const people: Person[] = [
@@ -24,6 +25,7 @@ export const clients: Client[] = [
     avatarUrl: 'https://picsum.photos/seed/client1/40/40',
     avatarFallback: 'GM',
     personIds: ['person-1', 'person-4'],
+    ownerId: 'user-1',
   },
   {
     id: 'client-2',
@@ -34,6 +36,7 @@ export const clients: Client[] = [
     avatarUrl: 'https://picsum.photos/seed/client2/40/40',
     avatarFallback: 'IS',
     personIds: ['person-2'],
+    ownerId: 'user-2',
   },
   {
     id: 'client-3',
@@ -44,6 +47,7 @@ export const clients: Client[] = [
     avatarUrl: 'https://picsum.photos/seed/client3/40/40',
     avatarFallback: 'QL',
     personIds: ['person-3'],
+    ownerId: 'user-1',
   },
     {
     id: 'client-4',
@@ -54,6 +58,7 @@ export const clients: Client[] = [
     avatarUrl: 'https://picsum.photos/seed/client4/40/40',
     avatarFallback: 'SP',
     personIds: ['person-4'],
+    ownerId: 'user-2',
   },
     {
     id: 'client-5',
@@ -64,6 +69,7 @@ export const clients: Client[] = [
     avatarUrl: 'https://picsum.photos/seed/client5/40/40',
     avatarFallback: 'AD',
     personIds: ['person-5'],
+    ownerId: 'user-1',
   },
 ];
 

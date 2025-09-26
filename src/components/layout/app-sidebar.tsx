@@ -10,7 +10,7 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, Kanban, Users, Settings, LifeBuoy } from 'lucide-react';
+import { Home, Kanban, Users } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
@@ -61,20 +61,6 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
-        <SidebarMenu>
-           <SidebarMenuItem>
-            <SidebarMenuButton tooltip={{ children: 'Ajustes', side: 'right' }}>
-              <Settings />
-              <span>Ajustes</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton tooltip={{ children: 'Soporte', side: 'right' }}>
-              <LifeBuoy />
-              <span>Soporte</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );

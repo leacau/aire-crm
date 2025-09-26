@@ -12,7 +12,6 @@ import {
   Briefcase,
   Mail,
   Phone,
-  User as UserIcon,
   PlusCircle,
   Edit,
   Trash2,
@@ -29,7 +28,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '../ui/button';
-import { opportunityStages } from '@/lib/data';
+import { opportunityStages, users } from '@/lib/data';
 import { OpportunityDetailsDialog } from '../opportunities/opportunity-details-dialog';
 import React from 'react';
 import {
@@ -40,6 +39,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { OpportunityStage } from '@/lib/types';
+import { useAuth } from '@/hooks/use-auth';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { MoreHorizontal } from 'lucide-react';
+
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'bg-blue-500',
@@ -59,18 +67,11 @@ const activityIcons: Record<Activity['type'], React.ReactNode> = {
 const WhatsappIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
     viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="h-4 w-4"
+    fill="currentColor"
+    className="h-5 w-5"
   >
-    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-    <path d="M14.05 14.05a2 2 0 0 0-2.83 0L10 15.22a3.76 3.76 0 0 1-5.29-5.29l1.22-1.22a2 2 0 0 0 0-2.83L5.47 5.47a2 2 0 0 0-2.83 0L2 6.13a7.51 7.51 0 0 0 10.6 10.6l.66-.66a2 2 0 0 0 0-2.83l-.45-.45Z" />
+    <path d="M16.6 14.2l-1.5-0.7c-0.3-0.1-0.5-0.1-0.8 0.1l-0.7 0.8c-1.5-0.8-2.8-2-3.6-3.6l0.8-0.7c0.2-0.2 0.2-0.5 0.1-0.8l-0.7-1.5c-0.1-0.3-0.4-0.5-0.8-0.5h-1.6c-0.4 0-0.8 0.4-0.8 0.8C7 9.8 9.2 16 15.2 16c0.4 0 0.8-0.3 0.8-0.8v-1.6c0-0.4-0.2-0.7-0.5-0.8z" />
   </svg>
 );
 
@@ -80,7 +81,6 @@ export function ClientDetails({
   opportunities: initialOpportunities,
   activities,
   people,
-  users,
 }: {
   client: Client;
   opportunities: Opportunity[];
@@ -88,8 +88,14 @@ export function ClientDetails({
   people: Person[];
   users: User[];
 }) {
+  const { userInfo } = useAuth();
   const [opportunities, setOpportunities] = React.useState(initialOpportunities);
   const [selectedOpportunity, setSelectedOpportunity] = React.useState<Opportunity | null>(null);
+
+  const canEdit = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor';
+  const canDelete = userInfo?.role === 'Jefe';
+  const canReassign = userInfo?.role === 'Jefe' || userInfo?.role === 'Administracion';
+
 
   const handleOpportunityUpdate = (updatedOpp: Opportunity) => {
     setOpportunities(prev => prev.map(opp => opp.id === updatedOpp.id ? updatedOpp : opp));
@@ -97,6 +103,7 @@ export function ClientDetails({
   };
 
   const handleStageChange = (opportunityId: string, newStage: OpportunityStage) => {
+    if (!canEdit) return;
     setOpportunities(prev => prev.map(opp => opp.id === opportunityId ? { ...opp, stage: newStage } : opp));
   };
 
@@ -137,10 +144,12 @@ export function ClientDetails({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Contactos</CardTitle>
-            <Button variant="outline" size="sm">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Añadir Persona
-            </Button>
+            {canEdit && (
+              <Button variant="outline" size="sm">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Añadir Persona
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             {people.map(person => (
@@ -155,7 +164,7 @@ export function ClientDetails({
                     <>
                      <Button asChild variant="ghost" size="icon" className="h-8 w-8">
                         <a href={`tel:${person.phone}`}>
-                          <PhoneCall />
+                          <PhoneCall className="h-4 w-4" />
                         </a>
                       </Button>
                       <Button asChild variant="ghost" size="icon" className="h-8 w-8">
@@ -165,12 +174,8 @@ export function ClientDetails({
                       </Button>
                     </>
                   )}
-                   <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                  {canEdit && <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-4 w-4" /></Button>}
+                  {canDelete && <Button variant="ghost" size="icon" className="h-8 w-8"><Trash2 className="h-4 w-4 text-destructive" /></Button>}
                 </div>
               </div>
             ))}
@@ -180,10 +185,12 @@ export function ClientDetails({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Oportunidades</CardTitle>
-             <Button variant="outline" size="sm">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Añadir Oportunidad
-            </Button>
+            {canEdit && (
+               <Button variant="outline" size="sm">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Añadir Oportunidad
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             <Table>
@@ -192,6 +199,7 @@ export function ClientDetails({
                   <TableHead>Título</TableHead>
                   <TableHead>Valor</TableHead>
                   <TableHead className="w-[150px]">Etapa</TableHead>
+                   { (canReassign || canDelete) && <TableHead className="w-[50px]"></TableHead> }
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -208,6 +216,7 @@ export function ClientDetails({
                        <Select
                           value={opp.stage}
                           onValueChange={(newStage: OpportunityStage) => handleStageChange(opp.id, newStage)}
+                          disabled={!canEdit}
                         >
                           <SelectTrigger className="w-full h-8 text-xs">
                              <SelectValue>
@@ -229,6 +238,21 @@ export function ClientDetails({
                           </SelectContent>
                         </Select>
                     </TableCell>
+                     {(canReassign || canDelete) && (
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            {canReassign && <DropdownMenuItem>Reasignar</DropdownMenuItem>}
+                            {canDelete && <DropdownMenuItem className="text-destructive">Eliminar</DropdownMenuItem>}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

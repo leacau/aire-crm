@@ -34,6 +34,7 @@ export type Client = {
   avatarUrl: string;
   avatarFallback: string;
   personIds: string[];
+  ownerId: string;
 };
 
 export type Activity = {
@@ -46,9 +47,13 @@ export type Activity = {
   opportunityId?: string;
 };
 
+export type UserRole = 'Asesor' | 'Administracion' | 'Jefe';
+
 export type User = {
   id: string;
   name:string;
+  email: string;
   avatarUrl: string;
   initials: string;
+  role: UserRole;
 };
