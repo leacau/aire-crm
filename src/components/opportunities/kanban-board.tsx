@@ -32,15 +32,14 @@ const stageColors: Record<OpportunityStage, string> = {
 const KanbanColumn = ({
   stage,
   opportunities,
-  onOpportunityUpdate,
-  onDrop,
+  onCardDrop,
 }: {
   stage: OpportunityStage;
   opportunities: Opportunity[];
-  onOpportunityUpdate: (opp: Opportunity) => void;
-  onDrop: (stage: OpportunityStage) => void;
+  onCardDrop: (e: React.DragEvent<HTMLDivElement>, stage: OpportunityStage) => void;
 }) => {
   const columnTotal = opportunities.reduce((sum, opp) => sum + opp.value, 0);
+  const [draggedOpportunityId, setDraggedOpportunityId] = React.useState<string | null>(null);
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -48,9 +47,12 @@ const KanbanColumn = ({
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    onDrop(stage);
+    onCardDrop(e, stage);
   };
-
+  
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, oppId: string) => {
+    e.dataTransfer.setData('opportunityId', oppId);
+  };
 
   return (
     <div
@@ -71,7 +73,7 @@ const KanbanColumn = ({
         className={`flex-1 space-y-3 p-2 rounded-lg bg-secondary/50 border-t-4 ${stageColors[stage]}`}
       >
         {opportunities.map((opp) => (
-          <KanbanCard key={opp.id} opportunity={opp} onOpportunityUpdate={onOpportunityUpdate} />
+          <KanbanCard key={opp.id} opportunity={opp} onDragStart={(e) => handleDragStart(e, opp.id)} />
         ))}
         {opportunities.length === 0 && (
             <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
@@ -83,24 +85,24 @@ const KanbanColumn = ({
   );
 };
 
-const KanbanCard = ({ opportunity, onOpportunityUpdate }: { opportunity: Opportunity, onOpportunityUpdate: (opp: Opportunity) => void; }) => {
+const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, onDragStart: (e: React.DragEvent<HTMLDivElement>) => void; }) => {
   const owner = users.find((user) => user.id === opportunity.ownerId);
+  const { userInfo } = useAuth();
   const [isDetailsOpen, setIsDetailsOpen] = React.useState(false);
 
+  // This should be replaced with a proper state management solution
   const handleUpdate = (updatedOpp: Opportunity) => {
-    onOpportunityUpdate(updatedOpp);
-    setIsDetailsOpen(false);
+     window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: updatedOpp }));
+     setIsDetailsOpen(false);
   }
-
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    e.dataTransfer.setData('opportunityId', opportunity.id);
-  };
+  
+  const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor';
 
   return (
     <>
       <Card 
-        draggable
-        onDragStart={handleDragStart}
+        draggable={canDrag}
+        onDragStart={onDragStart}
         className="hover:shadow-md transition-shadow duration-200 cursor-pointer"
         onClick={() => setIsDetailsOpen(true)}
       >
@@ -140,60 +142,67 @@ const KanbanCard = ({ opportunity, onOpportunityUpdate }: { opportunity: Opportu
           </div>
         </CardContent>
       </Card>
-      <OpportunityDetailsDialog
-        opportunity={opportunity}
-        isOpen={isDetailsOpen}
-        onOpenChange={setIsDetailsOpen}
-        onUpdate={handleUpdate}
-      />
+      {isDetailsOpen && (
+         <OpportunityDetailsDialog
+          opportunity={opportunity}
+          isOpen={isDetailsOpen}
+          onOpenChange={setIsDetailsOpen}
+          onUpdate={handleUpdate}
+        />
+      )}
     </>
   );
 };
 
 export function KanbanBoard() {
-  const { user } = useAuth();
-  const currentUser = users.find(u => u.email === user?.email);
+  const { userInfo } = useAuth();
 
-  const getVisibleOpportunities = () => {
-    if (!currentUser) return [];
-    if (currentUser.role === 'Jefe' || currentUser.role === 'Administracion') {
+  const getVisibleOpportunities = React.useCallback(() => {
+    if (!userInfo) return [];
+    if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
       return allOpportunities;
     }
     // Asesor
-    const myClientIds = clients.filter(c => c.ownerId === currentUser.id).map(c => c.id);
+    const myClientIds = clients.filter(c => c.ownerId === userInfo.id).map(c => c.id);
     return allOpportunities.filter(opp => myClientIds.includes(opp.clientId));
-  };
+  }, [userInfo]);
   
-  const [opportunities, setOpportunities] = React.useState(getVisibleOpportunities);
+  const [opportunities, setOpportunities] = React.useState(getVisibleOpportunities());
   
   React.useEffect(() => {
     setOpportunities(getVisibleOpportunities());
-  }, [user, currentUser]);
+  }, [userInfo, getVisibleOpportunities]);
 
-
-  const handleOpportunityUpdate = (updatedOpportunity: Opportunity) => {
+  React.useEffect(() => {
+    const handleUpdate = (e: Event) => {
+      const updatedOpportunity = (e as CustomEvent).detail;
       setOpportunities(prevOpps => 
           prevOpps.map(opp => opp.id === updatedOpportunity.id ? updatedOpportunity : opp)
       );
-  };
-  
-  const handleDrop = (newStage: OpportunityStage, e: React.DragEvent<HTMLDivElement>) => {
+    };
+
+    window.addEventListener('opportunityUpdated', handleUpdate);
+    return () => {
+      window.removeEventListener('opportunityUpdated', handleUpdate);
+    };
+  }, []);
+
+  const handleCardDrop = (e: React.DragEvent<HTMLDivElement>, newStage: OpportunityStage) => {
     const opportunityId = e.dataTransfer.getData('opportunityId');
     const oppToMove = opportunities.find(opp => opp.id === opportunityId);
 
     if (oppToMove && oppToMove.stage !== newStage) {
-        // Role Check: 'Administracion' can't modify.
-      if (currentUser?.role === 'Administracion') {
-        // Maybe show a toast message here in a real app
+      if (userInfo?.role === 'Administracion') {
         console.warn("Admins cannot modify opportunities.");
         return;
       }
       
       const updatedOpportunity = { ...oppToMove, stage: newStage };
-      handleOpportunityUpdate(updatedOpportunity);
+       setOpportunities(prevOpps => 
+          prevOpps.map(opp => opp.id === updatedOpportunity.id ? updatedOpportunity : opp)
+      );
     }
   };
-
 
   return (
     <div className="p-4 md:p-6 lg:p-8 h-full flex gap-6 overflow-x-auto">
@@ -202,33 +211,9 @@ export function KanbanBoard() {
           key={stage}
           stage={stage}
           opportunities={opportunities.filter((opp) => opp.stage === stage)}
-          onOpportunityUpdate={handleOpportunityUpdate}
-          onDrop={(newStage) => {
-            // This is a bit of a hack to get the event. We need to store the dragged item.
-            const draggedOppId = (window as any).draggedOppId;
-            if (draggedOppId) {
-                const oppToMove = opportunities.find(opp => opp.id === draggedOppId);
-                if (oppToMove && oppToMove.stage !== newStage) {
-                    if (currentUser?.role === 'Administracion') {
-                        console.warn("Admins cannot modify opportunities.");
-                        return;
-                    }
-                    const updatedOpportunity = { ...oppToMove, stage: newStage };
-                    handleOpportunityUpdate(updatedOpportunity);
-                }
-            }
-          }}
+          onCardDrop={handleCardDrop}
         />
       ))}
     </div>
   );
-}
-
-// Attach dragged item ID to window for drop handler access
-if (typeof window !== 'undefined') {
-  window.addEventListener('dragstart', (e) => {
-    if (e.dataTransfer) {
-      (window as any).draggedOppId = e.dataTransfer.getData('opportunityId');
-    }
-  });
 }
