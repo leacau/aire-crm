@@ -7,53 +7,57 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import React, { use } from 'react';
+import React, { use, useEffect, useState } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 
-function ClientPageContent({ id }: { id: string }) {
+export default function ClientPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const { userInfo, loading: authLoading } = useAuth();
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
 
   const client = clients.find((c) => c.id === id);
 
-  const [hasAccess, setHasAccess] = React.useState<boolean | null>(null);
+  useEffect(() => {
+    if (authLoading) {
+      return; // Espera a que termine la carga de la autenticación
+    }
 
-  React.useEffect(() => {
-    if (authLoading) return;
-
-    if (!userInfo || !client) {
-      if (!client) {
-        notFound();
-      }
+    if (!client) {
+      notFound();
       return;
+    }
+    
+    if (!userInfo) {
+       // Si no hay info de usuario después de cargar, podría ser un error o no estar logueado.
+       // El hook useAuth ya debería redirigir, pero por si acaso.
+       router.push('/login');
+       return;
     }
 
     const isOwner = client.ownerId === userInfo.id;
     const isAdmin = userInfo.role === 'Administracion';
     const isJefe = userInfo.role === 'Jefe';
-
+    
     if (isOwner || isAdmin || isJefe) {
       setHasAccess(true);
     } else {
       setHasAccess(false);
+      // Redirigir si no tiene acceso
       router.push('/clients');
     }
-  }, [userInfo, authLoading, client, router, id]);
+  }, [id, authLoading, userInfo, client, router]);
 
-  if (hasAccess === null || authLoading) {
+
+  if (authLoading || hasAccess === null) {
+    return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
+  }
+
+  if (!client || !hasAccess) {
+    // Muestra un spinner mientras redirige o si no se encontró el cliente
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
   }
   
-  if (hasAccess === false) {
-    // We are redirecting, so we can show a spinner or null
-    return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
-  }
-  
-  if (!client) {
-    // This will likely not be hit due to the check above, but it's good practice
-    return notFound();
-  }
-
   const clientOpportunities = opportunities.filter(
     (o) => o.clientId === client.id
   );
@@ -81,10 +85,4 @@ function ClientPageContent({ id }: { id: string }) {
       </main>
     </div>
   );
-}
-
-
-export default function ClientPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  return <ClientPageContent id={id} />;
 }
