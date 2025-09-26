@@ -3,6 +3,8 @@ import './globals.css';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { AppSidebar } from '@/components/layout/app-sidebar';
+import { AuthProvider } from '@/hooks/use-auth.tsx';
+import { AuthLayout } from '@/components/layout/auth-layout';
 
 export const metadata: Metadata = {
   title: 'MediaSales CRM',
@@ -29,10 +31,11 @@ export default function RootLayout({
         />
       </head>
       <body className="font-body antialiased">
-        <SidebarProvider>
-          <AppSidebar />
-          <SidebarInset>{children}</SidebarInset>
-        </SidebarProvider>
+        <AuthProvider>
+            <AuthLayout>
+                 {children}
+            </AuthLayout>
+        </AuthProvider>
         <Toaster />
       </body>
     </html>
