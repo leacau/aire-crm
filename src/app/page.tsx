@@ -14,24 +14,26 @@ import {
   Phone,
   Mail,
   Users2,
+  FileText,
+  PhoneCall,
 } from 'lucide-react';
 import { recentActivities, opportunities, clients } from '@/lib/data';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
+import type { Activity as ActivityType } from '@/lib/types';
 
 const totalRevenue = opportunities
-  .filter((o) => o.stage === 'Closed Won')
+  .filter((o) => o.stage === 'Cerrado - Ganado')
   .reduce((acc, o) => acc + o.value, 0);
 
 const forecastedRevenue = opportunities
-  .filter((o) => o.stage !== 'Closed Lost' && o.stage !== 'Closed Won')
+  .filter((o) => o.stage !== 'Cerrado - Perdido' && o.stage !== 'Cerrado - Ganado')
   .reduce((acc, o) => acc + o.value * 0.5, 0); // Simplified forecast
 
-const activityIcons = {
-  Call: <Phone className="h-4 w-4 text-muted-foreground" />,
+const activityIcons: Record<ActivityType['type'], React.ReactNode> = {
+  Llamada: <PhoneCall className="h-4 w-4 text-muted-foreground" />,
   Email: <Mail className="h-4 w-4 text-muted-foreground" />,
-  Meeting: <Users2 className="h-4 w-4 text-muted-foreground" />,
-  Note: <Activity className="h-4 w-4 text-muted-foreground" />,
+  Reunión: <Users2 className="h-4 w-4 text-muted-foreground" />,
+  Nota: <FileText className="h-4 w-4 text-muted-foreground" />,
 };
 
 export default function DashboardPage() {
@@ -65,7 +67,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {opportunities.filter((o) => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length}
+                {opportunities.filter((o) => o.stage !== 'Cerrado - Ganado' && o.stage !== 'Cerrado - Perdido').length}
               </div>
               <p className="text-xs text-muted-foreground">+10 desde la semana pasada</p>
             </CardContent>
