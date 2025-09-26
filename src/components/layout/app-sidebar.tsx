@@ -8,6 +8,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarFooter,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { Home, Kanban, Users, Settings, LifeBuoy } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -19,14 +20,32 @@ const menuItems = [
   { href: '/clients', label: 'Clientes', icon: Users },
 ];
 
-export function AppSidebar() {
+function MenuLink({ item }: { item: typeof menuItems[0] }) {
   const pathname = usePathname();
+  const { setOpenMobile } = useSidebar();
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
     return pathname.startsWith(href);
   };
 
+  return (
+    <SidebarMenuButton
+      asChild
+      isActive={isActive(item.href)}
+      tooltip={{ children: item.label, side: 'right' }}
+      onClick={() => setOpenMobile(false)}
+    >
+      <Link href={item.href}>
+        <item.icon />
+        <span>{item.label}</span>
+      </Link>
+    </SidebarMenuButton>
+  );
+}
+
+
+export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader>
@@ -36,16 +55,7 @@ export function AppSidebar() {
         <SidebarMenu>
           {menuItems.map((item) => (
             <SidebarMenuItem key={item.label}>
-              <SidebarMenuButton
-                asChild
-                isActive={isActive(item.href)}
-                tooltip={{ children: item.label, side: 'right' }}
-              >
-                <Link href={item.href}>
-                  <item.icon />
-                  <span>{item.label}</span>
-                </Link>
-              </SidebarMenuButton>
+              <MenuLink item={item} />
             </SidebarMenuItem>
           ))}
         </SidebarMenu>

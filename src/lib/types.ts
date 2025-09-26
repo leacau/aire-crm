@@ -14,6 +14,7 @@ export type Opportunity = {
   stage: OpportunityStage;
   closeDate: string;
   ownerId: string;
+  details?: string;
 };
 
 export type Person = {
@@ -36,7 +37,7 @@ export type Client = {
 };
 
 export type Activity = {
-  id: string;
+  id: 'act-1' | 'act-2' | 'act-3' | 'act-4' | 'act-5';
   type: 'Llamada' | 'Email' | 'Reunión' | 'Nota';
   subject: string;
   date: string;

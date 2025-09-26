@@ -9,9 +9,9 @@ export const users: User[] = [
 export const people: Person[] = [
     { id: 'person-1', name: 'Juan Perez', email: 'juan.perez@globalmedia.com', phone: '555-1111', clientIds: ['client-1'] },
     { id: 'person-2', name: 'Maria Rodriguez', email: 'maria.r@innovatesolutions.io', phone: '555-2222', clientIds: ['client-2'] },
-    { id: 'person-3', name: 'Carlos Gomez', email: 'carlos.gomez@quantumleap.tech', clientIds: ['client-3'] },
+    { id: 'person-3', name: 'Carlos Gomez', email: 'carlos.gomez@quantumleap.tech', phone: '555-3333', clientIds: ['client-3'] },
     { id: 'person-4', name: 'Ana Martinez', phone: '555-4444', clientIds: ['client-4', 'client-1'] },
-    { id: 'person-5', name: 'Lucia Fernandez', email: 'lucia.f@apexdigital.com', clientIds: ['client-5'] },
+    { id: 'person-5', name: 'Lucia Fernandez', email: 'lucia.f@apexdigital.com', phone: '555-5555', clientIds: ['client-5'] },
 ];
 
 export const clients: Client[] = [
@@ -75,7 +75,7 @@ export const opportunityStages: OpportunityStage[] = [
   'Cerrado - Perdido',
 ];
 
-export const opportunities: Opportunity[] = [
+export let opportunities: Opportunity[] = [
   {
     id: 'opp-1',
     title: 'Campaña Digital Q3',
@@ -85,6 +85,7 @@ export const opportunities: Opportunity[] = [
     stage: 'Negociación',
     closeDate: '2024-08-15',
     ownerId: 'user-1',
+    details: 'Campaña de marketing digital para el tercer trimestre, enfocada en redes sociales y SEO.'
   },
   {
     id: 'opp-2',
@@ -95,6 +96,7 @@ export const opportunities: Opportunity[] = [
     stage: 'Propuesta',
     closeDate: '2024-09-01',
     ownerId: 'user-2',
+    details: 'Rediseño completo del sitio web corporativo, incluyendo nueva arquitectura de información y experiencia de usuario.'
   },
   {
     id: 'opp-3',
@@ -105,6 +107,7 @@ export const opportunities: Opportunity[] = [
     stage: 'Cerrado - Ganado',
     closeDate: '2024-07-20',
     ownerId: 'user-1',
+    details: 'Renovación del servicio de software cloud por un año más.'
   },
   {
     id: 'opp-4',
@@ -115,6 +118,7 @@ export const opportunities: Opportunity[] = [
     stage: 'Nuevo',
     closeDate: '2024-09-30',
     ownerId: 'user-3',
+    details: 'Campaña publicitaria para el lanzamiento de un nuevo producto, incluye TV y medios digitales.'
   },
   {
     id: 'opp-5',
@@ -148,7 +152,7 @@ export const opportunities: Opportunity[] = [
   },
 ];
 
-export const activities: Activity[] = [
+export let activities: Activity[] = [
   {
     id: 'act-1',
     type: 'Reunión',

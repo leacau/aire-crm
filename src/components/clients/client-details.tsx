@@ -1,3 +1,4 @@
+'use client'
 import type { Client, Opportunity, Activity, User, Person } from '@/lib/types';
 import {
   Card,
@@ -15,12 +16,10 @@ import {
   PlusCircle,
   Edit,
   Trash2,
-  Phone as PhoneIcon,
-  Mail as MailIcon,
-  Users as UsersIcon,
+  PhoneCall,
   FileText,
+  Users as UsersIcon
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import {
   Table,
   TableBody,
@@ -30,25 +29,55 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '../ui/button';
+import { opportunityStages } from '@/lib/data';
+import { OpportunityDetailsDialog } from '../opportunities/opportunity-details-dialog';
+import React from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { OpportunityStage } from '@/lib/types';
 
-const stageBadgeVariant: Record<Opportunity['stage'], 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  'Nuevo': 'secondary',
-  'Propuesta': 'default',
-  'Negociación': 'default',
-  'Cerrado - Ganado': 'outline',
-  'Cerrado - Perdido': 'destructive',
+const stageColors: Record<OpportunityStage, string> = {
+  'Nuevo': 'bg-blue-500',
+  'Propuesta': 'bg-yellow-500',
+  'Negociación': 'bg-orange-500',
+  'Cerrado - Ganado': 'bg-green-500',
+  'Cerrado - Perdido': 'bg-red-500',
 };
 
 const activityIcons: Record<Activity['type'], React.ReactNode> = {
-  Llamada: <PhoneIcon className="h-5 w-5" />,
-  Email: <MailIcon className="h-5 w-5" />,
+  Llamada: <PhoneCall className="h-5 w-5" />,
+  Email: <Mail className="h-5 w-5" />,
   Reunión: <UsersIcon className="h-5 w-s" />,
   Nota: <FileText className="h-5 w-5" />,
 };
 
+const WhatsappIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="h-4 w-4"
+  >
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+    <path d="M14.05 14.05a2 2 0 0 0-2.83 0L10 15.22a3.76 3.76 0 0 1-5.29-5.29l1.22-1.22a2 2 0 0 0 0-2.83L5.47 5.47a2 2 0 0 0-2.83 0L2 6.13a7.51 7.51 0 0 0 10.6 10.6l.66-.66a2 2 0 0 0 0-2.83l-.45-.45Z" />
+  </svg>
+);
+
+
 export function ClientDetails({
   client,
-  opportunities,
+  opportunities: initialOpportunities,
   activities,
   people,
   users,
@@ -59,6 +88,22 @@ export function ClientDetails({
   people: Person[];
   users: User[];
 }) {
+  const [opportunities, setOpportunities] = React.useState(initialOpportunities);
+  const [selectedOpportunity, setSelectedOpportunity] = React.useState<Opportunity | null>(null);
+
+  const handleOpportunityUpdate = (updatedOpp: Opportunity) => {
+    setOpportunities(prev => prev.map(opp => opp.id === updatedOpp.id ? updatedOpp : opp));
+    setSelectedOpportunity(null);
+  };
+
+  const handleStageChange = (opportunityId: string, newStage: OpportunityStage) => {
+    setOpportunities(prev => prev.map(opp => opp.id === opportunityId ? { ...opp, stage: newStage } : opp));
+  };
+
+  const openOpportunityDetails = (opp: Opportunity) => {
+    setSelectedOpportunity(opp);
+  };
+  
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="lg:col-span-1 space-y-6">
@@ -99,13 +144,27 @@ export function ClientDetails({
           </CardHeader>
           <CardContent className="space-y-4">
             {people.map(person => (
-              <div key={person.id} className="flex items-center justify-between">
+              <div key={person.id} className="flex items-start justify-between">
                 <div>
                   <p className="font-medium">{person.name}</p>
                   <p className="text-sm text-muted-foreground">{person.email}</p>
                    <p className="text-sm text-muted-foreground">{person.phone}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-1">
+                  {person.phone && (
+                    <>
+                     <Button asChild variant="ghost" size="icon" className="h-8 w-8">
+                        <a href={`tel:${person.phone}`}>
+                          <PhoneCall />
+                        </a>
+                      </Button>
+                      <Button asChild variant="ghost" size="icon" className="h-8 w-8">
+                        <a href={`https://wa.me/${person.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
+                          <WhatsappIcon />
+                        </a>
+                      </Button>
+                    </>
+                  )}
                    <Button variant="ghost" size="icon" className="h-8 w-8">
                     <Edit className="h-4 w-4" />
                   </Button>
@@ -132,18 +191,43 @@ export function ClientDetails({
                 <TableRow>
                   <TableHead>Título</TableHead>
                   <TableHead>Valor</TableHead>
-                  <TableHead>Etapa</TableHead>
+                  <TableHead className="w-[150px]">Etapa</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {opportunities.map((opp) => (
-                  <TableRow key={opp.id} className="cursor-pointer hover:bg-muted/50">
-                    <TableCell className='font-medium'>{opp.title}</TableCell>
+                  <TableRow key={opp.id}>
+                    <TableCell 
+                      className='font-medium cursor-pointer hover:underline'
+                      onClick={() => openOpportunityDetails(opp)}
+                    >
+                      {opp.title}
+                    </TableCell>
                     <TableCell>${opp.value.toLocaleString()}</TableCell>
                     <TableCell>
-                      <Badge variant={stageBadgeVariant[opp.stage]}>
-                        {opp.stage}
-                      </Badge>
+                       <Select
+                          value={opp.stage}
+                          onValueChange={(newStage: OpportunityStage) => handleStageChange(opp.id, newStage)}
+                        >
+                          <SelectTrigger className="w-full h-8 text-xs">
+                             <SelectValue>
+                              <div className="flex items-center gap-2">
+                                <span className={`h-2 w-2 rounded-full ${stageColors[opp.stage]}`} />
+                                {opp.stage}
+                              </div>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {opportunityStages.map(stage => (
+                              <SelectItem key={stage} value={stage} className="text-xs">
+                                <div className="flex items-center gap-2">
+                                   <span className={`h-2 w-2 rounded-full ${stageColors[stage]}`} />
+                                  {stage}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -177,6 +261,15 @@ export function ClientDetails({
           </CardContent>
         </Card>
       </div>
+
+      {selectedOpportunity && (
+        <OpportunityDetailsDialog
+          opportunity={selectedOpportunity}
+          isOpen={!!selectedOpportunity}
+          onOpenChange={(isOpen) => !isOpen && setSelectedOpportunity(null)}
+          onUpdate={handleOpportunityUpdate}
+        />
+      )}
     </div>
   );
 }
