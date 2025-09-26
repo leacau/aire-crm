@@ -7,27 +7,26 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import React from 'react';
+import React, { use } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 
-export default function ClientPage({ params }: { params: { id: string } }) {
+function ClientPageContent({ id }: { id: string }) {
   const router = useRouter();
-  const { user } = useAuth();
-  const currentUser = users.find(u => u.email === user?.email);
+  const { user, userInfo } = useAuth();
 
-  const client = clients.find((c) => c.id === params.id);
+  const client = clients.find((c) => c.id === id);
   
   React.useEffect(() => {
-    if (currentUser && client) {
-      const isOwner = client.ownerId === currentUser.id;
-      const isAdmin = currentUser.role === 'Administracion';
-      const isJefe = currentUser.role === 'Jefe';
+    if (userInfo && client) {
+      const isOwner = client.ownerId === userInfo.id;
+      const isAdmin = userInfo.role === 'Administracion';
+      const isJefe = userInfo.role === 'Jefe';
 
       if (!isOwner && !isAdmin && !isJefe) {
         router.push('/clients');
       }
     }
-  }, [currentUser, client, router]);
+  }, [userInfo, client, router]);
 
 
   if (!client) {
@@ -35,7 +34,7 @@ export default function ClientPage({ params }: { params: { id: string } }) {
   }
 
   // Show a loading state or nothing while the effect runs
-  if (!currentUser || (currentUser.role === 'Asesor' && client.ownerId !== currentUser.id)) {
+  if (!userInfo || (userInfo.role === 'Asesor' && client.ownerId !== userInfo.id)) {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
   }
 
@@ -66,4 +65,10 @@ export default function ClientPage({ params }: { params: { id: string } }) {
       </main>
     </div>
   );
+}
+
+
+export default function ClientPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  return <ClientPageContent id={id} />;
 }
