@@ -20,6 +20,7 @@ import {
 import React from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
 import { useAuth } from '@/hooks/use-auth';
+import { Spinner } from '@/components/ui/spinner';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'border-blue-500',
@@ -39,7 +40,6 @@ const KanbanColumn = ({
   onCardDrop: (e: React.DragEvent<HTMLDivElement>, stage: OpportunityStage) => void;
 }) => {
   const columnTotal = opportunities.reduce((sum, opp) => sum + opp.value, 0);
-  const [draggedOpportunityId, setDraggedOpportunityId] = React.useState<string | null>(null);
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -155,23 +155,19 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
 };
 
 export function KanbanBoard() {
-  const { userInfo } = useAuth();
+  const { userInfo, loading: authLoading } = useAuth();
+  const [opportunities, setOpportunities] = React.useState<Opportunity[]>([]);
 
-  const getVisibleOpportunities = React.useCallback(() => {
-    if (!userInfo) return [];
-    if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
-      return allOpportunities;
-    }
-    // Asesor
-    const myClientIds = clients.filter(c => c.ownerId === userInfo.id).map(c => c.id);
-    return allOpportunities.filter(opp => myClientIds.includes(opp.clientId));
-  }, [userInfo]);
-  
-  const [opportunities, setOpportunities] = React.useState(getVisibleOpportunities());
-  
   React.useEffect(() => {
-    setOpportunities(getVisibleOpportunities());
-  }, [userInfo, getVisibleOpportunities]);
+    if (!authLoading && userInfo) {
+        if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
+          setOpportunities(allOpportunities);
+        } else { // Asesor
+          const myClientIds = clients.filter(c => c.ownerId === userInfo.id).map(c => c.id);
+          setOpportunities(allOpportunities.filter(opp => myClientIds.includes(opp.clientId)));
+        }
+    }
+  }, [userInfo, authLoading]);
 
   React.useEffect(() => {
     const handleUpdate = (e: Event) => {
@@ -203,6 +199,14 @@ export function KanbanBoard() {
       );
     }
   };
+
+  if (authLoading || !userInfo) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner size="large" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 lg:p-8 h-full flex gap-6 overflow-x-auto">
