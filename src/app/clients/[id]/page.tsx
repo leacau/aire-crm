@@ -12,30 +12,46 @@ import { Spinner } from '@/components/ui/spinner';
 
 function ClientPageContent({ id }: { id: string }) {
   const router = useRouter();
-  const { user, userInfo } = useAuth();
+  const { userInfo, loading: authLoading } = useAuth();
 
   const client = clients.find((c) => c.id === id);
-  
+
+  const [hasAccess, setHasAccess] = React.useState<boolean | null>(null);
+
   React.useEffect(() => {
-    if (userInfo && client) {
-      const isOwner = client.ownerId === userInfo.id;
-      const isAdmin = userInfo.role === 'Administracion';
-      const isJefe = userInfo.role === 'Jefe';
+    if (authLoading) return;
 
-      if (!isOwner && !isAdmin && !isJefe) {
-        router.push('/clients');
+    if (!userInfo || !client) {
+      if (!client) {
+        notFound();
       }
+      return;
     }
-  }, [userInfo, client, router]);
 
+    const isOwner = client.ownerId === userInfo.id;
+    const isAdmin = userInfo.role === 'Administracion';
+    const isJefe = userInfo.role === 'Jefe';
 
-  if (!client) {
-    return notFound();
-  }
+    if (isOwner || isAdmin || isJefe) {
+      setHasAccess(true);
+    } else {
+      setHasAccess(false);
+      router.push('/clients');
+    }
+  }, [userInfo, authLoading, client, router, id]);
 
-  // Show a loading state or nothing while the effect runs
-  if (!userInfo || (userInfo.role === 'Asesor' && client.ownerId !== userInfo.id)) {
+  if (hasAccess === null || authLoading) {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
+  }
+  
+  if (hasAccess === false) {
+    // We are redirecting, so we can show a spinner or null
+    return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
+  }
+  
+  if (!client) {
+    // This will likely not be hit due to the check above, but it's good practice
+    return notFound();
   }
 
   const clientOpportunities = opportunities.filter(
