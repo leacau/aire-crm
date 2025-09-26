@@ -37,13 +37,13 @@ const activityIcons = {
 export default function DashboardPage() {
   return (
     <div className="flex flex-col h-full">
-      <Header title="Dashboard" />
+      <Header title="Panel" />
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Total Revenue
+                Ingresos Totales
               </CardTitle>
               <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -52,14 +52,14 @@ export default function DashboardPage() {
                 ${totalRevenue.toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
-                +20.1% from last month
+                +20.1% desde el mes pasado
               </p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Active Opportunities
+                Oportunidades Activas
               </CardTitle>
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -67,25 +67,25 @@ export default function DashboardPage() {
               <div className="text-2xl font-bold">
                 {opportunities.filter((o) => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length}
               </div>
-              <p className="text-xs text-muted-foreground">+10 since last week</p>
+              <p className="text-xs text-muted-foreground">+10 desde la semana pasada</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">New Clients</CardTitle>
+              <CardTitle className="text-sm font-medium">Nuevos Clientes</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">+{clients.length}</div>
               <p className="text-xs text-muted-foreground">
-                +5 this month
+                +5 este mes
               </p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Forecasted Revenue
+                Ingresos Previstos
               </CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -94,7 +94,7 @@ export default function DashboardPage() {
                 ${forecastedRevenue.toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
-                Based on current pipeline
+                Basado en el pipeline actual
               </p>
             </CardContent>
           </Card>
@@ -102,9 +102,9 @@ export default function DashboardPage() {
         <div className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
+              <CardTitle>Actividad Reciente</CardTitle>
               <CardDescription>
-                A log of recent sales activities.
+                Un registro de las actividades de venta recientes.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -122,7 +122,7 @@ export default function DashboardPage() {
                         </p>
                       </div>
                        <p className="text-sm text-muted-foreground">
-                        Related to client: {clients.find(c => c.id === activity.clientId)?.name}
+                        Relacionado con el cliente: {clients.find(c => c.id === activity.clientId)?.name}
                       </p>
                       <p className="text-sm">{activity.notes}</p>
                     </div>

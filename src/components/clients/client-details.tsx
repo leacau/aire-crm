@@ -30,18 +30,18 @@ import {
 } from '@/components/ui/table';
 
 const stageBadgeVariant: Record<Opportunity['stage'], 'default' | 'secondary' | 'destructive'> = {
-  New: 'secondary',
-  Proposal: 'default',
-  Negotiation: 'default',
-  'Closed Won': 'default',
-  'Closed Lost': 'destructive',
+  Nuevo: 'secondary',
+  Propuesta: 'default',
+  Negociación: 'default',
+  'Cerrado - Ganado': 'default',
+  'Cerrado - Perdido': 'destructive',
 };
 
 const activityIcons: Record<Activity['type'], React.ReactNode> = {
-  Call: <PhoneIcon className="h-5 w-5" />,
+  Llamada: <PhoneIcon className="h-5 w-5" />,
   Email: <MailIcon className="h-5 w-5" />,
-  Meeting: <UsersIcon className="h-5 w-5" />,
-  Note: <FileText className="h-5 w-5" />,
+  Reunión: <UsersIcon className="h-5 w-s" />,
+  Nota: <FileText className="h-5 w-5" />,
 };
 
 export function ClientDetails({
@@ -86,15 +86,15 @@ export function ClientDetails({
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Opportunities</CardTitle>
+            <CardTitle>Oportunidades</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Value</TableHead>
-                  <TableHead>Stage</TableHead>
+                  <TableHead>Título</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Etapa</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -117,7 +117,7 @@ export function ClientDetails({
       <div className="lg:col-span-2">
         <Card>
           <CardHeader>
-            <CardTitle>Activity Timeline</CardTitle>
+            <CardTitle>Línea de Tiempo de Actividad</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="relative space-y-8 pl-6 before:absolute before:inset-y-0 before:w-px before:bg-border before:left-6">

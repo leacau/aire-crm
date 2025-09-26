@@ -18,11 +18,11 @@ import {
 } from '../ui/tooltip';
 
 const stageColors: Record<OpportunityStage, string> = {
-  New: 'border-blue-500',
-  Proposal: 'border-yellow-500',
-  Negotiation: 'border-orange-500',
-  'Closed Won': 'border-green-500',
-  'Closed Lost': 'border-red-500',
+  Nuevo: 'border-blue-500',
+  Propuesta: 'border-yellow-500',
+  Negociación: 'border-orange-500',
+  'Cerrado - Ganado': 'border-green-500',
+  'Cerrado - Perdido': 'border-red-500',
 };
 
 const KanbanColumn = ({
@@ -53,7 +53,7 @@ const KanbanColumn = ({
         ))}
         {opportunities.length === 0 && (
             <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
-                No opportunities
+                No hay oportunidades
             </div>
         )}
       </div>

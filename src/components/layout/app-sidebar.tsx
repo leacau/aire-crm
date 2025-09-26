@@ -14,9 +14,9 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
 const menuItems = [
-  { href: '/', label: 'Dashboard', icon: Home },
-  { href: '/opportunities', label: 'Opportunities', icon: Kanban },
-  { href: '/clients', label: 'Clients', icon: Users },
+  { href: '/', label: 'Panel', icon: Home },
+  { href: '/opportunities', label: 'Oportunidades', icon: Kanban },
+  { href: '/clients', label: 'Clientes', icon: Users },
 ];
 
 export function AppSidebar() {
@@ -53,15 +53,15 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
            <SidebarMenuItem>
-            <SidebarMenuButton tooltip={{ children: 'Settings', side: 'right' }}>
+            <SidebarMenuButton tooltip={{ children: 'Ajustes', side: 'right' }}>
               <Settings />
-              <span>Settings</span>
+              <span>Ajustes</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton tooltip={{ children: 'Support', side: 'right' }}>
+            <SidebarMenuButton tooltip={{ children: 'Soporte', side: 'right' }}>
               <LifeBuoy />
-              <span>Support</span>
+              <span>Soporte</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

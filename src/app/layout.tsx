@@ -7,8 +7,8 @@ import { AuthProvider } from '@/hooks/use-auth.tsx';
 import { AuthLayout } from '@/components/layout/auth-layout';
 
 export const metadata: Metadata = {
-  title: 'MediaSales CRM',
-  description: 'Visually track sales opportunities and forecast revenue.',
+  title: 'CRM Aire de Santa Fe',
+  description: 'Visualiza y pronostica oportunidades de venta.',
 };
 
 export default function RootLayout({

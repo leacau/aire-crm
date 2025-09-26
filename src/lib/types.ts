@@ -1,9 +1,9 @@
 export type OpportunityStage =
-  | 'New'
-  | 'Proposal'
-  | 'Negotiation'
-  | 'Closed Won'
-  | 'Closed Lost';
+  | 'Nuevo'
+  | 'Propuesta'
+  | 'Negociación'
+  | 'Cerrado - Ganado'
+  | 'Cerrado - Perdido';
 
 export type Opportunity = {
   id: string;
@@ -28,7 +28,7 @@ export type Client = {
 
 export type Activity = {
   id: string;
-  type: 'Call' | 'Email' | 'Meeting' | 'Note';
+  type: 'Llamada' | 'Email' | 'Reunión' | 'Nota';
   subject: string;
   date: string;
   notes: string;
