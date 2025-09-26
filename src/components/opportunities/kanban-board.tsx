@@ -65,7 +65,7 @@ const KanbanCard = ({ opportunity }: { opportunity: Opportunity }) => {
   const owner = users.find((user) => user.id === opportunity.ownerId);
 
   return (
-    <Card className="hover:shadow-md transition-shadow duration-200">
+    <Card className="hover:shadow-md transition-shadow duration-200 cursor-pointer">
       <CardHeader className="p-4">
         <div className="flex justify-between items-start">
           <CardTitle className="text-base font-semibold leading-tight">

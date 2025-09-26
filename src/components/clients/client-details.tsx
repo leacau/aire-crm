@@ -1,4 +1,4 @@
-import type { Client, Opportunity, Activity, User } from '@/lib/types';
+import type { Client, Opportunity, Activity, User, Person } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -11,9 +11,10 @@ import {
   Briefcase,
   Mail,
   Phone,
-  CircleDollarSign,
-  Calendar,
   User as UserIcon,
+  PlusCircle,
+  Edit,
+  Trash2,
   Phone as PhoneIcon,
   Mail as MailIcon,
   Users as UsersIcon,
@@ -28,12 +29,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Button } from '../ui/button';
 
-const stageBadgeVariant: Record<Opportunity['stage'], 'default' | 'secondary' | 'destructive'> = {
-  Nuevo: 'secondary',
-  Propuesta: 'default',
-  Negociación: 'default',
-  'Cerrado - Ganado': 'default',
+const stageBadgeVariant: Record<Opportunity['stage'], 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  'Nuevo': 'secondary',
+  'Propuesta': 'default',
+  'Negociación': 'default',
+  'Cerrado - Ganado': 'outline',
   'Cerrado - Perdido': 'destructive',
 };
 
@@ -48,11 +50,13 @@ export function ClientDetails({
   client,
   opportunities,
   activities,
+  people,
   users,
 }: {
   client: Client;
   opportunities: Opportunity[];
   activities: Activity[];
+  people: Person[];
   users: User[];
 }) {
   return (
@@ -84,9 +88,43 @@ export function ClientDetails({
             </div>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Contactos</CardTitle>
+            <Button variant="outline" size="sm">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Añadir Persona
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {people.map(person => (
+              <div key={person.id} className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">{person.name}</p>
+                  <p className="text-sm text-muted-foreground">{person.email}</p>
+                   <p className="text-sm text-muted-foreground">{person.phone}</p>
+                </div>
+                <div className="flex gap-2">
+                   <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Oportunidades</CardTitle>
+             <Button variant="outline" size="sm">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Añadir Oportunidad
+            </Button>
           </CardHeader>
           <CardContent>
             <Table>
@@ -99,7 +137,7 @@ export function ClientDetails({
               </TableHeader>
               <TableBody>
                 {opportunities.map((opp) => (
-                  <TableRow key={opp.id}>
+                  <TableRow key={opp.id} className="cursor-pointer hover:bg-muted/50">
                     <TableCell className='font-medium'>{opp.title}</TableCell>
                     <TableCell>${opp.value.toLocaleString()}</TableCell>
                     <TableCell>

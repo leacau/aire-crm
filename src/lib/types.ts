@@ -16,6 +16,14 @@ export type Opportunity = {
   ownerId: string;
 };
 
+export type Person = {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  clientIds: string[];
+};
+
 export type Client = {
   id: string;
   name: string;
@@ -24,6 +32,7 @@ export type Client = {
   company: string;
   avatarUrl: string;
   avatarFallback: string;
+  personIds: string[];
 };
 
 export type Activity = {

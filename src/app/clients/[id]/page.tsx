@@ -1,6 +1,6 @@
 import { Header } from '@/components/layout/header';
 import { notFound } from 'next/navigation';
-import { clients, opportunities, activities, users } from '@/lib/data';
+import { clients, opportunities, activities, users, people } from '@/lib/data';
 import { ClientDetails } from '@/components/clients/client-details';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ export default function ClientPage({ params }: { params: { id: string } }) {
     (o) => o.clientId === client.id
   );
   const clientActivities = activities.filter((a) => a.clientId === client.id);
+  const clientPeople = people.filter(p => client.personIds.includes(p.id));
 
   return (
     <div className="flex flex-col h-full">
@@ -32,6 +33,7 @@ export default function ClientPage({ params }: { params: { id: string } }) {
           client={client}
           opportunities={clientOpportunities}
           activities={clientActivities}
+          people={clientPeople}
           users={users}
         />
       </main>

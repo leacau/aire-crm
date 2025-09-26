@@ -1,9 +1,17 @@
-import type { User, Client, Opportunity, OpportunityStage, Activity } from './types';
+import type { User, Client, Opportunity, OpportunityStage, Activity, Person } from './types';
 
 export const users: User[] = [
   { id: 'user-1', name: 'Alex Morgan', avatarUrl: 'https://picsum.photos/seed/user1/40/40', initials: 'AM' },
   { id: 'user-2', name: 'Ben Carter', avatarUrl: 'https://picsum.photos/seed/user2/40/40', initials: 'BC' },
   { id: 'user-3', name: 'Chloe Davis', avatarUrl: 'https://picsum.photos/seed/user3/40/40', initials: 'CD' },
+];
+
+export const people: Person[] = [
+    { id: 'person-1', name: 'Juan Perez', email: 'juan.perez@globalmedia.com', phone: '555-1111', clientIds: ['client-1'] },
+    { id: 'person-2', name: 'Maria Rodriguez', email: 'maria.r@innovatesolutions.io', phone: '555-2222', clientIds: ['client-2'] },
+    { id: 'person-3', name: 'Carlos Gomez', email: 'carlos.gomez@quantumleap.tech', clientIds: ['client-3'] },
+    { id: 'person-4', name: 'Ana Martinez', phone: '555-4444', clientIds: ['client-4', 'client-1'] },
+    { id: 'person-5', name: 'Lucia Fernandez', email: 'lucia.f@apexdigital.com', clientIds: ['client-5'] },
 ];
 
 export const clients: Client[] = [
@@ -15,6 +23,7 @@ export const clients: Client[] = [
     company: 'Global Media Inc.',
     avatarUrl: 'https://picsum.photos/seed/client1/40/40',
     avatarFallback: 'GM',
+    personIds: ['person-1', 'person-4'],
   },
   {
     id: 'client-2',
@@ -24,6 +33,7 @@ export const clients: Client[] = [
     company: 'Innovate Solutions',
     avatarUrl: 'https://picsum.photos/seed/client2/40/40',
     avatarFallback: 'IS',
+    personIds: ['person-2'],
   },
   {
     id: 'client-3',
@@ -33,6 +43,7 @@ export const clients: Client[] = [
     company: 'Quantum Leap Tech',
     avatarUrl: 'https://picsum.photos/seed/client3/40/40',
     avatarFallback: 'QL',
+    personIds: ['person-3'],
   },
     {
     id: 'client-4',
@@ -42,6 +53,7 @@ export const clients: Client[] = [
     company: 'Starlight Productions',
     avatarUrl: 'https://picsum.photos/seed/client4/40/40',
     avatarFallback: 'SP',
+    personIds: ['person-4'],
   },
     {
     id: 'client-5',
@@ -51,6 +63,7 @@ export const clients: Client[] = [
     company: 'Apex Digital',
     avatarUrl: 'https://picsum.photos/seed/client5/40/40',
     avatarFallback: 'AD',
+    personIds: ['person-5'],
   },
 ];
 
@@ -65,7 +78,7 @@ export const opportunityStages: OpportunityStage[] = [
 export const opportunities: Opportunity[] = [
   {
     id: 'opp-1',
-    title: 'Q3 Digital Campaign',
+    title: 'Campaña Digital Q3',
     clientName: 'Global Media Inc.',
     clientId: 'client-1',
     value: 75000,
@@ -75,7 +88,7 @@ export const opportunities: Opportunity[] = [
   },
   {
     id: 'opp-2',
-    title: 'Website Revamp Project',
+    title: 'Proyecto de Rediseño Web',
     clientName: 'Innovate Solutions',
     clientId: 'client-2',
     value: 120000,
@@ -85,7 +98,7 @@ export const opportunities: Opportunity[] = [
   },
   {
     id: 'opp-3',
-    title: 'Annual Subscription Renewal',
+    title: 'Renovación de Suscripción Anual',
     clientName: 'Quantum Leap Tech',
     clientId: 'client-3',
     value: 45000,
@@ -95,7 +108,7 @@ export const opportunities: Opportunity[] = [
   },
   {
     id: 'opp-4',
-    title: 'New Product Launch Ad',
+    title: 'Anuncio de Lanzamiento de Nuevo Producto',
     clientName: 'Starlight Productions',
     clientId: 'client-4',
     value: 95000,
@@ -105,7 +118,7 @@ export const opportunities: Opportunity[] = [
   },
   {
     id: 'opp-5',
-    title: 'SEO & Content Strategy',
+    title: 'Estrategia de SEO y Contenido',
     clientName: 'Apex Digital',
     clientId: 'client-5',
     value: 30000,
@@ -115,7 +128,7 @@ export const opportunities: Opportunity[] = [
   },
   {
     id: 'opp-6',
-    title: 'Social Media Management',
+    title: 'Gestión de Redes Sociales',
     clientName: 'Global Media Inc.',
     clientId: 'client-1',
     value: 25000,
@@ -125,7 +138,7 @@ export const opportunities: Opportunity[] = [
   },
   {
     id: 'opp-7',
-    title: 'Mobile App Development',
+    title: 'Desarrollo de App Móvil',
     clientName: 'Quantum Leap Tech',
     clientId: 'client-3',
     value: 250000,
