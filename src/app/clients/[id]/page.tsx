@@ -19,20 +19,19 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
   const client = clients.find((c) => c.id === id);
 
   useEffect(() => {
+    // No hacer nada hasta que la autenticación haya terminado de cargar
     if (authLoading) {
-      return; // Espera a que termine la carga de la autenticación
+      return;
     }
 
-    if (!client) {
-      notFound();
+    // Si después de cargar no hay userInfo, el hook useAuth ya se encargará de redirigir a /login
+    if (!userInfo) {
       return;
     }
     
-    if (!userInfo) {
-       // Si no hay info de usuario después de cargar, podría ser un error o no estar logueado.
-       // El hook useAuth ya debería redirigir, pero por si acaso.
-       router.push('/login');
-       return;
+    if (!client) {
+      notFound();
+      return;
     }
 
     const isOwner = client.ownerId === userInfo.id;
@@ -43,7 +42,7 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
       setHasAccess(true);
     } else {
       setHasAccess(false);
-      // Redirigir si no tiene acceso
+      // Si el usuario está logueado pero no tiene permisos, lo mandamos a la lista de clientes.
       router.push('/clients');
     }
   }, [id, authLoading, userInfo, client, router]);
@@ -54,7 +53,8 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
   }
 
   if (!client || !hasAccess) {
-    // Muestra un spinner mientras redirige o si no se encontró el cliente
+    // Muestra un spinner mientras redirige o si no se encontró el cliente.
+    // Esto previene mostrar contenido brevemente antes de redirigir.
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
   }
   
