@@ -157,22 +157,27 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
 export function KanbanBoard() {
   const { userInfo, loading: authLoading } = useAuth();
   const [opportunities, setOpportunities] = React.useState<Opportunity[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
-    if (authLoading) return;
+    if (authLoading) {
+      setIsLoading(true);
+      return;
+    }
     
-    let userOpportunities: Opportunity[];
     if (userInfo) {
+        let userOpportunities: Opportunity[];
         if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
           userOpportunities = allOpportunities;
         } else { // Asesor
           const myClientIds = clients.filter(c => c.ownerId === userInfo.id).map(c => c.id);
           userOpportunities = allOpportunities.filter(opp => myClientIds.includes(opp.clientId));
         }
+        setOpportunities(userOpportunities);
     } else {
-        userOpportunities = [];
+        setOpportunities([]);
     }
-    setOpportunities(userOpportunities);
+    setIsLoading(false);
 
   }, [userInfo, authLoading]);
 
@@ -207,7 +212,7 @@ export function KanbanBoard() {
     }
   };
 
-  if (authLoading || !userInfo) {
+  if (isLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
