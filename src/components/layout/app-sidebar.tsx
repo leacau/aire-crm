@@ -1,3 +1,4 @@
+
 'use client';
 import { Logo } from '@/components/logo';
 import {
@@ -10,7 +11,7 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, Kanban, Users } from 'lucide-react';
+import { Home, Kanban, Users, Settings } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
