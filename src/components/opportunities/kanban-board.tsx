@@ -159,14 +159,21 @@ export function KanbanBoard() {
   const [opportunities, setOpportunities] = React.useState<Opportunity[]>([]);
 
   React.useEffect(() => {
-    if (!authLoading && userInfo) {
+    if (authLoading) return;
+    
+    let userOpportunities: Opportunity[];
+    if (userInfo) {
         if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
-          setOpportunities(allOpportunities);
+          userOpportunities = allOpportunities;
         } else { // Asesor
           const myClientIds = clients.filter(c => c.ownerId === userInfo.id).map(c => c.id);
-          setOpportunities(allOpportunities.filter(opp => myClientIds.includes(opp.clientId)));
+          userOpportunities = allOpportunities.filter(opp => myClientIds.includes(opp.clientId));
         }
+    } else {
+        userOpportunities = [];
     }
+    setOpportunities(userOpportunities);
+
   }, [userInfo, authLoading]);
 
   React.useEffect(() => {
