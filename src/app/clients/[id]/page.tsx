@@ -1,9 +1,9 @@
 
 'use client';
 
-import { useEffect, use } from 'react';
+import React, { useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/use-auth.tsx';
+import { useAuth } from '@/hooks/use-auth';
 import { clients, opportunities as allOpportunities, activities as allActivities, people as allPeople } from '@/lib/data';
 import { ClientDetails } from '@/components/clients/client-details';
 import { Spinner } from '@/components/ui/spinner';
@@ -15,22 +15,39 @@ import { ArrowLeft } from 'lucide-react';
 export default function ClientPage({ params }: { params: { id: string } }) {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
-  const id = params.id;
+  const id = use(Promise.resolve(params.id));
 
   const client = clients.find((c) => c.id === id);
-  
-  // Determine access rights after auth has loaded.
-  const hasAccess = !authLoading && userInfo && client && (userInfo.role === 'Jefe' || userInfo.role === 'Administracion' || (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
   useEffect(() => {
-    // Redirect if auth has loaded and user is not found, client not found, or no access.
-    if (!authLoading && (!userInfo || !client || !hasAccess)) {
+    // Solo redirigir si la autenticación ha terminado y no hay acceso.
+    if (!authLoading && (!userInfo || !client)) {
       router.push('/clients');
     }
-  }, [authLoading, userInfo, client, hasAccess, router]);
-
-  if (authLoading || !userInfo || !client || !hasAccess) {
+  }, [authLoading, userInfo, client, router]);
+  
+  if (authLoading || !client) {
     return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner size="large" />
+      </div>
+    );
+  }
+
+  // Ahora podemos estar seguros de que userInfo y client están definidos si pasamos la carga
+  const hasAccess = userInfo && (userInfo.role === 'Jefe' || userInfo.role === 'Administracion' || (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
+
+  useEffect(() => {
+      // Si después de la carga el usuario no tiene acceso, lo redirigimos
+      if (!authLoading && !hasAccess) {
+          router.push('/clients');
+      }
+  }, [authLoading, hasAccess, router]);
+
+
+  if (!hasAccess) {
+    // Mostramos el spinner mientras ocurre la redirección
+     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
       </div>
