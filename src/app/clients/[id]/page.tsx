@@ -15,12 +15,12 @@ import { ArrowLeft } from 'lucide-react';
 export default function ClientPage({ params }: { params: { id: string } }) {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
-  const id = use(Promise.resolve(params.id));
+  const { id } = use(params);
 
   const client = clients.find((c) => c.id === id);
 
   useEffect(() => {
-    // Solo redirigir si la autenticación ha terminado y no hay acceso.
+    // Solo redirigir si la autenticación ha terminado y no hay acceso o el cliente no existe.
     if (!authLoading && (!userInfo || !client)) {
       router.push('/clients');
     }
