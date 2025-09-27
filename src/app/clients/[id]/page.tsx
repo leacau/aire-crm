@@ -1,7 +1,7 @@
 
 'use client';
 
-import { use } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { clients, opportunities as allOpportunities, activities as allActivities, people as allPeople } from '@/lib/data';
@@ -17,39 +17,24 @@ export default function ClientPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const id = params.id;
 
-  if (authLoading) {
+  const client = clients.find((c) => c.id === id);
+  
+  // Determine access rights after auth has loaded.
+  const hasAccess = !authLoading && userInfo && client && (userInfo.role === 'Jefe' || userInfo.role === 'Administracion' || (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
+
+  useEffect(() => {
+    // Redirect if auth has loaded and user is not found, client not found, or no access.
+    if (!authLoading && (!userInfo || !client || !hasAccess)) {
+      router.push('/clients');
+    }
+  }, [authLoading, userInfo, client, hasAccess, router]);
+
+  if (authLoading || !userInfo || !client || !hasAccess) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
       </div>
     );
-  }
-
-  const client = clients.find((c) => c.id === id);
-
-  if (!client) {
-    // This part runs on the server or after hydration.
-    // If no client is found, it's a 404.
-    // We can navigate back or show a not found message.
-    // Using useEffect to avoid server-side navigation attempts.
-    if (typeof window !== 'undefined') {
-        router.push('/clients');
-    }
-    return <div className="flex h-full w-full items-center justify-center"><p>Cliente no encontrado.</p></div>;
-  }
-  
-  const hasAccess = userInfo?.role === 'Jefe' || userInfo?.role === 'Administracion' || (userInfo?.role === 'Asesor' && client.ownerId === userInfo.id);
-
-  if (!userInfo || !hasAccess) {
-     if (typeof window !== 'undefined') {
-        router.push('/clients');
-     }
-     return (
-        <div className="flex h-full w-full items-center justify-center">
-            <p>No tienes permiso para ver este cliente.</p>
-            <Spinner size="large" />
-        </div>
-     );
   }
 
   const clientOpportunities = allOpportunities.filter(o => o.clientId === client.id);
