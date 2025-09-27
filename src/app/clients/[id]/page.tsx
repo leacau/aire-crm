@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { clients, opportunities as allOpportunities, activities as allActivities, people as allPeople } from '@/lib/data';
