@@ -15,7 +15,7 @@ import { ArrowLeft } from 'lucide-react';
 export default function ClientPage({ params }: { params: { id: string } }) {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
-  const id = use(Promise.resolve(params.id));
+  const id = params.id;
 
   if (authLoading) {
     return (
