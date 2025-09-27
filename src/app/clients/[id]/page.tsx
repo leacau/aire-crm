@@ -19,35 +19,20 @@ export default function ClientPage({ params }: { params: { id: string } }) {
 
   const client = clients.find((c) => c.id === id);
 
+  const hasAccess = userInfo && client && (
+    userInfo.role === 'Jefe' || 
+    userInfo.role === 'Administracion' || 
+    (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
+  );
+
   useEffect(() => {
-    // Solo redirigir si la autenticación ha terminado y no hay acceso o el cliente no existe.
-    if (!authLoading && (!userInfo || !client)) {
+    if (!authLoading && (!hasAccess || !client)) {
       router.push('/clients');
     }
-  }, [authLoading, userInfo, client, router]);
+  }, [authLoading, hasAccess, client, router]);
   
-  if (authLoading || !client) {
+  if (authLoading || !client || !hasAccess) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Spinner size="large" />
-      </div>
-    );
-  }
-
-  // Ahora podemos estar seguros de que userInfo y client están definidos si pasamos la carga
-  const hasAccess = userInfo && (userInfo.role === 'Jefe' || userInfo.role === 'Administracion' || (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
-
-  useEffect(() => {
-      // Si después de la carga el usuario no tiene acceso, lo redirigimos
-      if (!authLoading && !hasAccess) {
-          router.push('/clients');
-      }
-  }, [authLoading, hasAccess, router]);
-
-
-  if (!hasAccess) {
-    // Mostramos el spinner mientras ocurre la redirección
-     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
       </div>
