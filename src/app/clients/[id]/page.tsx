@@ -15,7 +15,7 @@ import { ArrowLeft } from 'lucide-react';
 export default function ClientPage({ params }: { params: { id: string } }) {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
-  const id = use(params);
+  const id = use(params.id);
 
   const client = clients.find((c) => c.id === id);
 
@@ -28,12 +28,11 @@ export default function ClientPage({ params }: { params: { id: string } }) {
     );
   }, [userInfo, client]);
 
-
   useEffect(() => {
-    if (!authLoading && (!hasAccess || !client)) {
+    if (!authLoading && (!client || !hasAccess)) {
       router.push('/clients');
     }
-  }, [authLoading, hasAccess, client, router]);
+  }, [authLoading, client, hasAccess, router]);
 
   if (authLoading || !client || !hasAccess) {
     return (
