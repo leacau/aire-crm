@@ -15,22 +15,26 @@ import { ArrowLeft } from 'lucide-react';
 export default function ClientPage({ params }: { params: { id: string } }) {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { id } = use(params);
+  const id = use(params);
 
   const client = clients.find((c) => c.id === id);
 
-  const hasAccess = userInfo && client && (
-    userInfo.role === 'Jefe' || 
-    userInfo.role === 'Administracion' || 
-    (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
-  );
+  const hasAccess = React.useMemo(() => {
+    if (!userInfo || !client) return false;
+    return (
+      userInfo.role === 'Jefe' ||
+      userInfo.role === 'Administracion' ||
+      (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
+    );
+  }, [userInfo, client]);
+
 
   useEffect(() => {
     if (!authLoading && (!hasAccess || !client)) {
       router.push('/clients');
     }
   }, [authLoading, hasAccess, client, router]);
-  
+
   if (authLoading || !client || !hasAccess) {
     return (
       <div className="flex h-full w-full items-center justify-center">
