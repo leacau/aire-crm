@@ -3,7 +3,7 @@ import { KanbanBoard } from '@/components/opportunities/kanban-board';
 
 export default function OpportunitiesPage() {
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       <Header title="Oportunidades" />
       <main className="flex-1 overflow-auto">
         <KanbanBoard />
