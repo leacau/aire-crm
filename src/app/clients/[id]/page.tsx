@@ -15,14 +15,12 @@ import { ArrowLeft } from 'lucide-react';
 export default function ClientPage({ params }: { params: { id: string } }) {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
-
-  // Correctly unwrap the id from params as per Next.js 13+ app router guidelines
+  
   const { id } = use(params);
-
   const client = clients.find((c) => c.id === id);
 
   useEffect(() => {
-    // This effect will run ONLY when the loading state changes from true to false.
+    // Este efecto solo se ejecuta DESPUÉS de que la carga de autenticación ha terminado.
     if (!authLoading) {
       const userHasAccess =
         userInfo &&
@@ -31,15 +29,14 @@ export default function ClientPage({ params }: { params: { id: string } }) {
           userInfo.role === 'Administracion' ||
           (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
-      if (!client || !userHasAccess) {
+      // Si el cliente no existe o el usuario no tiene acceso, redirige.
+      if (!userHasAccess) {
         router.push('/clients');
       }
     }
-  }, [authLoading, userInfo, client, router, id]); // Dependencies ensure this runs when auth state is resolved.
+  }, [authLoading, userInfo, client, router, id]); // Dependencias clave
 
-
-  // Render a loading spinner as long as authentication is in progress.
-  // This is the primary guard against premature rendering or logic execution.
+  // 1. Mostrar Spinner mientras la autenticación está en progreso.
   if (authLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
@@ -48,8 +45,7 @@ export default function ClientPage({ params }: { params: { id: string } }) {
     );
   }
 
-  // Once loading is false, we can determine if the user has access.
-  // The useEffect above will handle redirection if they don't.
+  // 2. Después de cargar, verificar si el usuario tiene acceso.
   const userHasAccess =
     userInfo &&
     client &&
@@ -57,8 +53,8 @@ export default function ClientPage({ params }: { params: { id: string } }) {
       userInfo.role === 'Administracion' ||
       (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
-  // If there's no client or no access, render a spinner while the redirection from useEffect happens.
-  // This prevents flashing content.
+  // 3. Si no hay cliente o acceso, el useEffect de arriba redirigirá.
+  // Mientras tanto, mostramos un spinner para evitar parpadeos de contenido.
   if (!client || !userHasAccess) {
     return (
       <div className="flex h-full w-full items-center justify-center">
@@ -66,8 +62,8 @@ export default function ClientPage({ params }: { params: { id: string } }) {
       </div>
     );
   }
-  
-  // If we reach here, it means auth is loaded, the client exists, and the user has access.
+
+  // 4. Si todo está bien, mostrar los detalles del cliente.
   const clientOpportunities = allOpportunities.filter(o => o.clientId === client.id);
   const clientActivities = allActivities.filter(a => a.clientId === client.id);
   const clientPeople = allPeople.filter(p => p.clientIds.includes(client.id));
