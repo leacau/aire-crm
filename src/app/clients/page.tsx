@@ -64,7 +64,7 @@ export default function ClientsPage() {
     }
 
     try {
-      await createClient(clientData, userInfo.id);
+      await createClient(clientData, userInfo.id, userInfo.name);
       toast({
         title: "Cliente Creado",
         description: `${clientData.denominacion} ha sido añadido a la lista.`,

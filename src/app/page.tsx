@@ -15,34 +15,34 @@ import {
   CircleDollarSign,
   Users,
   TrendingUp,
-  PhoneCall,
-  Mail,
-  Users2,
-  FileText,
+  PlusCircle,
+  Edit,
+  ArrowRight,
 } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import type { Activity as ActivityType, Opportunity, Client } from '@/lib/types';
+import type { Opportunity, Client, ActivityLog } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
   getAllOpportunities,
   getOpportunitiesForUser,
   getClients,
-  getAllActivities,
+  getActivities,
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
+import { users } from '@/lib/data';
 
-const activityIcons: Record<ActivityType['type'], React.ReactNode> = {
-  Llamada: <PhoneCall className="h-4 w-4 text-muted-foreground" />,
-  Email: <Mail className="h-4 w-4 text-muted-foreground" />,
-  Reunión: <Users2 className="h-4 w-4 text-muted-foreground" />,
-  Nota: <FileText className="h-4 w-4 text-muted-foreground" />,
+const activityIcons: Record<string, React.ReactNode> = {
+  'create': <PlusCircle className="h-5 w-5 text-green-500" />,
+  'update': <Edit className="h-5 w-5 text-blue-500" />,
+  'stage_change': <ArrowRight className="h-5 w-5 text-purple-500" />,
 };
+
+const getDefaultIcon = () => <Activity className="h-5 w-5 text-muted-foreground" />;
 
 export default function DashboardPage() {
   const { userInfo, loading: authLoading } = useAuth();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [activities, setActivities] = useState<ActivityType[]>([]);
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
@@ -60,14 +60,12 @@ export default function DashboardPage() {
 
         const [allClients, allActivities] = await Promise.all([
           getClients(),
-          getAllActivities(),
+          getActivities(10), // Get last 10 activities
         ]);
         
         setOpportunities(userOpps);
         setClients(allClients);
-        // Sort activities by date descending and take the first 5
-        const sortedActivities = allActivities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setActivities(sortedActivities.slice(0, 5));
+        setActivities(allActivities);
 
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -177,30 +175,32 @@ export default function DashboardPage() {
             <CardHeader>
               <CardTitle>Actividad Reciente</CardTitle>
               <CardDescription>
-                Un registro de las actividades de venta más recientes.
+                Un registro de las últimas acciones realizadas en el sistema.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {activities.map((activity) => (
-                  <div key={activity.id} className="flex items-start gap-4">
-                    <div className="p-2 bg-muted rounded-full">
-                       {activityIcons[activity.type]}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium">{activity.subject}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(activity.date).toLocaleDateString()}
-                        </p>
+                {activities.map((activity) => {
+                    const performingUser = users.find(u => u.id === activity.userId);
+                    return (
+                      <div key={activity.id} className="flex items-start gap-4">
+                        <div className="p-2 bg-muted rounded-full">
+                           {activityIcons[activity.type] || getDefaultIcon()}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                             <p className="text-sm" dangerouslySetInnerHTML={{ __html: activity.details }} />
+                            <p className="text-sm text-muted-foreground whitespace-nowrap">
+                              {new Date(activity.timestamp).toLocaleDateString()}
+                            </p>
+                          </div>
+                           <p className="text-sm text-muted-foreground">
+                            Por: {performingUser?.name || 'Usuario desconocido'}
+                          </p>
+                        </div>
                       </div>
-                       <p className="text-sm text-muted-foreground">
-                        Relacionado con el cliente: {clients.find(c => c.id === activity.clientId)?.denominacion}
-                      </p>
-                      <p className="text-sm">{activity.notes}</p>
-                    </div>
-                  </div>
-                ))}
+                    )
+                })}
               </div>
             </CardContent>
           </Card>

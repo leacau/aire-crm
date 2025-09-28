@@ -1,4 +1,5 @@
-import type { User, Client, Opportunity, OpportunityStage, Activity, Person, TipoEntidad } from './types';
+
+import type { User, Client, Opportunity, OpportunityStage, Person, TipoEntidad } from './types';
 
 export const users: User[] = [
   { id: 'user-1', name: 'Alex Morgan', email: 'alex.morgan@example.com', avatarUrl: 'https://picsum.photos/seed/user1/40/40', initials: 'AM', role: 'Asesor' },
@@ -131,53 +132,3 @@ export let opportunities: Opportunity[] = [
     ownerId: 'user-3',
   },
 ];
-
-export let activities: Activity[] = [
-  {
-    id: 'act-1',
-    type: 'Reunión',
-    subject: 'Llamada inicial de descubrimiento',
-    date: '2024-07-12',
-    notes: 'Se discutió el alcance y los objetivos del proyecto. El cliente está interesado en una propuesta completa.',
-    clientId: 'client-4',
-    opportunityId: 'opp-4',
-  },
-  {
-    id: 'act-2',
-    type: 'Email',
-    subject: 'Seguimiento de la propuesta',
-    date: '2024-07-28',
-    notes: 'Se envió la propuesta revisada con los precios actualizados. A la espera de comentarios.',
-    clientId: 'client-2',
-    opportunityId: 'opp-2',
-  },
-  {
-    id: 'act-3',
-    type: 'Llamada',
-    subject: 'Llamada de negociación del contrato',
-    date: '2024-08-02',
-    notes: 'Se discutieron los términos finales del contrato. Se solicitaron ajustes menores en el calendario de pagos.',
-    clientId: 'client-1',
-    opportunityId: 'opp-1',
-  },
-  {
-    id: 'act-4',
-    type: 'Nota',
-    subject: 'Reunión de estrategia interna',
-    date: '2024-08-01',
-    notes: 'Reunión de equipo para alinear la estrategia de entrega para el proyecto de SEO.',
-    clientId: 'client-5',
-    opportunityId: 'opp-5',
-  },
-    {
-    id: 'act-5',
-    type: 'Email',
-    subject: 'Bienvenida e incorporación',
-    date: '2024-07-21',
-    notes: 'Se envió un correo electrónico de bienvenida y materiales de incorporación después de ganar el trato.',
-    clientId: 'client-3',
-    opportunityId: 'opp-3',
-  },
-];
-
-export const recentActivities = activities.slice(0, 3);

@@ -4,7 +4,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { activities as allActivities } from '@/lib/data';
 import { ClientDetails } from '@/components/clients/client-details';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
@@ -67,9 +66,9 @@ export default function ClientPage({ params }: { params: { id: string } }) {
 
 
   const handleUpdateClient = async (updatedData: Partial<Omit<Client, 'id'>>) => {
-    if (!client) return;
+    if (!client || !userInfo) return;
     try {
-        await updateClient(client.id, updatedData);
+        await updateClient(client.id, updatedData, userInfo.id, userInfo.name);
         setClient(prev => prev ? { ...prev, ...updatedData } : null);
         toast({ title: "Cliente Actualizado", description: "Los datos del cliente se han guardado." });
     } catch (error) {
@@ -86,8 +85,6 @@ export default function ClientPage({ params }: { params: { id: string } }) {
     );
   }
   
-  const clientActivities = allActivities.filter(a => a.clientId === client.id);
-
   return (
     <div className="flex flex-col h-full">
       <Header title={client.denominacion}>
@@ -101,7 +98,6 @@ export default function ClientPage({ params }: { params: { id: string } }) {
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <ClientDetails
           client={client}
-          activities={clientActivities}
           onUpdate={handleUpdateClient}
         />
       </main>

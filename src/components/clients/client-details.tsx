@@ -1,6 +1,6 @@
 
 'use client'
-import type { Client, Opportunity, Activity, Person } from '@/lib/types';
+import type { Client, Opportunity, Person } from '@/lib/types';
 import React, { useEffect, useState } from 'react';
 import {
   Card,
@@ -17,7 +17,6 @@ import {
   Edit,
   Trash2,
   PhoneCall,
-  FileText,
   Users as UsersIcon,
   Building,
   Home,
@@ -68,12 +67,6 @@ const stageColors: Record<OpportunityStage, string> = {
   'Cerrado - Perdido': 'bg-red-500',
 };
 
-const activityIcons: Record<Activity['type'], React.ReactNode> = {
-  Llamada: <PhoneCall className="h-5 w-5" />,
-  Email: <Mail className="h-5 w-5" />,
-  Reunión: <UsersIcon className="h-5 w-s" />,
-  Nota: <FileText className="h-5 w-5" />,
-};
 
 const WhatsappIcon = () => (
   <svg
@@ -89,11 +82,9 @@ const WhatsappIcon = () => (
 
 export function ClientDetails({
   client,
-  activities,
   onUpdate
 }: {
   client: Client;
-  activities: Activity[];
   onUpdate: (data: Partial<Omit<Client, 'id'>>) => void;
 }) {
   const { userInfo } = useAuth();
@@ -110,6 +101,7 @@ export function ClientDetails({
   const [isClientFormOpen, setIsClientFormOpen] = useState(false);
 
   const fetchClientData = async () => {
+      if(!userInfo) return;
       const [clientPeople, clientOpportunities] = await Promise.all([
           getPeopleByClientId(client.id),
           getOpportunitiesByClientId(client.id)
@@ -120,7 +112,7 @@ export function ClientDetails({
 
   useEffect(() => {
     fetchClientData();
-  }, [client.id]);
+  }, [client.id, userInfo]);
 
 
   const canEditClient = userInfo?.role === 'Jefe' || (userInfo?.id === client.ownerId);
@@ -130,9 +122,9 @@ export function ClientDetails({
   const canReassign = userInfo?.role === 'Jefe' || userInfo?.role === 'Administracion';
 
   const handleOpportunityUpdate = async (updatedOpp: Partial<Opportunity>) => {
-    if(!selectedOpportunity) return;
+    if(!selectedOpportunity || !userInfo) return;
     try {
-        await updateOpportunity(selectedOpportunity.id, updatedOpp);
+        await updateOpportunity(selectedOpportunity.id, updatedOpp, userInfo.id, userInfo.name);
         fetchClientData();
         toast({ title: 'Oportunidad Actualizada' });
     } catch (error) {
@@ -144,12 +136,13 @@ export function ClientDetails({
   const handleOpportunityCreate = async (newOppData: Omit<Opportunity, 'id'>) => {
      if(!userInfo) return;
      try {
-        await createOpportunity({
+        const fullNewOpp = {
             ...newOppData,
             clientId: client.id,
             clientName: client.denominacion,
             ownerId: userInfo.id,
-        });
+        }
+        await createOpportunity(fullNewOpp, userInfo.id, userInfo.name);
         fetchClientData();
         toast({ title: 'Oportunidad Creada' });
     } catch (error) {
@@ -160,12 +153,12 @@ export function ClientDetails({
 
 
   const handleStageChange = async (opportunityId: string, newStage: OpportunityStage) => {
-    if (!canEditOpportunity) return;
+    if (!canEditOpportunity || !userInfo) return;
     const originalOpportunities = opportunities;
     const updatedOpportunities = opportunities.map(opp => opp.id === opportunityId ? { ...opp, stage: newStage } : opp);
     setOpportunities(updatedOpportunities);
     try {
-        await updateOpportunity(opportunityId, { stage: newStage });
+        await updateOpportunity(opportunityId, { stage: newStage }, userInfo.id, userInfo.name);
     } catch (error) {
         console.error('Error updating stage', error);
         setOpportunities(originalOpportunities);
@@ -184,14 +177,15 @@ export function ClientDetails({
   }
 
   const handleSavePerson = async (personData: Omit<Person, 'id' | 'clientIds'> & { clientIds?: string[]}) => {
+     if(!userInfo) return;
      try {
         if (selectedPerson) { // Editing existing person
-            await updatePerson(selectedPerson.id, personData);
+            await updatePerson(selectedPerson.id, personData, userInfo.id, userInfo.name);
             fetchClientData();
             toast({ title: "Contacto Actualizado" });
         } else { // Creating new person
             const newPersonData = { ...personData, clientIds: [client.id] };
-            await createPerson(newPersonData);
+            await createPerson(newPersonData, userInfo.id, userInfo.name);
             fetchClientData();
             toast({ title: "Contacto Creado" });
         }
@@ -379,31 +373,16 @@ export function ClientDetails({
           </Table>
         </CardContent>
       </Card>
-      
+
       <Card>
         <CardHeader>
           <CardTitle>Línea de Tiempo de Actividad</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="relative space-y-8 pl-6 before:absolute before:inset-y-0 before:w-px before:bg-border before:left-6">
-            {activities.map((activity) => (
-              <div key={activity.id} className="relative">
-                <div className="absolute -left-3.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-background border-2 border-primary text-primary">
-                  {activityIcons[activity.type]}
-                </div>
-                <div className="ml-8">
-                  <div className="flex items-center justify-between">
-                      <p className="font-semibold">{activity.subject}</p>
-                      <p className="text-sm text-muted-foreground">{activity.date}</p>
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">{activity.notes}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+            <p className="text-muted-foreground">Esta sección ha sido movida al Panel principal.</p>
         </CardContent>
       </Card>
-
+      
       {isOpportunityFormOpen && (
         <OpportunityDetailsDialog
           opportunity={selectedOpportunity}
@@ -411,6 +390,7 @@ export function ClientDetails({
           onOpenChange={setIsOpportunityFormOpen}
           onUpdate={handleOpportunityUpdate}
           onCreate={handleOpportunityCreate}
+          client={{id: client.id, name: client.denominacion}}
         />
       )}
 

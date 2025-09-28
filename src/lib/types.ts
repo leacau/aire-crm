@@ -1,4 +1,5 @@
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -53,15 +54,18 @@ export type Client = {
   ownerId: string;
 };
 
-export type Activity = {
-  id: 'act-1' | 'act-2' | 'act-3' | 'act-4' | 'act-5';
-  type: 'Llamada' | 'Email' | 'Reunión' | 'Nota';
-  subject: string;
-  date: string;
-  notes: string;
-  clientId: string;
-  opportunityId?: string;
+export type ActivityLog = {
+  id: string;
+  userId: string;
+  userName: string;
+  type: 'create' | 'update' | 'delete' | 'stage_change';
+  entityType: 'client' | 'person' | 'opportunity';
+  entityId: string;
+  entityName: string;
+  details: string; // HTML-enabled string describing the action
+  timestamp: string;
 };
+
 
 export type UserRole = 'Asesor' | 'Administracion' | 'Jefe';
 

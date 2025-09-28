@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -89,10 +90,19 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
   const owner = users.find((user) => user.id === opportunity.ownerId);
   const { userInfo } = useAuth();
   const [isDetailsOpen, setIsDetailsOpen] = React.useState(false);
+  const { toast } = useToast();
 
-  const handleUpdate = (updatedOpp: Partial<Opportunity>) => {
-     window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: {id: opportunity.id, ...updatedOpp} }));
-     setIsDetailsOpen(false);
+  const handleUpdate = async (updatedOpp: Partial<Opportunity>) => {
+     if (!userInfo) return;
+     try {
+       await updateOpportunity(opportunity.id, updatedOpp, userInfo.id, userInfo.name);
+       window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: {id: opportunity.id, ...updatedOpp} }));
+       setIsDetailsOpen(false);
+       toast({ title: "Oportunidad Actualizada" });
+     } catch (error) {
+       console.error("Error updating opportunity", error);
+       toast({ title: "Error al actualizar", variant: "destructive" });
+     }
   }
   
   const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor';
@@ -214,7 +224,8 @@ export function KanbanBoard() {
       );
 
       try {
-        await updateOpportunity(opportunityId, { stage: newStage });
+        if (!userInfo) throw new Error("User not authenticated");
+        await updateOpportunity(opportunityId, { stage: newStage }, userInfo.id, userInfo.name);
         toast({ title: "Etapa actualizada", description: `"${oppToMove.title}" se movió a ${newStage}.` });
       } catch (error) {
         console.error("Error updating opportunity stage:", error);
@@ -248,5 +259,3 @@ export function KanbanBoard() {
     </div>
   );
 }
-
-    

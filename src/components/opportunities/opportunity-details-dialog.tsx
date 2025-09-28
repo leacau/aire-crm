@@ -25,7 +25,6 @@ import { opportunityStages } from '@/lib/data';
 import type { Opportunity, OpportunityStage } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
-import { updateOpportunity, createOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 
 interface OpportunityDetailsDialogProps {
@@ -62,7 +61,7 @@ export function OpportunityDetailsDialog({
   const { toast } = useToast();
 
   const getInitialData = () => {
-      if (opportunity) return opportunity;
+      if (opportunity) return { ...opportunity };
       return getInitialOpportunityData(userInfo, client);
   }
 
@@ -80,6 +79,7 @@ export function OpportunityDetailsDialog({
     if (isEditing && opportunity) {
       const changes = Object.keys(editedOpportunity).reduce((acc, key) => {
         const oppKey = key as keyof Opportunity;
+        // @ts-ignore
         if (editedOpportunity[oppKey] !== opportunity[oppKey]) {
           // @ts-ignore
           acc[oppKey] = editedOpportunity[oppKey];
@@ -88,23 +88,11 @@ export function OpportunityDetailsDialog({
       }, {} as Partial<Opportunity>);
 
       if (Object.keys(changes).length > 0) {
-          try {
-              await updateOpportunity(opportunity.id, changes);
-              onUpdate(changes);
-              toast({ title: "Oportunidad actualizada" });
-          } catch(e) {
-              toast({ title: "Error al actualizar", variant: "destructive" });
-          }
+          onUpdate(changes);
       }
     } else if (!isEditing) {
-        try {
-            const newOpp = editedOpportunity as Omit<Opportunity, 'id'>;
-            const newId = await createOpportunity(newOpp);
-            onCreate({...newOpp, id: newId});
-            toast({ title: "Oportunidad creada" });
-        } catch(e) {
-            toast({ title: "Error al crear", variant: "destructive" });
-        }
+        const newOpp = editedOpportunity as Omit<Opportunity, 'id'>;
+        onCreate(newOpp);
     }
     onOpenChange(false);
   };
@@ -277,5 +265,3 @@ export function OpportunityDetailsDialog({
     </Dialog>
   );
 }
-
-    

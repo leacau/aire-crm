@@ -1,7 +1,8 @@
 
 import { db } from './firebase';
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp } from 'firebase/firestore';
-import type { Client, Person, Opportunity, Activity } from './types';
+import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit } from 'firebase/firestore';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage } from './types';
+import { logActivity } from './activity-logger';
 
 const clientsCollection = collection(db, 'clients');
 const peopleCollection = collection(db, 'people');
@@ -12,7 +13,7 @@ const activitiesCollection = collection(db, 'activities');
 // --- Client Functions ---
 
 export const getClients = async (): Promise<Client[]> => {
-    const snapshot = await getDocs(clientsCollection);
+    const snapshot = await getDocs(query(clientsCollection, orderBy("denominacion")));
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
 };
 
@@ -35,21 +36,38 @@ export const getClient = async (id: string): Promise<Client | null> => {
 
 export const createClient = async (
     clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>,
-    ownerId: string
+    userId: string,
+    userName: string
 ): Promise<string> => {
     const newClientData = {
         ...clientData,
         avatarUrl: `https://picsum.photos/seed/client-${Date.now()}/40/40`,
         avatarFallback: clientData.denominacion.substring(0, 2).toUpperCase(),
         personIds: [],
-        ownerId,
+        ownerId: userId,
         createdAt: serverTimestamp(),
     };
     const docRef = await addDoc(clientsCollection, newClientData);
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'client',
+        entityId: docRef.id,
+        entityName: clientData.denominacion,
+        details: `creó el cliente <a href="/clients/${docRef.id}" class="font-bold text-primary hover:underline">${clientData.denominacion}</a>`,
+    });
+
     return docRef.id;
 };
 
-export const updateClient = async (id: string, data: Partial<Omit<Client, 'id'>>): Promise<void> => {
+export const updateClient = async (
+    id: string, 
+    data: Partial<Omit<Client, 'id'>>,
+    userId: string,
+    userName: string
+): Promise<void> => {
     const docRef = doc(db, 'clients', id);
     const updateData = { ...data };
     if (data.denominacion && !data.avatarFallback) {
@@ -59,6 +77,16 @@ export const updateClient = async (id: string, data: Partial<Omit<Client, 'id'>>
     await updateDoc(docRef, {
         ...updateData,
         updatedAt: serverTimestamp()
+    });
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'client',
+        entityId: id,
+        entityName: data.denominacion || '',
+        details: `actualizó el cliente <a href="/clients/${id}" class="font-bold text-primary hover:underline">${data.denominacion || 'un cliente'}</a>`,
     });
 };
 
@@ -72,7 +100,9 @@ export const getPeopleByClientId = async (clientId: string): Promise<Person[]> =
 }
 
 export const createPerson = async (
-    personData: Omit<Person, 'id'>
+    personData: Omit<Person, 'id'>,
+    userId: string,
+    userName: string
 ): Promise<string> => {
     const docRef = await addDoc(peopleCollection, {
         ...personData,
@@ -80,21 +110,48 @@ export const createPerson = async (
     });
     
     // Link this new person to their client(s)
-    for (const clientId of personData.clientIds) {
-        const clientRef = doc(db, 'clients', clientId);
-        await updateDoc(clientRef, {
-            personIds: arrayUnion(docRef.id)
-        });
+    if (personData.clientIds) {
+        for (const clientId of personData.clientIds) {
+            const clientRef = doc(db, 'clients', clientId);
+            await updateDoc(clientRef, {
+                personIds: arrayUnion(docRef.id)
+            });
+        }
     }
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'person',
+        entityId: docRef.id,
+        entityName: personData.name,
+        details: `creó el contacto <strong>${personData.name}</strong>`,
+    });
     
     return docRef.id;
 };
 
-export const updatePerson = async (id: string, data: Partial<Omit<Person, 'id'>>): Promise<void> => {
+export const updatePerson = async (
+    id: string, 
+    data: Partial<Omit<Person, 'id'>>,
+    userId: string,
+    userName: string
+): Promise<void> => {
     const docRef = doc(db, 'people', id);
     await updateDoc(docRef, {
         ...data,
         updatedAt: serverTimestamp()
+    });
+
+     await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'person',
+        entityId: id,
+        entityName: data.name || '',
+        details: `actualizó el contacto <strong>${data.name || 'un contacto'}</strong>`,
     });
 };
 
@@ -119,33 +176,77 @@ export const getOpportunitiesForUser = async (userId: string): Promise<Opportuni
 }
 
 export const createOpportunity = async (
-    opportunityData: Omit<Opportunity, 'id'>
+    opportunityData: Omit<Opportunity, 'id'>,
+    userId: string,
+    userName: string
 ): Promise<string> => {
     const docRef = await addDoc(opportunitiesCollection, {
         ...opportunityData,
         createdAt: serverTimestamp()
     });
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'opportunity',
+        entityId: docRef.id,
+        entityName: opportunityData.title,
+        details: `creó la oportunidad <strong>${opportunityData.title}</strong>`,
+    });
+
     return docRef.id;
 };
 
-export const updateOpportunity = async (id: string, data: Partial<Omit<Opportunity, 'id'>>): Promise<void> => {
+export const updateOpportunity = async (
+    id: string, 
+    data: Partial<Omit<Opportunity, 'id'>>,
+    userId: string,
+    userName: string
+): Promise<void> => {
     const docRef = doc(db, 'opportunities', id);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) throw new Error("Opportunity not found");
+    const originalData = docSnap.data() as Opportunity;
+
     await updateDoc(docRef, {
         ...data,
         updatedAt: serverTimestamp()
     });
+
+    if (data.stage && data.stage !== originalData.stage) {
+        await logActivity({
+            userId,
+            userName,
+            type: 'stage_change',
+            entityType: 'opportunity',
+            entityId: id,
+            entityName: originalData.title,
+            details: `cambió la etapa de <strong>${originalData.title}</strong> a <strong>${data.stage}</strong>`,
+        });
+    } else {
+        await logActivity({
+            userId,
+            userName,
+            type: 'update',
+            entityType: 'opportunity',
+            entityId: id,
+            entityName: originalData.title,
+            details: `actualizó la oportunidad <strong>${originalData.title}</strong>`,
+        });
+    }
 };
 
 // --- Activity Functions ---
 
-export const getAllActivities = async (): Promise<Activity[]> => {
-    const snapshot = await getDocs(activitiesCollection);
+export const getActivities = async (activityLimit: number = 20): Promise<ActivityLog[]> => {
+    const q = query(activitiesCollection, orderBy('timestamp', 'desc'), limit(activityLimit));
+    const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
-        // Convert Firestore Timestamps to serializable strings
-        if (data.date instanceof Timestamp) {
-            data.date = data.date.toDate().toISOString();
+        if (data.timestamp instanceof Timestamp) {
+            data.timestamp = data.timestamp.toDate().toISOString();
         }
-        return { id: doc.id, ...data } as Activity;
+        return { id: doc.id, ...data } as ActivityLog;
     });
 };
