@@ -1,7 +1,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { clients as initialClients, opportunities } from '@/lib/data';
+import { opportunities } from '@/lib/data';
 import { FileDown, MoreHorizontal, PlusCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -20,29 +20,67 @@ import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import type { Client } from '@/lib/types';
+import { createClient, getClients } from '@/lib/firebase-service';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ClientsPage() {
-  const { userInfo, loading } = useAuth();
-  const [clients, setClients] = React.useState(initialClients);
-  const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const { userInfo, loading: authLoading } = useAuth();
+  const { toast } = useToast();
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [clientsLoading, setClientsLoading] = useState(true);
 
-  const handleSaveClient = (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>) => {
-    if (!userInfo) return;
+  const fetchClients = useCallback(async () => {
+    setClientsLoading(true);
+    try {
+      const fetchedClients = await getClients();
+      setClients(fetchedClients);
+    } catch (error) {
+      console.error("Error fetching clients:", error);
+      toast({
+        title: "Error al cargar clientes",
+        description: "No se pudieron cargar los datos de los clientes.",
+        variant: "destructive",
+      });
+    } finally {
+      setClientsLoading(false);
+    }
+  }, [toast]);
 
-    const newClient: Client = {
-      id: `client-${Date.now()}`,
-      ...clientData,
-      name: clientData.company, // Assuming contact name is company name for now
-      avatarUrl: `https://picsum.photos/seed/new-${Date.now()}/40/40`,
-      avatarFallback: clientData.company.substring(0, 2).toUpperCase(),
-      personIds: [],
-      ownerId: userInfo.id,
-    };
-    setClients(prev => [...prev, newClient]);
+  useEffect(() => {
+    if (!authLoading) {
+      fetchClients();
+    }
+  }, [authLoading, fetchClients]);
+
+  const handleSaveClient = async (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>) => {
+    if (!userInfo) {
+        toast({
+            title: "Error",
+            description: "Debes iniciar sesión para crear un cliente.",
+            variant: "destructive",
+        });
+        return;
+    }
+
+    try {
+      await createClient(clientData, userInfo.id);
+      toast({
+        title: "Cliente Creado",
+        description: `${clientData.company} ha sido añadido a la lista.`,
+      });
+      fetchClients(); // Refresh the list
+    } catch (error) {
+        console.error("Error creating client:", error);
+        toast({
+            title: "Error al crear cliente",
+            description: "No se pudo guardar el cliente.",
+            variant: "destructive",
+        });
+    }
   };
 
-
-  if (loading) {
+  if (authLoading || clientsLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />

@@ -15,6 +15,7 @@ export const people: Person[] = [
     { id: 'person-5', name: 'Lucia Fernandez', email: 'lucia.f@apexdigital.com', phone: '555-5555', clientIds: ['client-5'] },
 ];
 
+// This is now just initial mock data. The app will use Firestore.
 export let clients: Client[] = [
   {
     id: 'client-1',
@@ -37,39 +38,6 @@ export let clients: Client[] = [
     avatarFallback: 'IS',
     personIds: ['person-2'],
     ownerId: 'user-2',
-  },
-  {
-    id: 'client-3',
-    name: 'Quantum Leap Tech',
-    email: 'info@quantumleap.tech',
-    phone: '555-0103',
-    company: 'Quantum Leap Tech',
-    avatarUrl: 'https://picsum.photos/seed/client3/40/40',
-    avatarFallback: 'QL',
-    personIds: ['person-3'],
-    ownerId: 'user-1',
-  },
-    {
-    id: 'client-4',
-    name: 'Starlight Productions',
-    email: 'support@starlight.prod',
-    phone: '555-0104',
-    company: 'Starlight Productions',
-    avatarUrl: 'https://picsum.photos/seed/client4/40/40',
-    avatarFallback: 'SP',
-    personIds: ['person-4'],
-    ownerId: 'user-2',
-  },
-    {
-    id: 'client-5',
-    name: 'Apex Digital',
-    email: 'connect@apexdigital.com',
-    phone: '555-0105',
-    company: 'Apex Digital',
-    avatarUrl: 'https://picsum.photos/seed/client5/40/40',
-    avatarFallback: 'AD',
-    personIds: ['person-5'],
-    ownerId: 'user-1',
   },
 ];
 

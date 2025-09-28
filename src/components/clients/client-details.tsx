@@ -89,14 +89,14 @@ export function ClientDetails({
   opportunities: Opportunity[];
   activities: Activity[];
   people: Person[];
-  onUpdate: (client: Client) => void;
+  onUpdate: (data: Partial<Omit<Client, 'id'>>) => void;
 }) {
   const { userInfo } = useAuth();
   const [opportunities, setOpportunities] = React.useState(initialOpportunities);
   const [selectedOpportunity, setSelectedOpportunity] = React.useState<Opportunity | null>(null);
   const [isClientFormOpen, setIsClientFormOpen] = React.useState(false);
 
-  const canEditClient = userInfo?.role === 'Jefe' || (userInfo?.role === 'Asesor' && client.ownerId === userInfo.id);
+  const canEditClient = userInfo?.role === 'Jefe' || (userInfo?.id === client.ownerId);
   const canEditOpportunity = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor';
   const canDelete = userInfo?.role === 'Jefe';
   const canReassign = userInfo?.role === 'Jefe' || userInfo?.role === 'Administracion';
@@ -116,11 +116,7 @@ export function ClientDetails({
   };
 
   const handleSaveClient = (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>) => {
-    const updatedClient = {
-      ...client,
-      ...clientData
-    };
-    onUpdate(updatedClient);
+    onUpdate(clientData);
   };
   
   return (

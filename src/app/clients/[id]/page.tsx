@@ -1,10 +1,10 @@
 
 'use client';
 
-import React, { useEffect, use } from 'react';
+import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { clients, opportunities as allOpportunities, activities as allActivities, people as allPeople } from '@/lib/data';
+import { opportunities as allOpportunities, activities as allActivities, people as allPeople } from '@/lib/data';
 import { ClientDetails } from '@/components/clients/client-details';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
@@ -12,23 +12,46 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import type { Client } from '@/lib/types';
-
+import { getClient, updateClient } from '@/lib/firebase-service';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ClientPage({ params }: { params: { id: string } }) {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   
+  // Correctly unwrap the id from params
   const { id } = use(params);
   
-  const [client, setClient] = React.useState<Client | undefined>(() => clients.find((c) => c.id === id));
+  const [client, setClient] = useState<Client | null>(null);
+  const [loadingClient, setLoadingClient] = useState(true);
 
   useEffect(() => {
-    if (!authLoading) {
-      if (!client) {
+    const fetchClient = async () => {
+      if (!id) return;
+      setLoadingClient(true);
+      try {
+        const fetchedClient = await getClient(id);
+        if (fetchedClient) {
+          setClient(fetchedClient);
+        } else {
+          toast({ title: "Cliente no encontrado", variant: "destructive" });
+          router.push('/clients');
+        }
+      } catch (error) {
+        console.error("Error fetching client:", error);
+        toast({ title: "Error al cargar el cliente", variant: "destructive" });
         router.push('/clients');
-        return;
+      } finally {
+        setLoadingClient(false);
       }
-      
+    };
+
+    fetchClient();
+  }, [id, router, toast]);
+
+  useEffect(() => {
+    if (!authLoading && !loadingClient && client) {
       const userHasAccess =
         userInfo &&
         (userInfo.role === 'Jefe' ||
@@ -36,13 +59,26 @@ export default function ClientPage({ params }: { params: { id: string } }) {
           (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
       if (!userHasAccess) {
+        toast({ title: "Acceso denegado", variant: "destructive" });
         router.push('/clients');
       }
     }
-  }, [authLoading, userInfo, client, router]);
+  }, [authLoading, loadingClient, userInfo, client, router, toast]);
+
+  const handleUpdateClient = async (updatedData: Partial<Omit<Client, 'id'>>) => {
+    if (!client) return;
+    try {
+        await updateClient(client.id, updatedData);
+        setClient(prev => prev ? { ...prev, ...updatedData } : null);
+        toast({ title: "Cliente Actualizado", description: "Los datos del cliente se han guardado." });
+    } catch (error) {
+        console.error("Error updating client:", error);
+        toast({ title: "Error al actualizar", variant: "destructive" });
+    }
+  };
 
 
-  if (authLoading || !client) {
+  if (authLoading || loadingClient || !client) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
@@ -50,6 +86,7 @@ export default function ClientPage({ params }: { params: { id: string } }) {
     );
   }
 
+  // Final check for access before rendering
   const userHasAccess =
     userInfo &&
     (userInfo.role === 'Jefe' ||
@@ -57,25 +94,17 @@ export default function ClientPage({ params }: { params: { id: string } }) {
       (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
   if (!userHasAccess) {
+      // This will show a spinner while redirecting
       return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Spinner size="large" />
-      </div>
-    );
+          <div className="flex h-full w-full items-center justify-center">
+              <Spinner size="large" />
+          </div>
+      );
   }
-
+  
   const clientOpportunities = allOpportunities.filter(o => o.clientId === client.id);
   const clientActivities = allActivities.filter(a => a.clientId === client.id);
   const clientPeople = allPeople.filter(p => p.clientIds.includes(client.id));
-
-  const handleUpdateClient = (updatedClient: Client) => {
-    setClient(updatedClient);
-    // Also update the main clients array for consistency across the app
-    const clientIndex = clients.findIndex(c => c.id === updatedClient.id);
-    if (clientIndex !== -1) {
-      clients[clientIndex] = updatedClient;
-    }
-  };
 
   return (
     <div className="flex flex-col h-full">
