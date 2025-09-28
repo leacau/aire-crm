@@ -157,8 +157,8 @@ export default function ClientsPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{clientOpps.length}</TableCell>
-                    <TableCell>${totalValue.toLocaleString()}</TableCell>
+                    <TableCell>{canViewDetails ? clientOpps.length : '-'}</TableCell>
+                    <TableCell>{canViewDetails ? `$${totalValue.toLocaleString()}` : '-'}</TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon">
                         <MoreHorizontal className="h-4 w-4" />
