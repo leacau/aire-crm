@@ -56,9 +56,9 @@ export const updateClient = async (id: string, data: Partial<Omit<Client, 'id'>>
 // --- Person (Contact) Functions ---
 
 export const getPeopleByClientId = async (clientId: string): Promise<Person[]> => {
-    const snapshot = await getDocs(peopleCollection);
-    const allPeople = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
-    return allPeople.filter(person => person.clientIds.includes(clientId));
+    const q = query(peopleCollection, where("clientIds", "array-contains", clientId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
 }
 
 export const createPerson = async (
@@ -96,6 +96,12 @@ export const getOpportunitiesByClientId = async (clientId: string): Promise<Oppo
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
 };
+
+export const getOpportunitiesForUser = async (userId: string): Promise<Opportunity[]> => {
+    const q = query(opportunitiesCollection, where("ownerId", "==", userId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
+}
 
 export const createOpportunity = async (
     opportunityData: Omit<Opportunity, 'id'>

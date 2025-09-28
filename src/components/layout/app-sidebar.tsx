@@ -11,7 +11,7 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, Kanban, Users, Settings } from 'lucide-react';
+import { Home, Kanban, Users, Settings, Receipt } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
@@ -19,6 +19,7 @@ const menuItems = [
   { href: '/', label: 'Panel', icon: Home },
   { href: '/opportunities', label: 'Oportunidades', icon: Kanban },
   { href: '/clients', label: 'Clientes', icon: Users },
+  { href: '/billing', label: 'Facturación', icon: Receipt },
 ];
 
 function MenuLink({ item }: { item: typeof menuItems[0] }) {

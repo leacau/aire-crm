@@ -24,13 +24,14 @@ import {
 import { opportunityStages } from '@/lib/data';
 import type { Opportunity, OpportunityStage } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
+import { Checkbox } from '../ui/checkbox';
 
 interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   onUpdate: (opportunity: Partial<Opportunity>) => void;
-  onCreate: (opportunity: Omit<Opportunity, 'id'>) => void;
+  onCreate?: (opportunity: Omit<Opportunity, 'id'>) => void;
 }
 
 const getInitialOpportunityData = (userInfo: any): Omit<Opportunity, 'id'> => ({
@@ -43,6 +44,7 @@ const getInitialOpportunityData = (userInfo: any): Omit<Opportunity, 'id'> => ({
     clientName: '',
     clientId: '',
     ownerId: userInfo?.id || '',
+    pagado: false,
 });
 
 export function OpportunityDetailsDialog({
@@ -50,7 +52,7 @@ export function OpportunityDetailsDialog({
   isOpen,
   onOpenChange,
   onUpdate,
-  onCreate,
+  onCreate = () => {},
 }: OpportunityDetailsDialogProps) {
   const { userInfo } = useAuth();
   const [editedOpportunity, setEditedOpportunity] = React.useState<Partial<Opportunity>>(
@@ -84,7 +86,12 @@ export function OpportunityDetailsDialog({
     setEditedOpportunity(prev => ({ ...prev, stage }));
   };
 
+  const handleCheckboxChange = (checked: boolean) => {
+    setEditedOpportunity(prev => ({...prev, pagado: checked }));
+  }
+
   const isCloseWon = editedOpportunity.stage === 'Cerrado - Ganado';
+  const isInvoiceSet = !!editedOpportunity.facturaNo;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -209,6 +216,19 @@ export function OpportunityDetailsDialog({
                   disabled={!isCloseWon}
                   placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}
                 />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="pagado" className="text-right">
+                  Pagado
+                </Label>
+                <div className="col-span-3 flex items-center">
+                    <Checkbox
+                        id="pagado"
+                        checked={editedOpportunity.pagado}
+                        onCheckedChange={handleCheckboxChange}
+                        disabled={!isInvoiceSet}
+                    />
+                </div>
               </div>
             </>
           )}

@@ -20,6 +20,7 @@ export type Opportunity = {
   facturaNo?: string;
   valorCerrado?: number;
   propuestaCerrada?: string;
+  pagado?: boolean;
 };
 
 export type Person = {
