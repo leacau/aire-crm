@@ -29,7 +29,9 @@ import {
   Users,
   Video,
   BuildingIcon,
-  MailIcon
+  MailIcon,
+  CalendarIcon,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   Table,
@@ -61,9 +63,16 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities } from '@/lib/firebase-service';
+import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
+import { Checkbox } from '../ui/checkbox';
+import { Label } from '../ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Calendar } from '../ui/calendar';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 
 const stageColors: Record<OpportunityStage, string> = {
@@ -109,8 +118,13 @@ export function ClientDetails({
   const [people, setPeople] = useState<Person[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clientActivities, setClientActivities] = useState<ClientActivity[]>([]);
+  
+  // New Activity State
   const [newActivityType, setNewActivityType] = useState<ClientActivityType | ''>('');
   const [newActivityObservation, setNewActivityObservation] = useState('');
+  const [isTask, setIsTask] = useState(false);
+  const [dueDate, setDueDate] = useState<Date | undefined>();
+
   
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [isOpportunityFormOpen, setIsOpportunityFormOpen] = useState(false);
@@ -215,28 +229,54 @@ export function ClientDetails({
         toast({ title: "Error al guardar el contacto", variant: 'destructive' });
     }
   };
+  
+  const resetActivityForm = () => {
+    setNewActivityType('');
+    setNewActivityObservation('');
+    setIsTask(false);
+    setDueDate(undefined);
+  };
+
 
   const handleSaveClientActivity = async () => {
     if (!newActivityType || !newActivityObservation.trim() || !userInfo) {
         toast({ title: "Datos incompletos", description: "Selecciona un tipo y añade una observación.", variant: 'destructive'});
         return;
     }
+    if (isTask && !dueDate) {
+        toast({ title: "Fecha de vencimiento requerida", description: "Por favor, selecciona una fecha para la tarea.", variant: 'destructive'});
+        return;
+    }
     try {
         await createClientActivity({
             clientId: client.id,
+            clientName: client.denominacion,
             type: newActivityType,
             observation: newActivityObservation,
             userId: userInfo.id,
             userName: userInfo.name,
+            isTask,
+            dueDate: isTask && dueDate ? dueDate.toISOString() : undefined,
+            completed: false,
         });
         toast({ title: "Actividad Registrada" });
-        setNewActivityType('');
-        setNewActivityObservation('');
+        resetActivityForm();
         fetchClientData(); // Refresh activities
     } catch (error) {
         console.error("Error saving client activity:", error);
         toast({ title: "Error al guardar la actividad", variant: 'destructive'});
     }
+  }
+
+  const handleTaskCompleteToggle = async (activityId: string, currentStatus: boolean) => {
+      try {
+          await updateClientActivity(activityId, { completed: !currentStatus });
+          fetchClientData();
+          toast({ title: `Tarea ${!currentStatus ? 'completada' : 'marcada como pendiente'}`});
+      } catch (error) {
+          console.error("Error updating task status", error);
+          toast({ title: "Error al actualizar la tarea", variant: 'destructive' });
+      }
   }
 
 
@@ -429,10 +469,11 @@ export function ClientDetails({
       <Card>
         <CardHeader>
           <CardTitle>Registro de Actividad</CardTitle>
-          <CardDescription>Añade y visualiza interacciones con el cliente.</CardDescription>
+          <CardDescription>Añade y visualiza interacciones y tareas con el cliente.</CardDescription>
         </CardHeader>
         <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-4 p-4 border rounded-md">
+                <h4 className="font-medium">Nueva Actividad</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <Select value={newActivityType} onValueChange={(value) => setNewActivityType(value as ClientActivityType)}>
                         <SelectTrigger>
@@ -449,24 +490,69 @@ export function ClientDetails({
                         className="sm:col-span-2"
                     />
                 </div>
+                 <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                        <Checkbox id="is-task" checked={isTask} onCheckedChange={(checked) => setIsTask(!!checked)} />
+                        <Label htmlFor="is-task" className='font-normal'>Crear como Tarea</Label>
+                    </div>
+                    {isTask && (
+                         <Popover>
+                            <PopoverTrigger asChild>
+                            <Button
+                                variant={"outline"}
+                                className={cn(
+                                "w-[240px] justify-start text-left font-normal",
+                                !dueDate && "text-muted-foreground"
+                                )}
+                            >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {dueDate ? format(dueDate, "PPP", { locale: es }) : <span>Fecha de vencimiento</span>}
+                            </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar
+                                    mode="single"
+                                    selected={dueDate}
+                                    onSelect={setDueDate}
+                                    initialFocus
+                                    locale={es}
+                                />
+                            </PopoverContent>
+                        </Popover>
+                    )}
+                 </div>
                  <Button onClick={handleSaveClientActivity}>Guardar Actividad</Button>
             </div>
 
              <div className="mt-6 space-y-4">
                  {clientActivities.map(activity => (
                     <div key={activity.id} className="flex items-start gap-3">
-                        <div className="p-2 bg-muted rounded-full mt-1">
+                        {activity.isTask && (
+                            <Checkbox 
+                                id={`task-${activity.id}`}
+                                checked={activity.completed}
+                                onCheckedChange={() => handleTaskCompleteToggle(activity.id, !!activity.completed)}
+                                className="mt-1"
+                            />
+                        )}
+                        <div className={cn("p-2 bg-muted rounded-full", !activity.isTask && "mt-1")}>
                             {activityIcons[activity.type]}
                         </div>
-                        <div className='flex-1'>
+                        <div className={cn('flex-1', activity.completed && 'line-through text-muted-foreground')}>
                             <div className="flex items-center justify-between">
                                 <span className="font-semibold text-sm">{activity.type}</span>
-                                 <span className="text-xs text-muted-foreground">
+                                 <span className="text-xs">
                                     {new Date(activity.timestamp).toLocaleDateString()}
                                 </span>
                             </div>
-                            <p className="text-sm text-muted-foreground">{activity.observation}</p>
-                            <p className="text-xs text-muted-foreground mt-1">Registrado por: {activity.userName}</p>
+                            <p className="text-sm">{activity.observation}</p>
+                            {activity.isTask && activity.dueDate && (
+                                <p className="text-xs mt-1 font-medium flex items-center">
+                                    <CalendarIcon className="h-3 w-3 mr-1" />
+                                    Vence: {format(new Date(activity.dueDate), "PPP", { locale: es })}
+                                </p>
+                            )}
+                            <p className="text-xs mt-1">Registrado por: {activity.userName}</p>
                         </div>
                     </div>
                 ))}

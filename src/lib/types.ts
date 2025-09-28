@@ -72,11 +72,15 @@ export type ClientActivityType = typeof clientActivityTypes[number];
 export type ClientActivity = {
     id: string;
     clientId: string;
+    clientName?: string; // Add clientName for easier display in dashboard
     userId: string;
     userName: string;
     type: ClientActivityType;
     observation: string;
     timestamp: string;
+    isTask: boolean;
+    dueDate?: string;
+    completed?: boolean;
 }
 
 

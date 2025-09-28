@@ -269,6 +269,20 @@ export const getClientActivities = async (clientId: string): Promise<ClientActiv
     });
 };
 
+export const getAllClientActivities = async (): Promise<ClientActivity[]> => {
+    const q = query(clientActivitiesCollection, orderBy('timestamp', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
+        } as ClientActivity;
+    });
+};
+
+
 export const createClientActivity = async (
     activityData: Omit<ClientActivity, 'id' | 'timestamp'>
 ): Promise<string> => {
@@ -277,4 +291,15 @@ export const createClientActivity = async (
         timestamp: serverTimestamp(),
     });
     return docRef.id;
+};
+
+export const updateClientActivity = async (
+    id: string,
+    data: Partial<Omit<ClientActivity, 'id'>>
+): Promise<void> => {
+    const docRef = doc(db, 'client-activities', id);
+    await updateDoc(docRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+    });
 };

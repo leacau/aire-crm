@@ -18,20 +18,29 @@ import {
   PlusCircle,
   Edit,
   ArrowRight,
+  AlertTriangle,
+  CalendarCheck,
+  CalendarClock,
 } from 'lucide-react';
-import type { Opportunity, Client, ActivityLog } from '@/lib/types';
+import type { Opportunity, Client, ActivityLog, ClientActivity } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
   getAllOpportunities,
   getOpportunitiesForUser,
   getClients,
   getActivities,
+  getAllClientActivities,
+  updateClientActivity,
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import { users } from '@/lib/data';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, isPast, startOfToday } from 'date-fns';
+import { Checkbox } from '@/components/ui/checkbox';
+import Link from 'next/link';
+import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 const activityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
@@ -41,47 +50,113 @@ const activityIcons: Record<string, React.ReactNode> = {
 
 const getDefaultIcon = () => <Activity className="h-5 w-5 text-muted-foreground" />;
 
+interface TaskSectionProps {
+    title: string;
+    tasks: ClientActivity[];
+    icon: React.ReactNode;
+    onTaskToggle: (id: string, status: boolean) => void;
+}
+
+const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskToggle }) => (
+    <div>
+        <h4 className="flex items-center font-semibold mb-2 text-sm">
+            {icon}
+            <span className='ml-2'>{title}</span>
+        </h4>
+        {tasks.length > 0 ? (
+            <div className="space-y-2">
+                {tasks.map(task => (
+                    <div key={task.id} className="flex items-center space-x-2">
+                        <Checkbox
+                            id={`task-dash-${task.id}`}
+                            checked={task.completed}
+                            onCheckedChange={() => onTaskToggle(task.id, !!task.completed)}
+                        />
+                        <div className="flex flex-col text-sm">
+                            <label
+                                htmlFor={`task-dash-${task.id}`}
+                                className={cn("font-medium leading-none", task.completed && "line-through text-muted-foreground")}
+                            >
+                                {task.observation}
+                            </label>
+                            <Link href={`/clients/${task.clientId}`} className="text-xs text-muted-foreground hover:underline">
+                                Cliente: {task.clientName}
+                            </Link>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        ) : (
+            <p className="text-sm text-muted-foreground">No hay tareas.</p>
+        )}
+    </div>
+);
+
+
 export default function DashboardPage() {
   const { userInfo, loading: authLoading } = useAuth();
+  const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [tasks, setTasks] = useState<ClientActivity[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!userInfo) return;
+  const fetchData = async () => {
+    if (!userInfo) return;
 
-      setLoadingData(true);
-      try {
-        let userOpps: Opportunity[];
-        if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
-          userOpps = await getAllOpportunities();
-        } else {
-          userOpps = await getOpportunitiesForUser(userInfo.id);
-        }
-
-        const [allClients, allActivities] = await Promise.all([
-          getClients(),
-          getActivities(100), // Get more activities for filtering
-        ]);
-        
-        setOpportunities(userOpps);
-        setClients(allClients);
-        setActivities(allActivities);
-
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-      } finally {
-        setLoadingData(false);
+    setLoadingData(true);
+    try {
+      let userOpps: Opportunity[];
+      if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
+        userOpps = await getAllOpportunities();
+      } else {
+        userOpps = await getOpportunitiesForUser(userInfo.id);
       }
-    };
+      
+      const [allClients, allActivities, allTasks] = await Promise.all([
+        getClients(),
+        getActivities(100),
+        getAllClientActivities() // Fetch all tasks for filtering
+      ]);
+      
+      setOpportunities(userOpps);
+      setClients(allClients);
+      setActivities(allActivities);
+      // Filter for tasks assigned to the current user or all if manager
+      const userTasks = (userInfo.role === 'Jefe' || userInfo.role === 'Administracion')
+            ? allTasks.filter(t => t.isTask)
+            : allTasks.filter(t => t.isTask && t.userId === userInfo.id);
 
+      setTasks(userTasks);
+
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+
+  useEffect(() => {
     if (!authLoading) {
       fetchData();
     }
   }, [userInfo, authLoading]);
+
+  const handleTaskToggle = async (taskId: string, currentStatus: boolean) => {
+      try {
+          await updateClientActivity(taskId, { completed: !currentStatus });
+          // Optimistic update
+          setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? {...t, completed: !currentStatus} : t));
+          toast({ title: `Tarea ${!currentStatus ? 'completada' : 'marcada como pendiente'}`});
+      } catch (error) {
+           console.error("Error updating task status", error);
+           toast({ title: "Error al actualizar la tarea", variant: 'destructive' });
+      }
+  }
+
 
   if (authLoading || loadingData) {
     return (
@@ -118,6 +193,11 @@ export default function DashboardPage() {
   
   // Client filtering by date is complex, so we'll show all clients for now.
   const totalClients = clients.length;
+
+  const today = startOfToday();
+  const overdueTasks = tasks.filter(t => !t.completed && t.dueDate && isPast(new Date(t.dueDate)) && !isToday(new Date(t.dueDate)));
+  const dueTodayTasks = tasks.filter(t => !t.completed && t.dueDate && isToday(new Date(t.dueDate)));
+  const dueTomorrowTasks = tasks.filter(t => !t.completed && t.dueDate && isTomorrow(new Date(t.dueDate)));
 
 
   return (
@@ -186,40 +266,69 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-        <div className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Actividad Reciente</CardTitle>
-              <CardDescription>
-                Un registro de las últimas acciones realizadas en el sistema.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {filteredActivities.map((activity) => {
-                    const performingUser = users.find(u => u.id === activity.userId);
-                    return (
-                      <div key={activity.id} className="flex items-start gap-4">
-                        <div className="p-2 bg-muted rounded-full">
-                           {activityIcons[activity.type] || getDefaultIcon()}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                             <p className="text-sm" dangerouslySetInnerHTML={{ __html: activity.details }} />
-                            <p className="text-sm text-muted-foreground whitespace-nowrap">
-                              {new Date(activity.timestamp).toLocaleDateString()}
+
+        <div className="grid gap-6 mt-6 md:grid-cols-2">
+            <Card>
+                 <CardHeader>
+                    <CardTitle>Tareas Pendientes</CardTitle>
+                    <CardDescription>
+                        Tus próximas tareas y las que ya han vencido.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <TaskSection 
+                        title="Vencidas"
+                        tasks={overdueTasks}
+                        icon={<AlertTriangle className="h-5 w-5 text-red-500" />}
+                        onTaskToggle={handleTaskToggle}
+                    />
+                     <TaskSection 
+                        title="Vencen Hoy"
+                        tasks={dueTodayTasks}
+                        icon={<CalendarCheck className="h-5 w-5 text-blue-500" />}
+                        onTaskToggle={handleTaskToggle}
+                    />
+                    <TaskSection 
+                        title="Vencen Mañana"
+                        tasks={dueTomorrowTasks}
+                        icon={<CalendarClock className="h-5 w-5 text-yellow-500" />}
+                        onTaskToggle={handleTaskToggle}
+                    />
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                <CardTitle>Actividad Reciente</CardTitle>
+                <CardDescription>
+                    Un registro de las últimas acciones realizadas en el sistema.
+                </CardDescription>
+                </CardHeader>
+                <CardContent>
+                <div className="space-y-4">
+                    {filteredActivities.map((activity) => {
+                        const performingUser = users.find(u => u.id === activity.userId);
+                        return (
+                        <div key={activity.id} className="flex items-start gap-4">
+                            <div className="p-2 bg-muted rounded-full">
+                            {activityIcons[activity.type] || getDefaultIcon()}
+                            </div>
+                            <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm" dangerouslySetInnerHTML={{ __html: activity.details }} />
+                                <p className="text-sm text-muted-foreground whitespace-nowrap">
+                                {new Date(activity.timestamp).toLocaleDateString()}
+                                </p>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                                Por: {performingUser?.name || activity.userName || 'Usuario desconocido'}
                             </p>
-                          </div>
-                           <p className="text-sm text-muted-foreground">
-                            Por: {performingUser?.name || activity.userName || 'Usuario desconocido'}
-                          </p>
+                            </div>
                         </div>
-                      </div>
-                    )
-                })}
-              </div>
-            </CardContent>
-          </Card>
+                        )
+                    })}
+                </div>
+                </CardContent>
+            </Card>
         </div>
       </main>
     </div>
