@@ -29,6 +29,9 @@ import {
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import { users } from '@/lib/data';
+import type { DateRange } from 'react-day-picker';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { isWithinInterval } from 'date-fns';
 
 const activityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
@@ -44,6 +47,7 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -60,7 +64,7 @@ export default function DashboardPage() {
 
         const [allClients, allActivities] = await Promise.all([
           getClients(),
-          getActivities(10), // Get last 10 activities
+          getActivities(100), // Get more activities for filtering
         ]);
         
         setOpportunities(userOpps);
@@ -87,28 +91,40 @@ export default function DashboardPage() {
     );
   }
 
-  const totalRevenue = opportunities
+  const filteredOpportunities = opportunities.filter(opp => {
+    if (!dateRange?.from || !dateRange?.to) return true;
+    const closeDate = new Date(opp.closeDate);
+    return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
+  });
+  
+  const filteredActivities = activities.filter(activity => {
+      if (!dateRange?.from || !dateRange?.to) return true;
+      const activityDate = new Date(activity.timestamp);
+      return isWithinInterval(activityDate, { start: dateRange.from, end: dateRange.to });
+  }).slice(0, 10); // Limit to 10 after filtering
+
+
+  const totalRevenue = filteredOpportunities
     .filter((o) => o.stage === 'Cerrado - Ganado')
     .reduce((acc, o) => acc + (o.valorCerrado || o.value), 0);
 
-  const forecastedRevenue = opportunities
+  const forecastedRevenue = filteredOpportunities
     .filter((o) => o.stage !== 'Cerrado - Perdido' && o.stage !== 'Cerrado - Ganado')
     .reduce((acc, o) => acc + o.value * 0.5, 0); // Simplified forecast
 
-  const activeOpportunities = opportunities.filter(
+  const activeOpportunities = filteredOpportunities.filter(
     (o) => o.stage !== 'Cerrado - Ganado' && o.stage !== 'Cerrado - Perdido'
   ).length;
   
-  const newClientsThisMonth = clients.filter(c => {
-    // This is a simplified check. For a real app, you'd parse createdAt.
-    // Assuming createdAt is a Firestore timestamp, it would need to be converted to a Date object first.
-    return true; 
-  }).length;
+  // Client filtering by date is complex, so we'll show all clients for now.
+  const totalClients = clients.length;
 
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Panel" />
+      <Header title="Panel">
+        <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+      </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
@@ -123,7 +139,7 @@ export default function DashboardPage() {
                 ${totalRevenue.toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
-                Total de negocios ganados.
+                Total de negocios ganados en el período.
               </p>
             </CardContent>
           </Card>
@@ -138,7 +154,7 @@ export default function DashboardPage() {
               <div className="text-2xl font-bold">
                 {activeOpportunities}
               </div>
-              <p className="text-xs text-muted-foreground">Oportunidades en curso.</p>
+              <p className="text-xs text-muted-foreground">Oportunidades en curso en el período.</p>
             </CardContent>
           </Card>
           <Card>
@@ -147,7 +163,7 @@ export default function DashboardPage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{clients.length}</div>
+              <div className="text-2xl font-bold">{totalClients}</div>
               <p className="text-xs text-muted-foreground">
                 Total de clientes registrados.
               </p>
@@ -165,7 +181,7 @@ export default function DashboardPage() {
                 ${forecastedRevenue.toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
-                Basado en el pipeline actual.
+                Basado en el pipeline del período.
               </p>
             </CardContent>
           </Card>
@@ -180,7 +196,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {activities.map((activity) => {
+                {filteredActivities.map((activity) => {
                     const performingUser = users.find(u => u.id === activity.userId);
                     return (
                       <div key={activity.id} className="flex items-start gap-4">
@@ -195,7 +211,7 @@ export default function DashboardPage() {
                             </p>
                           </div>
                            <p className="text-sm text-muted-foreground">
-                            Por: {performingUser?.name || 'Usuario desconocido'}
+                            Por: {performingUser?.name || activity.userName || 'Usuario desconocido'}
                           </p>
                         </div>
                       </div>

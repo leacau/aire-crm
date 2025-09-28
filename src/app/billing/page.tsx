@@ -20,6 +20,9 @@ import Link from 'next/link';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
+import type { DateRange } from 'react-day-picker';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { isWithinInterval } from 'date-fns';
 
 const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunity[], onRowClick: (opp: Opportunity) => void }) => (
   <div className="border rounded-lg">
@@ -65,6 +68,8 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+
 
   const fetchOpportunities = async (userId: string) => {
     setLoading(true);
@@ -110,18 +115,26 @@ export default function BillingPage() {
       </div>
     );
   }
+  
+  const filteredOpportunities = opportunities.filter(opp => {
+    if (!dateRange?.from || !dateRange?.to) return true;
+    const closeDate = new Date(opp.closeDate);
+    return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
+  });
 
-  const toInvoiceOpps = opportunities.filter(
+  const toInvoiceOpps = filteredOpportunities.filter(
     (opp) => opp.stage === 'Cerrado - Ganado' && !opp.facturaNo
   );
 
-  const toCollectOpps = opportunities.filter(
+  const toCollectOpps = filteredOpportunities.filter(
     (opp) => opp.stage === 'Cerrado - Ganado' && opp.facturaNo && !opp.pagado
   );
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Facturación" />
+      <Header title="Facturación">
+         <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+      </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <Tabs defaultValue="to-invoice">
           <TabsList className="grid w-full grid-cols-2">
