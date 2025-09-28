@@ -15,28 +15,35 @@ import { ArrowLeft } from 'lucide-react';
 export default function ClientPage({ params }: { params: { id: string } }) {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
-  
+
   // Correctly unwrap the id from params using use()
   const { id } = use(params as any);
 
   const client = clients.find((c) => c.id === id);
 
-  const hasAccess = React.useMemo(() => {
-    if (!userInfo || !client) return false;
-    return (
-      userInfo.role === 'Jefe' ||
-      userInfo.role === 'Administracion' ||
-      (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
-    );
-  }, [userInfo, client]);
-
   useEffect(() => {
     if (!authLoading) {
-      if (!client || !hasAccess) {
+      // Recalculate access inside the effect to ensure latest userInfo is used
+      const userHasAccess =
+        userInfo &&
+        client &&
+        (userInfo.role === 'Jefe' ||
+          userInfo.role === 'Administracion' ||
+          (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
+
+      if (!client || !userHasAccess) {
         router.push('/clients');
       }
     }
-  }, [authLoading, client, hasAccess, router]);
+  }, [authLoading, userInfo, client, router]);
+
+  // Determine access for rendering, ensures it's in sync with the effect
+  const hasAccess =
+    userInfo &&
+    client &&
+    (userInfo.role === 'Jefe' ||
+      userInfo.role === 'Administracion' ||
+      (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
   if (authLoading || !client || !hasAccess) {
     return (
