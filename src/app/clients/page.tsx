@@ -1,3 +1,7 @@
+
+'use client';
+
+import React from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,8 +16,20 @@ import { clients, opportunities } from '@/lib/data';
 import { FileDown, MoreHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useAuth } from '@/hooks/use-auth';
+import { Spinner } from '@/components/ui/spinner';
 
 export default function ClientsPage() {
+  const { userInfo, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner size="large" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       <Header title="Clientes">

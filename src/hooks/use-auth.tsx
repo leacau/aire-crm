@@ -32,11 +32,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
       if (firebaseUser) {
+        setUser(firebaseUser);
         const appUser = users.find(u => u.email === firebaseUser.email);
         setUserInfo(appUser || null);
       } else {
+        setUser(null);
         setUserInfo(null);
       }
       setLoading(false);
@@ -46,29 +47,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // This effect handles redirection logic once authentication state is resolved.
     if (!loading) {
       const isPublicRoute = publicRoutes.includes(pathname);
+      
       if (!user && !isPublicRoute) {
+        // If no user is logged in and the route is not public, redirect to login.
         router.push('/login');
       } else if (user && isPublicRoute) {
+        // If a user is logged in and tries to access a public route, redirect to the dashboard.
         router.push('/');
       }
     }
   }, [user, loading, pathname, router]);
 
-  if (loading) {
-    const isPublicRoute = publicRoutes.includes(pathname);
-    if (!isPublicRoute) {
-      return (
-        <div className="flex h-screen items-center justify-center">
-          <Spinner size="large" />
-        </div>
-      );
-    }
+  // While loading, we might want to show a global spinner for protected routes.
+  if (loading && !publicRoutes.includes(pathname)) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Spinner size="large" />
+      </div>
+    );
   }
 
-  const isPublicRoute = publicRoutes.includes(pathname);
-  if (!loading && !user && !isPublicRoute) {
+  // If loading is finished, and we are on a route that requires authentication,
+  // but we don't have a user, we can render a spinner while the redirect effect kicks in.
+  if (!loading && !user && !publicRoutes.includes(pathname)) {
      return (
         <div className="flex h-screen items-center justify-center">
           <Spinner size="large" />
@@ -76,7 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
   }
 
-  if (user || isPublicRoute) {
+  // Render children if:
+  // 1. Loading is complete and a user is present.
+  // 2. We are on a public route.
+  if (!loading && (user || publicRoutes.includes(pathname))) {
     return (
       <AuthContext.Provider value={{ user, userInfo, loading }}>
         {children}
@@ -84,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  // Fallback for any edge cases, though ideally this shouldn't be reached.
   return null;
 }
 

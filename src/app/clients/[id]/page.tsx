@@ -20,15 +20,13 @@ export default function ClientPage({ params }: { params: { id: string } }) {
   const client = clients.find((c) => c.id === id);
 
   useEffect(() => {
-    // This effect only runs AFTER the authentication loading is complete.
+    // This effect runs only when auth loading is complete.
     if (!authLoading) {
       if (!client) {
-        // If client doesn't exist, redirect.
         router.push('/clients');
         return;
       }
       
-      // Now check for user access.
       const userHasAccess =
         userInfo &&
         (userInfo.role === 'Jefe' ||
