@@ -1,3 +1,4 @@
+
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import type { Client } from './types';
@@ -27,9 +28,8 @@ export const createClient = async (
 ): Promise<string> => {
     const newClientData = {
         ...clientData,
-        name: clientData.name, // Main contact person
         avatarUrl: `https://picsum.photos/seed/new-${Date.now()}/40/40`,
-        avatarFallback: clientData.company.substring(0, 2).toUpperCase(),
+        avatarFallback: clientData.denominacion.substring(0, 2).toUpperCase(),
         personIds: [],
         ownerId,
         createdAt: serverTimestamp(),
@@ -41,8 +41,14 @@ export const createClient = async (
 // Function to update an existing client
 export const updateClient = async (id: string, data: Partial<Omit<Client, 'id'>>): Promise<void> => {
     const docRef = doc(db, 'clients', id);
+    const updateData = { ...data };
+    // Prevent avatar fallback from being overwritten with an empty value if not provided
+    if (data.denominacion && !data.avatarFallback) {
+        updateData.avatarFallback = data.denominacion.substring(0, 2).toUpperCase();
+    }
+    
     await updateDoc(docRef, {
-        ...data,
+        ...updateData,
         updatedAt: serverTimestamp()
     });
 };

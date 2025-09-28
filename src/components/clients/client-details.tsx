@@ -1,6 +1,6 @@
 
 'use client'
-import type { Client, Opportunity, Activity, User, Person } from '@/lib/types';
+import type { Client, Opportunity, Activity, Person } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -18,7 +18,12 @@ import {
   Trash2,
   PhoneCall,
   FileText,
-  Users as UsersIcon
+  Users as UsersIcon,
+  Building,
+  Home,
+  MapPin,
+  FileDigit,
+  Building2
 } from 'lucide-react';
 import {
   Table,
@@ -126,12 +131,12 @@ export function ClientDetails({
           <CardHeader className="flex flex-row items-start justify-between">
             <div className="flex flex-row items-center gap-4">
               <Avatar className="h-16 w-16">
-                <AvatarImage src={client.avatarUrl} alt={client.name} data-ai-hint="logo building" />
+                <AvatarImage src={client.avatarUrl} alt={client.denominacion} data-ai-hint="logo building" />
                 <AvatarFallback>{client.avatarFallback}</AvatarFallback>
               </Avatar>
               <div>
-                <CardTitle className="text-2xl">{client.company}</CardTitle>
-                <CardDescription>{client.name}</CardDescription>
+                <CardTitle className="text-2xl">{client.denominacion}</CardTitle>
+                <CardDescription>{client.razonSocial}</CardDescription>
               </div>
             </div>
             {canEditClient && (
@@ -140,18 +145,30 @@ export function ClientDetails({
                </Button>
             )}
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center gap-3 text-sm">
+          <CardContent className="space-y-3 text-sm">
+             <div className="flex items-center gap-3">
+              <FileDigit className="h-4 w-4 text-muted-foreground" />
+              <span>{client.cuit}</span>
+            </div>
+             <div className="flex items-center gap-3">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <span>{client.rubro}</span>
+            </div>
+             <div className="flex items-center gap-3">
+              <Home className="h-4 w-4 text-muted-foreground" />
+              <span>{client.tipoEntidad}</span>
+            </div>
+             <div className="flex items-center gap-3">
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <span>{client.localidad}, {client.provincia}</span>
+            </div>
+            <div className="flex items-center gap-3">
               <Mail className="h-4 w-4 text-muted-foreground" />
               <span>{client.email}</span>
             </div>
-            <div className="flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-3">
               <Phone className="h-4 w-4 text-muted-foreground" />
               <span>{client.phone}</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <Briefcase className="h-4 w-4 text-muted-foreground" />
-              <span>{client.company}</span>
             </div>
           </CardContent>
         </Card>

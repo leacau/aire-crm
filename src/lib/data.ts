@@ -1,4 +1,4 @@
-import type { User, Client, Opportunity, OpportunityStage, Activity, Person } from './types';
+import type { User, Client, Opportunity, OpportunityStage, Activity, Person, TipoEntidad } from './types';
 
 export const users: User[] = [
   { id: 'user-1', name: 'Alex Morgan', email: 'alex.morgan@example.com', avatarUrl: 'https://picsum.photos/seed/user1/40/40', initials: 'AM', role: 'Asesor' },
@@ -16,30 +16,7 @@ export const people: Person[] = [
 ];
 
 // This is now just initial mock data. The app will use Firestore.
-export let clients: Client[] = [
-  {
-    id: 'client-1',
-    name: 'Global Media Inc.',
-    email: 'contact@globalmedia.com',
-    phone: '555-0101',
-    company: 'Global Media Inc.',
-    avatarUrl: 'https://picsum.photos/seed/client1/40/40',
-    avatarFallback: 'GM',
-    personIds: ['person-1', 'person-4'],
-    ownerId: 'user-1',
-  },
-  {
-    id: 'client-2',
-    name: 'Innovate Solutions',
-    email: 'hello@innovatesolutions.io',
-    phone: '555-0102',
-    company: 'Innovate Solutions',
-    avatarUrl: 'https://picsum.photos/seed/client2/40/40',
-    avatarFallback: 'IS',
-    personIds: ['person-2'],
-    ownerId: 'user-2',
-  },
-];
+export let clients: Client[] = [];
 
 export const opportunityStages: OpportunityStage[] = [
   'Nuevo',
@@ -48,6 +25,35 @@ export const opportunityStages: OpportunityStage[] = [
   'Cerrado - Ganado',
   'Cerrado - Perdido',
 ];
+
+export const tipoEntidadOptions: TipoEntidad[] = ['Pública', 'Privada', 'Mixta'];
+
+export const provinciasArgentina = [
+  "Buenos Aires",
+  "Catamarca",
+  "Chaco",
+  "Chubut",
+  "Córdoba",
+  "Corrientes",
+  "Entre Ríos",
+  "Formosa",
+  "Jujuy",
+  "La Pampa",
+  "La Rioja",
+  "Mendoza",
+  "Misiones",
+  "Neuquén",
+  "Río Negro",
+  "Salta",
+  "San Juan",
+  "San Luis",
+  "Santa Cruz",
+  "Santa Fe",
+  "Santiago del Estero",
+  "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+  "Tucumán"
+];
+
 
 export let opportunities: Opportunity[] = [
   {

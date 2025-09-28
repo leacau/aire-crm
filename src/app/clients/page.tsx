@@ -67,7 +67,7 @@ export default function ClientsPage() {
       await createClient(clientData, userInfo.id);
       toast({
         title: "Cliente Creado",
-        description: `${clientData.company} ha sido añadido a la lista.`,
+        description: `${clientData.denominacion} ha sido añadido a la lista.`,
       });
       fetchClients(); // Refresh the list
     } catch (error) {
@@ -106,8 +106,8 @@ export default function ClientsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[80px]">Avatar</TableHead>
-                <TableHead>Compañía</TableHead>
-                <TableHead>Contacto Principal</TableHead>
+                <TableHead>Denominación</TableHead>
+                <TableHead>Razón Social</TableHead>
                 <TableHead>Negocios Abiertos</TableHead>
                 <TableHead>Valor Total</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
@@ -126,7 +126,7 @@ export default function ClientsPage() {
                   <TableRow key={client.id}>
                     <TableCell>
                       <Avatar>
-                        <AvatarImage src={client.avatarUrl} alt={client.name} data-ai-hint="logo building" />
+                        <AvatarImage src={client.avatarUrl} alt={client.denominacion} data-ai-hint="logo building" />
                         <AvatarFallback>{client.avatarFallback}</AvatarFallback>
                       </Avatar>
                     </TableCell>
@@ -135,12 +135,12 @@ export default function ClientsPage() {
                         href={`/clients/${client.id}`}
                         className="font-medium text-primary hover:underline"
                       >
-                        {client.company}
+                        {client.denominacion}
                       </Link>
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div className="font-medium">{client.name}</div>
+                        <div className="font-medium">{client.razonSocial}</div>
                         <div className="text-sm text-muted-foreground">
                           {client.email}
                         </div>

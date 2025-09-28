@@ -1,3 +1,4 @@
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -25,12 +26,19 @@ export type Person = {
   clientIds: string[];
 };
 
+export type TipoEntidad = 'Pública' | 'Privada' | 'Mixta';
+
 export type Client = {
   id: string;
-  name: string;
+  denominacion: string;
+  razonSocial: string;
+  cuit: string;
+  provincia: string;
+  localidad: string;
+  tipoEntidad: TipoEntidad;
+  rubro: string;
   email: string;
   phone: string;
-  company: string;
   avatarUrl: string;
   avatarFallback: string;
   personIds: string[];
