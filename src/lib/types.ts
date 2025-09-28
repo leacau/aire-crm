@@ -23,6 +23,8 @@ export type Person = {
   name: string;
   email?: string;
   phone?: string;
+  cargo?: string;
+  observaciones?: string;
   clientIds: string[];
 };
 
@@ -39,6 +41,7 @@ export type Client = {
   rubro: string;
   email: string;
   phone: string;
+  observaciones?: string;
   avatarUrl: string;
   avatarFallback: string;
   personIds: string[];

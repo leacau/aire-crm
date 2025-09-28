@@ -1,6 +1,7 @@
 
 'use client'
 import type { Client, Opportunity, Activity, Person } from '@/lib/types';
+import React, { useEffect, useState } from 'react';
 import {
   Card,
   CardContent,
@@ -10,7 +11,6 @@ import {
 } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
-  Briefcase,
   Mail,
   Phone,
   PlusCircle,
@@ -23,7 +23,8 @@ import {
   Home,
   MapPin,
   FileDigit,
-  Building2
+  Building2,
+  Briefcase
 } from 'lucide-react';
 import {
   Table,
@@ -36,7 +37,6 @@ import {
 import { Button } from '../ui/button';
 import { opportunityStages } from '@/lib/data';
 import { OpportunityDetailsDialog } from '../opportunities/opportunity-details-dialog';
-import React from 'react';
 import {
   Select,
   SelectContent,
@@ -54,6 +54,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
+import { PersonFormDialog } from '@/components/people/person-form-dialog';
+import { createPerson, getPeopleByClientId, updatePerson } from '@/lib/firebase-service';
+import { useToast } from '@/hooks/use-toast';
+import { Textarea } from '../ui/textarea';
 
 
 const stageColors: Record<OpportunityStage, string> = {
@@ -87,21 +91,35 @@ export function ClientDetails({
   client,
   opportunities: initialOpportunities,
   activities,
-  people,
   onUpdate
 }: {
   client: Client;
   opportunities: Opportunity[];
   activities: Activity[];
-  people: Person[];
   onUpdate: (data: Partial<Omit<Client, 'id'>>) => void;
 }) {
   const { userInfo } = useAuth();
-  const [opportunities, setOpportunities] = React.useState(initialOpportunities);
-  const [selectedOpportunity, setSelectedOpportunity] = React.useState<Opportunity | null>(null);
-  const [isClientFormOpen, setIsClientFormOpen] = React.useState(false);
+  const { toast } = useToast();
+  
+  const [people, setPeople] = useState<Person[]>([]);
+  const [opportunities, setOpportunities] = useState(initialOpportunities);
+  
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [isPersonFormOpen, setIsPersonFormOpen] = useState(false);
+  const [isClientFormOpen, setIsClientFormOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchPeople = async () => {
+        const clientPeople = await getPeopleByClientId(client.id);
+        setPeople(clientPeople);
+    }
+    fetchPeople();
+  }, [client.id]);
+
 
   const canEditClient = userInfo?.role === 'Jefe' || (userInfo?.id === client.ownerId);
+  const canEditContact = userInfo?.role === 'Jefe' || (userInfo?.id === client.ownerId);
   const canEditOpportunity = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor';
   const canDelete = userInfo?.role === 'Jefe';
   const canReassign = userInfo?.role === 'Jefe' || userInfo?.role === 'Administracion';
@@ -119,6 +137,31 @@ export function ClientDetails({
   const openOpportunityDetails = (opp: Opportunity) => {
     setSelectedOpportunity(opp);
   };
+  
+  const handleOpenPersonForm = (person: Person | null = null) => {
+    setSelectedPerson(person);
+    setIsPersonFormOpen(true);
+  }
+
+  const handleSavePerson = async (personData: Omit<Person, 'id' | 'clientIds'> & { clientIds?: string[]}) => {
+     try {
+        if (selectedPerson) { // Editing existing person
+            await updatePerson(selectedPerson.id, personData);
+            setPeople(prev => prev.map(p => p.id === selectedPerson.id ? { ...p, ...personData } : p));
+            toast({ title: "Contacto Actualizado" });
+        } else { // Creating new person
+            const newPersonData = { ...personData, clientIds: [client.id] };
+            const newPersonId = await createPerson(newPersonData);
+            const newPerson = { ...newPersonData, id: newPersonId };
+            setPeople(prev => [...prev, newPerson]);
+            toast({ title: "Contacto Creado" });
+        }
+    } catch (error) {
+        console.error("Error saving person", error);
+        toast({ title: "Error al guardar el contacto", variant: 'destructive' });
+    }
+  };
+
 
   const handleSaveClient = (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>) => {
     onUpdate(clientData);
@@ -128,8 +171,8 @@ export function ClientDetails({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between">
-              <div className="flex items-center gap-4">
+          <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-4 flex-1 min-w-0">
                   <Avatar className="h-16 w-16">
                       <AvatarImage src={client.avatarUrl} alt={client.denominacion} data-ai-hint="logo building" />
                       <AvatarFallback>{client.avatarFallback}</AvatarFallback>
@@ -171,14 +214,20 @@ export function ClientDetails({
             <Phone className="h-4 w-4 text-muted-foreground" />
             <span>{client.phone}</span>
           </div>
+           {client.observaciones && (
+              <div className="space-y-1 pt-2">
+                  <h4 className="font-medium text-sm">Observaciones</h4>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{client.observaciones}</p>
+              </div>
+            )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Contactos</CardTitle>
-          {canEditOpportunity && (
-            <Button variant="outline" size="icon">
+          {canEditContact && (
+            <Button variant="outline" size="icon" onClick={() => handleOpenPersonForm()}>
               <PlusCircle className="h-4 w-4" />
             </Button>
           )}
@@ -188,6 +237,7 @@ export function ClientDetails({
             <div key={person.id} className="flex items-start justify-between">
               <div>
                 <p className="font-medium">{person.name}</p>
+                 {person.cargo && <p className="text-sm text-muted-foreground">{person.cargo}</p>}
                 <p className="text-sm text-muted-foreground">{person.email}</p>
                  <p className="text-sm text-muted-foreground">{person.phone}</p>
               </div>
@@ -206,7 +256,7 @@ export function ClientDetails({
                     </Button>
                   </>
                 )}
-                {canEditOpportunity && <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-4 w-4" /></Button>}
+                {canEditContact && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenPersonForm(person)}><Edit className="h-4 w-4" /></Button>}
                 {canDelete && <Button variant="ghost" size="icon" className="h-8 w-8"><Trash2 className="h-4 w-4 text-destructive" /></Button>}
               </div>
             </div>
@@ -324,12 +374,21 @@ export function ClientDetails({
         />
       )}
 
-      {isClientFormOpen && (
+       {isClientFormOpen && (
         <ClientFormDialog
             isOpen={isClientFormOpen}
             onOpenChange={setIsClientFormOpen}
             onSave={handleSaveClient}
             client={client}
+        />
+      )}
+
+      {isPersonFormOpen && (
+        <PersonFormDialog
+            isOpen={isPersonFormOpen}
+            onOpenChange={setIsPersonFormOpen}
+            onSave={handleSavePerson}
+            person={selectedPerson}
         />
       )}
     </div>

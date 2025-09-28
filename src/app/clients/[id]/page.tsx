@@ -1,10 +1,10 @@
 
 'use client';
 
-import React, { useEffect, useState, use } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { opportunities as allOpportunities, activities as allActivities, people as allPeople } from '@/lib/data';
+import { opportunities as allOpportunities, activities as allActivities } from '@/lib/data';
 import { ClientDetails } from '@/components/clients/client-details';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
@@ -20,8 +20,7 @@ export default function ClientPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { toast } = useToast();
   
-  // Correctly unwrap the id from params
-  const { id } = use(params);
+  const id = params.id;
   
   const [client, setClient] = useState<Client | null>(null);
   const [loadingClient, setLoadingClient] = useState(true);
@@ -50,20 +49,21 @@ export default function ClientPage({ params }: { params: { id: string } }) {
     fetchClient();
   }, [id, router, toast]);
 
-  useEffect(() => {
-    if (!authLoading && !loadingClient && client) {
-      const userHasAccess =
-        userInfo &&
-        (userInfo.role === 'Jefe' ||
-          userInfo.role === 'Administracion' ||
-          (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
+  const userHasAccess = useMemo(() => {
+    if (authLoading || !client || !userInfo) return false;
+    return (
+      userInfo.role === 'Jefe' ||
+      userInfo.role === 'Administracion' ||
+      (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
+    );
+  }, [authLoading, client, userInfo]);
 
-      if (!userHasAccess) {
-        toast({ title: "Acceso denegado", variant: "destructive" });
-        router.push('/clients');
-      }
+  useEffect(() => {
+    if (!authLoading && !loadingClient && !userHasAccess) {
+      toast({ title: "Acceso denegado", description: "No tienes permiso para ver este cliente.", variant: "destructive" });
+      router.push('/clients');
     }
-  }, [authLoading, loadingClient, userInfo, client, router, toast]);
+  }, [authLoading, loadingClient, userHasAccess, router, toast]);
 
   const handleUpdateClient = async (updatedData: Partial<Omit<Client, 'id'>>) => {
     if (!client) return;
@@ -77,34 +77,16 @@ export default function ClientPage({ params }: { params: { id: string } }) {
     }
   };
 
-
-  if (authLoading || loadingClient || !client) {
+  if (authLoading || loadingClient || !client || !userHasAccess) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
       </div>
     );
   }
-
-  // Final check for access before rendering
-  const userHasAccess =
-    userInfo &&
-    (userInfo.role === 'Jefe' ||
-      userInfo.role === 'Administracion' ||
-      (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
-
-  if (!userHasAccess) {
-      // This will show a spinner while redirecting
-      return (
-          <div className="flex h-full w-full items-center justify-center">
-              <Spinner size="large" />
-          </div>
-      );
-  }
   
   const clientOpportunities = allOpportunities.filter(o => o.clientId === client.id);
   const clientActivities = allActivities.filter(a => a.clientId === client.id);
-  const clientPeople = allPeople.filter(p => p.clientIds.includes(client.id));
 
   return (
     <div className="flex flex-col h-full">
@@ -121,7 +103,6 @@ export default function ClientPage({ params }: { params: { id: string } }) {
           client={client}
           opportunities={clientOpportunities}
           activities={clientActivities}
-          people={clientPeople}
           onUpdate={handleUpdateClient}
         />
       </main>

@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { provinciasArgentina, tipoEntidadOptions } from '@/lib/data';
 import type { Client, TipoEntidad } from '@/lib/types';
 
@@ -36,6 +37,7 @@ const initialFormData: ClientFormData = {
   rubro: '',
   email: '',
   phone: '',
+  observaciones: '',
 };
 
 export function ClientFormDialog({
@@ -59,6 +61,7 @@ export function ClientFormDialog({
                 rubro: client.rubro,
                 email: client.email,
                 phone: client.phone,
+                observaciones: client.observaciones || '',
             });
         } else {
             setFormData(initialFormData);
@@ -71,7 +74,7 @@ export function ClientFormDialog({
     onOpenChange(false);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -168,6 +171,12 @@ export function ClientFormDialog({
               Teléfono
             </Label>
             <Input id="phone" name="phone" value={formData.phone} onChange={handleChange} className="col-span-3"/>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="observaciones" className="text-right">
+              Observaciones
+            </Label>
+            <Textarea id="observaciones" name="observaciones" value={formData.observaciones} onChange={handleChange} className="col-span-3"/>
           </div>
         </div>
         <DialogFooter>
