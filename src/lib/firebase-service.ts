@@ -1,11 +1,13 @@
 
 import { db } from './firebase';
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where } from 'firebase/firestore';
-import type { Client, Person, Opportunity } from './types';
+import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp } from 'firebase/firestore';
+import type { Client, Person, Opportunity, Activity } from './types';
 
 const clientsCollection = collection(db, 'clients');
 const peopleCollection = collection(db, 'people');
 const opportunitiesCollection = collection(db, 'opportunities');
+const activitiesCollection = collection(db, 'activities');
+
 
 // --- Client Functions ---
 
@@ -18,7 +20,15 @@ export const getClient = async (id: string): Promise<Client | null> => {
     const docRef = doc(db, 'clients', id);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as Client;
+        const data = docSnap.data();
+        // Convert Firestore Timestamps to serializable strings
+        if (data.createdAt instanceof Timestamp) {
+            data.createdAt = data.createdAt.toDate().toISOString();
+        }
+        if (data.updatedAt instanceof Timestamp) {
+            data.updatedAt = data.updatedAt.toDate().toISOString();
+        }
+        return { id: docSnap.id, ...data } as Client;
     }
     return null;
 };
@@ -91,6 +101,11 @@ export const updatePerson = async (id: string, data: Partial<Omit<Person, 'id'>>
 
 // --- Opportunity Functions ---
 
+export const getAllOpportunities = async (): Promise<Opportunity[]> => {
+    const snapshot = await getDocs(opportunitiesCollection);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
+};
+
 export const getOpportunitiesByClientId = async (clientId: string): Promise<Opportunity[]> => {
     const q = query(opportunitiesCollection, where("clientId", "==", clientId));
     const snapshot = await getDocs(q);
@@ -118,5 +133,19 @@ export const updateOpportunity = async (id: string, data: Partial<Omit<Opportuni
     await updateDoc(docRef, {
         ...data,
         updatedAt: serverTimestamp()
+    });
+};
+
+// --- Activity Functions ---
+
+export const getAllActivities = async (): Promise<Activity[]> => {
+    const snapshot = await getDocs(activitiesCollection);
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Firestore Timestamps to serializable strings
+        if (data.date instanceof Timestamp) {
+            data.date = data.date.toDate().toISOString();
+        }
+        return { id: doc.id, ...data } as Activity;
     });
 };

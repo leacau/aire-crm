@@ -1,3 +1,7 @@
+
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/header';
 import {
   Card,
@@ -11,23 +15,21 @@ import {
   CircleDollarSign,
   Users,
   TrendingUp,
-  Phone,
+  PhoneCall,
   Mail,
   Users2,
   FileText,
-  PhoneCall,
 } from 'lucide-react';
-import { recentActivities, opportunities, clients } from '@/lib/data';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import type { Activity as ActivityType } from '@/lib/types';
-
-const totalRevenue = opportunities
-  .filter((o) => o.stage === 'Cerrado - Ganado')
-  .reduce((acc, o) => acc + o.value, 0);
-
-const forecastedRevenue = opportunities
-  .filter((o) => o.stage !== 'Cerrado - Perdido' && o.stage !== 'Cerrado - Ganado')
-  .reduce((acc, o) => acc + o.value * 0.5, 0); // Simplified forecast
+import type { Activity as ActivityType, Opportunity, Client } from '@/lib/types';
+import { useAuth } from '@/hooks/use-auth';
+import {
+  getAllOpportunities,
+  getOpportunitiesForUser,
+  getClients,
+  getAllActivities,
+} from '@/lib/firebase-service';
+import { Spinner } from '@/components/ui/spinner';
 
 const activityIcons: Record<ActivityType['type'], React.ReactNode> = {
   Llamada: <PhoneCall className="h-4 w-4 text-muted-foreground" />,
@@ -37,6 +39,75 @@ const activityIcons: Record<ActivityType['type'], React.ReactNode> = {
 };
 
 export default function DashboardPage() {
+  const { userInfo, loading: authLoading } = useAuth();
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [activities, setActivities] = useState<ActivityType[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!userInfo) return;
+
+      setLoadingData(true);
+      try {
+        let userOpps: Opportunity[];
+        if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
+          userOpps = await getAllOpportunities();
+        } else {
+          userOpps = await getOpportunitiesForUser(userInfo.id);
+        }
+
+        const [allClients, allActivities] = await Promise.all([
+          getClients(),
+          getAllActivities(),
+        ]);
+        
+        setOpportunities(userOpps);
+        setClients(allClients);
+        // Sort activities by date descending and take the first 5
+        const sortedActivities = allActivities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setActivities(sortedActivities.slice(0, 5));
+
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoadingData(false);
+      }
+    };
+
+    if (!authLoading) {
+      fetchData();
+    }
+  }, [userInfo, authLoading]);
+
+  if (authLoading || loadingData) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner size="large" />
+      </div>
+    );
+  }
+
+  const totalRevenue = opportunities
+    .filter((o) => o.stage === 'Cerrado - Ganado')
+    .reduce((acc, o) => acc + (o.valorCerrado || o.value), 0);
+
+  const forecastedRevenue = opportunities
+    .filter((o) => o.stage !== 'Cerrado - Perdido' && o.stage !== 'Cerrado - Ganado')
+    .reduce((acc, o) => acc + o.value * 0.5, 0); // Simplified forecast
+
+  const activeOpportunities = opportunities.filter(
+    (o) => o.stage !== 'Cerrado - Ganado' && o.stage !== 'Cerrado - Perdido'
+  ).length;
+  
+  const newClientsThisMonth = clients.filter(c => {
+    // This is a simplified check. For a real app, you'd parse createdAt.
+    // Assuming createdAt is a Firestore timestamp, it would need to be converted to a Date object first.
+    return true; 
+  }).length;
+
+
   return (
     <div className="flex flex-col h-full">
       <Header title="Panel" />
@@ -54,7 +125,7 @@ export default function DashboardPage() {
                 ${totalRevenue.toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
-                +20.1% desde el mes pasado
+                Total de negocios ganados.
               </p>
             </CardContent>
           </Card>
@@ -67,20 +138,20 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {opportunities.filter((o) => o.stage !== 'Cerrado - Ganado' && o.stage !== 'Cerrado - Perdido').length}
+                {activeOpportunities}
               </div>
-              <p className="text-xs text-muted-foreground">+10 desde la semana pasada</p>
+              <p className="text-xs text-muted-foreground">Oportunidades en curso.</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Nuevos Clientes</CardTitle>
+              <CardTitle className="text-sm font-medium">Clientes Totales</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">+{clients.length}</div>
+              <div className="text-2xl font-bold">{clients.length}</div>
               <p className="text-xs text-muted-foreground">
-                +5 este mes
+                Total de clientes registrados.
               </p>
             </CardContent>
           </Card>
@@ -96,7 +167,7 @@ export default function DashboardPage() {
                 ${forecastedRevenue.toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
-                Basado en el pipeline actual
+                Basado en el pipeline actual.
               </p>
             </CardContent>
           </Card>
@@ -106,12 +177,12 @@ export default function DashboardPage() {
             <CardHeader>
               <CardTitle>Actividad Reciente</CardTitle>
               <CardDescription>
-                Un registro de las actividades de venta recientes.
+                Un registro de las actividades de venta más recientes.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentActivities.map((activity) => (
+                {activities.map((activity) => (
                   <div key={activity.id} className="flex items-start gap-4">
                     <div className="p-2 bg-muted rounded-full">
                        {activityIcons[activity.type]}
@@ -120,11 +191,11 @@ export default function DashboardPage() {
                       <div className="flex items-center justify-between">
                         <p className="font-medium">{activity.subject}</p>
                         <p className="text-sm text-muted-foreground">
-                          {activity.date}
+                          {new Date(activity.date).toLocaleDateString()}
                         </p>
                       </div>
                        <p className="text-sm text-muted-foreground">
-                        Relacionado con el cliente: {clients.find(c => c.id === activity.clientId)?.name}
+                        Relacionado con el cliente: {clients.find(c => c.id === activity.clientId)?.denominacion}
                       </p>
                       <p className="text-sm">{activity.notes}</p>
                     </div>
