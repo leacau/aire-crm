@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -58,16 +59,18 @@ export function OpportunityDetailsDialog({
     setEditedOpportunity(prev => ({ ...prev, stage }));
   };
 
+  const isInvoiceEnabled = editedOpportunity.stage === 'Cerrado - Ganado';
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Detalles de la Oportunidad</DialogTitle>
           <DialogDescription>
             Edita los detalles de la oportunidad. Haz clic en guardar cuando hayas terminado.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="title" className="text-right">
               Título
@@ -78,6 +81,19 @@ export function OpportunityDetailsDialog({
               value={editedOpportunity.title}
               onChange={handleChange}
               className="col-span-3"
+            />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="details" className="text-right">
+              Descripción
+            </Label>
+            <Textarea
+              id="details"
+              name="details"
+              value={editedOpportunity.details || ''}
+              onChange={handleChange}
+              className="col-span-3"
+              placeholder="Añade una descripción de la oportunidad..."
             />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
@@ -111,16 +127,29 @@ export function OpportunityDetailsDialog({
             </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="details" className="text-right">
-              Detalles
+            <Label htmlFor="facturaNo" className="text-right">
+              Factura Nº
             </Label>
-            <Textarea
-              id="details"
-              name="details"
-              value={editedOpportunity.details || ''}
+            <Input
+              id="facturaNo"
+              name="facturaNo"
+              value={editedOpportunity.facturaNo || ''}
               onChange={handleChange}
               className="col-span-3"
-              placeholder="Añade una descripción o notas sobre la oportunidad..."
+              disabled={!isInvoiceEnabled}
+            />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="observaciones" className="text-right">
+              Observaciones
+            </Label>
+            <Textarea
+              id="observaciones"
+              name="observaciones"
+              value={editedOpportunity.observaciones || ''}
+              onChange={handleChange}
+              className="col-span-3"
+              placeholder="Añade notas o comentarios..."
             />
           </div>
         </div>

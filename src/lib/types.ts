@@ -16,6 +16,8 @@ export type Opportunity = {
   closeDate: string;
   ownerId: string;
   details?: string;
+  observaciones?: string;
+  facturaNo?: string;
 };
 
 export type Person = {
