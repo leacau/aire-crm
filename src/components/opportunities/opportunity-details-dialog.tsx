@@ -25,6 +25,8 @@ import { opportunityStages } from '@/lib/data';
 import type { Opportunity, OpportunityStage } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
+import { updateOpportunity, createOpportunity } from '@/lib/firebase-service';
+import { useToast } from '@/hooks/use-toast';
 
 interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
@@ -32,17 +34,18 @@ interface OpportunityDetailsDialogProps {
   onOpenChange: (isOpen: boolean) => void;
   onUpdate: (opportunity: Partial<Opportunity>) => void;
   onCreate?: (opportunity: Omit<Opportunity, 'id'>) => void;
+  client?: {id: string, name: string}
 }
 
-const getInitialOpportunityData = (userInfo: any): Omit<Opportunity, 'id'> => ({
+const getInitialOpportunityData = (userInfo: any, client: any): Omit<Opportunity, 'id'> => ({
     title: '',
     details: '',
     value: 0,
     stage: 'Nuevo',
     observaciones: '',
     closeDate: new Date().toISOString().split('T')[0],
-    clientName: '',
-    clientId: '',
+    clientName: client?.name || '',
+    clientId: client?.id || '',
     ownerId: userInfo?.id || '',
     pagado: false,
 });
@@ -53,23 +56,55 @@ export function OpportunityDetailsDialog({
   onOpenChange,
   onUpdate,
   onCreate = () => {},
+  client
 }: OpportunityDetailsDialogProps) {
   const { userInfo } = useAuth();
-  const [editedOpportunity, setEditedOpportunity] = React.useState<Partial<Opportunity>>(
-    opportunity || getInitialOpportunityData(userInfo)
-  );
+  const { toast } = useToast();
+
+  const getInitialData = () => {
+      if (opportunity) return opportunity;
+      return getInitialOpportunityData(userInfo, client);
+  }
+
+  const [editedOpportunity, setEditedOpportunity] = React.useState<Partial<Opportunity>>(getInitialData());
 
   React.useEffect(() => {
-    setEditedOpportunity(opportunity || getInitialOpportunityData(userInfo));
-  }, [opportunity, isOpen, userInfo]);
+    if (isOpen) {
+        setEditedOpportunity(getInitialData());
+    }
+  }, [opportunity, isOpen, userInfo, client]);
 
   const isEditing = opportunity !== null;
 
-  const handleSave = () => {
-    if (isEditing) {
-      onUpdate(editedOpportunity);
-    } else {
-      onCreate(editedOpportunity as Omit<Opportunity, 'id'>);
+  const handleSave = async () => {
+    if (isEditing && opportunity) {
+      const changes = Object.keys(editedOpportunity).reduce((acc, key) => {
+        const oppKey = key as keyof Opportunity;
+        if (editedOpportunity[oppKey] !== opportunity[oppKey]) {
+          // @ts-ignore
+          acc[oppKey] = editedOpportunity[oppKey];
+        }
+        return acc;
+      }, {} as Partial<Opportunity>);
+
+      if (Object.keys(changes).length > 0) {
+          try {
+              await updateOpportunity(opportunity.id, changes);
+              onUpdate(changes);
+              toast({ title: "Oportunidad actualizada" });
+          } catch(e) {
+              toast({ title: "Error al actualizar", variant: "destructive" });
+          }
+      }
+    } else if (!isEditing) {
+        try {
+            const newOpp = editedOpportunity as Omit<Opportunity, 'id'>;
+            const newId = await createOpportunity(newOpp);
+            onCreate({...newOpp, id: newId});
+            toast({ title: "Oportunidad creada" });
+        } catch(e) {
+            toast({ title: "Error al crear", variant: "destructive" });
+        }
     }
     onOpenChange(false);
   };
@@ -86,8 +121,8 @@ export function OpportunityDetailsDialog({
     setEditedOpportunity(prev => ({ ...prev, stage }));
   };
 
-  const handleCheckboxChange = (checked: boolean) => {
-    setEditedOpportunity(prev => ({...prev, pagado: checked }));
+  const handleCheckboxChange = (checked: boolean | "indeterminate") => {
+    setEditedOpportunity(prev => ({...prev, pagado: !!checked }));
   }
 
   const isCloseWon = editedOpportunity.stage === 'Cerrado - Ganado';
@@ -145,7 +180,7 @@ export function OpportunityDetailsDialog({
             <Label htmlFor="stage" className="text-right">
               Etapa
             </Label>
-            <Select onValueChange={handleStageChange} defaultValue={editedOpportunity.stage}>
+            <Select onValueChange={handleStageChange} value={editedOpportunity.stage}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona una etapa" />
               </SelectTrigger>
@@ -196,7 +231,7 @@ export function OpportunityDetailsDialog({
                   id="valorCerrado"
                   name="valorCerrado"
                   type="number"
-                  value={editedOpportunity.valorCerrado || 0}
+                  value={editedOpportunity.valorCerrado || editedOpportunity.value || 0}
                   onChange={handleChange}
                   className="col-span-3"
                   disabled={!isCloseWon}
@@ -242,3 +277,5 @@ export function OpportunityDetailsDialog({
     </Dialog>
   );
 }
+
+    

@@ -1,12 +1,9 @@
 'use client';
 
 import {
-  opportunities as allOpportunities,
   opportunityStages,
-  users,
-  clients,
 } from '@/lib/data';
-import type { Opportunity, OpportunityStage, Client } from '@/lib/types';
+import type { Opportunity, OpportunityStage } from '@/lib/types';
 import { MoreHorizontal } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -17,10 +14,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip';
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
+import { getAllOpportunities, getOpportunitiesForUser, updateOpportunity } from '@/lib/firebase-service';
+import { useToast } from '@/hooks/use-toast';
+import { users } from '@/lib/data'; // Keep for owner avatar for now
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'border-blue-500',
@@ -90,9 +90,8 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
   const { userInfo } = useAuth();
   const [isDetailsOpen, setIsDetailsOpen] = React.useState(false);
 
-  // This should be replaced with a proper state management solution
-  const handleUpdate = (updatedOpp: Opportunity) => {
-     window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: updatedOpp }));
+  const handleUpdate = (updatedOpp: Partial<Opportunity>) => {
+     window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: {id: opportunity.id, ...updatedOpp} }));
      setIsDetailsOpen(false);
   }
   
@@ -156,36 +155,40 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
 
 export function KanbanBoard() {
   const { userInfo, loading: authLoading } = useAuth();
-  const [opportunities, setOpportunities] = React.useState<Opportunity[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
+  const { toast } = useToast();
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  React.useEffect(() => {
-    if (authLoading) {
-      setIsLoading(true);
-      return;
+  const fetchOpportunities = useCallback(async () => {
+    if (!userInfo) return;
+    setLoading(true);
+    try {
+      let userOpps: Opportunity[];
+      if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
+        userOpps = await getAllOpportunities();
+      } else {
+        userOpps = await getOpportunitiesForUser(userInfo.id);
+      }
+      setOpportunities(userOpps);
+    } catch (error) {
+      console.error("Error fetching opportunities:", error);
+      toast({ title: 'Error al cargar oportunidades', variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
-    
-    if (userInfo) {
-        let userOpportunities: Opportunity[];
-        if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
-          userOpportunities = allOpportunities;
-        } else { // Asesor
-          const myClientIds = clients.filter(c => c.ownerId === userInfo.id).map(c => c.id);
-          userOpportunities = allOpportunities.filter(opp => myClientIds.includes(opp.clientId));
-        }
-        setOpportunities(userOpportunities);
-    } else {
-        setOpportunities([]);
+  }, [userInfo, toast]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      fetchOpportunities();
     }
-    setIsLoading(false);
+  }, [authLoading, fetchOpportunities]);
 
-  }, [userInfo, authLoading]);
-
-  React.useEffect(() => {
+  useEffect(() => {
     const handleUpdate = (e: Event) => {
       const updatedOpportunity = (e as CustomEvent).detail;
       setOpportunities(prevOpps => 
-          prevOpps.map(opp => opp.id === updatedOpportunity.id ? updatedOpportunity : opp)
+          prevOpps.map(opp => opp.id === updatedOpportunity.id ? { ...opp, ...updatedOpportunity } : opp)
       );
     };
 
@@ -195,24 +198,36 @@ export function KanbanBoard() {
     };
   }, []);
 
-  const handleCardDrop = (e: React.DragEvent<HTMLDivElement>, newStage: OpportunityStage) => {
+  const handleCardDrop = async (e: React.DragEvent<HTMLDivElement>, newStage: OpportunityStage) => {
     const opportunityId = e.dataTransfer.getData('opportunityId');
     const oppToMove = opportunities.find(opp => opp.id === opportunityId);
 
     if (oppToMove && oppToMove.stage !== newStage) {
       if (userInfo?.role === 'Administracion') {
-        console.warn("Admins cannot modify opportunities.");
+        toast({ title: "Acción no permitida", description: "Los administradores no pueden modificar las etapas.", variant: "destructive" });
         return;
       }
       
       const updatedOpportunity = { ...oppToMove, stage: newStage };
-       setOpportunities(prevOpps => 
+      setOpportunities(prevOpps => 
           prevOpps.map(opp => opp.id === updatedOpportunity.id ? updatedOpportunity : opp)
       );
+
+      try {
+        await updateOpportunity(opportunityId, { stage: newStage });
+        toast({ title: "Etapa actualizada", description: `"${oppToMove.title}" se movió a ${newStage}.` });
+      } catch (error) {
+        console.error("Error updating opportunity stage:", error);
+        toast({ title: "Error al actualizar", variant: "destructive" });
+        // Revert UI change on error
+        setOpportunities(prevOpps => 
+          prevOpps.map(opp => opp.id === opportunityId ? oppToMove : opp)
+        );
+      }
     }
   };
 
-  if (isLoading) {
+  if (loading || authLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
@@ -233,3 +248,5 @@ export function KanbanBoard() {
     </div>
   );
 }
+
+    
