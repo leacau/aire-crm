@@ -27,7 +27,7 @@ export const createClient = async (
 ): Promise<string> => {
     const newClientData = {
         ...clientData,
-        name: clientData.company, // Contact name as company name for now
+        name: clientData.name, // Main contact person
         avatarUrl: `https://picsum.photos/seed/new-${Date.now()}/40/40`,
         avatarFallback: clientData.company.substring(0, 2).toUpperCase(),
         personIds: [],

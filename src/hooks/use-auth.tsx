@@ -7,7 +7,7 @@ import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
 import { users } from '@/lib/data';
-import type { User } from '@/lib/types';
+import type { User, UserRole } from '@/lib/types';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -34,8 +34,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
+        // Attempt to find the user in the static data to get their role
         const appUser = users.find(u => u.email === firebaseUser.email);
-        setUserInfo(appUser || null);
+        
+        // Create a userInfo object regardless of whether the user is in the static data
+        const currentUserInfo: User = {
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName || 'Usuario',
+          email: firebaseUser.email || '',
+          // Assign role from static data if found, otherwise default to 'Asesor'
+          role: appUser?.role || 'Asesor', 
+          // Provide fallback avatar and initials
+          avatarUrl: firebaseUser.photoURL || `https://picsum.photos/seed/${firebaseUser.uid}/40/40`,
+          initials: firebaseUser.displayName?.substring(0, 2).toUpperCase() || 'U'
+        };
+        setUserInfo(currentUserInfo);
+
       } else {
         setUser(null);
         setUserInfo(null);
@@ -47,21 +61,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // This effect handles redirection logic once authentication state is resolved.
     if (!loading) {
       const isPublicRoute = publicRoutes.includes(pathname);
       
       if (!user && !isPublicRoute) {
-        // If no user is logged in and the route is not public, redirect to login.
         router.push('/login');
       } else if (user && isPublicRoute) {
-        // If a user is logged in and tries to access a public route, redirect to the dashboard.
         router.push('/');
       }
     }
   }, [user, loading, pathname, router]);
 
-  // While loading, we might want to show a global spinner for protected routes.
   if (loading && !publicRoutes.includes(pathname)) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -70,8 +80,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  // If loading is finished, and we are on a route that requires authentication,
-  // but we don't have a user, we can render a spinner while the redirect effect kicks in.
   if (!loading && !user && !publicRoutes.includes(pathname)) {
      return (
         <div className="flex h-screen items-center justify-center">
@@ -80,9 +88,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
   }
 
-  // Render children if:
-  // 1. Loading is complete and a user is present.
-  // 2. We are on a public route.
   if (!loading && (user || publicRoutes.includes(pathname))) {
     return (
       <AuthContext.Provider value={{ user, userInfo, loading }}>
@@ -91,7 +96,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  // Fallback for any edge cases, though ideally this shouldn't be reached.
   return null;
 }
 
