@@ -17,7 +17,7 @@ export default function ClientPage({ params }: { params: { id: string } }) {
   const router = useRouter();
 
   // Correctly unwrap the id from params
-  const { id } = params;
+  const { id } = use(params);
 
   const client = clients.find((c) => c.id === id);
 
