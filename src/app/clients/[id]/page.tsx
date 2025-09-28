@@ -16,36 +16,29 @@ export default function ClientPage({ params }: { params: { id: string } }) {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Correctly unwrap the id from params using use()
-  const { id } = use(params as any);
+  // Correctly unwrap the id from params
+  const { id } = params;
 
   const client = clients.find((c) => c.id === id);
 
   useEffect(() => {
+    // This effect handles redirection after the loading state is resolved.
     if (!authLoading) {
-      // Recalculate access inside the effect to ensure latest userInfo is used
       const userHasAccess =
         userInfo &&
         client &&
         (userInfo.role === 'Jefe' ||
           userInfo.role === 'Administracion' ||
           (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
-
+      
       if (!client || !userHasAccess) {
         router.push('/clients');
       }
     }
-  }, [authLoading, userInfo, client, router]);
+  }, [authLoading, userInfo, client, router, id]);
 
-  // Determine access for rendering, ensures it's in sync with the effect
-  const hasAccess =
-    userInfo &&
-    client &&
-    (userInfo.role === 'Jefe' ||
-      userInfo.role === 'Administracion' ||
-      (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
-  if (authLoading || !client || !hasAccess) {
+  if (authLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
@@ -53,6 +46,26 @@ export default function ClientPage({ params }: { params: { id: string } }) {
     );
   }
 
+  // At this point, authLoading is false.
+  // The useEffect above will handle redirection if access is denied.
+  // We can check access again to decide whether to render the details or a spinner while redirecting.
+  const userHasAccess =
+    userInfo &&
+    client &&
+    (userInfo.role === 'Jefe' ||
+      userInfo.role === 'Administracion' ||
+      (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
+
+  if (!client || !userHasAccess) {
+    // Render a spinner while the redirection from the useEffect is in progress.
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner size="large" />
+      </div>
+    );
+  }
+
+  // If we reach here, user has access and client exists.
   const clientOpportunities = allOpportunities.filter(o => o.clientId === client.id);
   const clientActivities = allActivities.filter(a => a.clientId === client.id);
   const clientPeople = allPeople.filter(p => p.clientIds.includes(client.id));
