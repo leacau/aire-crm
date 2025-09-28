@@ -1,3 +1,4 @@
+
 'use client'
 import type { Client, Opportunity, Activity, User, Person } from '@/lib/types';
 import {
@@ -28,7 +29,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '../ui/button';
-import { opportunityStages, users } from '@/lib/data';
+import { opportunityStages } from '@/lib/data';
 import { OpportunityDetailsDialog } from '../opportunities/opportunity-details-dialog';
 import React from 'react';
 import {
@@ -47,6 +48,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { MoreHorizontal } from 'lucide-react';
+import { ClientFormDialog } from './client-form-dialog';
 
 
 const stageColors: Record<OpportunityStage, string> = {
@@ -81,21 +83,23 @@ export function ClientDetails({
   opportunities: initialOpportunities,
   activities,
   people,
+  onUpdate
 }: {
   client: Client;
   opportunities: Opportunity[];
   activities: Activity[];
   people: Person[];
-  users: User[];
+  onUpdate: (client: Client) => void;
 }) {
   const { userInfo } = useAuth();
   const [opportunities, setOpportunities] = React.useState(initialOpportunities);
   const [selectedOpportunity, setSelectedOpportunity] = React.useState<Opportunity | null>(null);
+  const [isClientFormOpen, setIsClientFormOpen] = React.useState(false);
 
-  const canEdit = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor';
+  const canEditClient = userInfo?.role === 'Jefe' || (userInfo?.role === 'Asesor' && client.ownerId === userInfo.id);
+  const canEditOpportunity = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor';
   const canDelete = userInfo?.role === 'Jefe';
   const canReassign = userInfo?.role === 'Jefe' || userInfo?.role === 'Administracion';
-
 
   const handleOpportunityUpdate = (updatedOpp: Opportunity) => {
     setOpportunities(prev => prev.map(opp => opp.id === updatedOpp.id ? updatedOpp : opp));
@@ -103,27 +107,42 @@ export function ClientDetails({
   };
 
   const handleStageChange = (opportunityId: string, newStage: OpportunityStage) => {
-    if (!canEdit) return;
+    if (!canEditOpportunity) return;
     setOpportunities(prev => prev.map(opp => opp.id === opportunityId ? { ...opp, stage: newStage } : opp));
   };
 
   const openOpportunityDetails = (opp: Opportunity) => {
     setSelectedOpportunity(opp);
   };
+
+  const handleSaveClient = (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>) => {
+    const updatedClient = {
+      ...client,
+      ...clientData
+    };
+    onUpdate(updatedClient);
+  };
   
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="lg:col-span-1 space-y-6">
         <Card>
-          <CardHeader className="flex flex-row items-center gap-4">
-            <Avatar className="h-16 w-16">
-              <AvatarImage src={client.avatarUrl} alt={client.name} data-ai-hint="logo building" />
-              <AvatarFallback>{client.avatarFallback}</AvatarFallback>
-            </Avatar>
-            <div>
-              <CardTitle className="text-2xl">{client.name}</CardTitle>
-              <CardDescription>{client.company}</CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div className="flex flex-row items-center gap-4">
+              <Avatar className="h-16 w-16">
+                <AvatarImage src={client.avatarUrl} alt={client.name} data-ai-hint="logo building" />
+                <AvatarFallback>{client.avatarFallback}</AvatarFallback>
+              </Avatar>
+              <div>
+                <CardTitle className="text-2xl">{client.company}</CardTitle>
+                <CardDescription>{client.name}</CardDescription>
+              </div>
             </div>
+            {canEditClient && (
+               <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setIsClientFormOpen(true)}>
+                  <Edit className="h-4 w-4" />
+               </Button>
+            )}
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-3 text-sm">
@@ -144,7 +163,7 @@ export function ClientDetails({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Contactos</CardTitle>
-            {canEdit && (
+            {canEditOpportunity && (
               <Button variant="outline" size="sm">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Añadir Persona
@@ -174,7 +193,7 @@ export function ClientDetails({
                       </Button>
                     </>
                   )}
-                  {canEdit && <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-4 w-4" /></Button>}
+                  {canEditOpportunity && <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-4 w-4" /></Button>}
                   {canDelete && <Button variant="ghost" size="icon" className="h-8 w-8"><Trash2 className="h-4 w-4 text-destructive" /></Button>}
                 </div>
               </div>
@@ -185,7 +204,7 @@ export function ClientDetails({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Oportunidades</CardTitle>
-            {canEdit && (
+            {canEditOpportunity && (
                <Button variant="outline" size="sm">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Añadir Oportunidad
@@ -216,7 +235,7 @@ export function ClientDetails({
                        <Select
                           value={opp.stage}
                           onValueChange={(newStage: OpportunityStage) => handleStageChange(opp.id, newStage)}
-                          disabled={!canEdit}
+                          disabled={!canEditOpportunity}
                         >
                           <SelectTrigger className="w-full h-8 text-xs">
                              <SelectValue>
@@ -292,6 +311,15 @@ export function ClientDetails({
           isOpen={!!selectedOpportunity}
           onOpenChange={(isOpen) => !isOpen && setSelectedOpportunity(null)}
           onUpdate={handleOpportunityUpdate}
+        />
+      )}
+
+      {isClientFormOpen && (
+        <ClientFormDialog
+            isOpen={isClientFormOpen}
+            onOpenChange={setIsClientFormOpen}
+            onSave={handleSaveClient}
+            client={client}
         />
       )}
     </div>

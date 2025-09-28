@@ -15,7 +15,7 @@ export const people: Person[] = [
     { id: 'person-5', name: 'Lucia Fernandez', email: 'lucia.f@apexdigital.com', phone: '555-5555', clientIds: ['client-5'] },
 ];
 
-export const clients: Client[] = [
+export let clients: Client[] = [
   {
     id: 'client-1',
     name: 'Global Media Inc.',

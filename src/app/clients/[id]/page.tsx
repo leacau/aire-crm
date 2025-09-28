@@ -11,16 +11,18 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import type { Client } from '@/lib/types';
+
 
 export default function ClientPage({ params }: { params: { id: string } }) {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
   
   const { id } = use(params);
-  const client = clients.find((c) => c.id === id);
+  
+  const [client, setClient] = React.useState<Client | undefined>(() => clients.find((c) => c.id === id));
 
   useEffect(() => {
-    // This effect runs only when auth loading is complete.
     if (!authLoading) {
       if (!client) {
         router.push('/clients');
@@ -33,15 +35,14 @@ export default function ClientPage({ params }: { params: { id: string } }) {
           userInfo.role === 'Administracion' ||
           (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
-      // If the user does not have access, redirect.
       if (!userHasAccess) {
         router.push('/clients');
       }
     }
-  }, [authLoading, userInfo, client, router]); // Key dependencies
+  }, [authLoading, userInfo, client, router]);
 
-  // 1. Show Spinner while authentication is in progress.
-  if (authLoading) {
+
+  if (authLoading || !client) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
@@ -49,29 +50,32 @@ export default function ClientPage({ params }: { params: { id: string } }) {
     );
   }
 
-  // 2. After loading, determine if the user has access.
-  // We re-check here to decide what to render. The useEffect above handles the redirect.
   const userHasAccess =
     userInfo &&
-    client &&
     (userInfo.role === 'Jefe' ||
       userInfo.role === 'Administracion' ||
       (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
-  // 3. If there's no client or no access, the useEffect will redirect.
-  // In the meantime, we show a spinner to prevent content flashing.
-  if (!client || !userHasAccess) {
-    return (
+  if (!userHasAccess) {
+      return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
       </div>
     );
   }
 
-  // 4. If everything is fine, show the client details.
   const clientOpportunities = allOpportunities.filter(o => o.clientId === client.id);
   const clientActivities = allActivities.filter(a => a.clientId === client.id);
   const clientPeople = allPeople.filter(p => p.clientIds.includes(client.id));
+
+  const handleUpdateClient = (updatedClient: Client) => {
+    setClient(updatedClient);
+    // Also update the main clients array for consistency across the app
+    const clientIndex = clients.findIndex(c => c.id === updatedClient.id);
+    if (clientIndex !== -1) {
+      clients[clientIndex] = updatedClient;
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -89,6 +93,7 @@ export default function ClientPage({ params }: { params: { id: string } }) {
           opportunities={clientOpportunities}
           activities={clientActivities}
           people={clientPeople}
+          onUpdate={handleUpdateClient}
         />
       </main>
     </div>

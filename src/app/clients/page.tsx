@@ -12,15 +12,35 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { clients, opportunities } from '@/lib/data';
-import { FileDown, MoreHorizontal } from 'lucide-react';
+import { clients as initialClients, opportunities } from '@/lib/data';
+import { FileDown, MoreHorizontal, PlusCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
+import { ClientFormDialog } from '@/components/clients/client-form-dialog';
+import type { Client } from '@/lib/types';
 
 export default function ClientsPage() {
   const { userInfo, loading } = useAuth();
+  const [clients, setClients] = React.useState(initialClients);
+  const [isFormOpen, setIsFormOpen] = React.useState(false);
+
+  const handleSaveClient = (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>) => {
+    if (!userInfo) return;
+
+    const newClient: Client = {
+      id: `client-${Date.now()}`,
+      ...clientData,
+      name: clientData.company, // Assuming contact name is company name for now
+      avatarUrl: `https://picsum.photos/seed/new-${Date.now()}/40/40`,
+      avatarFallback: clientData.company.substring(0, 2).toUpperCase(),
+      personIds: [],
+      ownerId: userInfo.id,
+    };
+    setClients(prev => [...prev, newClient]);
+  };
+
 
   if (loading) {
     return (
@@ -33,9 +53,13 @@ export default function ClientsPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Clientes">
-        <Button variant="outline">
+        <Button variant="outline" className="hidden sm:flex">
           <FileDown className="mr-2" />
           Exportar CSV
+        </Button>
+        <Button onClick={() => setIsFormOpen(true)}>
+          <PlusCircle className="mr-2" />
+          Nuevo Cliente
         </Button>
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
@@ -98,6 +122,11 @@ export default function ClientsPage() {
           </Table>
         </div>
       </main>
+      <ClientFormDialog
+        isOpen={isFormOpen}
+        onOpenChange={setIsFormOpen}
+        onSave={handleSaveClient}
+      />
     </div>
   );
 }
