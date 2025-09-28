@@ -40,7 +40,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '../ui/button';
-import { opportunityStages, clientActivityTypes } from '@/lib/data';
+import { opportunityStages } from '@/lib/data';
+import { clientActivityTypes } from '@/lib/types';
 import { OpportunityDetailsDialog } from '../opportunities/opportunity-details-dialog';
 import {
   Select,
