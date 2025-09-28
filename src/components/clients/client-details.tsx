@@ -55,7 +55,7 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson } from '@/lib/firebase-service';
+import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
 
@@ -89,12 +89,10 @@ const WhatsappIcon = () => (
 
 export function ClientDetails({
   client,
-  opportunities: initialOpportunities,
   activities,
   onUpdate
 }: {
   client: Client;
-  opportunities: Opportunity[];
   activities: Activity[];
   onUpdate: (data: Partial<Omit<Client, 'id'>>) => void;
 }) {
@@ -102,19 +100,26 @@ export function ClientDetails({
   const { toast } = useToast();
   
   const [people, setPeople] = useState<Person[]>([]);
-  const [opportunities, setOpportunities] = useState(initialOpportunities);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [isOpportunityFormOpen, setIsOpportunityFormOpen] = useState(false);
+  
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [isPersonFormOpen, setIsPersonFormOpen] = useState(false);
   const [isClientFormOpen, setIsClientFormOpen] = useState(false);
 
+  const fetchClientData = async () => {
+      const [clientPeople, clientOpportunities] = await Promise.all([
+          getPeopleByClientId(client.id),
+          getOpportunitiesByClientId(client.id)
+      ]);
+      setPeople(clientPeople);
+      setOpportunities(clientOpportunities);
+  }
+
   useEffect(() => {
-    const fetchPeople = async () => {
-        const clientPeople = await getPeopleByClientId(client.id);
-        setPeople(clientPeople);
-    }
-    fetchPeople();
+    fetchClientData();
   }, [client.id]);
 
 
@@ -124,18 +129,53 @@ export function ClientDetails({
   const canDelete = userInfo?.role === 'Jefe';
   const canReassign = userInfo?.role === 'Jefe' || userInfo?.role === 'Administracion';
 
-  const handleOpportunityUpdate = (updatedOpp: Opportunity) => {
-    setOpportunities(prev => prev.map(opp => opp.id === updatedOpp.id ? updatedOpp : opp));
-    setSelectedOpportunity(null);
+  const handleOpportunityUpdate = async (updatedOpp: Partial<Opportunity>) => {
+    if(!selectedOpportunity) return;
+    try {
+        await updateOpportunity(selectedOpportunity.id, updatedOpp);
+        fetchClientData();
+        toast({ title: 'Oportunidad Actualizada' });
+    } catch (error) {
+        console.error("Error updating opportunity", error);
+        toast({ title: "Error al actualizar la oportunidad", variant: 'destructive' });
+    }
   };
 
-  const handleStageChange = (opportunityId: string, newStage: OpportunityStage) => {
+  const handleOpportunityCreate = async (newOppData: Omit<Opportunity, 'id'>) => {
+     if(!userInfo) return;
+     try {
+        await createOpportunity({
+            ...newOppData,
+            clientId: client.id,
+            clientName: client.denominacion,
+            ownerId: userInfo.id,
+        });
+        fetchClientData();
+        toast({ title: 'Oportunidad Creada' });
+    } catch (error) {
+        console.error("Error creating opportunity", error);
+        toast({ title: "Error al crear la oportunidad", variant: 'destructive' });
+    }
+  };
+
+
+  const handleStageChange = async (opportunityId: string, newStage: OpportunityStage) => {
     if (!canEditOpportunity) return;
-    setOpportunities(prev => prev.map(opp => opp.id === opportunityId ? { ...opp, stage: newStage } : opp));
+    const originalOpportunities = opportunities;
+    const updatedOpportunities = opportunities.map(opp => opp.id === opportunityId ? { ...opp, stage: newStage } : opp);
+    setOpportunities(updatedOpportunities);
+    try {
+        await updateOpportunity(opportunityId, { stage: newStage });
+    } catch (error) {
+        console.error('Error updating stage', error);
+        setOpportunities(originalOpportunities);
+        toast({ title: 'Error al cambiar la etapa', variant: 'destructive' });
+    }
   };
 
-  const openOpportunityDetails = (opp: Opportunity) => {
+  const handleOpenOpportunityForm = (opp: Opportunity | null = null) => {
     setSelectedOpportunity(opp);
+    setIsOpportunityFormOpen(true);
   };
   
   const handleOpenPersonForm = (person: Person | null = null) => {
@@ -147,13 +187,12 @@ export function ClientDetails({
      try {
         if (selectedPerson) { // Editing existing person
             await updatePerson(selectedPerson.id, personData);
-            setPeople(prev => prev.map(p => p.id === selectedPerson.id ? { ...p, ...personData } : p));
+            fetchClientData();
             toast({ title: "Contacto Actualizado" });
         } else { // Creating new person
             const newPersonData = { ...personData, clientIds: [client.id] };
-            const newPersonId = await createPerson(newPersonData);
-            const newPerson = { ...newPersonData, id: newPersonId };
-            setPeople(prev => [...prev, newPerson]);
+            await createPerson(newPersonData);
+            fetchClientData();
             toast({ title: "Contacto Creado" });
         }
     } catch (error) {
@@ -268,7 +307,7 @@ export function ClientDetails({
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Oportunidades</CardTitle>
           {canEditOpportunity && (
-             <Button variant="outline" size="icon">
+             <Button variant="outline" size="icon" onClick={() => handleOpenOpportunityForm()}>
               <PlusCircle className="h-4 w-4" />
             </Button>
           )}
@@ -288,7 +327,7 @@ export function ClientDetails({
                 <TableRow key={opp.id}>
                   <TableCell 
                     className='font-medium cursor-pointer hover:underline'
-                    onClick={() => openOpportunityDetails(opp)}
+                    onClick={() => handleOpenOpportunityForm(opp)}
                   >
                     {opp.title}
                   </TableCell>
@@ -365,12 +404,13 @@ export function ClientDetails({
         </CardContent>
       </Card>
 
-      {selectedOpportunity && (
+      {isOpportunityFormOpen && (
         <OpportunityDetailsDialog
           opportunity={selectedOpportunity}
-          isOpen={!!selectedOpportunity}
-          onOpenChange={(isOpen) => !isOpen && setSelectedOpportunity(null)}
+          isOpen={isOpportunityFormOpen}
+          onOpenChange={setIsOpportunityFormOpen}
           onUpdate={handleOpportunityUpdate}
+          onCreate={handleOpportunityCreate}
         />
       )}
 

@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { opportunities as allOpportunities, activities as allActivities } from '@/lib/data';
+import { activities as allActivities } from '@/lib/data';
 import { ClientDetails } from '@/components/clients/client-details';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
@@ -50,20 +50,21 @@ export default function ClientPage({ params }: { params: { id: string } }) {
   }, [id, router, toast]);
 
   const userHasAccess = useMemo(() => {
-    if (authLoading || !client || !userInfo) return false;
+    if (!client || !userInfo) return false;
     return (
       userInfo.role === 'Jefe' ||
       userInfo.role === 'Administracion' ||
       (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
     );
-  }, [authLoading, client, userInfo]);
+  }, [client, userInfo]);
 
   useEffect(() => {
     if (!authLoading && !loadingClient && !userHasAccess) {
       toast({ title: "Acceso denegado", description: "No tienes permiso para ver este cliente.", variant: "destructive" });
       router.push('/clients');
     }
-  }, [authLoading, loadingClient, userHasAccess, router, toast]);
+  }, [authLoading, loadingClient, userHasAccess, router, toast, client]);
+
 
   const handleUpdateClient = async (updatedData: Partial<Omit<Client, 'id'>>) => {
     if (!client) return;
@@ -85,12 +86,11 @@ export default function ClientPage({ params }: { params: { id: string } }) {
     );
   }
   
-  const clientOpportunities = allOpportunities.filter(o => o.clientId === client.id);
   const clientActivities = allActivities.filter(a => a.clientId === client.id);
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={client.company}>
+      <Header title={client.denominacion}>
         <Button asChild variant="outline">
           <Link href="/clients">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -101,7 +101,6 @@ export default function ClientPage({ params }: { params: { id: string } }) {
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <ClientDetails
           client={client}
-          opportunities={clientOpportunities}
           activities={clientActivities}
           onUpdate={handleUpdateClient}
         />

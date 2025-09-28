@@ -18,6 +18,8 @@ export type Opportunity = {
   details?: string;
   observaciones?: string;
   facturaNo?: string;
+  valorCerrado?: number;
+  propuestaCerrada?: string;
 };
 
 export type Person = {

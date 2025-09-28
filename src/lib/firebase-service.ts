@@ -1,10 +1,11 @@
 
 import { db } from './firebase';
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
-import type { Client, Person } from './types';
+import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where } from 'firebase/firestore';
+import type { Client, Person, Opportunity } from './types';
 
 const clientsCollection = collection(db, 'clients');
 const peopleCollection = collection(db, 'people');
+const opportunitiesCollection = collection(db, 'opportunities');
 
 // --- Client Functions ---
 
@@ -81,6 +82,33 @@ export const createPerson = async (
 
 export const updatePerson = async (id: string, data: Partial<Omit<Person, 'id'>>): Promise<void> => {
     const docRef = doc(db, 'people', id);
+    await updateDoc(docRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+    });
+};
+
+
+// --- Opportunity Functions ---
+
+export const getOpportunitiesByClientId = async (clientId: string): Promise<Opportunity[]> => {
+    const q = query(opportunitiesCollection, where("clientId", "==", clientId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
+};
+
+export const createOpportunity = async (
+    opportunityData: Omit<Opportunity, 'id'>
+): Promise<string> => {
+    const docRef = await addDoc(opportunitiesCollection, {
+        ...opportunityData,
+        createdAt: serverTimestamp()
+    });
+    return docRef.id;
+};
+
+export const updateOpportunity = async (id: string, data: Partial<Omit<Opportunity, 'id'>>): Promise<void> => {
+    const docRef = doc(db, 'opportunities', id);
     await updateDoc(docRef, {
         ...data,
         updatedAt: serverTimestamp()

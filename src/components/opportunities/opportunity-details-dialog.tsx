@@ -23,35 +23,60 @@ import {
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
 import type { Opportunity, OpportunityStage } from '@/lib/types';
+import { useAuth } from '@/hooks/use-auth';
 
 interface OpportunityDetailsDialogProps {
-  opportunity: Opportunity;
+  opportunity: Opportunity | null;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onUpdate: (opportunity: Opportunity) => void;
+  onUpdate: (opportunity: Partial<Opportunity>) => void;
+  onCreate: (opportunity: Omit<Opportunity, 'id'>) => void;
 }
+
+const getInitialOpportunityData = (userInfo: any): Omit<Opportunity, 'id'> => ({
+    title: '',
+    details: '',
+    value: 0,
+    stage: 'Nuevo',
+    observaciones: '',
+    closeDate: new Date().toISOString().split('T')[0],
+    clientName: '',
+    clientId: '',
+    ownerId: userInfo?.id || '',
+});
 
 export function OpportunityDetailsDialog({
   opportunity,
   isOpen,
   onOpenChange,
   onUpdate,
+  onCreate,
 }: OpportunityDetailsDialogProps) {
-  const [editedOpportunity, setEditedOpportunity] = React.useState<Opportunity>(opportunity);
+  const { userInfo } = useAuth();
+  const [editedOpportunity, setEditedOpportunity] = React.useState<Partial<Opportunity>>(
+    opportunity || getInitialOpportunityData(userInfo)
+  );
 
   React.useEffect(() => {
-    setEditedOpportunity(opportunity);
-  }, [opportunity]);
+    setEditedOpportunity(opportunity || getInitialOpportunityData(userInfo));
+  }, [opportunity, isOpen, userInfo]);
+
+  const isEditing = opportunity !== null;
 
   const handleSave = () => {
-    onUpdate(editedOpportunity);
+    if (isEditing) {
+      onUpdate(editedOpportunity);
+    } else {
+      onCreate(editedOpportunity as Omit<Opportunity, 'id'>);
+    }
+    onOpenChange(false);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setEditedOpportunity(prev => ({
       ...prev,
-      [name]: name === 'value' ? Number(value) : value,
+      [name]: name === 'value' || name === 'valorCerrado' ? Number(value) : value,
     }));
   };
 
@@ -59,15 +84,15 @@ export function OpportunityDetailsDialog({
     setEditedOpportunity(prev => ({ ...prev, stage }));
   };
 
-  const isInvoiceEnabled = editedOpportunity.stage === 'Cerrado - Ganado';
+  const isCloseWon = editedOpportunity.stage === 'Cerrado - Ganado';
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Detalles de la Oportunidad</DialogTitle>
+          <DialogTitle>{isEditing ? 'Detalles de la Oportunidad' : 'Nueva Oportunidad'}</DialogTitle>
           <DialogDescription>
-            Edita los detalles de la oportunidad. Haz clic en guardar cuando hayas terminado.
+            {isEditing ? 'Edita los detalles de la oportunidad.' : 'Rellena los datos para crear una nueva oportunidad.'}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
@@ -78,7 +103,7 @@ export function OpportunityDetailsDialog({
             <Input
               id="title"
               name="title"
-              value={editedOpportunity.title}
+              value={editedOpportunity.title || ''}
               onChange={handleChange}
               className="col-span-3"
             />
@@ -104,7 +129,7 @@ export function OpportunityDetailsDialog({
               id="value"
               name="value"
               type="number"
-              value={editedOpportunity.value}
+              value={editedOpportunity.value || 0}
               onChange={handleChange}
               className="col-span-3"
             />
@@ -127,19 +152,6 @@ export function OpportunityDetailsDialog({
             </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="facturaNo" className="text-right">
-              Factura Nº
-            </Label>
-            <Input
-              id="facturaNo"
-              name="facturaNo"
-              value={editedOpportunity.facturaNo || ''}
-              onChange={handleChange}
-              className="col-span-3"
-              disabled={!isInvoiceEnabled}
-            />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="observaciones" className="text-right">
               Observaciones
             </Label>
@@ -152,10 +164,59 @@ export function OpportunityDetailsDialog({
               placeholder="Añade notas o comentarios..."
             />
           </div>
+
+          {isEditing && (
+            <>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="facturaNo" className="text-right">
+                  Factura Nº
+                </Label>
+                <Input
+                  id="facturaNo"
+                  name="facturaNo"
+                  value={editedOpportunity.facturaNo || ''}
+                  onChange={handleChange}
+                  className="col-span-3"
+                  disabled={!isCloseWon}
+                  placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="valorCerrado" className="text-right">
+                  Valor Cerrado
+                </Label>
+                <Input
+                  id="valorCerrado"
+                  name="valorCerrado"
+                  type="number"
+                  value={editedOpportunity.valorCerrado || 0}
+                  onChange={handleChange}
+                  className="col-span-3"
+                  disabled={!isCloseWon}
+                   placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}
+                />
+              </div>
+               <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="propuestaCerrada" className="text-right">
+                  Propuesta Cerrada
+                </Label>
+                <Input
+                  id="propuestaCerrada"
+                  name="propuestaCerrada"
+                  value={editedOpportunity.propuestaCerrada || ''}
+                  onChange={handleChange}
+                  className="col-span-3"
+                  disabled={!isCloseWon}
+                  placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}
+                />
+              </div>
+            </>
+          )}
+
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Guardar Cambios</Button>
+          <Button onClick={handleSave}>Guardar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
