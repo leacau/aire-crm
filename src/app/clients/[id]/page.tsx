@@ -34,7 +34,7 @@ export default function ClientPage({ params }: { params: { id: string } }) {
         router.push('/clients');
       }
     }
-  }, [authLoading, userInfo, client, router, id]); // Dependencias clave
+  }, [authLoading, userInfo, client, router]); // Dependencias clave
 
   // 1. Mostrar Spinner mientras la autenticación está en progreso.
   if (authLoading) {
