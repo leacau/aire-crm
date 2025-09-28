@@ -122,6 +122,13 @@ export default function ClientsPage() {
                   (acc, opp) => acc + opp.value,
                   0
                 );
+
+                const canViewDetails = userInfo && (
+                    userInfo.role === 'Jefe' || 
+                    userInfo.role === 'Administracion' || 
+                    (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
+                );
+
                 return (
                   <TableRow key={client.id}>
                     <TableCell>
@@ -131,12 +138,16 @@ export default function ClientsPage() {
                       </Avatar>
                     </TableCell>
                     <TableCell>
-                      <Link
-                        href={`/clients/${client.id}`}
-                        className="font-medium text-primary hover:underline"
-                      >
-                        {client.denominacion}
-                      </Link>
+                      {canViewDetails ? (
+                         <Link
+                          href={`/clients/${client.id}`}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {client.denominacion}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">{client.denominacion}</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div>
