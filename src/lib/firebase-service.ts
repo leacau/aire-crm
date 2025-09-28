@@ -1,13 +1,15 @@
 
+
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity } from './types';
 import { logActivity } from './activity-logger';
 
 const clientsCollection = collection(db, 'clients');
 const peopleCollection = collection(db, 'people');
 const opportunitiesCollection = collection(db, 'opportunities');
 const activitiesCollection = collection(db, 'activities');
+const clientActivitiesCollection = collection(db, 'client-activities');
 
 
 // --- Client Functions ---
@@ -237,7 +239,7 @@ export const updateOpportunity = async (
     }
 };
 
-// --- Activity Functions ---
+// --- General Activity Functions ---
 
 export const getActivities = async (activityLimit: number = 20): Promise<ActivityLog[]> => {
     const q = query(activitiesCollection, orderBy('timestamp', 'desc'), limit(activityLimit));
@@ -249,4 +251,30 @@ export const getActivities = async (activityLimit: number = 20): Promise<Activit
         }
         return { id: doc.id, ...data } as ActivityLog;
     });
+};
+
+
+// --- Client-Specific Activity Functions ---
+
+export const getClientActivities = async (clientId: string): Promise<ClientActivity[]> => {
+    const q = query(clientActivitiesCollection, where('clientId', '==', clientId), orderBy('timestamp', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
+        } as ClientActivity;
+    });
+};
+
+export const createClientActivity = async (
+    activityData: Omit<ClientActivity, 'id' | 'timestamp'>
+): Promise<string> => {
+    const docRef = await addDoc(clientActivitiesCollection, {
+        ...activityData,
+        timestamp: serverTimestamp(),
+    });
+    return docRef.id;
 };

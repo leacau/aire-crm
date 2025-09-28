@@ -1,5 +1,6 @@
 
-import type { User, Client, Opportunity, OpportunityStage, Person, TipoEntidad } from './types';
+
+import type { User, Client, Opportunity, OpportunityStage, Person, TipoEntidad, ClientActivityType } from './types';
 
 export const users: User[] = [
   { id: 'user-1', name: 'Alex Morgan', email: 'alex.morgan@example.com', avatarUrl: 'https://picsum.photos/seed/user1/40/40', initials: 'AM', role: 'Asesor' },

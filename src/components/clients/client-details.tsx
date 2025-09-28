@@ -1,6 +1,7 @@
 
+
 'use client'
-import type { Client, Opportunity, Person } from '@/lib/types';
+import type { Client, Opportunity, Person, ClientActivity, ClientActivityType } from '@/lib/types';
 import React, { useEffect, useState } from 'react';
 import {
   Card,
@@ -23,7 +24,12 @@ import {
   MapPin,
   FileDigit,
   Building2,
-  Briefcase
+  Briefcase,
+  MessageSquare,
+  Users,
+  Video,
+  BuildingIcon,
+  MailIcon
 } from 'lucide-react';
 import {
   Table,
@@ -34,7 +40,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '../ui/button';
-import { opportunityStages } from '@/lib/data';
+import { opportunityStages, clientActivityTypes } from '@/lib/data';
 import { OpportunityDetailsDialog } from '../opportunities/opportunity-details-dialog';
 import {
   Select,
@@ -54,7 +60,7 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity } from '@/lib/firebase-service';
+import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
 
@@ -79,6 +85,15 @@ const WhatsappIcon = () => (
   </svg>
 );
 
+const activityIcons: Record<ClientActivityType, React.ReactNode> = {
+    'Llamada': <PhoneCall className="h-4 w-4" />,
+    'WhatsApp': <MessageSquare className="h-4 w-4" />,
+    'Meet': <Video className="h-4 w-4" />,
+    'Reunión': <Users className="h-4 w-4" />,
+    'Visita Aire': <BuildingIcon className="h-4 w-4" />,
+    'Mail': <MailIcon className="h-4 w-4" />,
+};
+
 
 export function ClientDetails({
   client,
@@ -92,6 +107,9 @@ export function ClientDetails({
   
   const [people, setPeople] = useState<Person[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [clientActivities, setClientActivities] = useState<ClientActivity[]>([]);
+  const [newActivityType, setNewActivityType] = useState<ClientActivityType | ''>('');
+  const [newActivityObservation, setNewActivityObservation] = useState('');
   
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [isOpportunityFormOpen, setIsOpportunityFormOpen] = useState(false);
@@ -102,12 +120,14 @@ export function ClientDetails({
 
   const fetchClientData = async () => {
       if(!userInfo) return;
-      const [clientPeople, clientOpportunities] = await Promise.all([
+      const [clientPeople, clientOpportunities, activities] = await Promise.all([
           getPeopleByClientId(client.id),
-          getOpportunitiesByClientId(client.id)
+          getOpportunitiesByClientId(client.id),
+          getClientActivities(client.id)
       ]);
       setPeople(clientPeople);
       setOpportunities(clientOpportunities);
+      setClientActivities(activities);
   }
 
   useEffect(() => {
@@ -194,6 +214,29 @@ export function ClientDetails({
         toast({ title: "Error al guardar el contacto", variant: 'destructive' });
     }
   };
+
+  const handleSaveClientActivity = async () => {
+    if (!newActivityType || !newActivityObservation.trim() || !userInfo) {
+        toast({ title: "Datos incompletos", description: "Selecciona un tipo y añade una observación.", variant: 'destructive'});
+        return;
+    }
+    try {
+        await createClientActivity({
+            clientId: client.id,
+            type: newActivityType,
+            observation: newActivityObservation,
+            userId: userInfo.id,
+            userName: userInfo.name,
+        });
+        toast({ title: "Actividad Registrada" });
+        setNewActivityType('');
+        setNewActivityObservation('');
+        fetchClientData(); // Refresh activities
+    } catch (error) {
+        console.error("Error saving client activity:", error);
+        toast({ title: "Error al guardar la actividad", variant: 'destructive'});
+    }
+  }
 
 
   const handleSaveClient = (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>) => {
@@ -294,6 +337,7 @@ export function ClientDetails({
               </div>
             </div>
           ))}
+           {people.length === 0 && <p className="text-sm text-muted-foreground">No hay contactos para este cliente.</p>}
         </CardContent>
       </Card>
 
@@ -369,6 +413,13 @@ export function ClientDetails({
                   )}
                 </TableRow>
               ))}
+               {opportunities.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={canReassign || canDelete ? 4 : 3} className="h-24 text-center">
+                      No hay oportunidades para este cliente.
+                    </TableCell>
+                  </TableRow>
+                )}
             </TableBody>
           </Table>
         </CardContent>
@@ -376,10 +427,59 @@ export function ClientDetails({
 
       <Card>
         <CardHeader>
-          <CardTitle>Línea de Tiempo de Actividad</CardTitle>
+          <CardTitle>Registro de Actividad</CardTitle>
+          <CardDescription>Añade y visualiza interacciones con el cliente.</CardDescription>
         </CardHeader>
         <CardContent>
-            <p className="text-muted-foreground">Esta sección ha sido movida al Panel principal.</p>
+            <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <Select value={newActivityType} onValueChange={(value) => setNewActivityType(value as ClientActivityType)}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Tipo de actividad" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {clientActivityTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                     <Textarea 
+                        placeholder="Escribe una observación..." 
+                        value={newActivityObservation}
+                        onChange={(e) => setNewActivityObservation(e.target.value)}
+                        className="sm:col-span-2"
+                    />
+                </div>
+                 <Button onClick={handleSaveClientActivity}>Guardar Actividad</Button>
+            </div>
+
+             <div className="mt-6 space-y-4">
+                 {clientActivities.map(activity => (
+                    <div key={activity.id} className="flex items-start gap-3">
+                        <div className="p-2 bg-muted rounded-full mt-1">
+                            {activityIcons[activity.type]}
+                        </div>
+                        <div className='flex-1'>
+                            <div className="flex items-center justify-between">
+                                <span className="font-semibold text-sm">{activity.type}</span>
+                                 <span className="text-xs text-muted-foreground">
+                                    {new Date(activity.timestamp).toLocaleDateString()}
+                                </span>
+                            </div>
+                            <p className="text-sm text-muted-foreground">{activity.observation}</p>
+                            <p className="text-xs text-muted-foreground mt-1">Registrado por: {activity.userName}</p>
+                        </div>
+                    </div>
+                ))}
+                {clientActivities.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No hay actividades registradas.</p>}
+            </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Historial de Cambios</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <p className="text-muted-foreground">El historial de cambios del sistema se ha movido al Panel principal.</p>
         </CardContent>
       </Card>
       

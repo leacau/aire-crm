@@ -66,6 +66,19 @@ export type ActivityLog = {
   timestamp: string;
 };
 
+export const clientActivityTypes = ['Llamada', 'WhatsApp', 'Meet', 'Reunión', 'Visita Aire', 'Mail'] as const;
+export type ClientActivityType = typeof clientActivityTypes[number];
+
+export type ClientActivity = {
+    id: string;
+    clientId: string;
+    userId: string;
+    userName: string;
+    type: ClientActivityType;
+    observation: string;
+    timestamp: string;
+}
+
 
 export type UserRole = 'Asesor' | 'Administracion' | 'Jefe';
 
