@@ -128,22 +128,24 @@ export function ClientDetails({
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="lg:col-span-1 space-y-6">
         <Card>
-          <CardHeader className="flex flex-row items-start justify-between">
-            <div className="flex flex-row items-center gap-4">
-              <Avatar className="h-16 w-16">
-                <AvatarImage src={client.avatarUrl} alt={client.denominacion} data-ai-hint="logo building" />
-                <AvatarFallback>{client.avatarFallback}</AvatarFallback>
-              </Avatar>
-              <div>
-                <CardTitle className="text-2xl">{client.denominacion}</CardTitle>
-                <CardDescription>{client.razonSocial}</CardDescription>
-              </div>
+          <CardHeader>
+            <div className="flex items-start justify-between">
+                <div className="flex items-center gap-4">
+                    <Avatar className="h-16 w-16">
+                        <AvatarImage src={client.avatarUrl} alt={client.denominacion} data-ai-hint="logo building" />
+                        <AvatarFallback>{client.avatarFallback}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                        <CardTitle className="text-2xl truncate">{client.denominacion}</CardTitle>
+                        <CardDescription className="truncate">{client.razonSocial}</CardDescription>
+                    </div>
+                </div>
+                 {canEditClient && (
+                    <Button variant="outline" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => setIsClientFormOpen(true)}>
+                        <Edit className="h-4 w-4" />
+                    </Button>
+                )}
             </div>
-            {canEditClient && (
-               <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setIsClientFormOpen(true)}>
-                  <Edit className="h-4 w-4" />
-               </Button>
-            )}
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
              <div className="flex items-center gap-3">
@@ -177,9 +179,8 @@ export function ClientDetails({
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Contactos</CardTitle>
             {canEditOpportunity && (
-              <Button variant="outline" size="sm">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Añadir Persona
+              <Button variant="outline" size="icon">
+                <PlusCircle className="h-4 w-4" />
               </Button>
             )}
           </CardHeader>
@@ -218,9 +219,8 @@ export function ClientDetails({
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Oportunidades</CardTitle>
             {canEditOpportunity && (
-               <Button variant="outline" size="sm">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Añadir Oportunidad
+               <Button variant="outline" size="icon">
+                <PlusCircle className="h-4 w-4" />
               </Button>
             )}
           </CardHeader>
