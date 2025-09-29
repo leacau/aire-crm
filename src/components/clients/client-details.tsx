@@ -1,7 +1,7 @@
 
 
 'use client'
-import type { Client, Opportunity, Person, ClientActivity, ClientActivityType } from '@/lib/types';
+import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog } from '@/lib/types';
 import React, { useEffect, useState } from 'react';
 import {
   Card,
@@ -33,6 +33,8 @@ import {
   CalendarIcon,
   CheckCircle,
   FileText,
+  Activity,
+  ArrowRight,
 } from 'lucide-react';
 import {
   Table,
@@ -64,7 +66,7 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity } from '@/lib/firebase-service';
+import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
@@ -76,6 +78,7 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Spinner } from '../ui/spinner';
+import { users } from '@/lib/data';
 
 
 const stageColors: Record<OpportunityStage, string> = {
@@ -107,6 +110,14 @@ const activityIcons: Record<ClientActivityType, React.ReactNode> = {
     'Mail': <MailIcon className="h-4 w-4" />,
 };
 
+const systemActivityIcons: Record<string, React.ReactNode> = {
+  'create': <PlusCircle className="h-5 w-5 text-green-500" />,
+  'update': <Edit className="h-5 w-5 text-blue-500" />,
+  'stage_change': <ArrowRight className="h-5 w-5 text-purple-500" />,
+};
+
+const getDefaultIcon = () => <Activity className="h-5 w-5 text-muted-foreground" />;
+
 
 export function ClientDetails({
   client,
@@ -121,6 +132,7 @@ export function ClientDetails({
   const [people, setPeople] = useState<Person[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clientActivities, setClientActivities] = useState<ClientActivity[]>([]);
+  const [systemActivities, setSystemActivities] = useState<ActivityLog[]>([]);
   
   // New Activity State
   const [newActivityType, setNewActivityType] = useState<ClientActivityType | ''>('');
@@ -140,14 +152,16 @@ export function ClientDetails({
   const fetchClientData = async () => {
       if(!userInfo) return;
       try {
-        const [clientPeople, clientOpportunities, activities] = await Promise.all([
+        const [clientPeople, clientOpportunities, activities, systemLogs] = await Promise.all([
             getPeopleByClientId(client.id),
             getOpportunitiesByClientId(client.id),
-            getClientActivities(client.id)
+            getClientActivities(client.id),
+            getActivitiesForEntity(client.id)
         ]);
         setPeople(clientPeople);
         setOpportunities(clientOpportunities);
         setClientActivities(activities);
+        setSystemActivities(systemLogs);
       } catch (error) {
         console.error("Error fetching client data:", error);
         toast({ title: "Error al cargar los datos del cliente", variant: "destructive" });
@@ -203,6 +217,7 @@ export function ClientDetails({
     setOpportunities(updatedOpportunities);
     try {
         await updateOpportunity(opportunityId, { stage: newStage }, userInfo.id, userInfo.name);
+        fetchClientData(); // Refetch to get new system log
     } catch (error) {
         console.error('Error updating stage', error);
         setOpportunities(originalOpportunities);
@@ -624,10 +639,33 @@ export function ClientDetails({
         <TabsContent value="history">
             <Card>
                 <CardHeader>
-                <CardTitle>Historial de Cambios</CardTitle>
+                    <CardTitle>Historial de Cambios del Sistema</CardTitle>
+                    <CardDescription>
+                        Un registro automático de las acciones realizadas sobre este cliente y sus entidades asociadas.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <p className="text-muted-foreground">El historial de cambios del sistema se ha movido al Panel principal.</p>
+                    <div className="space-y-4">
+                        {systemActivities.map((activity) => (
+                        <div key={activity.id} className="flex items-start gap-4">
+                            <div className="p-2 bg-muted rounded-full">
+                            {systemActivityIcons[activity.type] || getDefaultIcon()}
+                            </div>
+                            <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm" dangerouslySetInnerHTML={{ __html: activity.details }} />
+                                <p className="text-sm text-muted-foreground whitespace-nowrap">
+                                {new Date(activity.timestamp).toLocaleDateString()}
+                                </p>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                                Por: {activity.userName || 'Usuario desconocido'}
+                            </p>
+                            </div>
+                        </div>
+                        ))}
+                         {systemActivities.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No hay historial de cambios para este cliente.</p>}
+                    </div>
                 </CardContent>
             </Card>
         </TabsContent>

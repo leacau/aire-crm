@@ -194,7 +194,7 @@ export const createOpportunity = async (
         entityType: 'opportunity',
         entityId: docRef.id,
         entityName: opportunityData.title,
-        details: `creó la oportunidad <strong>${opportunityData.title}</strong>`,
+        details: `creó la oportunidad <strong>${opportunityData.title}</strong> para el cliente <a href="/clients/${opportunityData.clientId}" class="font-bold text-primary hover:underline">${opportunityData.clientName}</a>`,
     });
 
     return docRef.id;
@@ -211,47 +211,94 @@ export const updateOpportunity = async (
     if (!docSnap.exists()) throw new Error("Opportunity not found");
     const originalData = docSnap.data() as Opportunity;
 
+    const clientRef = doc(db, 'clients', originalData.clientId);
+    const clientSnap = await getDoc(clientRef);
+    const clientName = clientSnap.exists() ? clientSnap.data().denominacion : 'un cliente';
+
+
     await updateDoc(docRef, {
         ...data,
         updatedAt: serverTimestamp()
     });
 
+    const activityDetails = {
+        userId,
+        userName,
+        entityType: 'opportunity',
+        entityId: id,
+        entityName: originalData.title,
+    };
+
     if (data.stage && data.stage !== originalData.stage) {
         await logActivity({
-            userId,
-            userName,
+            ...activityDetails,
             type: 'stage_change',
-            entityType: 'opportunity',
-            entityId: id,
-            entityName: originalData.title,
-            details: `cambió la etapa de <strong>${originalData.title}</strong> a <strong>${data.stage}</strong>`,
+            details: `cambió la etapa de <strong>${originalData.title}</strong> a <strong>${data.stage}</strong> para el cliente <a href="/clients/${originalData.clientId}" class="font-bold text-primary hover:underline">${clientName}</a>`,
         });
     } else {
         await logActivity({
-            userId,
-            userName,
+            ...activityDetails,
             type: 'update',
-            entityType: 'opportunity',
-            entityId: id,
-            entityName: originalData.title,
-            details: `actualizó la oportunidad <strong>${originalData.title}</strong>`,
+            details: `actualizó la oportunidad <strong>${originalData.title}</strong> para el cliente <a href="/clients/${originalData.clientId}" class="font-bold text-primary hover:underline">${clientName}</a>`,
         });
     }
 };
 
 // --- General Activity Functions ---
 
+const convertActivityLogDoc = (doc: any): ActivityLog => {
+    const data = doc.data();
+    if (data.timestamp instanceof Timestamp) {
+        data.timestamp = data.timestamp.toDate().toISOString();
+    }
+    return { id: doc.id, ...data } as ActivityLog;
+};
+
 export const getActivities = async (activityLimit: number = 20): Promise<ActivityLog[]> => {
     const q = query(activitiesCollection, orderBy('timestamp', 'desc'), limit(activityLimit));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => {
-        const data = doc.data();
-        if (data.timestamp instanceof Timestamp) {
-            data.timestamp = data.timestamp.toDate().toISOString();
-        }
-        return { id: doc.id, ...data } as ActivityLog;
-    });
+    return snapshot.docs.map(convertActivityLogDoc);
 };
+
+
+export const getActivitiesForEntity = async (entityId: string): Promise<ActivityLog[]> => {
+    // Query for activities directly related to the client (entityId)
+    const directClientActivitiesQuery = query(
+        activitiesCollection, 
+        where('entityId', '==', entityId),
+        where('entityType', '==', 'client')
+    );
+
+    // Query for activities related to opportunities of that client
+    const oppsOfClientSnap = await getDocs(query(opportunitiesCollection, where('clientId', '==', entityId)));
+    const oppIds = oppsOfClientSnap.docs.map(doc => doc.id);
+
+    const activities: ActivityLog[] = [];
+
+    // Get direct activities
+    const directClientActivitiesSnap = await getDocs(directClientActivitiesQuery);
+    directClientActivitiesSnap.forEach(doc => {
+        activities.push(convertActivityLogDoc(doc));
+    });
+    
+    // Get opportunity-related activities if any
+    if (oppIds.length > 0) {
+        const oppActivitiesQuery = query(
+            activitiesCollection, 
+            where('entityType', '==', 'opportunity'), 
+            where('entityId', 'in', oppIds)
+        );
+        const oppActivitiesSnap = await getDocs(oppActivitiesQuery);
+        oppActivitiesSnap.forEach(doc => {
+            activities.push(convertActivityLogDoc(doc));
+        });
+    }
+
+    // Sort all combined activities by timestamp
+    activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return activities;
+  };
 
 
 // --- Client-Specific Activity Functions ---
@@ -300,9 +347,11 @@ export const createClientActivity = async (
     };
 
     if (activityData.isTask && activityData.dueDate) {
+        // Convert ISO string back to Timestamp for Firestore
         dataToSave.dueDate = Timestamp.fromDate(new Date(activityData.dueDate));
-    } else {
-        delete dataToSave.dueDate;
+    } else if (Object.prototype.hasOwnProperty.call(activityData, 'dueDate')) {
+        // Use deleteField to ensure the field is not set to undefined if it's not a task
+        dataToSave.dueDate = deleteField();
     }
 
     const docRef = await addDoc(clientActivitiesCollection, dataToSave);
