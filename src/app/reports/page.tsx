@@ -9,7 +9,7 @@ import { useEffect } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import type { DateRange } from 'react-day-picker';
-import { SalesByAdvisorChart } from '@/components/reports/sales-by-advisor-chart';
+import { PipelineByAdvisorChart } from '@/components/reports/pipeline-by-advisor-chart';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 export default function ReportsPage() {
@@ -40,13 +40,13 @@ export default function ReportsPage() {
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <Card>
             <CardHeader>
-                <CardTitle>Ventas por Asesor</CardTitle>
+                <CardTitle>Pipeline por Asesor</CardTitle>
                 <CardDescription>
-                    Total de ingresos generados por cada asesor en el período seleccionado.
+                    Valor total de oportunidades por etapa para cada asesor en el período seleccionado.
                 </CardDescription>
             </CardHeader>
             <CardContent className="h-[400px] w-full">
-                <SalesByAdvisorChart dateRange={dateRange} />
+                <PipelineByAdvisorChart dateRange={dateRange} />
             </CardContent>
         </Card>
       </main>
