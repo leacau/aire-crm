@@ -23,6 +23,7 @@ import {
   Video,
 } from 'lucide-react';
 import Link from 'next/link';
+import { ActivitySummary } from './activity-summary';
 
 type CombinedActivity = (ActivityLog | ClientActivity) & { sortDate: Date };
 
@@ -75,19 +76,27 @@ export function ActivityFeed() {
     fetchData();
   }, [toast]);
 
-  const filteredActivities = useMemo(() => {
+  const { filteredSystemActivities, filteredClientActivities, filteredFeed } = useMemo(() => {
+    const filterByDate = (activity: { timestamp: string }) => 
+        !dateRange?.from || !dateRange?.to || isWithinInterval(new Date(activity.timestamp), { start: dateRange.from, end: dateRange.to });
+
+    const filteredSys = systemActivities.filter(filterByDate);
+    const filteredCli = clientActivities.filter(filterByDate);
+
     const combined: CombinedActivity[] = [
-      ...systemActivities.map(a => ({ ...a, sortDate: new Date(a.timestamp) })),
-      ...clientActivities.map(a => ({ ...a, sortDate: new Date(a.timestamp) }))
+      ...filteredSys.map(a => ({ ...a, sortDate: new Date(a.timestamp) })),
+      ...filteredCli.map(a => ({ ...a, sortDate: new Date(a.timestamp) }))
     ];
 
-    return combined
-      .filter(activity => {
-        const isInDateRange = !dateRange?.from || !dateRange?.to || isWithinInterval(activity.sortDate, { start: dateRange.from, end: dateRange.to });
-        const isBySelectedAdvisor = selectedAdvisor === 'all' || activity.userId === selectedAdvisor;
-        return isInDateRange && isBySelectedAdvisor;
-      })
+    const feed = combined
+      .filter(activity => selectedAdvisor === 'all' || activity.userId === selectedAdvisor)
       .sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
+    
+    return { 
+        filteredSystemActivities: filteredSys, 
+        filteredClientActivities: filteredCli,
+        filteredFeed: feed
+    };
   }, [systemActivities, clientActivities, dateRange, selectedAdvisor]);
 
   if (loading) {
@@ -151,25 +160,37 @@ export function ActivityFeed() {
 
   return (
     <div className="space-y-6">
+       <div className="flex flex-wrap items-center gap-4">
+         <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+      </div>
+
+      <ActivitySummary 
+        advisors={advisors}
+        systemActivities={filteredSystemActivities}
+        clientActivities={filteredClientActivities}
+      />
+
       <div className="flex flex-wrap items-center gap-4">
         <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
           <SelectTrigger className="w-full sm:w-[200px]">
-            <SelectValue placeholder="Filtrar por asesor" />
+            <SelectValue placeholder="Filtrar feed por asesor" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos los asesores</SelectItem>
+            <SelectItem value="all">Feed de todos los asesores</SelectItem>
             {advisors.map(advisor => (
               <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <DateRangePicker date={dateRange} onDateChange={setDateRange} />
       </div>
 
       <Card>
+        <CardHeader>
+          <h3 className="text-lg font-semibold">Feed de Actividad Detallado</h3>
+        </CardHeader>
         <CardContent className="p-6 space-y-6">
-          {filteredActivities.length > 0 ? (
-            filteredActivities.map(renderActivity)
+          {filteredFeed.length > 0 ? (
+            filteredFeed.map(renderActivity)
           ) : (
             <p className="text-center text-muted-foreground">No hay actividades que coincidan con los filtros.</p>
           )}
@@ -178,4 +199,3 @@ export function ActivityFeed() {
     </div>
   );
 }
-
