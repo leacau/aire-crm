@@ -36,7 +36,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { users } from '@/lib/data';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, isToday, isTomorrow, isPast, startOfToday } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, isPast, startOfToday, startOfTomorrow, endOfYesterday } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -195,7 +195,11 @@ export default function DashboardPage() {
   const totalClients = clients.length;
 
   const today = startOfToday();
-  const overdueTasks = tasks.filter(t => !t.completed && t.dueDate && isPast(new Date(t.dueDate)) && !isToday(new Date(t.dueDate)));
+  const overdueTasks = tasks.filter(t => {
+      if (t.completed || !t.dueDate) return false;
+      const dueDate = new Date(t.dueDate);
+      return dueDate < today;
+  });
   const dueTodayTasks = tasks.filter(t => !t.completed && t.dueDate && isToday(new Date(t.dueDate)));
   const dueTomorrowTasks = tasks.filter(t => !t.completed && t.dueDate && isTomorrow(new Date(t.dueDate)));
 

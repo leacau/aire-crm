@@ -74,6 +74,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Spinner } from '../ui/spinner';
 
 
 const stageColors: Record<OpportunityStage, string> = {
@@ -125,6 +126,7 @@ export function ClientDetails({
   const [newActivityObservation, setNewActivityObservation] = useState('');
   const [isTask, setIsTask] = useState(false);
   const [dueDate, setDueDate] = useState<Date | undefined>();
+  const [isSavingActivity, setIsSavingActivity] = useState(false);
 
   
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
@@ -253,6 +255,8 @@ export function ClientDetails({
         toast({ title: "Fecha de vencimiento requerida", description: "Por favor, selecciona una fecha para la tarea.", variant: 'destructive'});
         return;
     }
+
+    setIsSavingActivity(true);
     
     const activityPayload: Omit<ClientActivity, 'id' | 'timestamp'> = {
         clientId: client.id,
@@ -274,6 +278,8 @@ export function ClientDetails({
     } catch (error) {
         console.error("Error saving client activity:", error);
         toast({ title: "Error al guardar la actividad", variant: 'destructive'});
+    } finally {
+        setIsSavingActivity(false);
     }
   }
 
@@ -542,7 +548,16 @@ export function ClientDetails({
                                 </Popover>
                             )}
                         </div>
-                        <Button onClick={handleSaveClientActivity}>Guardar Actividad</Button>
+                         <Button onClick={handleSaveClientActivity} disabled={isSavingActivity}>
+                            {isSavingActivity ? (
+                                <>
+                                <Spinner size="small" color="white" className="mr-2" />
+                                Guardando...
+                                </>
+                            ) : (
+                                "Guardar Actividad"
+                            )}
+                        </Button>
                     </div>
 
                     <div className="mt-6 space-y-4">
