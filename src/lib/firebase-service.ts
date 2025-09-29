@@ -265,6 +265,8 @@ export const getClientActivities = async (clientId: string): Promise<ClientActiv
             id: doc.id,
             ...data,
             timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
+            // Ensure dueDate is also converted if it exists
+            ...(data.dueDate && { dueDate: (data.dueDate as Timestamp).toDate().toISOString() }),
         } as ClientActivity;
     });
 };
@@ -278,6 +280,8 @@ export const getAllClientActivities = async (): Promise<ClientActivity[]> => {
             id: doc.id,
             ...data,
             timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
+             // Ensure dueDate is also converted if it exists
+            ...(data.dueDate && { dueDate: (data.dueDate as Timestamp).toDate().toISOString() }),
         } as ClientActivity;
     });
 };
@@ -286,10 +290,22 @@ export const getAllClientActivities = async (): Promise<ClientActivity[]> => {
 export const createClientActivity = async (
     activityData: Omit<ClientActivity, 'id' | 'timestamp'>
 ): Promise<string> => {
-    const docRef = await addDoc(clientActivitiesCollection, {
-        ...activityData,
-        timestamp: serverTimestamp(),
-    });
+    
+    const dataToSave: any = {
+      ...activityData,
+      timestamp: serverTimestamp(),
+    };
+
+    // Firestore throws an error if you try to save 'undefined'.
+    // So we only add dueDate if it's actually a value.
+    if (activityData.isTask && activityData.dueDate) {
+        dataToSave.dueDate = activityData.dueDate;
+    } else {
+        delete dataToSave.dueDate;
+    }
+
+
+    const docRef = await addDoc(clientActivitiesCollection, dataToSave);
     return docRef.id;
 };
 

@@ -136,14 +136,19 @@ export function ClientDetails({
 
   const fetchClientData = async () => {
       if(!userInfo) return;
-      const [clientPeople, clientOpportunities, activities] = await Promise.all([
-          getPeopleByClientId(client.id),
-          getOpportunitiesByClientId(client.id),
-          getClientActivities(client.id)
-      ]);
-      setPeople(clientPeople);
-      setOpportunities(clientOpportunities);
-      setClientActivities(activities);
+      try {
+        const [clientPeople, clientOpportunities, activities] = await Promise.all([
+            getPeopleByClientId(client.id),
+            getOpportunitiesByClientId(client.id),
+            getClientActivities(client.id)
+        ]);
+        setPeople(clientPeople);
+        setOpportunities(clientOpportunities);
+        setClientActivities(activities);
+      } catch (error) {
+        console.error("Error fetching client data:", error);
+        toast({ title: "Error al cargar los datos del cliente", variant: "destructive" });
+      }
   }
 
   useEffect(() => {
@@ -248,18 +253,21 @@ export function ClientDetails({
         toast({ title: "Fecha de vencimiento requerida", description: "Por favor, selecciona una fecha para la tarea.", variant: 'destructive'});
         return;
     }
+    
+    const activityPayload: Omit<ClientActivity, 'id' | 'timestamp'> = {
+        clientId: client.id,
+        clientName: client.denominacion,
+        type: newActivityType,
+        observation: newActivityObservation,
+        userId: userInfo.id,
+        userName: userInfo.name,
+        isTask,
+        completed: false,
+        ...(isTask && dueDate && { dueDate: dueDate.toISOString() }),
+    };
+
     try {
-        await createClientActivity({
-            clientId: client.id,
-            clientName: client.denominacion,
-            type: newActivityType,
-            observation: newActivityObservation,
-            userId: userInfo.id,
-            userName: userInfo.name,
-            isTask,
-            dueDate: isTask && dueDate ? dueDate.toISOString() : undefined,
-            completed: false,
-        });
+        await createClientActivity(activityPayload);
         toast({ title: "Actividad Registrada" });
         resetActivityForm();
         fetchClientData(); // Refresh activities
