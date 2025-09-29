@@ -435,7 +435,7 @@ export function ClientDetails({
       </Card>
 
       <Tabs defaultValue="opportunities" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
           <TabsTrigger value="opportunities">Oportunidades</TabsTrigger>
           <TabsTrigger value="contacts">Contactos</TabsTrigger>
           <TabsTrigger value="activity">Actividad</TabsTrigger>
@@ -448,7 +448,7 @@ export function ClientDetails({
               {canEditOpportunity && (
                  <Button variant="outline" size="sm" onClick={() => handleOpenOpportunityForm()}>
                   <PlusCircle className="mr-2 h-4 w-4" />
-                  Nueva Oportunidad
+                  Nueva
                 </Button>
               )}
             </CardHeader>
@@ -534,7 +534,7 @@ export function ClientDetails({
                 {canEditContact && (
                     <Button variant="outline" size="sm" onClick={() => handleOpenPersonForm()}>
                     <PlusCircle className="mr-2 h-4 w-4" />
-                    Nuevo Contacto
+                    Nuevo
                     </Button>
                 )}
                 </CardHeader>
@@ -691,7 +691,7 @@ export function ClientDetails({
         <TabsContent value="history">
             <Card>
                 <CardHeader>
-                    <CardTitle>Historial de Cambios del Sistema</CardTitle>
+                    <CardTitle>Historial de Cambios</CardTitle>
                     <CardDescription>
                         Un registro automático de las acciones realizadas sobre este cliente y sus entidades asociadas.
                     </CardDescription>

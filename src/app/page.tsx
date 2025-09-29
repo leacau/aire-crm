@@ -337,7 +337,7 @@ export default function DashboardPage() {
         <DateRangePicker date={dateRange} onDateChange={setDateRange} />
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <Link href="/billing?tab=paid">
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

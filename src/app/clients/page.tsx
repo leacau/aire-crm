@@ -113,7 +113,7 @@ export default function ClientsPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
                 type="search"
-                placeholder="Buscar por denominación o razón social..."
+                placeholder="Buscar..."
                 className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[330px]"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -121,11 +121,11 @@ export default function ClientsPage() {
         </div>
         <Button variant="outline" className="hidden sm:flex">
           <FileDown className="mr-2" />
-          Exportar CSV
+          Exportar
         </Button>
         <Button onClick={() => setIsFormOpen(true)}>
           <PlusCircle className="mr-2" />
-          Nuevo Cliente
+          Nuevo
         </Button>
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
@@ -135,9 +135,9 @@ export default function ClientsPage() {
               <TableRow>
                 <TableHead className="w-[80px]">Avatar</TableHead>
                 <TableHead>Denominación</TableHead>
-                <TableHead>Razón Social</TableHead>
-                <TableHead>Negocios Abiertos</TableHead>
-                <TableHead>Valor Total</TableHead>
+                <TableHead className="hidden sm:table-cell">Razón Social</TableHead>
+                <TableHead className="hidden lg:table-cell">Negocios Abiertos</TableHead>
+                <TableHead className="hidden lg:table-cell">Valor Total</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -177,7 +177,7 @@ export default function ClientsPage() {
                         <span className="font-medium">{client.denominacion}</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       <div>
                         <div className="font-medium">{client.razonSocial}</div>
                         <div className="text-sm text-muted-foreground">
@@ -185,8 +185,8 @@ export default function ClientsPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{canViewDetails ? clientOpps.length : '-'}</TableCell>
-                    <TableCell>{canViewDetails ? `$${totalValue.toLocaleString('es-AR')}` : '-'}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{canViewDetails ? clientOpps.length : '-'}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{canViewDetails ? `$${totalValue.toLocaleString('es-AR')}` : '-'}</TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon">
                         <MoreHorizontal className="h-4 w-4" />

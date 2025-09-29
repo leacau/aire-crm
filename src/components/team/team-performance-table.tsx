@@ -91,10 +91,10 @@ export function TeamPerformanceTable() {
         <TableHeader>
           <TableRow>
             <TableHead>Asesor</TableHead>
-            <TableHead className="text-right">Oportunidades Ganadas</TableHead>
-            <TableHead className="text-right">Ingresos Generados</TableHead>
-            <TableHead className="text-right">Oportunidades Activas</TableHead>
-            <TableHead className="text-right">Valor del Pipeline</TableHead>
+            <TableHead className="text-right hidden sm:table-cell">Opps Ganadas</TableHead>
+            <TableHead className="text-right">Ingresos</TableHead>
+            <TableHead className="text-right hidden md:table-cell">Opps Activas</TableHead>
+            <TableHead className="text-right hidden lg:table-cell">Valor Pipeline</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -112,10 +112,10 @@ export function TeamPerformanceTable() {
                     </div>
                 </div>
               </TableCell>
-              <TableCell className="text-right">{stats.wonOpps}</TableCell>
+              <TableCell className="text-right hidden sm:table-cell">{stats.wonOpps}</TableCell>
               <TableCell className="text-right font-semibold">${stats.totalRevenue.toLocaleString('es-AR')}</TableCell>
-              <TableCell className="text-right">{stats.activeOpps}</TableCell>
-              <TableCell className="text-right">${stats.pipelineValue.toLocaleString('es-AR')}</TableCell>
+              <TableCell className="text-right hidden md:table-cell">{stats.activeOpps}</TableCell>
+              <TableCell className="text-right hidden lg:table-cell">${stats.pipelineValue.toLocaleString('es-AR')}</TableCell>
             </TableRow>
           ))}
           {advisorStats.length === 0 && (

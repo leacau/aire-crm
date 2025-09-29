@@ -31,7 +31,7 @@ const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunit
       <TableHeader>
         <TableRow>
           <TableHead>Título</TableHead>
-          <TableHead>Cliente</TableHead>
+          <TableHead className="hidden md:table-cell">Cliente</TableHead>
           <TableHead>Valor Cerrado</TableHead>
           <TableHead>Factura Nº</TableHead>
         </TableRow>
@@ -41,7 +41,7 @@ const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunit
           opportunities.map((opp) => (
             <TableRow key={opp.id} onClick={() => onRowClick(opp)} className="cursor-pointer">
               <TableCell className="font-medium">{opp.title}</TableCell>
-              <TableCell>
+              <TableCell className="hidden md:table-cell">
                 <Link href={`/clients/${opp.clientId}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
                   {opp.clientName}
                 </Link>

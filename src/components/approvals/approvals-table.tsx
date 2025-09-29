@@ -40,11 +40,11 @@ export const ApprovalsTable = ({ opportunities, onRowClick, ownerNames }: Approv
         <TableRow>
           <TableHead>Título</TableHead>
           <TableHead>Cliente</TableHead>
-          <TableHead>Asesor</TableHead>
+          <TableHead className="hidden md:table-cell">Asesor</TableHead>
           <TableHead className="text-right">Valor Cerrado</TableHead>
           <TableHead className="text-center">Bonificación</TableHead>
           <TableHead>Estado</TableHead>
-          <TableHead>Decisión</TableHead>
+          <TableHead className="hidden lg:table-cell">Decisión</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -57,13 +57,13 @@ export const ApprovalsTable = ({ opportunities, onRowClick, ownerNames }: Approv
                   {opp.clientName}
                 </Link>
               </TableCell>
-              <TableCell>{ownerNames[opp.clientId] || '-'}</TableCell>
+              <TableCell className="hidden md:table-cell">{ownerNames[opp.clientId] || '-'}</TableCell>
               <TableCell className="text-right">${(opp.valorCerrado || opp.value).toLocaleString('es-AR')}</TableCell>
               <TableCell className="text-center font-bold">{opp.bonificacionPorcentaje}%</TableCell>
               <TableCell>
                   {getBonusStatusPill(opp.bonificacionEstado)}
               </TableCell>
-               <TableCell>
+               <TableCell className="hidden lg:table-cell">
                  {opp.bonificacionAutorizadoPorNombre && (
                     <div className="text-xs">
                         <p className="font-medium">{opp.bonificacionAutorizadoPorNombre}</p>

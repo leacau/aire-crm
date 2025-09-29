@@ -11,23 +11,9 @@ import { useToast } from '@/hooks/use-toast';
 import { getActivities, getAllClientActivities, getAllUsers } from '@/lib/firebase-service';
 import type { ActivityLog, ClientActivity, User } from '@/lib/types';
 import { isWithinInterval } from 'date-fns';
-import {
-  Activity,
-  ArrowRight,
-  PlusCircle,
-} from 'lucide-react';
-import Link from 'next/link';
-import { ActivitySummary, activityGroupIcons, ActivityDetailRow } from './activity-summary';
+import { ActivityDetailRow, ActivitySummary } from './activity-summary';
 
 type CombinedActivity = (ActivityLog | ClientActivity) & { sortDate: Date };
-
-const systemActivityIcons: Record<string, React.ReactNode> = {
-  'create': <PlusCircle className="h-5 w-5 text-green-500" />,
-  'update': <Activity className="h-5 w-5 text-blue-500" />,
-  'stage_change': <ArrowRight className="h-5 w-5 text-purple-500" />,
-};
-
-const getDefaultIcon = () => <Activity className="h-5 w-5 text-muted-foreground" />;
 
 export function ActivityFeed() {
   const { toast } = useToast();
@@ -132,7 +118,7 @@ export function ActivityFeed() {
 
   return (
     <div className="space-y-6">
-       <div className="flex flex-wrap items-center gap-4">
+       <div className="flex flex-col sm:flex-row items-center gap-4">
          <DateRangePicker date={dateRange} onDateChange={setDateRange} />
           <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
             <SelectTrigger className="w-full sm:w-[200px]">
@@ -155,8 +141,7 @@ export function ActivityFeed() {
       
       {selectedActivityType && (
         <Card>
-           <CardHeader className="flex flex-row items-center gap-3">
-              {activityGroupIcons[selectedActivityType]}
+           <CardHeader>
               <CardTitle>{selectedActivityType}</CardTitle>
            </CardHeader>
            <CardContent>
