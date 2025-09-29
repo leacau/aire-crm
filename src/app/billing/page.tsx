@@ -11,6 +11,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
@@ -25,42 +26,55 @@ import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { isWithinInterval } from 'date-fns';
 
-const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunity[], onRowClick: (opp: Opportunity) => void }) => (
-  <div className="border rounded-lg">
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Título</TableHead>
-          <TableHead className="hidden md:table-cell">Cliente</TableHead>
-          <TableHead>Valor Cerrado</TableHead>
-          <TableHead>Factura Nº</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {opportunities.length > 0 ? (
-          opportunities.map((opp) => (
-            <TableRow key={opp.id} onClick={() => onRowClick(opp)} className="cursor-pointer">
-              <TableCell className="font-medium">{opp.title}</TableCell>
-              <TableCell className="hidden md:table-cell">
-                <Link href={`/clients/${opp.clientId}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
-                  {opp.clientName}
-                </Link>
-              </TableCell>
-              <TableCell>${(opp.valorCerrado || opp.value).toLocaleString('es-AR')}</TableCell>
-              <TableCell>{opp.facturaNo || '-'}</TableCell>
-            </TableRow>
-          ))
-        ) : (
+const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunity[], onRowClick: (opp: Opportunity) => void }) => {
+  const total = opportunities.reduce((acc, opp) => acc + (opp.valorCerrado || opp.value), 0);
+
+  return (
+    <div className="border rounded-lg">
+      <Table>
+        <TableHeader>
           <TableRow>
-            <TableCell colSpan={4} className="h-24 text-center">
-              No hay oportunidades en esta sección.
-            </TableCell>
+            <TableHead>Título</TableHead>
+            <TableHead className="hidden md:table-cell">Cliente</TableHead>
+            <TableHead className="text-right">Valor Cerrado</TableHead>
+            <TableHead>Factura Nº</TableHead>
           </TableRow>
+        </TableHeader>
+        <TableBody>
+          {opportunities.length > 0 ? (
+            opportunities.map((opp) => (
+              <TableRow key={opp.id} onClick={() => onRowClick(opp)} className="cursor-pointer">
+                <TableCell className="font-medium">{opp.title}</TableCell>
+                <TableCell className="hidden md:table-cell">
+                  <Link href={`/clients/${opp.clientId}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+                    {opp.clientName}
+                  </Link>
+                </TableCell>
+                <TableCell className="text-right">${(opp.valorCerrado || opp.value).toLocaleString('es-AR')}</TableCell>
+                <TableCell>{opp.facturaNo || '-'}</TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={4} className="h-24 text-center">
+                No hay oportunidades en esta sección.
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+        {opportunities.length > 0 && (
+            <TableFooter>
+                <TableRow>
+                    <TableCell colSpan={2} className="font-bold">Total</TableCell>
+                    <TableCell className="text-right font-bold">${total.toLocaleString('es-AR')}</TableCell>
+                    <TableCell></TableCell>
+                </TableRow>
+            </TableFooter>
         )}
-      </TableBody>
-    </Table>
-  </div>
-);
+      </Table>
+    </div>
+  );
+}
 
 function BillingPageComponent() {
   const { userInfo, loading: authLoading } = useAuth();
