@@ -72,6 +72,7 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarSeparator />
       <SidebarContent>
+        <div className="py-2" />
         <SidebarMenu>
           {accessibleItems.map((item) => (
             <SidebarMenuItem key={item.label}>
