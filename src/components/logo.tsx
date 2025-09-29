@@ -3,7 +3,7 @@ import { useSidebar } from './ui/sidebar';
 import { cn } from '@/lib/utils';
 
 export function Logo({ isInSidebar = false }: { isInSidebar?: boolean }) {
-  const { state } = useSidebar();
+  const { state } = useSidebar ? useSidebar() : { state: 'expanded' };
   const isCollapsed = state === 'collapsed';
 
   return (
