@@ -12,6 +12,7 @@ import {
   useSidebar,
   SidebarTrigger,
   SidebarRail,
+  SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -44,6 +45,7 @@ function MenuLink({ item }: { item: typeof menuItems[0] }) {
       isActive={isActive(item.href)}
       tooltip={{ children: item.label, side: 'right' }}
       onClick={() => setOpenMobile(false)}
+      size="lg"
     >
       <Link href={item.href}>
         <item.icon />
@@ -68,6 +70,7 @@ export function AppSidebar() {
         <Logo isInSidebar={true} />
         <SidebarTrigger className="ml-auto hidden data-[state=expanded]:md:flex" />
       </SidebarHeader>
+      <SidebarSeparator />
       <SidebarContent>
         <SidebarMenu>
           {accessibleItems.map((item) => (
