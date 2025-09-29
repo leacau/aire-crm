@@ -134,6 +134,7 @@ function BillingPageComponent() {
 
   const toInvoiceOpps = closedWonOpps.filter((opp) => !opp.facturaNo);
   const toCollectOpps = closedWonOpps.filter((opp) => opp.facturaNo && !opp.pagado);
+  const paidOpps = closedWonOpps.filter((opp) => opp.facturaNo && opp.pagado);
 
   return (
     <div className="flex flex-col h-full">
@@ -145,7 +146,7 @@ function BillingPageComponent() {
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="to-invoice">A Facturar</TabsTrigger>
             <TabsTrigger value="to-collect">A Cobrar</TabsTrigger>
-            <TabsTrigger value="invoiced">Facturado</TabsTrigger>
+            <TabsTrigger value="paid">Pagado</TabsTrigger>
           </TabsList>
           <TabsContent value="to-invoice">
             <BillingTable opportunities={toInvoiceOpps} onRowClick={handleRowClick} />
@@ -153,8 +154,8 @@ function BillingPageComponent() {
           <TabsContent value="to-collect">
             <BillingTable opportunities={toCollectOpps} onRowClick={handleRowClick} />
           </TabsContent>
-           <TabsContent value="invoiced">
-            <BillingTable opportunities={closedWonOpps} onRowClick={handleRowClick} />
+           <TabsContent value="paid">
+            <BillingTable opportunities={paidOpps} onRowClick={handleRowClick} />
           </TabsContent>
         </Tabs>
       </main>
