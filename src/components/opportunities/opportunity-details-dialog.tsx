@@ -22,10 +22,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
@@ -47,6 +50,7 @@ const getInitialOpportunityData = (userInfo: any, client: any): Omit<Opportunity
     clientId: client?.id || '',
     ownerId: userInfo?.id || '',
     pagado: false,
+    bonificacionPorcentaje: 0,
 });
 
 export function OpportunityDetailsDialog({
@@ -97,12 +101,34 @@ export function OpportunityDetailsDialog({
     onOpenChange(false);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+  const handleBonusDecision = (decision: 'Autorizado' | 'Rechazado') => {
+    if (!userInfo) return;
     setEditedOpportunity(prev => ({
       ...prev,
-      [name]: name === 'value' || name === 'valorCerrado' ? Number(value) : value,
+      bonificacionEstado: decision,
+      bonificacionAutorizadoPorId: userInfo.id,
+      bonificacionAutorizadoPorNombre: userInfo.name,
+      bonificacionFechaAutorizacion: new Date().toISOString(),
     }));
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    let finalValue: string | number = value;
+
+    if (name === 'value' || name === 'valorCerrado' || name === 'bonificacionPorcentaje') {
+        finalValue = Number(value);
+    }
+
+    setEditedOpportunity(prev => {
+        const newState = { ...prev, [name]: finalValue };
+        
+        if (name === 'bonificacionPorcentaje' && Number(value) > 0 && prev.bonificacionEstado !== 'Autorizado' && prev.bonificacionEstado !== 'Rechazado') {
+             newState.bonificacionEstado = 'Pendiente';
+        }
+
+        return newState;
+    });
   };
 
   const handleStageChange = (stage: OpportunityStage) => {
@@ -115,6 +141,21 @@ export function OpportunityDetailsDialog({
 
   const isCloseWon = editedOpportunity.stage === 'Cerrado - Ganado';
   const isInvoiceSet = !!editedOpportunity.facturaNo;
+  const hasBonus = (editedOpportunity.bonificacionPorcentaje || 0) > 0;
+  const isJefe = userInfo?.role === 'Jefe';
+  const isJefeOrAdmin = userInfo?.role === 'Jefe' || userInfo?.role === 'Administracion';
+
+
+  const getBonusStatusPill = (status?: BonificacionEstado) => {
+      if (!status) return null;
+      const baseClasses = 'px-2 py-1 text-xs font-medium rounded-full';
+      const statusMap = {
+          'Pendiente': 'bg-yellow-100 text-yellow-800',
+          'Autorizado': 'bg-green-100 text-green-800',
+          'Rechazado': 'bg-red-100 text-red-800',
+      };
+      return <span className={cn(baseClasses, statusMap[status])}>{status}</span>;
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -253,6 +294,48 @@ export function OpportunityDetailsDialog({
                     />
                 </div>
               </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="bonificacionPorcentaje" className="text-right">
+                    Bonificación %
+                    </Label>
+                    <Input
+                    id="bonificacionPorcentaje"
+                    name="bonificacionPorcentaje"
+                    type="number"
+                    value={editedOpportunity.bonificacionPorcentaje || 0}
+                    onChange={handleChange}
+                    className="col-span-3"
+                    disabled={!isCloseWon}
+                    placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}
+                    />
+              </div>
+              {hasBonus && isJefeOrAdmin && (
+                    <div className="grid grid-cols-1 gap-3 p-3 mt-2 border rounded-lg bg-muted/50 col-span-full">
+                        <h4 className="font-semibold text-sm">Gestión de Bonificación</h4>
+                        <div className="flex items-center justify-between">
+                            <Label>Estado</Label>
+                            {getBonusStatusPill(editedOpportunity.bonificacionEstado)}
+                        </div>
+                        
+                        {editedOpportunity.bonificacionEstado === 'Pendiente' && isJefe && (
+                             <div className="flex gap-2 mt-2">
+                                <Button size="sm" variant="destructive" onClick={() => handleBonusDecision('Rechazado')}>
+                                    Rechazar
+                                </Button>
+                                <Button size="sm" onClick={() => handleBonusDecision('Autorizado')}>
+                                    Autorizar
+                                </Button>
+                            </div>
+                        )}
+
+                        {(editedOpportunity.bonificacionEstado === 'Autorizado' || editedOpportunity.bonificacionEstado === 'Rechazado') && (
+                            <div className="text-xs text-muted-foreground space-y-1 mt-1">
+                                <p>Decisión por: {editedOpportunity.bonificacionAutorizadoPorNombre}</p>
+                                <p>Fecha: {editedOpportunity.bonificacionFechaAutorizacion ? format(new Date(editedOpportunity.bonificacionFechaAutorizacion), "PPP p", { locale: es }) : '-'}</p>
+                            </div>
+                        )}
+                    </div>
+                )}
             </>
           )}
 

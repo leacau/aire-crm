@@ -9,6 +9,8 @@ export type OpportunityStage =
   | 'Cerrado - Ganado'
   | 'Cerrado - Perdido';
 
+export type BonificacionEstado = 'Pendiente' | 'Autorizado' | 'Rechazado';
+
 export type Opportunity = {
   id: string;
   title: string;
@@ -24,6 +26,11 @@ export type Opportunity = {
   valorCerrado?: number;
   propuestaCerrada?: string;
   pagado?: boolean;
+  bonificacionPorcentaje?: number;
+  bonificacionEstado?: BonificacionEstado;
+  bonificacionAutorizadoPorId?: string;
+  bonificacionAutorizadoPorNombre?: string;
+  bonificacionFechaAutorizacion?: string;
 };
 
 export type Person = {
