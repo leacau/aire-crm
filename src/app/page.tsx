@@ -170,11 +170,12 @@ export default function DashboardPage() {
     });
     const dueTodayTasks = tasks.filter(t => !t.completed && t.dueDate && isToday(new Date(t.dueDate)));
     const dueTomorrowTasks = tasks.filter(t => !t.completed && t.dueDate && isTomorrow(new Date(t.dueDate)));
+    const hasPendingTasks = overdueTasks.length > 0 || dueTodayTasks.length > 0 || dueTomorrowTasks.length > 0;
 
   useEffect(() => {
     if (loadingData) return;
 
-    if (dueTodayTasks.length > 0 && notificationPermission === 'default') {
+    if (hasPendingTasks && notificationPermission === 'default') {
         toast({
             title: 'Permitir notificaciones',
             description: 'Habilita las notificaciones para recibir alertas de tareas.',
@@ -182,13 +183,29 @@ export default function DashboardPage() {
         });
     }
 
-    if (dueTodayTasks.length > 0 && notificationPermission === 'granted' && !notified) {
+    if (hasPendingTasks && notificationPermission === 'granted' && !notified) {
+        let notificationBody = 'Tienes tareas pendientes:';
+        if (overdueTasks.length > 0) notificationBody += `\n- ${overdueTasks.length} vencida(s)`;
+        if (dueTodayTasks.length > 0) notificationBody += `\n- ${dueTodayTasks.length} para hoy`;
+        if (dueTomorrowTasks.length > 0) notificationBody += `\n- ${dueTomorrowTasks.length} para mañana`;
+
         showNotification('Tareas Pendientes', {
-            body: `Tienes ${dueTodayTasks.length} tarea(s) que vencen hoy.`,
+            body: notificationBody,
         });
         setNotified(true); // Mark as notified for this session
     }
-  }, [loadingData, dueTodayTasks.length, notificationPermission, requestNotificationPermission, showNotification, toast, notified]);
+  }, [
+      loadingData, 
+      hasPendingTasks, 
+      overdueTasks.length,
+      dueTodayTasks.length,
+      dueTomorrowTasks.length,
+      notificationPermission, 
+      requestNotificationPermission, 
+      showNotification, 
+      toast, 
+      notified
+    ]);
 
 
   const handleTaskToggle = async (task: ClientActivity, currentStatus: boolean) => {
