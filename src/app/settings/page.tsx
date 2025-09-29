@@ -12,11 +12,11 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { Header } from '@/components/layout/header';
 import { Spinner } from '@/components/ui/spinner';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Shield } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SettingsPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, userInfo, loading: authLoading } = useAuth();
   const [name, setName] = useState(user?.displayName || '');
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -81,27 +81,48 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Perfil</CardTitle>
-              <CardDescription>Actualiza tu nombre de usuario.</CardDescription>
+              <CardDescription>Actualiza tu nombre de usuario y visualiza tu rol.</CardDescription>
             </CardHeader>
-            <form onSubmit={handleUpdateProfile}>
-              <CardContent>
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Nombre</Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                  />
-                </div>
+              <CardContent className="space-y-4">
+                <form onSubmit={handleUpdateProfile} className="space-y-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="name">Nombre</Label>
+                      <Input
+                        id="name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        required
+                      />
+                    </div>
+                    {userInfo && (
+                      <div className="grid gap-2">
+                        <Label>Email</Label>
+                        <Input value={userInfo.email} disabled />
+                      </div>
+                    )}
+                    <Button type="submit" disabled={loading} className="w-full sm:w-auto">
+                      {loading ? <Spinner size="small" /> : 'Guardar Cambios'}
+                    </Button>
+                </form>
               </CardContent>
-              <CardFooter className="border-t px-6 py-4">
-                <Button type="submit" disabled={loading}>
-                  {loading ? <Spinner size="small" /> : 'Guardar Cambios'}
-                </Button>
-              </CardFooter>
-            </form>
           </Card>
+           {userInfo && (
+            <Card>
+                <CardHeader>
+                    <CardTitle>Rol de Usuario</CardTitle>
+                    <CardDescription>Este es tu rol actual en el sistema.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center space-x-3">
+                        <Shield className="h-6 w-6 text-primary" />
+                        <span className="text-lg font-medium">{userInfo.role}</span>
+                    </div>
+                     <p className="text-sm text-muted-foreground mt-2">
+                        Los roles determinan tus permisos. Contacta a un administrador para cambios.
+                    </p>
+                </CardContent>
+            </Card>
+           )}
           <Card>
             <CardHeader>
               <CardTitle>Contraseña</CardTitle>
