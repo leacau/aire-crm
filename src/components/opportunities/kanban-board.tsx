@@ -39,7 +39,8 @@ const KanbanColumn = ({
   opportunities: Opportunity[];
   onCardDrop: (e: React.DragEvent<HTMLDivElement>, stage: OpportunityStage) => void;
 }) => {
-  const columnTotal = opportunities.reduce((sum, opp) => sum + opp.value, 0);
+  const columnTotal = opportunities.reduce((sum, opp) => sum + (opp.valorCerrado || opp.value), 0);
+
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -122,6 +123,10 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
   
   const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor';
 
+  const displayValue = opportunity.valorCerrado && opportunity.stage === 'Cerrado - Ganado'
+    ? opportunity.valorCerrado
+    : opportunity.value;
+
   return (
     <>
       <Card 
@@ -142,7 +147,7 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
         <CardContent className="p-4 pt-0">
           <div className="flex justify-between items-center">
             <span className="text-lg font-bold text-primary">
-              ${opportunity.value.toLocaleString()}
+                ${displayValue.toLocaleString()}
             </span>
             {owner && (
               <TooltipProvider>
