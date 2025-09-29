@@ -1,6 +1,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -85,6 +86,9 @@ export type ClientActivity = {
     isTask: boolean;
     dueDate?: string;
     completed?: boolean;
+    completedAt?: string;
+    completedByUserId?: string;
+    completedByUserName?: string;
 }
 
 

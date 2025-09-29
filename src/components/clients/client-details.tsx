@@ -31,7 +31,7 @@ import {
   BuildingIcon,
   MailIcon,
   CalendarIcon,
-  CheckCircle2,
+  CheckCircle,
   FileText,
 } from 'lucide-react';
 import {
@@ -284,9 +284,19 @@ export function ClientDetails({
     }
   }
 
-  const handleTaskCompleteToggle = async (activityId: string, currentStatus: boolean) => {
+  const handleTaskCompleteToggle = async (activity: ClientActivity, currentStatus: boolean) => {
+      if(!userInfo) return;
+      const completed = !currentStatus;
+      const payload: Partial<ClientActivity> = { 
+          completed,
+          ...(completed && {
+              completedByUserId: userInfo.id,
+              completedByUserName: userInfo.name,
+          })
+      };
+
       try {
-          await updateClientActivity(activityId, { completed: !currentStatus });
+          await updateClientActivity(activity.id, payload);
           fetchClientData();
           toast({ title: `Tarea ${!currentStatus ? 'completada' : 'marcada como pendiente'}`});
       } catch (error) {
@@ -572,7 +582,7 @@ export function ClientDetails({
                                     <Checkbox 
                                         id={`task-${activity.id}`}
                                         checked={activity.completed}
-                                        onCheckedChange={() => handleTaskCompleteToggle(activity.id, !!activity.completed)}
+                                        onCheckedChange={() => handleTaskCompleteToggle(activity, !!activity.completed)}
                                         className="mt-1"
                                     />
                                 )}
@@ -594,6 +604,15 @@ export function ClientDetails({
                                         </p>
                                     )}
                                     <p className="text-xs mt-1">Registrado por: {activity.userName}</p>
+                                    {activity.completed && activity.completedAt && (
+                                        <div className='text-xs mt-1'>
+                                            <p className='font-medium flex items-center text-green-600'>
+                                               <CheckCircle className="h-3 w-3 mr-1"/>
+                                               Finalizada: {format(new Date(activity.completedAt), "PPP", { locale: es })}
+                                            </p>
+                                            <p className="text-muted-foreground">Por: {activity.completedByUserName}</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}

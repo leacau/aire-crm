@@ -1,7 +1,7 @@
 
 
 import { db } from './firebase';
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity } from './types';
 import { logActivity } from './activity-logger';
 
@@ -256,19 +256,24 @@ export const getActivities = async (activityLimit: number = 20): Promise<Activit
 
 // --- Client-Specific Activity Functions ---
 
-const convertActivityDoc = (doc: any) => {
+const convertActivityDoc = (doc: any): ClientActivity => {
     const data = doc.data();
-    let dueDate = data.dueDate;
-    if (dueDate && dueDate instanceof Timestamp) {
-        dueDate = dueDate.toDate().toISOString();
-    }
     
-    return {
+    const activity: ClientActivity = {
         id: doc.id,
         ...data,
         timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
-        ...(dueDate && { dueDate }),
-    } as ClientActivity;
+    };
+
+    if (data.dueDate && data.dueDate instanceof Timestamp) {
+        activity.dueDate = data.dueDate.toDate().toISOString();
+    }
+    
+    if (data.completedAt && data.completedAt instanceof Timestamp) {
+        activity.completedAt = data.completedAt.toDate().toISOString();
+    }
+
+    return activity;
 }
 
 
@@ -295,13 +300,10 @@ export const createClientActivity = async (
     };
 
     if (activityData.isTask && activityData.dueDate) {
-        // Convert string date to Firestore Timestamp
         dataToSave.dueDate = Timestamp.fromDate(new Date(activityData.dueDate));
     } else {
-        // Ensure undefined is not sent
         delete dataToSave.dueDate;
     }
-
 
     const docRef = await addDoc(clientActivitiesCollection, dataToSave);
     return docRef.id;
@@ -312,8 +314,19 @@ export const updateClientActivity = async (
     data: Partial<Omit<ClientActivity, 'id'>>
 ): Promise<void> => {
     const docRef = doc(db, 'client-activities', id);
-    await updateDoc(docRef, {
-        ...data,
-        updatedAt: serverTimestamp()
-    });
+    const updateData: {[key: string]: any} = { ...data, updatedAt: serverTimestamp() };
+
+    if (data.completed) {
+        updateData.completedAt = serverTimestamp();
+        updateData.completedByUserId = data.completedByUserId;
+        updateData.completedByUserName = data.completedByUserName;
+    } else if (data.completed === false) {
+        // If un-checking, remove the completion fields
+        updateData.completedAt = deleteField();
+        updateData.completedByUserId = deleteField();
+        updateData.completedByUserName = deleteField();
+    }
+
+
+    await updateDoc(docRef, updateData);
 };

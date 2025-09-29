@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   CalendarCheck,
   CalendarClock,
+  CheckCircle,
 } from 'lucide-react';
 import type { Opportunity, Client, ActivityLog, ClientActivity } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
@@ -36,7 +37,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { users } from '@/lib/data';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, isToday, isTomorrow, isPast, startOfToday, startOfTomorrow, endOfYesterday } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, isPast, startOfToday, startOfTomorrow, endOfYesterday, format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -54,7 +56,7 @@ interface TaskSectionProps {
     title: string;
     tasks: ClientActivity[];
     icon: React.ReactNode;
-    onTaskToggle: (id: string, status: boolean) => void;
+    onTaskToggle: (task: ClientActivity, status: boolean) => void;
 }
 
 const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskToggle }) => (
@@ -64,13 +66,14 @@ const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskTog
             <span className='ml-2'>{title}</span>
         </h4>
         {tasks.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-4">
                 {tasks.map(task => (
-                    <div key={task.id} className="flex items-center space-x-2">
+                    <div key={task.id} className="flex items-start space-x-2">
                         <Checkbox
                             id={`task-dash-${task.id}`}
                             checked={task.completed}
-                            onCheckedChange={() => onTaskToggle(task.id, !!task.completed)}
+                            onCheckedChange={() => onTaskToggle(task, !!task.completed)}
+                            className='mt-1'
                         />
                         <div className="flex flex-col text-sm">
                             <label
@@ -79,9 +82,18 @@ const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskTog
                             >
                                 {task.observation}
                             </label>
-                            <Link href={`/clients/${task.clientId}`} className="text-xs text-muted-foreground hover:underline">
+                            <Link href={`/clients/${task.clientId}`} className="text-xs text-muted-foreground hover:underline mt-0.5">
                                 Cliente: {task.clientName}
                             </Link>
+                            {task.completed && task.completedAt && (
+                                <div className='text-xs text-muted-foreground mt-1'>
+                                    <p className='flex items-center'>
+                                        <CheckCircle className="h-3 w-3 mr-1 text-green-600"/>
+                                        Finalizada: {format(new Date(task.completedAt), "PPP", { locale: es })}
+                                    </p>
+                                    <p>Por: {task.completedByUserName}</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}
@@ -145,14 +157,32 @@ export default function DashboardPage() {
     }
   }, [userInfo, authLoading]);
 
-  const handleTaskToggle = async (taskId: string, currentStatus: boolean) => {
+  const handleTaskToggle = async (task: ClientActivity, currentStatus: boolean) => {
+      if (!userInfo) return;
+      const completed = !currentStatus;
+      const payload: Partial<ClientActivity> = { 
+          completed,
+          ...(completed && {
+              completedByUserId: userInfo.id,
+              completedByUserName: userInfo.name,
+          })
+      };
+
       try {
-          await updateClientActivity(taskId, { completed: !currentStatus });
           // Optimistic update
-          setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? {...t, completed: !currentStatus} : t));
-          toast({ title: `Tarea ${!currentStatus ? 'completada' : 'marcada como pendiente'}`});
+          setTasks(prevTasks => prevTasks.map(t => t.id === task.id ? {
+                ...t, 
+                completed,
+                completedAt: completed ? new Date().toISOString() : undefined,
+                completedByUserName: completed ? userInfo.name : undefined
+            } : t
+          ));
+          await updateClientActivity(task.id, payload);
+          toast({ title: `Tarea ${completed ? 'completada' : 'marcada como pendiente'}`});
+          // No need to refetch, optimistic update is enough for the UI
       } catch (error) {
            console.error("Error updating task status", error);
+           setTasks(prevTasks => prevTasks.map(t => t.id === task.id ? task : t)); // Revert on error
            toast({ title: "Error al actualizar la tarea", variant: 'destructive' });
       }
   }
@@ -198,7 +228,8 @@ export default function DashboardPage() {
   const overdueTasks = tasks.filter(t => {
       if (t.completed || !t.dueDate) return false;
       const dueDate = new Date(t.dueDate);
-      return dueDate < today;
+      // Compare only date part, ignoring time
+      return new Date(dueDate.toDateString()) < new Date(today.toDateString());
   });
   const dueTodayTasks = tasks.filter(t => !t.completed && t.dueDate && isToday(new Date(t.dueDate)));
   const dueTomorrowTasks = tasks.filter(t => !t.completed && t.dueDate && isTomorrow(new Date(t.dueDate)));
