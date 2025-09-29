@@ -250,10 +250,20 @@ export const updateOpportunity = async (
     const clientName = clientSnap.exists() ? clientSnap.data().denominacion : 'un cliente';
 
 
-    await updateDoc(docRef, {
+    const updateData: {[key: string]: any} = {
         ...data,
         updatedAt: serverTimestamp()
-    });
+    };
+    
+    if (data.bonificacionPorcentaje !== undefined && data.bonificacionPorcentaje <= 0) {
+        updateData.bonificacionEstado = deleteField();
+        updateData.bonificacionAutorizadoPorId = deleteField();
+        updateData.bonificacionAutorizadoPorNombre = deleteField();
+        updateData.bonificacionFechaAutorizacion = deleteField();
+    }
+
+
+    await updateDoc(docRef, updateData);
 
     const activityDetails = {
         userId,

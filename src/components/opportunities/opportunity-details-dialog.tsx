@@ -121,10 +121,22 @@ export function OpportunityDetailsDialog({
     }
 
     setEditedOpportunity(prev => {
-        const newState = { ...prev, [name]: finalValue };
+        const newState: Partial<Opportunity> = { ...prev, [name]: finalValue };
         
-        if (name === 'bonificacionPorcentaje' && Number(value) > 0 && prev.bonificacionEstado !== 'Autorizado' && prev.bonificacionEstado !== 'Rechazado') {
-             newState.bonificacionEstado = 'Pendiente';
+        if (name === 'bonificacionPorcentaje') {
+            const bonusValue = Number(value);
+            if (bonusValue > 0) {
+                // Only set to pending if it's not already decided
+                if (prev.bonificacionEstado !== 'Autorizado' && prev.bonificacionEstado !== 'Rechazado') {
+                    newState.bonificacionEstado = 'Pendiente';
+                }
+            } else {
+                // If bonus is 0 or less, it shouldn't be in the approval process
+                delete newState.bonificacionEstado;
+                delete newState.bonificacionAutorizadoPorId;
+                delete newState.bonificacionAutorizadoPorNombre;
+                delete newState.bonificacionFechaAutorizacion;
+            }
         }
 
         return newState;
