@@ -124,27 +124,48 @@ export default function DashboardPage() {
     setLoadingData(true);
     try {
       let userOpps: Opportunity[];
-      if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
-        userOpps = await getAllOpportunities();
-      } else {
-        userOpps = await getOpportunitiesForUser(userInfo.id);
-      }
-      
-      const [allClients, allActivities, allTasks] = await Promise.all([
-        getClients(),
-        getActivities(100),
-        getAllClientActivities() // Fetch all tasks for filtering
-      ]);
-      
-      setOpportunities(userOpps);
-      setClients(allClients);
-      setActivities(allActivities);
-      // Filter for tasks assigned to the current user or all if manager
-      const userTasks = (userInfo.role === 'Jefe' || userInfo.role === 'Administracion')
-            ? allTasks.filter(t => t.isTask)
-            : allTasks.filter(t => t.isTask && t.userId === userInfo.id);
+      let allClients: Client[];
+      let allActivities: ActivityLog[];
+      let allTasks: ClientActivity[];
 
-      setTasks(userTasks);
+      // Admins and Chiefs see everything
+      if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
+        [userOpps, allClients, allActivities, allTasks] = await Promise.all([
+          getAllOpportunities(),
+          getClients(),
+          getActivities(100),
+          getAllClientActivities(),
+        ]);
+        setOpportunities(userOpps);
+        setClients(allClients);
+        setActivities(allActivities);
+        setTasks(allTasks.filter(t => t.isTask)); // Show all tasks
+      } else { 
+        // Asesores only see their own data
+        [userOpps, allClients, allActivities, allTasks] = await Promise.all([
+          getOpportunitiesForUser(userInfo.id),
+          getClients(),
+          getActivities(100),
+          getAllClientActivities(),
+        ]);
+
+        const userClientIds = new Set(userOpps.map(opp => opp.clientId));
+        const userClients = allClients.filter(client => client.ownerId === userInfo.id);
+        userClients.forEach(c => userClientIds.add(c.id));
+        
+        const filteredClients = allClients.filter(c => userClientIds.has(c.id));
+        
+        const filteredActivities = allActivities.filter(activity => {
+          return activity.userId === userInfo.id || (activity.entityId && userClientIds.has(activity.entityId));
+        });
+
+        const filteredTasks = allTasks.filter(t => t.isTask && t.userId === userInfo.id);
+
+        setOpportunities(userOpps);
+        setClients(filteredClients);
+        setActivities(filteredActivities);
+        setTasks(filteredTasks);
+      }
 
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -280,7 +301,7 @@ export default function DashboardPage() {
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Link href="/billing?tab=invoiced">
+          <Link href="/billing?tab=to-invoice">
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
@@ -407,5 +428,7 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
 
     
