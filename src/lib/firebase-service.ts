@@ -256,34 +256,32 @@ export const getActivities = async (activityLimit: number = 20): Promise<Activit
 
 // --- Client-Specific Activity Functions ---
 
+const convertActivityDoc = (doc: any) => {
+    const data = doc.data();
+    let dueDate = data.dueDate;
+    if (dueDate && dueDate instanceof Timestamp) {
+        dueDate = dueDate.toDate().toISOString();
+    }
+    
+    return {
+        id: doc.id,
+        ...data,
+        timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
+        ...(dueDate && { dueDate }),
+    } as ClientActivity;
+}
+
+
 export const getClientActivities = async (clientId: string): Promise<ClientActivity[]> => {
     const q = query(clientActivitiesCollection, where('clientId', '==', clientId), orderBy('timestamp', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
-            // Ensure dueDate is also converted if it exists
-            ...(data.dueDate && { dueDate: (data.dueDate as Timestamp).toDate().toISOString() }),
-        } as ClientActivity;
-    });
+    return snapshot.docs.map(convertActivityDoc);
 };
 
 export const getAllClientActivities = async (): Promise<ClientActivity[]> => {
     const q = query(clientActivitiesCollection, orderBy('timestamp', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
-             // Ensure dueDate is also converted if it exists
-            ...(data.dueDate && { dueDate: (data.dueDate as Timestamp).toDate().toISOString() }),
-        } as ClientActivity;
-    });
+    return snapshot.docs.map(convertActivityDoc);
 };
 
 
@@ -296,11 +294,11 @@ export const createClientActivity = async (
       timestamp: serverTimestamp(),
     };
 
-    // Firestore throws an error if you try to save 'undefined'.
-    // So we only add dueDate if it's actually a value.
     if (activityData.isTask && activityData.dueDate) {
-        dataToSave.dueDate = activityData.dueDate;
+        // Convert string date to Firestore Timestamp
+        dataToSave.dueDate = Timestamp.fromDate(new Date(activityData.dueDate));
     } else {
+        // Ensure undefined is not sent
         delete dataToSave.dueDate;
     }
 
