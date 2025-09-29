@@ -349,10 +349,10 @@ export const createClientActivity = async (
     if (activityData.isTask && activityData.dueDate) {
         // Convert ISO string back to Timestamp for Firestore
         dataToSave.dueDate = Timestamp.fromDate(new Date(activityData.dueDate));
-    } else if (Object.prototype.hasOwnProperty.call(activityData, 'dueDate')) {
-        // Use deleteField to ensure the field is not set to undefined if it's not a task
-        dataToSave.dueDate = deleteField();
+    } else if (Object.prototype.hasOwnProperty.call(dataToSave, 'dueDate')) {
+       delete dataToSave.dueDate;
     }
+
 
     const docRef = await addDoc(clientActivitiesCollection, dataToSave);
     return docRef.id;
@@ -374,6 +374,10 @@ export const updateClientActivity = async (
         updateData.completedAt = deleteField();
         updateData.completedByUserId = deleteField();
         updateData.completedByUserName = deleteField();
+    }
+
+    if (data.dueDate) {
+        updateData.dueDate = Timestamp.fromDate(new Date(data.dueDate));
     }
 
 

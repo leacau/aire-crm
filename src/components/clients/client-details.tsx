@@ -35,6 +35,7 @@ import {
   FileText,
   Activity,
   ArrowRight,
+  BellPlus,
 } from 'lucide-react';
 import {
   Table,
@@ -320,9 +321,61 @@ export function ClientDetails({
       }
   }
 
+  const handleConvertToTask = async (activityId: string, newDueDate: Date) => {
+    if (!userInfo) return;
+    try {
+      const payload: Partial<ClientActivity> = {
+        isTask: true,
+        dueDate: newDueDate.toISOString(),
+      };
+      await updateClientActivity(activityId, payload);
+      fetchClientData();
+      toast({ title: 'Actividad convertida en Tarea' });
+    } catch (error) {
+      console.error('Error converting to task', error);
+      toast({ title: 'Error al crear la tarea', variant: 'destructive' });
+    }
+  };
+
 
   const handleSaveClient = (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>) => {
     onUpdate(clientData);
+  };
+
+  const ConvertToTaskPopover = ({ activityId }: { activityId: string }) => {
+    const [popoverOpen, setPopoverOpen] = useState(false);
+    const [newDueDate, setNewDueDate] = useState<Date | undefined>();
+
+    const onSave = () => {
+      if (newDueDate) {
+        handleConvertToTask(activityId, newDueDate);
+        setPopoverOpen(false);
+      } else {
+        toast({ title: 'Selecciona una fecha', variant: 'destructive' });
+      }
+    };
+
+    return (
+      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+        <PopoverTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary">
+            <BellPlus className="h-4 w-4" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0">
+          <Calendar
+            mode="single"
+            selected={newDueDate}
+            onSelect={setNewDueDate}
+            initialFocus
+            locale={es}
+          />
+          <div className="p-2 border-t flex justify-end">
+            <Button size="sm" onClick={onSave}>Guardar</Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
   };
   
   return (
@@ -606,7 +659,10 @@ export function ClientDetails({
                                 </div>
                                 <div className={cn('flex-1', activity.completed && 'line-through text-muted-foreground')}>
                                     <div className="flex items-center justify-between">
-                                        <span className="font-semibold text-sm">{activity.type}</span>
+                                        <div className='flex items-center gap-2'>
+                                            <span className="font-semibold text-sm">{activity.type}</span>
+                                            {!activity.isTask && <ConvertToTaskPopover activityId={activity.id} />}
+                                        </div>
                                         <span className="text-xs">
                                             {new Date(activity.timestamp).toLocaleDateString()}
                                         </span>
