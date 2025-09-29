@@ -45,6 +45,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useNotifications } from '@/hooks/use-notifications';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const activityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
@@ -62,6 +64,12 @@ interface TaskSectionProps {
     icon: React.ReactNode;
     onTaskToggle: (task: ClientActivity, status: boolean) => void;
 }
+
+const DynamicDateRangePicker = dynamic(() => import('@/components/ui/date-range-picker').then(mod => mod.DateRangePicker), {
+  ssr: false,
+  loading: () => <Skeleton className="h-10 w-[260px]" />,
+});
+
 
 const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskToggle }) => (
     <div className='mt-4'>
@@ -333,7 +341,7 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Panel">
-        <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+        <DynamicDateRangePicker date={dateRange} onDateChange={setDateRange} />
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
