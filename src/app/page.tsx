@@ -44,6 +44,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useNotifications } from '@/hooks/use-notifications';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 const activityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
@@ -53,6 +54,8 @@ const activityIcons: Record<string, React.ReactNode> = {
 
 const getDefaultIcon = () => <Activity className="h-5 w-5 text-muted-foreground" />;
 
+type TaskStatus = 'overdue' | 'dueToday' | 'dueTomorrow';
+
 interface TaskSectionProps {
     title: string;
     tasks: ClientActivity[];
@@ -61,22 +64,22 @@ interface TaskSectionProps {
 }
 
 const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskToggle }) => (
-    <div>
-        <h4 className="flex items-center font-semibold mb-2 text-sm">
+    <div className='mt-4'>
+        <h4 className="flex items-center font-semibold mb-3 text-md border-b pb-2">
             {icon}
             <span className='ml-2'>{title}</span>
         </h4>
         {tasks.length > 0 ? (
             <div className="space-y-4">
                 {tasks.map(task => (
-                    <div key={task.id} className="flex items-start space-x-2">
+                    <div key={task.id} className="flex items-start space-x-3">
                         <Checkbox
                             id={`task-dash-${task.id}`}
                             checked={task.completed}
                             onCheckedChange={() => onTaskToggle(task, !!task.completed)}
                             className='mt-1'
                         />
-                        <div className="flex flex-col text-sm">
+                        <div className="flex flex-col text-sm flex-1">
                             <label
                                 htmlFor={`task-dash-${task.id}`}
                                 className={cn("font-medium leading-none", task.completed && "line-through text-muted-foreground")}
@@ -87,7 +90,7 @@ const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskTog
                                 Cliente: {task.clientName}
                             </Link>
                             {task.completed && task.completedAt && (
-                                <div className='text-xs text-muted-foreground mt-1'>
+                                <div className='text-xs text-muted-foreground mt-1 space-y-0.5'>
                                     <p className='flex items-center'>
                                         <CheckCircle className="h-3 w-3 mr-1 text-green-600"/>
                                         Finalizada: {format(new Date(task.completedAt), "PPP", { locale: es })}
@@ -100,11 +103,32 @@ const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskTog
                 ))}
             </div>
         ) : (
-            <p className="text-sm text-muted-foreground">No hay tareas.</p>
+            <p className="text-sm text-muted-foreground">No hay tareas en esta categoría.</p>
         )}
     </div>
 );
 
+const TaskSummaryCard = ({ title, count, icon, onClick, isSelected }: { title: string, count: number, icon: React.ReactNode, onClick: () => void, isSelected: boolean }) => (
+    <Card 
+        onClick={onClick}
+        className={cn(
+            "cursor-pointer transition-all hover:shadow-md hover:border-primary/50",
+            isSelected && "border-primary shadow-md"
+        )}
+    >
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+                {icon}
+                <span>{title}</span>
+            </CardTitle>
+            <Badge variant="secondary">{count}</Badge>
+        </CardHeader>
+        <CardContent>
+            <div className="text-2xl font-bold">{count}</div>
+            <p className="text-xs text-muted-foreground">tareas</p>
+        </CardContent>
+    </Card>
+);
 
 export default function DashboardPage() {
   const { userInfo, loading: authLoading } = useAuth();
@@ -117,6 +141,7 @@ export default function DashboardPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [notified, setNotified] = useState(false);
+  const [selectedTaskStatus, setSelectedTaskStatus] = useState<TaskStatus | null>(null);
 
   const fetchData = async () => {
     if (!userInfo) return;
@@ -138,6 +163,7 @@ export default function DashboardPage() {
           getAllClientActivities(),
         ]);
         userClients = allClients;
+        setActivities(allActivities); // Set all activities for Jefe
         setTasks(allTasks.filter(t => t.isTask)); // Show all tasks
       } else { 
         // Asesores only see their own data
@@ -153,8 +179,8 @@ export default function DashboardPage() {
         userOpps = opps;
         
         const filteredActivities = activities.filter(activity => {
-            const isOwner = clients.find(c => c.id === activity.entityId)?.ownerId === userInfo.id;
-            return isOwner;
+            const client = allClients.find(c => c.id === activity.entityId);
+            return client && client.ownerId === userInfo.id;
         });
 
         const filteredTasks = tasks.filter(t => t.isTask && userClientIds.includes(t.clientId));
@@ -255,6 +281,19 @@ export default function DashboardPage() {
            toast({ title: "Error al actualizar la tarea", variant: 'destructive' });
       }
   }
+
+  const handleTaskStatusSelect = (status: TaskStatus) => {
+    setSelectedTaskStatus(prev => prev === status ? null : status);
+  };
+
+  const getSelectedTasks = () => {
+    switch(selectedTaskStatus) {
+        case 'overdue': return overdueTasks;
+        case 'dueToday': return dueTodayTasks;
+        case 'dueTomorrow': return dueTomorrowTasks;
+        default: return [];
+    }
+  };
 
 
   if (authLoading || loadingData) {
@@ -369,25 +408,46 @@ export default function DashboardPage() {
                         Tus próximas tareas y las que ya han vencido.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                    <TaskSection 
-                        title="Vencidas"
-                        tasks={overdueTasks}
-                        icon={<AlertTriangle className="h-5 w-5 text-red-500" />}
-                        onTaskToggle={handleTaskToggle}
-                    />
-                     <TaskSection 
-                        title="Vencen Hoy"
-                        tasks={dueTodayTasks}
-                        icon={<CalendarCheck className="h-5 w-5 text-blue-500" />}
-                        onTaskToggle={handleTaskToggle}
-                    />
-                    <TaskSection 
-                        title="Vencen Mañana"
-                        tasks={dueTomorrowTasks}
-                        icon={<CalendarClock className="h-5 w-5 text-yellow-500" />}
-                        onTaskToggle={handleTaskToggle}
-                    />
+                <CardContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <TaskSummaryCard 
+                            title="Vencidas"
+                            count={overdueTasks.length}
+                            icon={<AlertTriangle className="h-5 w-5 text-red-500" />}
+                            onClick={() => handleTaskStatusSelect('overdue')}
+                            isSelected={selectedTaskStatus === 'overdue'}
+                        />
+                        <TaskSummaryCard 
+                            title="Vencen Hoy"
+                            count={dueTodayTasks.length}
+                            icon={<CalendarCheck className="h-5 w-5 text-blue-500" />}
+                            onClick={() => handleTaskStatusSelect('dueToday')}
+                            isSelected={selectedTaskStatus === 'dueToday'}
+                        />
+                        <TaskSummaryCard 
+                            title="Vencen Mañana"
+                            count={dueTomorrowTasks.length}
+                            icon={<CalendarClock className="h-5 w-5 text-yellow-500" />}
+                            onClick={() => handleTaskStatusSelect('dueTomorrow')}
+                             isSelected={selectedTaskStatus === 'dueTomorrow'}
+                        />
+                    </div>
+                     {selectedTaskStatus && (
+                        <TaskSection 
+                           title={
+                             selectedTaskStatus === 'overdue' ? 'Detalle de Tareas Vencidas' :
+                             selectedTaskStatus === 'dueToday' ? 'Detalle de Tareas para Hoy' :
+                             'Detalle de Tareas para Mañana'
+                           }
+                           tasks={getSelectedTasks()}
+                           icon={
+                             selectedTaskStatus === 'overdue' ? <AlertTriangle className="h-5 w-5 text-red-500" /> :
+                             selectedTaskStatus === 'dueToday' ? <CalendarCheck className="h-5 w-5 text-blue-500" /> :
+                             <CalendarClock className="h-5 w-5 text-yellow-500" />
+                           }
+                           onTaskToggle={handleTaskToggle}
+                        />
+                    )}
                 </CardContent>
             </Card>
             <Card>
