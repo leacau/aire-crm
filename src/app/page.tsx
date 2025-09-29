@@ -43,6 +43,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useNotifications } from '@/hooks/use-notifications';
+import { Button } from '@/components/ui/button';
 
 const activityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
@@ -108,12 +110,14 @@ const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskTog
 export default function DashboardPage() {
   const { userInfo, loading: authLoading } = useAuth();
   const { toast } = useToast();
+  const { notificationPermission, requestNotificationPermission, showNotification } = useNotifications();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [tasks, setTasks] = useState<ClientActivity[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [notified, setNotified] = useState(false);
 
   const fetchData = async () => {
     if (!userInfo) return;
@@ -156,6 +160,36 @@ export default function DashboardPage() {
       fetchData();
     }
   }, [userInfo, authLoading]);
+  
+    const today = startOfToday();
+    const overdueTasks = tasks.filter(t => {
+        if (t.completed || !t.dueDate) return false;
+        const dueDate = new Date(t.dueDate);
+        // Compare only date part, ignoring time
+        return new Date(dueDate.toDateString()) < new Date(today.toDateString());
+    });
+    const dueTodayTasks = tasks.filter(t => !t.completed && t.dueDate && isToday(new Date(t.dueDate)));
+    const dueTomorrowTasks = tasks.filter(t => !t.completed && t.dueDate && isTomorrow(new Date(t.dueDate)));
+
+  useEffect(() => {
+    if (loadingData) return;
+
+    if (dueTodayTasks.length > 0 && notificationPermission === 'default') {
+        toast({
+            title: 'Permitir notificaciones',
+            description: 'Habilita las notificaciones para recibir alertas de tareas.',
+            action: <Button onClick={requestNotificationPermission}>Habilitar</Button>,
+        });
+    }
+
+    if (dueTodayTasks.length > 0 && notificationPermission === 'granted' && !notified) {
+        showNotification('Tareas Pendientes', {
+            body: `Tienes ${dueTodayTasks.length} tarea(s) que vencen hoy.`,
+        });
+        setNotified(true); // Mark as notified for this session
+    }
+  }, [loadingData, dueTodayTasks.length, notificationPermission, requestNotificationPermission, showNotification, toast, notified]);
+
 
   const handleTaskToggle = async (task: ClientActivity, currentStatus: boolean) => {
       if (!userInfo) return;
@@ -223,17 +257,6 @@ export default function DashboardPage() {
   
   // Client filtering by date is complex, so we'll show all clients for now.
   const totalClients = clients.length;
-
-  const today = startOfToday();
-  const overdueTasks = tasks.filter(t => {
-      if (t.completed || !t.dueDate) return false;
-      const dueDate = new Date(t.dueDate);
-      // Compare only date part, ignoring time
-      return new Date(dueDate.toDateString()) < new Date(today.toDateString());
-  });
-  const dueTodayTasks = tasks.filter(t => !t.completed && t.dueDate && isToday(new Date(t.dueDate)));
-  const dueTomorrowTasks = tasks.filter(t => !t.completed && t.dueDate && isTomorrow(new Date(t.dueDate)));
-
 
   return (
     <div className="flex flex-col h-full">
