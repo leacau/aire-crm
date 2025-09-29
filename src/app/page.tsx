@@ -143,68 +143,67 @@ export default function DashboardPage() {
   const [notified, setNotified] = useState(false);
   const [selectedTaskStatus, setSelectedTaskStatus] = useState<TaskStatus | null>(null);
 
-  const fetchData = async () => {
-    if (!userInfo) return;
-
-    setLoadingData(true);
-    try {
-      let userOpps: Opportunity[];
-      let userClients: Client[];
-      let allActivities: ActivityLog[];
-      let allTasks: ClientActivity[];
-      
-      const allClients = await getClients();
-
-      // Admins and Chiefs see everything
-      if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
-        [userOpps, allActivities, allTasks] = await Promise.all([
-          getAllOpportunities(),
-          getActivities(100),
-          getAllClientActivities(),
-        ]);
-        userClients = allClients;
-        setActivities(allActivities); // Set all activities for Jefe
-        setTasks(allTasks.filter(t => t.isTask)); // Show all tasks
-      } else { 
-        // Asesores only see their own data
-        userClients = allClients.filter(client => client.ownerId === userInfo.id);
-        const userClientIds = userClients.map(c => c.id);
-
-        const [opps, activities, tasks] = await Promise.all([
-          getOpportunitiesForUser(userInfo.id),
-          getActivities(100),
-          getAllClientActivities(),
-        ]);
-        
-        userOpps = opps;
-        
-        const filteredActivities = activities.filter(activity => {
-            const client = allClients.find(c => c.id === activity.entityId);
-            return client && client.ownerId === userInfo.id;
-        });
-
-        const filteredTasks = tasks.filter(t => t.isTask && userClientIds.includes(t.clientId));
-        
-        setActivities(filteredActivities);
-        setTasks(filteredTasks);
-      }
-
-      setOpportunities(userOpps);
-      setClients(userClients);
-
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-    } finally {
-      setLoadingData(false);
-    }
-  };
-
-
   useEffect(() => {
-    if (!authLoading && userInfo) {
-      fetchData();
+    const fetchData = async () => {
+      if (!userInfo) return;
+
+      setLoadingData(true);
+      try {
+        let userOpps: Opportunity[];
+        let userClients: Client[];
+        let allActivities: ActivityLog[];
+        let allTasks: ClientActivity[];
+        
+        const allClients = await getClients();
+
+        // Admins and Chiefs see everything
+        if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
+          [userOpps, allActivities, allTasks] = await Promise.all([
+            getAllOpportunities(),
+            getActivities(100),
+            getAllClientActivities(),
+          ]);
+          userClients = allClients;
+          setActivities(allActivities); // Set all activities for Jefe
+          setTasks(allTasks.filter(t => t.isTask)); // Show all tasks
+        } else { 
+          // Asesores only see their own data
+          userClients = allClients.filter(client => client.ownerId === userInfo.id);
+          const userClientIds = userClients.map(c => c.id);
+
+          const [opps, activities, tasks] = await Promise.all([
+            getOpportunitiesForUser(userInfo.id),
+            getActivities(100),
+            getAllClientActivities(),
+          ]);
+          
+          userOpps = opps;
+          
+          const filteredActivities = activities.filter(activity => {
+              const client = allClients.find(c => c.id === activity.entityId);
+              return client && client.ownerId === userInfo.id;
+          });
+
+          const filteredTasks = tasks.filter(t => t.isTask && userClientIds.includes(t.clientId));
+          
+          setActivities(filteredActivities);
+          setTasks(filteredTasks);
+        }
+
+        setOpportunities(userOpps);
+        setClients(userClients);
+
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoadingData(false);
+      }
+    };
+
+    if (userInfo) {
+        fetchData();
     }
-  }, [userInfo, authLoading]);
+  }, [userInfo]);
   
     const today = startOfToday();
     const overdueTasks = tasks.filter(t => {
@@ -400,8 +399,8 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <div className="mt-6 space-y-6">
-            <Card>
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-1 gap-6">
+            <Card className="lg:col-span-1">
                  <CardHeader>
                     <CardTitle>Tareas Pendientes</CardTitle>
                     <CardDescription>
@@ -450,7 +449,7 @@ export default function DashboardPage() {
                     )}
                 </CardContent>
             </Card>
-            <Card>
+            <Card className="lg:col-span-1">
                 <CardHeader>
                 <CardTitle>Actividad Reciente</CardTitle>
                 <CardDescription>
