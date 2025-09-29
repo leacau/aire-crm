@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import {
   Table,
@@ -14,7 +15,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getOpportunitiesForUser } from '@/lib/firebase-service';
+import { getOpportunitiesForUser, getAllOpportunities } from '@/lib/firebase-service';
 import type { Opportunity } from '@/lib/types';
 import Link from 'next/link';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
@@ -61,7 +62,7 @@ const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunit
   </div>
 );
 
-export default function BillingPage() {
+function BillingPageComponent() {
   const { userInfo, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -69,12 +70,17 @@ export default function BillingPage() {
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'to-invoice';
 
-
-  const fetchOpportunities = async (userId: string) => {
+  const fetchOpportunities = async () => {
+    if (!userInfo) return;
     setLoading(true);
     try {
-      const userOpps = await getOpportunitiesForUser(userId);
+      const userOpps = (userInfo.role === 'Jefe' || userInfo.role === 'Administracion')
+        ? await getAllOpportunities()
+        : await getOpportunitiesForUser(userInfo.id);
+
       setOpportunities(userOpps);
     } catch (error) {
       console.error("Error fetching opportunities:", error);
@@ -85,17 +91,17 @@ export default function BillingPage() {
   };
 
   useEffect(() => {
-    if (userInfo?.id) {
-      fetchOpportunities(userInfo.id);
+    if (userInfo) {
+      fetchOpportunities();
     }
   }, [userInfo]);
 
   const handleUpdateOpportunity = async (updatedData: Partial<Opportunity>) => {
     if (!selectedOpportunity) return;
     try {
-      await updateOpportunity(selectedOpportunity.id, updatedData);
+      await updateOpportunity(selectedOpportunity.id, updatedData, userInfo!.id, userInfo!.name);
       // Refresca la lista después de la actualización
-      if(userInfo?.id) fetchOpportunities(userInfo.id);
+      fetchOpportunities();
       toast({ title: "Oportunidad Actualizada" });
     } catch (error) {
       console.error("Error updating opportunity:", error);
@@ -121,14 +127,13 @@ export default function BillingPage() {
     const closeDate = new Date(opp.closeDate);
     return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
   });
-
-  const toInvoiceOpps = filteredOpportunities.filter(
-    (opp) => opp.stage === 'Cerrado - Ganado' && !opp.facturaNo
+  
+  const closedWonOpps = filteredOpportunities.filter(
+    (opp) => opp.stage === 'Cerrado - Ganado'
   );
 
-  const toCollectOpps = filteredOpportunities.filter(
-    (opp) => opp.stage === 'Cerrado - Ganado' && opp.facturaNo && !opp.pagado
-  );
+  const toInvoiceOpps = closedWonOpps.filter((opp) => !opp.facturaNo);
+  const toCollectOpps = closedWonOpps.filter((opp) => opp.facturaNo && !opp.pagado);
 
   return (
     <div className="flex flex-col h-full">
@@ -136,16 +141,20 @@ export default function BillingPage() {
          <DateRangePicker date={dateRange} onDateChange={setDateRange} />
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-        <Tabs defaultValue="to-invoice">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs defaultValue={initialTab}>
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="to-invoice">A Facturar</TabsTrigger>
             <TabsTrigger value="to-collect">A Cobrar</TabsTrigger>
+            <TabsTrigger value="invoiced">Facturado</TabsTrigger>
           </TabsList>
           <TabsContent value="to-invoice">
             <BillingTable opportunities={toInvoiceOpps} onRowClick={handleRowClick} />
           </TabsContent>
           <TabsContent value="to-collect">
             <BillingTable opportunities={toCollectOpps} onRowClick={handleRowClick} />
+          </TabsContent>
+           <TabsContent value="invoiced">
+            <BillingTable opportunities={closedWonOpps} onRowClick={handleRowClick} />
           </TabsContent>
         </Tabs>
       </main>
@@ -159,5 +168,19 @@ export default function BillingPage() {
         />
       )}
     </div>
+  );
+}
+
+// Need to wrap the component in a Suspense boundary because useSearchParams() is a Client Component hook
+// that suspends.
+export default function BillingPage() {
+  return (
+    <React.Suspense fallback={
+        <div className="flex h-full w-full items-center justify-center">
+            <Spinner size="large" />
+        </div>
+    }>
+      <BillingPageComponent />
+    </React.Suspense>
   );
 }
