@@ -39,7 +39,7 @@ interface OpportunityDetailsDialogProps {
   client?: {id: string, name: string}
 }
 
-const getInitialOpportunityData = (userInfo: any, client: any): Omit<Opportunity, 'id'> => ({
+const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     title: '',
     details: '',
     value: 0,
@@ -48,7 +48,6 @@ const getInitialOpportunityData = (userInfo: any, client: any): Omit<Opportunity
     closeDate: new Date().toISOString().split('T')[0],
     clientName: client?.name || '',
     clientId: client?.id || '',
-    ownerId: userInfo?.id || '',
     pagado: false,
     bonificacionPorcentaje: 0,
 });
@@ -66,7 +65,7 @@ export function OpportunityDetailsDialog({
 
   const getInitialData = () => {
       if (opportunity) return { ...opportunity };
-      return getInitialOpportunityData(userInfo, client);
+      return getInitialOpportunityData(client);
   }
 
   const [editedOpportunity, setEditedOpportunity] = React.useState<Partial<Opportunity>>(getInitialData());

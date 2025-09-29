@@ -11,8 +11,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getAllUsers } from '@/lib/firebase-service';
-import type { Opportunity, User } from '@/lib/types';
+import { getAllOpportunities, getAllUsers, getClients } from '@/lib/firebase-service';
+import type { Opportunity, User, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import Link from 'next/link';
@@ -29,18 +29,21 @@ export function TeamPerformanceTable() {
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [allOpps, allAdvisors] = await Promise.all([
+        const [allOpps, allAdvisors, allClients] = await Promise.all([
             getAllOpportunities(),
-            getAllUsers('Asesor')
+            getAllUsers('Asesor'),
+            getClients()
         ]);
         setOpportunities(allOpps);
         setAdvisors(allAdvisors);
+        setClients(allClients);
       } catch (error) {
         console.error("Error fetching team data:", error);
         toast({ title: 'Error al cargar los datos del equipo', variant: 'destructive' });
@@ -52,8 +55,11 @@ export function TeamPerformanceTable() {
   }, [toast]);
 
   const advisorStats = useMemo(() => {
+    if (advisors.length === 0 || clients.length === 0) return [];
+    
     return advisors.map(advisor => {
-        const userOpps = opportunities.filter(opp => opp.ownerId === advisor.id);
+        const advisorClientIds = new Set(clients.filter(c => c.ownerId === advisor.id).map(c => c.id));
+        const userOpps = opportunities.filter(opp => advisorClientIds.has(opp.clientId));
         
         const wonOpps = userOpps.filter(opp => opp.stage === 'Cerrado - Ganado');
         const totalRevenue = wonOpps.reduce((sum, opp) => sum + (opp.valorCerrado || opp.value), 0);
@@ -69,7 +75,7 @@ export function TeamPerformanceTable() {
             pipelineValue
         };
     }).sort((a,b) => b.totalRevenue - a.totalRevenue); // Sort by revenue
-  }, [advisors, opportunities]);
+  }, [advisors, opportunities, clients]);
 
   if (loading) {
     return (
@@ -107,9 +113,9 @@ export function TeamPerformanceTable() {
                 </div>
               </TableCell>
               <TableCell className="text-right">{stats.wonOpps}</TableCell>
-              <TableCell className="text-right font-semibold">${stats.totalRevenue.toLocaleString()}</TableCell>
+              <TableCell className="text-right font-semibold">${stats.totalRevenue.toLocaleString('es-AR')}</TableCell>
               <TableCell className="text-right">{stats.activeOpps}</TableCell>
-              <TableCell className="text-right">${stats.pipelineValue.toLocaleString()}</TableCell>
+              <TableCell className="text-right">${stats.pipelineValue.toLocaleString('es-AR')}</TableCell>
             </TableRow>
           ))}
           {advisorStats.length === 0 && (

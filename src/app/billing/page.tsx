@@ -15,8 +15,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getOpportunitiesForUser, getAllOpportunities } from '@/lib/firebase-service';
-import type { Opportunity } from '@/lib/types';
+import { getOpportunitiesForUser, getAllOpportunities, getClients } from '@/lib/firebase-service';
+import type { Opportunity, Client } from '@/lib/types';
 import Link from 'next/link';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { updateOpportunity } from '@/lib/firebase-service';
@@ -46,7 +46,7 @@ const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunit
                   {opp.clientName}
                 </Link>
               </TableCell>
-              <TableCell>${(opp.valorCerrado || opp.value).toLocaleString()}</TableCell>
+              <TableCell>${(opp.valorCerrado || opp.value).toLocaleString('es-AR')}</TableCell>
               <TableCell>{opp.facturaNo || '-'}</TableCell>
             </TableRow>
           ))
@@ -66,6 +66,7 @@ function BillingPageComponent() {
   const { userInfo, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -77,11 +78,17 @@ function BillingPageComponent() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      const userOpps = (userInfo.role === 'Jefe' || userInfo.role === 'Administracion')
-        ? await getAllOpportunities()
-        : await getOpportunitiesForUser(userInfo.id);
-
+      let userOpps: Opportunity[];
+      if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
+        userOpps = await getAllOpportunities();
+      } else {
+        userOpps = await getOpportunitiesForUser(userInfo.id);
+      }
       setOpportunities(userOpps);
+      
+      const allClients = await getClients();
+      setClients(allClients);
+
     } catch (error) {
       console.error("Error fetching opportunities:", error);
       toast({ title: 'Error al cargar oportunidades', variant: 'destructive' });
@@ -97,9 +104,12 @@ function BillingPageComponent() {
   }, [userInfo]);
 
   const handleUpdateOpportunity = async (updatedData: Partial<Opportunity>) => {
-    if (!selectedOpportunity) return;
+    if (!selectedOpportunity || !userInfo) return;
     try {
-      await updateOpportunity(selectedOpportunity.id, updatedData, userInfo!.id, userInfo!.name);
+      const client = clients.find(c => c.id === selectedOpportunity.clientId);
+      if (!client) throw new Error("Client not found for the opportunity");
+
+      await updateOpportunity(selectedOpportunity.id, updatedData, userInfo.id, userInfo.name, client.ownerName);
       // Refresca la lista después de la actualización
       fetchOpportunities();
       toast({ title: "Oportunidad Actualizada" });

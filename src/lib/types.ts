@@ -1,8 +1,4 @@
 
-
-
-
-
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -20,8 +16,6 @@ export type Opportunity = {
   value: number;
   stage: OpportunityStage;
   closeDate: string;
-  ownerId: string;
-  ownerName: string;
   details?: string;
   observaciones?: string;
   facturaNo?: string;
@@ -73,6 +67,7 @@ export type ActivityLog = {
   id: string;
   userId: string;
   userName: string;
+  ownerName: string;
   type: 'create' | 'update' | 'delete' | 'stage_change';
   entityType: 'client' | 'person' | 'opportunity';
   entityId: string;
@@ -111,5 +106,3 @@ export type User = {
   role: UserRole;
   initials?: string;
 };
-
-    

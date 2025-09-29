@@ -1,5 +1,4 @@
 
-
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User } from './types';
@@ -69,7 +68,7 @@ export const getClient = async (id: string): Promise<Client | null> => {
 };
 
 export const createClient = async (
-    clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>,
+    clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId' | 'ownerName'>,
     userId: string,
     userName: string
 ): Promise<string> => {
@@ -92,6 +91,7 @@ export const createClient = async (
         entityId: docRef.id,
         entityName: clientData.denominacion,
         details: `creó el cliente <a href="/clients/${docRef.id}" class="font-bold text-primary hover:underline">${clientData.denominacion}</a>`,
+        ownerName: userName
     });
 
     return docRef.id;
@@ -104,6 +104,9 @@ export const updateClient = async (
     userName: string
 ): Promise<void> => {
     const docRef = doc(db, 'clients', id);
+    const originalDoc = await getDoc(docRef);
+    const originalData = originalDoc.data() as Client;
+
     const updateData = { ...data };
     if (data.denominacion && !data.avatarFallback) {
         updateData.avatarFallback = data.denominacion.substring(0, 2).toUpperCase();
@@ -120,8 +123,9 @@ export const updateClient = async (
         type: 'update',
         entityType: 'client',
         entityId: id,
-        entityName: data.denominacion || '',
-        details: `actualizó el cliente <a href="/clients/${id}" class="font-bold text-primary hover:underline">${data.denominacion || 'un cliente'}</a>`,
+        entityName: data.denominacion || originalData.denominacion,
+        details: `actualizó el cliente <a href="/clients/${id}" class="font-bold text-primary hover:underline">${data.denominacion || originalData.denominacion}</a>`,
+        ownerName: originalData.ownerName
     });
 };
 
@@ -148,21 +152,26 @@ export const createPerson = async (
     if (personData.clientIds) {
         for (const clientId of personData.clientIds) {
             const clientRef = doc(db, 'clients', clientId);
-            await updateDoc(clientRef, {
-                personIds: arrayUnion(docRef.id)
-            });
+            const clientSnap = await getDoc(clientRef);
+            if (clientSnap.exists()) {
+                const clientData = clientSnap.data() as Client;
+                await updateDoc(clientRef, {
+                    personIds: arrayUnion(docRef.id)
+                });
+
+                 await logActivity({
+                    userId,
+                    userName,
+                    type: 'create',
+                    entityType: 'person',
+                    entityId: docRef.id,
+                    entityName: personData.name,
+                    details: `creó el contacto <strong>${personData.name}</strong> para el cliente <a href="/clients/${clientId}" class="font-bold text-primary hover:underline">${clientData.denominacion}</a>`,
+                    ownerName: clientData.ownerName
+                });
+            }
         }
     }
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'person',
-        entityId: docRef.id,
-        entityName: personData.name,
-        details: `creó el contacto <strong>${personData.name}</strong>`,
-    });
     
     return docRef.id;
 };
@@ -174,20 +183,31 @@ export const updatePerson = async (
     userName: string
 ): Promise<void> => {
     const docRef = doc(db, 'people', id);
+    const originalDoc = await getDoc(docRef);
+    const originalData = originalDoc.data() as Person;
+
     await updateDoc(docRef, {
         ...data,
         updatedAt: serverTimestamp()
     });
 
-     await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'person',
-        entityId: id,
-        entityName: data.name || '',
-        details: `actualizó el contacto <strong>${data.name || 'un contacto'}</strong>`,
-    });
+    if (originalData.clientIds && originalData.clientIds.length > 0) {
+        const clientRef = doc(db, 'clients', originalData.clientIds[0]);
+        const clientSnap = await getDoc(clientRef);
+        if (clientSnap.exists()) {
+            const clientData = clientSnap.data() as Client;
+            await logActivity({
+                userId,
+                userName,
+                type: 'update',
+                entityType: 'person',
+                entityId: id,
+                entityName: data.name || originalData.name,
+                details: `actualizó el contacto <strong>${data.name || originalData.name}</strong>`,
+                ownerName: clientData.ownerName
+            });
+        }
+    }
 };
 
 
@@ -205,19 +225,25 @@ export const getOpportunitiesByClientId = async (clientId: string): Promise<Oppo
 };
 
 export const getOpportunitiesForUser = async (userId: string): Promise<Opportunity[]> => {
-    const q = query(opportunitiesCollection, where("ownerId", "==", userId));
-    const snapshot = await getDocs(q);
+    const clientsSnapshot = await getDocs(query(clientsCollection, where("ownerId", "==", userId)));
+    const clientIds = clientsSnapshot.docs.map(doc => doc.id);
+
+    if (clientIds.length === 0) {
+        return [];
+    }
+
+    const snapshot = await getDocs(query(opportunitiesCollection, where("clientId", "in", clientIds)));
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
 }
 
 export const createOpportunity = async (
     opportunityData: Omit<Opportunity, 'id'>,
     userId: string,
-    userName: string
+    userName: string,
+    ownerName: string
 ): Promise<string> => {
     const docRef = await addDoc(opportunitiesCollection, {
         ...opportunityData,
-        ownerName: userName, // Also store the owner's name
         createdAt: serverTimestamp()
     });
 
@@ -229,6 +255,7 @@ export const createOpportunity = async (
         entityId: docRef.id,
         entityName: opportunityData.title,
         details: `creó la oportunidad <strong>${opportunityData.title}</strong> para el cliente <a href="/clients/${opportunityData.clientId}" class="font-bold text-primary hover:underline">${opportunityData.clientName}</a>`,
+        ownerName: ownerName
     });
 
     return docRef.id;
@@ -238,17 +265,13 @@ export const updateOpportunity = async (
     id: string, 
     data: Partial<Omit<Opportunity, 'id'>>,
     userId: string,
-    userName: string
+    userName: string,
+    ownerName: string
 ): Promise<void> => {
     const docRef = doc(db, 'opportunities', id);
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) throw new Error("Opportunity not found");
     const originalData = docSnap.data() as Opportunity;
-
-    const clientRef = doc(db, 'clients', originalData.clientId);
-    const clientSnap = await getDoc(clientRef);
-    const clientName = clientSnap.exists() ? clientSnap.data().denominacion : 'un cliente';
-
 
     const updateData: {[key: string]: any} = {
         ...data,
@@ -268,22 +291,23 @@ export const updateOpportunity = async (
     const activityDetails = {
         userId,
         userName,
-        entityType: 'opportunity',
+        entityType: 'opportunity' as const,
         entityId: id,
         entityName: originalData.title,
+        ownerName: ownerName
     };
 
     if (data.stage && data.stage !== originalData.stage) {
         await logActivity({
             ...activityDetails,
             type: 'stage_change',
-            details: `cambió la etapa de <strong>${originalData.title}</strong> a <strong>${data.stage}</strong> para el cliente <a href="/clients/${originalData.clientId}" class="font-bold text-primary hover:underline">${clientName}</a>`,
+            details: `cambió la etapa de <strong>${originalData.title}</strong> a <strong>${data.stage}</strong> para el cliente <a href="/clients/${originalData.clientId}" class="font-bold text-primary hover:underline">${originalData.clientName}</a>`,
         });
     } else {
         await logActivity({
             ...activityDetails,
             type: 'update',
-            details: `actualizó la oportunidad <strong>${originalData.title}</strong> para el cliente <a href="/clients/${originalData.clientId}" class="font-bold text-primary hover:underline">${clientName}</a>`,
+            details: `actualizó la oportunidad <strong>${originalData.title}</strong> para el cliente <a href="/clients/${originalData.clientId}" class="font-bold text-primary hover:underline">${originalData.clientName}</a>`,
         });
     }
 };
@@ -306,6 +330,12 @@ export const getActivities = async (activityLimit: number = 20): Promise<Activit
 
 
 export const getActivitiesForEntity = async (entityId: string): Promise<ActivityLog[]> => {
+    const clientRef = doc(db, 'clients', entityId);
+    const clientSnap = await getDoc(clientRef);
+    if (!clientSnap.exists()) return [];
+    
+    const clientOwnerId = clientSnap.data().ownerId;
+
     // Query for activities directly related to the client (entityId)
     const directClientActivitiesQuery = query(
         activitiesCollection, 
@@ -334,6 +364,21 @@ export const getActivitiesForEntity = async (entityId: string): Promise<Activity
         );
         const oppActivitiesSnap = await getDocs(oppActivitiesQuery);
         oppActivitiesSnap.forEach(doc => {
+            activities.push(convertActivityLogDoc(doc));
+        });
+    }
+    
+    // Add person creation/update activities for this client
+    const peopleSnap = await getDocs(query(peopleCollection, where('clientIds', 'array-contains', entityId)));
+    const personIds = peopleSnap.docs.map(p => p.id);
+    if (personIds.length > 0) {
+        const personActivitiesQuery = query(
+            activitiesCollection, 
+            where('entityType', '==', 'person'), 
+            where('entityId', 'in', personIds)
+        );
+         const personActivitiesSnap = await getDocs(personActivitiesQuery);
+         personActivitiesSnap.forEach(doc => {
             activities.push(convertActivityLogDoc(doc));
         });
     }
@@ -426,5 +471,3 @@ export const updateClientActivity = async (
 
     await updateDoc(docRef, updateData);
 };
-
-    

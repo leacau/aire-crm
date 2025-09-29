@@ -12,15 +12,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { opportunities } from '@/lib/data';
 import { FileDown, MoreHorizontal, PlusCircle, Search } from 'lucide-react';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
-import type { Client } from '@/lib/types';
-import { createClient, getClients } from '@/lib/firebase-service';
+import type { Client, Opportunity } from '@/lib/types';
+import { createClient, getClients, getAllOpportunities } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 
@@ -28,32 +27,37 @@ export default function ClientsPage() {
   const { userInfo, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [clientsLoading, setClientsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const fetchClients = useCallback(async () => {
-    setClientsLoading(true);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
-      const fetchedClients = await getClients();
+      const [fetchedClients, fetchedOpps] = await Promise.all([
+          getClients(),
+          getAllOpportunities()
+      ]);
       setClients(fetchedClients);
+      setOpportunities(fetchedOpps);
     } catch (error) {
-      console.error("Error fetching clients:", error);
+      console.error("Error fetching data:", error);
       toast({
-        title: "Error al cargar clientes",
-        description: "No se pudieron cargar los datos de los clientes.",
+        title: "Error al cargar datos",
+        description: "No se pudieron cargar los datos de clientes y oportunidades.",
         variant: "destructive",
       });
     } finally {
-      setClientsLoading(false);
+      setLoading(false);
     }
   }, [toast]);
 
   useEffect(() => {
     if (!authLoading) {
-      fetchClients();
+      fetchData();
     }
-  }, [authLoading, fetchClients]);
+  }, [authLoading, fetchData]);
 
   const filteredClients = useMemo(() => {
     if (searchTerm.length < 3) {
@@ -67,7 +71,7 @@ export default function ClientsPage() {
   }, [clients, searchTerm]);
 
 
-  const handleSaveClient = async (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>) => {
+  const handleSaveClient = async (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId' | 'ownerName'>) => {
     if (!userInfo) {
         toast({
             title: "Error",
@@ -83,7 +87,7 @@ export default function ClientsPage() {
         title: "Cliente Creado",
         description: `${clientData.denominacion} ha sido añadido a la lista.`,
       });
-      fetchClients(); // Refresh the list
+      fetchData(); // Refresh the list
     } catch (error) {
         console.error("Error creating client:", error);
         toast({
@@ -94,7 +98,7 @@ export default function ClientsPage() {
     }
   };
 
-  if (authLoading || clientsLoading) {
+  if (authLoading || loading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
@@ -182,7 +186,7 @@ export default function ClientsPage() {
                       </div>
                     </TableCell>
                     <TableCell>{canViewDetails ? clientOpps.length : '-'}</TableCell>
-                    <TableCell>{canViewDetails ? `$${totalValue.toLocaleString()}` : '-'}</TableCell>
+                    <TableCell>{canViewDetails ? `$${totalValue.toLocaleString('es-AR')}` : '-'}</TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon">
                         <MoreHorizontal className="h-4 w-4" />

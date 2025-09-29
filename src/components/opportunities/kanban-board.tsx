@@ -4,7 +4,7 @@
 import {
   opportunityStages,
 } from '@/lib/data';
-import type { Opportunity, OpportunityStage } from '@/lib/types';
+import type { Opportunity, OpportunityStage, Client } from '@/lib/types';
 import { MoreHorizontal } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -19,7 +19,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getOpportunitiesForUser, updateOpportunity, getUserProfile } from '@/lib/firebase-service';
+import { getAllOpportunities, getOpportunitiesForUser, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 
 const stageColors: Record<OpportunityStage, string> = {
@@ -67,7 +67,7 @@ const KanbanColumn = ({
           <Badge variant="secondary">{opportunities.length}</Badge>
         </div>
         <span className="text-sm font-medium text-muted-foreground">
-          ${columnTotal.toLocaleString()}
+          ${columnTotal.toLocaleString('es-AR')}
         </span>
       </div>
       <div
@@ -94,24 +94,25 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
 
   useEffect(() => {
     const fetchOwner = async () => {
-        if(opportunity.ownerId) {
-            const ownerProfile = await getUserProfile(opportunity.ownerId);
+      const client = (await getClients()).find(c => c.id === opportunity.clientId);
+        if(client?.ownerId) {
+            const ownerProfile = await getUserProfile(client.ownerId);
             if(ownerProfile) {
                 setOwner({
                     name: ownerProfile.name,
-                    avatarUrl: `https://picsum.photos/seed/${opportunity.ownerId}/40/40`,
+                    avatarUrl: `https://picsum.photos/seed/${client.ownerId}/40/40`,
                     initials: ownerProfile.name.substring(0, 2).toUpperCase()
                 });
             }
         }
     }
     fetchOwner();
-  }, [opportunity.ownerId]);
+  }, [opportunity.clientId]);
 
   const handleUpdate = async (updatedOpp: Partial<Opportunity>) => {
-     if (!userInfo) return;
+     if (!userInfo || !owner) return;
      try {
-       await updateOpportunity(opportunity.id, updatedOpp, userInfo.id, userInfo.name);
+       await updateOpportunity(opportunity.id, updatedOpp, userInfo.id, userInfo.name, owner.name);
        window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: {id: opportunity.id, ...updatedOpp} }));
        setIsDetailsOpen(false);
        toast({ title: "Oportunidad Actualizada" });
@@ -147,7 +148,7 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
         <CardContent className="p-4 pt-0">
           <div className="flex justify-between items-center">
             <span className="text-lg font-bold text-primary">
-                ${displayValue.toLocaleString()}
+                ${displayValue.toLocaleString('es-AR')}
             </span>
             {owner && (
               <TooltipProvider>
@@ -187,6 +188,7 @@ export function KanbanBoard() {
   const { userInfo, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchOpportunities = useCallback(async () => {
@@ -200,6 +202,9 @@ export function KanbanBoard() {
         userOpps = await getOpportunitiesForUser(userInfo.id);
       }
       setOpportunities(userOpps);
+      const allClients = await getClients();
+      setClients(allClients);
+
     } catch (error) {
       console.error("Error fetching opportunities:", error);
       toast({ title: 'Error al cargar oportunidades', variant: 'destructive' });
@@ -245,7 +250,10 @@ export function KanbanBoard() {
 
       try {
         if (!userInfo) throw new Error("User not authenticated");
-        await updateOpportunity(opportunityId, { stage: newStage }, userInfo.id, userInfo.name);
+        const client = clients.find(c => c.id === oppToMove.clientId);
+        if (!client) throw new Error("Client not found for opportunity");
+
+        await updateOpportunity(opportunityId, { stage: newStage }, userInfo.id, userInfo.name, client.ownerName);
         toast({ title: "Etapa actualizada", description: `"${oppToMove.title}" se movió a ${newStage}.` });
       } catch (error) {
         console.error("Error updating opportunity stage:", error);
@@ -279,5 +287,3 @@ export function KanbanBoard() {
     </div>
   );
 }
-
-    

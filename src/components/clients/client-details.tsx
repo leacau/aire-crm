@@ -1,5 +1,4 @@
 
-
 'use client'
 import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog } from '@/lib/types';
 import React, { useEffect, useState } from 'react';
@@ -79,8 +78,6 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Spinner } from '../ui/spinner';
-import { users } from '@/lib/data';
-
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'bg-blue-500',
@@ -176,14 +173,14 @@ export function ClientDetails({
 
   const canEditClient = userInfo?.role === 'Jefe' || (userInfo?.id === client.ownerId);
   const canEditContact = userInfo?.role === 'Jefe' || (userInfo?.id === client.ownerId);
-  const canEditOpportunity = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor';
+  const canEditOpportunity = userInfo?.role === 'Jefe' || (userInfo?.id === client.ownerId);
   const canDelete = userInfo?.role === 'Jefe';
   const canReassign = userInfo?.role === 'Jefe' || userInfo?.role === 'Administracion';
 
   const handleOpportunityUpdate = async (updatedOpp: Partial<Opportunity>) => {
     if(!selectedOpportunity || !userInfo) return;
     try {
-        await updateOpportunity(selectedOpportunity.id, updatedOpp, userInfo.id, userInfo.name);
+        await updateOpportunity(selectedOpportunity.id, updatedOpp, userInfo.id, userInfo.name, client.ownerName);
         fetchClientData();
         toast({ title: 'Oportunidad Actualizada' });
     } catch (error) {
@@ -199,9 +196,8 @@ export function ClientDetails({
             ...newOppData,
             clientId: client.id,
             clientName: client.denominacion,
-            ownerId: userInfo.id,
         }
-        await createOpportunity(fullNewOpp, userInfo.id, userInfo.name);
+        await createOpportunity(fullNewOpp, userInfo.id, userInfo.name, client.ownerName);
         fetchClientData();
         toast({ title: 'Oportunidad Creada' });
     } catch (error) {
@@ -217,7 +213,7 @@ export function ClientDetails({
     const updatedOpportunities = opportunities.map(opp => opp.id === opportunityId ? { ...opp, stage: newStage } : opp);
     setOpportunities(updatedOpportunities);
     try {
-        await updateOpportunity(opportunityId, { stage: newStage }, userInfo.id, userInfo.name);
+        await updateOpportunity(opportunityId, { stage: newStage }, userInfo.id, userInfo.name, client.ownerName);
         fetchClientData(); // Refetch to get new system log
     } catch (error) {
         console.error('Error updating stage', error);
@@ -338,7 +334,7 @@ export function ClientDetails({
   };
 
 
-  const handleSaveClient = (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>) => {
+  const handleSaveClient = (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId' | 'ownerName'>) => {
     onUpdate(clientData);
   };
 
@@ -475,7 +471,7 @@ export function ClientDetails({
                       >
                         {opp.title}
                       </TableCell>
-                      <TableCell>${opp.value.toLocaleString()}</TableCell>
+                      <TableCell>${opp.value.toLocaleString('es-AR')}</TableCell>
                       <TableCell>
                          <Select
                             value={opp.stage}

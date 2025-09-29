@@ -19,6 +19,7 @@ import { Badge } from '../ui/badge';
 interface ApprovalsTableProps {
   opportunities: Opportunity[];
   onRowClick: (opp: Opportunity) => void;
+  ownerNames: Record<string, string>;
 }
 
 const getBonusStatusPill = (status?: string) => {
@@ -32,7 +33,7 @@ const getBonusStatusPill = (status?: string) => {
   return <Badge variant="outline" className={cn(baseClasses, statusMap[status])}>{status}</Badge>;
 };
 
-export const ApprovalsTable = ({ opportunities, onRowClick }: ApprovalsTableProps) => (
+export const ApprovalsTable = ({ opportunities, onRowClick, ownerNames }: ApprovalsTableProps) => (
   <div className="border rounded-lg">
     <Table>
       <TableHeader>
@@ -56,8 +57,8 @@ export const ApprovalsTable = ({ opportunities, onRowClick }: ApprovalsTableProp
                   {opp.clientName}
                 </Link>
               </TableCell>
-              <TableCell>{opp.ownerName}</TableCell>
-              <TableCell className="text-right">${(opp.valorCerrado || opp.value).toLocaleString()}</TableCell>
+              <TableCell>{ownerNames[opp.clientId] || '-'}</TableCell>
+              <TableCell className="text-right">${(opp.valorCerrado || opp.value).toLocaleString('es-AR')}</TableCell>
               <TableCell className="text-center font-bold">{opp.bonificacionPorcentaje}%</TableCell>
               <TableCell>
                   {getBonusStatusPill(opp.bonificacionEstado)}

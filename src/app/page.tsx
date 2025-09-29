@@ -124,48 +124,47 @@ export default function DashboardPage() {
     setLoadingData(true);
     try {
       let userOpps: Opportunity[];
-      let allClients: Client[];
+      let userClients: Client[];
       let allActivities: ActivityLog[];
       let allTasks: ClientActivity[];
+      
+      const allClients = await getClients();
 
       // Admins and Chiefs see everything
       if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
-        [userOpps, allClients, allActivities, allTasks] = await Promise.all([
+        [userOpps, allActivities, allTasks] = await Promise.all([
           getAllOpportunities(),
-          getClients(),
           getActivities(100),
           getAllClientActivities(),
         ]);
-        setOpportunities(userOpps);
-        setClients(allClients);
-        setActivities(allActivities);
+        userClients = allClients;
         setTasks(allTasks.filter(t => t.isTask)); // Show all tasks
       } else { 
         // Asesores only see their own data
-        [userOpps, allClients, allActivities, allTasks] = await Promise.all([
+        userClients = allClients.filter(client => client.ownerId === userInfo.id);
+        const userClientIds = userClients.map(c => c.id);
+
+        const [opps, activities, tasks] = await Promise.all([
           getOpportunitiesForUser(userInfo.id),
-          getClients(),
           getActivities(100),
           getAllClientActivities(),
         ]);
-
-        const userClientIds = new Set(userOpps.map(opp => opp.clientId));
-        const userClients = allClients.filter(client => client.ownerId === userInfo.id);
-        userClients.forEach(c => userClientIds.add(c.id));
         
-        const filteredClients = allClients.filter(c => userClientIds.has(c.id));
+        userOpps = opps;
         
-        const filteredActivities = allActivities.filter(activity => {
-          return activity.userId === userInfo.id || (activity.entityId && userClientIds.has(activity.entityId));
+        const filteredActivities = activities.filter(activity => {
+            const isOwner = clients.find(c => c.id === activity.entityId)?.ownerId === userInfo.id;
+            return isOwner;
         });
 
-        const filteredTasks = allTasks.filter(t => t.isTask && t.userId === userInfo.id);
-
-        setOpportunities(userOpps);
-        setClients(filteredClients);
+        const filteredTasks = tasks.filter(t => t.isTask && userClientIds.includes(t.clientId));
+        
         setActivities(filteredActivities);
         setTasks(filteredTasks);
       }
+
+      setOpportunities(userOpps);
+      setClients(userClients);
 
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -291,7 +290,6 @@ export default function DashboardPage() {
     (o) => o.stage !== 'Cerrado - Ganado' && o.stage !== 'Cerrado - Perdido'
   ).length;
   
-  // Client filtering by date is complex, so we'll show all clients for now.
   const totalClients = clients.length;
 
   return (
@@ -301,7 +299,7 @@ export default function DashboardPage() {
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Link href="/billing?tab=to-invoice">
+          <Link href="/billing?tab=paid">
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
@@ -311,7 +309,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${totalRevenue.toLocaleString()}
+                  ${totalRevenue.toLocaleString('es-AR')}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Total de negocios ganados en el período.
@@ -354,7 +352,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${forecastedRevenue.toLocaleString()}
+                ${forecastedRevenue.toLocaleString('es-AR')}
               </div>
               <p className="text-xs text-muted-foreground">
                 Basado en el pipeline del período.
@@ -428,7 +426,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
-
-    

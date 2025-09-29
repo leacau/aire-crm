@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/lib/data';
 import type { Client, TipoEntidad, CondicionIVA } from '@/lib/types';
 
-type ClientFormData = Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>;
+type ClientFormData = Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId' | 'ownerName'>;
 
 interface ClientFormDialogProps {
   isOpen: boolean;

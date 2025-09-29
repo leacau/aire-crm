@@ -4,8 +4,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getAllUsers } from '@/lib/firebase-service';
-import type { Opportunity, User } from '@/lib/types';
+import { getAllOpportunities, getAllUsers, getClients } from '@/lib/firebase-service';
+import type { Opportunity, User, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval } from 'date-fns';
@@ -18,18 +18,21 @@ export function SalesByAdvisorChart({ dateRange }: SalesByAdvisorChartProps) {
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [allOpps, allAdvisors] = await Promise.all([
+        const [allOpps, allAdvisors, allClients] = await Promise.all([
             getAllOpportunities(),
-            getAllUsers('Asesor')
+            getAllUsers('Asesor'),
+            getClients(),
         ]);
         setOpportunities(allOpps);
         setAdvisors(allAdvisors);
+        setClients(allClients);
       } catch (error) {
         console.error("Error fetching report data:", error);
         toast({ title: 'Error al cargar los datos del reporte', variant: 'destructive' });
@@ -51,10 +54,13 @@ export function SalesByAdvisorChart({ dateRange }: SalesByAdvisorChartProps) {
     const salesByAdvisor: { [key: string]: number } = {};
 
     for(const opp of filteredOpps) {
-        if(!salesByAdvisor[opp.ownerId]) {
-            salesByAdvisor[opp.ownerId] = 0;
+        const client = clients.find(c => c.id === opp.clientId);
+        if (client && client.ownerId) {
+            if(!salesByAdvisor[client.ownerId]) {
+                salesByAdvisor[client.ownerId] = 0;
+            }
+            salesByAdvisor[client.ownerId] += (opp.valorCerrado || opp.value);
         }
-        salesByAdvisor[opp.ownerId] += (opp.valorCerrado || opp.value);
     }
     
     return advisors.map(advisor => ({
@@ -62,7 +68,7 @@ export function SalesByAdvisorChart({ dateRange }: SalesByAdvisorChartProps) {
       total: salesByAdvisor[advisor.id] || 0,
     })).sort((a,b) => b.total - a.total);
 
-  }, [opportunities, advisors, dateRange]);
+  }, [opportunities, advisors, clients, dateRange]);
 
   if (loading) {
     return (
@@ -88,7 +94,7 @@ export function SalesByAdvisorChart({ dateRange }: SalesByAdvisorChartProps) {
              fontSize={12}
              tickLine={false}
              axisLine={false}
-             tickFormatter={(value) => `$${(value as number).toLocaleString()}`}
+             tickFormatter={(value) => `$${(value as number).toLocaleString('es-AR')}`}
         />
         <Tooltip
           cursor={{ fill: 'hsl(var(--muted))' }}
@@ -110,7 +116,7 @@ export function SalesByAdvisorChart({ dateRange }: SalesByAdvisorChartProps) {
                         Ventas
                       </span>
                       <span className="font-bold">
-                        ${(payload[0].value as number).toLocaleString()}
+                        ${(payload[0].value as number).toLocaleString('es-AR')}
                       </span>
                     </div>
                   </div>

@@ -7,8 +7,8 @@ import { Header } from '@/components/layout/header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities } from '@/lib/firebase-service';
-import type { Opportunity } from '@/lib/types';
+import { getAllOpportunities, getClients } from '@/lib/firebase-service';
+import type { Opportunity, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { ApprovalsTable } from '@/components/approvals/approvals-table';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
@@ -21,6 +21,7 @@ function ApprovalsPageComponent() {
   const router = useRouter();
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -33,14 +34,18 @@ function ApprovalsPageComponent() {
     }
   }, [userInfo, authLoading, router]);
 
-  const fetchOpportunities = async () => {
+  const fetchData = async () => {
     if (!userInfo) return;
     setLoading(true);
     try {
-      const allOpps = await getAllOpportunities();
+      const [allOpps, allClients] = await Promise.all([
+        getAllOpportunities(),
+        getClients()
+      ]);
       setOpportunities(allOpps.filter(opp => opp.bonificacionEstado));
+      setClients(allClients);
     } catch (error) {
-      console.error("Error fetching opportunities:", error);
+      console.error("Error fetching data:", error);
       toast({ title: 'Error al cargar las solicitudes', variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -49,15 +54,18 @@ function ApprovalsPageComponent() {
 
   useEffect(() => {
     if (userInfo?.role === 'Jefe') {
-      fetchOpportunities();
+      fetchData();
     }
   }, [userInfo]);
 
   const handleUpdateOpportunity = async (updatedData: Partial<Opportunity>) => {
     if (!selectedOpportunity || !userInfo) return;
     try {
-      await updateOpportunity(selectedOpportunity.id, updatedData, userInfo.id, userInfo.name);
-      fetchOpportunities(); // Refresca la lista después de la actualización
+      const client = clients.find(c => c.id === selectedOpportunity.clientId);
+      if (!client) throw new Error("Client not found for opportunity");
+
+      await updateOpportunity(selectedOpportunity.id, updatedData, userInfo.id, userInfo.name, client.ownerName);
+      fetchData(); // Refresca la lista después de la actualización
       toast({ title: "Oportunidad Actualizada" });
     } catch (error) {
       console.error("Error updating opportunity:", error);
@@ -82,6 +90,11 @@ function ApprovalsPageComponent() {
   const approvedOpps = opportunities.filter((opp) => opp.bonificacionEstado === 'Autorizado');
   const rejectedOpps = opportunities.filter((opp) => opp.bonificacionEstado === 'Rechazado');
 
+  const clientOwnerNames = clients.reduce((acc, client) => {
+    acc[client.id] = client.ownerName;
+    return acc;
+  }, {} as Record<string, string>);
+
   return (
     <div className="flex flex-col h-full">
       <Header title="Aprobaciones de Bonificación" />
@@ -93,13 +106,13 @@ function ApprovalsPageComponent() {
             <TabsTrigger value="rejected">Rechazadas</TabsTrigger>
           </TabsList>
           <TabsContent value="pending">
-            <ApprovalsTable opportunities={pendingOpps} onRowClick={handleRowClick} />
+            <ApprovalsTable opportunities={pendingOpps} onRowClick={handleRowClick} ownerNames={clientOwnerNames} />
           </TabsContent>
           <TabsContent value="approved">
-            <ApprovalsTable opportunities={approvedOpps} onRowClick={handleRowClick} />
+            <ApprovalsTable opportunities={approvedOpps} onRowClick={handleRowClick} ownerNames={clientOwnerNames} />
           </TabsContent>
            <TabsContent value="rejected">
-            <ApprovalsTable opportunities={rejectedOpps} onRowClick={handleRowClick} />
+            <ApprovalsTable opportunities={rejectedOpps} onRowClick={handleRowClick} ownerNames={clientOwnerNames} />
           </TabsContent>
         </Tabs>
       </main>
