@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { ClientDetails } from '@/components/clients/client-details';
 import { Spinner } from '@/components/ui/spinner';
@@ -14,12 +14,13 @@ import type { Client } from '@/lib/types';
 import { getClient, updateClient } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 
-export default function ClientPage({ params }: { params: { id: string } }) {
+export default function ClientPage() {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const params = useParams();
   
-  const id = params.id;
+  const id = params.id as string;
   
   const [client, setClient] = useState<Client | null>(null);
   const [loadingClient, setLoadingClient] = useState(true);
