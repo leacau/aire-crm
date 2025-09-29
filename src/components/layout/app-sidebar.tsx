@@ -11,7 +11,7 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, Kanban, Users, Settings, Receipt, BarChart, Users2, LayoutList } from 'lucide-react';
+import { Home, Kanban, Users, Settings, Receipt, BarChart, Users2, LayoutList, CheckSquare } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
@@ -21,6 +21,7 @@ const menuItems = [
   { href: '/opportunities', label: 'Oportunidades', icon: Kanban, roles: ['Jefe', 'Asesor', 'Administracion'] },
   { href: '/clients', label: 'Clientes', icon: Users, roles: ['Jefe', 'Asesor', 'Administracion'] },
   { href: '/billing', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Asesor', 'Administracion'] },
+  { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, roles: ['Jefe'] },
   { href: '/activity', label: 'Actividad', icon: LayoutList, roles: ['Jefe'] },
   { href: '/team', label: 'Equipo', icon: Users2, roles: ['Jefe'] },
   { href: '/reports', label: 'Reportes', icon: BarChart, roles: ['Jefe'] },
