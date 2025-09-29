@@ -73,6 +73,7 @@ import { Calendar } from '../ui/calendar';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 
 const stageColors: Record<OpportunityStage, string> = {
@@ -340,235 +341,250 @@ export function ClientDetails({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Contactos</CardTitle>
-          {canEditContact && (
-            <Button variant="outline" size="icon" onClick={() => handleOpenPersonForm()}>
-              <PlusCircle className="h-4 w-4" />
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {people.map(person => (
-            <div key={person.id} className="flex items-start justify-between">
-              <div>
-                <p className="font-medium">{person.name}</p>
-                 {person.cargo && <p className="text-sm text-muted-foreground">{person.cargo}</p>}
-                <p className="text-sm text-muted-foreground">{person.email}</p>
-                 <p className="text-sm text-muted-foreground">{person.phone}</p>
-              </div>
-              <div className="flex items-center gap-1">
-                {person.phone && (
-                  <>
-                   <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-                      <a href={`tel:${person.phone}`}>
-                        <PhoneCall className="h-4 w-4" />
-                      </a>
-                    </Button>
-                    <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-                      <a href={`https://wa.me/${person.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
-                        <WhatsappIcon />
-                      </a>
-                    </Button>
-                  </>
-                )}
-                {canEditContact && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenPersonForm(person)}><Edit className="h-4 w-4" /></Button>}
-                {canDelete && <Button variant="ghost" size="icon" className="h-8 w-8"><Trash2 className="h-4 w-4 text-destructive" /></Button>}
-              </div>
-            </div>
-          ))}
-           {people.length === 0 && <p className="text-sm text-muted-foreground">No hay contactos para este cliente.</p>}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Oportunidades</CardTitle>
-          {canEditOpportunity && (
-             <Button variant="outline" size="icon" onClick={() => handleOpenOpportunityForm()}>
-              <PlusCircle className="h-4 w-4" />
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Título</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead className="w-[150px]">Etapa</TableHead>
-                 { (canReassign || canDelete) && <TableHead className="w-[50px]"></TableHead> }
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {opportunities.map((opp) => (
-                <TableRow key={opp.id}>
-                  <TableCell 
-                    className='font-medium cursor-pointer hover:underline'
-                    onClick={() => handleOpenOpportunityForm(opp)}
-                  >
-                    {opp.title}
-                  </TableCell>
-                  <TableCell>${opp.value.toLocaleString()}</TableCell>
-                  <TableCell>
-                     <Select
-                        value={opp.stage}
-                        onValueChange={(newStage: OpportunityStage) => handleStageChange(opp.id, newStage)}
-                        disabled={!canEditOpportunity}
-                      >
-                        <SelectTrigger className="w-full h-8 text-xs">
-                           <SelectValue>
-                            <div className="flex items-center gap-2">
-                              <span className={`h-2 w-2 rounded-full ${stageColors[opp.stage]}`} />
-                              {opp.stage}
-                            </div>
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {opportunityStages.map(stage => (
-                            <SelectItem key={stage} value={stage} className="text-xs">
-                              <div className="flex items-center gap-2">
-                                 <span className={`h-2 w-2 rounded-full ${stageColors[stage]}`} />
-                                {stage}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                  </TableCell>
-                   {(canReassign || canDelete) && (
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          {canReassign && <DropdownMenuItem>Reasignar</DropdownMenuItem>}
-                          {canDelete && <DropdownMenuItem className="text-destructive">Eliminar</DropdownMenuItem>}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-               {opportunities.length === 0 && (
+      <Tabs defaultValue="opportunities" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="opportunities">Oportunidades</TabsTrigger>
+          <TabsTrigger value="contacts">Contactos</TabsTrigger>
+          <TabsTrigger value="activity">Actividad</TabsTrigger>
+          <TabsTrigger value="history">Historial</TabsTrigger>
+        </TabsList>
+        <TabsContent value="opportunities">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Oportunidades</CardTitle>
+              {canEditOpportunity && (
+                 <Button variant="outline" size="sm" onClick={() => handleOpenOpportunityForm()}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Nueva Oportunidad
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={canReassign || canDelete ? 4 : 3} className="h-24 text-center">
-                      No hay oportunidades para este cliente.
-                    </TableCell>
+                    <TableHead>Título</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead className="w-[150px]">Etapa</TableHead>
+                     { (canReassign || canDelete) && <TableHead className="w-[50px]"></TableHead> }
                   </TableRow>
-                )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Registro de Actividad</CardTitle>
-          <CardDescription>Añade y visualiza interacciones y tareas con el cliente.</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <div className="space-y-4 p-4 border rounded-md">
-                <h4 className="font-medium">Nueva Actividad</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <Select value={newActivityType} onValueChange={(value) => setNewActivityType(value as ClientActivityType)}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Tipo de actividad" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {clientActivityTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                     <Textarea 
-                        placeholder="Escribe una observación..." 
-                        value={newActivityObservation}
-                        onChange={(e) => setNewActivityObservation(e.target.value)}
-                        className="sm:col-span-2"
-                    />
-                </div>
-                 <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                        <Checkbox id="is-task" checked={isTask} onCheckedChange={(checked) => setIsTask(!!checked)} />
-                        <Label htmlFor="is-task" className='font-normal'>Crear como Tarea</Label>
-                    </div>
-                    {isTask && (
-                         <Popover>
-                            <PopoverTrigger asChild>
-                            <Button
-                                variant={"outline"}
-                                className={cn(
-                                "w-[240px] justify-start text-left font-normal",
-                                !dueDate && "text-muted-foreground"
-                                )}
-                            >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {dueDate ? format(dueDate, "PPP", { locale: es }) : <span>Fecha de vencimiento</span>}
-                            </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                                <Calendar
-                                    mode="single"
-                                    selected={dueDate}
-                                    onSelect={setDueDate}
-                                    initialFocus
-                                    locale={es}
-                                />
-                            </PopoverContent>
-                        </Popover>
+                </TableHeader>
+                <TableBody>
+                  {opportunities.map((opp) => (
+                    <TableRow key={opp.id}>
+                      <TableCell 
+                        className='font-medium cursor-pointer hover:underline'
+                        onClick={() => handleOpenOpportunityForm(opp)}
+                      >
+                        {opp.title}
+                      </TableCell>
+                      <TableCell>${opp.value.toLocaleString()}</TableCell>
+                      <TableCell>
+                         <Select
+                            value={opp.stage}
+                            onValueChange={(newStage: OpportunityStage) => handleStageChange(opp.id, newStage)}
+                            disabled={!canEditOpportunity}
+                          >
+                            <SelectTrigger className="w-full h-8 text-xs">
+                               <SelectValue>
+                                <div className="flex items-center gap-2">
+                                  <span className={`h-2 w-2 rounded-full ${stageColors[opp.stage]}`} />
+                                  {opp.stage}
+                                </div>
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {opportunityStages.map(stage => (
+                                <SelectItem key={stage} value={stage} className="text-xs">
+                                  <div className="flex items-center gap-2">
+                                     <span className={`h-2 w-2 rounded-full ${stageColors[stage]}`} />
+                                    {stage}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                      </TableCell>
+                       {(canReassign || canDelete) && (
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                              {canReassign && <DropdownMenuItem>Reasignar</DropdownMenuItem>}
+                              {canDelete && <DropdownMenuItem className="text-destructive">Eliminar</DropdownMenuItem>}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                   {opportunities.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={canReassign || canDelete ? 4 : 3} className="h-24 text-center">
+                          No hay oportunidades para este cliente.
+                        </TableCell>
+                      </TableRow>
                     )}
-                 </div>
-                 <Button onClick={handleSaveClientActivity}>Guardar Actividad</Button>
-            </div>
-
-             <div className="mt-6 space-y-4">
-                 {clientActivities.map(activity => (
-                    <div key={activity.id} className="flex items-start gap-3">
-                        {activity.isTask && (
-                            <Checkbox 
-                                id={`task-${activity.id}`}
-                                checked={activity.completed}
-                                onCheckedChange={() => handleTaskCompleteToggle(activity.id, !!activity.completed)}
-                                className="mt-1"
-                            />
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="contacts">
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Contactos</CardTitle>
+                {canEditContact && (
+                    <Button variant="outline" size="sm" onClick={() => handleOpenPersonForm()}>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Nuevo Contacto
+                    </Button>
+                )}
+                </CardHeader>
+                <CardContent className="space-y-4">
+                {people.map(person => (
+                    <div key={person.id} className="flex items-start justify-between">
+                    <div>
+                        <p className="font-medium">{person.name}</p>
+                        {person.cargo && <p className="text-sm text-muted-foreground">{person.cargo}</p>}
+                        <p className="text-sm text-muted-foreground">{person.email}</p>
+                        <p className="text-sm text-muted-foreground">{person.phone}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        {person.phone && (
+                        <>
+                        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
+                            <a href={`tel:${person.phone}`}>
+                                <PhoneCall className="h-4 w-4" />
+                            </a>
+                            </Button>
+                            <Button asChild variant="ghost" size="icon" className="h-8 w-8">
+                            <a href={`https://wa.me/${person.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
+                                <WhatsappIcon />
+                            </a>
+                            </Button>
+                        </>
                         )}
-                        <div className={cn("p-2 bg-muted rounded-full", !activity.isTask && "mt-1")}>
-                            {activityIcons[activity.type]}
-                        </div>
-                        <div className={cn('flex-1', activity.completed && 'line-through text-muted-foreground')}>
-                            <div className="flex items-center justify-between">
-                                <span className="font-semibold text-sm">{activity.type}</span>
-                                 <span className="text-xs">
-                                    {new Date(activity.timestamp).toLocaleDateString()}
-                                </span>
-                            </div>
-                            <p className="text-sm">{activity.observation}</p>
-                            {activity.isTask && activity.dueDate && (
-                                <p className="text-xs mt-1 font-medium flex items-center">
-                                    <CalendarIcon className="h-3 w-3 mr-1" />
-                                    Vence: {format(new Date(activity.dueDate), "PPP", { locale: es })}
-                                </p>
-                            )}
-                            <p className="text-xs mt-1">Registrado por: {activity.userName}</p>
-                        </div>
+                        {canEditContact && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenPersonForm(person)}><Edit className="h-4 w-4" /></Button>}
+                        {canDelete && <Button variant="ghost" size="icon" className="h-8 w-8"><Trash2 className="h-4 w-4 text-destructive" /></Button>}
+                    </div>
                     </div>
                 ))}
-                {clientActivities.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No hay actividades registradas.</p>}
-            </div>
-        </CardContent>
-      </Card>
+                {people.length === 0 && <p className="text-sm text-muted-foreground text-center">No hay contactos para este cliente.</p>}
+                </CardContent>
+            </Card>
+        </TabsContent>
+        <TabsContent value="activity">
+            <Card>
+                <CardHeader>
+                <CardTitle>Registro de Actividad</CardTitle>
+                <CardDescription>Añade y visualiza interacciones y tareas con el cliente.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-4 p-4 border rounded-md">
+                        <h4 className="font-medium">Nueva Actividad</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <Select value={newActivityType} onValueChange={(value) => setNewActivityType(value as ClientActivityType)}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Tipo de actividad" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {clientActivityTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                            <Textarea 
+                                placeholder="Escribe una observación..." 
+                                value={newActivityObservation}
+                                onChange={(e) => setNewActivityObservation(e.target.value)}
+                                className="sm:col-span-2"
+                            />
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                                <Checkbox id="is-task" checked={isTask} onCheckedChange={(checked) => setIsTask(!!checked)} />
+                                <Label htmlFor="is-task" className='font-normal'>Crear como Tarea</Label>
+                            </div>
+                            {isTask && (
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                    <Button
+                                        variant={"outline"}
+                                        className={cn(
+                                        "w-[240px] justify-start text-left font-normal",
+                                        !dueDate && "text-muted-foreground"
+                                        )}
+                                    >
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {dueDate ? format(dueDate, "PPP", { locale: es }) : <span>Fecha de vencimiento</span>}
+                                    </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0">
+                                        <Calendar
+                                            mode="single"
+                                            selected={dueDate}
+                                            onSelect={setDueDate}
+                                            initialFocus
+                                            locale={es}
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+                            )}
+                        </div>
+                        <Button onClick={handleSaveClientActivity}>Guardar Actividad</Button>
+                    </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Historial de Cambios</CardTitle>
-        </CardHeader>
-        <CardContent>
-            <p className="text-muted-foreground">El historial de cambios del sistema se ha movido al Panel principal.</p>
-        </CardContent>
-      </Card>
+                    <div className="mt-6 space-y-4">
+                        {clientActivities.map(activity => (
+                            <div key={activity.id} className="flex items-start gap-3">
+                                {activity.isTask && (
+                                    <Checkbox 
+                                        id={`task-${activity.id}`}
+                                        checked={activity.completed}
+                                        onCheckedChange={() => handleTaskCompleteToggle(activity.id, !!activity.completed)}
+                                        className="mt-1"
+                                    />
+                                )}
+                                <div className={cn("p-2 bg-muted rounded-full", !activity.isTask && "mt-1")}>
+                                    {activityIcons[activity.type]}
+                                </div>
+                                <div className={cn('flex-1', activity.completed && 'line-through text-muted-foreground')}>
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-semibold text-sm">{activity.type}</span>
+                                        <span className="text-xs">
+                                            {new Date(activity.timestamp).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm">{activity.observation}</p>
+                                    {activity.isTask && activity.dueDate && (
+                                        <p className="text-xs mt-1 font-medium flex items-center">
+                                            <CalendarIcon className="h-3 w-3 mr-1" />
+                                            Vence: {format(new Date(activity.dueDate), "PPP", { locale: es })}
+                                        </p>
+                                    )}
+                                    <p className="text-xs mt-1">Registrado por: {activity.userName}</p>
+                                </div>
+                            </div>
+                        ))}
+                        {clientActivities.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No hay actividades registradas.</p>}
+                    </div>
+                </CardContent>
+            </Card>
+        </TabsContent>
+        <TabsContent value="history">
+            <Card>
+                <CardHeader>
+                <CardTitle>Historial de Cambios</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-muted-foreground">El historial de cambios del sistema se ha movido al Panel principal.</p>
+                </CardContent>
+            </Card>
+        </TabsContent>
+      </Tabs>
       
       {isOpportunityFormOpen && (
         <OpportunityDetailsDialog
