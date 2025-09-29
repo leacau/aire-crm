@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { opportunities } from '@/lib/data';
-import { FileDown, MoreHorizontal, PlusCircle } from 'lucide-react';
+import { FileDown, MoreHorizontal, PlusCircle, Search } from 'lucide-react';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
@@ -22,6 +22,7 @@ import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import type { Client } from '@/lib/types';
 import { createClient, getClients } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
 
 export default function ClientsPage() {
   const { userInfo, loading: authLoading } = useAuth();
@@ -29,6 +30,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [clientsLoading, setClientsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const fetchClients = useCallback(async () => {
     setClientsLoading(true);
@@ -52,6 +54,18 @@ export default function ClientsPage() {
       fetchClients();
     }
   }, [authLoading, fetchClients]);
+
+  const filteredClients = useMemo(() => {
+    if (searchTerm.length < 3) {
+      return clients;
+    }
+    const lowercasedFilter = searchTerm.toLowerCase();
+    return clients.filter(client =>
+      client.denominacion.toLowerCase().includes(lowercasedFilter) ||
+      client.razonSocial.toLowerCase().includes(lowercasedFilter)
+    );
+  }, [clients, searchTerm]);
+
 
   const handleSaveClient = async (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>) => {
     if (!userInfo) {
@@ -91,6 +105,16 @@ export default function ClientsPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Clientes">
+         <div className="relative ml-auto flex-1 md:grow-0">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+                type="search"
+                placeholder="Buscar por denominación o razón social..."
+                className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[330px]"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+            />
+        </div>
         <Button variant="outline" className="hidden sm:flex">
           <FileDown className="mr-2" />
           Exportar CSV
@@ -114,7 +138,7 @@ export default function ClientsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {clients.map((client) => {
+              {filteredClients.map((client) => {
                 const clientOpps = opportunities.filter(
                   (opp) => opp.clientId === client.id && opp.stage !== 'Cerrado - Ganado' && opp.stage !== 'Cerrado - Perdido'
                 );
