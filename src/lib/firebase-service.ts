@@ -34,6 +34,15 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
     return null;
 }
 
+export const getAllUsers = async (role?: User['role']): Promise<User[]> => {
+    let q = query(usersCollection);
+    if (role) {
+        q = query(usersCollection, where("role", "==", role));
+    }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+}
+
 
 // --- Client Functions ---
 

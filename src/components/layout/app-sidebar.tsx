@@ -11,15 +11,18 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, Kanban, Users, Settings, Receipt } from 'lucide-react';
+import { Home, Kanban, Users, Settings, Receipt, BarChart, Users2 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useAuth } from '@/hooks/use-auth';
 
 const menuItems = [
-  { href: '/', label: 'Panel', icon: Home },
-  { href: '/opportunities', label: 'Oportunidades', icon: Kanban },
-  { href: '/clients', label: 'Clientes', icon: Users },
-  { href: '/billing', label: 'Facturación', icon: Receipt },
+  { href: '/', label: 'Panel', icon: Home, roles: ['Jefe', 'Asesor', 'Administracion'] },
+  { href: '/opportunities', label: 'Oportunidades', icon: Kanban, roles: ['Jefe', 'Asesor', 'Administracion'] },
+  { href: '/clients', label: 'Clientes', icon: Users, roles: ['Jefe', 'Asesor', 'Administracion'] },
+  { href: '/billing', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Asesor', 'Administracion'] },
+  { href: '/team', label: 'Equipo', icon: Users2, roles: ['Jefe'] },
+  { href: '/reports', label: 'Reportes', icon: BarChart, roles: ['Jefe'] },
 ];
 
 function MenuLink({ item }: { item: typeof menuItems[0] }) {
@@ -48,6 +51,12 @@ function MenuLink({ item }: { item: typeof menuItems[0] }) {
 
 
 export function AppSidebar() {
+  const { userInfo } = useAuth();
+  
+  if (!userInfo) return null;
+
+  const accessibleItems = menuItems.filter(item => item.roles.includes(userInfo.role));
+
   return (
     <Sidebar>
       <SidebarHeader>
@@ -55,7 +64,7 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
-          {menuItems.map((item) => (
+          {accessibleItems.map((item) => (
             <SidebarMenuItem key={item.label}>
               <MenuLink item={item} />
             </SidebarMenuItem>
