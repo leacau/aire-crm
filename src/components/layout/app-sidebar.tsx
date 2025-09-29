@@ -65,7 +65,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
         <SidebarRail />
       <SidebarHeader>
-        <Logo />
+        <Logo isInSidebar={true} />
         <SidebarTrigger className="ml-auto hidden data-[state=expanded]:md:flex" />
       </SidebarHeader>
       <SidebarContent>
