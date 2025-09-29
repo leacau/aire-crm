@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   // This handles the case where !user and !isPublicRoute after loading,
-  // which will trigger the useEffect to redirect. Returning null or a spinner here
+  // which will trigger the useEffect to redirect. Returning a spinner here
   // prevents the old page from rendering during the redirect.
   return (
     <div className="flex h-screen items-center justify-center">
