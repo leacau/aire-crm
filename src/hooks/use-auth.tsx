@@ -6,8 +6,8 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
-import { users } from '@/lib/data';
-import type { User, UserRole } from '@/lib/types';
+import { getUserProfile } from '@/lib/firebase-service';
+import type { User } from '@/lib/types';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -31,25 +31,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
-        // Attempt to find the user in the static data to get their role
-        const appUser = users.find(u => u.email === firebaseUser.email);
+        const profile = await getUserProfile(firebaseUser.uid);
         
-        // Create a userInfo object regardless of whether the user is in the static data
-        const currentUserInfo: User = {
-          id: firebaseUser.uid,
-          name: firebaseUser.displayName || 'Usuario',
-          email: firebaseUser.email || '',
-          // Assign role from static data if found, otherwise default to 'Asesor'
-          role: appUser?.role || 'Asesor', 
-          // Provide fallback avatar and initials
-          avatarUrl: firebaseUser.photoURL || `https://picsum.photos/seed/${firebaseUser.uid}/40/40`,
-          initials: firebaseUser.displayName?.substring(0, 2).toUpperCase() || 'U'
-        };
-        setUserInfo(currentUserInfo);
-
+        if (profile) {
+          const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';
+          setUserInfo({ 
+            id: firebaseUser.uid, 
+            ...profile,
+            initials
+          });
+        } else {
+            // This case might happen if the user profile creation fails after registration.
+            // We'll create a default one to avoid breaking the app.
+            const name = firebaseUser.displayName || 'Usuario';
+            setUserInfo({
+                id: firebaseUser.uid,
+                name: name,
+                email: firebaseUser.email || '',
+                role: 'Asesor',
+                initials: name.substring(0, 2).toUpperCase()
+            });
+        }
       } else {
         setUser(null);
         setUserInfo(null);
@@ -100,3 +105,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+
+    

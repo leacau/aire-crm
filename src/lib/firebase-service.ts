@@ -1,15 +1,38 @@
 
 
 import { db } from './firebase';
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity } from './types';
+import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc } from 'firebase/firestore';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User } from './types';
 import { logActivity } from './activity-logger';
 
+const usersCollection = collection(db, 'users');
 const clientsCollection = collection(db, 'clients');
 const peopleCollection = collection(db, 'people');
 const opportunitiesCollection = collection(db, 'opportunities');
 const activitiesCollection = collection(db, 'activities');
 const clientActivitiesCollection = collection(db, 'client-activities');
+
+
+// --- User Profile Functions ---
+
+export const createUserProfile = async (uid: string, name: string, email: string): Promise<void> => {
+    const userRef = doc(db, 'users', uid);
+    await setDoc(userRef, {
+        name,
+        email,
+        role: 'Asesor', // Default role for new users
+        createdAt: serverTimestamp(),
+    });
+};
+
+export const getUserProfile = async (uid: string): Promise<User | null> => {
+    const userRef = doc(db, 'users', uid);
+    const docSnap = await getDoc(userRef);
+    if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() } as User;
+    }
+    return null;
+}
 
 
 // --- Client Functions ---
@@ -47,6 +70,7 @@ export const createClient = async (
         avatarFallback: clientData.denominacion.substring(0, 2).toUpperCase(),
         personIds: [],
         ownerId: userId,
+        ownerName: userName,
         createdAt: serverTimestamp(),
     };
     const docRef = await addDoc(clientsCollection, newClientData);
@@ -184,6 +208,7 @@ export const createOpportunity = async (
 ): Promise<string> => {
     const docRef = await addDoc(opportunitiesCollection, {
         ...opportunityData,
+        ownerName: userName, // Also store the owner's name
         createdAt: serverTimestamp()
     });
 
@@ -347,9 +372,8 @@ export const createClientActivity = async (
     };
 
     if (activityData.isTask && activityData.dueDate) {
-        // Convert ISO string back to Timestamp for Firestore
         dataToSave.dueDate = Timestamp.fromDate(new Date(activityData.dueDate));
-    } else if (Object.prototype.hasOwnProperty.call(dataToSave, 'dueDate')) {
+    } else {
        delete dataToSave.dueDate;
     }
 
@@ -383,3 +407,5 @@ export const updateClientActivity = async (
 
     await updateDoc(docRef, updateData);
 };
+
+    

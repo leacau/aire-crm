@@ -2,6 +2,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -20,6 +21,7 @@ export type Opportunity = {
   stage: OpportunityStage;
   closeDate: string;
   ownerId: string;
+  ownerName: string;
   details?: string;
   observaciones?: string;
   facturaNo?: string;
@@ -64,6 +66,7 @@ export type Client = {
   avatarFallback: string;
   personIds: string[];
   ownerId: string;
+  ownerName: string;
 };
 
 export type ActivityLog = {
@@ -105,7 +108,8 @@ export type User = {
   id: string;
   name:string;
   email: string;
-  avatarUrl: string;
-  initials: string;
   role: UserRole;
+  initials?: string;
 };
+
+    

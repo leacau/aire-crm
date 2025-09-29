@@ -1,14 +1,8 @@
 
 
 
-import type { User, Client, Opportunity, OpportunityStage, Person, TipoEntidad, ClientActivityType, CondicionIVA } from './types';
 
-export const users: User[] = [
-  { id: 'user-1', name: 'Alex Morgan', email: 'alex.morgan@example.com', avatarUrl: 'https://picsum.photos/seed/user1/40/40', initials: 'AM', role: 'Asesor' },
-  { id: 'user-2', name: 'Ben Carter', email: 'ben.carter@example.com', avatarUrl: 'https://picsum.photos/seed/user2/40/40', initials: 'BC', role: 'Asesor' },
-  { id: 'user-3', name: 'Chloe Davis', email: 'chloe.davis@example.com', avatarUrl: 'https://picsum.photos/seed/user3/40/40', initials: 'CD', role: 'Jefe' },
-  { id: 'user-4', name: 'David Evans', email: 'david.evans@example.com', avatarUrl: 'https://picsum.photos/seed/user4/40/40', initials: 'DE', role: 'Administracion' },
-];
+import type { Client, Opportunity, OpportunityStage, Person, TipoEntidad, ClientActivityType, CondicionIVA } from './types';
 
 export const people: Person[] = [
     { id: 'person-1', name: 'Juan Perez', email: 'juan.perez@globalmedia.com', phone: '555-1111', clientIds: ['client-1'] },
@@ -70,6 +64,7 @@ export let opportunities: Opportunity[] = [
     stage: 'Negociación',
     closeDate: '2024-08-15',
     ownerId: 'user-1',
+    ownerName: 'Alex Morgan',
     details: 'Campaña de marketing digital para el tercer trimestre, enfocada en redes sociales y SEO.'
   },
   {
@@ -81,6 +76,7 @@ export let opportunities: Opportunity[] = [
     stage: 'Propuesta',
     closeDate: '2024-09-01',
     ownerId: 'user-2',
+    ownerName: 'Ben Carter',
     details: 'Rediseño completo del sitio web corporativo, incluyendo nueva arquitectura de información y experiencia de usuario.'
   },
   {
@@ -92,6 +88,7 @@ export let opportunities: Opportunity[] = [
     stage: 'Cerrado - Ganado',
     closeDate: '2024-07-20',
     ownerId: 'user-1',
+    ownerName: 'Alex Morgan',
     details: 'Renovación del servicio de software cloud por un año más.'
   },
   {
@@ -103,6 +100,7 @@ export let opportunities: Opportunity[] = [
     stage: 'Nuevo',
     closeDate: '2024-09-30',
     ownerId: 'user-3',
+    ownerName: 'Chloe Davis',
     details: 'Campaña publicitaria para el lanzamiento de un nuevo producto, incluye TV y medios digitales.'
   },
   {
@@ -114,6 +112,7 @@ export let opportunities: Opportunity[] = [
     stage: 'Propuesta',
     closeDate: '2024-08-25',
     ownerId: 'user-2',
+    ownerName: 'Ben Carter',
   },
   {
     id: 'opp-6',
@@ -124,6 +123,7 @@ export let opportunities: Opportunity[] = [
     stage: 'Nuevo',
     closeDate: '2024-10-10',
     ownerId: 'user-1',
+    ownerName: 'Alex Morgan',
   },
   {
     id: 'opp-7',
@@ -134,5 +134,8 @@ export let opportunities: Opportunity[] = [
     stage: 'Cerrado - Perdido',
     closeDate: '2024-07-10',
     ownerId: 'user-3',
+    ownerName: 'Chloe Davis',
   },
 ];
+
+    

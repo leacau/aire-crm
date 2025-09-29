@@ -34,10 +34,9 @@ import {
   updateClientActivity,
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
-import { users } from '@/lib/data';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, isToday, isTomorrow, isPast, startOfToday, startOfTomorrow, endOfYesterday, format } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, startOfToday, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -156,7 +155,7 @@ export default function DashboardPage() {
 
 
   useEffect(() => {
-    if (!authLoading) {
+    if (!authLoading && userInfo) {
       fetchData();
     }
   }, [userInfo, authLoading]);
@@ -165,7 +164,6 @@ export default function DashboardPage() {
     const overdueTasks = tasks.filter(t => {
         if (t.completed || !t.dueDate) return false;
         const dueDate = new Date(t.dueDate);
-        // Compare only date part, ignoring time
         return new Date(dueDate.toDateString()) < new Date(today.toDateString());
     });
     const dueTodayTasks = tasks.filter(t => !t.completed && t.dueDate && isToday(new Date(t.dueDate)));
@@ -380,9 +378,7 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                 <div className="space-y-4">
-                    {filteredActivities.map((activity) => {
-                        const performingUser = users.find(u => u.id === activity.userId);
-                        return (
+                    {filteredActivities.map((activity) => (
                         <div key={activity.id} className="flex items-start gap-4">
                             <div className="p-2 bg-muted rounded-full">
                             {activityIcons[activity.type] || getDefaultIcon()}
@@ -395,12 +391,12 @@ export default function DashboardPage() {
                                 </p>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                                Por: {performingUser?.name || activity.userName || 'Usuario desconocido'}
+                                Por: {activity.userName || 'Usuario desconocido'}
                             </p>
                             </div>
                         </div>
                         )
-                    })}
+                    )}
                 </div>
                 </CardContent>
             </Card>
@@ -409,3 +405,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    

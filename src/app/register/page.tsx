@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Logo } from '@/components/logo';
+import { createUserProfile } from '@/lib/firebase-service';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -34,6 +35,10 @@ export default function RegisterPage() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(userCredential.user, { displayName: name });
+      
+      // Create user profile in Firestore
+      await createUserProfile(userCredential.user.uid, name, email);
+
       router.push('/');
     } catch (error: any) {
       toast({
@@ -110,3 +115,5 @@ export default function RegisterPage() {
     </div>
   );
 }
+
+    

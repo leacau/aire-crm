@@ -19,9 +19,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getOpportunitiesForUser, updateOpportunity } from '@/lib/firebase-service';
+import { getAllOpportunities, getOpportunitiesForUser, updateOpportunity, getUserProfile } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
-import { users } from '@/lib/data'; // Keep for owner avatar for now
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'border-blue-500',
@@ -87,10 +86,26 @@ const KanbanColumn = ({
 };
 
 const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, onDragStart: (e: React.DragEvent<HTMLDivElement>) => void; }) => {
-  const owner = users.find((user) => user.id === opportunity.ownerId);
   const { userInfo } = useAuth();
   const [isDetailsOpen, setIsDetailsOpen] = React.useState(false);
   const { toast } = useToast();
+  const [owner, setOwner] = useState<{name: string, avatarUrl: string, initials: string} | null>(null);
+
+  useEffect(() => {
+    const fetchOwner = async () => {
+        if(opportunity.ownerId) {
+            const ownerProfile = await getUserProfile(opportunity.ownerId);
+            if(ownerProfile) {
+                setOwner({
+                    name: ownerProfile.name,
+                    avatarUrl: `https://picsum.photos/seed/${opportunity.ownerId}/40/40`,
+                    initials: ownerProfile.name.substring(0, 2).toUpperCase()
+                });
+            }
+        }
+    }
+    fetchOwner();
+  }, [opportunity.ownerId]);
 
   const handleUpdate = async (updatedOpp: Partial<Opportunity>) => {
      if (!userInfo) return;
@@ -189,10 +204,10 @@ export function KanbanBoard() {
   }, [userInfo, toast]);
 
   useEffect(() => {
-    if (!authLoading) {
+    if (!authLoading && userInfo) {
       fetchOpportunities();
     }
-  }, [authLoading, fetchOpportunities]);
+  }, [authLoading, fetchOpportunities, userInfo]);
 
   useEffect(() => {
     const handleUpdate = (e: Event) => {
@@ -259,3 +274,5 @@ export function KanbanBoard() {
     </div>
   );
 }
+
+    
