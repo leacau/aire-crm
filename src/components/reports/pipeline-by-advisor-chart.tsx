@@ -82,7 +82,7 @@ export function PipelineByAdvisorChart({ dateRange }: PipelineByAdvisorChartProp
     }
     
     return advisors.map(advisor => ({
-      name: advisor.name.split(' ')[0], // Show first name for brevity
+      name: advisor.name,
       ...salesByAdvisor[advisor.id]
     }));
 
