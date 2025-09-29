@@ -15,8 +15,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { provinciasArgentina, tipoEntidadOptions } from '@/lib/data';
-import type { Client, TipoEntidad } from '@/lib/types';
+import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/lib/data';
+import type { Client, TipoEntidad, CondicionIVA } from '@/lib/types';
 
 type ClientFormData = Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId'>;
 
@@ -31,6 +31,7 @@ const initialFormData: ClientFormData = {
   denominacion: '',
   razonSocial: '',
   cuit: '',
+  condicionIVA: 'Consumidor Final',
   provincia: '',
   localidad: '',
   tipoEntidad: 'Privada',
@@ -55,6 +56,7 @@ export function ClientFormDialog({
                 denominacion: client.denominacion,
                 razonSocial: client.razonSocial,
                 cuit: client.cuit,
+                condicionIVA: client.condicionIVA,
                 provincia: client.provincia,
                 localidad: client.localidad,
                 tipoEntidad: client.tipoEntidad,
@@ -121,6 +123,19 @@ export function ClientFormDialog({
               CUIT
             </Label>
             <Input id="cuit" name="cuit" value={formData.cuit} onChange={handleChange} className="col-span-3"/>
+          </div>
+           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="condicionIVA" className="text-right">
+              Condición IVA
+            </Label>
+            <Select name="condicionIVA" value={formData.condicionIVA} onValueChange={(value: CondicionIVA) => handleSelectChange('condicionIVA', value)}>
+                <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Selecciona una condición" />
+                </SelectTrigger>
+                <SelectContent>
+                    {condicionIVAOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="provincia" className="text-right">

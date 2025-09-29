@@ -32,6 +32,7 @@ import {
   MailIcon,
   CalendarIcon,
   CheckCircle2,
+  FileText,
 } from 'lucide-react';
 import {
   Table,
@@ -325,6 +326,10 @@ export function ClientDetails({
            <div className="flex items-center gap-3">
             <FileDigit className="h-4 w-4 text-muted-foreground" />
             <span>{client.cuit}</span>
+          </div>
+           <div className="flex items-center gap-3">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <span>{client.condicionIVA}</span>
           </div>
            <div className="flex items-center gap-3">
             <Building2 className="h-4 w-4 text-muted-foreground" />

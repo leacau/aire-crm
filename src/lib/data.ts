@@ -1,6 +1,7 @@
 
 
-import type { User, Client, Opportunity, OpportunityStage, Person, TipoEntidad, ClientActivityType } from './types';
+
+import type { User, Client, Opportunity, OpportunityStage, Person, TipoEntidad, ClientActivityType, CondicionIVA } from './types';
 
 export const users: User[] = [
   { id: 'user-1', name: 'Alex Morgan', email: 'alex.morgan@example.com', avatarUrl: 'https://picsum.photos/seed/user1/40/40', initials: 'AM', role: 'Asesor' },
@@ -29,6 +30,8 @@ export const opportunityStages: OpportunityStage[] = [
 ];
 
 export const tipoEntidadOptions: TipoEntidad[] = ['Pública', 'Privada', 'Mixta'];
+
+export const condicionIVAOptions: CondicionIVA[] = ['Responsable Inscripto', 'Monotributista', 'Exento', 'Consumidor Final'];
 
 export const provinciasArgentina = [
   "Buenos Aires",

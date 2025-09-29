@@ -1,5 +1,6 @@
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -35,12 +36,15 @@ export type Person = {
 };
 
 export type TipoEntidad = 'Pública' | 'Privada' | 'Mixta';
+export type CondicionIVA = 'Responsable Inscripto' | 'Monotributista' | 'Exento' | 'Consumidor Final';
+
 
 export type Client = {
   id: string;
   denominacion: string;
   razonSocial: string;
   cuit: string;
+  condicionIVA: CondicionIVA;
   provincia: string;
   localidad: string;
   tipoEntidad: TipoEntidad;
