@@ -400,7 +400,7 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <div className="grid gap-6 mt-6 md:grid-cols-2">
+        <div className="mt-6 space-y-6">
             <Card>
                  <CardHeader>
                     <CardTitle>Tareas Pendientes</CardTitle>
