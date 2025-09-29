@@ -1,40 +1,33 @@
 
 'use client';
 
-import React, { useMemo } from 'react';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import type { User, ActivityLog, ClientActivity, ClientActivityType } from '@/lib/types';
-import { clientActivityTypes } from '@/lib/types';
+import type { ActivityLog, ClientActivity } from '@/lib/types';
 import {
-  Activity,
-  ArrowRight,
   BuildingIcon,
-  Kanban,
   MailIcon,
   MessageSquare,
   PhoneCall,
   PlusCircle,
+  ArrowRight,
   Users,
   Video,
 } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
+import { Button } from '../ui/button';
 
-type CombinedActivity = (ActivityLog | ClientActivity) & { sortDate: Date };
+export type CombinedActivity = (ActivityLog | ClientActivity) & { sortDate: Date };
 
 interface ActivitySummaryProps {
-  advisors: User[];
-  systemActivities: ActivityLog[];
-  clientActivities: ClientActivity[];
+  summary: { title: string; count: number }[];
+  onActivityTypeSelect: (type: string) => void;
+  selectedActivityType: string | null;
 }
 
-const activityGroupIcons: Record<string, React.ReactNode> = {
+export const activityGroupIcons: Record<string, React.ReactNode> = {
   'Llamada': <PhoneCall className="h-5 w-5" />,
   'WhatsApp': <MessageSquare className="h-5 w-5" />,
   'Meet': <Video className="h-5 w-5" />,
@@ -46,7 +39,7 @@ const activityGroupIcons: Record<string, React.ReactNode> = {
   'Cambios de Etapa': <ArrowRight className="h-5 w-5 text-purple-500" />,
 };
 
-const ActivityDetailRow = ({ activity }: { activity: CombinedActivity }) => {
+export const ActivityDetailRow = ({ activity }: { activity: CombinedActivity }) => {
   return (
     <div className="flex items-center justify-between text-sm py-2 border-b last:border-b-0">
       <div className="flex-1">
@@ -64,76 +57,40 @@ const ActivityDetailRow = ({ activity }: { activity: CombinedActivity }) => {
 };
 
 
-export function ActivitySummary({ advisors, systemActivities, clientActivities }: ActivitySummaryProps) {
+export function ActivitySummary({ summary, onActivityTypeSelect, selectedActivityType }: ActivitySummaryProps) {
   
-  const groupedActivities = useMemo(() => {
-      const allActivities: CombinedActivity[] = [
-        ...clientActivities.map(a => ({ ...a, sortDate: new Date(a.timestamp) })),
-        ...systemActivities.map(a => ({ ...a, sortDate: new Date(a.timestamp) }))
-      ].sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
-      
-      const groups: Record<string, CombinedActivity[]> = {
-        'Llamada': [],
-        'WhatsApp': [],
-        'Meet': [],
-        'Reunión': [],
-        'Visita Aire': [],
-        'Mail': [],
-        'Nuevos Clientes': [],
-        'Nuevas Oportunidades': [],
-        'Cambios de Etapa': [],
-      };
-
-      allActivities.forEach(activity => {
-        if ('entityType' in activity) { // System Activity
-          if (activity.type === 'create' && activity.entityType === 'client') {
-            groups['Nuevos Clientes'].push(activity);
-          } else if (activity.type === 'create' && activity.entityType === 'opportunity') {
-            groups['Nuevas Oportunidades'].push(activity);
-          } else if (activity.type === 'stage_change') {
-            groups['Cambios de Etapa'].push(activity);
-          }
-        } else { // Client Activity
-          if (groups[activity.type]) {
-            groups[activity.type].push(activity);
-          }
-        }
-      });
-
-      return Object.entries(groups).map(([title, activities]) => ({
-        title,
-        count: activities.length,
-        activities
-      })).filter(g => g.count > 0);
-
-  }, [systemActivities, clientActivities]);
-
   return (
     <Card>
       <CardHeader>
         <CardTitle>Resumen de Actividad</CardTitle>
-        <CardDescription>Resumen de actividades del equipo para el período seleccionado.</CardDescription>
+        <CardDescription>Resumen de actividades del equipo para el período seleccionado. Haz clic en una tarjeta para ver el detalle.</CardDescription>
       </CardHeader>
       <CardContent>
-          <Accordion type="multiple" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {groupedActivities.map(({ title, count, activities }) => (
-                  <AccordionItem key={title} value={title} className="border rounded-lg px-4 bg-muted/50">
-                      <AccordionTrigger className="py-4 hover:no-underline">
-                          <div className="flex items-center gap-3">
-                              {activityGroupIcons[title]}
-                              <span className="font-semibold text-base">{title}</span>
-                              <Badge variant="secondary">{count}</Badge>
-                          </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="bg-background -mx-4 px-4">
-                          <div className="space-y-2 mt-2 max-h-60 overflow-y-auto">
-                              {activities.map(act => <ActivityDetailRow key={act.id} activity={act}/>)}
-                          </div>
-                      </AccordionContent>
-                  </AccordionItem>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {summary.map(({ title, count }) => (
+                  <Card 
+                    key={title}
+                    onClick={() => onActivityTypeSelect(title)}
+                    className={cn(
+                        "cursor-pointer transition-all hover:shadow-md hover:border-primary/50",
+                        selectedActivityType === title && "border-primary shadow-md"
+                    )}
+                  >
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                         <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            {activityGroupIcons[title]}
+                            <span>{title}</span>
+                         </CardTitle>
+                         <Badge variant="secondary">{count}</Badge>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{count}</div>
+                        <p className="text-xs text-muted-foreground">actividades</p>
+                    </CardContent>
+                  </Card>
               ))}
-          </Accordion>
-           {groupedActivities.length === 0 && (
+          </div>
+           {summary.length === 0 && (
             <p className="text-center text-muted-foreground py-8">No hay actividad para el período seleccionado.</p>
            )}
       </CardContent>

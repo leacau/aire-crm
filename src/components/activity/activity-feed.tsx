@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import type { DateRange } from 'react-day-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/hooks/use-toast';
 import { getActivities, getAllClientActivities, getAllUsers } from '@/lib/firebase-service';
@@ -14,16 +14,10 @@ import { isWithinInterval } from 'date-fns';
 import {
   Activity,
   ArrowRight,
-  BuildingIcon,
-  MailIcon,
-  MessageSquare,
-  PhoneCall,
   PlusCircle,
-  Users,
-  Video,
 } from 'lucide-react';
 import Link from 'next/link';
-import { ActivitySummary } from './activity-summary';
+import { ActivitySummary, activityGroupIcons, ActivityDetailRow } from './activity-summary';
 
 type CombinedActivity = (ActivityLog | ClientActivity) & { sortDate: Date };
 
@@ -31,15 +25,6 @@ const systemActivityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
   'update': <Activity className="h-5 w-5 text-blue-500" />,
   'stage_change': <ArrowRight className="h-5 w-5 text-purple-500" />,
-};
-
-const clientActivityIcons: Record<string, React.ReactNode> = {
-    'Llamada': <PhoneCall className="h-5 w-5" />,
-    'WhatsApp': <MessageSquare className="h-5 w-5" />,
-    'Meet': <Video className="h-5 w-5" />,
-    'Reunión': <Users className="h-5 w-5" />,
-    'Visita Aire': <BuildingIcon className="h-5 w-5" />,
-    'Mail': <MailIcon className="h-5 w-5" />,
 };
 
 const getDefaultIcon = () => <Activity className="h-5 w-5 text-muted-foreground" />;
@@ -53,6 +38,8 @@ export function ActivityFeed() {
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
+  const [selectedActivityType, setSelectedActivityType] = useState<string | null>(null);
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -76,28 +63,62 @@ export function ActivityFeed() {
     fetchData();
   }, [toast]);
 
-  const { filteredSystemActivities, filteredClientActivities, filteredFeed } = useMemo(() => {
+  const groupedActivities = useMemo(() => {
     const filterByDate = (activity: { timestamp: string }) => 
         !dateRange?.from || !dateRange?.to || isWithinInterval(new Date(activity.timestamp), { start: dateRange.from, end: dateRange.to });
-
-    const filteredSys = systemActivities.filter(filterByDate);
-    const filteredCli = clientActivities.filter(filterByDate);
-
-    const combined: CombinedActivity[] = [
-      ...filteredSys.map(a => ({ ...a, sortDate: new Date(a.timestamp) })),
-      ...filteredCli.map(a => ({ ...a, sortDate: new Date(a.timestamp) }))
-    ];
-
-    const feed = combined
-      .filter(activity => selectedAdvisor === 'all' || activity.userId === selectedAdvisor)
-      .sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
     
-    return { 
-        filteredSystemActivities: filteredSys, 
-        filteredClientActivities: filteredCli,
-        filteredFeed: feed
+    const activitiesByUser = (activity: { userId: string }) =>
+        selectedAdvisor === 'all' || activity.userId === selectedAdvisor;
+
+    const filteredSys = systemActivities.filter(filterByDate).filter(activitiesByUser);
+    const filteredCli = clientActivities.filter(filterByDate).filter(activitiesByUser);
+    
+    const allActivities: CombinedActivity[] = [
+      ...filteredCli.map(a => ({ ...a, sortDate: new Date(a.timestamp) })),
+      ...filteredSys.map(a => ({ ...a, sortDate: new Date(a.timestamp) }))
+    ].sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
+    
+    const groups: Record<string, CombinedActivity[]> = {
+      'Llamada': [],
+      'WhatsApp': [],
+      'Meet': [],
+      'Reunión': [],
+      'Visita Aire': [],
+      'Mail': [],
+      'Nuevos Clientes': [],
+      'Nuevas Oportunidades': [],
+      'Cambios de Etapa': [],
     };
+
+    allActivities.forEach(activity => {
+      if ('entityType' in activity) { // System Activity
+        if (activity.type === 'create' && activity.entityType === 'client') {
+          groups['Nuevos Clientes'].push(activity);
+        } else if (activity.type === 'create' && activity.entityType === 'opportunity') {
+          groups['Nuevas Oportunidades'].push(activity);
+        } else if (activity.type === 'stage_change') {
+          groups['Cambios de Etapa'].push(activity);
+        }
+      } else { // Client Activity
+        if (groups[activity.type]) {
+          groups[activity.type].push(activity);
+        }
+      }
+    });
+
+    const summary = Object.entries(groups).map(([title, activities]) => ({
+      title,
+      count: activities.length,
+      activities
+    })).filter(g => g.count > 0);
+
+    return { summary, details: groups };
+
   }, [systemActivities, clientActivities, dateRange, selectedAdvisor]);
+
+  const handleActivityTypeSelect = (type: string) => {
+    setSelectedActivityType(prev => prev === type ? null : type);
+  }
 
   if (loading) {
     return (
@@ -107,95 +128,49 @@ export function ActivityFeed() {
     );
   }
 
-  const renderActivity = (activity: CombinedActivity) => {
-    // System Activity
-    if ('entityType' in activity) {
-        return (
-            <div key={activity.id} className="flex items-start gap-4">
-                <div className="p-2 bg-muted rounded-full">
-                    {systemActivityIcons[activity.type] || getDefaultIcon()}
-                </div>
-                <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                        <p className="text-sm" dangerouslySetInnerHTML={{ __html: activity.details }} />
-                        <p className="text-sm text-muted-foreground whitespace-nowrap">
-                            {new Date(activity.timestamp).toLocaleDateString()}
-                        </p>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                        Por: {activity.userName || 'Usuario desconocido'}
-                    </p>
-                </div>
-            </div>
-        )
-    }
-    // Client Activity
-    if ('clientId' in activity) {
-        return (
-             <div key={activity.id} className="flex items-start gap-4">
-                <div className="p-2 bg-muted rounded-full">
-                    {clientActivityIcons[activity.type] || getDefaultIcon()}
-                </div>
-                 <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold">{activity.type}</p>
-                        <p className="text-sm text-muted-foreground whitespace-nowrap">
-                             {new Date(activity.timestamp).toLocaleDateString()}
-                        </p>
-                    </div>
-                    <Link href={`/clients/${activity.clientId}`} className="text-sm font-bold text-primary hover:underline">
-                        {activity.clientName}
-                    </Link>
-                    <p className="text-sm text-muted-foreground mt-1">{activity.observation}</p>
-                    <p className="text-sm text-muted-foreground mt-2">
-                        Por: {activity.userName || 'Usuario desconocido'}
-                    </p>
-                </div>
-            </div>
-        )
-    }
-
-    return null;
-  }
+  const selectedActivities = selectedActivityType ? groupedActivities.details[selectedActivityType] : [];
 
   return (
     <div className="space-y-6">
        <div className="flex flex-wrap items-center gap-4">
          <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+          <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
+            <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectValue placeholder="Filtrar por asesor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los asesores</SelectItem>
+              {advisors.map(advisor => (
+                <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
       </div>
 
       <ActivitySummary 
-        advisors={advisors}
-        systemActivities={filteredSystemActivities}
-        clientActivities={filteredClientActivities}
+        summary={groupedActivities.summary}
+        onActivityTypeSelect={handleActivityTypeSelect}
+        selectedActivityType={selectedActivityType}
       />
+      
+      {selectedActivityType && (
+        <Card>
+           <CardHeader className="flex flex-row items-center gap-3">
+              {activityGroupIcons[selectedActivityType]}
+              <CardTitle>{selectedActivityType}</CardTitle>
+           </CardHeader>
+           <CardContent>
+               <div className="space-y-2 mt-2 max-h-96 overflow-y-auto">
+                    {selectedActivities.length > 0 ? (
+                        selectedActivities.map(act => <ActivityDetailRow key={act.id} activity={act}/>)
+                    ) : (
+                        <p className="text-center text-muted-foreground py-4">No hay actividades para mostrar.</p>
+                    )}
+                </div>
+           </CardContent>
+        </Card>
+      )}
 
-      <div className="flex flex-wrap items-center gap-4">
-        <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
-          <SelectTrigger className="w-full sm:w-[200px]">
-            <SelectValue placeholder="Filtrar feed por asesor" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Feed de todos los asesores</SelectItem>
-            {advisors.map(advisor => (
-              <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <h3 className="text-lg font-semibold">Feed de Actividad Detallado</h3>
-        </CardHeader>
-        <CardContent className="p-6 space-y-6">
-          {filteredFeed.length > 0 ? (
-            filteredFeed.map(renderActivity)
-          ) : (
-            <p className="text-center text-muted-foreground">No hay actividades que coincidan con los filtros.</p>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
