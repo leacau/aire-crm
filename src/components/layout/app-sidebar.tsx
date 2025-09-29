@@ -26,7 +26,7 @@ const menuItems = [
   { href: '/billing', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Asesor', 'Administracion'] },
   { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, roles: ['Jefe'] },
   { href: '/activity', label: 'Actividad', icon: LayoutList, roles: ['Jefe'] },
-  { href: '/team', label: 'Equipo', icon: BarChart, roles: ['Jefe'] },
+  { href: '/team', label: 'Equipo', icon: Users, roles: ['Jefe'] },
   { href: '/reports', label: 'Reportes', icon: BarChart, roles: ['Jefe'] },
 ];
 
