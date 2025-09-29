@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
@@ -9,8 +9,15 @@ import { useEffect } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import type { DateRange } from 'react-day-picker';
-import { PipelineByAdvisorChart } from '@/components/reports/pipeline-by-advisor-chart';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const PipelineByAdvisorChart = dynamic(() => import('@/components/reports/pipeline-by-advisor-chart').then(mod => mod.PipelineByAdvisorChart), {
+  ssr: false,
+  loading: () => <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>,
+});
+
 
 export default function ReportsPage() {
   const { userInfo, loading } = useAuth();
