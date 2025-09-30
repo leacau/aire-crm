@@ -26,7 +26,7 @@ import { CalendarToolbar } from './calendar-toolbar';
 
 
 const locales = {
-  'es': es,
+  'es-ES': es,
 };
 
 const localizer = dateFnsLocalizer({
@@ -189,6 +189,7 @@ export function GoogleCalendar() {
     <>
       <div className="h-full p-4">
         <BigCalendar
+          culture='es-ES'
           localizer={localizer}
           events={events}
           startAccessor="start"
