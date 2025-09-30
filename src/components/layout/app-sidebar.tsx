@@ -26,6 +26,7 @@ const menuItems = [
   { href: '/clients', label: 'Clientes', icon: Users, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/billing', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/calendar', label: 'Calendario', icon: Calendar, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
+  { href: '/tasks', label: 'Tareas', icon: CheckSquare, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, roles: ['Jefe', 'Gerencia'] },
   { href: '/activity', label: 'Actividad', icon: LayoutList, roles: ['Jefe', 'Gerencia'] },
   { href: '/team', label: 'Equipo', icon: Users, roles: ['Jefe', 'Gerencia'] },
