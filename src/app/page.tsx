@@ -49,6 +49,7 @@ import { Badge } from '@/components/ui/badge';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TasksModal } from '@/components/dashboard/tasks-modal';
 
 const activityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
@@ -159,6 +160,7 @@ export default function DashboardPage() {
   const [notified, setNotified] = useState(false);
   const [selectedTaskStatus, setSelectedTaskStatus] = useState<TaskStatus | null>(null);
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
+  const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
 
 
   useEffect(() => {
@@ -243,7 +245,18 @@ export default function DashboardPage() {
   });
   const dueTodayTasks = userTasks.filter(t => !t.completed && t.dueDate && isToday(new Date(t.dueDate)));
   const dueTomorrowTasks = userTasks.filter(t => !t.completed && t.dueDate && isTomorrow(new Date(t.dueDate)));
-  const hasPendingTasks = overdueTasks.length > 0 || dueTodayTasks.length > 0 || dueTomorrowTasks.length > 0;
+  const hasPendingTasks = overdueTasks.length > 0 || dueTodayTasks.length > 0;
+
+  useEffect(() => {
+    if (!loadingData && hasPendingTasks) {
+      const modalShown = sessionStorage.getItem('tasksModalShown');
+      if (!modalShown) {
+        setIsTasksModalOpen(true);
+        sessionStorage.setItem('tasksModalShown', 'true');
+      }
+    }
+  }, [loadingData, hasPendingTasks]);
+
 
   useEffect(() => {
     if (loadingData || isBoss) return; // Notifications only for non-bosses
@@ -365,6 +378,7 @@ export default function DashboardPage() {
   const totalClients = userClients.length;
 
   return (
+    <>
     <div className="flex flex-col h-full">
       <Header title="Panel">
         <DynamicDateRangePicker date={dateRange} onDateChange={setDateRange} />
@@ -535,5 +549,14 @@ export default function DashboardPage() {
         </div>
       </main>
     </div>
+    <TasksModal
+        isOpen={isTasksModalOpen}
+        onOpenChange={setIsTasksModalOpen}
+        overdueTasks={overdueTasks}
+        dueTodayTasks={dueTodayTasks}
+        dueTomorrowTasks={dueTomorrowTasks}
+        usersMap={usersMap}
+      />
+    </>
   );
 }
