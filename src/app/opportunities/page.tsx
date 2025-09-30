@@ -1,3 +1,7 @@
+
+
+'use client';
+
 import { Header } from '@/components/layout/header';
 import { KanbanBoard } from '@/components/opportunities/kanban-board';
 

@@ -18,6 +18,7 @@ import Link from 'next/link';
 export default function SettingsPage() {
   const { user, userInfo, loading: authLoading } = useAuth();
   const [name, setName] = useState(user?.displayName || '');
+  const [photoURL, setPhotoURL] = useState(user?.photoURL || '');
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -26,10 +27,10 @@ export default function SettingsPage() {
     if (!user) return;
     setLoading(true);
     try {
-      await updateProfile(user, { displayName: name });
+      await updateProfile(user, { displayName: name, photoURL: photoURL });
       toast({
         title: 'Perfil actualizado',
-        description: 'Tu nombre ha sido actualizado correctamente.',
+        description: 'Tus datos han sido actualizados correctamente.',
       });
     } catch (error: any) {
       toast({
@@ -81,9 +82,9 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Perfil</CardTitle>
-              <CardDescription>Actualiza tu nombre de usuario y visualiza tu rol.</CardDescription>
+              <CardDescription>Actualiza tu nombre y tu imagen de perfil.</CardDescription>
             </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
                 <form onSubmit={handleUpdateProfile} className="space-y-4">
                     <div className="grid gap-2">
                       <Label htmlFor="name">Nombre</Label>
@@ -100,6 +101,15 @@ export default function SettingsPage() {
                         <Input value={userInfo.email} disabled />
                       </div>
                     )}
+                    <div className="grid gap-2">
+                        <Label htmlFor="photoURL">URL de la imagen de perfil</Label>
+                        <Input
+                            id="photoURL"
+                            value={photoURL}
+                            onChange={(e) => setPhotoURL(e.target.value)}
+                            placeholder="https://example.com/avatar.jpg"
+                        />
+                    </div>
                     <Button type="submit" disabled={loading} className="w-full sm:w-auto">
                       {loading ? <Spinner size="small" /> : 'Guardar Cambios'}
                     </Button>
