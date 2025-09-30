@@ -66,7 +66,7 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity } from '@/lib/firebase-service';
+import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
@@ -122,6 +122,7 @@ const systemActivityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
   'update': <Edit className="h-5 w-5 text-blue-500" />,
   'stage_change': <ArrowRight className="h-5 w-5 text-purple-500" />,
+  'delete': <Trash2 className="h-5 w-5 text-red-500" />
 };
 
 const getDefaultIcon = () => <Activity className="h-5 w-5 text-muted-foreground" />;
@@ -160,7 +161,9 @@ export function ClientDetails({
   const [isClientFormOpen, setIsClientFormOpen] = useState(false);
   
   const [oppToDelete, setOppToDelete] = useState<Opportunity | null>(null);
+  const [personToDelete, setPersonToDelete] = useState<Person | null>(null);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
+  const [alertConfig, setAlertConfig] = useState<{ title: string, description: string, onConfirm: () => void} | null>(null);
 
   const fetchClientData = async () => {
       if(!userInfo) return;
@@ -190,7 +193,6 @@ export function ClientDetails({
   const canEditContact = isBoss || (userInfo?.id === client.ownerId);
   const canEditOpportunity = isBoss || (userInfo?.id === client.ownerId);
   const canDelete = isBoss;
-  const canReassign = isBoss || userInfo?.role === 'Administracion';
 
   const handleOpportunityUpdate = async (updatedOpp: Partial<Opportunity>) => {
     if(!selectedOpportunity || !userInfo) return;
@@ -353,15 +355,22 @@ export function ClientDetails({
     onUpdate(clientData);
   };
 
-  const openDeleteDialog = (opp: Opportunity) => {
-    setOppToDelete(opp);
+  const openDeleteDialog = (item: Opportunity | Person, type: 'opportunity' | 'person') => {
+    const onConfirm = type === 'opportunity' 
+        ? () => confirmDeleteOpportunity(item as Opportunity) 
+        : () => confirmDeletePerson(item as Person);
+
+    const title = type === 'opportunity' ? '¿Eliminar oportunidad?' : '¿Eliminar contacto?';
+    const description = `Esta acción es irreversible. Se eliminará permanentemente <strong>${(item as any).title || (item as any).name}</strong>.`;
+
+    setAlertConfig({ title, description, onConfirm });
     setIsAlertOpen(true);
   };
   
-  const confirmDelete = async () => {
-    if (!oppToDelete || !userInfo) return;
+  const confirmDeleteOpportunity = async (opp: Opportunity) => {
+    if (!userInfo) return;
     try {
-      await deleteOpportunity(oppToDelete.id, userInfo.id, userInfo.name);
+      await deleteOpportunity(opp.id, userInfo.id, userInfo.name);
       toast({ title: "Oportunidad Eliminada" });
       fetchClientData(); // Refresh the list
     } catch (error) {
@@ -369,9 +378,25 @@ export function ClientDetails({
       toast({ title: "Error al eliminar la oportunidad", variant: "destructive" });
     } finally {
       setIsAlertOpen(false);
-      setOppToDelete(null);
+      setAlertConfig(null);
     }
   };
+  
+  const confirmDeletePerson = async (person: Person) => {
+    if (!userInfo) return;
+    try {
+      await deletePerson(person.id, userInfo.id, userInfo.name);
+      toast({ title: "Contacto Eliminado" });
+      fetchClientData();
+    } catch (error) {
+      console.error("Error deleting person:", error);
+      toast({ title: "Error al eliminar el contacto", variant: "destructive" });
+    } finally {
+      setIsAlertOpen(false);
+      setAlertConfig(null);
+    }
+  };
+
 
   const ConvertToTaskPopover = ({ activityId }: { activityId: string }) => {
     const [popoverOpen, setPopoverOpen] = useState(false);
@@ -491,7 +516,7 @@ export function ClientDetails({
                     <TableHead>Título</TableHead>
                     <TableHead>Valor</TableHead>
                     <TableHead className="w-[150px]">Etapa</TableHead>
-                     { (canReassign || canDelete) && <TableHead className="w-[50px]"></TableHead> }
+                     { canDelete && <TableHead className="w-[50px]"></TableHead> }
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -530,7 +555,7 @@ export function ClientDetails({
                             </SelectContent>
                           </Select>
                       </TableCell>
-                       {(canReassign || canDelete) && (
+                       {canDelete && (
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -539,8 +564,7 @@ export function ClientDetails({
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent>
-                              {canReassign && <DropdownMenuItem>Reasignar</DropdownMenuItem>}
-                              {canDelete && <DropdownMenuItem className="text-destructive" onClick={() => openDeleteDialog(opp)}>Eliminar</DropdownMenuItem>}
+                              <DropdownMenuItem className="text-destructive" onClick={() => openDeleteDialog(opp, 'opportunity')}>Eliminar</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -549,7 +573,7 @@ export function ClientDetails({
                   ))}
                    {opportunities.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={canReassign || canDelete ? 4 : 3} className="h-24 text-center">
+                        <TableCell colSpan={canDelete ? 4 : 3} className="h-24 text-center">
                           No hay oportunidades para este cliente.
                         </TableCell>
                       </TableRow>
@@ -595,7 +619,7 @@ export function ClientDetails({
                         </>
                         )}
                         {canEditContact && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenPersonForm(person)}><Edit className="h-4 w-4" /></Button>}
-                        {canDelete && <Button variant="ghost" size="icon" className="h-8 w-8"><Trash2 className="h-4 w-4 text-destructive" /></Button>}
+                        {canDelete && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDeleteDialog(person, 'person')}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
                     </div>
                     </div>
                 ))}
@@ -788,14 +812,12 @@ export function ClientDetails({
     <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
         <AlertDialogContent>
             <AlertDialogHeader>
-            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-            <AlertDialogDescription>
-                Esta acción es irreversible. Se eliminará permanentemente la oportunidad <strong>{oppToDelete?.title}</strong>.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{alertConfig?.title}</AlertDialogTitle>
+            <AlertDialogDescription dangerouslySetInnerHTML={{ __html: alertConfig?.description || '' }} />
             </AlertDialogHeader>
             <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>Eliminar</AlertDialogAction>
+            <AlertDialogCancel onClick={() => setIsAlertOpen(false)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => alertConfig?.onConfirm()} variant="destructive">Eliminar</AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
     </AlertDialog>

@@ -13,24 +13,35 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { FileDown, MoreHorizontal, PlusCircle, Search } from 'lucide-react';
+import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import type { Client, Opportunity } from '@/lib/types';
-import { createClient, getClients, getAllOpportunities } from '@/lib/firebase-service';
+import { createClient, getClients, getAllOpportunities, deleteClient } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export default function ClientsPage() {
-  const { userInfo, loading: authLoading } = useAuth();
+  const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -97,6 +108,23 @@ export default function ClientsPage() {
         });
     }
   };
+  
+  const handleDeleteClient = async () => {
+    if (!clientToDelete || !userInfo) return;
+    try {
+      await deleteClient(clientToDelete.id, userInfo.id, userInfo.name);
+      toast({
+        title: "Cliente Eliminado",
+        description: `${clientToDelete.denominacion} ha sido eliminado.`,
+      });
+      fetchData(); // Refresh the list
+    } catch (error) {
+      console.error("Error deleting client:", error);
+      toast({ title: "Error al eliminar el cliente", variant: "destructive" });
+    } finally {
+      setClientToDelete(null);
+    }
+  }
 
   const validateCuit = async (cuit: string, clientId?: string): Promise<string | false> => {
     const existingClient = clients.find(c => c.cuit === cuit && c.id !== clientId);
@@ -115,6 +143,7 @@ export default function ClientsPage() {
   }
 
   return (
+    <>
     <div className="flex flex-col h-full">
       <Header title="Clientes">
          <div className="relative ml-auto flex-1 md:grow-0">
@@ -145,7 +174,7 @@ export default function ClientsPage() {
                 <TableHead className="hidden sm:table-cell">Razón Social</TableHead>
                 <TableHead className="hidden lg:table-cell">Negocios Abiertos</TableHead>
                 <TableHead className="hidden lg:table-cell">Valor Total</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
+                <TableHead className="w-[100px]">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -159,9 +188,7 @@ export default function ClientsPage() {
                 );
 
                 const canViewDetails = userInfo && (
-                    userInfo.role === 'Jefe' || 
-                    userInfo.role === 'Gerencia' ||
-                    userInfo.role === 'Administracion' || 
+                    isBoss || 
                     (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
                 );
 
@@ -190,9 +217,16 @@ export default function ClientsPage() {
                     <TableCell className="hidden lg:table-cell">{canViewDetails ? clientOpps.length : '-'}</TableCell>
                     <TableCell className="hidden lg:table-cell">{canViewDetails ? `$${totalValue.toLocaleString('es-AR')}` : '-'}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
+                      <div className='flex items-center gap-2'>
+                          <Button variant="ghost" size="icon" disabled>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                          {isBoss && (
+                            <Button variant="ghost" size="icon" onClick={() => setClientToDelete(client)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -208,5 +242,20 @@ export default function ClientsPage() {
         onValidateCuit={validateCuit}
       />
     </div>
+     <AlertDialog open={!!clientToDelete} onOpenChange={(open) => !open && setClientToDelete(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás realmente seguro?</AlertDialogTitle>
+            <AlertDialogDescription>
+                Esta acción es irreversible. Se eliminará permanentemente el cliente <strong>{clientToDelete?.denominacion}</strong> y todas sus oportunidades y contactos asociados.
+            </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteClient} variant="destructive">Eliminar</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

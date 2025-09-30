@@ -1,7 +1,7 @@
 
 
 import { db } from './firebase';
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User } from './types';
 import { logActivity } from './activity-logger';
 
@@ -125,6 +125,51 @@ export const updateClient = async (
     });
 };
 
+export const deleteClient = async (
+    id: string,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const clientRef = doc(db, 'clients', id);
+    const clientSnap = await getDoc(clientRef);
+    if (!clientSnap.exists()) throw new Error("Client not found");
+
+    const clientData = clientSnap.data() as Client;
+    const batch = writeBatch(db);
+
+    // Delete opportunities associated with the client
+    const oppsQuery = query(opportunitiesCollection, where('clientId', '==', id));
+    const oppsSnap = await getDocs(oppsQuery);
+    oppsSnap.forEach(doc => batch.delete(doc.ref));
+
+    // Delete people associated ONLY with this client
+    const peopleQuery = query(peopleCollection, where('clientIds', '==', [id]));
+    const peopleSnap = await getDocs(peopleQuery);
+    peopleSnap.forEach(doc => batch.delete(doc.ref));
+    
+    // Delete client activities
+    const clientActivitiesQuery = query(clientActivitiesCollection, where('clientId', '==', id));
+    const clientActivitiesSnap = await getDocs(clientActivitiesQuery);
+    clientActivitiesSnap.forEach(doc => batch.delete(doc.ref));
+
+    // Finally, delete the client itself
+    batch.delete(clientRef);
+
+    await batch.commit();
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'client',
+        entityId: id,
+        entityName: clientData.denominacion,
+        details: `eliminó el cliente <strong>${clientData.denominacion}</strong> y toda su información asociada`,
+        ownerName: clientData.ownerName
+    });
+};
+
+
 
 // --- Person (Contact) Functions ---
 
@@ -203,6 +248,39 @@ export const updatePerson = async (
                 ownerName: clientData.ownerName
             });
         }
+    }
+};
+
+export const deletePerson = async (
+    id: string,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const personRef = doc(db, 'people', id);
+    const personSnap = await getDoc(personRef);
+    if (!personSnap.exists()) throw new Error("Person not found");
+
+    const personData = personSnap.data() as Person;
+    
+    // Just delete the person. We don't remove them from the client's personIds array
+    // to avoid complex state management on the client. It's harmless to have a stale ID.
+    await deleteDoc(personRef);
+
+    if (personData.clientIds && personData.clientIds.length > 0) {
+        const clientSnap = await getDoc(doc(db, 'clients', personData.clientIds[0]));
+        const clientOwnerName = clientSnap.exists() ? (clientSnap.data() as Client).ownerName : 'N/A';
+        const clientName = clientSnap.exists() ? (clientSnap.data() as Client).denominacion : 'N/A';
+
+         await logActivity({
+            userId,
+            userName,
+            type: 'delete',
+            entityType: 'person',
+            entityId: id,
+            entityName: personData.name,
+            details: `eliminó el contacto <strong>${personData.name}</strong> del cliente <a href="/clients/${personData.clientIds[0]}" class="font-bold text-primary hover:underline">${clientName}</a>`,
+            ownerName: clientOwnerName
+        });
     }
 };
 
