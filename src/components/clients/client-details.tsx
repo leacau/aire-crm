@@ -67,6 +67,7 @@ import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
 import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers } from '@/lib/firebase-service';
+import { sendEmail } from '@/lib/google-gmail-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
@@ -98,17 +99,6 @@ const stageColors: Record<OpportunityStage, string> = {
 };
 
 
-const WhatsappIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    className="h-5 w-5"
-  >
-    <path d="M16.6 14.2l-1.5-0.7c-0.3-0.1-0.5-0.1-0.8 0.1l-0.7 0.8c-1.5-0.8-2.8-2-3.6-3.6l0.8-0.7c0.2-0.2 0.2-0.5 0.1-0.8l-0.7-1.5c-0.1-0.3-0.4-0.5-0.8-0.5h-1.6c-0.4 0-0.8 0.4-0.8 0.8C7 9.8 9.2 16 15.2 16c0.4 0 0.8-0.3 0.8-0.8v-1.6c0-0.4-0.2-0.7-0.5-0.8z" />
-  </svg>
-);
-
 const activityIcons: Record<ClientActivityType, React.ReactNode> = {
     'Llamada': <PhoneCall className="h-4 w-4" />,
     'WhatsApp': <MessageSquare className="h-4 w-4" />,
@@ -137,7 +127,7 @@ export function ClientDetails({
   onUpdate: (data: Partial<Omit<Client, 'id'>>) => void;
   onValidateCuit: (cuit: string, clientId?: string) => Promise<string | false>;
 }) {
-  const { userInfo, isBoss } = useAuth();
+  const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   
   const [people, setPeople] = useState<Person[]>([]);
@@ -152,6 +142,7 @@ export function ClientDetails({
   const [isTask, setIsTask] = useState(false);
   const [dueDate, setDueDate] = useState<Date | undefined>();
   const [isSavingActivity, setIsSavingActivity] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState<string | null>(null);
 
   
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
@@ -354,6 +345,43 @@ export function ClientDetails({
     } catch (error) {
       console.error('Error converting to task', error);
       toast({ title: 'Error al crear la tarea', variant: 'destructive' });
+    }
+  };
+
+  const handleSendTaskEmail = async (task: ClientActivity) => {
+    if (!userInfo || !userInfo.email) return;
+
+    setIsSendingEmail(task.id);
+    try {
+        const accessToken = await getGoogleAccessToken();
+        if (!accessToken) {
+            throw new Error("No se pudo obtener el token de acceso de Google.");
+        }
+        
+        const subject = `Recordatorio de Tarea: ${task.observation}`;
+        const body = `
+            <p>Hola ${userInfo.name},</p>
+            <p>Este es un recordatorio para tu tarea pendiente:</p>
+            <p><strong>Tarea:</strong> ${task.observation}</p>
+            <p><strong>Cliente:</strong> ${task.clientName}</p>
+            ${task.dueDate ? `<p><strong>Vence:</strong> ${format(new Date(task.dueDate), 'PPP', { locale: es })}</p>` : ''}
+            <p>Puedes ver más detalles en el <a href="https://crm-aire.web.app/clients/${task.clientId}">CRM</a>.</p>
+        `;
+
+        await sendEmail({
+            accessToken,
+            to: userInfo.email,
+            subject,
+            body,
+        });
+
+        toast({ title: "Correo de recordatorio enviado" });
+
+    } catch (error: any) {
+        console.error("Error sending task email:", error);
+        toast({ title: "Error al enviar el correo", description: error.message, variant: "destructive" });
+    } finally {
+        setIsSendingEmail(null);
     }
   };
 
@@ -620,7 +648,7 @@ export function ClientDetails({
                             </Button>
                             <Button asChild variant="ghost" size="icon" className="h-8 w-8">
                             <a href={`https://wa.me/${person.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
-                                <WhatsappIcon />
+                                <MessageSquare className="h-4 w-4" />
                             </a>
                             </Button>
                         </>
@@ -731,10 +759,26 @@ export function ClientDetails({
                                         </div>
                                         <p className="text-sm">{activity.observation}</p>
                                         {activity.isTask && activity.dueDate && (
-                                            <p className="text-xs mt-1 font-medium flex items-center">
-                                                <CalendarIcon className="h-3 w-3 mr-1" />
-                                                Vence: {format(new Date(activity.dueDate), "PPP", { locale: es })}
-                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-xs mt-1 font-medium flex items-center">
+                                                    <CalendarIcon className="h-3 w-3 mr-1" />
+                                                    Vence: {format(new Date(activity.dueDate), "PPP", { locale: es })}
+                                                </p>
+                                                {!activity.completed && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 text-muted-foreground hover:text-primary mt-1"
+                                                        onClick={() => handleSendTaskEmail(activity)}
+                                                        disabled={isSendingEmail === activity.id}
+                                                    >
+                                                        {isSendingEmail === activity.id 
+                                                            ? <Spinner size="small" /> 
+                                                            : <Mail className="h-4 w-4" />
+                                                        }
+                                                    </Button>
+                                                )}
+                                            </div>
                                         )}
                                         <p className="text-xs mt-1">Registrado por: {userName}</p>
                                         {activity.completed && activity.completedAt && (
@@ -835,3 +879,5 @@ export function ClientDetails({
     </>
   );
 }
+
+    
