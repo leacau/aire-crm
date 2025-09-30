@@ -4,7 +4,7 @@
 import {
   opportunityStages,
 } from '@/lib/data';
-import type { Opportunity, OpportunityStage, Client } from '@/lib/types';
+import type { Opportunity, OpportunityStage, Client, User } from '@/lib/types';
 import { MoreHorizontal } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -15,12 +15,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getOpportunitiesForUser, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service';
+import { getAllOpportunities, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
+import type { DateRange } from 'react-day-picker';
+import { isWithinInterval } from 'date-fns';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'border-blue-500',
@@ -29,6 +31,11 @@ const stageColors: Record<OpportunityStage, string> = {
   'Cerrado - Ganado': 'border-green-500',
   'Cerrado - Perdido': 'border-red-500',
 };
+
+interface KanbanBoardProps {
+  dateRange?: DateRange;
+  selectedAdvisor: string;
+}
 
 const KanbanColumn = ({
   stage,
@@ -122,7 +129,7 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
      }
   }
   
-  const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor';
+  const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor' || userInfo?.role === 'Gerencia';
 
   const displayValue = opportunity.valorCerrado && opportunity.stage === 'Cerrado - Ganado'
     ? opportunity.valorCerrado
@@ -184,25 +191,21 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
   );
 };
 
-export function KanbanBoard() {
-  const { userInfo, loading: authLoading } = useAuth();
+export function KanbanBoard({ dateRange, selectedAdvisor }: KanbanBoardProps) {
+  const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchOpportunities = useCallback(async () => {
-    if (!userInfo) return;
     setLoading(true);
     try {
-      let userOpps: Opportunity[];
-      if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
-        userOpps = await getAllOpportunities();
-      } else {
-        userOpps = await getOpportunitiesForUser(userInfo.id);
-      }
-      setOpportunities(userOpps);
-      const allClients = await getClients();
+      const [allOpps, allClients] = await Promise.all([
+        getAllOpportunities(),
+        getClients(),
+      ]);
+      setOpportunities(allOpps);
       setClients(allClients);
 
     } catch (error) {
@@ -211,13 +214,11 @@ export function KanbanBoard() {
     } finally {
       setLoading(false);
     }
-  }, [userInfo, toast]);
+  }, [toast]);
 
   useEffect(() => {
-    if (!authLoading && userInfo) {
-      fetchOpportunities();
-    }
-  }, [authLoading, fetchOpportunities, userInfo]);
+    fetchOpportunities();
+  }, [fetchOpportunities]);
 
   useEffect(() => {
     const handleUpdate = (e: Event) => {
@@ -232,6 +233,36 @@ export function KanbanBoard() {
       window.removeEventListener('opportunityUpdated', handleUpdate);
     };
   }, []);
+
+  const advisorClientIds = useMemo(() => {
+    if (selectedAdvisor === 'all') return null;
+    return new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
+  }, [clients, selectedAdvisor]);
+
+  const filteredOpportunities = useMemo(() => {
+    if (!userInfo) return [];
+    
+    let opps = opportunities;
+
+    if(isBoss) {
+      if(selectedAdvisor !== 'all' && advisorClientIds) {
+        opps = opps.filter(opp => advisorClientIds.has(opp.clientId));
+      }
+    } else {
+      const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
+      opps = opps.filter(opp => userClientIds.has(opp.clientId));
+    }
+    
+    if (dateRange?.from && dateRange?.to) {
+      return opps.filter(opp => {
+        const closeDate = new Date(opp.closeDate);
+        return isWithinInterval(closeDate, { start: dateRange.from!, end: dateRange.to! });
+      });
+    }
+
+    return opps;
+  }, [opportunities, clients, userInfo, isBoss, selectedAdvisor, dateRange, advisorClientIds]);
+
 
   const handleCardDrop = async (e: React.DragEvent<HTMLDivElement>, newStage: OpportunityStage) => {
     const opportunityId = e.dataTransfer.getData('opportunityId');
@@ -280,7 +311,7 @@ export function KanbanBoard() {
         <KanbanColumn
           key={stage}
           stage={stage}
-          opportunities={opportunities.filter((opp) => opp.stage === stage)}
+          opportunities={filteredOpportunities.filter((opp) => opp.stage === stage)}
           onCardDrop={handleCardDrop}
         />
       ))}

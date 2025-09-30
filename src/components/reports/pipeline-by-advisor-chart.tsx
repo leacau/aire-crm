@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell } from 'recharts';
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { Spinner } from '@/components/ui/spinner';
 import { getAllOpportunities, getAllUsers, getClients } from '@/lib/firebase-service';
 import type { Opportunity, User, Client } from '@/lib/types';
@@ -12,6 +12,7 @@ import { isWithinInterval } from 'date-fns';
 
 interface PipelineByAdvisorChartProps {
     dateRange?: DateRange;
+    selectedAdvisor: string;
 }
 
 const COLORS = {
@@ -21,7 +22,7 @@ const COLORS = {
   ganadoNoPagado: 'hsl(var(--chart-4))',
 };
 
-export function PipelineByAdvisorChart({ dateRange }: PipelineByAdvisorChartProps) {
+export function PipelineByAdvisorChart({ dateRange, selectedAdvisor }: PipelineByAdvisorChartProps) {
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
@@ -56,10 +57,14 @@ export function PipelineByAdvisorChart({ dateRange }: PipelineByAdvisorChartProp
       const closeDate = new Date(opp.closeDate);
       return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
     });
+    
+    const relevantAdvisors = selectedAdvisor === 'all'
+      ? advisors
+      : advisors.filter(adv => adv.id === selectedAdvisor);
 
     const salesByAdvisor: { [key: string]: { nuevo: number; negociacion: number; ganadoPagado: number; ganadoNoPagado: number } } = {};
 
-    advisors.forEach(adv => {
+    relevantAdvisors.forEach(adv => {
         salesByAdvisor[adv.id] = { nuevo: 0, negociacion: 0, ganadoPagado: 0, ganadoNoPagado: 0 };
     });
 
@@ -81,12 +86,12 @@ export function PipelineByAdvisorChart({ dateRange }: PipelineByAdvisorChartProp
         }
     }
     
-    return advisors.map(advisor => ({
+    return relevantAdvisors.map(advisor => ({
       name: advisor.name,
       ...salesByAdvisor[advisor.id]
     }));
 
-  }, [opportunities, advisors, clients, dateRange]);
+  }, [opportunities, advisors, clients, dateRange, selectedAdvisor]);
 
   if (loading) {
     return (

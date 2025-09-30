@@ -1,8 +1,7 @@
 
-
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import {
   Card,
@@ -49,6 +48,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const activityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
@@ -145,7 +145,7 @@ const TaskSummaryCard = ({ title, count, icon, onClick, isSelected }: { title: s
 );
 
 export default function DashboardPage() {
-  const { userInfo, loading: authLoading } = useAuth();
+  const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const { notificationPermission, requestNotificationPermission, showNotification } = useNotifications();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -153,61 +153,33 @@ export default function DashboardPage() {
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [tasks, setTasks] = useState<ClientActivity[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [advisors, setAdvisors] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [notified, setNotified] = useState(false);
   const [selectedTaskStatus, setSelectedTaskStatus] = useState<TaskStatus | null>(null);
+  const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
+
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!userInfo) return;
-
       setLoadingData(true);
       try {
-        let userOpps: Opportunity[];
-        let userClients: Client[];
-        let allActivities: ActivityLog[];
-        let allTasks: ClientActivity[];
-        
-        const [allClients, allUsers] = await Promise.all([getClients(), getAllUsers()]);
-        setUsers(allUsers);
-
-        // Admins and Chiefs see everything
-        if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion' || userInfo.role === 'Gerencia') {
-          [userOpps, allActivities, allTasks] = await Promise.all([
+        const [allOpps, allClients, allActivities, allTasks, allUsers, allAdvisors] = await Promise.all([
             getAllOpportunities(),
+            getClients(),
             getActivities(100),
             getAllClientActivities(),
-          ]);
-          userClients = allClients;
-          setActivities(allActivities); // Set all activities for Jefe
-          setTasks(allTasks.filter(t => t.isTask)); // Show all tasks
-        } else { 
-          // Asesores only see their own data
-          userClients = allClients.filter(client => client.ownerId === userInfo.id);
-          const userClientIds = userClients.map(c => c.id);
+            getAllUsers(),
+            getAllUsers('Asesor'),
+        ]);
 
-          const [opps, activities, tasks] = await Promise.all([
-            getOpportunitiesForUser(userInfo.id),
-            getActivities(100),
-            getAllClientActivities(),
-          ]);
-          
-          userOpps = opps;
-          
-          const filteredActivities = activities.filter(activity => {
-              const client = allClients.find(c => c.id === activity.entityId);
-              return client && client.ownerId === userInfo.id;
-          });
-
-          const filteredTasks = tasks.filter(t => t.isTask && userClientIds.includes(t.clientId));
-          
-          setActivities(filteredActivities);
-          setTasks(filteredTasks);
-        }
-
-        setOpportunities(userOpps);
-        setClients(userClients);
+        setOpportunities(allOpps);
+        setClients(allClients);
+        setActivities(allActivities);
+        setTasks(allTasks);
+        setUsers(allUsers);
+        setAdvisors(allAdvisors);
 
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -216,23 +188,65 @@ export default function DashboardPage() {
       }
     };
 
-    if (userInfo) {
-        fetchData();
-    }
-  }, [userInfo]);
+    fetchData();
+  }, []);
   
-    const today = startOfToday();
-    const overdueTasks = tasks.filter(t => {
-        if (t.completed || !t.dueDate) return false;
-        const dueDate = new Date(t.dueDate);
-        return new Date(dueDate.toDateString()) < new Date(today.toDateString());
-    });
-    const dueTodayTasks = tasks.filter(t => !t.completed && t.dueDate && isToday(new Date(t.dueDate)));
-    const dueTomorrowTasks = tasks.filter(t => !t.completed && t.dueDate && isTomorrow(new Date(t.dueDate)));
-    const hasPendingTasks = overdueTasks.length > 0 || dueTodayTasks.length > 0 || dueTomorrowTasks.length > 0;
+  const advisorClientIds = useMemo(() => {
+    if (selectedAdvisor === 'all' || !isBoss) return null;
+    return new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
+  }, [clients, selectedAdvisor, isBoss]);
+
+
+  const { 
+    userOpportunities, 
+    userClients, 
+    userActivities, 
+    userTasks 
+  } = useMemo(() => {
+    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [] };
+    
+    if (isBoss) {
+      if (selectedAdvisor === 'all') {
+        return { userOpportunities: opportunities, userClients: clients, userActivities: activities, userTasks: tasks.filter(t => t.isTask) };
+      }
+      return {
+        userOpportunities: opportunities.filter(opp => advisorClientIds?.has(opp.clientId)),
+        userClients: clients.filter(c => c.ownerId === selectedAdvisor),
+        userActivities: activities.filter(act => {
+            const client = clients.find(c => c.id === act.entityId);
+            return client?.ownerId === selectedAdvisor;
+        }),
+        userTasks: tasks.filter(t => t.isTask && advisorClientIds?.has(t.clientId))
+      }
+    }
+
+    // For non-boss users
+    const ownClientIds = new Set(clients.filter(client => client.ownerId === userInfo.id).map(c => c.id));
+    return {
+        userOpportunities: opportunities.filter(opp => ownClientIds.has(opp.clientId)),
+        userClients: clients.filter(client => client.ownerId === userInfo.id),
+        userActivities: activities.filter(act => {
+            const client = clients.find(c => c.id === act.entityId);
+            return client && client.ownerId === userInfo.id;
+        }),
+        userTasks: tasks.filter(t => t.isTask && ownClientIds.has(t.clientId))
+    }
+
+  }, [userInfo, isBoss, opportunities, clients, activities, tasks, selectedAdvisor, advisorClientIds]);
+
+
+  const today = startOfToday();
+  const overdueTasks = userTasks.filter(t => {
+      if (t.completed || !t.dueDate) return false;
+      const dueDate = new Date(t.dueDate);
+      return new Date(dueDate.toDateString()) < new Date(today.toDateString());
+  });
+  const dueTodayTasks = userTasks.filter(t => !t.completed && t.dueDate && isToday(new Date(t.dueDate)));
+  const dueTomorrowTasks = userTasks.filter(t => !t.completed && t.dueDate && isTomorrow(new Date(t.dueDate)));
+  const hasPendingTasks = overdueTasks.length > 0 || dueTodayTasks.length > 0 || dueTomorrowTasks.length > 0;
 
   useEffect(() => {
-    if (loadingData) return;
+    if (loadingData || isBoss) return; // Notifications only for non-bosses
 
     if (hasPendingTasks && notificationPermission === 'default') {
         toast({
@@ -255,6 +269,7 @@ export default function DashboardPage() {
     }
   }, [
       loadingData, 
+      isBoss,
       hasPendingTasks, 
       overdueTasks.length,
       dueTodayTasks.length,
@@ -274,24 +289,22 @@ export default function DashboardPage() {
           completed,
           ...(completed && {
               completedByUserId: userInfo.id,
-              completedByUserName: userInfo.name, // This will be denormalized, but it's ok for optimistic update
+              completedByUserName: userInfo.name,
           })
       };
 
       try {
-          // Optimistic update
           const originalTasks = tasks;
           setTasks(prevTasks => prevTasks.map(t => t.id === task.id ? {
                 ...t, 
                 completed,
                 completedAt: completed ? new Date().toISOString() : undefined,
                 completedByUserId: completed ? userInfo.id : undefined,
-                completedByUserName: completed ? userInfo.name : undefined // optimistic update
+                completedByUserName: completed ? userInfo.name : undefined
             } : t
           ));
           await updateClientActivity(task.id, payload);
           toast({ title: `Tarea ${completed ? 'completada' : 'marcada como pendiente'}`});
-          // No need to refetch, optimistic update is enough for the UI
       } catch (error) {
            console.error("Error updating task status", error);
            setTasks(prevTasks => prevTasks.map(t => t.id === task.id ? task : t)); // Revert on error
@@ -327,37 +340,47 @@ export default function DashboardPage() {
   }, {} as Record<string, User>);
 
 
-  const filteredOpportunities = opportunities.filter(opp => {
+  const filteredOpportunities = userOpportunities.filter(opp => {
     if (!dateRange?.from || !dateRange?.to) return true;
     const closeDate = new Date(opp.closeDate);
     return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
   });
   
-  const filteredActivities = activities.filter(activity => {
+  const filteredActivities = userActivities.filter(activity => {
       if (!dateRange?.from || !dateRange?.to) return true;
       const activityDate = new Date(activity.timestamp);
       return isWithinInterval(activityDate, { start: dateRange.from, end: dateRange.to });
-  }).slice(0, 10); // Limit to 10 after filtering
+  }).slice(0, 10);
 
 
   const totalRevenue = filteredOpportunities
     .filter((o) => o.stage === 'Cerrado - Ganado')
     .reduce((acc, o) => acc + (o.valorCerrado || o.value), 0);
 
-  const forecastedRevenue = filteredOpportunities
-    .filter((o) => o.stage !== 'Cerrado - Perdido' && o.stage !== 'Cerrado - Ganado')
-    .reduce((acc, o) => acc + o.value * 0.5, 0); // Simplified forecast
-
   const activeOpportunities = filteredOpportunities.filter(
     (o) => o.stage !== 'Cerrado - Ganado' && o.stage !== 'Cerrado - Perdido'
-  ).length;
+  );
+  const forecastedRevenue = activeOpportunities.reduce((acc, o) => acc + o.value * 0.5, 0);
   
-  const totalClients = clients.length;
+  const totalClients = userClients.length;
 
   return (
     <div className="flex flex-col h-full">
       <Header title="Panel">
         <DynamicDateRangePicker date={dateRange} onDateChange={setDateRange} />
+        {isBoss && (
+          <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
+            <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectValue placeholder="Filtrar por asesor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los asesores</SelectItem>
+              {advisors.map(advisor => (
+                <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
@@ -379,20 +402,22 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </Link>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Oportunidades Activas
-              </CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {activeOpportunities}
-              </div>
-              <p className="text-xs text-muted-foreground">Oportunidades en curso en el período.</p>
-            </CardContent>
-          </Card>
+          <Link href="/opportunities">
+            <Card className="hover:bg-muted/50 transition-colors">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Oportunidades Activas
+                </CardTitle>
+                <Activity className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {activeOpportunities.length}
+                </div>
+                <p className="text-xs text-muted-foreground">Oportunidades en curso en el período.</p>
+              </CardContent>
+            </Card>
+          </Link>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Clientes Totales</CardTitle>
@@ -405,22 +430,24 @@ export default function DashboardPage() {
               </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Ingresos Previstos
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                ${forecastedRevenue.toLocaleString('es-AR')}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Basado en el pipeline del período.
-              </p>
-            </CardContent>
-          </Card>
+           <Link href="/opportunities">
+            <Card className="hover:bg-muted/50 transition-colors">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Ingresos Previstos
+                </CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  ${forecastedRevenue.toLocaleString('es-AR')}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Basado en el pipeline del período.
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
 
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-1 gap-6">
