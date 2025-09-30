@@ -68,14 +68,12 @@ export const getClient = async (id: string): Promise<Client | null> => {
 };
 
 export const createClient = async (
-    clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId' | 'ownerName'>,
+    clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>,
     userId: string,
     userName: string
 ): Promise<string> => {
     const newClientData = {
         ...clientData,
-        avatarUrl: `https://picsum.photos/seed/client-${Date.now()}/40/40`,
-        avatarFallback: clientData.denominacion.substring(0, 2).toUpperCase(),
         personIds: [],
         ownerId: userId,
         ownerName: userName,
@@ -108,9 +106,6 @@ export const updateClient = async (
     const originalData = originalDoc.data() as Client;
 
     const updateData = { ...data };
-    if (data.denominacion && !data.avatarFallback) {
-        updateData.avatarFallback = data.denominacion.substring(0, 2).toUpperCase();
-    }
     
     await updateDoc(docRef, {
         ...updateData,

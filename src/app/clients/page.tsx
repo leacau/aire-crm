@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/table';
 import { FileDown, MoreHorizontal, PlusCircle, Search } from 'lucide-react';
 import Link from 'next/link';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
@@ -71,7 +70,7 @@ export default function ClientsPage() {
   }, [clients, searchTerm]);
 
 
-  const handleSaveClient = async (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId' | 'ownerName'>) => {
+  const handleSaveClient = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>) => {
     if (!userInfo) {
         toast({
             title: "Error",
@@ -133,7 +132,6 @@ export default function ClientsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[80px]">Avatar</TableHead>
                 <TableHead>Denominación</TableHead>
                 <TableHead className="hidden sm:table-cell">Razón Social</TableHead>
                 <TableHead className="hidden lg:table-cell">Negocios Abiertos</TableHead>
@@ -159,12 +157,6 @@ export default function ClientsPage() {
 
                 return (
                   <TableRow key={client.id}>
-                    <TableCell>
-                      <Avatar>
-                        <AvatarImage src={client.avatarUrl} alt={client.denominacion} data-ai-hint="logo building" />
-                        <AvatarFallback>{client.avatarFallback}</AvatarFallback>
-                      </Avatar>
-                    </TableCell>
                     <TableCell>
                       {canViewDetails ? (
                          <Link

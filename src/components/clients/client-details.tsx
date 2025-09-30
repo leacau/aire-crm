@@ -9,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Mail,
   Phone,
@@ -334,7 +333,7 @@ export function ClientDetails({
   };
 
 
-  const handleSaveClient = (clientData: Omit<Client, 'id' | 'avatarUrl' | 'avatarFallback' | 'personIds' | 'ownerId' | 'ownerName'>) => {
+  const handleSaveClient = (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>) => {
     onUpdate(clientData);
   };
 
@@ -380,10 +379,6 @@ export function ClientDetails({
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <Avatar className="h-16 w-16">
-                      <AvatarImage src={client.avatarUrl} alt={client.denominacion} data-ai-hint="logo building" />
-                      <AvatarFallback>{client.avatarFallback}</AvatarFallback>
-                  </Avatar>
                   <div className="flex-1 min-w-0">
                       <CardTitle className="text-2xl truncate">{client.denominacion}</CardTitle>
                       <CardDescription className="truncate">{client.razonSocial}</CardDescription>

@@ -56,8 +56,6 @@ export type Client = {
   email: string;
   phone: string;
   observaciones?: string;
-  avatarUrl: string;
-  avatarFallback: string;
   personIds: string[];
   ownerId: string;
   ownerName: string;
