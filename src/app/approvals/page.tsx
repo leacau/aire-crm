@@ -8,8 +8,8 @@ import { Header } from '@/components/layout/header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getClients } from '@/lib/firebase-service';
-import type { Opportunity, Client } from '@/lib/types';
+import { getAllOpportunities, getClients, getAllUsers } from '@/lib/firebase-service';
+import type { Opportunity, Client, User } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { ApprovalsTable } from '@/components/approvals/approvals-table';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
@@ -23,6 +23,7 @@ function ApprovalsPageComponent() {
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -39,12 +40,14 @@ function ApprovalsPageComponent() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      const [allOpps, allClients] = await Promise.all([
+      const [allOpps, allClients, allUsers] = await Promise.all([
         getAllOpportunities(),
-        getClients()
+        getClients(),
+        getAllUsers(),
       ]);
       setOpportunities(allOpps.filter(opp => opp.bonificacionEstado));
       setClients(allClients);
+      setUsers(allUsers);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: 'Error al cargar las solicitudes', variant: 'destructive' });
@@ -91,10 +94,16 @@ function ApprovalsPageComponent() {
   const approvedOpps = opportunities.filter((opp) => opp.bonificacionEstado === 'Autorizado');
   const rejectedOpps = opportunities.filter((opp) => opp.bonificacionEstado === 'Rechazado');
 
-  const clientOwnerNames = clients.reduce((acc, client) => {
-    acc[client.id] = client.ownerName;
+  const clientsMap = clients.reduce((acc, client) => {
+    acc[client.id] = client;
     return acc;
-  }, {} as Record<string, string>);
+  }, {} as Record<string, Client>);
+  
+  const usersMap = users.reduce((acc, user) => {
+    acc[user.id] = user;
+    return acc;
+  }, {} as Record<string, User>);
+
 
   return (
     <div className="flex flex-col h-full">
@@ -107,13 +116,13 @@ function ApprovalsPageComponent() {
             <TabsTrigger value="rejected">Rechazadas</TabsTrigger>
           </TabsList>
           <TabsContent value="pending">
-            <ApprovalsTable opportunities={pendingOpps} onRowClick={handleRowClick} ownerNames={clientOwnerNames} />
+            <ApprovalsTable opportunities={pendingOpps} onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} />
           </TabsContent>
           <TabsContent value="approved">
-            <ApprovalsTable opportunities={approvedOpps} onRowClick={handleRowClick} ownerNames={clientOwnerNames} />
+            <ApprovalsTable opportunities={approvedOpps} onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} />
           </TabsContent>
            <TabsContent value="rejected">
-            <ApprovalsTable opportunities={rejectedOpps} onRowClick={handleRowClick} ownerNames={clientOwnerNames} />
+            <ApprovalsTable opportunities={rejectedOpps} onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} />
           </TabsContent>
         </Tabs>
       </main>

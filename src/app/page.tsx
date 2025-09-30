@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -23,7 +24,7 @@ import {
   CalendarClock,
   CheckCircle,
 } from 'lucide-react';
-import type { Opportunity, Client, ActivityLog, ClientActivity } from '@/lib/types';
+import type { Opportunity, Client, ActivityLog, ClientActivity, User } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
   getAllOpportunities,
@@ -32,6 +33,7 @@ import {
   getActivities,
   getAllClientActivities,
   updateClientActivity,
+  getAllUsers,
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
@@ -63,6 +65,7 @@ interface TaskSectionProps {
     tasks: ClientActivity[];
     icon: React.ReactNode;
     onTaskToggle: (task: ClientActivity, status: boolean) => void;
+    usersMap: Record<string, User>;
 }
 
 const DynamicDateRangePicker = dynamic(() => import('@/components/ui/date-range-picker').then(mod => mod.DateRangePicker), {
@@ -71,7 +74,7 @@ const DynamicDateRangePicker = dynamic(() => import('@/components/ui/date-range-
 });
 
 
-const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskToggle }) => (
+const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskToggle, usersMap }) => (
     <div className='mt-4'>
         <h4 className="flex items-center font-semibold mb-3 text-md border-b pb-2">
             {icon}
@@ -79,36 +82,39 @@ const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskTog
         </h4>
         {tasks.length > 0 ? (
             <div className="space-y-4">
-                {tasks.map(task => (
-                    <div key={task.id} className="flex items-start space-x-3">
-                        <Checkbox
-                            id={`task-dash-${task.id}`}
-                            checked={task.completed}
-                            onCheckedChange={() => onTaskToggle(task, !!task.completed)}
-                            className='mt-1'
-                        />
-                        <div className="flex flex-col text-sm flex-1">
-                            <label
-                                htmlFor={`task-dash-${task.id}`}
-                                className={cn("font-medium leading-none", task.completed && "line-through text-muted-foreground")}
-                            >
-                                {task.observation}
-                            </label>
-                            <Link href={`/clients/${task.clientId}`} className="text-xs text-muted-foreground hover:underline mt-0.5">
-                                Cliente: {task.clientName}
-                            </Link>
-                            {task.completed && task.completedAt && (
-                                <div className='text-xs text-muted-foreground mt-1 space-y-0.5'>
-                                    <p className='flex items-center'>
-                                        <CheckCircle className="h-3 w-3 mr-1 text-green-600"/>
-                                        Finalizada: {format(new Date(task.completedAt), "PPP", { locale: es })}
-                                    </p>
-                                    <p>Por: {task.completedByUserName}</p>
-                                </div>
-                            )}
+                {tasks.map(task => {
+                    const completedByUserName = task.completedByUserId ? usersMap[task.completedByUserId]?.name : task.completedByUserName;
+                    return (
+                        <div key={task.id} className="flex items-start space-x-3">
+                            <Checkbox
+                                id={`task-dash-${task.id}`}
+                                checked={task.completed}
+                                onCheckedChange={() => onTaskToggle(task, !!task.completed)}
+                                className='mt-1'
+                            />
+                            <div className="flex flex-col text-sm flex-1">
+                                <label
+                                    htmlFor={`task-dash-${task.id}`}
+                                    className={cn("font-medium leading-none", task.completed && "line-through text-muted-foreground")}
+                                >
+                                    {task.observation}
+                                </label>
+                                <Link href={`/clients/${task.clientId}`} className="text-xs text-muted-foreground hover:underline mt-0.5">
+                                    Cliente: {task.clientName}
+                                </Link>
+                                {task.completed && task.completedAt && (
+                                    <div className='text-xs text-muted-foreground mt-1 space-y-0.5'>
+                                        <p className='flex items-center'>
+                                            <CheckCircle className="h-3 w-3 mr-1 text-green-600"/>
+                                            Finalizada: {format(new Date(task.completedAt), "PPP", { locale: es })}
+                                        </p>
+                                        <p>Por: {completedByUserName}</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         ) : (
             <p className="text-sm text-muted-foreground">No hay tareas en esta categoría.</p>
@@ -146,6 +152,7 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [tasks, setTasks] = useState<ClientActivity[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [notified, setNotified] = useState(false);
@@ -162,10 +169,11 @@ export default function DashboardPage() {
         let allActivities: ActivityLog[];
         let allTasks: ClientActivity[];
         
-        const allClients = await getClients();
+        const [allClients, allUsers] = await Promise.all([getClients(), getAllUsers()]);
+        setUsers(allUsers);
 
         // Admins and Chiefs see everything
-        if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion') {
+        if (userInfo.role === 'Jefe' || userInfo.role === 'Administracion' || userInfo.role === 'Gerencia') {
           [userOpps, allActivities, allTasks] = await Promise.all([
             getAllOpportunities(),
             getActivities(100),
@@ -266,17 +274,19 @@ export default function DashboardPage() {
           completed,
           ...(completed && {
               completedByUserId: userInfo.id,
-              completedByUserName: userInfo.name,
+              completedByUserName: userInfo.name, // This will be denormalized, but it's ok for optimistic update
           })
       };
 
       try {
           // Optimistic update
+          const originalTasks = tasks;
           setTasks(prevTasks => prevTasks.map(t => t.id === task.id ? {
                 ...t, 
                 completed,
                 completedAt: completed ? new Date().toISOString() : undefined,
-                completedByUserName: completed ? userInfo.name : undefined
+                completedByUserId: completed ? userInfo.id : undefined,
+                completedByUserName: completed ? userInfo.name : undefined // optimistic update
             } : t
           ));
           await updateClientActivity(task.id, payload);
@@ -310,6 +320,12 @@ export default function DashboardPage() {
       </div>
     );
   }
+  
+  const usersMap = users.reduce((acc, user) => {
+    acc[user.id] = user;
+    return acc;
+  }, {} as Record<string, User>);
+
 
   const filteredOpportunities = opportunities.filter(opp => {
     if (!dateRange?.from || !dateRange?.to) return true;
@@ -453,6 +469,7 @@ export default function DashboardPage() {
                              <CalendarClock className="h-5 w-5 text-yellow-500" />
                            }
                            onTaskToggle={handleTaskToggle}
+                           usersMap={usersMap}
                         />
                     )}
                 </CardContent>
@@ -479,7 +496,7 @@ export default function DashboardPage() {
                                 </p>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                                Por: {activity.userName || 'Usuario desconocido'}
+                                Por: {usersMap[activity.userId]?.name || 'Usuario desconocido'}
                             </p>
                             </div>
                         </div>

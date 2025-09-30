@@ -1,7 +1,8 @@
 
+
 'use client';
 
-import type { Opportunity } from '@/lib/types';
+import type { Opportunity, Client, User } from '@/lib/types';
 import {
   Table,
   TableBody,
@@ -19,7 +20,8 @@ import { Badge } from '../ui/badge';
 interface ApprovalsTableProps {
   opportunities: Opportunity[];
   onRowClick: (opp: Opportunity) => void;
-  ownerNames: Record<string, string>;
+  clientsMap: Record<string, Client>;
+  usersMap: Record<string, User>;
 }
 
 const getBonusStatusPill = (status?: string) => {
@@ -33,7 +35,7 @@ const getBonusStatusPill = (status?: string) => {
   return <Badge variant="outline" className={cn(baseClasses, statusMap[status])}>{status}</Badge>;
 };
 
-export const ApprovalsTable = ({ opportunities, onRowClick, ownerNames }: ApprovalsTableProps) => (
+export const ApprovalsTable = ({ opportunities, onRowClick, clientsMap, usersMap }: ApprovalsTableProps) => (
   <div className="border rounded-lg">
     <Table>
       <TableHeader>
@@ -49,32 +51,38 @@ export const ApprovalsTable = ({ opportunities, onRowClick, ownerNames }: Approv
       </TableHeader>
       <TableBody>
         {opportunities.length > 0 ? (
-          opportunities.map((opp) => (
-            <TableRow key={opp.id} onClick={() => onRowClick(opp)} className="cursor-pointer">
-              <TableCell className="font-medium">{opp.title}</TableCell>
-              <TableCell>
-                <Link href={`/clients/${opp.clientId}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
-                  {opp.clientName}
-                </Link>
-              </TableCell>
-              <TableCell className="hidden md:table-cell">{ownerNames[opp.clientId] || '-'}</TableCell>
-              <TableCell className="text-right">${(opp.valorCerrado || opp.value).toLocaleString('es-AR')}</TableCell>
-              <TableCell className="font-bold">{opp.bonificacionDetalle}</TableCell>
-              <TableCell>
-                  {getBonusStatusPill(opp.bonificacionEstado)}
-              </TableCell>
-               <TableCell className="hidden lg:table-cell">
-                 {opp.bonificacionAutorizadoPorNombre && (
-                    <div className="text-xs">
-                        <p className="font-medium">{opp.bonificacionAutorizadoPorNombre}</p>
-                        <p className="text-muted-foreground">
-                            {opp.bonificacionFechaAutorizacion ? format(new Date(opp.bonificacionFechaAutorizacion), "P", { locale: es }) : ''}
-                        </p>
-                    </div>
-                 )}
-              </TableCell>
-            </TableRow>
-          ))
+          opportunities.map((opp) => {
+            const client = clientsMap[opp.clientId];
+            const ownerName = client ? usersMap[client.ownerId]?.name : 'N/A';
+            const approverName = opp.bonificacionAutorizadoPorId ? usersMap[opp.bonificacionAutorizadoPorId]?.name : opp.bonificacionAutorizadoPorNombre;
+
+            return (
+              <TableRow key={opp.id} onClick={() => onRowClick(opp)} className="cursor-pointer">
+                <TableCell className="font-medium">{opp.title}</TableCell>
+                <TableCell>
+                  <Link href={`/clients/${opp.clientId}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+                    {opp.clientName}
+                  </Link>
+                </TableCell>
+                <TableCell className="hidden md:table-cell">{ownerName}</TableCell>
+                <TableCell className="text-right">${(opp.valorCerrado || opp.value).toLocaleString('es-AR')}</TableCell>
+                <TableCell className="font-bold">{opp.bonificacionDetalle}</TableCell>
+                <TableCell>
+                    {getBonusStatusPill(opp.bonificacionEstado)}
+                </TableCell>
+                <TableCell className="hidden lg:table-cell">
+                  {approverName && (
+                      <div className="text-xs">
+                          <p className="font-medium">{approverName}</p>
+                          <p className="text-muted-foreground">
+                              {opp.bonificacionFechaAutorizacion ? format(new Date(opp.bonificacionFechaAutorizacion), "P", { locale: es }) : ''}
+                          </p>
+                      </div>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })
         ) : (
           <TableRow>
             <TableCell colSpan={7} className="h-24 text-center">

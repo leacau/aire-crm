@@ -1,7 +1,7 @@
 
 
 'use client'
-import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog } from '@/lib/types';
+import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User } from '@/lib/types';
 import React, { useEffect, useState } from 'react';
 import {
   Card,
@@ -66,7 +66,7 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson } from '@/lib/firebase-service';
+import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
@@ -144,6 +144,7 @@ export function ClientDetails({
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clientActivities, setClientActivities] = useState<ClientActivity[]>([]);
   const [systemActivities, setSystemActivities] = useState<ActivityLog[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   
   // New Activity State
   const [newActivityType, setNewActivityType] = useState<ClientActivityType | ''>('');
@@ -168,16 +169,18 @@ export function ClientDetails({
   const fetchClientData = async () => {
       if(!userInfo) return;
       try {
-        const [clientPeople, clientOpportunities, activities, systemLogs] = await Promise.all([
+        const [clientPeople, clientOpportunities, activities, systemLogs, allUsers] = await Promise.all([
             getPeopleByClientId(client.id),
             getOpportunitiesByClientId(client.id),
             getClientActivities(client.id),
-            getActivitiesForEntity(client.id)
+            getActivitiesForEntity(client.id),
+            getAllUsers(),
         ]);
         setPeople(clientPeople);
         setOpportunities(clientOpportunities);
         setClientActivities(activities);
         setSystemActivities(systemLogs);
+        setUsers(allUsers);
       } catch (error) {
         console.error("Error fetching client data:", error);
         toast({ title: "Error al cargar los datos del cliente", variant: "destructive" });
@@ -188,6 +191,10 @@ export function ClientDetails({
     fetchClientData();
   }, [client.id, userInfo]);
 
+  const usersMap = users.reduce((acc, user) => {
+    acc[user.id] = user;
+    return acc;
+  }, {} as Record<string, User>);
 
   const canEditClient = isBoss || (userInfo?.id === client.ownerId);
   const canEditContact = isBoss || (userInfo?.id === client.ownerId);
@@ -696,49 +703,53 @@ export function ClientDetails({
                     </div>
 
                     <div className="mt-6 space-y-4">
-                        {clientActivities.map(activity => (
-                            <div key={activity.id} className="flex items-start gap-3">
-                                {activity.isTask && (
-                                    <Checkbox 
-                                        id={`task-${activity.id}`}
-                                        checked={activity.completed}
-                                        onCheckedChange={() => handleTaskCompleteToggle(activity, !!activity.completed)}
-                                        className="mt-1"
-                                    />
-                                )}
-                                <div className={cn("p-2 bg-muted rounded-full", !activity.isTask && "mt-1")}>
-                                    {activityIcons[activity.type]}
-                                </div>
-                                <div className={cn('flex-1', activity.completed && 'line-through text-muted-foreground')}>
-                                    <div className="flex items-center justify-between">
-                                        <div className='flex items-center gap-2'>
-                                            <span className="font-semibold text-sm">{activity.type}</span>
-                                            {!activity.isTask && <ConvertToTaskPopover activityId={activity.id} />}
-                                        </div>
-                                        <span className="text-xs">
-                                            {new Date(activity.timestamp).toLocaleDateString()}
-                                        </span>
+                        {clientActivities.map(activity => {
+                            const userName = usersMap[activity.userId]?.name || activity.userName;
+                            const completedByUserName = activity.completedByUserId ? (usersMap[activity.completedByUserId]?.name || activity.completedByUserName) : undefined;
+                            return (
+                                <div key={activity.id} className="flex items-start gap-3">
+                                    {activity.isTask && (
+                                        <Checkbox 
+                                            id={`task-${activity.id}`}
+                                            checked={activity.completed}
+                                            onCheckedChange={() => handleTaskCompleteToggle(activity, !!activity.completed)}
+                                            className="mt-1"
+                                        />
+                                    )}
+                                    <div className={cn("p-2 bg-muted rounded-full", !activity.isTask && "mt-1")}>
+                                        {activityIcons[activity.type]}
                                     </div>
-                                    <p className="text-sm">{activity.observation}</p>
-                                    {activity.isTask && activity.dueDate && (
-                                        <p className="text-xs mt-1 font-medium flex items-center">
-                                            <CalendarIcon className="h-3 w-3 mr-1" />
-                                            Vence: {format(new Date(activity.dueDate), "PPP", { locale: es })}
-                                        </p>
-                                    )}
-                                    <p className="text-xs mt-1">Registrado por: {activity.userName}</p>
-                                    {activity.completed && activity.completedAt && (
-                                        <div className='text-xs mt-1'>
-                                            <p className='font-medium flex items-center text-green-600'>
-                                               <CheckCircle className="h-3 w-3 mr-1"/>
-                                               Finalizada: {format(new Date(activity.completedAt), "PPP", { locale: es })}
-                                            </p>
-                                            <p className="text-muted-foreground">Por: {activity.completedByUserName}</p>
+                                    <div className={cn('flex-1', activity.completed && 'line-through text-muted-foreground')}>
+                                        <div className="flex items-center justify-between">
+                                            <div className='flex items-center gap-2'>
+                                                <span className="font-semibold text-sm">{activity.type}</span>
+                                                {!activity.isTask && <ConvertToTaskPopover activityId={activity.id} />}
+                                            </div>
+                                            <span className="text-xs">
+                                                {new Date(activity.timestamp).toLocaleDateString()}
+                                            </span>
                                         </div>
-                                    )}
+                                        <p className="text-sm">{activity.observation}</p>
+                                        {activity.isTask && activity.dueDate && (
+                                            <p className="text-xs mt-1 font-medium flex items-center">
+                                                <CalendarIcon className="h-3 w-3 mr-1" />
+                                                Vence: {format(new Date(activity.dueDate), "PPP", { locale: es })}
+                                            </p>
+                                        )}
+                                        <p className="text-xs mt-1">Registrado por: {userName}</p>
+                                        {activity.completed && activity.completedAt && (
+                                            <div className='text-xs mt-1'>
+                                                <p className='font-medium flex items-center text-green-600'>
+                                                <CheckCircle className="h-3 w-3 mr-1"/>
+                                                Finalizada: {format(new Date(activity.completedAt), "PPP", { locale: es })}
+                                                </p>
+                                                <p className="text-muted-foreground">Por: {completedByUserName}</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                         {clientActivities.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No hay actividades registradas.</p>}
                     </div>
                 </CardContent>
@@ -767,7 +778,7 @@ export function ClientDetails({
                                 </p>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                                Por: {activity.userName || 'Usuario desconocido'}
+                                Por: {usersMap[activity.userId]?.name || 'Usuario desconocido'}
                             </p>
                             </div>
                         </div>
