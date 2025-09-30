@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithRedirect, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,7 +20,6 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Logo } from '@/components/logo';
 import { Separator } from '@/components/ui/separator';
-import { createUserProfile, getUserProfile } from '@/lib/firebase-service';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -51,32 +50,15 @@ export default function LoginPage() {
     const provider = new GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/calendar');
     provider.addScope('https://www.googleapis.com/auth/gmail.send');
-
+    
     try {
-        const result = await signInWithPopup(auth, provider);
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        const token = credential?.accessToken;
-        const user = result.user;
-
-        // Store access token in session storage
-        if (token) {
-            sessionStorage.setItem('google-calendar-token', token);
-        }
-
-        // Check if user profile exists, if not create one
-        const userProfile = await getUserProfile(user.uid);
-        if (!userProfile) {
-            await createUserProfile(user.uid, user.displayName || 'Usuario de Google', user.email || '');
-        }
-
-        router.push('/');
+        await signInWithRedirect(auth, provider);
     } catch (error: any) {
-        toast({
+         toast({
             title: 'Error con Google Sign-In',
             description: error.message,
             variant: 'destructive',
         });
-    } finally {
         setLoading(false);
     }
   };
