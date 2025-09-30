@@ -37,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
@@ -62,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 
                 const intendedUrl = sessionStorage.getItem('redirect_url') || '/';
                 sessionStorage.removeItem('redirect_url');
-                // No need to manually push, the onAuthStateChanged will trigger the other useEffect
+                router.push(intendedUrl);
             }
         } catch (error: any) {
             toast({
@@ -70,6 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 description: error.message,
                 variant: 'destructive',
             });
+        } finally {
+            setIsProcessingRedirect(false);
         }
     };
     
@@ -110,26 +113,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [toast]);
+  }, [router, toast]);
 
   useEffect(() => {
-    if (!loading) {
-      const isPublicRoute = publicRoutes.includes(pathname);
-      
+    const isPublicRoute = publicRoutes.includes(pathname);
+    // Wait until redirect processing is done and auth state is loaded
+    if (!loading && !isProcessingRedirect) {
       if (!user && !isPublicRoute) {
         router.push('/login');
       } else if (user && isPublicRoute) {
-        const intendedUrl = sessionStorage.getItem('redirect_url') || '/';
-        sessionStorage.removeItem('redirect_url');
-        router.push(intendedUrl);
+        router.push('/');
       }
     }
-  }, [user, loading, pathname, router]);
+  }, [user, loading, isProcessingRedirect, pathname, router]);
 
     const getGoogleAccessToken = async (): Promise<string | null> => {
         const storedToken = sessionStorage.getItem('google-access-token');
         if (storedToken) {
-            // TODO: Here you might want to check for token expiration
             return storedToken;
         }
         return null;
@@ -140,16 +140,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const initiateGoogleSignIn = useCallback(() => {
-        const provider = new GoogleAuthProvider();
-        provider.addScope('https://www.googleapis.com/auth/calendar');
-        provider.addScope('https://www.googleapis.com/auth/gmail.send');
-        provider.addScope('https://www.googleapis.com/auth/tasks');
-        sessionStorage.setItem('redirect_url', window.location.pathname);
-        signInWithRedirect(auth, provider);
-    }, []);
+        if (user) {
+            const provider = new GoogleAuthProvider();
+            provider.addScope('https://www.googleapis.com/auth/calendar');
+            provider.addScope('https://www.googleapis.com/auth/gmail.send');
+            provider.addScope('https://www.googleapis.com/auth/tasks');
+            sessionStorage.setItem('redirect_url', window.location.pathname);
+            signInWithRedirect(auth, provider);
+        } else {
+            // Handle case where user is not logged in when initiating sign-in
+            const provider = new GoogleAuthProvider();
+            provider.addScope('https://www.googleapis.com/auth/calendar');
+            provider.addScope('https://www.googleapis.com/auth/gmail.send');
+            provider.addScope('https://www.googleapis.com/auth/tasks');
+            signInWithRedirect(auth, provider);
+        }
+    }, [user]);
 
 
-  if (loading && !publicRoutes.includes(pathname)) {
+  const isLoading = loading || isProcessingRedirect;
+  const isPublicRoute = publicRoutes.includes(pathname);
+
+  if (isLoading && !isPublicRoute) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Spinner size="large" />
@@ -157,12 +169,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!loading && (user || publicRoutes.includes(pathname))) {
+  if (!isLoading && (user || isPublicRoute)) {
     return (
-      <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, hasGoogleAccessToken, initiateGoogleSignIn }}>
+      <AuthContext.Provider value={{ user, userInfo, loading: isLoading, isBoss, getGoogleAccessToken, hasGoogleAccessToken, initiateGoogleSignIn }}>
         {children}
       </AuthContext.Provider>
     );
+  }
+  
+  if(isPublicRoute){
+       return (
+         <AuthContext.Provider value={{ user, userInfo, loading: isLoading, isBoss, getGoogleAccessToken, hasGoogleAccessToken, initiateGoogleSignIn }}>
+            {children}
+         </AuthContext.Provider>
+       )
   }
 
   return (
