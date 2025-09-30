@@ -26,7 +26,7 @@ interface Task {
     notes?: string;
 }
 
-export function GoogleTasksView() {
+const TasksView = () => {
     const { getGoogleAccessToken } = useAuth();
     const { toast } = useToast();
     
@@ -39,7 +39,6 @@ export function GoogleTasksView() {
     const [loadingTasks, setLoadingTasks] = useState(false);
     const [isCreatingTask, setIsCreatingTask] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
 
     const fetchTaskLists = useCallback(async () => {
         setLoading(true);
@@ -75,7 +74,7 @@ export function GoogleTasksView() {
             if (!token) throw new Error("No se pudo obtener el token de acceso.");
 
             const fetchedTasks = await getTasks(token, listId);
-            setTasks(fetchedTasks);
+            setTasks(fetchedTasks.filter((t: Task) => t.status === 'needsAction'));
         } catch (err: any) {
             setError(`Error al cargar las tareas: ${err.message}`);
             toast({ title: "Error", description: err.message, variant: 'destructive'});
@@ -114,8 +113,8 @@ export function GoogleTasksView() {
         if (!selectedTaskListId) return;
 
         const newStatus = task.status === 'completed' ? 'needsAction' : 'completed';
-        const originalTasks = tasks;
-        // Optimistic update
+        const originalTasks = [...tasks];
+        
         setTasks(prev => prev.filter(t => t.id !== task.id));
 
         try {
@@ -124,6 +123,9 @@ export function GoogleTasksView() {
             
             await updateTask(token, selectedTaskListId, task.id, { ...task, status: newStatus });
             toast({ title: `Tarea ${newStatus === 'completed' ? 'completada' : 'reactivada'}` });
+            
+            // Refetch to be sure
+            fetchTasks(selectedTaskListId);
 
         } catch (err: any) {
             setTasks(originalTasks); // Revert on error
@@ -131,26 +133,20 @@ export function GoogleTasksView() {
         }
     }
 
-
     if (loading) {
-        return (
-            <div className="flex h-full w-full items-center justify-center">
-                <Spinner size="large" />
-            </div>
-        );
+        return <div className="flex justify-center py-8"><Spinner size="large" /></div>;
     }
      if (error) {
-        return <p className="text-destructive">{error}</p>
+        return <p className="text-destructive text-center py-8">{error}</p>;
     }
-
+    
     return (
-        <Card className="max-w-3xl mx-auto">
-            <CardHeader>
+        <>
+            <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
                 <CardTitle>Mis Tareas de Google</CardTitle>
-                <CardDescription>Selecciona una lista para ver y gestionar tus tareas.</CardDescription>
                 {taskLists.length > 0 && selectedTaskListId && (
                      <Select value={selectedTaskListId} onValueChange={setSelectedTaskListId}>
-                        <SelectTrigger className="w-full sm:w-[280px] mt-4">
+                        <SelectTrigger className="w-full sm:w-[280px]">
                             <SelectValue placeholder="Seleccionar lista de tareas" />
                         </SelectTrigger>
                         <SelectContent>
@@ -160,45 +156,97 @@ export function GoogleTasksView() {
                         </SelectContent>
                     </Select>
                 )}
+            </div>
+
+            <form onSubmit={handleCreateTask} className="flex items-center gap-2 mb-4">
+                <Input 
+                    placeholder="Añadir una nueva tarea..."
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    disabled={isCreatingTask}
+                />
+                <Button type="submit" disabled={isCreatingTask}>
+                    {isCreatingTask ? <Spinner size="small" color="white"/> : <PlusCircle />}
+                </Button>
+            </form>
+
+            {loadingTasks ? (
+                <div className="flex justify-center py-8"><Spinner /></div>
+            ) : (
+                <div className="space-y-3">
+                    {tasks.length > 0 ? tasks.map(task => (
+                        <div key={task.id} className="flex items-start gap-3 p-3 rounded-md border bg-background hover:bg-muted/50">
+                            <Checkbox
+                                id={`task-${task.id}`}
+                                checked={task.status === 'completed'}
+                                onCheckedChange={() => handleTaskToggle(task)}
+                                className="mt-1"
+                            />
+                            <div className="flex-1">
+                                <label htmlFor={`task-${task.id}`} className="font-medium text-sm leading-none cursor-pointer">
+                                    {task.title}
+                                </label>
+                                {task.notes && <p className="text-xs text-muted-foreground mt-1">{task.notes}</p>}
+                            </div>
+                        </div>
+                    )) : (
+                        <p className="text-center text-muted-foreground py-6">No hay tareas pendientes en esta lista.</p>
+                    )}
+                </div>
+            )}
+        </>
+    );
+};
+
+
+export function GoogleTasksView() {
+    const { hasGoogleAccessToken, getGoogleAccessToken } = useAuth();
+    const [hasToken, setHasToken] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const checkToken = async () => {
+            setIsLoading(true);
+            const tokenExists = await hasGoogleAccessToken();
+            setHasToken(tokenExists);
+            setIsLoading(false);
+        };
+        checkToken();
+    }, []);
+
+    const handleConnect = async () => {
+        setIsLoading(true);
+        await getGoogleAccessToken();
+        const tokenExists = await hasGoogleAccessToken();
+        setHasToken(tokenExists);
+        setIsLoading(false);
+    };
+
+    if (isLoading) {
+         return (
+            <div className="flex h-full w-full items-center justify-center">
+                <Spinner size="large" />
+            </div>
+        );
+    }
+    
+    return (
+        <Card className="max-w-3xl mx-auto">
+            <CardHeader>
+                 <CardDescription>Visualiza y gestiona tus tareas de Google directamente desde el CRM.</CardDescription>
             </CardHeader>
             <CardContent>
-                <form onSubmit={handleCreateTask} className="flex items-center gap-2 mb-4">
-                    <Input 
-                        placeholder="Añadir una nueva tarea..."
-                        value={newTaskTitle}
-                        onChange={(e) => setNewTaskTitle(e.target.value)}
-                        disabled={isCreatingTask}
-                    />
-                    <Button type="submit" disabled={isCreatingTask}>
-                        {isCreatingTask ? <Spinner size="small" color="white"/> : <PlusCircle />}
-                    </Button>
-                </form>
-
-                {loadingTasks ? (
-                    <div className="flex justify-center py-8"><Spinner /></div>
+                {hasToken ? (
+                    <TasksView />
                 ) : (
-                    <div className="space-y-3">
-                        {tasks.length > 0 ? tasks.map(task => (
-                            <div key={task.id} className="flex items-start gap-3 p-3 rounded-md border bg-background hover:bg-muted/50">
-                                <Checkbox
-                                    id={`task-${task.id}`}
-                                    checked={task.status === 'completed'}
-                                    onCheckedChange={() => handleTaskToggle(task)}
-                                    className="mt-1"
-                                />
-                                <div className="flex-1">
-                                    <label htmlFor={`task-${task.id}`} className="font-medium text-sm leading-none cursor-pointer">
-                                        {task.title}
-                                    </label>
-                                    {task.notes && <p className="text-xs text-muted-foreground mt-1">{task.notes}</p>}
-                                </div>
-                            </div>
-                        )) : (
-                            <p className="text-center text-muted-foreground py-6">No hay tareas pendientes en esta lista.</p>
-                        )}
+                    <div className="text-center py-10">
+                        <h3 className="text-lg font-semibold mb-2">Conecta tu cuenta de Google</h3>
+                        <p className="text-muted-foreground mb-4">Para gestionar tus tareas, necesitas dar permiso a la aplicación.</p>
+                        <Button onClick={handleConnect}>Conectar con Google Tasks</Button>
                     </div>
                 )}
             </CardContent>
         </Card>
     );
 }
+

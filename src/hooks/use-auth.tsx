@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, getRedirectResult, signInWithPopup } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, getRedirectResult, signInWithRedirect } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
@@ -17,6 +17,7 @@ interface AuthContextType {
   loading: boolean;
   isBoss: boolean;
   getGoogleAccessToken: () => Promise<string | null>;
+  hasGoogleAccessToken: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -25,6 +26,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isBoss: false,
   getGoogleAccessToken: async () => null,
+  hasGoogleAccessToken: async () => false,
 });
 
 const publicRoutes = ['/login', '/register'];
@@ -56,7 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     await createUserProfile(user.uid, user.displayName || 'Usuario de Google', user.email || '');
                 }
                 
-                router.push('/');
+                // Redirect to the originally intended page or home
+                const intendedUrl = sessionStorage.getItem('redirect_url') || '/';
+                sessionStorage.removeItem('redirect_url');
+                router.push(intendedUrl);
             }
         } catch (error: any) {
             toast({
@@ -121,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const getGoogleAccessToken = async (): Promise<string | null> => {
         const storedToken = sessionStorage.getItem('google-access-token');
         if (storedToken) {
-            // Here you might want to check for token expiration
+            // TODO: Here you might want to check for token expiration
             return storedToken;
         }
 
@@ -131,19 +136,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
             provider.addScope('https://www.googleapis.com/auth/tasks');
             try {
-                const result = await signInWithPopup(auth, provider);
-                const credential = GoogleAuthProvider.credentialFromResult(result);
-                const token = credential?.accessToken;
-                if (token) {
-                    sessionStorage.setItem('google-access-token', token);
-                    return token;
-                }
+                // Use redirect flow instead of popup
+                sessionStorage.setItem('redirect_url', window.location.pathname);
+                await signInWithRedirect(auth, provider);
+                return null; // The page will redirect, so this promise might not resolve
             } catch (error) {
                 console.error("Error getting Google access token:", error);
                 return null;
             }
         }
         return null;
+    };
+    
+    const hasGoogleAccessToken = async (): Promise<boolean> => {
+        return !!sessionStorage.getItem('google-access-token');
     };
 
 
@@ -157,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (!loading && (user || publicRoutes.includes(pathname))) {
     return (
-      <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken }}>
+      <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, hasGoogleAccessToken }}>
         {children}
       </AuthContext.Provider>
     );
@@ -171,3 +177,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+
