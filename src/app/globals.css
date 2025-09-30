@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 @tailwind base;
 @tailwind components;
@@ -83,5 +84,29 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .rbc-calendar {
+    @apply h-[calc(100vh-10rem)];
+  }
+  .rbc-toolbar button {
+    @apply text-foreground bg-secondary hover:bg-muted focus:ring-ring focus:ring-2 focus:outline-none;
+  }
+  .rbc-toolbar button:active, .rbc-toolbar button.rbc-active {
+    @apply bg-primary text-primary-foreground;
+  }
+  .rbc-event {
+    @apply bg-primary/80;
+  }
+  .rbc-day-slot .rbc-event {
+    @apply border-primary;
+  }
+  .rbc-slot-selection {
+      @apply bg-primary/20;
+  }
+  .rbc-header {
+      @apply text-foreground/80;
   }
 }
