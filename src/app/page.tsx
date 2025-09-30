@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Header } from '@/components/layout/header';
 import {
   Card,
@@ -50,6 +50,7 @@ import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TasksModal } from '@/components/dashboard/tasks-modal';
+import { TaskNotification } from '@/components/dashboard/task-notification';
 
 const activityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
@@ -161,6 +162,7 @@ export default function DashboardPage() {
   const [selectedTaskStatus, setSelectedTaskStatus] = useState<TaskStatus | null>(null);
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
   const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
+  const tasksSectionRef = useRef<HTMLDivElement>(null);
 
 
   useEffect(() => {
@@ -338,6 +340,10 @@ export default function DashboardPage() {
     }
   };
 
+  const handleShowTasks = () => {
+    tasksSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
 
   if (authLoading || loadingData) {
     return (
@@ -379,6 +385,13 @@ export default function DashboardPage() {
 
   return (
     <>
+    {hasPendingTasks && (
+      <TaskNotification
+        overdueCount={overdueTasks.length}
+        dueTodayCount={dueTodayTasks.length}
+        onShowTasks={handleShowTasks}
+      />
+    )}
     <div className="flex flex-col h-full">
       <Header title="Panel">
         <DynamicDateRangePicker date={dateRange} onDateChange={setDateRange} />
@@ -464,7 +477,7 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-1 gap-6">
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-1 gap-6" ref={tasksSectionRef}>
             <Card className="lg:col-span-1">
                  <CardHeader>
                     <CardTitle>Tareas Pendientes</CardTitle>
