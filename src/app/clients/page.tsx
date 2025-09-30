@@ -210,7 +210,7 @@ export default function ClientsPage() {
                         <div className="font-medium">{client.razonSocial}</div>
                         <div className="text-sm text-muted-foreground flex items-center gap-2">
                            <span>{client.email}</span>
-                           {(!isOwner || isBoss) && <Badge variant="secondary" className="font-normal">{client.ownerName}</Badge>}
+                           {(isBoss || !isOwner) && <Badge variant="secondary" className="font-normal">{client.ownerName}</Badge>}
                         </div>
                       </div>
                     </TableCell>
