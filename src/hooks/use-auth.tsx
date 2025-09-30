@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
@@ -15,6 +15,7 @@ interface AuthContextType {
   userInfo: User | null;
   loading: boolean;
   isBoss: boolean;
+  getGoogleAccessToken: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -22,6 +23,7 @@ const AuthContext = createContext<AuthContextType>({
   userInfo: null,
   loading: true,
   isBoss: false,
+  getGoogleAccessToken: async () => null,
 });
 
 const publicRoutes = ['/login', '/register'];
@@ -50,8 +52,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserInfo(finalProfile);
           setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
         } else {
-            // This case might happen if the user profile creation fails after registration.
-            // We'll create a default one to avoid breaking the app.
             const name = firebaseUser.displayName || 'Usuario';
             const defaultProfile = {
                 id: firebaseUser.uid,
@@ -86,6 +86,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
+    const getGoogleAccessToken = async (): Promise<string | null> => {
+        const storedToken = sessionStorage.getItem('google-calendar-token');
+        if (storedToken) {
+            // Here you might want to check for token expiration
+            return storedToken;
+        }
+
+        if (user) {
+            const provider = new GoogleAuthProvider();
+            provider.addScope('https://www.googleapis.com/auth/calendar.events');
+            try {
+                const result = await signInWithPopup(auth, provider);
+                const credential = GoogleAuthProvider.credentialFromResult(result);
+                const token = credential?.accessToken;
+                if (token) {
+                    sessionStorage.setItem('google-calendar-token', token);
+                    return token;
+                }
+            } catch (error) {
+                console.error("Error getting Google access token:", error);
+                return null;
+            }
+        }
+        return null;
+    };
+
+
   if (loading && !publicRoutes.includes(pathname)) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -96,15 +123,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (!loading && (user || publicRoutes.includes(pathname))) {
     return (
-      <AuthContext.Provider value={{ user, userInfo, loading, isBoss }}>
+      <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken }}>
         {children}
       </AuthContext.Provider>
     );
   }
 
-  // This handles the case where !user and !isPublicRoute after loading,
-  // which will trigger the useEffect to redirect. Returning a spinner here
-  // prevents the old page from rendering during the redirect.
   return (
     <div className="flex h-screen items-center justify-center">
         <Spinner size="large" />
@@ -113,5 +137,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
-
-    
