@@ -195,25 +195,25 @@ export default function ClientsPage() {
                 return (
                   <TableRow key={client.id}>
                     <TableCell>
-                      {canViewDetails ? (
-                         <Link
-                          href={`/clients/${client.id}`}
-                          className="font-medium text-primary hover:underline"
-                        >
-                          {client.denominacion}
-                        </Link>
-                      ) : (
-                        <span className="font-medium">{client.denominacion}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <div className='flex flex-col gap-1'>
-                        <div className="font-medium">{client.razonSocial}</div>
-                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                      <div className="flex flex-col gap-1">
+                        {canViewDetails ? (
+                          <Link
+                            href={`/clients/${client.id}`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {client.denominacion}
+                          </Link>
+                        ) : (
+                          <span className="font-medium">{client.denominacion}</span>
+                        )}
+                         <div className="text-sm text-muted-foreground flex items-center gap-2">
                            <span>{client.email}</span>
                            {shouldShowOwner && <Badge variant="secondary" className="font-normal">{client.ownerName}</Badge>}
                         </div>
                       </div>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      {client.razonSocial}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">{canViewDetails ? clientOpps.length : '-'}</TableCell>
                     <TableCell className="hidden lg:table-cell">{canViewDetails ? `$${totalValue.toLocaleString('es-AR')}` : '-'}</TableCell>
