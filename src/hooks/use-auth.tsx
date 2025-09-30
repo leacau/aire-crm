@@ -60,10 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     await createUserProfile(user.uid, user.displayName || 'Usuario de Google', user.email || '');
                 }
                 
-                // Redirect to the originally intended page or home
                 const intendedUrl = sessionStorage.getItem('redirect_url') || '/';
                 sessionStorage.removeItem('redirect_url');
-                router.push(intendedUrl);
+                // No need to manually push, the onAuthStateChanged will trigger the other useEffect
             }
         } catch (error: any) {
             toast({
@@ -111,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (!loading) {
@@ -120,7 +119,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!user && !isPublicRoute) {
         router.push('/login');
       } else if (user && isPublicRoute) {
-        router.push('/');
+        const intendedUrl = sessionStorage.getItem('redirect_url') || '/';
+        sessionStorage.removeItem('redirect_url');
+        router.push(intendedUrl);
       }
     }
   }, [user, loading, pathname, router]);
@@ -139,15 +140,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const initiateGoogleSignIn = useCallback(() => {
-        if (user) {
-            const provider = new GoogleAuthProvider();
-            provider.addScope('https://www.googleapis.com/auth/calendar');
-            provider.addScope('https://www.googleapis.com/auth/gmail.send');
-            provider.addScope('https://www.googleapis.com/auth/tasks');
-            sessionStorage.setItem('redirect_url', window.location.pathname);
-            signInWithRedirect(auth, provider);
-        }
-    }, [user]);
+        const provider = new GoogleAuthProvider();
+        provider.addScope('https://www.googleapis.com/auth/calendar');
+        provider.addScope('https://www.googleapis.com/auth/gmail.send');
+        provider.addScope('https://www.googleapis.com/auth/tasks');
+        sessionStorage.setItem('redirect_url', window.location.pathname);
+        signInWithRedirect(auth, provider);
+    }, []);
 
 
   if (loading && !publicRoutes.includes(pathname)) {
