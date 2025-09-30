@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -26,7 +27,7 @@ import { CalendarToolbar } from './calendar-toolbar';
 
 
 const locales = {
-  'es-ES': es,
+  'es': es,
 };
 
 const localizer = dateFnsLocalizer({
@@ -136,6 +137,12 @@ export function GoogleCalendar() {
         description: formData.description || '',
         start: { dateTime: formData.start.toISOString() },
         end: { dateTime: formData.end.toISOString() },
+        reminders: {
+            useDefault: false,
+            overrides: [
+                { method: 'popup', minutes: 10 }
+            ]
+        }
       };
 
       await createCalendarEvent(token, eventToSave);
@@ -189,7 +196,7 @@ export function GoogleCalendar() {
     <>
       <div className="h-full p-4">
         <BigCalendar
-          culture='es-ES'
+          culture='es'
           localizer={localizer}
           events={events}
           startAccessor="start"
