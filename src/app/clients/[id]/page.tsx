@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
@@ -11,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import type { Client } from '@/lib/types';
-import { getClient, updateClient } from '@/lib/firebase-service';
+import { getClient, updateClient, getClients } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ClientPage() {
@@ -23,6 +24,7 @@ export default function ClientPage() {
   const id = params.id as string;
   
   const [client, setClient] = useState<Client | null>(null);
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [loadingClient, setLoadingClient] = useState(true);
 
   useEffect(() => {
@@ -30,9 +32,14 @@ export default function ClientPage() {
       if (!id) return;
       setLoadingClient(true);
       try {
-        const fetchedClient = await getClient(id);
+        const [fetchedClient, allFetchedClients] = await Promise.all([
+            getClient(id),
+            getClients()
+        ]);
+
         if (fetchedClient) {
           setClient(fetchedClient);
+          setAllClients(allFetchedClients);
         } else {
           toast({ title: "Cliente no encontrado", variant: "destructive" });
           router.push('/clients');
@@ -53,6 +60,7 @@ export default function ClientPage() {
     if (!client || !userInfo) return false;
     return (
       userInfo.role === 'Jefe' ||
+      userInfo.role === 'Gerencia' ||
       userInfo.role === 'Administracion' ||
       (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
     );
@@ -78,6 +86,14 @@ export default function ClientPage() {
     }
   };
 
+  const validateCuit = async (cuit: string, clientId?: string): Promise<string | false> => {
+    const existingClient = allClients.find(c => c.cuit === cuit && c.id !== clientId);
+    if (existingClient) {
+      return `El CUIT ya pertenece al cliente "${existingClient.denominacion}", asignado a ${existingClient.ownerName}.`;
+    }
+    return false;
+  };
+
   if (authLoading || loadingClient || !client || !userHasAccess) {
     return (
       <div className="flex h-full w-full items-center justify-center">
@@ -100,6 +116,7 @@ export default function ClientPage() {
         <ClientDetails
           client={client}
           onUpdate={handleUpdateClient}
+          onValidateCuit={validateCuit}
         />
       </main>
     </div>

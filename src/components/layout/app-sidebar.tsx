@@ -1,4 +1,5 @@
 
+
 'use client';
 import { Logo } from '@/components/logo';
 import {
@@ -20,14 +21,14 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 
 const menuItems = [
-  { href: '/', label: 'Panel', icon: Home, roles: ['Jefe', 'Asesor', 'Administracion'] },
-  { href: '/opportunities', label: 'Oportunidades', icon: CircleDollarSign, roles: ['Jefe', 'Asesor', 'Administracion'] },
-  { href: '/clients', label: 'Clientes', icon: Users, roles: ['Jefe', 'Asesor', 'Administracion'] },
-  { href: '/billing', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Asesor', 'Administracion'] },
-  { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, roles: ['Jefe'] },
-  { href: '/activity', label: 'Actividad', icon: LayoutList, roles: ['Jefe'] },
-  { href: '/team', label: 'Equipo', icon: Users, roles: ['Jefe'] },
-  { href: '/reports', label: 'Reportes', icon: BarChart, roles: ['Jefe'] },
+  { href: '/', label: 'Panel', icon: Home, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
+  { href: '/opportunities', label: 'Oportunidades', icon: CircleDollarSign, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
+  { href: '/clients', label: 'Clientes', icon: Users, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
+  { href: '/billing', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
+  { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, roles: ['Jefe', 'Gerencia'] },
+  { href: '/activity', label: 'Actividad', icon: LayoutList, roles: ['Jefe', 'Gerencia'] },
+  { href: '/team', label: 'Equipo', icon: Users, roles: ['Jefe', 'Gerencia'] },
+  { href: '/reports', label: 'Reportes', icon: BarChart, roles: ['Jefe', 'Gerencia'] },
 ];
 
 function MenuLink({ item }: { item: typeof menuItems[0] }) {

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, Suspense } from 'react';
@@ -20,18 +21,18 @@ const PipelineByAdvisorChart = dynamic(() => import('@/components/reports/pipeli
 
 
 export default function ReportsPage() {
-  const { userInfo, loading } = useAuth();
+  const { userInfo, loading, isBoss } = useAuth();
   const router = useRouter();
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
 
   useEffect(() => {
-    if (!loading && userInfo?.role !== 'Jefe') {
+    if (!loading && !isBoss) {
       router.push('/');
     }
-  }, [userInfo, loading, router]);
+  }, [userInfo, loading, router, isBoss]);
   
-  if (loading || !userInfo || userInfo.role !== 'Jefe') {
+  if (loading || !isBoss) {
     return (
        <div className="flex h-full w-full items-center justify-center">
           <Spinner size="large" />

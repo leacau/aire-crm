@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -16,7 +17,7 @@ import { updateOpportunity } from '@/lib/firebase-service';
 import { useRouter } from 'next/navigation';
 
 function ApprovalsPageComponent() {
-  const { userInfo, loading: authLoading } = useAuth();
+  const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -29,10 +30,10 @@ function ApprovalsPageComponent() {
   const initialTab = searchParams.get('tab') || 'pending';
 
   useEffect(() => {
-    if (!authLoading && userInfo?.role !== 'Jefe') {
+    if (!authLoading && !isBoss) {
       router.push('/');
     }
-  }, [userInfo, authLoading, router]);
+  }, [userInfo, authLoading, router, isBoss]);
 
   const fetchData = async () => {
     if (!userInfo) return;
@@ -53,10 +54,10 @@ function ApprovalsPageComponent() {
   };
 
   useEffect(() => {
-    if (userInfo?.role === 'Jefe') {
+    if (isBoss) {
       fetchData();
     }
-  }, [userInfo]);
+  }, [userInfo, isBoss]);
 
   const handleUpdateOpportunity = async (updatedData: Partial<Opportunity>) => {
     if (!selectedOpportunity || !userInfo) return;
@@ -78,7 +79,7 @@ function ApprovalsPageComponent() {
     setIsFormOpen(true);
   }
 
-  if (authLoading || loading || userInfo?.role !== 'Jefe') {
+  if (authLoading || loading || !isBoss) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />

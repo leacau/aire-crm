@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -13,12 +14,14 @@ interface AuthContextType {
   user: FirebaseUser | null;
   userInfo: User | null;
   loading: boolean;
+  isBoss: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   userInfo: null,
   loading: true,
+  isBoss: false,
 });
 
 const publicRoutes = ['/login', '/register'];
@@ -29,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  const [isBoss, setIsBoss] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -38,26 +42,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (profile) {
           const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';
-          setUserInfo({ 
+          const finalProfile = { 
             id: firebaseUser.uid, 
             ...profile,
             initials
-          });
+          };
+          setUserInfo(finalProfile);
+          setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
         } else {
             // This case might happen if the user profile creation fails after registration.
             // We'll create a default one to avoid breaking the app.
             const name = firebaseUser.displayName || 'Usuario';
-            setUserInfo({
+            const defaultProfile = {
                 id: firebaseUser.uid,
                 name: name,
                 email: firebaseUser.email || '',
-                role: 'Asesor',
+                role: 'Asesor' as const,
                 initials: name.substring(0, 2).toUpperCase()
-            });
+            };
+            setUserInfo(defaultProfile);
+            setIsBoss(false);
         }
       } else {
         setUser(null);
         setUserInfo(null);
+        setIsBoss(false);
       }
       setLoading(false);
     });
@@ -87,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (!loading && (user || publicRoutes.includes(pathname))) {
     return (
-      <AuthContext.Provider value={{ user, userInfo, loading }}>
+      <AuthContext.Provider value={{ user, userInfo, loading, isBoss }}>
         {children}
       </AuthContext.Provider>
     );

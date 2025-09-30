@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -97,6 +98,14 @@ export default function ClientsPage() {
     }
   };
 
+  const validateCuit = async (cuit: string, clientId?: string): Promise<string | false> => {
+    const existingClient = clients.find(c => c.cuit === cuit && c.id !== clientId);
+    if (existingClient) {
+      return `El CUIT ya pertenece al cliente "${existingClient.denominacion}", asignado a ${existingClient.ownerName}.`;
+    }
+    return false;
+  };
+
   if (authLoading || loading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
@@ -151,6 +160,7 @@ export default function ClientsPage() {
 
                 const canViewDetails = userInfo && (
                     userInfo.role === 'Jefe' || 
+                    userInfo.role === 'Gerencia' ||
                     userInfo.role === 'Administracion' || 
                     (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
                 );
@@ -195,6 +205,7 @@ export default function ClientsPage() {
         isOpen={isFormOpen}
         onOpenChange={setIsFormOpen}
         onSave={handleSaveClient}
+        onValidateCuit={validateCuit}
       />
     </div>
   );

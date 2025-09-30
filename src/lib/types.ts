@@ -1,4 +1,5 @@
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -95,7 +96,7 @@ export type ClientActivity = {
 }
 
 
-export type UserRole = 'Asesor' | 'Administracion' | 'Jefe';
+export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia';
 
 export type User = {
   id: string;

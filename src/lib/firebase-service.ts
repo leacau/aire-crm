@@ -1,6 +1,7 @@
 
+
 import { db } from './firebase';
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User } from './types';
 import { logActivity } from './activity-logger';
 
@@ -306,6 +307,34 @@ export const updateOpportunity = async (
         });
     }
 };
+
+export const deleteOpportunity = async (
+    id: string,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(db, 'opportunities', id);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) throw new Error("Opportunity not found");
+    const opportunityData = docSnap.data() as Opportunity;
+    
+    await deleteDoc(docRef);
+
+    const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
+    const clientOwnerName = clientSnap.exists() ? (clientSnap.data() as Client).ownerName : 'N/A';
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'opportunity',
+        entityId: id,
+        entityName: opportunityData.title,
+        details: `eliminó la oportunidad <strong>${opportunityData.title}</strong> del cliente ${opportunityData.clientName}`,
+        ownerName: clientOwnerName
+    });
+};
+
 
 // --- General Activity Functions ---
 

@@ -1,7 +1,8 @@
 
+
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/lib/data';
 import type { Client, TipoEntidad, CondicionIVA } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
+import { Spinner } from '../ui/spinner';
 
 type ClientFormData = Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>;
 
@@ -25,6 +28,7 @@ interface ClientFormDialogProps {
   onOpenChange: (isOpen: boolean) => void;
   onSave: (clientData: ClientFormData) => void;
   client?: Client | null;
+  onValidateCuit: (cuit: string, clientId?: string) => Promise<string | false>;
 }
 
 const initialFormData: ClientFormData = {
@@ -46,8 +50,11 @@ export function ClientFormDialog({
   onOpenChange,
   onSave,
   client = null,
+  onValidateCuit,
 }: ClientFormDialogProps) {
-  const [formData, setFormData] = React.useState<ClientFormData>(initialFormData);
+  const [formData, setFormData] = useState<ClientFormData>(initialFormData);
+  const [isSaving, setIsSaving] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (isOpen) {
@@ -68,10 +75,31 @@ export function ClientFormDialog({
         } else {
             setFormData(initialFormData);
         }
+        setIsSaving(false);
     }
   }, [client, isOpen]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!formData.cuit.trim() || !formData.denominacion.trim()) {
+        toast({ title: "Campos requeridos", description: "La Denominación y el CUIT son obligatorios.", variant: "destructive"});
+        return;
+    }
+
+    setIsSaving(true);
+
+    const validationMessage = await onValidateCuit(formData.cuit, client?.id);
+
+    if (validationMessage) {
+        toast({
+            title: "CUIT Duplicado",
+            description: validationMessage,
+            variant: "destructive",
+            duration: 10000,
+        });
+        setIsSaving(false);
+        return;
+    }
+    
     onSave(formData);
     onOpenChange(false);
   };
@@ -196,7 +224,9 @@ export function ClientFormDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Guardar</Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? <Spinner size="small" color="white" /> : 'Guardar'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

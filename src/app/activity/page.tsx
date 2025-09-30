@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Header } from '@/components/layout/header';
@@ -9,16 +10,16 @@ import { Spinner } from '@/components/ui/spinner';
 import { ActivityFeed } from '@/components/activity/activity-feed';
 
 export default function ActivityPage() {
-  const { userInfo, loading } = useAuth();
+  const { userInfo, loading, isBoss } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && userInfo?.role !== 'Jefe') {
+    if (!loading && !isBoss) {
       router.push('/');
     }
-  }, [userInfo, loading, router]);
+  }, [userInfo, loading, router, isBoss]);
   
-  if (loading || !userInfo || userInfo.role !== 'Jefe') {
+  if (loading || !isBoss) {
     return (
        <div className="flex h-full w-full items-center justify-center">
           <Spinner size="large" />
