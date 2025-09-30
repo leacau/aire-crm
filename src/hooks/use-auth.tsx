@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const user = result.user;
 
                 if (token) {
-                    sessionStorage.setItem('google-calendar-token', token);
+                    sessionStorage.setItem('google-access-token', token);
                 }
 
                 const userProfile = await getUserProfile(user.uid);
@@ -119,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, loading, pathname, router]);
 
     const getGoogleAccessToken = async (): Promise<string | null> => {
-        const storedToken = sessionStorage.getItem('google-calendar-token');
+        const storedToken = sessionStorage.getItem('google-access-token');
         if (storedToken) {
             // Here you might want to check for token expiration
             return storedToken;
@@ -129,12 +129,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const provider = new GoogleAuthProvider();
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
+            provider.addScope('https://www.googleapis.com/auth/tasks');
             try {
                 const result = await signInWithPopup(auth, provider);
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 const token = credential?.accessToken;
                 if (token) {
-                    sessionStorage.setItem('google-calendar-token', token);
+                    sessionStorage.setItem('google-access-token', token);
                     return token;
                 }
             } catch (error) {

@@ -50,6 +50,7 @@ export default function LoginPage() {
     const provider = new GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/calendar');
     provider.addScope('https://www.googleapis.com/auth/gmail.send');
+    provider.addScope('https://www.googleapis.com/auth/tasks');
     
     try {
         await signInWithRedirect(auth, provider);
