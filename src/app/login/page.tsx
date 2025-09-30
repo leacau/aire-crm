@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Logo } from '@/components/logo';
 import { Separator } from '@/components/ui/separator';
-import { createUserProfile } from '@/lib/firebase-service';
+import { createUserProfile, getUserProfile } from '@/lib/firebase-service';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -63,7 +63,7 @@ export default function LoginPage() {
         }
 
         // Check if user profile exists, if not create one
-        const userProfile = await fetch(`/api/user-profile?uid=${user.uid}`).then(res => res.json());
+        const userProfile = await getUserProfile(user.uid);
         if (!userProfile) {
             await createUserProfile(user.uid, user.displayName || 'Usuario de Google', user.email || '');
         }
