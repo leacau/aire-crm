@@ -18,8 +18,8 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
-import type { Client, Opportunity } from '@/lib/types';
-import { createClient, getClients, getAllOpportunities, deleteClient } from '@/lib/firebase-service';
+import type { Client, Opportunity, User } from '@/lib/types';
+import { createClient, getClients, getAllOpportunities, deleteClient, getAllUsers } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import {
@@ -39,6 +39,7 @@ export default function ClientsPage() {
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,17 +48,19 @@ export default function ClientsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [fetchedClients, fetchedOpps] = await Promise.all([
+      const [fetchedClients, fetchedOpps, fetchedUsers] = await Promise.all([
           getClients(),
-          getAllOpportunities()
+          getAllOpportunities(),
+          getAllUsers(),
       ]);
       setClients(fetchedClients);
       setOpportunities(fetchedOpps);
+      setUsers(fetchedUsers);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
         title: "Error al cargar datos",
-        description: "No se pudieron cargar los datos de clientes y oportunidades.",
+        description: "No se pudieron cargar los datos.",
         variant: "destructive",
       });
     } finally {
@@ -81,6 +84,13 @@ export default function ClientsPage() {
       client.razonSocial.toLowerCase().includes(lowercasedFilter)
     );
   }, [clients, searchTerm]);
+
+  const usersMap = useMemo(() => {
+    return users.reduce((acc, user) => {
+        acc[user.id] = user;
+        return acc;
+    }, {} as Record<string, User>);
+  }, [users]);
 
 
   const handleSaveClient = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>) => {
@@ -130,7 +140,8 @@ export default function ClientsPage() {
   const validateCuit = async (cuit: string, clientId?: string): Promise<string | false> => {
     const existingClient = clients.find(c => c.cuit === cuit && c.id !== clientId);
     if (existingClient) {
-      return `El CUIT ya pertenece al cliente "${existingClient.denominacion}", asignado a ${existingClient.ownerName}.`;
+      const ownerName = usersMap[existingClient.ownerId]?.name || 'un asesor desconocido';
+      return `El CUIT ya pertenece al cliente "${existingClient.denominacion}", asignado a ${ownerName}.`;
     }
     return false;
   };
@@ -191,6 +202,8 @@ export default function ClientsPage() {
                 const isOwner = userInfo?.id === client.ownerId;
                 const canViewDetails = userInfo && (isBoss || isOwner);
                 const shouldShowOwner = isBoss || !isOwner;
+                const ownerName = usersMap[client.ownerId]?.name;
+
 
                 return (
                   <TableRow key={client.id}>
@@ -208,7 +221,7 @@ export default function ClientsPage() {
                         )}
                          <div className="text-sm text-muted-foreground flex items-center gap-2">
                            <span>{client.email}</span>
-                           {shouldShowOwner && <Badge variant="secondary" className="font-normal">{client.ownerName}</Badge>}
+                           {shouldShowOwner && ownerName && <Badge variant="secondary" className="font-normal">{ownerName}</Badge>}
                         </div>
                       </div>
                     </TableCell>
