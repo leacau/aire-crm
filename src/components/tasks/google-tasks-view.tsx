@@ -200,7 +200,7 @@ const TasksView = () => {
 
 
 export function GoogleTasksView() {
-    const { hasGoogleAccessToken, getGoogleAccessToken } = useAuth();
+    const { hasGoogleAccessToken, initiateGoogleSignIn } = useAuth();
     const [hasToken, setHasToken] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -214,13 +214,6 @@ export function GoogleTasksView() {
         checkToken();
     }, []);
 
-    const handleConnect = async () => {
-        setIsLoading(true);
-        await getGoogleAccessToken();
-        const tokenExists = await hasGoogleAccessToken();
-        setHasToken(tokenExists);
-        setIsLoading(false);
-    };
 
     if (isLoading) {
          return (
@@ -242,11 +235,10 @@ export function GoogleTasksView() {
                     <div className="text-center py-10">
                         <h3 className="text-lg font-semibold mb-2">Conecta tu cuenta de Google</h3>
                         <p className="text-muted-foreground mb-4">Para gestionar tus tareas, necesitas dar permiso a la aplicación.</p>
-                        <Button onClick={handleConnect}>Conectar con Google Tasks</Button>
+                        <Button onClick={initiateGoogleSignIn}>Conectar con Google Tasks</Button>
                     </div>
                 )}
             </CardContent>
         </Card>
     );
 }
-

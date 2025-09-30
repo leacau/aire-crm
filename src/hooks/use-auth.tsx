@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
 import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, getRedirectResult, signInWithRedirect } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
@@ -18,6 +18,7 @@ interface AuthContextType {
   isBoss: boolean;
   getGoogleAccessToken: () => Promise<string | null>;
   hasGoogleAccessToken: () => Promise<boolean>;
+  initiateGoogleSignIn: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -27,6 +28,7 @@ const AuthContext = createContext<AuthContextType>({
   isBoss: false,
   getGoogleAccessToken: async () => null,
   hasGoogleAccessToken: async () => false,
+  initiateGoogleSignIn: () => {},
 });
 
 const publicRoutes = ['/login', '/register'];
@@ -129,28 +131,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // TODO: Here you might want to check for token expiration
             return storedToken;
         }
-
-        if (user) {
-            const provider = new GoogleAuthProvider();
-            provider.addScope('https://www.googleapis.com/auth/calendar.events');
-            provider.addScope('https://www.googleapis.com/auth/gmail.send');
-            provider.addScope('https://www.googleapis.com/auth/tasks');
-            try {
-                // Use redirect flow instead of popup
-                sessionStorage.setItem('redirect_url', window.location.pathname);
-                await signInWithRedirect(auth, provider);
-                return null; // The page will redirect, so this promise might not resolve
-            } catch (error) {
-                console.error("Error getting Google access token:", error);
-                return null;
-            }
-        }
         return null;
     };
     
     const hasGoogleAccessToken = async (): Promise<boolean> => {
         return !!sessionStorage.getItem('google-access-token');
     };
+
+    const initiateGoogleSignIn = useCallback(() => {
+        if (user) {
+            const provider = new GoogleAuthProvider();
+            provider.addScope('https://www.googleapis.com/auth/calendar');
+            provider.addScope('https://www.googleapis.com/auth/gmail.send');
+            provider.addScope('https://www.googleapis.com/auth/tasks');
+            sessionStorage.setItem('redirect_url', window.location.pathname);
+            signInWithRedirect(auth, provider);
+        }
+    }, [user]);
 
 
   if (loading && !publicRoutes.includes(pathname)) {
@@ -163,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (!loading && (user || publicRoutes.includes(pathname))) {
     return (
-      <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, hasGoogleAccessToken }}>
+      <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, hasGoogleAccessToken, initiateGoogleSignIn }}>
         {children}
       </AuthContext.Provider>
     );
