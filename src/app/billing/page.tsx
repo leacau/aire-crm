@@ -16,7 +16,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getOpportunitiesForUser, getAllOpportunities, getClients, getAllUsers } from '@/lib/firebase-service';
+import { getAllOpportunities, getClients, getAllUsers } from '@/lib/firebase-service';
 import type { Opportunity, Client, User } from '@/lib/types';
 import Link from 'next/link';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
@@ -77,7 +77,7 @@ const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunit
   );
 }
 
-function BillingPageComponent() {
+function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -89,9 +89,7 @@ function BillingPageComponent() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
-  const searchParams = useSearchParams();
-  const initialTab = searchParams.get('tab') || 'to-invoice';
-
+  
   const advisorClientIds = useMemo(() => {
     if (selectedAdvisor === 'all') return null;
     return new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
@@ -119,7 +117,6 @@ function BillingPageComponent() {
   });
 
   const fetchData = async () => {
-    if (!userInfo) return;
     setLoading(true);
     try {
       const [allOpps, allClients, allUsers, allAdvisors] = await Promise.all([
@@ -142,8 +139,10 @@ function BillingPageComponent() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (userInfo) {
+        fetchData();
+    }
+  }, [userInfo]);
 
   const handleUpdateOpportunity = async (updatedData: Partial<Opportunity>) => {
     if (!selectedOpportunity || !userInfo) return;
@@ -230,8 +229,12 @@ function BillingPageComponent() {
   );
 }
 
-// Need to wrap the component in a Suspense boundary because useSearchParams() is a Client Component hook
-// that suspends.
+function BillingPageWithSuspense() {
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'to-invoice';
+  return <BillingPageComponent initialTab={initialTab} />;
+}
+
 export default function BillingPage() {
   return (
     <React.Suspense fallback={
@@ -239,7 +242,7 @@ export default function BillingPage() {
             <Spinner size="large" />
         </div>
     }>
-      <BillingPageComponent />
+      <BillingPageWithSuspense />
     </React.Suspense>
   );
 }
