@@ -92,6 +92,32 @@ function BillingPageComponent() {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get('tab') || 'to-invoice';
 
+  const advisorClientIds = useMemo(() => {
+    if (selectedAdvisor === 'all') return null;
+    return new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
+  }, [clients, selectedAdvisor]);
+
+  const filteredOpportunitiesByAdvisor = useMemo(() => {
+    if (!userInfo) return [];
+    
+    if (isBoss) {
+      if (selectedAdvisor === 'all') {
+        return opportunities;
+      }
+      return opportunities.filter(opp => advisorClientIds?.has(opp.clientId));
+    }
+    // For non-boss users, only show their opportunities
+    const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
+    return opportunities.filter(opp => userClientIds.has(opp.clientId));
+  }, [opportunities, clients, selectedAdvisor, isBoss, userInfo, advisorClientIds]);
+
+
+  const filteredOpportunities = filteredOpportunitiesByAdvisor.filter(opp => {
+    if (!dateRange?.from || !dateRange?.to) return true;
+    const closeDate = new Date(opp.closeDate);
+    return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
+  });
+
   const fetchData = async () => {
     if (!userInfo) return;
     setLoading(true);
@@ -146,32 +172,6 @@ function BillingPageComponent() {
       </div>
     );
   }
-  
-  const advisorClientIds = useMemo(() => {
-    if (selectedAdvisor === 'all') return null;
-    return new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
-  }, [clients, selectedAdvisor]);
-
-  const filteredOpportunitiesByAdvisor = useMemo(() => {
-    if (!userInfo) return [];
-    
-    if (isBoss) {
-      if (selectedAdvisor === 'all') {
-        return opportunities;
-      }
-      return opportunities.filter(opp => advisorClientIds?.has(opp.clientId));
-    }
-    // For non-boss users, only show their opportunities
-    const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
-    return opportunities.filter(opp => userClientIds.has(opp.clientId));
-  }, [opportunities, clients, selectedAdvisor, isBoss, userInfo, advisorClientIds]);
-
-
-  const filteredOpportunities = filteredOpportunitiesByAdvisor.filter(opp => {
-    if (!dateRange?.from || !dateRange?.to) return true;
-    const closeDate = new Date(opp.closeDate);
-    return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
-  });
   
   const closedWonOpps = filteredOpportunities.filter(
     (opp) => opp.stage === 'Cerrado - Ganado'
