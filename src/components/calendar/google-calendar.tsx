@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -57,7 +56,7 @@ interface EventFormData {
 }
 
 export function GoogleCalendar() {
-  const { getGoogleAccessToken } = useAuth();
+  const { getGoogleAccessToken, isBoss } = useAuth();
   const { toast } = useToast();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +77,8 @@ export function GoogleCalendar() {
 
     if (token) {
       try {
-        const eventItems = await getCalendarEvents(token);
+        const calendarId = isBoss && process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID ? process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID : 'primary';
+        const eventItems = await getCalendarEvents(token, calendarId);
         const formattedEvents = eventItems.map((item: any) => ({
           id: item.id,
           title: item.summary,
@@ -96,7 +96,7 @@ export function GoogleCalendar() {
       setError('No se pudo obtener el permiso para acceder a Google Calendar.');
     }
     setLoading(false);
-  }, [getGoogleAccessToken]);
+  }, [getGoogleAccessToken, isBoss]);
 
   useEffect(() => {
     fetchEvents();
@@ -127,10 +127,11 @@ export function GoogleCalendar() {
     }
 
     try {
+      const calendarId = isBoss && process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID ? process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID : 'primary';
+
       if (selectedEvent?.id) {
-        // Update logic would go here if API supports it easily, for now we delete and create
         // For simplicity, this example just recreates. A real app should implement PATCH.
-        await deleteCalendarEvent(token, selectedEvent.id);
+        await deleteCalendarEvent(token, selectedEvent.id, calendarId);
       }
       
       const eventToSave = {
@@ -142,7 +143,6 @@ export function GoogleCalendar() {
             useDefault: false,
             overrides: [
                 { method: 'popup', minutes: 10 },
-                { method: 'popup', minutes: (24 * 60) }, // 24 hours
             ]
         }
       };
@@ -163,7 +163,8 @@ export function GoogleCalendar() {
     if (!token) return;
 
     try {
-      await deleteCalendarEvent(token, selectedEvent.id);
+      const calendarId = isBoss && process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID ? process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID : 'primary';
+      await deleteCalendarEvent(token, selectedEvent.id, calendarId);
       toast({ title: 'Evento eliminado' });
       setIsDialogOpen(false);
       fetchEvents();
