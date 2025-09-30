@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 
                 const intendedUrl = sessionStorage.getItem('redirect_url') || '/';
                 sessionStorage.removeItem('redirect_url');
-                router.push(intendedUrl);
+                // No redirect here, let the onAuthStateChanged handle it
             }
         } catch (error: any) {
             toast({
@@ -144,7 +144,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const provider = new GoogleAuthProvider();
             provider.addScope('https://www.googleapis.com/auth/calendar');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
-            provider.addScope('https://www.googleapis.com/auth/tasks');
             sessionStorage.setItem('redirect_url', window.location.pathname);
             signInWithRedirect(auth, provider);
         } else {
@@ -152,7 +151,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const provider = new GoogleAuthProvider();
             provider.addScope('https://www.googleapis.com/auth/calendar');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
-            provider.addScope('https://www.googleapis.com/auth/tasks');
             signInWithRedirect(auth, provider);
         }
     }, [user]);
