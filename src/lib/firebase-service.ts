@@ -570,6 +570,9 @@ export const updateClientActivity = async (
         updateData.dueDate = Timestamp.fromDate(new Date(data.dueDate));
     }
 
+    if (data.googleCalendarEventId === null) {
+        updateData.googleCalendarEventId = deleteField();
+    }
 
     await updateDoc(docRef, updateData);
 };

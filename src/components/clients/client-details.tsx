@@ -35,6 +35,7 @@ import {
   Activity,
   ArrowRight,
   BellPlus,
+  Clock,
 } from 'lucide-react';
 import {
   Table,
@@ -67,14 +68,14 @@ import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
 import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers } from '@/lib/firebase-service';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail, createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/lib/google-gmail-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Calendar } from '../ui/calendar';
-import { format } from 'date-fns';
+import { format, set, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -88,7 +89,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import { Input } from '../ui/input';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'bg-blue-500',
@@ -141,6 +143,7 @@ export function ClientDetails({
   const [newActivityObservation, setNewActivityObservation] = useState('');
   const [isTask, setIsTask] = useState(false);
   const [dueDate, setDueDate] = useState<Date | undefined>();
+  const [dueTime, setDueTime] = useState<string>('09:00');
   const [isSavingActivity, setIsSavingActivity] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState<string | null>(null);
 
@@ -271,6 +274,12 @@ export function ClientDetails({
     setNewActivityObservation('');
     setIsTask(false);
     setDueDate(undefined);
+    setDueTime('09:00');
+  };
+
+  const combineDateAndTime = (date: Date, time: string): Date => {
+      const [hours, minutes] = time.split(':').map(Number);
+      return set(date, { hours, minutes, seconds: 0, milliseconds: 0 });
   };
 
 
@@ -279,12 +288,17 @@ export function ClientDetails({
         toast({ title: "Datos incompletos", description: "Selecciona un tipo y añade una observación.", variant: 'destructive'});
         return;
     }
-    if (isTask && !dueDate) {
-        toast({ title: "Fecha de vencimiento requerida", description: "Por favor, selecciona una fecha para la tarea.", variant: 'destructive'});
+    if (isTask && (!dueDate || !dueTime)) {
+        toast({ title: "Fecha y hora de vencimiento requeridas", description: "Por favor, selecciona fecha y hora para la tarea.", variant: 'destructive'});
         return;
     }
 
     setIsSavingActivity(true);
+
+    let finalDueDate: Date | undefined = undefined;
+    if (isTask && dueDate) {
+        finalDueDate = combineDateAndTime(dueDate, dueTime);
+    }
     
     const activityPayload: Omit<ClientActivity, 'id' | 'timestamp'> = {
         clientId: client.id,
@@ -295,10 +309,41 @@ export function ClientDetails({
         userName: userInfo.name,
         isTask,
         completed: false,
-        ...(isTask && dueDate && { dueDate: dueDate.toISOString() }),
+        ...(isTask && finalDueDate && { dueDate: finalDueDate.toISOString() }),
     };
 
+    let calendarEventId: string | undefined = undefined;
+    if(activityPayload.isTask && activityPayload.dueDate) {
+        const token = await getGoogleAccessToken();
+        if (token) {
+            try {
+                const calendarEvent = {
+                    summary: `Tarea CRM: ${activityPayload.observation}`,
+                    description: `Tarea registrada en el CRM para el cliente: ${client.denominacion}.\n\nObservación: ${activityPayload.observation}`,
+                    start: { dateTime: activityPayload.dueDate },
+                    end: { dateTime: activityPayload.dueDate },
+                    reminders: {
+                        useDefault: false,
+                        overrides: [
+                            { method: 'popup', minutes: 10 },
+                            { method: 'popup', minutes: 60 * 24 }, // 24 hours
+                        ],
+                    },
+                };
+                const createdEvent = await createCalendarEvent(token, calendarEvent);
+                calendarEventId = createdEvent.id;
+            } catch(e) {
+                 console.error("Failed to create calendar event", e);
+                 toast({ title: "Error al crear evento en calendario", description: "La tarea se guardó en el CRM, pero no se pudo crear el evento en Google Calendar.", variant: "destructive"});
+            }
+        }
+    }
+
+
     try {
+        if (calendarEventId) {
+            activityPayload.googleCalendarEventId = calendarEventId;
+        }
         await createClientActivity(activityPayload);
         toast({ title: "Actividad Registrada" });
         resetActivityForm();
@@ -322,6 +367,20 @@ export function ClientDetails({
           })
       };
 
+      // If task is completed, delete the calendar event
+      if(completed && activity.googleCalendarEventId) {
+          const token = await getGoogleAccessToken();
+          if (token) {
+              try {
+                  await deleteCalendarEvent(token, activity.googleCalendarEventId);
+                  payload.googleCalendarEventId = null; // Remove from our db
+              } catch(e) {
+                  console.error("Failed to delete calendar event", e);
+                  // Non-blocking, the user can delete it manually
+              }
+          }
+      }
+
       try {
           await updateClientActivity(activity.id, payload);
           fetchClientData();
@@ -332,14 +391,41 @@ export function ClientDetails({
       }
   }
 
-  const handleConvertToTask = async (activityId: string, newDueDate: Date) => {
+  const handleConvertToTask = async (activity: ClientActivity, newDueDate: Date) => {
     if (!userInfo) return;
+
+    let calendarEventId: string | undefined = undefined;
+    const token = await getGoogleAccessToken();
+    if (token) {
+        try {
+            const calendarEvent = {
+                summary: `Tarea CRM: ${activity.observation}`,
+                description: `Tarea registrada en el CRM para el cliente: ${client.denominacion}.\n\nObservación: ${activity.observation}`,
+                start: { dateTime: newDueDate.toISOString() },
+                end: { dateTime: newDueDate.toISOString() },
+                reminders: {
+                    useDefault: false,
+                    overrides: [
+                        { method: 'popup', minutes: 10 },
+                        { method: 'popup', minutes: 60 * 24 }, // 24 hours
+                    ],
+                },
+            };
+            const createdEvent = await createCalendarEvent(token, calendarEvent);
+            calendarEventId = createdEvent.id;
+        } catch(e) {
+             console.error("Failed to create calendar event", e);
+             toast({ title: "Error al crear evento en calendario", variant: "destructive"});
+        }
+    }
+
     try {
       const payload: Partial<ClientActivity> = {
         isTask: true,
         dueDate: newDueDate.toISOString(),
+        ...(calendarEventId && { googleCalendarEventId: calendarEventId })
       };
-      await updateClientActivity(activityId, payload);
+      await updateClientActivity(activity.id, payload);
       fetchClientData();
       toast({ title: 'Actividad convertida en Tarea' });
     } catch (error) {
@@ -364,7 +450,7 @@ export function ClientDetails({
             <p>Este es un recordatorio para tu tarea pendiente:</p>
             <p><strong>Tarea:</strong> ${task.observation}</p>
             <p><strong>Cliente:</strong> ${task.clientName}</p>
-            ${task.dueDate ? `<p><strong>Vence:</strong> ${format(new Date(task.dueDate), 'PPP', { locale: es })}</p>` : ''}
+            ${task.dueDate ? `<p><strong>Vence:</strong> ${format(new Date(task.dueDate), 'PPP p', { locale: es })}</p>` : ''}
             <p>Puedes ver más detalles en el <a href="https://crm-aire.web.app/clients/${task.clientId}">CRM</a>.</p>
         `;
 
@@ -421,7 +507,6 @@ export function ClientDetails({
     if (!userInfo) return;
     try {
       await deletePerson(person.id, userInfo.id, userInfo.name);
-      toast({ title: "Contacto Eliminado" });
       fetchClientData();
     } catch (error) {
       console.error("Error deleting person:", error);
@@ -433,16 +518,18 @@ export function ClientDetails({
   };
 
 
-  const ConvertToTaskPopover = ({ activityId }: { activityId: string }) => {
+  const ConvertToTaskPopover = ({ activity }: { activity: ClientActivity }) => {
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [newDueDate, setNewDueDate] = useState<Date | undefined>();
+    const [newDueTime, setNewDueTime] = useState('09:00');
 
     const onSave = () => {
-      if (newDueDate) {
-        handleConvertToTask(activityId, newDueDate);
+      if (newDueDate && newDueTime) {
+        const finalDate = combineDateAndTime(newDueDate, newDueTime);
+        handleConvertToTask(activity, finalDate);
         setPopoverOpen(false);
       } else {
-        toast({ title: 'Selecciona una fecha', variant: 'destructive' });
+        toast({ title: 'Selecciona fecha y hora', variant: 'destructive' });
       }
     };
 
@@ -461,8 +548,12 @@ export function ClientDetails({
             initialFocus
             locale={es}
           />
+          <div className="p-2 border-t">
+            <Label htmlFor="convert-time" className="text-xs">Hora</Label>
+            <Input id="convert-time" type="time" value={newDueTime} onChange={e => setNewDueTime(e.target.value)} />
+          </div>
           <div className="p-2 border-t flex justify-end">
-            <Button size="sm" onClick={onSave}>Guardar</Button>
+            <Button size="sm" onClick={onSave}>Guardar Tarea</Button>
           </div>
         </PopoverContent>
       </Popover>
@@ -687,35 +778,46 @@ export function ClientDetails({
                                 className="sm:col-span-2"
                             />
                         </div>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <div className="flex items-center space-x-2">
                                 <Checkbox id="is-task" checked={isTask} onCheckedChange={(checked) => setIsTask(!!checked)} />
                                 <Label htmlFor="is-task" className='font-normal'>Crear como Tarea</Label>
                             </div>
                             {isTask && (
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                    <Button
-                                        variant={"outline"}
-                                        className={cn(
-                                        "w-[240px] justify-start text-left font-normal",
-                                        !dueDate && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {dueDate ? format(dueDate, "PPP", { locale: es }) : <span>Fecha de vencimiento</span>}
-                                    </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0">
-                                        <Calendar
-                                            mode="single"
-                                            selected={dueDate}
-                                            onSelect={setDueDate}
-                                            initialFocus
-                                            locale={es}
-                                        />
-                                    </PopoverContent>
-                                </Popover>
+                                <div className="flex items-center gap-2">
+                                  <Popover>
+                                      <PopoverTrigger asChild>
+                                      <Button
+                                          variant={"outline"}
+                                          className={cn(
+                                          "w-[200px] justify-start text-left font-normal",
+                                          !dueDate && "text-muted-foreground"
+                                          )}
+                                      >
+                                          <CalendarIcon className="mr-2 h-4 w-4" />
+                                          {dueDate ? format(dueDate, "PPP", { locale: es }) : <span>Fecha de vencimiento</span>}
+                                      </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-auto p-0">
+                                          <Calendar
+                                              mode="single"
+                                              selected={dueDate}
+                                              onSelect={setDueDate}
+                                              initialFocus
+                                              locale={es}
+                                          />
+                                      </PopoverContent>
+                                  </Popover>
+                                  <div className="relative">
+                                    <Clock className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        type="time"
+                                        value={dueTime}
+                                        onChange={(e) => setDueTime(e.target.value)}
+                                        className="pl-8 w-[120px]"
+                                    />
+                                   </div>
+                                </div>
                             )}
                         </div>
                          <Button onClick={handleSaveClientActivity} disabled={isSavingActivity}>
@@ -751,7 +853,7 @@ export function ClientDetails({
                                         <div className="flex items-center justify-between">
                                             <div className='flex items-center gap-2'>
                                                 <span className="font-semibold text-sm">{activity.type}</span>
-                                                {!activity.isTask && <ConvertToTaskPopover activityId={activity.id} />}
+                                                {!activity.isTask && <ConvertToTaskPopover activity={activity} />}
                                             </div>
                                             <span className="text-xs">
                                                 {new Date(activity.timestamp).toLocaleDateString()}
@@ -762,7 +864,7 @@ export function ClientDetails({
                                             <div className="flex items-center gap-2">
                                                 <p className="text-xs mt-1 font-medium flex items-center">
                                                     <CalendarIcon className="h-3 w-3 mr-1" />
-                                                    Vence: {format(new Date(activity.dueDate), "PPP", { locale: es })}
+                                                    Vence: {format(new Date(activity.dueDate), "PPP p", { locale: es })}
                                                 </p>
                                                 {!activity.completed && (
                                                     <Button
@@ -879,5 +981,3 @@ export function ClientDetails({
     </>
   );
 }
-
-    
