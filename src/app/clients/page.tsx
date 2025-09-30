@@ -31,7 +31,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import { Badge } from '@/components/ui/badge';
 
 export default function ClientsPage() {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
@@ -187,10 +188,8 @@ export default function ClientsPage() {
                   0
                 );
 
-                const canViewDetails = userInfo && (
-                    isBoss || 
-                    (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
-                );
+                const isOwner = userInfo?.id === client.ownerId;
+                const canViewDetails = userInfo && (isBoss || isOwner);
 
                 return (
                   <TableRow key={client.id}>
@@ -207,10 +206,11 @@ export default function ClientsPage() {
                       )}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
-                      <div>
+                      <div className='flex flex-col gap-1'>
                         <div className="font-medium">{client.razonSocial}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {client.email}
+                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                           <span>{client.email}</span>
+                           {(!isOwner || isBoss) && <Badge variant="secondary" className="font-normal">{client.ownerName}</Badge>}
                         </div>
                       </div>
                     </TableCell>
