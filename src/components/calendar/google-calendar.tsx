@@ -18,10 +18,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Calendar as BigCalendar, dateFnsLocalizer } from 'react-big-calendar';
+import { Calendar as BigCalendar, dateFnsLocalizer, Views, type View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { CalendarToolbar } from './calendar-toolbar';
+
 
 const locales = {
   'es': es,
@@ -62,6 +64,10 @@ export function GoogleCalendar() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [formData, setFormData] = useState<Partial<EventFormData>>({});
+
+  const [date, setDate] = useState(new Date());
+  const [view, setView] = useState<View>(Views.MONTH);
+
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
@@ -191,6 +197,13 @@ export function GoogleCalendar() {
           selectable
           onSelectSlot={handleSelectSlot}
           onSelectEvent={handleSelectEvent}
+          date={date}
+          onNavigate={setDate}
+          view={view}
+          onView={setView}
+          components={{
+            toolbar: (toolbarProps) => <CalendarToolbar {...toolbarProps} />
+          }}
           messages={{
             next: "Siguiente",
             previous: "Anterior",
