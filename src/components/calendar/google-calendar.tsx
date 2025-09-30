@@ -4,7 +4,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { getCalendarEvents, createCalendarEvent, deleteCalendarEvent } from '@/lib/google-calendar-service';
+import { getCalendarEvents } from '@/lib/google-calendar-service';
+import { createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -140,7 +141,8 @@ export function GoogleCalendar() {
         reminders: {
             useDefault: false,
             overrides: [
-                { method: 'popup', minutes: 10 }
+                { method: 'popup', minutes: 10 },
+                { method: 'popup', minutes: (24 * 60) }, // 24 hours
             ]
         }
       };
