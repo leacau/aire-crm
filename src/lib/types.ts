@@ -23,7 +23,7 @@ export type Opportunity = {
   valorCerrado?: number;
   propuestaCerrada?: string;
   pagado?: boolean;
-  bonificacionPorcentaje?: number;
+  bonificacionDetalle?: string;
   bonificacionEstado?: BonificacionEstado;
   bonificacionAutorizadoPorId?: string;
   bonificacionAutorizadoPorNombre?: string;

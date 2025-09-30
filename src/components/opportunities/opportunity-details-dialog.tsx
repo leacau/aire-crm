@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React from 'react';
@@ -49,7 +50,7 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     clientName: client?.name || '',
     clientId: client?.id || '',
     pagado: false,
-    bonificacionPorcentaje: 0,
+    bonificacionDetalle: '',
 });
 
 export function OpportunityDetailsDialog({
@@ -60,7 +61,7 @@ export function OpportunityDetailsDialog({
   onCreate = () => {},
   client
 }: OpportunityDetailsDialogProps) {
-  const { userInfo } = useAuth();
+  const { userInfo, isBoss } = useAuth();
   const { toast } = useToast();
 
   const getInitialData = () => {
@@ -115,22 +116,21 @@ export function OpportunityDetailsDialog({
     const { name, value } = e.target;
     let finalValue: string | number = value;
 
-    if (name === 'value' || name === 'valorCerrado' || name === 'bonificacionPorcentaje') {
+    if (name === 'value' || name === 'valorCerrado') {
         finalValue = Number(value);
     }
 
     setEditedOpportunity(prev => {
         const newState: Partial<Opportunity> = { ...prev, [name]: finalValue };
         
-        if (name === 'bonificacionPorcentaje') {
-            const bonusValue = Number(value);
-            if (bonusValue > 0) {
+        if (name === 'bonificacionDetalle') {
+            if (value.trim()) {
                 // Only set to pending if it's not already decided
                 if (prev.bonificacionEstado !== 'Autorizado' && prev.bonificacionEstado !== 'Rechazado') {
                     newState.bonificacionEstado = 'Pendiente';
                 }
             } else {
-                // If bonus is 0 or less, it shouldn't be in the approval process
+                // If bonus detail is empty, it shouldn't be in the approval process
                 delete newState.bonificacionEstado;
                 delete newState.bonificacionAutorizadoPorId;
                 delete newState.bonificacionAutorizadoPorNombre;
@@ -152,10 +152,7 @@ export function OpportunityDetailsDialog({
 
   const isCloseWon = editedOpportunity.stage === 'Cerrado - Ganado';
   const isInvoiceSet = !!editedOpportunity.facturaNo;
-  const hasBonus = (editedOpportunity.bonificacionPorcentaje || 0) > 0;
-  const isJefe = userInfo?.role === 'Jefe';
-  const isJefeOrAdmin = userInfo?.role === 'Jefe' || userInfo?.role === 'Administracion';
-
+  const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
 
   const getBonusStatusPill = (status?: BonificacionEstado) => {
       if (!status) return null;
@@ -306,21 +303,20 @@ export function OpportunityDetailsDialog({
                 </div>
               </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="bonificacionPorcentaje" className="text-right">
-                    Bonificación %
+                    <Label htmlFor="bonificacionDetalle" className="text-right">
+                    Detalle Bonificación
                     </Label>
-                    <Input
-                    id="bonificacionPorcentaje"
-                    name="bonificacionPorcentaje"
-                    type="number"
-                    value={editedOpportunity.bonificacionPorcentaje || 0}
-                    onChange={handleChange}
-                    className="col-span-3"
-                    disabled={!isCloseWon}
-                    placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}
+                    <Textarea
+                        id="bonificacionDetalle"
+                        name="bonificacionDetalle"
+                        value={editedOpportunity.bonificacionDetalle || ''}
+                        onChange={handleChange}
+                        className="col-span-3"
+                        disabled={!isCloseWon}
+                        placeholder={!isCloseWon ? 'Solo para Cierre Ganado. Ej: 10% Descuento' : 'Ej: 10% Descuento'}
                     />
               </div>
-              {hasBonus && isJefeOrAdmin && (
+              {hasBonusRequest && (
                     <div className="grid grid-cols-1 gap-3 p-3 mt-2 border rounded-lg bg-muted/50 col-span-full">
                         <h4 className="font-semibold text-sm">Gestión de Bonificación</h4>
                         <div className="flex items-center justify-between">
@@ -328,7 +324,7 @@ export function OpportunityDetailsDialog({
                             {getBonusStatusPill(editedOpportunity.bonificacionEstado)}
                         </div>
                         
-                        {editedOpportunity.bonificacionEstado === 'Pendiente' && isJefe && (
+                        {editedOpportunity.bonificacionEstado === 'Pendiente' && isBoss && (
                              <div className="flex gap-2 mt-2">
                                 <Button size="sm" variant="destructive" onClick={() => handleBonusDecision('Rechazado')}>
                                     Rechazar

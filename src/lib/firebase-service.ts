@@ -352,7 +352,7 @@ export const updateOpportunity = async (
         updatedAt: serverTimestamp()
     };
     
-    if (data.bonificacionPorcentaje !== undefined && data.bonificacionPorcentaje <= 0) {
+    if (data.bonificacionDetalle !== undefined && !data.bonificacionDetalle.trim()) {
         updateData.bonificacionEstado = deleteField();
         updateData.bonificacionAutorizadoPorId = deleteField();
         updateData.bonificacionAutorizadoPorNombre = deleteField();

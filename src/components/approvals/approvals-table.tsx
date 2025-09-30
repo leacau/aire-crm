@@ -42,7 +42,7 @@ export const ApprovalsTable = ({ opportunities, onRowClick, ownerNames }: Approv
           <TableHead>Cliente</TableHead>
           <TableHead className="hidden md:table-cell">Asesor</TableHead>
           <TableHead className="text-right">Valor Cerrado</TableHead>
-          <TableHead className="text-center">Bonificación</TableHead>
+          <TableHead>Bonificación</TableHead>
           <TableHead>Estado</TableHead>
           <TableHead className="hidden lg:table-cell">Decisión</TableHead>
         </TableRow>
@@ -59,7 +59,7 @@ export const ApprovalsTable = ({ opportunities, onRowClick, ownerNames }: Approv
               </TableCell>
               <TableCell className="hidden md:table-cell">{ownerNames[opp.clientId] || '-'}</TableCell>
               <TableCell className="text-right">${(opp.valorCerrado || opp.value).toLocaleString('es-AR')}</TableCell>
-              <TableCell className="text-center font-bold">{opp.bonificacionPorcentaje}%</TableCell>
+              <TableCell className="font-bold">{opp.bonificacionDetalle}</TableCell>
               <TableCell>
                   {getBonusStatusPill(opp.bonificacionEstado)}
               </TableCell>
