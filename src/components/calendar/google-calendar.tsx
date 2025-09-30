@@ -239,7 +239,7 @@ export function GoogleCalendar() {
                     <Input
                         id="start"
                         type="datetime-local"
-                        value={formData.start ? format(formData.start, "yyyy-MM-dd'T'HH:mm") : ''}
+                        value={formData.start ? format(new Date(formData.start), "yyyy-MM-dd'T'HH:mm") : ''}
                         onChange={(e) => setFormData(p => ({...p, start: new Date(e.target.value)}))}
                     />
                 </div>
@@ -248,7 +248,7 @@ export function GoogleCalendar() {
                     <Input
                         id="end"
                         type="datetime-local"
-                        value={formData.end ? format(formData.end, "yyyy-MM-dd'T'HH:mm") : ''}
+                        value={formData.end ? format(new Date(formData.end), "yyyy-MM-dd'T'HH:mm") : ''}
                         onChange={(e) => setFormData(p => ({...p, end: new Date(e.target.value)}))}
                     />
                 </div>
