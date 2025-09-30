@@ -190,6 +190,7 @@ export default function ClientsPage() {
 
                 const isOwner = userInfo?.id === client.ownerId;
                 const canViewDetails = userInfo && (isBoss || isOwner);
+                const shouldShowOwner = isBoss || !isOwner;
 
                 return (
                   <TableRow key={client.id}>
@@ -210,7 +211,7 @@ export default function ClientsPage() {
                         <div className="font-medium">{client.razonSocial}</div>
                         <div className="text-sm text-muted-foreground flex items-center gap-2">
                            <span>{client.email}</span>
-                           {(isBoss || !isOwner) && <Badge variant="secondary" className="font-normal">{client.ownerName}</Badge>}
+                           {shouldShowOwner && <Badge variant="secondary" className="font-normal">{client.ownerName}</Badge>}
                         </div>
                       </div>
                     </TableCell>
