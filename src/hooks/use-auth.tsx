@@ -35,7 +35,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
@@ -60,19 +59,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             }
         } catch (error: any) {
+            console.error("Google Sign-In Error:", error);
             toast({
                 title: 'Error con Google Sign-In',
-                description: error.message,
+                description: `Code: ${error.code}, Message: ${error.message}`,
                 variant: 'destructive',
             });
-        } finally {
-            setIsProcessingRedirect(false);
         }
     };
     
     handleRedirectResult();
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true);
       if (firebaseUser) {
         setUser(firebaseUser);
         const profile = await getUserProfile(firebaseUser.uid);
@@ -86,39 +85,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
           setUserInfo(finalProfile);
           setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
-        } else {
-            const name = firebaseUser.displayName || 'Usuario';
-            const defaultProfile = {
-                id: firebaseUser.uid,
-                name: name,
-                email: firebaseUser.email || '',
-                role: 'Asesor' as const,
-                initials: name.substring(0, 2).toUpperCase()
-            };
-            setUserInfo(defaultProfile);
-            setIsBoss(false);
         }
+        
+        const isPublic = publicRoutes.includes(pathname);
+        if (isPublic) {
+            router.push('/');
+        }
+
       } else {
         setUser(null);
         setUserInfo(null);
         setIsBoss(false);
+        const isPublic = publicRoutes.includes(pathname);
+        if (!isPublic) {
+            router.push('/login');
+        }
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [router, toast]);
-
-  useEffect(() => {
-    const isPublicRoute = publicRoutes.includes(pathname);
-    if (!loading && !isProcessingRedirect) {
-      if (!user && !isPublicRoute) {
-        router.push('/login');
-      } else if (user && isPublicRoute) {
-        router.push('/');
-      }
-    }
-  }, [user, loading, isProcessingRedirect, pathname, router]);
+  }, [router, toast, pathname]);
 
     const getGoogleAccessToken = async (): Promise<string | null> => {
         const storedToken = sessionStorage.getItem('google-access-token');
@@ -132,44 +119,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const provider = new GoogleAuthProvider();
         provider.addScope('https://www.googleapis.com/auth/calendar');
         provider.addScope('https://www.googleapis.com/auth/gmail.send');
-        sessionStorage.setItem('redirect_url', window.location.pathname);
         signInWithRedirect(auth, provider);
     }, []);
 
 
-  const isLoading = loading || isProcessingRedirect;
   const isPublicRoute = publicRoutes.includes(pathname);
 
-  if (isLoading && !isPublicRoute) {
+  if (loading && !isPublicRoute) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Spinner size="large" />
       </div>
     );
   }
-
-  if (!isLoading && (user || isPublicRoute)) {
-    return (
-      <AuthContext.Provider value={{ user, userInfo, loading: isLoading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
-        {children}
-      </AuthContext.Provider>
-    );
-  }
   
-  if(isPublicRoute){
-       return (
-         <AuthContext.Provider value={{ user, userInfo, loading: isLoading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
-            {children}
-         </AuthContext.Provider>
-       )
+  if (!loading && !user && !isPublicRoute) {
+      return (
+         <div className="flex h-screen items-center justify-center">
+            <Spinner size="large" />
+         </div>
+      )
   }
 
   return (
-    <div className="flex h-screen items-center justify-center">
-        <Spinner size="large" />
-    </div>
+    <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
+        {children}
+    </AuthContext.Provider>
   );
 }
 
 export const useAuth = () => useContext(AuthContext);
-
