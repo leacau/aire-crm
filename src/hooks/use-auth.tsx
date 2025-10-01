@@ -17,7 +17,6 @@ interface AuthContextType {
   loading: boolean;
   isBoss: boolean;
   getGoogleAccessToken: () => Promise<string | null>;
-  hasGoogleAccessToken: () => Promise<boolean>;
   initiateGoogleSignIn: () => void;
 }
 
@@ -27,7 +26,6 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isBoss: false,
   getGoogleAccessToken: async () => null,
-  hasGoogleAccessToken: async () => false,
   initiateGoogleSignIn: () => {},
 });
 
@@ -60,10 +58,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (!userProfile) {
                     await createUserProfile(user.uid, user.displayName || 'Usuario de Google', user.email || '');
                 }
-                
-                const intendedUrl = sessionStorage.getItem('redirect_url') || '/';
-                sessionStorage.removeItem('redirect_url');
-                // No redirect here, let the onAuthStateChanged handle it
             }
         } catch (error: any) {
             toast({
@@ -117,7 +111,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const isPublicRoute = publicRoutes.includes(pathname);
-    // Wait until redirect processing is done and auth state is loaded
     if (!loading && !isProcessingRedirect) {
       if (!user && !isPublicRoute) {
         router.push('/login');
@@ -134,26 +127,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return null;
     };
-    
-    const hasGoogleAccessToken = async (): Promise<boolean> => {
-        return !!sessionStorage.getItem('google-access-token');
-    };
 
     const initiateGoogleSignIn = useCallback(() => {
-        if (user) {
-            const provider = new GoogleAuthProvider();
-            provider.addScope('https://www.googleapis.com/auth/calendar');
-            provider.addScope('https://www.googleapis.com/auth/gmail.send');
-            sessionStorage.setItem('redirect_url', window.location.pathname);
-            signInWithRedirect(auth, provider);
-        } else {
-            // Handle case where user is not logged in when initiating sign-in
-            const provider = new GoogleAuthProvider();
-            provider.addScope('https://www.googleapis.com/auth/calendar');
-            provider.addScope('https://www.googleapis.com/auth/gmail.send');
-            signInWithRedirect(auth, provider);
-        }
-    }, [user]);
+        const provider = new GoogleAuthProvider();
+        provider.addScope('https://www.googleapis.com/auth/calendar');
+        provider.addScope('https://www.googleapis.com/auth/gmail.send');
+        sessionStorage.setItem('redirect_url', window.location.pathname);
+        signInWithRedirect(auth, provider);
+    }, []);
 
 
   const isLoading = loading || isProcessingRedirect;
@@ -169,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (!isLoading && (user || isPublicRoute)) {
     return (
-      <AuthContext.Provider value={{ user, userInfo, loading: isLoading, isBoss, getGoogleAccessToken, hasGoogleAccessToken, initiateGoogleSignIn }}>
+      <AuthContext.Provider value={{ user, userInfo, loading: isLoading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
         {children}
       </AuthContext.Provider>
     );
@@ -177,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   
   if(isPublicRoute){
        return (
-         <AuthContext.Provider value={{ user, userInfo, loading: isLoading, isBoss, getGoogleAccessToken, hasGoogleAccessToken, initiateGoogleSignIn }}>
+         <AuthContext.Provider value={{ user, userInfo, loading: isLoading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
             {children}
          </AuthContext.Provider>
        )
