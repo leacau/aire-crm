@@ -9,6 +9,19 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://apis.google.com https://www.googletagmanager.com https://*.firebaseapp.com https://www.google-analytics.com;",
+          },
+        ],
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {
