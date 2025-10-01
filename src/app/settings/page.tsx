@@ -14,7 +14,6 @@ import { Header } from '@/components/layout/header';
 import { Spinner } from '@/components/ui/spinner';
 import { ArrowLeft, Shield } from 'lucide-react';
 import Link from 'next/link';
-import { updateUserProfile } from '@/lib/firebase-service';
 
 export default function SettingsPage() {
   const { user, userInfo, loading: authLoading } = useAuth();
@@ -29,8 +28,6 @@ export default function SettingsPage() {
     setLoading(true);
     try {
       await updateProfile(user, { displayName: name, photoURL: photoURL });
-      await updateUserProfile(user.uid, { name: name });
-
       toast({
         title: 'Perfil actualizado',
         description: 'Tus datos han sido actualizados correctamente.',

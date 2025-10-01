@@ -1,9 +1,10 @@
 
+
 'use server';
 
-export async function getCalendarEvents(accessToken: string, calendarId: string = 'primary') {
-    const API_URL = `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`;
+const API_URL = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
 
+export async function getCalendarEvents(accessToken: string) {
     const response = await fetch(`${API_URL}?timeMin=${new Date().toISOString()}&maxResults=250&singleEvents=true&orderBy=startTime`, {
         headers: {
             'Authorization': `Bearer ${accessToken}`

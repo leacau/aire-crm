@@ -5,7 +5,6 @@ import { Toaster } from '@/components/ui/toaster';
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { AuthProvider } from '@/hooks/use-auth.tsx';
 import { AuthLayout } from '@/components/layout/auth-layout';
-import { Analytics } from '@vercel/analytics/next';
 
 export const metadata: Metadata = {
   title: 'CRM Aire de Santa Fe',
@@ -28,7 +27,6 @@ export default function RootLayout({
             </AuthLayout>
         </AuthProvider>
         <Toaster />
-        <Analytics />
       </body>
     </html>
   );

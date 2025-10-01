@@ -34,14 +34,6 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
     return null;
 }
 
-export const updateUserProfile = async (uid: string, data: Partial<User>): Promise<void> => {
-    const userRef = doc(db, 'users', uid);
-    await updateDoc(userRef, {
-        ...data,
-        updatedAt: serverTimestamp(),
-    });
-}
-
 export const getAllUsers = async (role?: User['role']): Promise<User[]> => {
     let q = query(usersCollection);
     if (role) {

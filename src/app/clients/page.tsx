@@ -18,8 +18,8 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
-import type { Client, Opportunity, User } from '@/lib/types';
-import { createClient, getClients, getAllOpportunities, deleteClient, getAllUsers } from '@/lib/firebase-service';
+import type { Client, Opportunity } from '@/lib/types';
+import { createClient, getClients, getAllOpportunities, deleteClient } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import {
@@ -31,15 +31,13 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Badge } from '@/components/ui/badge';
+} from "@/components/ui/alert-dialog"
 
 export default function ClientsPage() {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,19 +46,17 @@ export default function ClientsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [fetchedClients, fetchedOpps, fetchedUsers] = await Promise.all([
+      const [fetchedClients, fetchedOpps] = await Promise.all([
           getClients(),
-          getAllOpportunities(),
-          getAllUsers(),
+          getAllOpportunities()
       ]);
       setClients(fetchedClients);
       setOpportunities(fetchedOpps);
-      setUsers(fetchedUsers);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
         title: "Error al cargar datos",
-        description: "No se pudieron cargar los datos.",
+        description: "No se pudieron cargar los datos de clientes y oportunidades.",
         variant: "destructive",
       });
     } finally {
@@ -84,13 +80,6 @@ export default function ClientsPage() {
       client.razonSocial.toLowerCase().includes(lowercasedFilter)
     );
   }, [clients, searchTerm]);
-
-  const usersMap = useMemo(() => {
-    return users.reduce((acc, user) => {
-        acc[user.id] = user;
-        return acc;
-    }, {} as Record<string, User>);
-  }, [users]);
 
 
   const handleSaveClient = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>) => {
@@ -140,8 +129,7 @@ export default function ClientsPage() {
   const validateCuit = async (cuit: string, clientId?: string): Promise<string | false> => {
     const existingClient = clients.find(c => c.cuit === cuit && c.id !== clientId);
     if (existingClient) {
-      const ownerName = usersMap[existingClient.ownerId]?.name || 'un asesor desconocido';
-      return `El CUIT ya pertenece al cliente "${existingClient.denominacion}", asignado a ${ownerName}.`;
+      return `El CUIT ya pertenece al cliente "${existingClient.denominacion}", asignado a ${existingClient.ownerName}.`;
     }
     return false;
   };
@@ -199,34 +187,32 @@ export default function ClientsPage() {
                   0
                 );
 
-                const isOwner = userInfo?.id === client.ownerId;
-                const canViewDetails = userInfo && (isBoss || isOwner);
-                const shouldShowOwner = isBoss || !isOwner;
-                const ownerName = usersMap[client.ownerId]?.name;
-
+                const canViewDetails = userInfo && (
+                    isBoss || 
+                    (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
+                );
 
                 return (
                   <TableRow key={client.id}>
                     <TableCell>
-                      <div className="flex flex-col gap-1">
-                        {canViewDetails ? (
-                          <Link
-                            href={`/clients/${client.id}`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            {client.denominacion}
-                          </Link>
-                        ) : (
-                          <span className="font-medium">{client.denominacion}</span>
-                        )}
-                         <div className="text-sm text-muted-foreground flex items-center gap-2">
-                           <span>{client.email}</span>
-                           {shouldShowOwner && ownerName && <Badge variant="secondary" className="font-normal">{ownerName}</Badge>}
-                        </div>
-                      </div>
+                      {canViewDetails ? (
+                         <Link
+                          href={`/clients/${client.id}`}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {client.denominacion}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">{client.denominacion}</span>
+                      )}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
-                      {client.razonSocial}
+                      <div>
+                        <div className="font-medium">{client.razonSocial}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {client.email}
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">{canViewDetails ? clientOpps.length : '-'}</TableCell>
                     <TableCell className="hidden lg:table-cell">{canViewDetails ? `$${totalValue.toLocaleString('es-AR')}` : '-'}</TableCell>

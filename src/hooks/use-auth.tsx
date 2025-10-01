@@ -3,13 +3,12 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, getRedirectResult, signInWithPopup } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
-import { createUserProfile, getUserProfile } from '@/lib/firebase-service';
+import { getUserProfile } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
-import { useToast } from './use-toast';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -36,39 +35,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => {
-    const handleRedirectResult = async () => {
-        try {
-            const result = await getRedirectResult(auth);
-            if (result) {
-                const credential = GoogleAuthProvider.credentialFromResult(result);
-                const token = credential?.accessToken;
-                const user = result.user;
-
-                if (token) {
-                    sessionStorage.setItem('google-calendar-token', token);
-                }
-
-                const userProfile = await getUserProfile(user.uid);
-                if (!userProfile) {
-                    await createUserProfile(user.uid, user.displayName || 'Usuario de Google', user.email || '');
-                }
-                
-                router.push('/');
-            }
-        } catch (error: any) {
-            toast({
-                title: 'Error con Google Sign-In',
-                description: error.message,
-                variant: 'destructive',
-            });
-        }
-    };
-    
-    handleRedirectResult();
-
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
