@@ -68,7 +68,7 @@ import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
 import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers } from '@/lib/firebase-service';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail, createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/lib/google-gmail-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
@@ -312,7 +312,38 @@ export function ClientDetails({
         ...(isTask && finalDueDate && { dueDate: finalDueDate.toISOString() }),
     };
 
+    let calendarEventId: string | undefined = undefined;
+    if(activityPayload.isTask && activityPayload.dueDate) {
+        const token = await getGoogleAccessToken();
+        if (token) {
+            try {
+                const calendarEvent = {
+                    summary: `Tarea CRM: ${activityPayload.observation}`,
+                    description: `Tarea registrada en el CRM para el cliente: ${client.denominacion}.\n\nObservación: ${activityPayload.observation}`,
+                    start: { dateTime: activityPayload.dueDate },
+                    end: { dateTime: activityPayload.dueDate },
+                    reminders: {
+                        useDefault: false,
+                        overrides: [
+                            { method: 'popup', minutes: 10 },
+                            { method: 'popup', minutes: 60 * 24 }, // 24 hours
+                        ],
+                    },
+                };
+                const createdEvent = await createCalendarEvent(token, calendarEvent);
+                calendarEventId = createdEvent.id;
+            } catch(e) {
+                 console.error("Failed to create calendar event", e);
+                 toast({ title: "Error al crear evento en calendario", description: "La tarea se guardó en el CRM, pero no se pudo crear el evento en Google Calendar.", variant: "destructive"});
+            }
+        }
+    }
+
+
     try {
+        if (calendarEventId) {
+            activityPayload.googleCalendarEventId = calendarEventId;
+        }
         await createClientActivity(activityPayload);
         toast({ title: "Actividad Registrada" });
         resetActivityForm();
@@ -336,6 +367,20 @@ export function ClientDetails({
           })
       };
 
+      // If task is completed, delete the calendar event
+      if(completed && activity.googleCalendarEventId) {
+          const token = await getGoogleAccessToken();
+          if (token) {
+              try {
+                  await deleteCalendarEvent(token, activity.googleCalendarEventId);
+                  payload.googleCalendarEventId = null; // Remove from our db
+              } catch(e) {
+                  console.error("Failed to delete calendar event", e);
+                  // Non-blocking, the user can delete it manually
+              }
+          }
+      }
+
       try {
           await updateClientActivity(activity.id, payload);
           fetchClientData();
@@ -349,10 +394,36 @@ export function ClientDetails({
   const handleConvertToTask = async (activity: ClientActivity, newDueDate: Date) => {
     if (!userInfo) return;
 
+    let calendarEventId: string | undefined = undefined;
+    const token = await getGoogleAccessToken();
+    if (token) {
+        try {
+            const calendarEvent = {
+                summary: `Tarea CRM: ${activity.observation}`,
+                description: `Tarea registrada en el CRM para el cliente: ${client.denominacion}.\n\nObservación: ${activity.observation}`,
+                start: { dateTime: newDueDate.toISOString() },
+                end: { dateTime: newDueDate.toISOString() },
+                reminders: {
+                    useDefault: false,
+                    overrides: [
+                        { method: 'popup', minutes: 10 },
+                        { method: 'popup', minutes: 60 * 24 }, // 24 hours
+                    ],
+                },
+            };
+            const createdEvent = await createCalendarEvent(token, calendarEvent);
+            calendarEventId = createdEvent.id;
+        } catch(e) {
+             console.error("Failed to create calendar event", e);
+             toast({ title: "Error al crear evento en calendario", variant: "destructive"});
+        }
+    }
+
     try {
       const payload: Partial<ClientActivity> = {
         isTask: true,
         dueDate: newDueDate.toISOString(),
+        ...(calendarEventId && { googleCalendarEventId: calendarEventId })
       };
       await updateClientActivity(activity.id, payload);
       fetchClientData();

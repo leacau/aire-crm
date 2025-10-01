@@ -93,6 +93,7 @@ export type ClientActivity = {
     completedAt?: string;
     completedByUserId?: string;
     completedByUserName?: string;
+    googleCalendarEventId?: string;
 }
 
 
