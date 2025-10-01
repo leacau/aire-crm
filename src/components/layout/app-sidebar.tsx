@@ -18,7 +18,7 @@ import {
 import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/use-auth.tsx';
+import { useAuth } from '@/hooks/use-auth';
 
 const menuItems = [
   { href: '/', label: 'Panel', icon: Home, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },

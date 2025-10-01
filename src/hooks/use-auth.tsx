@@ -1,8 +1,9 @@
 
+
 'use client';
 
-import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
-import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, getRedirectResult, signInWithRedirect } from 'firebase/auth';
+import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, getRedirectResult, signInWithPopup } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
@@ -16,7 +17,6 @@ interface AuthContextType {
   loading: boolean;
   isBoss: boolean;
   getGoogleAccessToken: () => Promise<string | null>;
-  initiateGoogleSignIn: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -25,7 +25,6 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isBoss: false,
   getGoogleAccessToken: async () => null,
-  initiateGoogleSignIn: () => {},
 });
 
 const publicRoutes = ['/login', '/register'];
@@ -36,76 +35,137 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
-
-  const isBoss = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia';
-
-  const getGoogleAccessToken = useCallback(async (): Promise<string | null> => {
-    return sessionStorage.getItem('google-access-token');
-  }, []);
-
-  const initiateGoogleSignIn = useCallback(() => {
-    const provider = new GoogleAuthProvider();
-    provider.addScope('https://www.googleapis.com/auth/calendar');
-    provider.addScope('https://www.googleapis.com/auth/gmail.send');
-    signInWithRedirect(auth, provider);
-  }, []);
+  const [isBoss, setIsBoss] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
+    const handleRedirectResult = async () => {
+        try {
+            const result = await getRedirectResult(auth);
+            if (result) {
+                const credential = GoogleAuthProvider.credentialFromResult(result);
+                const token = credential?.accessToken;
+                const user = result.user;
+
+                if (token) {
+                    sessionStorage.setItem('google-calendar-token', token);
+                }
+
+                const userProfile = await getUserProfile(user.uid);
+                if (!userProfile) {
+                    await createUserProfile(user.uid, user.displayName || 'Usuario de Google', user.email || '');
+                }
+                
+                router.push('/');
+            }
+        } catch (error: any) {
+            toast({
+                title: 'Error con Google Sign-In',
+                description: error.message,
+                variant: 'destructive',
+            });
+        }
+    };
+    
+    handleRedirectResult();
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true);
       if (firebaseUser) {
         setUser(firebaseUser);
         const profile = await getUserProfile(firebaseUser.uid);
+        
         if (profile) {
           const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';
-          setUserInfo({ id: firebaseUser.uid, ...profile, initials });
+          const finalProfile = { 
+            id: firebaseUser.uid, 
+            ...profile,
+            initials
+          };
+          setUserInfo(finalProfile);
+          setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
         } else {
-          // If no profile exists, create one (e.g., for Google Sign-In first time)
-          await createUserProfile(firebaseUser.uid, firebaseUser.displayName || 'Usuario de Google', firebaseUser.email || '');
-          const newProfile = await getUserProfile(firebaseUser.uid);
-          if (newProfile) {
-            const initials = newProfile.name?.substring(0, 2).toUpperCase() || 'U';
-            setUserInfo({ id: firebaseUser.uid, ...newProfile, initials });
-          }
-        }
-        
-        if (publicRoutes.includes(pathname)) {
-            router.replace('/');
+            const name = firebaseUser.displayName || 'Usuario';
+            const defaultProfile = {
+                id: firebaseUser.uid,
+                name: name,
+                email: firebaseUser.email || '',
+                role: 'Asesor' as const,
+                initials: name.substring(0, 2).toUpperCase()
+            };
+            setUserInfo(defaultProfile);
+            setIsBoss(false);
         }
       } else {
         setUser(null);
         setUserInfo(null);
-        if (!publicRoutes.includes(pathname)) {
-            router.replace('/login');
-        }
+        setIsBoss(false);
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [pathname, router]);
-  
+  }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      const isPublicRoute = publicRoutes.includes(pathname);
+      
+      if (!user && !isPublicRoute) {
+        router.push('/login');
+      } else if (user && isPublicRoute) {
+        router.push('/');
+      }
+    }
+  }, [user, loading, pathname, router]);
+
+    const getGoogleAccessToken = async (): Promise<string | null> => {
+        const storedToken = sessionStorage.getItem('google-calendar-token');
+        if (storedToken) {
+            // Here you might want to check for token expiration
+            return storedToken;
+        }
+
+        if (user) {
+            const provider = new GoogleAuthProvider();
+            provider.addScope('https://www.googleapis.com/auth/calendar.events');
+            provider.addScope('https://www.googleapis.com/auth/gmail.send');
+            try {
+                const result = await signInWithPopup(auth, provider);
+                const credential = GoogleAuthProvider.credentialFromResult(result);
+                const token = credential?.accessToken;
+                if (token) {
+                    sessionStorage.setItem('google-calendar-token', token);
+                    return token;
+                }
+            } catch (error) {
+                console.error("Error getting Google access token:", error);
+                return null;
+            }
+        }
+        return null;
+    };
+
+
   if (loading && !publicRoutes.includes(pathname)) {
-     return (
+    return (
       <div className="flex h-screen items-center justify-center">
         <Spinner size="large" />
       </div>
     );
   }
 
-  // This prevents showing a protected page for a split second before redirecting
-  if (!loading && !user && !publicRoutes.includes(pathname)) {
-     return (
-      <div className="flex h-screen items-center justify-center">
-        <Spinner size="large" />
-      </div>
+  if (!loading && (user || publicRoutes.includes(pathname))) {
+    return (
+      <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken }}>
+        {children}
+      </AuthContext.Provider>
     );
   }
-  
+
   return (
-    <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
-      {children}
-    </AuthContext.Provider>
+    <div className="flex h-screen items-center justify-center">
+        <Spinner size="large" />
+    </div>
   );
 }
 

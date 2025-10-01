@@ -3,7 +3,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { getCalendarEvents, createCalendarEvent, deleteCalendarEvent } from '@/lib/google-calendar-service';
+import { getCalendarEvents } from '@/lib/google-calendar-service';
+import { createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,7 +56,7 @@ interface EventFormData {
 }
 
 export function GoogleCalendar() {
-  const { getGoogleAccessToken, isBoss, initiateGoogleSignIn } = useAuth();
+  const { getGoogleAccessToken, isBoss } = useAuth();
   const { toast } = useToast();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,17 +101,6 @@ export function GoogleCalendar() {
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
-  
-  const handleRetry = () => {
-    // If the error is permission-related, initiate the sign-in flow.
-    if (error?.includes('permiso')) {
-        initiateGoogleSignIn();
-    } else {
-        // Otherwise, just try fetching events again.
-        fetchEvents();
-    }
-  };
-
 
   const handleSelectSlot = useCallback(({ start, end }: { start: Date; end: Date }) => {
     setSelectedEvent(null);
@@ -199,7 +189,7 @@ export function GoogleCalendar() {
         <CardHeader><CardTitle>Error de Calendario</CardTitle></CardHeader>
         <CardContent>
           <p className="text-destructive mb-4">{error}</p>
-          <Button onClick={handleRetry}>Reintentar</Button>
+          <Button onClick={fetchEvents}>Reintentar</Button>
         </CardContent>
       </Card>
     );

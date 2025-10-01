@@ -72,7 +72,6 @@ export default function RegisterPage() {
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                autoComplete="name"
               />
             </div>
             <div className="grid gap-2">
@@ -84,7 +83,6 @@ export default function RegisterPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
               />
             </div>
             <div className="grid gap-2">
@@ -95,7 +93,6 @@ export default function RegisterPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
               />
             </div>
           </CardContent>
@@ -118,3 +115,5 @@ export default function RegisterPage() {
     </div>
   );
 }
+
+    
