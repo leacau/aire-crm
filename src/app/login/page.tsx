@@ -28,7 +28,7 @@ export default function LoginPage() {
   const [pageLoading, setPageLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-  const { user, loading: authLoading, initiateGoogleSignIn } = useAuth();
+  const { user, loading: authLoading, isProcessingRedirect, initiateGoogleSignIn } = useAuth();
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -68,7 +68,7 @@ export default function LoginPage() {
     }
   };
 
-  if (authLoading || user) {
+  if (authLoading || user || isProcessingRedirect) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Spinner size="large" />
