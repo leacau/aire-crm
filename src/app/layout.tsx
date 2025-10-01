@@ -9,6 +9,10 @@ import { AuthLayout } from '@/components/layout/auth-layout';
 export const metadata: Metadata = {
   title: 'CRM Aire de Santa Fe',
   description: 'Visualiza y pronostica oportunidades de venta.',
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export default function RootLayout({

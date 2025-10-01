@@ -6,14 +6,6 @@ import * as SelectPrimitive from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from "@/components/ui/drawer"
-import { useMediaQuery } from "@/hooks/use-media-query"
 
 const Select = SelectPrimitive.Root
 
@@ -80,20 +72,6 @@ const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
 >(({ className, children, position = "popper", ...props }, ref) => {
-  const isDesktop = useMediaQuery("(min-width: 768px)")
-  
-  if (!isDesktop) {
-    return (
-      <Drawer open={true}>
-        <DrawerContent>
-          <div className="mt-4 border-t">
-            {children}
-          </div>
-        </DrawerContent>
-      </Drawer>
-    )
-  }
-
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
