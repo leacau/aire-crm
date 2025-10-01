@@ -3,8 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { getCalendarEvents } from '@/lib/google-calendar-service';
-import { createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
+import { getCalendarEvents, createCalendarEvent, deleteCalendarEvent } from '@/lib/google-calendar-service';
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
