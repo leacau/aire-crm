@@ -53,12 +53,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // This effect runs only once on mount to handle the redirect result.
     const processRedirect = async () => {
       try {
         const result = await getRedirectResult(auth);
         if (result) {
-          // This means a sign-in redirect has just completed.
           const credential = GoogleAuthProvider.credentialFromResult(result);
           const token = credential?.accessToken;
           if (token) {
@@ -68,6 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!userProfile) {
             await createUserProfile(result.user.uid, result.user.displayName || 'Usuario de Google', result.user.email || '');
           }
+           // On successful redirect, force navigation to home
+          router.replace('/');
         }
       } catch (error: any) {
         console.error("Google Sign-In Error:", error);
@@ -77,18 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           variant: 'destructive',
         });
       } finally {
-        // Signal that redirect processing is done.
         setIsProcessingRedirect(false);
       }
     };
     processRedirect();
-  }, [toast]);
+  }, [router, toast]);
 
   useEffect(() => {
-    // This effect runs after the redirect processing is finished.
-    if (isProcessingRedirect) {
-      return; // Wait until getRedirectResult is done.
-    }
+    if (isProcessingRedirect) return;
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -99,13 +95,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserInfo({ id: firebaseUser.uid, ...profile, initials });
         }
         if (publicRoutes.includes(pathname)) {
-            router.push('/');
+            router.replace('/');
         }
       } else {
         setUser(null);
         setUserInfo(null);
         if (!publicRoutes.includes(pathname)) {
-            router.push('/login');
+            router.replace('/login');
         }
       }
       setLoading(false);
@@ -114,7 +110,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, [isProcessingRedirect, pathname, router]);
 
-  // Show a spinner while initial auth state is loading or redirect is processing
   if (loading || isProcessingRedirect) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -123,21 +118,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
   
-  // If we are on a public route, or if we have a user, render children
-  // The effect above will handle redirecting unauthenticated users away from private routes.
-  if (publicRoutes.includes(pathname) || user) {
-     return (
-       <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
-         {children}
-       </AuthContext.Provider>
-     )
-  }
-
-  // Fallback spinner for private routes while redirecting
   return (
-    <div className="flex h-screen items-center justify-center">
-        <Spinner size="large" />
-    </div>
+    <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 
