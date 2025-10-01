@@ -33,7 +33,8 @@ const publicRoutes = ['/login', '/register'];
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userInfo, setUserInfo] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
@@ -52,11 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // This effect runs only once on mount to handle the redirect and set up the listener.
+    // This effect runs only once on mount to handle the redirect result.
     const processRedirect = async () => {
       try {
         const result = await getRedirectResult(auth);
         if (result) {
+          // This means a sign-in redirect has just completed.
           const credential = GoogleAuthProvider.credentialFromResult(result);
           const token = credential?.accessToken;
           if (token) {
@@ -74,17 +76,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           description: `Code: ${error.code}, Message: ${error.message}`,
           variant: 'destructive',
         });
+      } finally {
+        // Signal that redirect processing is done.
+        setIsProcessingRedirect(false);
       }
     };
+    processRedirect();
+  }, [toast]);
+
+  useEffect(() => {
+    // This effect runs after the redirect processing is finished.
+    if (isProcessingRedirect) {
+      return; // Wait until getRedirectResult is done.
+    }
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      // First, handle the redirect result if it exists.
-      // This is crucial to ensure the user session is established before any routing decisions.
-      if (!auth.currentUser) {
-        await processRedirect();
-      }
-      
-      // Now, onAuthStateChanged will fire again with the user object if the sign-in was successful.
       if (firebaseUser) {
         setUser(firebaseUser);
         const profile = await getUserProfile(firebaseUser.uid);
@@ -92,56 +98,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';
           setUserInfo({ id: firebaseUser.uid, ...profile, initials });
         }
+        if (publicRoutes.includes(pathname)) {
+            router.push('/');
+        }
       } else {
         setUser(null);
         setUserInfo(null);
+        if (!publicRoutes.includes(pathname)) {
+            router.push('/login');
+        }
       }
-      
-      // Only set loading to false after all auth state processing is done.
-      setIsLoading(false);
+      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [toast]);
+  }, [isProcessingRedirect, pathname, router]);
 
-
-  useEffect(() => {
-    // This effect handles routing after the loading state is resolved.
-    if (isLoading) return;
-
-    const isPublic = publicRoutes.includes(pathname);
-
-    if (user && isPublic) {
-      router.push('/');
-    } else if (!user && !isPublic) {
-      router.push('/login');
-    }
-  }, [user, isLoading, pathname, router]);
-
-  if (isLoading) {
+  // Show a spinner while initial auth state is loading or redirect is processing
+  if (loading || isProcessingRedirect) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Spinner size="large" />
       </div>
     );
   }
-
-  // If we are on a public route, we can render the children without a logged-in user.
-  const isPublicRoute = publicRoutes.includes(pathname);
-  if (isPublicRoute) {
+  
+  // If we are on a public route, or if we have a user, render children
+  // The effect above will handle redirecting unauthenticated users away from private routes.
+  if (publicRoutes.includes(pathname) || user) {
      return (
-       <AuthContext.Provider value={{ user, userInfo, loading: isLoading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
+       <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
          {children}
        </AuthContext.Provider>
      )
   }
 
-  // For private routes, only render children if the user is logged in.
-  // Otherwise, the effect above will handle the redirect.
+  // Fallback spinner for private routes while redirecting
   return (
-    <AuthContext.Provider value={{ user, userInfo, loading: isLoading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
-      {user ? children :  <div className="flex h-screen items-center justify-center"><Spinner size="large" /></div>}
-    </AuthContext.Provider>
+    <div className="flex h-screen items-center justify-center">
+        <Spinner size="large" />
+    </div>
   );
 }
 
