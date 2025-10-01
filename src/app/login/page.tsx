@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, GoogleAuthProvider, getRedirectResult } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,21 +21,52 @@ import Link from 'next/link';
 import { Logo } from '@/components/logo';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
+import { createUserProfile, getUserProfile } from '@/lib/firebase-service';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pageLoading, setPageLoading] = useState(false);
+  const [isProcessingRedirect, setIsProcessingRedirect] = useState(true); // Start as true
   const router = useRouter();
   const { toast } = useToast();
-  const { user, loading: authLoading, isProcessingRedirect, initiateGoogleSignIn } = useAuth();
+  const { user, loading: authLoading, initiateGoogleSignIn } = useAuth();
 
   useEffect(() => {
-    if (!authLoading && user) {
+    // This effect runs only once on mount to handle the redirect result from Google.
+    const processRedirect = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          toast({ title: "Iniciando sesión con Google..." });
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          const token = credential?.accessToken;
+          if (token) {
+            sessionStorage.setItem('google-access-token', token);
+          }
+          // The onAuthStateChanged in AuthProvider will handle the user state update and redirect.
+        }
+      } catch (error: any) {
+        console.error("Google Sign-In Error:", error);
+        toast({
+          title: 'Error con Google Sign-In',
+          description: `Code: ${error.code}, Message: ${error.message}`,
+          variant: 'destructive',
+        });
+      } finally {
+        // This is crucial: once we've checked for a redirect, we stop processing.
+        setIsProcessingRedirect(false);
+      }
+    };
+    processRedirect();
+  }, [toast]);
+
+  useEffect(() => {
+    // This effect handles redirection once auth state is confirmed and not a redirect process.
+    if (!authLoading && user && !isProcessingRedirect) {
       router.push('/');
     }
-  }, [user, authLoading, router]);
-
+  }, [user, authLoading, isProcessingRedirect, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,33 +80,33 @@ export default function LoginPage() {
         description: error.message,
         variant: 'destructive',
       });
-       setPageLoading(false);
+      setPageLoading(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
     setPageLoading(true);
-    try {
-        initiateGoogleSignIn();
-        // The browser will redirect, and AuthProvider will handle the result
-    } catch (error: any) {
-         toast({
-            title: 'Error con Google Sign-In',
-            description: error.message,
-            variant: 'destructive',
-        });
-        setPageLoading(false);
-    }
+    initiateGoogleSignIn(); // This will trigger the redirect
   };
 
-  if (authLoading || user || isProcessingRedirect) {
+  // Show a full-screen loader if we're waiting for auth state or processing a redirect.
+  if (authLoading || isProcessingRedirect) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Spinner size="large" />
       </div>
     );
   }
-
+  
+  // If user is logged in (and we're not processing a redirect), don't show login page.
+  // This prevents a flash of the login form after a successful redirect.
+  if(user) {
+     return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Spinner size="large" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">

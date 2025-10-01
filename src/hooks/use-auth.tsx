@@ -15,7 +15,6 @@ interface AuthContextType {
   userInfo: User | null;
   loading: boolean;
   isBoss: boolean;
-  isProcessingRedirect: boolean;
   getGoogleAccessToken: () => Promise<string | null>;
   initiateGoogleSignIn: () => void;
 }
@@ -25,7 +24,6 @@ const AuthContext = createContext<AuthContextType>({
   userInfo: null,
   loading: true,
   isBoss: false,
-  isProcessingRedirect: true,
   getGoogleAccessToken: async () => null,
   initiateGoogleSignIn: () => {},
 });
@@ -36,10 +34,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
-  const { toast } = useToast();
 
   const isBoss = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia';
 
@@ -55,40 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const processRedirectResult = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result) {
-          toast({ title: "Iniciando sesión..." });
-          const credential = GoogleAuthProvider.credentialFromResult(result);
-          const token = credential?.accessToken;
-          if (token) {
-            sessionStorage.setItem('google-access-token', token);
-          }
-
-          const userProfile = await getUserProfile(result.user.uid);
-          if (!userProfile) {
-            await createUserProfile(result.user.uid, result.user.displayName || 'Usuario de Google', result.user.email || '');
-          }
-        }
-      } catch (error: any) {
-        console.error("Google Sign-In Error:", error);
-        toast({
-          title: 'Error con Google Sign-In',
-          description: `Code: ${error.code}, Message: ${error.message}`,
-          variant: 'destructive',
-        });
-      } finally {
-        setIsProcessingRedirect(false);
-      }
-    };
-    processRedirectResult();
-  }, [toast]);
-
-
-  useEffect(() => {
-    if (isProcessingRedirect) return;
-
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
       if (firebaseUser) {
@@ -97,7 +59,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (profile) {
           const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';
           setUserInfo({ id: firebaseUser.uid, ...profile, initials });
+        } else {
+          // If no profile exists, create one (e.g., for Google Sign-In first time)
+          await createUserProfile(firebaseUser.uid, firebaseUser.displayName || 'Usuario de Google', firebaseUser.email || '');
+          const newProfile = await getUserProfile(firebaseUser.uid);
+          if (newProfile) {
+            const initials = newProfile.name?.substring(0, 2).toUpperCase() || 'U';
+            setUserInfo({ id: firebaseUser.uid, ...newProfile, initials });
+          }
         }
+        
         if (publicRoutes.includes(pathname)) {
             router.replace('/');
         }
@@ -112,11 +83,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [isProcessingRedirect, pathname, router]);
-
-  const isLoading = loading || isProcessingRedirect;
-
-  if (isLoading && !publicRoutes.includes(pathname)) {
+  }, [pathname, router]);
+  
+  if (loading && !publicRoutes.includes(pathname)) {
      return (
       <div className="flex h-screen items-center justify-center">
         <Spinner size="large" />
@@ -124,7 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!isLoading && !user && !publicRoutes.includes(pathname)) {
+  // This prevents showing a protected page for a split second before redirecting
+  if (!loading && !user && !publicRoutes.includes(pathname)) {
      return (
       <div className="flex h-screen items-center justify-center">
         <Spinner size="large" />
@@ -133,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
   
   return (
-    <AuthContext.Provider value={{ user, userInfo, loading: isLoading, isBoss, isProcessingRedirect, getGoogleAccessToken, initiateGoogleSignIn }}>
+    <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, initiateGoogleSignIn }}>
       {children}
     </AuthContext.Provider>
   );
