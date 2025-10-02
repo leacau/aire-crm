@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -16,6 +15,7 @@ interface AuthContextType {
   userInfo: User | null;
   loading: boolean;
   isBoss: boolean;
+  isProcessingRedirect: boolean;
   getGoogleAccessToken: () => Promise<string | null>;
 }
 
@@ -24,6 +24,7 @@ const AuthContext = createContext<AuthContextType>({
   userInfo: null,
   loading: true,
   isBoss: false,
+  isProcessingRedirect: true,
   getGoogleAccessToken: async () => null,
 });
 
@@ -33,41 +34,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    const handleRedirectResult = async () => {
-        try {
-            const result = await getRedirectResult(auth);
-            if (result) {
-                const credential = GoogleAuthProvider.credentialFromResult(result);
-                const token = credential?.accessToken;
-                const user = result.user;
+    const processRedirect = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          const token = credential?.accessToken;
+          const user = result.user;
 
-                if (token) {
-                    sessionStorage.setItem('google-calendar-token', token);
-                }
+          if (token) {
+            sessionStorage.setItem('google-calendar-token', token);
+          }
 
-                const userProfile = await getUserProfile(user.uid);
-                if (!userProfile) {
-                    await createUserProfile(user.uid, user.displayName || 'Usuario de Google', user.email || '');
-                }
-                
-                router.push('/');
-            }
-        } catch (error: any) {
-            toast({
-                title: 'Error con Google Sign-In',
-                description: error.message,
-                variant: 'destructive',
-            });
+          const userProfile = await getUserProfile(user.uid);
+          if (!userProfile) {
+            await createUserProfile(user.uid, user.displayName || 'Usuario de Google', user.email || '');
+          }
         }
+      } catch (error: any) {
+        toast({
+            title: 'Error con Google Sign-In',
+            description: error.message,
+            variant: 'destructive',
+        });
+      } finally {
+        setIsProcessingRedirect(false);
+      }
     };
-    
-    handleRedirectResult();
+    processRedirect();
+  }, [toast]);
+  
+
+  useEffect(() => {
+    if (isProcessingRedirect) return;
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -104,24 +110,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isProcessingRedirect]);
 
   useEffect(() => {
-    if (!loading) {
-      const isPublicRoute = publicRoutes.includes(pathname);
-      
-      if (!user && !isPublicRoute) {
-        router.push('/login');
-      } else if (user && isPublicRoute) {
-        router.push('/');
-      }
+    if (loading) return;
+
+    const isPublicRoute = publicRoutes.includes(pathname);
+    
+    if (!user && !isPublicRoute) {
+      router.push('/login');
+    } else if (user && isPublicRoute) {
+      router.push('/');
     }
   }, [user, loading, pathname, router]);
 
     const getGoogleAccessToken = async (): Promise<string | null> => {
         const storedToken = sessionStorage.getItem('google-calendar-token');
         if (storedToken) {
-            // Here you might want to check for token expiration
             return storedToken;
         }
 
@@ -130,6 +135,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
             try {
+                // This will re-authenticate with a popup if the token is needed and not present.
+                // You can also use signInWithRedirect here if popups are an issue.
                 const result = await signInWithPopup(auth, provider);
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 const token = credential?.accessToken;
@@ -139,33 +146,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             } catch (error) {
                 console.error("Error getting Google access token:", error);
+                toast({title: 'Error de autenticación con Google', description: 'Por favor, intenta iniciar sesión de nuevo con Google.', variant: 'destructive'});
                 return null;
             }
         }
         return null;
     };
 
-
-  if (loading && !publicRoutes.includes(pathname)) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Spinner size="large" />
-      </div>
-    );
-  }
-
-  if (!loading && (user || publicRoutes.includes(pathname))) {
-    return (
-      <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken }}>
-        {children}
-      </AuthContext.Provider>
-    );
+  if (loading || isProcessingRedirect) {
+     if (!publicRoutes.includes(pathname) || isProcessingRedirect) {
+       return (
+        <div className="flex h-screen items-center justify-center">
+          <Spinner size="large" />
+        </div>
+      );
+     }
   }
 
   return (
-    <div className="flex h-screen items-center justify-center">
-        <Spinner size="large" />
-    </div>
+    <AuthContext.Provider value={{ user, userInfo, loading, isBoss, isProcessingRedirect, getGoogleAccessToken }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 

@@ -1,9 +1,9 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword, signInWithRedirect, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithEmailAndPassword, GoogleAuthProvider, getRedirectResult, signInWithRedirect } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +20,9 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Logo } from '@/components/logo';
 import { Separator } from '@/components/ui/separator';
+import { createUserProfile, getUserProfile } from '@/lib/firebase-service';
+import { useAuth } from '@/hooks/use-auth';
+import { Spinner } from '@/components/ui/spinner';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -27,6 +30,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const { isProcessingRedirect } = useAuth();
+  
+  if (isProcessingRedirect) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Spinner size="large" />
+      </div>
+    );
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,14 +64,16 @@ export default function LoginPage() {
     provider.addScope('https://www.googleapis.com/auth/gmail.send');
     
     try {
-        await signInWithRedirect(auth, provider);
+      await signInWithRedirect(auth, provider);
+      // The user will be redirected to Google's sign-in page.
+      // The result is handled in the useAuth hook after redirection.
     } catch (error: any) {
-         toast({
+      toast({
             title: 'Error con Google Sign-In',
             description: error.message,
             variant: 'destructive',
-        });
-        setLoading(false);
+      });
+      setLoading(false);
     }
   };
 
