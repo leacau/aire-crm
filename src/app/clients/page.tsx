@@ -22,6 +22,8 @@ import type { Client, Opportunity } from '@/lib/types';
 import { createClient, getClients, getAllOpportunities, deleteClient } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +44,7 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const [showOnlyMyClients, setShowOnlyMyClients] = useState(!isBoss);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -69,17 +72,29 @@ export default function ClientsPage() {
       fetchData();
     }
   }, [authLoading, fetchData]);
+  
+  useEffect(() => {
+    if (userInfo) {
+      setShowOnlyMyClients(!isBoss);
+    }
+  }, [isBoss, userInfo]);
 
   const filteredClients = useMemo(() => {
+    let clientsToShow = clients;
+
+    if (showOnlyMyClients && userInfo) {
+        clientsToShow = clients.filter(client => client.ownerId === userInfo.id);
+    }
+
     if (searchTerm.length < 3) {
-      return clients;
+      return clientsToShow;
     }
     const lowercasedFilter = searchTerm.toLowerCase();
-    return clients.filter(client =>
+    return clientsToShow.filter(client =>
       client.denominacion.toLowerCase().includes(lowercasedFilter) ||
       client.razonSocial.toLowerCase().includes(lowercasedFilter)
     );
-  }, [clients, searchTerm]);
+  }, [clients, searchTerm, showOnlyMyClients, userInfo]);
 
 
   const handleSaveClient = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>) => {
@@ -157,10 +172,10 @@ export default function ClientsPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
             />
         </div>
-        <Button variant="outline" className="hidden sm:flex">
-          <FileDown className="mr-2" />
-          Exportar
-        </Button>
+         <div className="flex items-center space-x-2">
+            <Checkbox id="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
+            <Label htmlFor="my-clients" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis clientes</Label>
+        </div>
         <Button onClick={() => setIsFormOpen(true)}>
           <PlusCircle className="mr-2" />
           Nuevo
@@ -196,16 +211,21 @@ export default function ClientsPage() {
                 return (
                   <TableRow key={client.id}>
                     <TableCell>
-                      {canViewDetails ? (
-                         <Link
-                          href={`/clients/${client.id}`}
-                          className="font-medium text-primary hover:underline"
-                        >
-                          {client.denominacion}
-                        </Link>
-                      ) : (
-                        <span className="font-medium">{client.denominacion}</span>
-                      )}
+                      <div>
+                        {canViewDetails ? (
+                          <Link
+                            href={`/clients/${client.id}`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {client.denominacion}
+                          </Link>
+                        ) : (
+                          <span className="font-medium">{client.denominacion}</span>
+                        )}
+                        {isBoss && userInfo && client.ownerId !== userInfo.id && (
+                           <p className="text-xs text-muted-foreground">{client.ownerName}</p>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       <div>
