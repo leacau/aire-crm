@@ -129,4 +129,4 @@ export type User = {
 
 // This type is used for mapping columns during import.
 // It includes client fields and the ownerName for assignment.
-export type ClientImportMapping = Partial<Omit<Client, 'id' | 'personIds' | 'ownerId'>> & { ownerName?: string };
+export type ClientImportMapping =
