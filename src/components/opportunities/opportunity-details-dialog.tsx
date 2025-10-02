@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -187,7 +186,10 @@ export function OpportunityDetailsDialog({
           onUpdate(changes);
       }
     } else if (!isEditing) {
-        const newOpp = editedOpportunity as Omit<Opportunity, 'id'>;
+        const newOpp = {
+            ...editedOpportunity,
+            value: editedOpportunity.value || 0, // Ensure value is a number
+        } as Omit<Opportunity, 'id'>;
         onCreate(newOpp);
     }
     onOpenChange(false);
@@ -209,7 +211,7 @@ export function OpportunityDetailsDialog({
     let finalValue: string | number = value;
 
     if (name === 'value' || name === 'valorCerrado') {
-        finalValue = Number(value);
+        finalValue = value === '' ? 0 : Number(value);
     }
     
     if (name === 'fechaFacturacion' && value) {
@@ -301,7 +303,7 @@ export function OpportunityDetailsDialog({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
                 <Label htmlFor="value">Valor</Label>
-                <Input id="value" name="value" type="number" value={editedOpportunity.value || 0} onChange={handleChange}/>
+                <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange}/>
             </div>
             <div className="space-y-2">
                 <Label htmlFor="stage">Etapa</Label>
@@ -402,7 +404,7 @@ export function OpportunityDetailsDialog({
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor="valorCerrado">Valor Cerrado</Label>
-                    <Input id="valorCerrado" name="valorCerrado" type="number" value={editedOpportunity.valorCerrado || editedOpportunity.value || 0} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''} />
+                    <Input id="valorCerrado" name="valorCerrado" type="number" value={editedOpportunity.valorCerrado || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''} />
                 </div>
               </div>
 
