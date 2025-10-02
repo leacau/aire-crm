@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, getRedirectResult, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
@@ -53,8 +53,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserInfo(finalProfile);
           setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
         } else {
-            // This case might happen if Firestore profile creation is slow.
-            // Or for users created before the profile system.
             const name = firebaseUser.displayName || 'Usuario';
             const defaultProfile = {
                 id: firebaseUser.uid,
@@ -89,32 +87,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
-    const getGoogleAccessToken = async (): Promise<string | null> => {
-        const storedToken = sessionStorage.getItem('google-calendar-token');
-        if (storedToken) {
-            return storedToken;
-        }
-
-        if (user) {
-            const provider = new GoogleAuthProvider();
-            provider.addScope('https://www.googleapis.com/auth/calendar.events');
-            provider.addScope('https://www.googleapis.com/auth/gmail.send');
-            try {
-                const result = await signInWithPopup(auth, provider);
-                const credential = GoogleAuthProvider.credentialFromResult(result);
-                const token = credential?.accessToken;
-                if (token) {
-                    sessionStorage.setItem('google-calendar-token', token);
-                    return token;
-                }
-            } catch (error) {
-                console.error("Error getting Google access token:", error);
-                toast({title: 'Error de autenticación con Google', description: 'Por favor, intenta iniciar sesión de nuevo con Google.', variant: 'destructive'});
-                return null;
-            }
-        }
+  const getGoogleAccessToken = async (): Promise<string | null> => {
+      const storedToken = sessionStorage.getItem('google-calendar-token');
+      if (storedToken) {
+          return storedToken;
+      }
+      
+      if (!user) {
+        toast({title: 'Debes iniciar sesión', description: 'Por favor, inicia sesión para conectar con Google.', variant: 'destructive'});
         return null;
-    };
+      }
+
+      // We re-authenticate with popup just to get a fresh token. 
+      // This is a common pattern when needing scopes after initial login.
+      const provider = new GoogleAuthProvider();
+      provider.addScope('https://www.googleapis.com/auth/calendar.events');
+      provider.addScope('https://www.googleapis.com/auth/gmail.send');
+      try {
+          // Use a popup here as it's less disruptive than a full redirect just for a token.
+          const result = await signInWithPopup(auth, provider);
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          const token = credential?.accessToken;
+          if (token) {
+              sessionStorage.setItem('google-calendar-token', token);
+              return token;
+          }
+          return null;
+      } catch (error: any) {
+          if (error.code !== 'auth/popup-closed-by-user') {
+            console.error("Error getting Google access token:", error);
+            toast({title: 'Error de autenticación con Google', description: 'No se pudo obtener el permiso para acceder a los servicios de Google.', variant: 'destructive'});
+          }
+          return null;
+      }
+  };
+
 
   if (loading) {
      if (!publicRoutes.includes(pathname)) {
