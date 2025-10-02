@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -228,4 +229,11 @@ export default function ImportPage() {
                 <Progress value={importProgress} className="w-full max-w-md mt-4" />
                 {step === 'done' && (
                      <Button onClick={resetState} className="mt-6">Iniciar una nueva importación</Button>
-                
+                )}
+            </div>
+        )}
+
+      </main>
+    </div>
+  );
+}

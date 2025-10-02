@@ -134,3 +134,7 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                         Importar Selección ({rowsToImport.length})
                     </Button>
                 </div>
+            </CardContent>
+        </Card>
+    );
+}
