@@ -71,8 +71,9 @@ export default function ImportPage() {
         for(const header in columnMapping) {
             const clientField = columnMapping[header];
             if (clientField !== 'ignore') {
+                const value = row[header];
                 // @ts-ignore
-                client[clientField] = row[header];
+                client[clientField] = value === undefined ? '' : value;
             }
         }
         client.rawOwnerName = row[ownerNameColumn];
@@ -84,7 +85,7 @@ export default function ImportPage() {
         const clientData = clientsToCreate[i];
         
         const ownerName = clientData.rawOwnerName;
-        const owner = ownerName ? advisorsMap.get(ownerName.toLowerCase()) : undefined;
+        const owner = ownerName ? advisorsMap.get(String(ownerName).toLowerCase()) : undefined;
 
         if (clientData.denominacion && owner) {
              try {
@@ -97,14 +98,16 @@ export default function ImportPage() {
                  toast({
                     title: `Error importando ${clientData.denominacion}`,
                     description: error.message,
-                    variant: 'destructive'
+                    variant: 'destructive',
+                    duration: 10000,
                  });
             }
         } else if (clientData.denominacion && !owner) {
              toast({
                 title: `Propietario no encontrado para: ${clientData.denominacion}`,
                 description: `No se encontró un asesor llamado "${ownerName}". Este cliente no fue importado.`,
-                variant: 'destructive'
+                variant: 'destructive',
+                duration: 10000,
              });
         }
         setImportProgress(((i + 1) / clientsToCreate.length) * 100);
