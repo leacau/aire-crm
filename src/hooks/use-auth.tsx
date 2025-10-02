@@ -98,13 +98,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
       }
 
-      // We re-authenticate with popup just to get a fresh token. 
-      // This is a common pattern when needing scopes after initial login.
       const provider = new GoogleAuthProvider();
       provider.addScope('https://www.googleapis.com/auth/calendar.events');
       provider.addScope('https://www.googleapis.com/auth/gmail.send');
       try {
-          // Use a popup here as it's less disruptive than a full redirect just for a token.
           const result = await signInWithPopup(auth, provider);
           const credential = GoogleAuthProvider.credentialFromResult(result);
           const token = credential?.accessToken;
