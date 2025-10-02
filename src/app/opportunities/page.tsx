@@ -25,7 +25,7 @@ export default function OpportunitiesPage() {
   }, [isBoss]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full">
       <Header title="Oportunidades">
         <DateRangePicker date={dateRange} onDateChange={setDateRange} />
           {isBoss && (
@@ -42,7 +42,7 @@ export default function OpportunitiesPage() {
             </Select>
           )}
       </Header>
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-x-auto">
         <KanbanBoard dateRange={dateRange} selectedAdvisor={selectedAdvisor} />
       </main>
     </div>
