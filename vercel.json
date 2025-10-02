@@ -1,0 +1,18 @@
+{
+    "version": 2,
+    "headers": [
+      {
+        "source": "/auth/(.*)",
+        "headers": [
+          { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" }
+        ]
+      },
+      {
+        "source": "/api/auth/(.*)",
+        "headers": [
+          { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" }
+        ]
+      }
+    ]
+  }
+  
