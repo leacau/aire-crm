@@ -122,7 +122,7 @@ export function ClientFormDialog({
   const handleSelectChange = (name: keyof ClientFormData, value: string) => {
     setFormData(prev => ({
         ...prev,
-        [name]: value,
+        [name]: value === 'none' ? undefined : value,
     }));
   };
 
@@ -226,12 +226,12 @@ export function ClientFormDialog({
             <Label htmlFor="agencyId" className="text-right">
               Agencia
             </Label>
-             <Select name="agencyId" value={formData.agencyId || ''} onValueChange={(value) => handleSelectChange('agencyId', value)}>
+             <Select name="agencyId" value={formData.agencyId || 'none'} onValueChange={(value) => handleSelectChange('agencyId', value)}>
                 <SelectTrigger className="col-span-3">
                     <SelectValue placeholder="Asignar a una agencia (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="">Ninguna</SelectItem>
+                    <SelectItem value="none">Ninguna</SelectItem>
                     {agencies.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
                 </SelectContent>
             </Select>
