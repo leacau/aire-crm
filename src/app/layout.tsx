@@ -23,8 +23,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <meta name="google" content="notranslate" />
       </head>
-      <body className="font-body antialiased">
+      <body className="font-body antialiased flex flex-col">
         <AuthProvider>
             <AuthLayout>
                  {children}
