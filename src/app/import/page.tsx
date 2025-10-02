@@ -14,7 +14,7 @@ import { createClient, getUsersByRole } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 
-type MappedData = Partial<Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>>;
+type MappedData = Partial<Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>> & { ownerName?: string };
 type ColumnMapping = Record<string, keyof MappedData | 'ignore'>;
 
 export default function ImportPage() {
@@ -25,7 +25,6 @@ export default function ImportPage() {
   const [data, setData] = useState<any[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>({});
-  const [ownerId, setOwnerId] = useState<string>('');
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
@@ -46,7 +45,7 @@ export default function ImportPage() {
     setHeaders(extractedHeaders);
     // Auto-map based on header names if possible
     const initialMapping: ColumnMapping = {};
-    const clientFields = ['denominacion', 'razonSocial', 'cuit', 'condicionIVA', 'provincia', 'localidad', 'tipoEntidad', 'rubro', 'email', 'phone', 'observaciones'];
+    const clientFields = ['denominacion', 'razonSocial', 'cuit', 'condicionIVA', 'provincia', 'localidad', 'tipoEntidad', 'rubro', 'email', 'phone', 'observaciones', 'ownerName'];
     extractedHeaders.forEach(header => {
         const lowerHeader = header.toLowerCase().replace(/ /g, '');
         const foundField = clientFields.find(field => lowerHeader.includes(field.toLowerCase()));
@@ -56,22 +55,19 @@ export default function ImportPage() {
   };
   
   const handleImport = async () => {
-    if (!ownerId) {
-        toast({ title: 'Propietario no asignado', description: 'Por favor, selecciona un asesor para asignar estos clientes.', variant: 'destructive'});
+    const ownerNameColumn = Object.keys(columnMapping).find(h => columnMapping[h] === 'ownerName');
+    if (!ownerNameColumn) {
+        toast({ title: 'Propietario no asignado', description: 'Por favor, asigna la columna "Propietario" a una de las columnas de tu archivo.', variant: 'destructive'});
         return;
     }
     
-    const owner = advisors.find(a => a.id === ownerId);
-    if (!owner) {
-        toast({ title: 'Error', description: 'Asesor seleccionado no encontrado.', variant: 'destructive'});
-        return;
-    }
+    const advisorsMap = new Map(advisors.map(a => [a.name.toLowerCase(), a]));
 
     setIsImporting(true);
     setImportProgress(0);
 
-    const clientsToCreate: MappedData[] = data.map(row => {
-        const client: MappedData = {};
+    const clientsToCreate: (MappedData & { rawOwnerName?: string })[] = data.map(row => {
+        const client: MappedData & { rawOwnerName?: string } = {};
         for(const header in columnMapping) {
             const clientField = columnMapping[header];
             if (clientField !== 'ignore') {
@@ -79,15 +75,22 @@ export default function ImportPage() {
                 client[clientField] = row[header];
             }
         }
+        client.rawOwnerName = row[ownerNameColumn];
         return client;
     });
 
     let successCount = 0;
     for (let i = 0; i < clientsToCreate.length; i++) {
         const clientData = clientsToCreate[i];
-        if (clientData.denominacion) {
+        
+        const ownerName = clientData.rawOwnerName;
+        const owner = ownerName ? advisorsMap.get(ownerName.toLowerCase()) : undefined;
+
+        if (clientData.denominacion && owner) {
              try {
-                await createClient(clientData, owner.id, owner.name);
+                // We don't want to save rawOwnerName to the client object
+                const { rawOwnerName, ...clientToSave } = clientData;
+                await createClient(clientToSave, owner.id, owner.name);
                 successCount++;
             } catch (error: any) {
                  console.error(`Error importing client ${clientData.denominacion}:`, error);
@@ -97,6 +100,12 @@ export default function ImportPage() {
                     variant: 'destructive'
                  });
             }
+        } else if (clientData.denominacion && !owner) {
+             toast({
+                title: `Propietario no encontrado para: ${clientData.denominacion}`,
+                description: `No se encontró un asesor llamado "${ownerName}". Este cliente no fue importado.`,
+                variant: 'destructive'
+             });
         }
         setImportProgress(((i + 1) / clientsToCreate.length) * 100);
     }
@@ -110,7 +119,6 @@ export default function ImportPage() {
     setData([]);
     setHeaders([]);
     setColumnMapping({});
-    setOwnerId('');
   };
 
 
@@ -134,9 +142,6 @@ export default function ImportPage() {
                     headers={headers}
                     columnMapping={columnMapping}
                     setColumnMapping={setColumnMapping}
-                    ownerId={ownerId}
-                    setOwnerId={setOwnerId}
-                    advisors={advisors}
                 />
 
                 <DataPreview
@@ -147,7 +152,7 @@ export default function ImportPage() {
 
                 <div className="flex justify-end gap-4">
                      <Button variant="outline" onClick={() => { setData([]); setHeaders([]); }}>Cancelar</Button>
-                     <Button onClick={handleImport} disabled={!ownerId}>
+                     <Button onClick={handleImport}>
                         Importar {data.length} Clientes
                     </Button>
                 </div>

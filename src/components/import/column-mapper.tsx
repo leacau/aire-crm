@@ -4,19 +4,16 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import type { Client, User } from '@/lib/types';
+import type { Client } from '@/lib/types';
 import { ArrowRight } from 'lucide-react';
 
-type MappedData = Partial<Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>>;
+type MappedData = Partial<Omit<Client, 'id' | 'personIds' | 'ownerId'>> & { ownerName?: string };
 type ColumnMapping = Record<string, keyof MappedData | 'ignore'>;
 
 interface ColumnMapperProps {
     headers: string[];
     columnMapping: ColumnMapping;
     setColumnMapping: React.Dispatch<React.SetStateAction<ColumnMapping>>;
-    ownerId: string;
-    setOwnerId: React.Dispatch<React.SetStateAction<string>>;
-    advisors: User[];
 }
 
 const clientFields: { value: keyof MappedData; label: string }[] = [
@@ -31,9 +28,10 @@ const clientFields: { value: keyof MappedData; label: string }[] = [
     { value: 'email', label: 'Email' },
     { value: 'phone', label: 'Teléfono' },
     { value: 'observaciones', label: 'Observaciones' },
+    { value: 'ownerName', label: 'Propietario' },
 ];
 
-export function ColumnMapper({ headers, columnMapping, setColumnMapping, ownerId, setOwnerId, advisors }: ColumnMapperProps) {
+export function ColumnMapper({ headers, columnMapping, setColumnMapping }: ColumnMapperProps) {
     const handleMappingChange = (header: string, value: keyof MappedData | 'ignore') => {
         setColumnMapping(prev => ({ ...prev, [header]: value }));
     };
@@ -41,8 +39,8 @@ export function ColumnMapper({ headers, columnMapping, setColumnMapping, ownerId
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Paso 2: Asignar Columnas y Propietario</CardTitle>
-                <CardDescription>Asigna cada columna de tu archivo a un campo del CRM y elige a qué asesor pertenecerán los nuevos clientes.</CardDescription>
+                <CardTitle>Paso 2: Asignar Columnas</CardTitle>
+                <CardDescription>Asigna cada columna de tu archivo a un campo del CRM. Asegúrate de asignar la columna "Propietario".</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
                 <div>
@@ -73,19 +71,6 @@ export function ColumnMapper({ headers, columnMapping, setColumnMapping, ownerId
                             </div>
                         ))}
                     </div>
-                </div>
-                 <div>
-                    <Label htmlFor="owner" className="font-semibold text-lg">Asignar Propietario</Label>
-                     <Select value={ownerId} onValueChange={setOwnerId}>
-                        <SelectTrigger id="owner" className="w-full md:w-[300px] mt-2">
-                            <SelectValue placeholder="Seleccionar un asesor..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {advisors.map(advisor => (
-                                <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
                 </div>
             </CardContent>
         </Card>
