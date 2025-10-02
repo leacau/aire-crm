@@ -17,9 +17,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/lib/data';
-import type { Client, TipoEntidad, CondicionIVA } from '@/lib/types';
+import type { Client, TipoEntidad, CondicionIVA, Agency } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
+import { getAgencies } from '@/lib/firebase-service';
 
 type ClientFormData = Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>;
 
@@ -43,6 +44,7 @@ const initialFormData: ClientFormData = {
   email: '',
   phone: '',
   observaciones: '',
+  agencyId: undefined,
 };
 
 export function ClientFormDialog({
@@ -54,6 +56,7 @@ export function ClientFormDialog({
 }: ClientFormDialogProps) {
   const [formData, setFormData] = useState<ClientFormData>(initialFormData);
   const [isSaving, setIsSaving] = useState(false);
+  const [agencies, setAgencies] = useState<Agency[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -71,10 +74,12 @@ export function ClientFormDialog({
                 email: client.email,
                 phone: client.phone,
                 observaciones: client.observaciones || '',
+                agencyId: client.agencyId,
             });
         } else {
             setFormData(initialFormData);
         }
+        getAgencies().then(setAgencies);
         setIsSaving(false);
     }
   }, [client, isOpen]);
@@ -216,6 +221,20 @@ export function ClientFormDialog({
               Teléfono
             </Label>
             <Input id="phone" name="phone" value={formData.phone} onChange={handleChange} className="col-span-3"/>
+          </div>
+           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="agencyId" className="text-right">
+              Agencia
+            </Label>
+             <Select name="agencyId" value={formData.agencyId || ''} onValueChange={(value) => handleSelectChange('agencyId', value)}>
+                <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Asignar a una agencia (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="">Ninguna</SelectItem>
+                    {agencies.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="observaciones" className="text-right">

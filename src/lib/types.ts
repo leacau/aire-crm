@@ -9,6 +9,13 @@ export type OpportunityStage =
 
 export type BonificacionEstado = 'Pendiente' | 'Autorizado' | 'Rechazado';
 
+export const periodicidadOptions = ['Ocasional', 'Mensual', 'Trimestral', 'Semestral', 'Anual'] as const;
+export type Periodicidad = typeof periodicidadOptions[number];
+
+export const formaDePagoOptions = ['Anticipado', 'A fecha', '30 días', '45 días', '60 días', '90 días'] as const;
+export type FormaDePago = typeof formaDePagoOptions[number];
+
+
 export type Opportunity = {
   id: string;
   title: string;
@@ -28,6 +35,13 @@ export type Opportunity = {
   bonificacionAutorizadoPorId?: string;
   bonificacionAutorizadoPorNombre?: string;
   bonificacionFechaAutorizacion?: string;
+  // Nuevos campos
+  periodicidad?: Periodicidad[];
+  facturaPorAgencia?: boolean;
+  agencyId?: string;
+  formaDePago?: FormaDePago[];
+  fechaFacturacion?: string; // formato "dd/MM"
+  fechaInicioPauta?: string; // formato "YYYY-MM-DD"
 };
 
 export type Person = {
@@ -60,6 +74,12 @@ export type Client = {
   personIds: string[];
   ownerId: string;
   ownerName: string;
+  agencyId?: string;
+};
+
+export type Agency = {
+  id: string;
+  name: string;
 };
 
 export type ActivityLog = {
@@ -68,7 +88,7 @@ export type ActivityLog = {
   userName: string;
   ownerName: string;
   type: 'create' | 'update' | 'delete' | 'stage_change';
-  entityType: 'client' | 'person' | 'opportunity';
+  entityType: 'client' | 'person' | 'opportunity' | 'agency';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action

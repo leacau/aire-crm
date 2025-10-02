@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency } from './types';
 import { logActivity } from './activity-logger';
 
 const usersCollection = collection(db, 'users');
@@ -11,6 +11,41 @@ const peopleCollection = collection(db, 'people');
 const opportunitiesCollection = collection(db, 'opportunities');
 const activitiesCollection = collection(db, 'activities');
 const clientActivitiesCollection = collection(db, 'client-activities');
+const agenciesCollection = collection(db, 'agencies');
+
+
+// --- Agency Functions ---
+
+export const getAgencies = async (): Promise<Agency[]> => {
+    const snapshot = await getDocs(query(agenciesCollection, orderBy("name")));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Agency));
+};
+
+export const createAgency = async (
+    agencyData: Omit<Agency, 'id'>,
+    userId: string,
+    userName: string
+): Promise<string> => {
+    const newAgencyData = {
+        ...agencyData,
+        createdAt: serverTimestamp(),
+        createdBy: userId,
+    };
+    const docRef = await addDoc(agenciesCollection, newAgencyData);
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'agency',
+        entityId: docRef.id,
+        entityName: agencyData.name,
+        details: `creó la agencia <strong>${agencyData.name}</strong>`,
+        ownerName: userName // Or a more generic term if agencies don't have owners
+    });
+
+    return docRef.id;
+};
 
 
 // --- User Profile Functions ---
@@ -106,7 +141,11 @@ export const updateClient = async (
     const originalDoc = await getDoc(docRef);
     const originalData = originalDoc.data() as Client;
 
-    const updateData = { ...data };
+    const updateData: {[key: string]: any} = { ...data };
+    
+    if (data.agencyId === '') {
+        updateData.agencyId = deleteField();
+    }
     
     await updateDoc(docRef, {
         ...updateData,
@@ -357,6 +396,10 @@ export const updateOpportunity = async (
         updateData.bonificacionAutorizadoPorId = deleteField();
         updateData.bonificacionAutorizadoPorNombre = deleteField();
         updateData.bonificacionFechaAutorizacion = deleteField();
+    }
+    
+    if (data.agencyId === '') {
+        updateData.agencyId = deleteField();
     }
 
 
