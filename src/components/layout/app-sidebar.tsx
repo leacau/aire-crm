@@ -15,7 +15,7 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar } from 'lucide-react';
+import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
@@ -30,6 +30,7 @@ const menuItems = [
   { href: '/activity', label: 'Actividad', icon: LayoutList, roles: ['Jefe', 'Gerencia'] },
   { href: '/team', label: 'Equipo', icon: Users, roles: ['Jefe', 'Gerencia'] },
   { href: '/reports', label: 'Reportes', icon: BarChart, roles: ['Jefe', 'Gerencia'] },
+  { href: '/import', label: 'Importar', icon: Upload, roles: ['Jefe', 'Gerencia', 'Administracion'] },
 ];
 
 function MenuLink({ item }: { item: typeof menuItems[0] }) {

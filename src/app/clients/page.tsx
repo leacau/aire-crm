@@ -239,8 +239,10 @@ export default function ClientsPage() {
                     <TableCell className="hidden lg:table-cell">{canViewDetails ? `$${totalValue.toLocaleString('es-AR')}` : '-'}</TableCell>
                     <TableCell>
                       <div className='flex items-center gap-2'>
-                          <Button variant="ghost" size="icon" disabled>
-                            <MoreHorizontal className="h-4 w-4" />
+                          <Button variant="ghost" size="icon" disabled={!canViewDetails}>
+                            <Link href={`/clients/${client.id}`}>
+                                <MoreHorizontal className="h-4 w-4" />
+                            </Link>
                           </Button>
                           {isBoss && (
                             <Button variant="ghost" size="icon" onClick={() => setClientToDelete(client)}>

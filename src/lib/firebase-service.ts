@@ -69,14 +69,16 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
     return null;
 }
 
-export const getAllUsers = async (role?: User['role']): Promise<User[]> => {
-    let q = query(usersCollection);
-    if (role) {
-        q = query(usersCollection, where("role", "==", role));
-    }
+export const getAllUsers = async (): Promise<User[]> => {
+    const snapshot = await getDocs(usersCollection);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+};
+
+export const getUsersByRole = async (role: User['role']): Promise<User[]> => {
+    const q = query(usersCollection, where("role", "==", role));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-}
+};
 
 
 // --- Client Functions ---
@@ -143,7 +145,7 @@ export const updateClient = async (
 
     const updateData: {[key: string]: any} = { ...data };
     
-    if (data.agencyId === '') {
+    if (data.agencyId === 'none') {
         updateData.agencyId = deleteField();
     }
     
