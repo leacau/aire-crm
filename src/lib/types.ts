@@ -48,7 +48,7 @@ export type Client = {
   id: string;
   denominacion: string;
   razonSocial: string;
-  cuit: string;
+  cuit?: string;
   condicionIVA: CondicionIVA;
   provincia: string;
   localidad: string;

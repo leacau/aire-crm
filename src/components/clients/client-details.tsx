@@ -580,10 +580,12 @@ export function ClientDetails({
           </div>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-           <div className="flex items-center gap-3">
-            <FileDigit className="h-4 w-4 text-muted-foreground" />
-            <span>{client.cuit}</span>
-          </div>
+           {client.cuit && (
+            <div className="flex items-center gap-3">
+              <FileDigit className="h-4 w-4 text-muted-foreground" />
+              <span>{client.cuit}</span>
+            </div>
+           )}
            <div className="flex items-center gap-3">
             <FileText className="h-4 w-4 text-muted-foreground" />
             <span>{client.condicionIVA}</span>

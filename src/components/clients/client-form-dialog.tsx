@@ -62,7 +62,7 @@ export function ClientFormDialog({
             setFormData({
                 denominacion: client.denominacion,
                 razonSocial: client.razonSocial,
-                cuit: client.cuit,
+                cuit: client.cuit || '',
                 condicionIVA: client.condicionIVA,
                 provincia: client.provincia,
                 localidad: client.localidad,
@@ -80,24 +80,26 @@ export function ClientFormDialog({
   }, [client, isOpen]);
 
   const handleSave = async () => {
-    if (!formData.cuit.trim() || !formData.denominacion.trim()) {
-        toast({ title: "Campos requeridos", description: "La Denominación y el CUIT son obligatorios.", variant: "destructive"});
+    if (!formData.denominacion.trim()) {
+        toast({ title: "Campo requerido", description: "La Denominación es obligatoria.", variant: "destructive"});
         return;
     }
 
     setIsSaving(true);
+    
+    if (formData.cuit) {
+        const validationMessage = await onValidateCuit(formData.cuit, client?.id);
 
-    const validationMessage = await onValidateCuit(formData.cuit, client?.id);
-
-    if (validationMessage) {
-        toast({
-            title: "CUIT Duplicado",
-            description: validationMessage,
-            variant: "destructive",
-            duration: 10000,
-        });
-        setIsSaving(false);
-        return;
+        if (validationMessage) {
+            toast({
+                title: "CUIT Duplicado",
+                description: validationMessage,
+                variant: "destructive",
+                duration: 10000,
+            });
+            setIsSaving(false);
+            return;
+        }
     }
     
     onSave(formData);

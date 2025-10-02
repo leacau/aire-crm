@@ -87,6 +87,7 @@ export default function ClientPage() {
   };
 
   const validateCuit = async (cuit: string, clientId?: string): Promise<string | false> => {
+    if (!cuit) return false;
     const existingClient = allClients.find(c => c.cuit === cuit && c.id !== clientId);
     if (existingClient) {
       return `El CUIT ya pertenece al cliente "${existingClient.denominacion}", asignado a ${existingClient.ownerName}.`;
