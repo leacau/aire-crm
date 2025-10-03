@@ -61,10 +61,13 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
     const warningCount = results.filter(r => r.issues.some(i => i.type === 'warning')).length;
 
     const handleToggleAll = (checked: boolean | 'indeterminate') => {
-        // Only toggle rows that are not disabled (don't have errors)
+        // When the header checkbox is clicked, its new state is `true` or `false`.
+        // `indeterminate` is a visual state, not a clickable one.
+        const newCheckedState = !!checked;
         setResults(prev => prev.map(r => {
             const hasError = r.issues.some(i => i.type === 'error');
-            return hasError ? r : { ...r, include: !!checked };
+            // Only change the state if the row doesn't have an error
+            return hasError ? r : { ...r, include: newCheckedState };
         }));
     };
 
@@ -72,9 +75,11 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
         setResults(prev => prev.map((r, i) => i === index ? { ...r, include: checked } : r));
     };
 
-    const enabledRows = results.filter(r => !r.issues.some(i => i.type === 'error'));
-    const isAllSelected = enabledRows.length > 0 && enabledRows.every(r => r.include);
-    const isSomeSelected = enabledRows.some(r => r.include) && !isAllSelected;
+    const selectableRows = results.filter(r => !r.issues.some(i => i.type === 'error'));
+    const selectedSelectableRows = selectableRows.filter(r => r.include);
+
+    const isAllSelected = selectableRows.length > 0 && selectedSelectableRows.length === selectableRows.length;
+    const isSomeSelected = selectedSelectableRows.length > 0 && !isAllSelected;
 
     return (
         <Card>
