@@ -284,14 +284,6 @@ export default function ClientsPage() {
       {
         accessorKey: 'razonSocial',
         header: 'Razón Social',
-        cell: ({ row }) => {
-          const client = row.original;
-          return (
-            <div>
-              <div className="font-medium">{client.razonSocial}</div>
-            </div>
-          );
-        }
       },
       {
         header: 'Negocios Abiertos',
@@ -301,7 +293,8 @@ export default function ClientsPage() {
             (opp) => opp.clientId === client.id && opp.stage !== 'Cerrado - Ganado' && opp.stage !== 'Cerrado - Perdido'
           );
           return canViewDetails(client) ? clientOpps.length : '-';
-        }
+        },
+        size: 150,
       },
       {
         header: 'Valor Total',
@@ -312,7 +305,8 @@ export default function ClientsPage() {
           );
           const totalValue = clientOpps.reduce((acc, opp) => acc + opp.value, 0);
           return canViewDetails(client) ? `$${totalValue.toLocaleString('es-AR')}` : '-';
-        }
+        },
+        size: 150,
       },
       {
         id: 'actions',
