@@ -1,7 +1,8 @@
 
+
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -58,11 +59,33 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
     const mappedHeaders = headers.filter(h => columnMapping[h] !== 'ignore');
     const rowsToImport = results.filter(r => r.include);
     
+    const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null);
+
     const errorCount = results.filter(r => r.issues.some(i => i.type === 'error')).length;
     const warningCount = results.filter(r => r.issues.some(i => i.type === 'warning')).length;
 
-    const handleToggleRow = (index: number, checked: boolean) => {
-        setResults(prev => prev.map((r, i) => i === index ? { ...r, include: checked } : r));
+    const handleToggleRow = (index: number, checked: boolean, event?: React.MouseEvent<HTMLButtonElement>) => {
+        const hasError = results[index].issues.some(i => i.type === 'error');
+        if (hasError) return;
+
+        // Logic for SHIFT + click
+        if (event?.nativeEvent.shiftKey && lastCheckedIndex !== null) {
+            const start = Math.min(lastCheckedIndex, index);
+            const end = Math.max(lastCheckedIndex, index);
+            
+            setResults(prev => prev.map((r, i) => {
+                const rowHasError = r.issues.some(issue => issue.type === 'error');
+                if (i >= start && i <= end && !rowHasError) {
+                    return { ...r, include: checked };
+                }
+                return r;
+            }));
+        } else {
+            // Logic for single click
+            setResults(prev => prev.map((r, i) => i === index ? { ...r, include: checked } : r));
+        }
+
+        setLastCheckedIndex(index);
     };
 
     const selectableRows = results.filter(r => !r.issues.some(i => i.type === 'error'));
@@ -72,13 +95,12 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
     const isSomeSelected = selectedSelectableRows.length > 0 && !isAllSelected;
 
     const handleToggleAll = () => {
-        // If all (or some) are selected, the action is to unselect all. Otherwise, select all.
         const newCheckedState = !isAllSelected;
         setResults(prev => prev.map(r => {
             const hasError = r.issues.some(i => i.type === 'error');
-            // Only change the state if the row doesn't have an error
             return hasError ? r : { ...r, include: newCheckedState };
         }));
+        setLastCheckedIndex(null);
     };
 
     return (
@@ -86,8 +108,7 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
             <CardHeader>
                 <CardTitle>Paso 3: Validar y Revisar Datos</CardTitle>
                 <CardDescription>
-                    Revisa los datos antes de importar. Las filas con errores graves (como CUIT duplicado) están desmarcadas y no se pueden importar. 
-                    Puedes seleccionar o deseleccionar filas con alertas.
+                    Revisa los datos antes de importar. Las filas con errores graves están desmarcadas. Usa SHIFT + clic para seleccionar un rango.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -132,7 +153,7 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                                         <TableCell className="sticky left-0 bg-inherit z-10">
                                             <Checkbox
                                                 checked={result.include}
-                                                onCheckedChange={(checked) => handleToggleRow(rowIndex, !!checked)}
+                                                onCheckedChange={(checked, event) => handleToggleRow(rowIndex, !!checked, event as React.MouseEvent<HTMLButtonElement>)}
                                                 disabled={hasError}
                                                 aria-label={`Seleccionar fila ${rowIndex + 1}`}
                                             />
@@ -155,6 +176,11 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                                                                 title="Denominación"
                                                                 importValue={result.data[headers.find(h => columnMapping[h] === 'denominacion')!]}
                                                                 systemValue={conflictingClient.denominacion}
+                                                            />
+                                                             <ComparisonCard 
+                                                                title="Razón Social"
+                                                                importValue={result.data[headers.find(h => columnMapping[h] === 'razonSocial')!]}
+                                                                systemValue={conflictingClient.razonSocial}
                                                             />
                                                             <ComparisonCard 
                                                                 title="CUIT"
