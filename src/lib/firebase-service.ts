@@ -236,6 +236,72 @@ export const deleteClient = async (
 };
 
 
+export const bulkDeleteClients = async (clientIds: string[], userId: string, userName: string): Promise<void> => {
+    const batch = writeBatch(db);
+
+    for (const id of clientIds) {
+        const clientRef = doc(db, 'clients', id);
+        batch.delete(clientRef);
+        // Cascading deletes for related collections
+        const oppsQuery = query(opportunitiesCollection, where('clientId', '==', id));
+        const oppsSnap = await getDocs(oppsQuery);
+        oppsSnap.forEach(d => batch.delete(d.ref));
+        
+        const activitiesQuery = query(clientActivitiesCollection, where('clientId', '==', id));
+        const activitiesSnap = await getDocs(activitiesQuery);
+        activitiesSnap.forEach(d => batch.delete(d.ref));
+
+        const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', id));
+        const peopleSnap = await getDocs(peopleQuery);
+        peopleSnap.forEach(d => batch.delete(d.ref));
+    }
+    
+    await batch.commit();
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'client',
+        entityId: 'multiple',
+        entityName: 'multiple',
+        details: `eliminó <strong>${clientIds.length}</strong> clientes de forma masiva`,
+        ownerName: userName // Admin action
+    });
+};
+
+export const bulkUpdateClients = async (
+    updates: { id: string; denominacion: string; data: Partial<Omit<Client, 'id'>> }[],
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const batch = writeBatch(db);
+
+    for (const { id, data } of updates) {
+        const docRef = doc(db, 'clients', id);
+        batch.update(docRef, { ...data, updatedAt: serverTimestamp() });
+    }
+
+    await batch.commit();
+    
+    const isReassign = updates.length > 0 && updates[0].data.ownerName;
+
+    if (isReassign) {
+        const newOwnerName = updates[0].data.ownerName;
+        await logActivity({
+            userId,
+            userName,
+            type: 'update',
+            entityType: 'client',
+            entityId: 'multiple',
+            entityName: 'multiple',
+            details: `reasignó <strong>${updates.length}</strong> clientes a <strong>${newOwnerName}</strong>`,
+            ownerName: newOwnerName!
+        });
+    }
+};
+
+
 
 // --- Person (Contact) Functions ---
 

@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import type { Client, Opportunity, User } from '@/lib/types';
-import { createClient, getClients, getAllOpportunities, deleteClient, getAllUsers, updateClient } from '@/lib/firebase-service';
+import { createClient, getClients, getAllOpportunities, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -29,18 +29,18 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
-import type { ColumnDef, SortingState } from '@tanstack/react-table';
+import type { ColumnDef, SortingState, RowSelectionState } from '@tanstack/react-table';
 import { useRouter } from 'next/navigation';
 import { findBestMatch } from 'string-similarity';
 
 function ReassignClientDialog({ 
-  client, 
+  clients, 
   advisors, 
   isOpen, 
   onOpenChange, 
   onReassign 
 }: { 
-  client: Client | null, 
+  clients: Client[], 
   advisors: User[], 
   isOpen: boolean, 
   onOpenChange: (open: boolean) => void,
@@ -49,14 +49,18 @@ function ReassignClientDialog({
   const [selectedAdvisorId, setSelectedAdvisorId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  const clientNames = clients.map(c => c.denominacion).join(', ');
+
   useEffect(() => {
-    if (client) {
-      setSelectedAdvisorId(client.ownerId);
+    if (clients.length === 1) {
+      setSelectedAdvisorId(clients[0].ownerId);
+    } else {
+        setSelectedAdvisorId('');
     }
-  }, [client]);
+  }, [clients]);
 
   const handleSave = async () => {
-    if (!client || !selectedAdvisorId || selectedAdvisorId === client.ownerId) {
+    if (clients.length === 0 || !selectedAdvisorId) {
       onOpenChange(false);
       return;
     }
@@ -70,9 +74,9 @@ function ReassignClientDialog({
     <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Reasignar Cliente</AlertDialogTitle>
+          <AlertDialogTitle>Reasignar Cliente(s)</AlertDialogTitle>
           <AlertDialogDescription>
-            Selecciona un nuevo asesor para el cliente <strong>{client?.denominacion}</strong>.
+            Selecciona un nuevo asesor para {clients.length > 1 ? `${clients.length} clientes` : `el cliente`}: <strong>{clientNames}</strong>.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="py-4">
@@ -100,6 +104,46 @@ function ReassignClientDialog({
   );
 }
 
+function BulkDeleteDialog({
+    clients,
+    isOpen,
+    onOpenChange,
+    onConfirm
+}: {
+    clients: Client[],
+    isOpen: boolean,
+    onOpenChange: (open: boolean) => void,
+    onConfirm: () => Promise<void>
+}) {
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleConfirm = async () => {
+        setIsDeleting(true);
+        await onConfirm();
+        setIsDeleting(false);
+        onOpenChange(false);
+    }
+    
+    return (
+        <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>¿Estás realmente seguro?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Esta acción es irreversible. Se eliminarán permanentemente <strong>{clients.length} cliente(s)</strong> y todas sus oportunidades y contactos asociados.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleConfirm} variant="destructive" disabled={isDeleting}>
+                        {isDeleting ? <Spinner size="small"/> : 'Eliminar'}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
 
 export default function ClientsPage() {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
@@ -112,10 +156,12 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
-  const [clientToReassign, setClientToReassign] = useState<Client | null>(null);
+  const [clientsToReassign, setClientsToReassign] = useState<Client[]>([]);
+  const [clientsToDelete, setClientsToDelete] = useState<Client[]>([]);
   const [showOnlyMyClients, setShowOnlyMyClients] = useState(!isBoss);
   const canManage = isBoss || userInfo?.role === 'Administracion';
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [showDuplicates, setShowDuplicates] = useState(false);
 
 
@@ -159,6 +205,11 @@ export default function ClientsPage() {
       setShowOnlyMyClients(!isBoss);
     }
   }, [isBoss, userInfo]);
+
+  useEffect(() => {
+    setRowSelection({});
+  }, [searchTerm, showOnlyMyClients, showDuplicates]);
+
 
   const displayedClients = useMemo(() => {
     let clientsToShow = clients;
@@ -261,27 +312,44 @@ export default function ClientsPage() {
     }
   }
 
+  const handleBulkDelete = async () => {
+    const selectedClientIds = Object.keys(rowSelection).filter(id => rowSelection[id]);
+    if (selectedClientIds.length === 0 || !userInfo) return;
+
+    try {
+        await bulkDeleteClients(selectedClientIds, userInfo.id, userInfo.name);
+        toast({ title: `${selectedClientIds.length} cliente(s) eliminado(s)` });
+        fetchData();
+        setRowSelection({});
+    } catch (error) {
+        console.error("Error bulk deleting clients:", error);
+        toast({ title: "Error al eliminar clientes", variant: "destructive" });
+    }
+  }
+
   const handleReassignClient = async (newOwnerId: string) => {
-    if (!clientToReassign || !userInfo || !canManage) return;
+    if (clientsToReassign.length === 0 || !userInfo || !canManage) return;
     
     const newOwner = advisors.find(a => a.id === newOwnerId);
     if (!newOwner) {
       toast({ title: 'Asesor no encontrado', variant: 'destructive' });
       return;
     }
+    
+    const updates = clientsToReassign.map(client => ({
+        id: client.id,
+        denominacion: client.denominacion,
+        data: { ownerId: newOwner.id, ownerName: newOwner.name }
+    }));
 
     try {
-      await updateClient(
-        clientToReassign.id,
-        { ownerId: newOwner.id, ownerName: newOwner.name },
-        userInfo.id,
-        userInfo.name
-      );
-      toast({ title: "Cliente Reasignado", description: `${clientToReassign.denominacion} ha sido asignado a ${newOwner.name}.`});
+      await bulkUpdateClients(updates, userInfo.id, userInfo.name);
+      toast({ title: "Clientes Reasignados", description: `${clientsToReassign.length} cliente(s) han sido asignado(s) a ${newOwner.name}.`});
       fetchData();
+      setRowSelection({});
     } catch (error) {
-      console.error("Error reassigning client:", error);
-      toast({ title: "Error al reasignar el cliente", variant: "destructive" });
+      console.error("Error reassigning clients:", error);
+      toast({ title: "Error al reasignar clientes", variant: "destructive" });
     }
   };
 
@@ -293,11 +361,46 @@ export default function ClientsPage() {
     }
     return false;
   };
+
+   const handleOpenReassignDialog = () => {
+    const selectedClients = displayedClients.filter(client => rowSelection[client.id]);
+    setClientsToReassign(selectedClients);
+  };
+  
+  const handleOpenDeleteDialog = () => {
+    const selectedClients = displayedClients.filter(client => rowSelection[client.id]);
+    setClientsToDelete(selectedClients);
+  };
   
   const columns = useMemo<ColumnDef<Client>[]>(() => {
     const canViewDetails = (client: Client) => userInfo && (isBoss || (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
-    return [
+    let cols: ColumnDef<Client>[] = [];
+
+    if (canManage) {
+        cols.push({
+            id: 'select',
+            header: ({ table }) => (
+                <Checkbox
+                    checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+                    onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                    aria-label="Seleccionar todo"
+                />
+            ),
+            cell: ({ row }) => (
+                <Checkbox
+                    checked={row.getIsSelected()}
+                    onCheckedChange={(value) => row.toggleSelected(!!value)}
+                    aria-label="Seleccionar fila"
+                />
+            ),
+            enableSorting: false,
+            enableHiding: false,
+            size: 40,
+        });
+    }
+
+    cols = cols.concat([
       {
         accessorKey: 'denominacion',
         header: 'Denominación',
@@ -362,7 +465,7 @@ export default function ClientsPage() {
                   <Link href={`/clients/${client.id}`}>Ver detalles</Link>
                 </DropdownMenuItem>
                 {canManage && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setClientToReassign(client); }}>
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setClientsToReassign([client]); }}>
                     <UserCog className="mr-2 h-4 w-4" />
                     Reasignar
                   </DropdownMenuItem>
@@ -378,7 +481,9 @@ export default function ClientsPage() {
           );
         },
       }
-    ];
+    ]);
+    
+    return cols;
   }, [userInfo, isBoss, canManage, opportunities]);
 
   if (authLoading || loading) {
@@ -388,6 +493,8 @@ export default function ClientsPage() {
       </div>
     );
   }
+  
+  const selectedCount = Object.keys(rowSelection).filter(id => rowSelection[id]).length;
 
   return (
     <>
@@ -403,6 +510,18 @@ export default function ClientsPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
             />
         </div>
+        {canManage && selectedCount > 0 && (
+            <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={handleOpenReassignDialog}>
+                    <UserCog className="mr-2 h-4 w-4" />
+                    Reasignar ({selectedCount})
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleOpenDeleteDialog}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar ({selectedCount})
+                </Button>
+            </div>
+        )}
          <div className="flex items-center space-x-2">
             <Checkbox id="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
             <Label htmlFor="my-clients" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis clientes</Label>
@@ -422,6 +541,8 @@ export default function ClientsPage() {
           data={displayedClients}
           sorting={sorting}
           setSorting={setSorting}
+          rowSelection={rowSelection}
+          setRowSelection={setRowSelection}
           onRowClick={(client) => {
             if (userInfo && (isBoss || client.ownerId === userInfo.id)) {
               router.push(`/clients/${client.id}`);
@@ -452,11 +573,17 @@ export default function ClientsPage() {
         </AlertDialogContent>
     </AlertDialog>
     <ReassignClientDialog 
-      client={clientToReassign}
+      clients={clientsToReassign}
       advisors={advisors}
-      isOpen={!!clientToReassign}
-      onOpenChange={(open) => !open && setClientToReassign(null)}
+      isOpen={clientsToReassign.length > 0}
+      onOpenChange={(open) => !open && setClientsToReassign([])}
       onReassign={handleReassignClient}
+    />
+     <BulkDeleteDialog
+      clients={clientsToDelete}
+      isOpen={clientsToDelete.length > 0}
+      onOpenChange={(open) => !open && setClientsToDelete([])}
+      onConfirm={handleBulkDelete}
     />
     </>
   );

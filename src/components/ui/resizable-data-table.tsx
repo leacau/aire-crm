@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -9,6 +10,11 @@ import {
   useReactTable,
   SortingState,
   getSortedRowModel,
+  RowSelectionState,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
 } from '@tanstack/react-table';
 
 import {
@@ -32,6 +38,8 @@ interface ResizableDataTableProps<TData, TValue> {
   enableRowResizing?: boolean;
   sorting?: SortingState;
   setSorting?: React.Dispatch<React.SetStateAction<SortingState>>;
+  rowSelection?: RowSelectionState;
+  setRowSelection?: React.Dispatch<React.SetStateAction<RowSelectionState>>;
 }
 
 export function ResizableDataTable<TData, TValue>({
@@ -44,8 +52,11 @@ export function ResizableDataTable<TData, TValue>({
   enableRowResizing = true,
   sorting,
   setSorting,
+  rowSelection,
+  setRowSelection,
 }: ResizableDataTableProps<TData, TValue>) {
   const isSortingEnabled = !!sorting && !!setSorting;
+  const isRowSelectionEnabled = !!rowSelection && !!setRowSelection;
 
   const table = useReactTable({
     data,
@@ -55,12 +66,19 @@ export function ResizableDataTable<TData, TValue>({
     ...(isSortingEnabled && {
       onSortingChange: setSorting,
       getSortedRowModel: getSortedRowModel(),
-      state: { sorting },
     }),
+     ...(isRowSelectionEnabled && {
+      onRowSelectionChange: setRowSelection,
+      enableRowSelection: true,
+    }),
+    state: {
+        ...(isSortingEnabled && { sorting }),
+        ...(isRowSelectionEnabled && { rowSelection }),
+    },
   });
 
   return (
-    <div className="rounded-md border overflow-x-auto w-full">
+    <div className="rounded-md border overflow-auto w-full">
       <Table className="w-full">
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -74,7 +92,7 @@ export function ResizableDataTable<TData, TValue>({
                     key={header.id}
                     colSpan={header.colSpan}
                     style={{ 
-                      width: canResize ? header.getSize() : undefined,
+                      width: canResize ? header.getSize() : header.column.columnDef.size,
                     }}
                     className="relative"
                     onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
@@ -113,9 +131,9 @@ export function ResizableDataTable<TData, TValue>({
                 <TableRow
                   data-state={row.getIsSelected() && 'selected'}
                   onClick={(e) => {
-                    // Previene el click en la fila si el target fue dentro de un menu
+                    // Previene el click en la fila si el target fue dentro de un menu o un checkbox
                     const target = e.target as HTMLElement;
-                    if (target.closest('[role="menu"]') || target.closest('[role="menuitem"]')) {
+                    if (target.closest('[role="menu"]') || target.closest('[role="menuitem"]') || target.closest('[role="checkbox"]')) {
                       return;
                     }
                     onRowClick?.(row.original)
