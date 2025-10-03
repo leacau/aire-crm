@@ -12,8 +12,7 @@ const nextConfig: NextConfig = {
    async headers() {
     return [
       {
-        // Apply these headers to all routes except for /auth
-        source: '/((?!auth).*)',
+        source: '/:path*',
         headers: [
           {
             key: 'Cross-Origin-Opener-Policy',
@@ -25,11 +24,6 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      {
-        // For auth routes, don't apply strict headers to allow popups
-        source: '/auth(.*)',
-        headers: [],
-      }
     ];
   },
   images: {
