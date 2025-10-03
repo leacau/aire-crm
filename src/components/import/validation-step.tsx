@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -39,10 +40,10 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
     const rowsToImport = results.filter(r => r.include && r.issues.every(i => i.type !== 'error'));
     
     const errorCount = results.filter(r => r.issues.some(i => i.type === 'error')).length;
-    const warningCount = results.filter(r => r.issues.length > 0 && r.issues.every(i => i.type === 'warning')).length;
+    const warningCount = results.filter(r => r.issues.some(i => i.type === 'warning')).length;
 
-    const handleToggleAll = (checked: boolean) => {
-        setResults(prev => prev.map(r => ({ ...r, include: checked })));
+    const handleToggleAll = (checked: boolean | 'indeterminate') => {
+        setResults(prev => prev.map(r => ({ ...r, include: !!checked })));
     };
 
     const handleToggleRow = (index: number, checked: boolean) => {
@@ -91,6 +92,7 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                         <TableBody>
                             {results.map((result, rowIndex) => {
                                 const hasError = result.issues.some(i => i.type === 'error');
+                                const hasWarning = result.issues.some(i => i.type === 'warning');
                                 return (
                                     <TableRow key={rowIndex} className={cn(hasError && 'bg-destructive/10')}>
                                         <TableCell>
@@ -101,7 +103,7 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                                             />
                                         </TableCell>
                                         <TableCell>
-                                            {result.issues.length > 0 && (
+                                            {(hasError || hasWarning) && (
                                                 <TooltipProvider>
                                                     <Tooltip>
                                                         <TooltipTrigger>

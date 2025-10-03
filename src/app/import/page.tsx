@@ -78,10 +78,6 @@ export default function ImportPage() {
         toast({ title: 'Campo requerido', description: 'Por favor, asigna la columna "Denominación" para continuar.', variant: 'destructive'});
         return;
     }
-    if (!ownerNameColumn) {
-        toast({ title: 'Propietario no asignado', description: 'Por favor, asigna la columna "Propietario".', variant: 'destructive'});
-        return;
-    }
 
     const advisorsMap = new Map(advisors.map(a => [a.name.toLowerCase(), a]));
     const existingCuits = new Set(existingClients.map(c => c.cuit).filter(Boolean));
@@ -89,13 +85,16 @@ export default function ImportPage() {
 
     const results: ValidationResult[] = data.map((row, index) => {
         const result: ValidationResult = { index, data: row, issues: [], include: true };
-        const ownerName = row[ownerNameColumn] ? String(row[ownerNameColumn]).toLowerCase() : '';
+        const ownerName = ownerNameColumn && row[ownerNameColumn] ? String(row[ownerNameColumn]).toLowerCase() : '';
         const cuit = cuitColumn ? row[cuitColumn] : undefined;
         const denominacion = row[denominacionColumn];
 
-        if (!advisorsMap.has(ownerName)) {
-            result.issues.push({ type: 'error', message: `El propietario "${row[ownerNameColumn]}" no existe.` });
+        if (ownerNameColumn && !ownerName) {
+             result.issues.push({ type: 'warning', message: `No se especificó un propietario.` });
+        } else if (ownerName && !advisorsMap.has(ownerName)) {
+            result.issues.push({ type: 'warning', message: `El propietario "${row[ownerNameColumn]}" no existe. Se importará sin propietario.` });
         }
+
         if (cuit && existingCuits.has(cuit)) {
             result.issues.push({ type: 'error', message: `El CUIT "${cuit}" ya existe.` });
         }
@@ -105,6 +104,12 @@ export default function ImportPage() {
                  result.issues.push({ type: 'warning', message: `Denominación similar a un cliente existente: "${bestMatch.target}".` });
             }
         }
+        
+        // Rows with issues are not included by default
+        if (result.issues.length > 0) {
+            result.include = false;
+        }
+
         return result;
     });
 
@@ -113,7 +118,7 @@ export default function ImportPage() {
   }
 
   const handleImport = async (rowsToImport: ValidationResult[]) => {
-    const ownerNameColumn = Object.keys(columnMapping).find(h => columnMapping[h] === 'ownerName')!;
+    const ownerNameColumn = Object.keys(columnMapping).find(h => columnMapping[h] === 'ownerName');
     const advisorsMap = new Map(advisors.map(a => [a.name.toLowerCase(), a]));
 
     setStep('importing');
@@ -131,7 +136,9 @@ export default function ImportPage() {
                 client[clientField] = value === undefined ? '' : value;
             }
         }
-        client.rawOwnerName = row[ownerNameColumn];
+        if (ownerNameColumn) {
+            client.rawOwnerName = row[ownerNameColumn];
+        }
         return client;
     });
 
@@ -142,10 +149,10 @@ export default function ImportPage() {
         const ownerName = clientData.rawOwnerName;
         const owner = ownerName ? advisorsMap.get(String(ownerName).toLowerCase()) : undefined;
 
-        if (clientData.denominacion && owner) {
+        if (clientData.denominacion) {
              try {
                 const { rawOwnerName, ...clientToSave } = clientData;
-                await createClient(clientToSave, owner.id, owner.name);
+                await createClient(clientToSave, owner?.id, owner?.name);
                 successCount++;
             } catch (error: any) {
                  console.error(`Error importing client ${clientData.denominacion}:`, error);

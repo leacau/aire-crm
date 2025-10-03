@@ -69,8 +69,9 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
     return null;
 }
 
-export const getAllUsers = async (): Promise<User[]> => {
-    const snapshot = await getDocs(usersCollection);
+export const getAllUsers = async (role?: User['role']): Promise<User[]> => {
+    const q = role ? query(usersCollection, where("role", "==", role)) : usersCollection;
+    const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
 };
 
@@ -107,28 +108,33 @@ export const getClient = async (id: string): Promise<Client | null> => {
 
 export const createClient = async (
     clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>,
-    userId: string,
-    userName: string
+    userId?: string,
+    userName?: string
 ): Promise<string> => {
-    const newClientData = {
+    const newClientData: any = {
         ...clientData,
         personIds: [],
-        ownerId: userId,
-        ownerName: userName,
         createdAt: serverTimestamp(),
     };
+    if (userId && userName) {
+        newClientData.ownerId = userId;
+        newClientData.ownerName = userName;
+    }
+
     const docRef = await addDoc(clientsCollection, newClientData);
     
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'client',
-        entityId: docRef.id,
-        entityName: clientData.denominacion,
-        details: `creó el cliente <a href="/clients/${docRef.id}" class="font-bold text-primary hover:underline">${clientData.denominacion}</a>`,
-        ownerName: userName
-    });
+    if (userId && userName) {
+        await logActivity({
+            userId,
+            userName,
+            type: 'create',
+            entityType: 'client',
+            entityId: docRef.id,
+            entityName: clientData.denominacion,
+            details: `creó el cliente <a href="/clients/${docRef.id}" class="font-bold text-primary hover:underline">${clientData.denominacion}</a>`,
+            ownerName: userName
+        });
+    }
 
     return docRef.id;
 };
@@ -141,6 +147,7 @@ export const updateClient = async (
 ): Promise<void> => {
     const docRef = doc(db, 'clients', id);
     const originalDoc = await getDoc(docRef);
+    if (!originalDoc.exists()) throw new Error('Client not found');
     const originalData = originalDoc.data() as Client;
 
     const updateData: {[key: string]: any} = { ...data };
@@ -154,15 +161,23 @@ export const updateClient = async (
         updatedAt: serverTimestamp()
     });
 
+    const newOwnerName = (data.ownerName !== undefined) ? data.ownerName : originalData.ownerName;
+    const clientName = data.denominacion || originalData.denominacion;
+
+    let details = `actualizó el cliente <a href="/clients/${id}" class="font-bold text-primary hover:underline">${clientName}</a>`;
+    if (data.ownerId && data.ownerId !== originalData.ownerId) {
+        details = `reasignó el cliente <strong>${clientName}</strong> a <strong>${newOwnerName}</strong>`;
+    }
+
     await logActivity({
         userId,
         userName,
         type: 'update',
         entityType: 'client',
         entityId: id,
-        entityName: data.denominacion || originalData.denominacion,
-        details: `actualizó el cliente <a href="/clients/${id}" class="font-bold text-primary hover:underline">${data.denominacion || originalData.denominacion}</a>`,
-        ownerName: originalData.ownerName
+        entityName: clientName,
+        details: details,
+        ownerName: newOwnerName
     });
 };
 

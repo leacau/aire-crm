@@ -13,13 +13,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2 } from 'lucide-react';
+import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
-import type { Client, Opportunity } from '@/lib/types';
-import { createClient, getClients, getAllOpportunities, deleteClient } from '@/lib/firebase-service';
+import type { Client, Opportunity, User } from '@/lib/types';
+import { createClient, getClients, getAllOpportunities, deleteClient, getAllUsers, updateClient } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -33,28 +33,110 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+function ReassignClientDialog({ 
+  client, 
+  advisors, 
+  isOpen, 
+  onOpenChange, 
+  onReassign 
+}: { 
+  client: Client | null, 
+  advisors: User[], 
+  isOpen: boolean, 
+  onOpenChange: (open: boolean) => void,
+  onReassign: (newOwnerId: string) => Promise<void>
+}) {
+  const [selectedAdvisorId, setSelectedAdvisorId] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (client) {
+      setSelectedAdvisorId(client.ownerId);
+    }
+  }, [client]);
+
+  const handleSave = async () => {
+    if (!client || !selectedAdvisorId || selectedAdvisorId === client.ownerId) {
+      onOpenChange(false);
+      return;
+    }
+    setIsSaving(true);
+    await onReassign(selectedAdvisorId);
+    setIsSaving(false);
+    onOpenChange(false);
+  };
+
+  return (
+    <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Reasignar Cliente</AlertDialogTitle>
+          <AlertDialogDescription>
+            Selecciona un nuevo asesor para el cliente <strong>{client?.denominacion}</strong>.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="py-4">
+          <Select value={selectedAdvisorId} onValueChange={setSelectedAdvisorId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar asesor..." />
+            </SelectTrigger>
+            <SelectContent>
+              {advisors.map(advisor => (
+                <SelectItem key={advisor.id} value={advisor.id}>
+                  {advisor.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction onClick={handleSave} disabled={isSaving}>
+            {isSaving ? <Spinner size="small" /> : "Reasignar"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 
 export default function ClientsPage() {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [advisors, setAdvisors] = useState<User[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const [clientToReassign, setClientToReassign] = useState<Client | null>(null);
   const [showOnlyMyClients, setShowOnlyMyClients] = useState(!isBoss);
+  const canManage = isBoss || userInfo?.role === 'Administracion';
+
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [fetchedClients, fetchedOpps] = await Promise.all([
+      const promises = [
           getClients(),
           getAllOpportunities()
-      ]);
+      ];
+      if (canManage) {
+        promises.push(getAllUsers('Asesor'));
+      }
+      const [fetchedClients, fetchedOpps, fetchedAdvisors] = await Promise.all(promises);
+
       setClients(fetchedClients);
       setOpportunities(fetchedOpps);
+      if(fetchedAdvisors) {
+        setAdvisors(fetchedAdvisors);
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
@@ -65,7 +147,7 @@ export default function ClientsPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, canManage]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -140,6 +222,30 @@ export default function ClientsPage() {
       setClientToDelete(null);
     }
   }
+
+  const handleReassignClient = async (newOwnerId: string) => {
+    if (!clientToReassign || !userInfo || !canManage) return;
+    
+    const newOwner = advisors.find(a => a.id === newOwnerId);
+    if (!newOwner) {
+      toast({ title: 'Asesor no encontrado', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      await updateClient(
+        clientToReassign.id,
+        { ownerId: newOwner.id, ownerName: newOwner.name },
+        userInfo.id,
+        userInfo.name
+      );
+      toast({ title: "Cliente Reasignado", description: `${clientToReassign.denominacion} ha sido asignado a ${newOwner.name}.`});
+      fetchData();
+    } catch (error) {
+      console.error("Error reassigning client:", error);
+      toast({ title: "Error al reasignar el cliente", variant: "destructive" });
+    }
+  };
 
   const validateCuit = async (cuit: string, clientId?: string): Promise<string | false> => {
     if (!cuit) return false;
@@ -238,18 +344,30 @@ export default function ClientsPage() {
                     <TableCell className="hidden lg:table-cell">{canViewDetails ? clientOpps.length : '-'}</TableCell>
                     <TableCell className="hidden lg:table-cell">{canViewDetails ? `$${totalValue.toLocaleString('es-AR')}` : '-'}</TableCell>
                     <TableCell>
-                      <div className='flex items-center gap-2'>
-                          <Button variant="ghost" size="icon" disabled={!canViewDetails}>
-                            <Link href={`/clients/${client.id}`}>
-                                <MoreHorizontal className="h-4 w-4" />
-                            </Link>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
-                          {isBoss && (
-                            <Button variant="ghost" size="icon" onClick={() => setClientToDelete(client)}>
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem asChild disabled={!canViewDetails}>
+                            <Link href={`/clients/${client.id}`}>Ver detalles</Link>
+                          </DropdownMenuItem>
+                          {canManage && (
+                            <DropdownMenuItem onClick={() => setClientToReassign(client)}>
+                              <UserCog className="mr-2 h-4 w-4" />
+                              Reasignar
+                            </DropdownMenuItem>
                           )}
-                      </div>
+                          {isBoss && (
+                            <DropdownMenuItem className="text-destructive" onClick={() => setClientToDelete(client)}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Eliminar
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 );
@@ -279,6 +397,13 @@ export default function ClientsPage() {
             </AlertDialogFooter>
         </AlertDialogContent>
     </AlertDialog>
+    <ReassignClientDialog 
+      client={clientToReassign}
+      advisors={advisors}
+      isOpen={!!clientToReassign}
+      onOpenChange={(open) => !open && setClientToReassign(null)}
+      onReassign={handleReassignClient}
+    />
     </>
   );
 }
