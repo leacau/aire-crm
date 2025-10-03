@@ -10,6 +10,7 @@ import { AlertCircle, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { Client, ClientImportMapping } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { ScrollArea, ScrollBar } from '../ui/scroll-area';
 
 type Issue = {
     type: 'error' | 'warning';
@@ -60,17 +61,6 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
     const errorCount = results.filter(r => r.issues.some(i => i.type === 'error')).length;
     const warningCount = results.filter(r => r.issues.some(i => i.type === 'warning')).length;
 
-    const handleToggleAll = (checked: boolean | 'indeterminate') => {
-        // When the header checkbox is clicked, its new state is `true` or `false`.
-        // `indeterminate` is a visual state, not a clickable one.
-        const newCheckedState = !!checked;
-        setResults(prev => prev.map(r => {
-            const hasError = r.issues.some(i => i.type === 'error');
-            // Only change the state if the row doesn't have an error
-            return hasError ? r : { ...r, include: newCheckedState };
-        }));
-    };
-
     const handleToggleRow = (index: number, checked: boolean) => {
         setResults(prev => prev.map((r, i) => i === index ? { ...r, include: checked } : r));
     };
@@ -81,39 +71,50 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
     const isAllSelected = selectableRows.length > 0 && selectedSelectableRows.length === selectableRows.length;
     const isSomeSelected = selectedSelectableRows.length > 0 && !isAllSelected;
 
+    const handleToggleAll = () => {
+        // If all (or some) are selected, the action is to unselect all. Otherwise, select all.
+        const newCheckedState = !isAllSelected;
+        setResults(prev => prev.map(r => {
+            const hasError = r.issues.some(i => i.type === 'error');
+            // Only change the state if the row doesn't have an error
+            return hasError ? r : { ...r, include: newCheckedState };
+        }));
+    };
+
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Paso 3: Validar y Revisar Datos</CardTitle>
                 <CardDescription>
-                    Revisa los datos antes de importar. Las filas con alertas o errores graves (como CUIT duplicado) están desmarcadas por defecto. 
-                    Puedes importar filas con alertas si lo deseas.
+                    Revisa los datos antes de importar. Las filas con errores graves (como CUIT duplicado) están desmarcadas y no se pueden importar. 
+                    Puedes seleccionar o deseleccionar filas con alertas.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg text-sm">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 bg-muted/50 rounded-lg text-sm">
                     <div className="flex items-center gap-4">
                         <Badge variant="destructive">{errorCount} Fila(s) con Errores</Badge>
                         <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">{warningCount} Fila(s) con Alertas</Badge>
                     </div>
                     <div className="font-medium">
-                        {rowsToImport.length} de {results.length} filas seleccionadas.
+                        {rowsToImport.length} de {results.length} filas seleccionadas para importar.
                     </div>
                 </div>
 
-                <div className="border rounded-lg overflow-auto max-h-[60vh]">
+                <ScrollArea className="w-full whitespace-nowrap rounded-md border">
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="w-12">
+                                <TableHead className="w-12 sticky left-0 bg-background z-10">
                                     <Checkbox 
                                         checked={isAllSelected ? true : isSomeSelected ? "indeterminate" : false}
                                         onCheckedChange={handleToggleAll}
                                         aria-label="Seleccionar todo"
+                                        disabled={selectableRows.length === 0}
                                     />
                                 </TableHead>
                                 <TableHead className="w-24">Estado</TableHead>
-                                <TableHead className="min-w-[200px]">Detalle de Alerta</TableHead>
+                                <TableHead className="min-w-[250px]">Detalle de Alerta</TableHead>
                                 {mappedHeaders.map(header => (
                                     <TableHead key={header} className="min-w-[150px]">{columnMapping[header]}</TableHead>
                                 ))}
@@ -128,7 +129,7 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
 
                                 return (
                                     <TableRow key={rowIndex} className={cn(hasError && 'bg-destructive/10', hasWarning && !hasError && 'bg-yellow-100/30')}>
-                                        <TableCell>
+                                        <TableCell className="sticky left-0 bg-inherit z-10">
                                             <Checkbox
                                                 checked={result.include}
                                                 onCheckedChange={(checked) => handleToggleRow(rowIndex, !!checked)}
@@ -149,7 +150,7 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                                                 <div className="space-y-1">
                                                     <p className="text-xs font-semibold">{firstIssue.message}</p>
                                                     {conflictingClient && (
-                                                        <div className='space-y-1'>
+                                                        <div className='grid grid-cols-1 gap-1 mt-1'>
                                                             <ComparisonCard 
                                                                 title="Denominación"
                                                                 importValue={result.data[headers.find(h => columnMapping[h] === 'denominacion')!]}
@@ -173,7 +174,8 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                             })}
                         </TableBody>
                     </Table>
-                </div>
+                     <ScrollBar orientation="horizontal" />
+                </ScrollArea>
                  <div className="flex justify-between gap-4 mt-4">
                      <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Volver</Button>
                      <Button onClick={() => onImport(rowsToImport)} disabled={rowsToImport.length === 0}>
