@@ -44,17 +44,22 @@ export function ResizableDataTable<TData, TValue>({
   });
 
   return (
-    <div className="rounded-md border">
-      <Table style={{ width: table.getCenterTotalSize() }}>
+    <div className="rounded-md border overflow-x-auto">
+      <Table className="w-full">
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => {
+                const canResize = header.column.getCanResize() && header.column.columnDef.size !== undefined;
                 return (
                   <TableHead
                     key={header.id}
                     colSpan={header.colSpan}
-                    style={{ width: header.getSize() }}
+                    style={{ 
+                      width: header.getSize(),
+                      minWidth: header.column.columnDef.minSize,
+                      maxWidth: header.column.columnDef.maxSize,
+                    }}
                     className="relative"
                   >
                     {header.isPlaceholder
@@ -63,12 +68,12 @@ export function ResizableDataTable<TData, TValue>({
                           header.column.columnDef.header,
                           header.getContext()
                         )}
-                    {header.column.getCanResize() && (
+                    {canResize && (
                       <div
                         onMouseDown={header.getResizeHandler()}
                         onTouchStart={header.getResizeHandler()}
                         className={cn(
-                          'absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none bg-blue-400 opacity-0 hover:opacity-100',
+                          'absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none bg-blue-400 opacity-0 transition-opacity hover:opacity-100',
                            header.column.getIsResizing() ? 'bg-blue-600 opacity-100' : ''
                         )}
                       />

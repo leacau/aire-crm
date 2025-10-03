@@ -294,7 +294,6 @@ export default function ClientsPage() {
           );
           return canViewDetails(client) ? clientOpps.length : '-';
         },
-        size: 150,
       },
       {
         header: 'Valor Total',
@@ -306,7 +305,6 @@ export default function ClientsPage() {
           const totalValue = clientOpps.reduce((acc, opp) => acc + opp.value, 0);
           return canViewDetails(client) ? `$${totalValue.toLocaleString('es-AR')}` : '-';
         },
-        size: 150,
       },
       {
         id: 'actions',
@@ -339,7 +337,6 @@ export default function ClientsPage() {
             </DropdownMenu>
           );
         },
-        size: 80,
         enableResizing: false,
       }
     ];
