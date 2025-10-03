@@ -125,6 +125,7 @@ export type User = {
   email: string;
   role: UserRole;
   initials?: string;
+  photoURL?: string;
 };
 
 // This type is used for mapping columns during import.

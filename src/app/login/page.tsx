@@ -51,6 +51,7 @@ export default function LoginPage() {
     const provider = new GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/calendar');
     provider.addScope('https://www.googleapis.com/auth/gmail.send');
+    provider.addScope('https://www.googleapis.com/auth/drive.file');
 
     try {
         const result = await signInWithPopup(auth, provider);
@@ -60,13 +61,13 @@ export default function LoginPage() {
 
         // Store access token in session storage
         if (token) {
-            sessionStorage.setItem('google-calendar-token', token);
+            sessionStorage.setItem('google-access-token', token);
         }
 
         // Check if user profile exists, if not create one
         const userProfile = await getUserProfile(user.uid);
         if (!userProfile) {
-            await createUserProfile(user.uid, user.displayName || 'Usuario de Google', user.email || '');
+            await createUserProfile(user.uid, user.displayName || 'Usuario de Google', user.email || '', user.photoURL || undefined);
         }
 
         router.push('/');

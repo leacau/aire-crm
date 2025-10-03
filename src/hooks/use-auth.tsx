@@ -7,7 +7,7 @@ import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWit
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
-import { getUserProfile } from '@/lib/firebase-service';
+import { getUserProfile, updateUserProfile } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
 
 interface AuthContextType {
@@ -47,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const finalProfile = { 
             id: firebaseUser.uid, 
             ...profile,
+            photoURL: firebaseUser.photoURL || profile.photoURL,
             initials
           };
           setUserInfo(finalProfile);
@@ -58,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 name: name,
                 email: firebaseUser.email || '',
                 role: 'Asesor' as const,
+                photoURL: firebaseUser.photoURL,
                 initials: name.substring(0, 2).toUpperCase()
             };
             setUserInfo(defaultProfile);
@@ -87,22 +89,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, loading, pathname, router]);
 
     const getGoogleAccessToken = async (): Promise<string | null> => {
-        const storedToken = sessionStorage.getItem('google-calendar-token');
-        if (storedToken) {
-            // Here you might want to check for token expiration
-            return storedToken;
-        }
+        let storedToken = sessionStorage.getItem('google-access-token');
+        
+        // Simple check if token exists. A robust solution would check expiration.
+        if (storedToken) return storedToken;
 
-        if (user) {
+        if (auth.currentUser) {
             const provider = new GoogleAuthProvider();
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
+            provider.addScope('https://www.googleapis.com/auth/drive.file');
             try {
+                // Re-authenticate to get a fresh token if needed
                 const result = await signInWithPopup(auth, provider);
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 const token = credential?.accessToken;
                 if (token) {
-                    sessionStorage.setItem('google-calendar-token', token);
+                    sessionStorage.setItem('google-access-token', token);
                     return token;
                 }
             } catch (error) {

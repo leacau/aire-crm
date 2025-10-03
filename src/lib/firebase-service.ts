@@ -50,12 +50,13 @@ export const createAgency = async (
 
 // --- User Profile Functions ---
 
-export const createUserProfile = async (uid: string, name: string, email: string): Promise<void> => {
+export const createUserProfile = async (uid: string, name: string, email: string, photoURL?: string): Promise<void> => {
     const userRef = doc(db, 'users', uid);
     await setDoc(userRef, {
         name,
         email,
         role: 'Asesor', // Default role for new users
+        photoURL: photoURL || null,
         createdAt: serverTimestamp(),
     });
 };
@@ -68,6 +69,15 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
     }
     return null;
 }
+
+export const updateUserProfile = async (uid: string, data: Partial<User>): Promise<void> => {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+    });
+};
+
 
 export const getAllUsers = async (role?: User['role']): Promise<User[]> => {
     const q = role ? query(usersCollection, where("role", "==", role)) : usersCollection;

@@ -9,12 +9,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { AlertCircle, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import type { ClientImportMapping } from '@/lib/types';
+import type { Client, ClientImportMapping } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 type Issue = {
     type: 'error' | 'warning';
     message: string;
+    similarClient?: Client;
 };
 
 export type ValidationResult = {
@@ -37,7 +38,7 @@ interface ValidationStepProps {
 
 export function ValidationStep({ results, setResults, headers, columnMapping, onImport, onBack }: ValidationStepProps) {
     const mappedHeaders = headers.filter(h => columnMapping[h] !== 'ignore');
-    const rowsToImport = results.filter(r => r.include && r.issues.every(i => i.type !== 'error'));
+    const rowsToImport = results.filter(r => r.include);
     
     const errorCount = results.filter(r => r.issues.some(i => i.type === 'error')).length;
     const warningCount = results.filter(r => r.issues.some(i => i.type === 'warning')).length;
@@ -58,8 +59,8 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
             <CardHeader>
                 <CardTitle>Paso 3: Validar y Revisar Datos</CardTitle>
                 <CardDescription>
-                    Revisa los datos antes de importar. Las filas con errores no se pueden importar. 
-                    Desmarca las filas que no desees importar.
+                    Revisa los datos antes de importar. Las filas con alertas o errores están desmarcadas por defecto. 
+                    Puedes importarlas si lo deseas, excepto aquellas con errores graves.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -69,7 +70,7 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                         <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">{warningCount} Alertas</Badge>
                     </div>
                     <div className="text-sm font-medium">
-                        {rowsToImport.length} de {results.length} filas listas para importar.
+                        {rowsToImport.length} de {results.length} filas seleccionadas para importar.
                     </div>
                 </div>
 
@@ -93,6 +94,8 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                             {results.map((result, rowIndex) => {
                                 const hasError = result.issues.some(i => i.type === 'error');
                                 const hasWarning = result.issues.some(i => i.type === 'warning');
+                                const similarClient = result.issues.find(i => i.similarClient)?.similarClient;
+
                                 return (
                                     <TableRow key={rowIndex} className={cn(hasError && 'bg-destructive/10')}>
                                         <TableCell>
@@ -113,8 +116,19 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                                                             </Badge>
                                                         </TooltipTrigger>
                                                         <TooltipContent>
-                                                            <ul className="list-disc list-inside">
-                                                                {result.issues.map((issue, i) => <li key={i}>{issue.message}</li>)}
+                                                            <ul className="list-disc list-inside space-y-1">
+                                                                {result.issues.map((issue, i) => (
+                                                                    <li key={i}>
+                                                                        {issue.message}
+                                                                        {issue.similarClient && (
+                                                                             <div className="mt-1 p-2 text-xs bg-background/50 rounded border">
+                                                                                <p><strong>Dato existente:</strong></p>
+                                                                                <p>Razón Social: {issue.similarClient.razonSocial}</p>
+                                                                                <p>CUIT: {issue.similarClient.cuit}</p>
+                                                                            </div>
+                                                                        )}
+                                                                    </li>
+                                                                ))}
                                                             </ul>
                                                         </TooltipContent>
                                                     </Tooltip>
