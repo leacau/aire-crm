@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog } from 'lucide-react';
+import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog, CopyCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
@@ -29,8 +29,9 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { useRouter } from 'next/navigation';
+import { findBestMatch } from 'string-similarity';
 
 function ReassignClientDialog({ 
   client, 
@@ -114,6 +115,8 @@ export default function ClientsPage() {
   const [clientToReassign, setClientToReassign] = useState<Client | null>(null);
   const [showOnlyMyClients, setShowOnlyMyClients] = useState(!isBoss);
   const canManage = isBoss || userInfo?.role === 'Administracion';
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [showDuplicates, setShowDuplicates] = useState(false);
 
 
   const fetchData = useCallback(async () => {
@@ -157,12 +160,47 @@ export default function ClientsPage() {
     }
   }, [isBoss, userInfo]);
 
-  const filteredClients = useMemo(() => {
+  const displayedClients = useMemo(() => {
     let clientsToShow = clients;
 
     if (showOnlyMyClients && userInfo) {
         clientsToShow = clients.filter(client => client.ownerId === userInfo.id);
     }
+
+    if (showDuplicates) {
+        const potentialDuplicates = new Set<string>();
+        const allClientNames = clients.map(c => ({ id: c.id, name: c.denominacion, rz: c.razonSocial }));
+
+        clients.forEach(client => {
+            const others = allClientNames.filter(c => c.id !== client.id);
+            const nameTargets = others.map(o => o.name).filter(Boolean);
+            const rzTargets = others.map(o => o.rz).filter(Boolean);
+
+            if (client.denominacion && nameTargets.length > 0) {
+                const { bestMatch: bestNameMatch } = findBestMatch(client.denominacion, nameTargets);
+                if (bestNameMatch.rating > 0.7) {
+                    const match = others.find(o => o.name === bestNameMatch.target);
+                    if(match) {
+                        potentialDuplicates.add(client.id);
+                        potentialDuplicates.add(match.id);
+                    }
+                }
+            }
+            if (client.razonSocial && rzTargets.length > 0) {
+                 const { bestMatch: bestRzMatch } = findBestMatch(client.razonSocial, rzTargets);
+                 if (bestRzMatch.rating > 0.7) {
+                    const match = others.find(o => o.rz === bestRzMatch.target);
+                    if (match) {
+                        potentialDuplicates.add(client.id);
+                        potentialDuplicates.add(match.id);
+                    }
+                }
+            }
+        });
+        
+        clientsToShow = clients.filter(c => potentialDuplicates.has(c.id));
+    }
+
 
     if (searchTerm.length < 3) {
       return clientsToShow;
@@ -176,7 +214,7 @@ export default function ClientsPage() {
         razonSocial.toLowerCase().includes(lowercasedFilter)
       );
     });
-  }, [clients, searchTerm, showOnlyMyClients, userInfo]);
+  }, [clients, searchTerm, showOnlyMyClients, userInfo, showDuplicates]);
 
 
   const handleSaveClient = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>) => {
@@ -263,6 +301,7 @@ export default function ClientsPage() {
       {
         accessorKey: 'denominacion',
         header: 'Denominación',
+        enableSorting: true,
         cell: ({ row }) => {
           const client = row.original;
           return (
@@ -284,6 +323,7 @@ export default function ClientsPage() {
       {
         accessorKey: 'razonSocial',
         header: 'Razón Social',
+        enableSorting: true,
       },
       {
         header: 'Negocios Abiertos',
@@ -337,7 +377,6 @@ export default function ClientsPage() {
             </DropdownMenu>
           );
         },
-        enableResizing: false,
       }
     ];
   }, [userInfo, isBoss, canManage, opportunities]);
@@ -368,6 +407,10 @@ export default function ClientsPage() {
             <Checkbox id="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
             <Label htmlFor="my-clients" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis clientes</Label>
         </div>
+        <Button variant="outline" onClick={() => setShowDuplicates(s => !s)}>
+          <CopyCheck className="mr-2 h-4 w-4" />
+          {showDuplicates ? 'Ver Todos' : 'Buscar Duplicados'}
+        </Button>
         <Button onClick={() => setIsFormOpen(true)}>
           <PlusCircle className="mr-2" />
           Nuevo
@@ -376,12 +419,15 @@ export default function ClientsPage() {
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <ResizableDataTable 
           columns={columns} 
-          data={filteredClients} 
+          data={displayedClients}
+          sorting={sorting}
+          setSorting={setSorting}
           onRowClick={(client) => {
             if (userInfo && (isBoss || client.ownerId === userInfo.id)) {
               router.push(`/clients/${client.id}`);
             }
           }}
+          enableRowResizing={false}
         />
       </main>
       <ClientFormDialog

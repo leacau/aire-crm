@@ -7,6 +7,8 @@ import {
   flexRender,
   getCoreRowModel,
   useReactTable,
+  SortingState,
+  getSortedRowModel,
 } from '@tanstack/react-table';
 
 import {
@@ -18,6 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { ArrowUpDown } from 'lucide-react';
 
 interface ResizableDataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -26,6 +29,9 @@ interface ResizableDataTableProps<TData, TValue> {
   renderSubComponent?: (row: TData) => React.ReactElement;
   emptyStateMessage?: string;
   footerContent?: React.ReactNode;
+  enableRowResizing?: boolean;
+  sorting?: SortingState;
+  setSorting?: React.Dispatch<React.SetStateAction<SortingState>>;
 }
 
 export function ResizableDataTable<TData, TValue>({
@@ -34,40 +40,56 @@ export function ResizableDataTable<TData, TValue>({
   onRowClick,
   renderSubComponent,
   emptyStateMessage = "No hay resultados.",
-  footerContent
+  footerContent,
+  enableRowResizing = true,
+  sorting,
+  setSorting,
 }: ResizableDataTableProps<TData, TValue>) {
+  const isSortingEnabled = !!sorting && !!setSorting;
+
   const table = useReactTable({
     data,
     columns,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
+    ...(isSortingEnabled && {
+      onSortingChange: setSorting,
+      getSortedRowModel: getSortedRowModel(),
+      state: { sorting },
+    }),
   });
 
   return (
-    <div className="rounded-md border overflow-x-auto">
+    <div className="rounded-md border overflow-x-auto w-full">
       <Table className="w-full">
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => {
-                const canResize = header.column.getCanResize() && header.column.columnDef.size !== undefined;
+                const canResize = enableRowResizing && header.column.getCanResize();
+                const canSort = isSortingEnabled && header.column.getCanSort();
+                
                 return (
                   <TableHead
                     key={header.id}
                     colSpan={header.colSpan}
                     style={{ 
-                      width: header.getSize(),
-                      minWidth: header.column.columnDef.minSize,
-                      maxWidth: header.column.columnDef.maxSize,
+                      width: canResize ? header.getSize() : undefined,
                     }}
                     className="relative"
+                    onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                   >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
+                    <div className={cn("flex items-center gap-2", canSort && "cursor-pointer select-none")}>
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                        {canSort && header.column.getIsSorted() && (
+                            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
                         )}
+                    </div>
                     {canResize && (
                       <div
                         onMouseDown={header.getResizeHandler()}
@@ -90,11 +112,18 @@ export function ResizableDataTable<TData, TValue>({
               <React.Fragment key={row.id}>
                 <TableRow
                   data-state={row.getIsSelected() && 'selected'}
-                  onClick={() => onRowClick?.(row.original)}
+                  onClick={(e) => {
+                    // Previene el click en la fila si el target fue dentro de un menu
+                    const target = e.target as HTMLElement;
+                    if (target.closest('[role="menu"]') || target.closest('[role="menuitem"]')) {
+                      return;
+                    }
+                    onRowClick?.(row.original)
+                  }}
                   className={cn(onRowClick && 'cursor-pointer')}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} style={{ width: cell.column.getSize() }}>
+                    <TableCell key={cell.id} style={{ width: enableRowResizing ? cell.column.getSize() : undefined }}>
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
