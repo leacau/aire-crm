@@ -1,19 +1,10 @@
 
+
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  TableFooter,
-} from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { getAllOpportunities, getClients, getAllUsers } from '@/lib/firebase-service';
@@ -26,44 +17,75 @@ import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { isWithinInterval } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ResizableDataTable } from '@/components/ui/resizable-data-table';
+import type { ColumnDef } from '@tanstack/react-table';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunity[], onRowClick: (opp: Opportunity) => void }) => {
   const total = opportunities.reduce((acc, opp) => acc + (opp.valorCerrado || opp.value), 0);
 
+  const columns = useMemo<ColumnDef<Opportunity>[]>(() => [
+    {
+      accessorKey: 'title',
+      header: 'Título',
+      cell: ({ row }) => <div className="font-medium">{row.original.title}</div>,
+    },
+    {
+      accessorKey: 'clientName',
+      header: 'Cliente',
+      cell: ({ row }) => (
+        <Link href={`/clients/${row.original.clientId}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+          {row.original.clientName}
+        </Link>
+      ),
+    },
+    {
+      accessorKey: 'valorCerrado',
+      header: () => <div className="text-right">Valor Cerrado</div>,
+      cell: ({ row }) => {
+        const amount = row.original.valorCerrado || row.original.value;
+        return <div className="text-right">${amount.toLocaleString('es-AR')}</div>;
+      },
+      footer: () => <div className="text-right font-bold">${total.toLocaleString('es-AR')}</div>
+    },
+    {
+      accessorKey: 'facturaNo',
+      header: 'Factura Nº',
+      cell: ({ row }) => row.original.facturaNo || '-',
+    }
+  ], [total]);
+
+  if (opportunities.length === 0) {
+    return (
+        <div className="border rounded-lg">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Título</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead className="text-right">Valor Cerrado</TableHead>
+                        <TableHead>Factura Nº</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    <TableRow>
+                        <TableCell colSpan={4} className="h-24 text-center">
+                            No hay oportunidades en esta sección.
+                        </TableCell>
+                    </TableRow>
+                </TableBody>
+            </Table>
+        </div>
+    );
+  }
+
   return (
-    <div className="border rounded-lg">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Título</TableHead>
-            <TableHead className="hidden md:table-cell">Cliente</TableHead>
-            <TableHead className="text-right">Valor Cerrado</TableHead>
-            <TableHead>Factura Nº</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {opportunities.length > 0 ? (
-            opportunities.map((opp) => (
-              <TableRow key={opp.id} onClick={() => onRowClick(opp)} className="cursor-pointer">
-                <TableCell className="font-medium">{opp.title}</TableCell>
-                <TableCell className="hidden md:table-cell">
-                  <Link href={`/clients/${opp.clientId}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
-                    {opp.clientName}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-right">${(opp.valorCerrado || opp.value).toLocaleString('es-AR')}</TableCell>
-                <TableCell>{opp.facturaNo || '-'}</TableCell>
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={4} className="h-24 text-center">
-                No hay oportunidades en esta sección.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-        {opportunities.length > 0 && (
+      <ResizableDataTable
+        columns={columns}
+        data={opportunities}
+        onRowClick={onRowClick}
+        renderSubComponent={() => null}
+        footerContent={
             <TableFooter>
                 <TableRow>
                     <TableCell colSpan={2} className="font-bold">Total</TableCell>
@@ -71,10 +93,9 @@ const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunit
                     <TableCell></TableCell>
                 </TableRow>
             </TableFooter>
-        )}
-      </Table>
-    </div>
-  );
+        }
+      />
+  )
 }
 
 function BillingPageComponent({ initialTab }: { initialTab: string }) {
@@ -82,7 +103,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
@@ -116,18 +136,16 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
   });
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [allOpps, allClients, allUsers, allAdvisors] = await Promise.all([
+      const [allOpps, allClients, allAdvisors] = await Promise.all([
         getAllOpportunities(),
         getClients(),
-        getAllUsers(),
         getAllUsers('Asesor'),
       ]);
       setOpportunities(allOpps);
       setClients(allClients);
-      setUsers(allUsers);
       setAdvisors(allAdvisors);
 
     } catch (error) {
@@ -136,13 +154,13 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     if (userInfo) {
         fetchData();
     }
-  }, [userInfo]);
+  }, [userInfo, fetchData]);
 
   const handleUpdateOpportunity = async (updatedData: Partial<Opportunity>) => {
     if (!selectedOpportunity || !userInfo) return;

@@ -1,21 +1,15 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Spinner } from '@/components/ui/spinner';
 import { getAllOpportunities, getAllUsers, getClients } from '@/lib/firebase-service';
 import type { Opportunity, User, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import Link from 'next/link';
+import { ResizableDataTable } from '@/components/ui/resizable-data-table';
+import type { ColumnDef } from '@tanstack/react-table';
 
 interface AdvisorStats {
   user: User;
@@ -54,7 +48,7 @@ export function TeamPerformanceTable() {
     fetchData();
   }, [toast]);
 
-  const advisorStats = useMemo(() => {
+  const advisorStats = useMemo<AdvisorStats[]>(() => {
     if (advisors.length === 0 || clients.length === 0) return [];
     
     return advisors.map(advisor => {
@@ -76,6 +70,49 @@ export function TeamPerformanceTable() {
         };
     }).sort((a,b) => b.totalRevenue - a.totalRevenue); // Sort by revenue
   }, [advisors, opportunities, clients]);
+  
+  const columns = useMemo<ColumnDef<AdvisorStats>[]>(() => [
+    {
+      accessorKey: 'user',
+      header: 'Asesor',
+      cell: ({ row }) => {
+        const { user } = row.original;
+        return (
+          <div className="flex items-center gap-3">
+            <Avatar className="h-9 w-9">
+              <AvatarImage src={`https://picsum.photos/seed/${user.id}/40/40`} alt={user.name} data-ai-hint="person face" />
+              <AvatarFallback>{user.initials}</AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col">
+              <span className="font-medium">{user.name}</span>
+              <span className="text-sm text-muted-foreground">{user.email}</span>
+            </div>
+          </div>
+        );
+      },
+      minSize: 250,
+    },
+    {
+      accessorKey: 'wonOpps',
+      header: () => <div className="text-right">Opps Ganadas</div>,
+      cell: ({ row }) => <div className="text-right">{row.original.wonOpps}</div>,
+    },
+    {
+      accessorKey: 'totalRevenue',
+      header: () => <div className="text-right">Ingresos</div>,
+      cell: ({ row }) => <div className="text-right font-semibold">${row.original.totalRevenue.toLocaleString('es-AR')}</div>,
+    },
+    {
+      accessorKey: 'activeOpps',
+      header: () => <div className="text-right">Opps Activas</div>,
+      cell: ({ row }) => <div className="text-right">{row.original.activeOpps}</div>,
+    },
+    {
+      accessorKey: 'pipelineValue',
+      header: () => <div className="text-right">Valor Pipeline</div>,
+      cell: ({ row }) => <div className="text-right">${row.original.pipelineValue.toLocaleString('es-AR')}</div>,
+    }
+  ], []);
 
   if (loading) {
     return (
@@ -86,47 +123,10 @@ export function TeamPerformanceTable() {
   }
 
   return (
-    <div className="border rounded-lg">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Asesor</TableHead>
-            <TableHead className="text-right hidden sm:table-cell">Opps Ganadas</TableHead>
-            <TableHead className="text-right">Ingresos</TableHead>
-            <TableHead className="text-right hidden md:table-cell">Opps Activas</TableHead>
-            <TableHead className="text-right hidden lg:table-cell">Valor Pipeline</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {advisorStats.map(stats => (
-            <TableRow key={stats.user.id}>
-              <TableCell>
-                 <div className="flex items-center gap-3">
-                    <Avatar className="h-9 w-9">
-                        <AvatarImage src={`https://picsum.photos/seed/${stats.user.id}/40/40`} alt={stats.user.name} data-ai-hint="person face" />
-                        <AvatarFallback>{stats.user.initials}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col">
-                        <span className="font-medium">{stats.user.name}</span>
-                        <span className="text-sm text-muted-foreground">{stats.user.email}</span>
-                    </div>
-                </div>
-              </TableCell>
-              <TableCell className="text-right hidden sm:table-cell">{stats.wonOpps}</TableCell>
-              <TableCell className="text-right font-semibold">${stats.totalRevenue.toLocaleString('es-AR')}</TableCell>
-              <TableCell className="text-right hidden md:table-cell">{stats.activeOpps}</TableCell>
-              <TableCell className="text-right hidden lg:table-cell">${stats.pipelineValue.toLocaleString('es-AR')}</TableCell>
-            </TableRow>
-          ))}
-          {advisorStats.length === 0 && (
-             <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
-                  No se encontraron asesores.
-                </TableCell>
-              </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </div>
+    <ResizableDataTable
+      columns={columns}
+      data={advisorStats}
+      emptyStateMessage="No se encontraron asesores."
+    />
   );
 }

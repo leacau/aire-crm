@@ -5,14 +5,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
@@ -36,6 +28,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ResizableDataTable } from '@/components/ui/resizable-data-table';
+import type { ColumnDef } from '@tanstack/react-table';
+import { useRouter } from 'next/navigation';
 
 function ReassignClientDialog({ 
   client, 
@@ -108,6 +103,7 @@ function ReassignClientDialog({
 export default function ClientsPage() {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
@@ -259,6 +255,102 @@ export default function ClientsPage() {
     }
     return false;
   };
+  
+  const columns = useMemo<ColumnDef<Client>[]>(() => {
+    const canViewDetails = (client: Client) => userInfo && (isBoss || (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
+
+    return [
+      {
+        accessorKey: 'denominacion',
+        header: 'Denominación',
+        cell: ({ row }) => {
+          const client = row.original;
+          return (
+            <div>
+              {canViewDetails(client) ? (
+                <Link href={`/clients/${client.id}`} className="font-medium text-primary hover:underline">
+                  {client.denominacion}
+                </Link>
+              ) : (
+                <span className="font-medium">{client.denominacion}</span>
+              )}
+              {isBoss && userInfo && client.ownerId !== userInfo.id && (
+                 <p className="text-xs text-muted-foreground">{client.ownerName}</p>
+              )}
+            </div>
+          );
+        }
+      },
+      {
+        accessorKey: 'razonSocial',
+        header: 'Razón Social',
+        cell: ({ row }) => {
+          const client = row.original;
+          return (
+            <div>
+              <div className="font-medium">{client.razonSocial}</div>
+              <div className="text-sm text-muted-foreground">{client.email}</div>
+            </div>
+          );
+        }
+      },
+      {
+        header: 'Negocios Abiertos',
+        cell: ({ row }) => {
+          const client = row.original;
+          const clientOpps = opportunities.filter(
+            (opp) => opp.clientId === client.id && opp.stage !== 'Cerrado - Ganado' && opp.stage !== 'Cerrado - Perdido'
+          );
+          return canViewDetails(client) ? clientOpps.length : '-';
+        }
+      },
+      {
+        header: 'Valor Total',
+        cell: ({ row }) => {
+          const client = row.original;
+          const clientOpps = opportunities.filter(
+            (opp) => opp.clientId === client.id && opp.stage !== 'Cerrado - Ganado' && opp.stage !== 'Cerrado - Perdido'
+          );
+          const totalValue = clientOpps.reduce((acc, opp) => acc + opp.value, 0);
+          return canViewDetails(client) ? `$${totalValue.toLocaleString('es-AR')}` : '-';
+        }
+      },
+      {
+        id: 'actions',
+        cell: ({ row }) => {
+          const client = row.original;
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem asChild disabled={!canViewDetails(client)}>
+                  <Link href={`/clients/${client.id}`}>Ver detalles</Link>
+                </DropdownMenuItem>
+                {canManage && (
+                  <DropdownMenuItem onClick={() => setClientToReassign(client)}>
+                    <UserCog className="mr-2 h-4 w-4" />
+                    Reasignar
+                  </DropdownMenuItem>
+                )}
+                {isBoss && (
+                  <DropdownMenuItem className="text-destructive" onClick={() => setClientToDelete(client)}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        },
+        size: 80,
+        enableResizing: false,
+      }
+    ];
+  }, [userInfo, isBoss, canManage, opportunities]);
 
   if (authLoading || loading) {
     return (
@@ -292,93 +384,15 @@ export default function ClientsPage() {
         </Button>
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-        <div className="border rounded-lg">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Denominación</TableHead>
-                <TableHead className="hidden sm:table-cell">Razón Social</TableHead>
-                <TableHead className="hidden lg:table-cell">Negocios Abiertos</TableHead>
-                <TableHead className="hidden lg:table-cell">Valor Total</TableHead>
-                <TableHead className="w-[100px]">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredClients.map((client) => {
-                const clientOpps = opportunities.filter(
-                  (opp) => opp.clientId === client.id && opp.stage !== 'Cerrado - Ganado' && opp.stage !== 'Cerrado - Perdido'
-                );
-                const totalValue = clientOpps.reduce(
-                  (acc, opp) => acc + opp.value,
-                  0
-                );
-
-                const canViewDetails = userInfo && (
-                    isBoss || 
-                    (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
-                );
-
-                return (
-                  <TableRow key={client.id}>
-                    <TableCell>
-                      <div>
-                        {canViewDetails ? (
-                          <Link
-                            href={`/clients/${client.id}`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            {client.denominacion}
-                          </Link>
-                        ) : (
-                          <span className="font-medium">{client.denominacion}</span>
-                        )}
-                        {isBoss && userInfo && client.ownerId !== userInfo.id && (
-                           <p className="text-xs text-muted-foreground">{client.ownerName}</p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <div>
-                        <div className="font-medium">{client.razonSocial}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {client.email}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">{canViewDetails ? clientOpps.length : '-'}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{canViewDetails ? `$${totalValue.toLocaleString('es-AR')}` : '-'}</TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem asChild disabled={!canViewDetails}>
-                            <Link href={`/clients/${client.id}`}>Ver detalles</Link>
-                          </DropdownMenuItem>
-                          {canManage && (
-                            <DropdownMenuItem onClick={() => setClientToReassign(client)}>
-                              <UserCog className="mr-2 h-4 w-4" />
-                              Reasignar
-                            </DropdownMenuItem>
-                          )}
-                          {isBoss && (
-                            <DropdownMenuItem className="text-destructive" onClick={() => setClientToDelete(client)}>
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Eliminar
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+        <ResizableDataTable 
+          columns={columns} 
+          data={filteredClients} 
+          onRowClick={(client) => {
+            if (userInfo && (isBoss || client.ownerId === userInfo.id)) {
+              router.push(`/clients/${client.id}`);
+            }
+          }}
+        />
       </main>
       <ClientFormDialog
         isOpen={isFormOpen}
