@@ -289,7 +289,6 @@ export default function ClientsPage() {
           return (
             <div>
               <div className="font-medium">{client.razonSocial}</div>
-              <div className="text-sm text-muted-foreground">{client.email}</div>
             </div>
           );
         }

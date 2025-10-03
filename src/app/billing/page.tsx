@@ -19,7 +19,7 @@ import { isWithinInterval } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableFooter, TableRow, TableCell } from '@/components/ui/table';
 
 const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunity[], onRowClick: (opp: Opportunity) => void }) => {
   const total = opportunities.reduce((acc, opp) => acc + (opp.valorCerrado || opp.value), 0);
@@ -46,57 +46,34 @@ const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunit
         const amount = row.original.valorCerrado || row.original.value;
         return <div className="text-right">${amount.toLocaleString('es-AR')}</div>;
       },
-      footer: () => <div className="text-right font-bold">${total.toLocaleString('es-AR')}</div>
     },
     {
       accessorKey: 'facturaNo',
       header: 'Factura Nº',
       cell: ({ row }) => row.original.facturaNo || '-',
     }
-  ], [total]);
+  ], []);
 
-  if (opportunities.length === 0) {
-    return (
-        <div className="border rounded-lg">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Título</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead className="text-right">Valor Cerrado</TableHead>
-                        <TableHead>Factura Nº</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    <TableRow>
-                        <TableCell colSpan={4} className="h-24 text-center">
-                            No hay oportunidades en esta sección.
-                        </TableCell>
-                    </TableRow>
-                </TableBody>
-            </Table>
-        </div>
-    );
-  }
+  const footerContent = (
+    <TableFooter>
+      <TableRow>
+        <TableCell colSpan={2} className="font-bold">Total</TableCell>
+        <TableCell className="text-right font-bold">${total.toLocaleString('es-AR')}</TableCell>
+        <TableCell></TableCell>
+      </TableRow>
+    </TableFooter>
+  );
 
   return (
       <ResizableDataTable
         columns={columns}
         data={opportunities}
         onRowClick={onRowClick}
-        renderSubComponent={() => null}
-        footerContent={
-            <TableFooter>
-                <TableRow>
-                    <TableCell colSpan={2} className="font-bold">Total</TableCell>
-                    <TableCell className="text-right font-bold">${total.toLocaleString('es-AR')}</TableCell>
-                    <TableCell></TableCell>
-                </TableRow>
-            </TableFooter>
-        }
+        footerContent={footerContent}
+        emptyStateMessage="No hay oportunidades en esta sección."
       />
-  )
-}
+  );
+};
 
 function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
