@@ -1,5 +1,4 @@
 
-
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'

@@ -80,37 +80,55 @@ export default function ImportPage() {
     }
 
     const advisorsMap = new Map(advisors.map(a => [a.name.toLowerCase(), a]));
-    const existingCuits = new Set(existingClients.map(c => c.cuit).filter(Boolean));
-    const existingDenominaciones = existingClients.map(c => c.denominacion);
+    const existingCuits = new Map(existingClients.map(c => c.cuit ? [c.cuit, c] : ['', null]).filter(c => c[0]));
+    const existingDenominaciones = new Map(existingClients.map(c => [c.denominacion, c]));
 
-    const results: ValidationResult[] = data.map((row, index) => {
+
+    let results: ValidationResult[] = data.map((row, index) => {
         const result: ValidationResult = { index, data: row, issues: [], include: true };
         const ownerName = ownerNameColumn && row[ownerNameColumn] ? String(row[ownerNameColumn]).toLowerCase() : '';
         const cuit = cuitColumn ? row[cuitColumn] : undefined;
         const denominacion = row[denominacionColumn];
 
         if (ownerNameColumn && !ownerName) {
-             result.issues.push({ type: 'warning', message: `No se especificó un propietario.` });
+             result.issues.push({ type: 'warning', message: `No se especificó un propietario. El cliente se importará sin asesor asignado.` });
         } else if (ownerName && !advisorsMap.has(ownerName)) {
-            result.issues.push({ type: 'warning', message: `El propietario "${row[ownerNameColumn]}" no existe. Se importará sin propietario.` });
+            result.issues.push({ type: 'warning', message: `El propietario "${row[ownerNameColumn]}" no existe. El cliente se importará sin asesor.` });
         }
 
         if (cuit && existingCuits.has(cuit)) {
-            result.issues.push({ type: 'error', message: `El CUIT "${cuit}" ya existe.` });
+            result.issues.push({ type: 'error', message: `El CUIT "${cuit}" ya existe.`, conflictingClient: existingCuits.get(cuit) });
         }
         if (denominacion) {
-            const { bestMatch } = findBestMatch(denominacion, existingDenominaciones);
-            if (bestMatch.rating > 0.85) {
-                 result.issues.push({ type: 'warning', message: `Denominación similar a un cliente existente: "${bestMatch.target}".` });
+            if (existingDenominaciones.has(denominacion)) {
+                result.issues.push({ type: 'warning', message: `La denominación "${denominacion}" ya existe.`, conflictingClient: existingDenominaciones.get(denominacion) });
+            } else {
+                const { bestMatch } = findBestMatch(denominacion, Array.from(existingDenominaciones.keys()));
+                if (bestMatch.rating > 0.85) {
+                    result.issues.push({ type: 'warning', message: `Denominación similar a un cliente existente.`, conflictingClient: existingDenominaciones.get(bestMatch.target) });
+                }
             }
         }
         
-        // Rows with issues are not included by default
         if (result.issues.length > 0) {
             result.include = false;
         }
 
         return result;
+    });
+
+    // Sort results: errors first, then warnings, then valid
+    results.sort((a, b) => {
+        const aHasError = a.issues.some(i => i.type === 'error');
+        const bHasError = b.issues.some(i => i.type === 'error');
+        const aHasWarning = a.issues.some(i => i.type === 'warning');
+        const bHasWarning = b.issues.some(i => i.type === 'warning');
+
+        if (aHasError && !bHasError) return -1;
+        if (!aHasError && bHasError) return 1;
+        if (aHasWarning && !bHasWarning) return -1;
+        if (!aHasWarning && bHasWarning) return 1;
+        return 0;
     });
 
     setValidationResults(results);

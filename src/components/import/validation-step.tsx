@@ -8,14 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertCircle, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Client, ClientImportMapping } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 type Issue = {
     type: 'error' | 'warning';
     message: string;
-    similarClient?: Client;
+    conflictingClient?: Client;
 };
 
 export type ValidationResult = {
@@ -36,6 +35,24 @@ interface ValidationStepProps {
     onBack: () => void;
 }
 
+const ComparisonCard = ({ title, importValue, systemValue }: { title: string, importValue?: string, systemValue?: string }) => {
+    if (!importValue && !systemValue) return null;
+
+    const isSimilar = importValue && systemValue && importValue.toLowerCase() === systemValue.toLowerCase();
+
+    return (
+        <div className={cn("p-1.5 rounded-md border", isSimilar ? 'bg-amber-100/50 border-amber-200' : 'bg-muted/30')}>
+            <p className="text-xs font-semibold">{title}</p>
+            <p className="text-xs text-foreground truncate" title={importValue}>
+                <span className="font-medium">Archivo:</span> {importValue || <span className="text-muted-foreground">N/A</span>}
+            </p>
+            <p className="text-xs text-muted-foreground truncate" title={systemValue}>
+                <span className="font-medium">Sistema:</span> {systemValue || <span className="text-muted-foreground">N/A</span>}
+            </p>
+        </div>
+    );
+};
+
 export function ValidationStep({ results, setResults, headers, columnMapping, onImport, onBack }: ValidationStepProps) {
     const mappedHeaders = headers.filter(h => columnMapping[h] !== 'ignore');
     const rowsToImport = results.filter(r => r.include);
@@ -44,37 +61,42 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
     const warningCount = results.filter(r => r.issues.some(i => i.type === 'warning')).length;
 
     const handleToggleAll = (checked: boolean | 'indeterminate') => {
-        setResults(prev => prev.map(r => ({ ...r, include: !!checked })));
+        // Only toggle rows that are not disabled (don't have errors)
+        setResults(prev => prev.map(r => {
+            const hasError = r.issues.some(i => i.type === 'error');
+            return hasError ? r : { ...r, include: !!checked };
+        }));
     };
 
     const handleToggleRow = (index: number, checked: boolean) => {
         setResults(prev => prev.map((r, i) => i === index ? { ...r, include: checked } : r));
     };
 
-    const isAllSelected = results.every(r => r.include);
-    const isSomeSelected = results.some(r => r.include) && !isAllSelected;
+    const enabledRows = results.filter(r => !r.issues.some(i => i.type === 'error'));
+    const isAllSelected = enabledRows.length > 0 && enabledRows.every(r => r.include);
+    const isSomeSelected = enabledRows.some(r => r.include) && !isAllSelected;
 
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Paso 3: Validar y Revisar Datos</CardTitle>
                 <CardDescription>
-                    Revisa los datos antes de importar. Las filas con alertas o errores están desmarcadas por defecto. 
-                    Puedes importarlas si lo deseas, excepto aquellas con errores graves.
+                    Revisa los datos antes de importar. Las filas con alertas o errores graves (como CUIT duplicado) están desmarcadas por defecto. 
+                    Puedes importar filas con alertas si lo deseas.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg text-sm">
                     <div className="flex items-center gap-4">
-                        <Badge variant="destructive">{errorCount} Errores</Badge>
-                        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">{warningCount} Alertas</Badge>
+                        <Badge variant="destructive">{errorCount} Fila(s) con Errores</Badge>
+                        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">{warningCount} Fila(s) con Alertas</Badge>
                     </div>
-                    <div className="text-sm font-medium">
-                        {rowsToImport.length} de {results.length} filas seleccionadas para importar.
+                    <div className="font-medium">
+                        {rowsToImport.length} de {results.length} filas seleccionadas.
                     </div>
                 </div>
 
-                <div className="border rounded-lg overflow-auto max-h-[50vh]">
+                <div className="border rounded-lg overflow-auto max-h-[60vh]">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -82,11 +104,13 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                                     <Checkbox 
                                         checked={isAllSelected ? true : isSomeSelected ? "indeterminate" : false}
                                         onCheckedChange={handleToggleAll}
+                                        aria-label="Seleccionar todo"
                                     />
                                 </TableHead>
                                 <TableHead className="w-24">Estado</TableHead>
+                                <TableHead className="min-w-[200px]">Detalle de Alerta</TableHead>
                                 {mappedHeaders.map(header => (
-                                    <TableHead key={header}>{columnMapping[header]}</TableHead>
+                                    <TableHead key={header} className="min-w-[150px]">{columnMapping[header]}</TableHead>
                                 ))}
                             </TableRow>
                         </TableHeader>
@@ -94,45 +118,46 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                             {results.map((result, rowIndex) => {
                                 const hasError = result.issues.some(i => i.type === 'error');
                                 const hasWarning = result.issues.some(i => i.type === 'warning');
-                                const similarClient = result.issues.find(i => i.similarClient)?.similarClient;
+                                const firstIssue = result.issues[0];
+                                const conflictingClient = firstIssue?.conflictingClient;
 
                                 return (
-                                    <TableRow key={rowIndex} className={cn(hasError && 'bg-destructive/10')}>
+                                    <TableRow key={rowIndex} className={cn(hasError && 'bg-destructive/10', hasWarning && !hasError && 'bg-yellow-100/30')}>
                                         <TableCell>
                                             <Checkbox
                                                 checked={result.include}
                                                 onCheckedChange={(checked) => handleToggleRow(rowIndex, !!checked)}
                                                 disabled={hasError}
+                                                aria-label={`Seleccionar fila ${rowIndex + 1}`}
                                             />
                                         </TableCell>
                                         <TableCell>
                                             {(hasError || hasWarning) && (
-                                                <TooltipProvider>
-                                                    <Tooltip>
-                                                        <TooltipTrigger>
-                                                            <Badge variant={hasError ? 'destructive' : 'secondary'} className={cn(!hasError && "bg-yellow-100 text-yellow-800")}>
-                                                                {hasError ? <AlertCircle className="h-4 w-4 mr-1" /> : <AlertTriangle className="h-4 w-4 mr-1" />}
-                                                                {hasError ? 'Error' : 'Alerta'}
-                                                            </Badge>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            <ul className="list-disc list-inside space-y-1">
-                                                                {result.issues.map((issue, i) => (
-                                                                    <li key={i}>
-                                                                        {issue.message}
-                                                                        {issue.similarClient && (
-                                                                             <div className="mt-1 p-2 text-xs bg-background/50 rounded border">
-                                                                                <p><strong>Dato existente:</strong></p>
-                                                                                <p>Razón Social: {issue.similarClient.razonSocial}</p>
-                                                                                <p>CUIT: {issue.similarClient.cuit}</p>
-                                                                            </div>
-                                                                        )}
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
+                                                <Badge variant={hasError ? 'destructive' : 'secondary'} className={cn(!hasError && "bg-yellow-100 text-yellow-800 hover:bg-yellow-100")}>
+                                                    {hasError ? <AlertCircle className="h-4 w-4 mr-1" /> : <AlertTriangle className="h-4 w-4 mr-1" />}
+                                                    {hasError ? 'Error' : 'Alerta'}
+                                                </Badge>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {firstIssue && (
+                                                <div className="space-y-1">
+                                                    <p className="text-xs font-semibold">{firstIssue.message}</p>
+                                                    {conflictingClient && (
+                                                        <div className='space-y-1'>
+                                                            <ComparisonCard 
+                                                                title="Denominación"
+                                                                importValue={result.data[headers.find(h => columnMapping[h] === 'denominacion')!]}
+                                                                systemValue={conflictingClient.denominacion}
+                                                            />
+                                                            <ComparisonCard 
+                                                                title="CUIT"
+                                                                importValue={result.data[headers.find(h => columnMapping[h] === 'cuit')!]}
+                                                                systemValue={conflictingClient.cuit}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
                                         </TableCell>
                                         {mappedHeaders.map(header => (
