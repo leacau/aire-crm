@@ -322,13 +322,13 @@ export default function ClientsPage() {
                   <Link href={`/clients/${client.id}`}>Ver detalles</Link>
                 </DropdownMenuItem>
                 {canManage && (
-                  <DropdownMenuItem onClick={() => setClientToReassign(client)}>
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setClientToReassign(client); }}>
                     <UserCog className="mr-2 h-4 w-4" />
                     Reasignar
                   </DropdownMenuItem>
                 )}
                 {isBoss && (
-                  <DropdownMenuItem className="text-destructive" onClick={() => setClientToDelete(client)}>
+                  <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setClientToDelete(client); }}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Eliminar
                   </DropdownMenuItem>
