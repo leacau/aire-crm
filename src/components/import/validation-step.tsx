@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState } from 'react';
@@ -64,25 +63,25 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
     const errorCount = results.filter(r => r.issues.some(i => i.type === 'error')).length;
     const warningCount = results.filter(r => r.issues.some(i => i.type === 'warning')).length;
 
-    const handleToggleRow = (index: number, checked: boolean, event?: React.MouseEvent<HTMLButtonElement>) => {
+    const handleToggleRow = (index: number, event: React.MouseEvent) => {
         const hasError = results[index].issues.some(i => i.type === 'error');
         if (hasError) return;
 
-        // Logic for SHIFT + click
-        if (event?.nativeEvent.shiftKey && lastCheckedIndex !== null) {
+        const currentCheckedState = !results[index].include;
+
+        if (event.nativeEvent.shiftKey && lastCheckedIndex !== null) {
             const start = Math.min(lastCheckedIndex, index);
             const end = Math.max(lastCheckedIndex, index);
             
             setResults(prev => prev.map((r, i) => {
                 const rowHasError = r.issues.some(issue => issue.type === 'error');
                 if (i >= start && i <= end && !rowHasError) {
-                    return { ...r, include: checked };
+                    return { ...r, include: currentCheckedState };
                 }
                 return r;
             }));
         } else {
-            // Logic for single click
-            setResults(prev => prev.map((r, i) => i === index ? { ...r, include: checked } : r));
+            setResults(prev => prev.map((r, i) => i === index ? { ...r, include: currentCheckedState } : r));
         }
 
         setLastCheckedIndex(index);
@@ -151,12 +150,14 @@ export function ValidationStep({ results, setResults, headers, columnMapping, on
                                 return (
                                     <TableRow key={rowIndex} className={cn(hasError && 'bg-destructive/10', hasWarning && !hasError && 'bg-yellow-100/30')}>
                                         <TableCell className="sticky left-0 bg-inherit z-10">
-                                            <Checkbox
-                                                checked={result.include}
-                                                onCheckedChange={(checked, event) => handleToggleRow(rowIndex, !!checked, event as React.MouseEvent<HTMLButtonElement>)}
-                                                disabled={hasError}
-                                                aria-label={`Seleccionar fila ${rowIndex + 1}`}
-                                            />
+                                            <div onClick={(e) => handleToggleRow(rowIndex, e)} className="p-2.5 -m-2.5 cursor-pointer">
+                                                <Checkbox
+                                                    checked={result.include}
+                                                    disabled={hasError}
+                                                    aria-label={`Seleccionar fila ${rowIndex + 1}`}
+                                                    className="pointer-events-none"
+                                                />
+                                            </div>
                                         </TableCell>
                                         <TableCell>
                                             {(hasError || hasWarning) && (
