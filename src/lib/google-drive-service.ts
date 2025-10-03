@@ -57,24 +57,16 @@ export async function uploadFileToDrive(accessToken: string, file: File): Promis
         parents: [subFolderId],
     };
 
+    const formData = new FormData();
+    formData.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
+    formData.append('file', file);
+
     const response = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=multipart`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': `multipart/related; boundary=foo_bar_baz`,
         },
-        body: [
-            `--foo_bar_baz`,
-            `Content-Type: application/json; charset=UTF-8`,
-            ``,
-            JSON.stringify(fileMetadata),
-            ``,
-            `--foo_bar_baz`,
-            `Content-Type: ${file.type}`,
-            ``,
-            await file.arrayBuffer(),
-            `--foo_bar_baz--`,
-        ].join('\r\n'),
+        body: formData,
     });
     
     if (!response.ok) {
