@@ -172,10 +172,14 @@ export default function ClientsPage() {
       return clientsToShow;
     }
     const lowercasedFilter = searchTerm.toLowerCase();
-    return clientsToShow.filter(client =>
-      client.denominacion.toLowerCase().includes(lowercasedFilter) ||
-      client.razonSocial.toLowerCase().includes(lowercasedFilter)
-    );
+    return clientsToShow.filter(client => {
+      const denominacion = client.denominacion || '';
+      const razonSocial = client.razonSocial || '';
+      return (
+        denominacion.toLowerCase().includes(lowercasedFilter) ||
+        razonSocial.toLowerCase().includes(lowercasedFilter)
+      );
+    });
   }, [clients, searchTerm, showOnlyMyClients, userInfo]);
 
 
