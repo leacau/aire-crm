@@ -96,9 +96,9 @@ function ReassignClientDialog({
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={handleSave} disabled={isSaving}>
+          <Button onClick={handleSave} disabled={isSaving}>
             {isSaving ? <Spinner size="small" /> : "Reasignar"}
-          </AlertDialogAction>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -316,8 +316,8 @@ export default function ClientsPage() {
     try {
         await bulkDeleteClients(idsToDelete, userInfo.id, userInfo.name);
         toast({ title: `${idsToDelete.length} cliente(s) eliminado(s)` });
-        fetchData();
-        setRowSelection({});
+        await fetchData();
+        setRowSelection({}); 
     } catch (error) {
         console.error("Error bulk deleting clients:", error);
         toast({ title: "Error al eliminar clientes", description: (error as Error).message, variant: "destructive" });
@@ -380,7 +380,7 @@ export default function ClientsPage() {
             id: 'select',
             header: ({ table }) => (
                 <Checkbox
-                    id="select-all"
+                    id="select-all-clients"
                     checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
                     onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
                     aria-label="Seleccionar todo"

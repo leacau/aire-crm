@@ -269,13 +269,12 @@ export const deleteClient = async (
 export const bulkDeleteClients = async (clientIds: string[], userId: string, userName: string): Promise<void> => {
     if (clientIds.length === 0) return;
 
-    // Firestore `in` queries are limited to 30 items. We need to chunk the deletions.
-    const chunkSize = 30;
+    const chunkSize = 30; // Firestore `in` query limit is 30
     for (let i = 0; i < clientIds.length; i += chunkSize) {
         const chunk = clientIds.slice(i, i + chunkSize);
+        console.log(`Processing chunk ${i / chunkSize + 1} for deletion:`, chunk);
         const batch = writeBatch(db);
 
-        // For each chunk, find and delete related documents
         // 1. Opportunities
         const oppsQuery = query(opportunitiesCollection, where('clientId', 'in', chunk));
         const oppsSnap = await getDocs(oppsQuery);
@@ -292,15 +291,13 @@ export const bulkDeleteClients = async (clientIds: string[], userId: string, use
         peopleSnap.forEach(d => batch.delete(d.ref));
         
         // 4. Clients themselves
-        for (const id of chunk) {
+        chunk.forEach(id => {
             const clientRef = doc(db, 'clients', id);
             batch.delete(clientRef);
-        }
+        });
 
-        // Commit the batch for the current chunk
         await batch.commit();
     }
-
 
     await logActivity({
         userId,
@@ -310,7 +307,7 @@ export const bulkDeleteClients = async (clientIds: string[], userId: string, use
         entityId: 'multiple',
         entityName: 'multiple',
         details: `eliminó <strong>${clientIds.length}</strong> clientes de forma masiva`,
-        ownerName: userName // Admin action
+        ownerName: userName
     });
 };
 
