@@ -275,7 +275,7 @@ export default function ClientsPage() {
     }
 
     try {
-      await createClient(clientData, userInfo.id, userInfo.name);
+      const newClientId = await createClient(clientData, userInfo.id, userInfo.name);
       toast({
         title: "Cliente Creado",
         description: `${clientData.denominacion} ha sido añadido a la lista.`,
@@ -320,7 +320,7 @@ export default function ClientsPage() {
         setRowSelection({});
     } catch (error) {
         console.error("Error bulk deleting clients:", error);
-        toast({ title: "Error al eliminar clientes", variant: "destructive" });
+        toast({ title: "Error al eliminar clientes", description: (error as Error).message, variant: "destructive" });
     } finally {
         setIsBulkDeleting(false);
         setIsBulkDeleteDialogOpen(false);
@@ -380,6 +380,7 @@ export default function ClientsPage() {
             id: 'select',
             header: ({ table }) => (
                 <Checkbox
+                    id="select-all"
                     checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
                     onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
                     aria-label="Seleccionar todo"
@@ -390,6 +391,7 @@ export default function ClientsPage() {
                     checked={row.getIsSelected()}
                     onCheckedChange={(value) => row.toggleSelected(!!value)}
                     aria-label="Seleccionar fila"
+                    onClick={(e) => e.stopPropagation()}
                 />
             ),
             enableSorting: false,

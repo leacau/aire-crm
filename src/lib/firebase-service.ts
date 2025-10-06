@@ -266,41 +266,41 @@ export const deleteClient = async (
     });
 };
 
-
 export const bulkDeleteClients = async (clientIds: string[], userId: string, userName: string): Promise<void> => {
     if (clientIds.length === 0) return;
-    
-    const batch = writeBatch(db);
 
-    // 1. Delete all selected clients
-    for (const id of clientIds) {
-        const clientRef = doc(db, 'clients', id);
-        batch.delete(clientRef);
+    // Firestore `in` queries are limited to 30 items. We need to chunk the deletions.
+    const chunkSize = 30;
+    for (let i = 0; i < clientIds.length; i += chunkSize) {
+        const chunk = clientIds.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+
+        // For each chunk, find and delete related documents
+        // 1. Opportunities
+        const oppsQuery = query(opportunitiesCollection, where('clientId', 'in', chunk));
+        const oppsSnap = await getDocs(oppsQuery);
+        oppsSnap.forEach(d => batch.delete(d.ref));
+
+        // 2. Client Activities
+        const activitiesQuery = query(clientActivitiesCollection, where('clientId', 'in', chunk));
+        const activitiesSnap = await getDocs(activitiesQuery);
+        activitiesSnap.forEach(d => batch.delete(d.ref));
+
+        // 3. People (Contacts)
+        const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains-any', chunk));
+        const peopleSnap = await getDocs(peopleQuery);
+        peopleSnap.forEach(d => batch.delete(d.ref));
+        
+        // 4. Clients themselves
+        for (const id of chunk) {
+            const clientRef = doc(db, 'clients', id);
+            batch.delete(clientRef);
+        }
+
+        // Commit the batch for the current chunk
+        await batch.commit();
     }
-    
-    // 2. Delete all related opportunities
-    const oppsQuery = query(opportunitiesCollection, where('clientId', 'in', clientIds));
-    const oppsSnap = await getDocs(oppsQuery);
-    oppsSnap.forEach(d => batch.delete(d.ref));
-    
-    // 3. Delete all related client activities
-    const activitiesQuery = query(clientActivitiesCollection, where('clientId', 'in', clientIds));
-    const activitiesSnap = await getDocs(activitiesQuery);
-    activitiesSnap.forEach(d => batch.delete(d.ref));
-    
-    // 4. Delete all related people (if they are only associated with the deleted clients)
-    // This part is trickier. A simpler approach for now is to delete people linked to these clients.
-    // A more complex approach would check if they are linked to other non-deleted clients.
-    const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains-any', clientIds));
-    const peopleSnap = await getDocs(peopleQuery);
-    peopleSnap.forEach(d => {
-        // Simplified logic: If a person is linked to any of the clients being deleted, delete the person.
-        // A more robust solution might remove the clientIds from the person's array and delete only if the array becomes empty.
-        batch.delete(d.ref);
-    });
 
-    // 5. Commit all deletions at once
-    await batch.commit();
 
     await logActivity({
         userId,
