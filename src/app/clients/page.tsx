@@ -368,7 +368,8 @@ export default function ClientsPage() {
   };
   
   const handleOpenDeleteDialog = () => {
-    const selectedClients = displayedClients.filter(client => rowSelection[client.id]);
+    const selectedClientIds = Object.keys(rowSelection).filter(id => rowSelection[id]);
+    const selectedClients = clients.filter(client => selectedClientIds.includes(client.id));
     setClientsToDelete(selectedClients);
   };
   
@@ -396,7 +397,6 @@ export default function ClientsPage() {
             ),
             enableSorting: false,
             enableHiding: false,
-            size: 40,
         });
     }
 
@@ -588,5 +588,6 @@ export default function ClientsPage() {
     </>
   );
 }
+
 
 
