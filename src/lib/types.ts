@@ -74,6 +74,10 @@ export type Client = {
   ownerId: string;
   ownerName: string;
   agencyId?: string;
+  isNewClient?: boolean;
+  newClientDate?: string;
+  isDeactivated?: boolean;
+  deactivationHistory?: string[];
 };
 
 export type Agency = {

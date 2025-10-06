@@ -96,7 +96,14 @@ export const getUsersByRole = async (role: User['role']): Promise<User[]> => {
 
 export const getClients = async (): Promise<Client[]> => {
     const snapshot = await getDocs(query(clientsCollection, orderBy("denominacion")));
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return { 
+        id: doc.id, 
+        ...data,
+        newClientDate: data.newClientDate instanceof Timestamp ? data.newClientDate.toDate().toISOString() : data.newClientDate,
+      } as Client
+    });
 };
 
 export const getClient = async (id: string): Promise<Client | null> => {
@@ -105,19 +112,22 @@ export const getClient = async (id: string): Promise<Client | null> => {
     if (docSnap.exists()) {
         const data = docSnap.data();
         // Convert Firestore Timestamps to serializable strings
-        if (data.createdAt instanceof Timestamp) {
-            data.createdAt = data.createdAt.toDate().toISOString();
+        const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+        
+        data.createdAt = convertTimestamp(data.createdAt);
+        data.updatedAt = convertTimestamp(data.updatedAt);
+        data.newClientDate = convertTimestamp(data.newClientDate);
+        if (data.deactivationHistory) {
+            data.deactivationHistory = data.deactivationHistory.map(convertTimestamp);
         }
-        if (data.updatedAt instanceof Timestamp) {
-            data.updatedAt = data.updatedAt.toDate().toISOString();
-        }
+
         return { id: docSnap.id, ...data } as Client;
     }
     return null;
 };
 
 export const createClient = async (
-    clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>,
+    clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>,
     userId?: string,
     userName?: string
 ): Promise<string> => {
@@ -125,10 +135,19 @@ export const createClient = async (
         ...clientData,
         personIds: [],
         createdAt: serverTimestamp(),
+        isDeactivated: false,
+        deactivationHistory: [],
     };
     if (userId && userName) {
         newClientData.ownerId = userId;
         newClientData.ownerName = userName;
+    }
+
+    if (clientData.isNewClient) {
+        newClientData.newClientDate = serverTimestamp();
+    } else {
+        newClientData.isNewClient = deleteField();
+        newClientData.newClientDate = deleteField();
     }
 
     const docRef = await addDoc(clientsCollection, newClientData);
@@ -165,6 +184,11 @@ export const updateClient = async (
     if (data.agencyId === 'none') {
         updateData.agencyId = deleteField();
     }
+
+    // Handle deactivation logic
+    if (data.isDeactivated === true && originalData.isDeactivated === false) {
+        updateData.deactivationHistory = arrayUnion(serverTimestamp());
+    }
     
     await updateDoc(docRef, {
         ...updateData,
@@ -178,6 +202,13 @@ export const updateClient = async (
     if (data.ownerId && data.ownerId !== originalData.ownerId) {
         details = `reasignó el cliente <strong>${clientName}</strong> a <strong>${newOwnerName}</strong>`;
     }
+    if (data.isDeactivated === true && !originalData.isDeactivated) {
+        details = `dio de baja al cliente <strong>${clientName}</strong>`;
+    }
+    if (data.isDeactivated === false && originalData.isDeactivated) {
+        details = `reactivó al cliente <strong>${clientName}</strong>`;
+    }
+
 
     await logActivity({
         userId,

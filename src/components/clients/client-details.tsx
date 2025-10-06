@@ -36,6 +36,8 @@ import {
   ArrowRight,
   BellPlus,
   Clock,
+  BadgeAlert,
+  Star,
 } from 'lucide-react';
 import {
   Table,
@@ -91,6 +93,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Input } from '../ui/input';
+import { Badge } from '../ui/badge';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'bg-blue-500',
@@ -472,7 +475,7 @@ export function ClientDetails({
   };
 
 
-  const handleSaveClient = (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>) => {
+  const handleSaveClient = (clientData: any) => {
     onUpdate(clientData);
   };
 
@@ -570,6 +573,23 @@ export function ClientDetails({
                   <div className="flex-1 min-w-0">
                       <CardTitle className="text-2xl truncate">{client.denominacion}</CardTitle>
                       <CardDescription className="truncate">{client.razonSocial}</CardDescription>
+                       <div className="flex items-center gap-2 mt-2">
+                        {client.isNewClient && client.newClientDate && (
+                          <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                            <Star className="h-3 w-3 mr-1" />
+                            Nuevo ({format(new Date(client.newClientDate), 'dd/MM/yy')})
+                          </Badge>
+                        )}
+                        {client.isDeactivated && (
+                          <Badge variant="destructive">
+                            <BadgeAlert className="h-3 w-3 mr-1" />
+                            Dado de Baja
+                            {client.deactivationHistory && client.deactivationHistory.length > 0 &&
+                              ` (${format(new Date(client.deactivationHistory[client.deactivationHistory.length - 1]), 'dd/MM/yy')})`
+                            }
+                          </Badge>
+                        )}
+                      </div>
                   </div>
               </div>
                {canEditClient && (

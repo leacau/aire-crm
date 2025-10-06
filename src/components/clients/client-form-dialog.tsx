@@ -21,8 +21,9 @@ import type { Client, TipoEntidad, CondicionIVA, Agency } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
 import { getAgencies } from '@/lib/firebase-service';
+import { Checkbox } from '../ui/checkbox';
 
-type ClientFormData = Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>;
+type ClientFormData = Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>;
 
 interface ClientFormDialogProps {
   isOpen: boolean;
@@ -45,6 +46,8 @@ const initialFormData: ClientFormData = {
   phone: '',
   observaciones: '',
   agencyId: undefined,
+  isNewClient: false,
+  isDeactivated: false,
 };
 
 export function ClientFormDialog({
@@ -58,6 +61,8 @@ export function ClientFormDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const { toast } = useToast();
+
+  const isEditing = client !== null;
 
   useEffect(() => {
     if (isOpen) {
@@ -75,6 +80,8 @@ export function ClientFormDialog({
                 phone: client.phone,
                 observaciones: client.observaciones || '',
                 agencyId: client.agencyId,
+                isNewClient: client.isNewClient,
+                isDeactivated: client.isDeactivated,
             });
         } else {
             setFormData(initialFormData);
@@ -126,7 +133,9 @@ export function ClientFormDialog({
     }));
   };
 
-  const isEditing = client !== null;
+  const handleCheckboxChange = (name: keyof ClientFormData, checked: boolean | "indeterminate") => {
+    setFormData(prev => ({...prev, [name]: !!checked }));
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -141,6 +150,18 @@ export function ClientFormDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
+          {!isEditing && (
+             <div className="flex items-center space-x-2">
+                <Checkbox id="isNewClient" checked={formData.isNewClient} onCheckedChange={(checked) => handleCheckboxChange('isNewClient', checked)} />
+                <Label htmlFor="isNewClient" className="font-normal">Marcar como Cliente Nuevo</Label>
+            </div>
+          )}
+          {isEditing && (
+             <div className="flex items-center space-x-2">
+                <Checkbox id="isDeactivated" checked={formData.isDeactivated} onCheckedChange={(checked) => handleCheckboxChange('isDeactivated', checked)} />
+                <Label htmlFor="isDeactivated" className="font-normal">Dar de baja al cliente</Label>
+            </div>
+          )}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="denominacion" className="text-right">
               Denominación

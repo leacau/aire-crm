@@ -32,6 +32,7 @@ import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState, RowSelectionState } from '@tanstack/react-table';
 import { useRouter } from 'next/navigation';
 import { findBestMatch } from 'string-similarity';
+import { Badge } from '@/components/ui/badge';
 
 function ReassignClientDialog({ 
   clients, 
@@ -105,25 +106,26 @@ function ReassignClientDialog({
 }
 
 function BulkDeleteDialog({
-    clients,
     isOpen,
     onOpenChange,
     onConfirm,
-    isDeleting
+    isDeleting,
+    count
 }: {
-    clients: Client[],
     isOpen: boolean,
     onOpenChange: (open: boolean) => void,
     onConfirm: () => void,
-    isDeleting: boolean
+    isDeleting: boolean,
+    count: number
 }) {
+    if (!isOpen) return null;
     return (
         <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>¿Estás realmente seguro?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Esta acción es irreversible. Se eliminarán permanentemente <strong>{clients.length} cliente(s)</strong> y todas sus oportunidades y contactos asociados.
+                        Esta acción es irreversible. Se eliminarán permanentemente <strong>{count} cliente(s)</strong> y todas sus oportunidades y contactos asociados.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -150,13 +152,13 @@ export default function ClientsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const [clientsToReassign, setClientsToReassign] = useState<Client[]>([]);
-  const [clientsToDelete, setClientsToDelete] = useState<Client[]>([]);
   const [showOnlyMyClients, setShowOnlyMyClients] = useState(!isBoss);
   const canManage = isBoss || userInfo?.role === 'Administracion';
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
 
 
   const fetchData = useCallback(async () => {
@@ -262,7 +264,7 @@ export default function ClientsPage() {
   }, [clients, searchTerm, showOnlyMyClients, userInfo, showDuplicates]);
 
 
-  const handleSaveClient = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>) => {
+  const handleSaveClient = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>) => {
     if (!userInfo) {
         toast({
             title: "Error",
@@ -307,11 +309,11 @@ export default function ClientsPage() {
   }
 
   const handleBulkDelete = async () => {
-    if (clientsToDelete.length === 0 || !userInfo) return;
+    const idsToDelete = Object.keys(rowSelection).filter(id => rowSelection[id]);
+    if (idsToDelete.length === 0 || !userInfo) return;
 
     setIsBulkDeleting(true);
     try {
-        const idsToDelete = clientsToDelete.map(c => c.id);
         await bulkDeleteClients(idsToDelete, userInfo.id, userInfo.name);
         toast({ title: `${idsToDelete.length} cliente(s) eliminado(s)` });
         fetchData();
@@ -321,7 +323,7 @@ export default function ClientsPage() {
         toast({ title: "Error al eliminar clientes", variant: "destructive" });
     } finally {
         setIsBulkDeleting(false);
-        setClientsToDelete([]);
+        setIsBulkDeleteDialogOpen(false);
     }
   }
 
@@ -368,14 +370,6 @@ export default function ClientsPage() {
     }
   };
   
-  const handleOpenDeleteDialog = () => {
-    const selectedClientIds = Object.keys(rowSelection).filter(id => rowSelection[id]);
-    const selectedClients = clients.filter(client => selectedClientIds.includes(client.id));
-    if (selectedClients.length > 0) {
-      setClientsToDelete(selectedClients);
-    }
-  };
-  
   const columns = useMemo<ColumnDef<Client>[]>(() => {
     const canViewDetails = (client: Client) => userInfo && (isBoss || (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
@@ -419,9 +413,12 @@ export default function ClientsPage() {
               ) : (
                 <span className="font-medium">{client.denominacion}</span>
               )}
-              {isBoss && userInfo && client.ownerId !== userInfo.id && (
-                 <p className="text-xs text-muted-foreground">{client.ownerName}</p>
-              )}
+               <div className="flex items-center gap-2 mt-1">
+                 {isBoss && userInfo && client.ownerId !== userInfo.id && (
+                    <p className="text-xs text-muted-foreground">{client.ownerName}</p>
+                 )}
+                 {client.isDeactivated && <Badge variant="destructive">Baja</Badge>}
+               </div>
             </div>
           );
         }
@@ -519,7 +516,7 @@ export default function ClientsPage() {
                     <UserCog className="mr-2 h-4 w-4" />
                     Reasignar ({selectedCount})
                 </Button>
-                <Button variant="destructive" size="sm" onClick={handleOpenDeleteDialog}>
+                <Button variant="destructive" size="sm" onClick={() => setIsBulkDeleteDialogOpen(true)}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Eliminar ({selectedCount})
                 </Button>
@@ -583,11 +580,11 @@ export default function ClientsPage() {
       onReassign={handleReassignClient}
     />
      <BulkDeleteDialog
-      clients={clientsToDelete}
-      isOpen={clientsToDelete.length > 0}
-      onOpenChange={(open) => !open && setClientsToDelete([])}
-      onConfirm={handleBulkDelete}
-      isDeleting={isBulkDeleting}
+        isOpen={isBulkDeleteDialogOpen}
+        onOpenChange={setIsBulkDeleteDialogOpen}
+        onConfirm={handleBulkDelete}
+        isDeleting={isBulkDeleting}
+        count={selectedCount}
     />
     </>
   );
