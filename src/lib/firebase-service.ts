@@ -268,10 +268,12 @@ export const deleteClient = async (
 
 export const bulkDeleteClients = async (clientIds: string[], userId: string, userName: string): Promise<void> => {
     if (clientIds.length === 0) return;
+    console.log(`[bulkDeleteClients] Starting deletion for ${clientIds.length} clients.`);
 
     const batch = writeBatch(db);
 
     for (const clientId of clientIds) {
+        console.log(`[bulkDeleteClients] Processing client ID: ${clientId}`);
         // 1. Mark client for deletion
         const clientRef = doc(db, 'clients', clientId);
         batch.delete(clientRef);
@@ -279,23 +281,32 @@ export const bulkDeleteClients = async (clientIds: string[], userId: string, use
         // 2. Find and mark opportunities for deletion
         const oppsQuery = query(opportunitiesCollection, where('clientId', '==', clientId));
         const oppsSnap = await getDocs(oppsQuery);
-        oppsSnap.forEach(d => batch.delete(d.ref));
+        oppsSnap.forEach(d => {
+            console.log(`  > Marking opportunity ${d.id} for deletion`);
+            batch.delete(d.ref);
+        });
 
         // 3. Find and mark client activities for deletion
         const activitiesQuery = query(clientActivitiesCollection, where('clientId', '==', clientId));
         const activitiesSnap = await getDocs(activitiesQuery);
-        activitiesSnap.forEach(d => batch.delete(d.ref));
+        activitiesSnap.forEach(d => {
+            console.log(`  > Marking activity ${d.id} for deletion`);
+            batch.delete(d.ref);
+        });
 
         // 4. Find and mark people (contacts) for deletion
-        // This assumes a person is only linked to one client or should be deleted if one of their clients is deleted.
-        // A more complex logic would be needed if a person can belong to multiple clients and should only be deleted if all are gone.
         const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', clientId));
         const peopleSnap = await getDocs(peopleQuery);
-        peopleSnap.forEach(d => batch.delete(d.ref));
+        peopleSnap.forEach(d => {
+             console.log(`  > Marking person ${d.id} for deletion`);
+             batch.delete(d.ref)
+        });
     }
     
     // Commit all deletions in a single atomic operation
     await batch.commit();
+    console.log('[bulkDeleteClients] Batch commit successful.');
+
 
     // Log a single activity for the bulk action
     await logActivity({

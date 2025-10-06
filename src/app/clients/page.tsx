@@ -310,6 +310,7 @@ export default function ClientsPage() {
 
   const handleBulkDelete = async () => {
     const idsToDelete = Object.keys(rowSelection).filter(id => rowSelection[id]);
+    console.log('IDs to delete:', idsToDelete); // Log for debugging
     if (idsToDelete.length === 0 || !userInfo) return;
 
     setIsBulkDeleting(true);
