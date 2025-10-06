@@ -268,57 +268,63 @@ export const deleteClient = async (
 
 export const bulkDeleteClients = async (clientIds: string[], userId: string, userName: string): Promise<void> => {
     if (clientIds.length === 0) return;
-    console.log(`[bulkDeleteClients] Starting deletion for ${clientIds.length} clients.`);
-
-    const batch = writeBatch(db);
-
-    for (const clientId of clientIds) {
-        console.log(`[bulkDeleteClients] Processing client ID: ${clientId}`);
-        // 1. Mark client for deletion
-        const clientRef = doc(db, 'clients', clientId);
-        batch.delete(clientRef);
-
-        // 2. Find and mark opportunities for deletion
-        const oppsQuery = query(opportunitiesCollection, where('clientId', '==', clientId));
-        const oppsSnap = await getDocs(oppsQuery);
-        oppsSnap.forEach(d => {
-            console.log(`  > Marking opportunity ${d.id} for deletion`);
-            batch.delete(d.ref);
-        });
-
-        // 3. Find and mark client activities for deletion
-        const activitiesQuery = query(clientActivitiesCollection, where('clientId', '==', clientId));
-        const activitiesSnap = await getDocs(activitiesQuery);
-        activitiesSnap.forEach(d => {
-            console.log(`  > Marking activity ${d.id} for deletion`);
-            batch.delete(d.ref);
-        });
-
-        // 4. Find and mark people (contacts) for deletion
-        const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', clientId));
-        const peopleSnap = await getDocs(peopleQuery);
-        peopleSnap.forEach(d => {
-             console.log(`  > Marking person ${d.id} for deletion`);
-             batch.delete(d.ref)
-        });
-    }
     
-    // Commit all deletions in a single atomic operation
-    await batch.commit();
-    console.log('[bulkDeleteClients] Batch commit successful.');
+    console.log(`[bulkDeleteClients] Received request to delete ${clientIds.length} clients.`);
 
+    try {
+        const batch = writeBatch(db);
 
-    // Log a single activity for the bulk action
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'client',
-        entityId: 'multiple',
-        entityName: 'multiple',
-        details: `eliminó <strong>${clientIds.length}</strong> clientes de forma masiva`,
-        ownerName: userName,
-    });
+        for (const clientId of clientIds) {
+            console.log(`  - Processing client ID: ${clientId}`);
+            
+            // 1. Mark client for deletion
+            const clientRef = doc(db, 'clients', clientId);
+            batch.delete(clientRef);
+
+            // 2. Find and mark opportunities for deletion
+            const oppsQuery = query(opportunitiesCollection, where('clientId', '==', clientId));
+            const oppsSnap = await getDocs(oppsQuery);
+            oppsSnap.forEach(d => {
+                console.log(`    > Marking opportunity ${d.id} for deletion`);
+                batch.delete(d.ref);
+            });
+
+            // 3. Find and mark client activities for deletion
+            const activitiesQuery = query(clientActivitiesCollection, where('clientId', '==', clientId));
+            const activitiesSnap = await getDocs(activitiesQuery);
+            activitiesSnap.forEach(d => {
+                console.log(`    > Marking activity ${d.id} for deletion`);
+                batch.delete(d.ref);
+            });
+
+            // 4. Find and mark people (contacts) for deletion
+            const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', clientId));
+            const peopleSnap = await getDocs(peopleQuery);
+            peopleSnap.forEach(d => {
+                 console.log(`    > Marking person ${d.id} for deletion`);
+                 batch.delete(d.ref);
+            });
+        }
+        
+        // Commit all deletions in a single atomic operation
+        await batch.commit();
+        console.log(`[bulkDeleteClients] Batch commit successful for ${clientIds.length} clients.`);
+
+        // Log a single activity for the bulk action
+        await logActivity({
+            userId,
+            userName,
+            type: 'delete',
+            entityType: 'client',
+            entityId: 'multiple',
+            entityName: 'multiple',
+            details: `eliminó <strong>${clientIds.length}</strong> clientes de forma masiva`,
+            ownerName: userName,
+        });
+    } catch (error) {
+        console.error("[bulkDeleteClients] An error occurred during the bulk deletion process:", error);
+        throw error; // Re-throw the error to be caught by the calling function
+    }
 };
 
 export const bulkUpdateClients = async (

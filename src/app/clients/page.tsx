@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -130,7 +129,7 @@ function BulkDeleteDialog({
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <Button onClick={onConfirm} variant="destructive" disabled={isDeleting}>
+                     <Button onClick={onConfirm} variant="destructive" disabled={isDeleting}>
                         {isDeleting ? <Spinner size="small"/> : 'Eliminar'}
                     </Button>
                 </AlertDialogFooter>
@@ -309,8 +308,8 @@ export default function ClientsPage() {
   }
 
   const handleBulkDelete = async () => {
-    const idsToDelete = Object.keys(rowSelection).filter(id => rowSelection[id]);
-    console.log('IDs to delete:', idsToDelete); // Log for debugging
+    const idsToDelete = Object.keys(rowSelection);
+    console.log('IDs to delete:', idsToDelete);
     if (idsToDelete.length === 0 || !userInfo) return;
 
     setIsBulkDeleting(true);
@@ -364,7 +363,7 @@ export default function ClientsPage() {
   };
 
    const handleOpenReassignDialog = () => {
-    const selectedClientIds = Object.keys(rowSelection).filter(id => rowSelection[id]);
+    const selectedClientIds = Object.keys(rowSelection);
     const selectedClients = clients.filter(client => selectedClientIds.includes(client.id));
     if (selectedClients.length > 0) {
       setClientsToReassign(selectedClients);
@@ -497,7 +496,7 @@ export default function ClientsPage() {
     );
   }
   
-  const selectedCount = Object.keys(rowSelection).filter(id => rowSelection[id]).length;
+  const selectedCount = Object.keys(rowSelection).length;
 
   return (
     <>
@@ -551,6 +550,7 @@ export default function ClientsPage() {
               router.push(`/clients/${client.id}`);
             }
           }}
+          getRowId={(row) => row.id}
           enableRowResizing={false}
         />
       </main>

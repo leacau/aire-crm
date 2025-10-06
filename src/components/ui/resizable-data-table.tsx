@@ -15,6 +15,7 @@ import {
   getPaginationRowModel,
   getFacetedRowModel,
   getFacetedUniqueValues,
+  Row,
 } from '@tanstack/react-table';
 
 import {
@@ -40,6 +41,7 @@ interface ResizableDataTableProps<TData, TValue> {
   setSorting?: React.Dispatch<React.SetStateAction<SortingState>>;
   rowSelection?: RowSelectionState;
   setRowSelection?: React.Dispatch<React.SetStateAction<RowSelectionState>>;
+  getRowId?: (originalRow: TData, index: number, parent?: Row<TData>) => string;
 }
 
 export function ResizableDataTable<TData, TValue>({
@@ -54,6 +56,7 @@ export function ResizableDataTable<TData, TValue>({
   setSorting,
   rowSelection,
   setRowSelection,
+  getRowId,
 }: ResizableDataTableProps<TData, TValue>) {
   const isSortingEnabled = !!sorting && !!setSorting;
   const isRowSelectionEnabled = !!rowSelection && !!setRowSelection;
@@ -63,6 +66,7 @@ export function ResizableDataTable<TData, TValue>({
     columns,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
+    ...(getRowId && { getRowId }),
     ...(isSortingEnabled && {
       onSortingChange: setSorting,
       getSortedRowModel: getSortedRowModel(),
@@ -84,7 +88,7 @@ export function ResizableDataTable<TData, TValue>({
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => {
-                const canResize = enableRowResizing && header.column.getCanResize();
+                const canResize = enableRowResizing && header.column.getCanResize() && header.column.columnDef.size;
                 const canSort = isSortingEnabled && header.column.getCanSort();
                 
                 return (
@@ -92,7 +96,7 @@ export function ResizableDataTable<TData, TValue>({
                     key={header.id}
                     colSpan={header.colSpan}
                     style={{ 
-                      width: canResize ? header.getSize() : header.column.columnDef.size,
+                      width: canResize ? header.getSize() : (header.column.columnDef.size ? header.column.columnDef.size : 'auto'),
                     }}
                     className="relative"
                     onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
@@ -141,7 +145,7 @@ export function ResizableDataTable<TData, TValue>({
                   className={cn(onRowClick && 'cursor-pointer')}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} style={{ width: enableRowResizing ? cell.column.getSize() : undefined }}>
+                    <TableCell key={cell.id} style={{ width: enableRowResizing && cell.column.columnDef.size ? cell.column.getSize() : 'auto' }}>
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
