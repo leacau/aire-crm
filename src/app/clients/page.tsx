@@ -135,9 +135,9 @@ function BulkDeleteDialog({
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleConfirm} variant="destructive" disabled={isDeleting}>
+                    <Button onClick={handleConfirm} variant="destructive" disabled={isDeleting}>
                         {isDeleting ? <Spinner size="small"/> : 'Eliminar'}
-                    </AlertDialogAction>
+                    </Button>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
@@ -588,4 +588,5 @@ export default function ClientsPage() {
     </>
   );
 }
+
 
