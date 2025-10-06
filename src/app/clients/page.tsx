@@ -108,22 +108,15 @@ function BulkDeleteDialog({
     clients,
     isOpen,
     onOpenChange,
-    onConfirm
+    onConfirm,
+    isDeleting
 }: {
     clients: Client[],
     isOpen: boolean,
     onOpenChange: (open: boolean) => void,
-    onConfirm: () => Promise<void>
+    onConfirm: () => void,
+    isDeleting: boolean
 }) {
-    const [isDeleting, setIsDeleting] = useState(false);
-
-    const handleConfirm = async () => {
-        setIsDeleting(true);
-        await onConfirm();
-        setIsDeleting(false);
-        onOpenChange(false);
-    }
-    
     return (
         <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
             <AlertDialogContent>
@@ -135,7 +128,7 @@ function BulkDeleteDialog({
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <Button onClick={handleConfirm} variant="destructive" disabled={isDeleting}>
+                    <Button onClick={onConfirm} variant="destructive" disabled={isDeleting}>
                         {isDeleting ? <Spinner size="small"/> : 'Eliminar'}
                     </Button>
                 </AlertDialogFooter>
@@ -163,6 +156,7 @@ export default function ClientsPage() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [showDuplicates, setShowDuplicates] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
 
   const fetchData = useCallback(async () => {
@@ -313,17 +307,21 @@ export default function ClientsPage() {
   }
 
   const handleBulkDelete = async () => {
-    const selectedClientIds = Object.keys(rowSelection).filter(id => rowSelection[id]);
-    if (selectedClientIds.length === 0 || !userInfo) return;
+    if (clientsToDelete.length === 0 || !userInfo) return;
 
+    setIsBulkDeleting(true);
     try {
-        await bulkDeleteClients(selectedClientIds, userInfo.id, userInfo.name);
-        toast({ title: `${selectedClientIds.length} cliente(s) eliminado(s)` });
+        const idsToDelete = clientsToDelete.map(c => c.id);
+        await bulkDeleteClients(idsToDelete, userInfo.id, userInfo.name);
+        toast({ title: `${idsToDelete.length} cliente(s) eliminado(s)` });
         fetchData();
         setRowSelection({});
     } catch (error) {
         console.error("Error bulk deleting clients:", error);
         toast({ title: "Error al eliminar clientes", variant: "destructive" });
+    } finally {
+        setIsBulkDeleting(false);
+        setClientsToDelete([]);
     }
   }
 
@@ -589,6 +587,7 @@ export default function ClientsPage() {
       isOpen={clientsToDelete.length > 0}
       onOpenChange={(open) => !open && setClientsToDelete([])}
       onConfirm={handleBulkDelete}
+      isDeleting={isBulkDeleting}
     />
     </>
   );
