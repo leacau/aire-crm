@@ -363,14 +363,19 @@ export default function ClientsPage() {
   };
 
    const handleOpenReassignDialog = () => {
-    const selectedClients = displayedClients.filter(client => rowSelection[client.id]);
-    setClientsToReassign(selectedClients);
+    const selectedClientIds = Object.keys(rowSelection).filter(id => rowSelection[id]);
+    const selectedClients = clients.filter(client => selectedClientIds.includes(client.id));
+    if (selectedClients.length > 0) {
+      setClientsToReassign(selectedClients);
+    }
   };
   
   const handleOpenDeleteDialog = () => {
     const selectedClientIds = Object.keys(rowSelection).filter(id => rowSelection[id]);
     const selectedClients = clients.filter(client => selectedClientIds.includes(client.id));
-    setClientsToDelete(selectedClients);
+    if (selectedClients.length > 0) {
+      setClientsToDelete(selectedClients);
+    }
   };
   
   const columns = useMemo<ColumnDef<Client>[]>(() => {
@@ -588,6 +593,3 @@ export default function ClientsPage() {
     </>
   );
 }
-
-
-
