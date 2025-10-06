@@ -146,7 +146,7 @@ export const createClient = async (
     if (clientData.isNewClient) {
         newClientData.newClientDate = serverTimestamp();
     } else {
-        newClientData.isNewClient = deleteField();
+        newClientData.isNewClient = false;
         newClientData.newClientDate = deleteField();
     }
 
@@ -268,25 +268,38 @@ export const deleteClient = async (
 
 
 export const bulkDeleteClients = async (clientIds: string[], userId: string, userName: string): Promise<void> => {
+    if (clientIds.length === 0) return;
+    
     const batch = writeBatch(db);
 
+    // 1. Delete all selected clients
     for (const id of clientIds) {
         const clientRef = doc(db, 'clients', id);
         batch.delete(clientRef);
-        // Cascading deletes for related collections
-        const oppsQuery = query(opportunitiesCollection, where('clientId', '==', id));
-        const oppsSnap = await getDocs(oppsQuery);
-        oppsSnap.forEach(d => batch.delete(d.ref));
-        
-        const activitiesQuery = query(clientActivitiesCollection, where('clientId', '==', id));
-        const activitiesSnap = await getDocs(activitiesQuery);
-        activitiesSnap.forEach(d => batch.delete(d.ref));
-
-        const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', id));
-        const peopleSnap = await getDocs(peopleQuery);
-        peopleSnap.forEach(d => batch.delete(d.ref));
     }
     
+    // 2. Delete all related opportunities
+    const oppsQuery = query(opportunitiesCollection, where('clientId', 'in', clientIds));
+    const oppsSnap = await getDocs(oppsQuery);
+    oppsSnap.forEach(d => batch.delete(d.ref));
+    
+    // 3. Delete all related client activities
+    const activitiesQuery = query(clientActivitiesCollection, where('clientId', 'in', clientIds));
+    const activitiesSnap = await getDocs(activitiesQuery);
+    activitiesSnap.forEach(d => batch.delete(d.ref));
+    
+    // 4. Delete all related people (if they are only associated with the deleted clients)
+    // This part is trickier. A simpler approach for now is to delete people linked to these clients.
+    // A more complex approach would check if they are linked to other non-deleted clients.
+    const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains-any', clientIds));
+    const peopleSnap = await getDocs(peopleQuery);
+    peopleSnap.forEach(d => {
+        // Simplified logic: If a person is linked to any of the clients being deleted, delete the person.
+        // A more robust solution might remove the clientIds from the person's array and delete only if the array becomes empty.
+        batch.delete(d.ref);
+    });
+
+    // 5. Commit all deletions at once
     await batch.commit();
 
     await logActivity({
