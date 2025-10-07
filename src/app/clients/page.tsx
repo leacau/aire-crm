@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import type { Client, Opportunity, User } from '@/lib/types';
-import { createClient, getClients, getAllOpportunities, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients } from '@/lib/firebase-service';
+import { createClient, getClients, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -144,7 +144,6 @@ export default function ClientsPage() {
   const { toast } = useToast();
   const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -163,17 +162,15 @@ export default function ClientsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const promises = [
+      const promises: [Promise<Client[]>, Promise<User[]>?] = [
           getClients(),
-          getAllOpportunities()
       ];
       if (canManage) {
         promises.push(getAllUsers('Asesor'));
       }
-      const [fetchedClients, fetchedOpps, fetchedAdvisors] = await Promise.all(promises);
+      const [fetchedClients, fetchedAdvisors] = await Promise.all(promises);
 
       setClients(fetchedClients);
-      setOpportunities(fetchedOpps);
       if(fetchedAdvisors) {
         setAdvisors(fetchedAdvisors);
       }
@@ -181,7 +178,7 @@ export default function ClientsPage() {
       console.error("Error fetching data:", error);
       toast({
         title: "Error al cargar datos",
-        description: "No se pudieron cargar los datos de clientes y oportunidades.",
+        description: "No se pudieron cargar los datos de clientes.",
         variant: "destructive",
       });
     } finally {
@@ -210,7 +207,7 @@ export default function ClientsPage() {
     let clientsToShow = clients;
 
     if (showOnlyMyClients && userInfo) {
-        clientsToShow = clients.filter(client => client.ownerId === userInfo.id);
+        clientsToShow = clients.filter(client => client && client.ownerId === userInfo.id);
     }
 
     if (showDuplicates) {
@@ -218,6 +215,7 @@ export default function ClientsPage() {
         const allClientNames = clients.map(c => ({ id: c.id, name: c.denominacion, rz: c.razonSocial }));
 
         clients.forEach(client => {
+            if (!client) return;
             const others = allClientNames.filter(c => c.id !== client.id);
             const nameTargets = others.map(o => o.name).filter(Boolean);
             const rzTargets = others.map(o => o.rz).filter(Boolean);
@@ -244,7 +242,7 @@ export default function ClientsPage() {
             }
         });
         
-        clientsToShow = clients.filter(c => potentialDuplicates.has(c.id));
+        clientsToShow = clients.filter(c => c && potentialDuplicates.has(c.id));
     }
 
 
@@ -253,6 +251,8 @@ export default function ClientsPage() {
     }
     const lowercasedFilter = searchTerm.toLowerCase();
     return clientsToShow.filter(client => {
+      // Defensive coding to prevent crash
+      if (!client) return false;
       const denominacion = client.denominacion || '';
       const razonSocial = client.razonSocial || '';
       return (
@@ -364,14 +364,14 @@ export default function ClientsPage() {
 
    const handleOpenReassignDialog = () => {
     const selectedClientIds = Object.keys(rowSelection);
-    const selectedClients = clients.filter(client => selectedClientIds.includes(client.id));
+    const selectedClients = clients.filter(client => client && selectedClientIds.includes(client.id));
     if (selectedClients.length > 0) {
       setClientsToReassign(selectedClients);
     }
   };
   
   const columns = useMemo<ColumnDef<Client>[]>(() => {
-    const canViewDetails = (client: Client) => userInfo && (isBoss || (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
+    const canViewDetails = (client: Client) => userInfo && client && (isBoss || (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
 
     let cols: ColumnDef<Client>[] = [];
 
@@ -432,24 +432,11 @@ export default function ClientsPage() {
       },
       {
         header: 'Negocios Abiertos',
-        cell: ({ row }) => {
-          const client = row.original;
-          const clientOpps = opportunities.filter(
-            (opp) => opp.clientId === client.id && opp.stage !== 'Cerrado - Ganado' && opp.stage !== 'Cerrado - Perdido'
-          );
-          return canViewDetails(client) ? clientOpps.length : '-';
-        },
+        cell: () => '-',
       },
       {
         header: 'Valor Total',
-        cell: ({ row }) => {
-          const client = row.original;
-          const clientOpps = opportunities.filter(
-            (opp) => opp.clientId === client.id && opp.stage !== 'Cerrado - Ganado' && opp.stage !== 'Cerrado - Perdido'
-          );
-          const totalValue = clientOpps.reduce((acc, opp) => acc + opp.value, 0);
-          return canViewDetails(client) ? `$${totalValue.toLocaleString('es-AR')}` : '-';
-        },
+        cell: () => '-',
       },
       {
         id: 'actions',
@@ -486,7 +473,7 @@ export default function ClientsPage() {
     ]);
     
     return cols;
-  }, [userInfo, isBoss, canManage, opportunities]);
+  }, [userInfo, isBoss, canManage]);
 
   if (authLoading || loading) {
     return (
@@ -546,7 +533,7 @@ export default function ClientsPage() {
           rowSelection={rowSelection}
           setRowSelection={setRowSelection}
           onRowClick={(client) => {
-            if (userInfo && (isBoss || client.ownerId === userInfo.id)) {
+            if (userInfo && client && (isBoss || client.ownerId === userInfo.id)) {
               router.push(`/clients/${client.id}`);
             }
           }}
@@ -571,7 +558,7 @@ export default function ClientsPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteClient} variant="destructive">Eliminar</AlertDialogAction>
+            <Button onClick={handleDeleteClient} variant="destructive">Eliminar</Button>
             </AlertDialogFooter>
         </AlertDialogContent>
     </AlertDialog>
