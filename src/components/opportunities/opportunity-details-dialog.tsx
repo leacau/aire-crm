@@ -288,18 +288,14 @@ export function OpportunityDetailsDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
-          {/* Fila 1 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-                <Label htmlFor="title">Título</Label>
-                <Input id="title" name="title" value={editedOpportunity.title || ''} onChange={handleChange}/>
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="details">Descripción</Label>
-                <Textarea id="details" name="details" value={editedOpportunity.details || ''} onChange={handleChange}/>
-            </div>
+          <div className="space-y-2">
+              <Label htmlFor="title">Título</Label>
+              <Input id="title" name="title" value={editedOpportunity.title || ''} onChange={handleChange}/>
           </div>
-          {/* Fila 2 */}
+          <div className="space-y-2">
+              <Label htmlFor="details">Descripción</Label>
+              <Textarea id="details" name="details" value={editedOpportunity.details || ''} onChange={handleChange}/>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
                 <Label htmlFor="value">Valor</Label>
@@ -313,7 +309,6 @@ export function OpportunityDetailsDialog({
                 </Select>
             </div>
           </div>
-          {/* Fila 3 - Periodicidad */}
            <div className="space-y-2">
               <Label>Periodicidad</Label>
               <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -329,7 +324,6 @@ export function OpportunityDetailsDialog({
                   ))}
               </div>
           </div>
-          {/* Fila 4 - Agencia */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
              <div className="flex items-center space-x-2 pt-6">
                 <Checkbox id="facturaPorAgencia" name="facturaPorAgencia" checked={editedOpportunity.facturaPorAgencia} onCheckedChange={(c) => handleCheckboxChange('facturaPorAgencia', c)} />
@@ -350,7 +344,6 @@ export function OpportunityDetailsDialog({
                 </div>
             )}
           </div>
-           {/* Fila 5 - Forma de Pago */}
            <div className="space-y-2">
               <Label>Forma de Pago</Label>
               <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -366,7 +359,6 @@ export function OpportunityDetailsDialog({
                   ))}
               </div>
           </div>
-          {/* Fila 6 - Fechas */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
                 <Label htmlFor="fechaFacturacion">Fecha de Facturación (Día/Mes)</Label>
