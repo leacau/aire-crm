@@ -120,7 +120,7 @@ export type ClientActivity = {
 }
 
 
-export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import';
+export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Admin';
 
 export type User = {
   id: string;

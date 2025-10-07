@@ -2,16 +2,17 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getAllUsers, getClients } from '@/lib/firebase-service';
-import type { Opportunity, User, Client } from '@/lib/types';
+import { getAllOpportunities, getAllUsers, getClients, updateUserProfile } from '@/lib/firebase-service';
+import type { Opportunity, User, Client, UserRole } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
-interface AdvisorStats {
+interface UserStats {
   user: User;
   wonOpps: number;
   totalRevenue: number;
@@ -19,41 +20,57 @@ interface AdvisorStats {
   pipelineValue: number;
 }
 
+const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia'];
+
 export function TeamPerformanceTable() {
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [advisors, setAdvisors] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [allOpps, allAdvisors, allClients] = await Promise.all([
-            getAllOpportunities(),
-            getAllUsers('Asesor'),
-            getClients()
-        ]);
-        setOpportunities(allOpps);
-        setAdvisors(allAdvisors);
-        setClients(allClients);
-      } catch (error) {
-        console.error("Error fetching team data:", error);
-        toast({ title: 'Error al cargar los datos del equipo', variant: 'destructive' });
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [allOpps, allUsers, allClients] = await Promise.all([
+          getAllOpportunities(),
+          getAllUsers(),
+          getClients()
+      ]);
+      setOpportunities(allOpps);
+      setUsers(allUsers);
+      setClients(allClients);
+    } catch (error) {
+      console.error("Error fetching team data:", error);
+      toast({ title: 'Error al cargar los datos del equipo', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
   }, [toast]);
 
-  const advisorStats = useMemo<AdvisorStats[]>(() => {
-    if (advisors.length === 0 || clients.length === 0) return [];
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleRoleChange = async (userId: string, newRole: UserRole) => {
+    const originalUsers = users;
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
     
-    return advisors.map(advisor => {
-        const advisorClientIds = new Set(clients.filter(c => c.ownerId === advisor.id).map(c => c.id));
-        const userOpps = opportunities.filter(opp => advisorClientIds.has(opp.clientId));
+    try {
+        await updateUserProfile(userId, { role: newRole });
+        toast({ title: 'Rol actualizado', description: `El rol del usuario ha sido cambiado a ${newRole}.` });
+    } catch (error) {
+        setUsers(originalUsers); // Revert on error
+        console.error("Error updating user role:", error);
+        toast({ title: 'Error al actualizar el rol', variant: 'destructive' });
+    }
+  }
+
+  const userStats = useMemo<UserStats[]>(() => {
+    return users.map(user => {
+        const isAdvisor = user.role === 'Asesor';
+        const advisorClientIds = isAdvisor ? new Set(clients.filter(c => c.ownerId === user.id).map(c => c.id)) : new Set();
+        const userOpps = isAdvisor ? opportunities.filter(opp => advisorClientIds.has(opp.clientId)) : [];
         
         const wonOpps = userOpps.filter(opp => opp.stage === 'Cerrado - Ganado');
         const totalRevenue = wonOpps.reduce((sum, opp) => sum + (opp.valorCerrado || opp.value), 0);
@@ -62,26 +79,27 @@ export function TeamPerformanceTable() {
         const pipelineValue = activeOpps.reduce((sum, opp) => sum + opp.value, 0);
 
         return {
-            user: advisor,
+            user,
             wonOpps: wonOpps.length,
             totalRevenue,
             activeOpps: activeOpps.length,
             pipelineValue
         };
     }).sort((a,b) => b.totalRevenue - a.totalRevenue); // Sort by revenue
-  }, [advisors, opportunities, clients]);
+  }, [users, opportunities, clients]);
   
-  const columns = useMemo<ColumnDef<AdvisorStats>[]>(() => [
+  const columns = useMemo<ColumnDef<UserStats>[]>(() => [
     {
       accessorKey: 'user',
-      header: 'Asesor',
+      header: 'Usuario',
       cell: ({ row }) => {
         const { user } = row.original;
+        const initials = user.name?.substring(0, 2).toUpperCase() || 'U';
         return (
           <div className="flex items-center gap-3">
             <Avatar className="h-9 w-9">
-              <AvatarImage src={`https://picsum.photos/seed/${user.id}/40/40`} alt={user.name} data-ai-hint="person face" />
-              <AvatarFallback>{user.initials}</AvatarFallback>
+              <AvatarImage src={user.photoURL} alt={user.name} data-ai-hint="person face" />
+              <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
               <span className="font-medium">{user.name}</span>
@@ -93,24 +111,43 @@ export function TeamPerformanceTable() {
       minSize: 250,
     },
     {
+        accessorKey: 'role',
+        header: 'Rol',
+        cell: ({ row }) => {
+            const { user } = row.original;
+            return (
+                <Select value={user.role} onValueChange={(newRole: UserRole) => handleRoleChange(user.id, newRole)}>
+                    <SelectTrigger className="w-[150px]">
+                        <SelectValue placeholder="Seleccionar rol" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {userRoles.map(role => (
+                            <SelectItem key={role} value={role}>{role}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            );
+        }
+    },
+    {
       accessorKey: 'wonOpps',
       header: () => <div className="text-right">Opps Ganadas</div>,
-      cell: ({ row }) => <div className="text-right">{row.original.wonOpps}</div>,
+      cell: ({ row }) => <div className="text-right">{row.original.user.role === 'Asesor' ? row.original.wonOpps : '-'}</div>,
     },
     {
       accessorKey: 'totalRevenue',
       header: () => <div className="text-right">Ingresos</div>,
-      cell: ({ row }) => <div className="text-right font-semibold">${row.original.totalRevenue.toLocaleString('es-AR')}</div>,
+      cell: ({ row }) => <div className="text-right font-semibold">{row.original.user.role === 'Asesor' ? `$${row.original.totalRevenue.toLocaleString('es-AR')}` : '-'}</div>,
     },
     {
       accessorKey: 'activeOpps',
       header: () => <div className="text-right">Opps Activas</div>,
-      cell: ({ row }) => <div className="text-right">{row.original.activeOpps}</div>,
+      cell: ({ row }) => <div className="text-right">{row.original.user.role === 'Asesor' ? row.original.activeOpps : '-'}</div>,
     },
     {
       accessorKey: 'pipelineValue',
       header: () => <div className="text-right">Valor Pipeline</div>,
-      cell: ({ row }) => <div className="text-right">${row.original.pipelineValue.toLocaleString('es-AR')}</div>,
+      cell: ({ row }) => <div className="text-right">{row.original.user.role === 'Asesor' ? `$${row.original.pipelineValue.toLocaleString('es-AR')}` : '-'}</div>,
     }
   ], []);
 
@@ -125,8 +162,8 @@ export function TeamPerformanceTable() {
   return (
     <ResizableDataTable
       columns={columns}
-      data={advisorStats}
-      emptyStateMessage="No se encontraron asesores."
+      data={userStats}
+      emptyStateMessage="No se encontraron usuarios."
     />
   );
 }
