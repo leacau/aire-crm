@@ -18,11 +18,12 @@ import {
   Row,
 } from '@tanstack/react-table';
 import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  DoubleArrowLeftIcon,
-  DoubleArrowRightIcon,
-} from '@radix-ui/react-icons';
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from 'lucide-react';
 
 import {
   Table,
@@ -35,7 +36,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { ArrowUpDown } from 'lucide-react';
 
 interface DataTablePaginationProps<TData> {
   table: ReturnType<typeof useReactTable<TData>>;
@@ -83,7 +83,7 @@ function DataTablePagination<TData>({
             disabled={!table.getCanPreviousPage()}
           >
             <span className="sr-only">Ir a la primera página</span>
-            <DoubleArrowLeftIcon className="h-4 w-4" />
+            <ChevronsLeft className="h-4 w-4" />
           </Button>
           <Button
             variant="outline"
@@ -92,7 +92,7 @@ function DataTablePagination<TData>({
             disabled={!table.getCanPreviousPage()}
           >
             <span className="sr-only">Ir a la página anterior</span>
-            <ChevronLeftIcon className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button
             variant="outline"
@@ -101,7 +101,7 @@ function DataTablePagination<TData>({
             disabled={!table.getCanNextPage()}
           >
             <span className="sr-only">Ir a la siguiente página</span>
-            <ChevronRightIcon className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4" />
           </Button>
           <Button
             variant="outline"
@@ -110,7 +110,7 @@ function DataTablePagination<TData>({
             disabled={!table.getCanNextPage()}
           >
             <span className="sr-only">Ir a la última página</span>
-            <DoubleArrowRightIcon className="h-4 w-4" />
+            <ChevronsRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
