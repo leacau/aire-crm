@@ -164,12 +164,11 @@ export default function ClientsPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      const promises: [Promise<Client[]>, Promise<User[]>?, Promise<Opportunity[]>?] = [getClients()];
+      const promises: [Promise<Client[]>, Promise<User[]>, Promise<Opportunity[]>?] = [getClients(), getAllUsers('Asesor')];
       
       const shouldFetchAllData = userInfo.role === 'Jefe' || userInfo.role === 'Gerencia' || userInfo.role === 'Administracion';
 
       if (shouldFetchAllData) {
-        promises.push(getAllUsers('Asesor'));
         promises.push(getAllOpportunities());
       }
       
@@ -318,7 +317,7 @@ export default function ClientsPage() {
   
   const handleBulkDelete = async () => {
     const idsToDelete = Object.keys(rowSelection);
-    console.log("IDs a eliminar:", idsToDelete);
+    console.log("IDs to be deleted:", idsToDelete);
     if (idsToDelete.length === 0 || !userInfo) return;
 
     setIsBulkDeleting(true);
@@ -446,7 +445,10 @@ export default function ClientsPage() {
         enableSorting: true,
       },
       {
+        id: 'openOpps',
+        accessorFn: (row) => clientOpportunityData[row.id]?.openOpps || 0,
         header: 'Negocios Abiertos',
+        enableSorting: true,
         cell: ({ row }) => {
           if (!canSeeOppData) return '-';
           const data = clientOpportunityData[row.original.id];
@@ -454,7 +456,10 @@ export default function ClientsPage() {
         },
       },
       {
+        id: 'totalValue',
+        accessorFn: (row) => clientOpportunityData[row.id]?.totalValue || 0,
         header: 'Valor Total',
+        enableSorting: true,
         cell: ({ row }) => {
            if (!canSeeOppData) return '-';
           const data = clientOpportunityData[row.original.id];
