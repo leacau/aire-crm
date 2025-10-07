@@ -185,9 +185,12 @@ export const updateClient = async (
 
     const updateData: {[key: string]: any} = { ...data };
     
-    if (data.agencyId === 'none' || data.agencyId === undefined) {
-        updateData.agencyId = deleteField();
-    }
+    // Clean up undefined fields before sending to Firestore
+    Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined) {
+            delete updateData[key];
+        }
+    });
 
     // Handle deactivation logic
     if (data.isDeactivated === true && originalData.isDeactivated === false) {
@@ -281,21 +284,36 @@ export const bulkDeleteClients = async (clientIds: string[], userId: string, use
     const clientRef = doc(db, 'clients', clientId);
     batch.delete(clientRef);
 
+    console.log(`Processing client ID: ${clientId}`);
+
+    // Delete associated opportunities
     const oppsQuery = query(opportunitiesCollection, where('clientId', '==', clientId));
     const oppsSnap = await getDocs(oppsQuery);
-    oppsSnap.forEach(doc => batch.delete(doc.ref));
+    oppsSnap.forEach(doc => {
+      console.log(`  Deleting opportunity: ${doc.id}`);
+      batch.delete(doc.ref);
+    });
 
+    // Delete associated activities
     const activitiesQuery = query(clientActivitiesCollection, where('clientId', '==', clientId));
     const activitiesSnap = await getDocs(activitiesQuery);
-    activitiesSnap.forEach(doc => batch.delete(doc.ref));
+    activitiesSnap.forEach(doc => {
+      console.log(`  Deleting activity: ${doc.id}`);
+      batch.delete(doc.ref);
+    });
 
+    // Delete associated people
     const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', clientId));
     const peopleSnap = await getDocs(peopleQuery);
-    peopleSnap.forEach(doc => batch.delete(doc.ref));
+    peopleSnap.forEach(doc => {
+      console.log(`  Deleting person: ${doc.id}`);
+      batch.delete(doc.ref);
+    });
   }
 
   await batch.commit();
   console.log(`[bulkDeleteClients] Batch commit successful for ${clientIds.length} clients.`);
+
 
   await logActivity({
     userId,
@@ -487,8 +505,13 @@ export const createOpportunity = async (
     userName: string,
     ownerName: string
 ): Promise<string> => {
+    const dataToSave: any = { ...opportunityData };
+    if (dataToSave.agencyId === undefined) {
+        delete dataToSave.agencyId;
+    }
+
     const docRef = await addDoc(opportunitiesCollection, {
-        ...opportunityData,
+        ...dataToSave,
         createdAt: serverTimestamp()
     });
 
@@ -530,7 +553,7 @@ export const updateOpportunity = async (
         updateData.bonificacionFechaAutorizacion = deleteField();
     }
     
-    if (data.agencyId === '') {
+    if (data.agencyId === '' || data.agencyId === undefined) {
         updateData.agencyId = deleteField();
     }
 
