@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -149,10 +150,9 @@ export default function ClientsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const [clientsToReassign, setClientsToReassign] = useState<Client[]>([]);
   const [showOnlyMyClients, setShowOnlyMyClients] = useState(!isBoss);
-  const canManage = isBoss || userInfo?.role === 'Administracion';
+  const canManage = isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Gerencia';
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [showDuplicates, setShowDuplicates] = useState(false);
@@ -233,7 +233,7 @@ export default function ClientsPage() {
 
 
   const displayedClients = useMemo(() => {
-    let clientsToShow = clients.map(client => client ? {...client} : null).filter(Boolean) as Client[];
+    let clientsToShow = clients;
 
     if (showOnlyMyClients && userInfo) {
         clientsToShow = clientsToShow.filter(client => client.ownerId === userInfo.id);
@@ -279,7 +279,6 @@ export default function ClientsPage() {
     }
     const lowercasedFilter = searchTerm.toLowerCase();
     return clientsToShow.filter(client => {
-      // Defensive coding to prevent crash
       const denominacion = client.denominacion || '';
       const razonSocial = client.razonSocial || '';
       return (
@@ -317,23 +316,6 @@ export default function ClientsPage() {
     }
   };
   
-  const handleDeleteClient = async () => {
-    if (!clientToDelete || !userInfo) return;
-    try {
-      await deleteClient(clientToDelete.id, userInfo.id, userInfo.name);
-      toast({
-        title: "Cliente Eliminado",
-        description: `${clientToDelete.denominacion} ha sido eliminado.`,
-      });
-      fetchData(); // Refresh the list
-    } catch (error) {
-      console.error("Error deleting client:", error);
-      toast({ title: "Error al eliminar el cliente", variant: "destructive" });
-    } finally {
-      setClientToDelete(null);
-    }
-  }
-
   const handleBulkDelete = async () => {
     const idsToDelete = Object.keys(rowSelection);
     console.log("IDs a eliminar:", idsToDelete);
@@ -355,9 +337,7 @@ export default function ClientsPage() {
   }
 
   const handleReassignClient = async (newOwnerId: string) => {
-    const clientsToUpdate = clientsToReassign.length > 0
-      ? clientsToReassign
-      : clients.filter(c => Object.keys(rowSelection).includes(c.id));
+    const clientsToUpdate = clientsToReassign;
 
     if (clientsToUpdate.length === 0 || !userInfo || !canManage) return;
     
@@ -397,7 +377,7 @@ export default function ClientsPage() {
 
    const handleOpenReassignDialog = () => {
     const selectedClientIds = Object.keys(rowSelection);
-    const selectedClients = clients.filter(client => client && selectedClientIds.includes(client.id));
+    const selectedClients = clients.filter(client => selectedClientIds.includes(client.id));
     if (selectedClients.length > 0) {
       setClientsToReassign(selectedClients);
     }
@@ -415,7 +395,7 @@ export default function ClientsPage() {
             id: 'select',
             header: ({ table }) => (
                 <Checkbox
-                    id="select-all-clients"
+                    id="select-all-clients-checkbox"
                     checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
                     onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
                     aria-label="Seleccionar todo"
@@ -503,7 +483,7 @@ export default function ClientsPage() {
                   </DropdownMenuItem>
                 )}
                 {isBoss && (
-                  <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setClientToDelete(client); }}>
+                  <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setIsBulkDeleteDialogOpen(true)}}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Eliminar
                   </DropdownMenuItem>
@@ -591,20 +571,6 @@ export default function ClientsPage() {
         onValidateCuit={validateCuit}
       />
     </div>
-     <AlertDialog open={!!clientToDelete} onOpenChange={(open) => !open && setClientToDelete(null)}>
-        <AlertDialogContent>
-            <AlertDialogHeader>
-            <AlertDialogTitle>¿Estás realmente seguro?</AlertDialogTitle>
-            <AlertDialogDescription>
-                Esta acción es irreversible. Se eliminará permanentemente el cliente <strong>{clientToDelete?.denominacion}</strong> y todas sus oportunidades y contactos asociados.
-            </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <Button onClick={handleDeleteClient} variant="destructive">Eliminar</Button>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-    </AlertDialog>
     <ReassignClientDialog 
       clients={clientsToReassign}
       advisors={advisors}
