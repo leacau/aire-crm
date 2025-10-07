@@ -164,7 +164,8 @@ export default function ClientsPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      const promises: [Promise<Client[]>, Promise<User[]>, Promise<Opportunity[]>?] = [getClients(), getAllUsers('Asesor')];
+      const allowedOwnerRoles = ['Asesor', 'Jefe', 'Gerencia', 'Administracion'];
+      const promises: [Promise<Client[]>, Promise<User[]>, Promise<Opportunity[]>?] = [getClients(), getAllUsers()];
       
       const shouldFetchAllData = userInfo.role === 'Jefe' || userInfo.role === 'Gerencia' || userInfo.role === 'Administracion';
 
@@ -172,11 +173,11 @@ export default function ClientsPage() {
         promises.push(getAllOpportunities());
       }
       
-      const [fetchedClients, fetchedAdvisors, fetchedOpportunities] = await Promise.all(promises);
+      const [fetchedClients, fetchedUsers, fetchedOpportunities] = await Promise.all(promises);
 
       setClients(fetchedClients);
-      if(fetchedAdvisors) {
-        setAdvisors(fetchedAdvisors);
+      if(fetchedUsers) {
+        setAdvisors(fetchedUsers.filter(u => allowedOwnerRoles.includes(u.role)));
       }
       if (fetchedOpportunities) {
         setOpportunities(fetchedOpportunities);
@@ -317,7 +318,6 @@ export default function ClientsPage() {
   
   const handleBulkDelete = async () => {
     const idsToDelete = Object.keys(rowSelection);
-    console.log("IDs to be deleted:", idsToDelete);
     if (idsToDelete.length === 0 || !userInfo) return;
 
     setIsBulkDeleting(true);
@@ -383,7 +383,7 @@ export default function ClientsPage() {
   };
   
   const columns = useMemo<ColumnDef<Client>[]>(() => {
-    const canViewDetails = (client: Client) => userInfo && client && (isBoss || (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
+    const canViewDetails = (client: Client) => userInfo && client && (isBoss || client.ownerId === userInfo.id);
     const canSeeOppData = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
 
 
@@ -446,7 +446,7 @@ export default function ClientsPage() {
       },
       {
         id: 'openOpps',
-        accessorFn: (row) => clientOpportunityData[row.id]?.openOpps || 0,
+        accessorKey: 'openOpps',
         header: 'Negocios Abiertos',
         enableSorting: true,
         cell: ({ row }) => {
@@ -457,7 +457,7 @@ export default function ClientsPage() {
       },
       {
         id: 'totalValue',
-        accessorFn: (row) => clientOpportunityData[row.id]?.totalValue || 0,
+        accessorKey: 'totalValue',
         header: 'Valor Total',
         enableSorting: true,
         cell: ({ row }) => {
