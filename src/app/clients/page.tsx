@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import type { Client, Opportunity, User } from '@/lib/types';
-import { createClient, getClients, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients } from '@/lib/firebase-service';
+import { createClient, getClients, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients, getAllOpportunities } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -144,6 +144,7 @@ export default function ClientsPage() {
   const { toast } = useToast();
   const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -160,19 +161,26 @@ export default function ClientsPage() {
 
 
   const fetchData = useCallback(async () => {
+    if (!userInfo) return;
     setLoading(true);
     try {
-      const promises: [Promise<Client[]>, Promise<User[]>?] = [
-          getClients(),
-      ];
-      if (canManage) {
+      const promises: [Promise<Client[]>, Promise<User[]>?, Promise<Opportunity[]>?] = [getClients()];
+      
+      const shouldFetchAllData = userInfo.role === 'Jefe' || userInfo.role === 'Gerencia' || userInfo.role === 'Administracion';
+
+      if (shouldFetchAllData) {
         promises.push(getAllUsers('Asesor'));
+        promises.push(getAllOpportunities());
       }
-      const [fetchedClients, fetchedAdvisors] = await Promise.all(promises);
+      
+      const [fetchedClients, fetchedAdvisors, fetchedOpportunities] = await Promise.all(promises);
 
       setClients(fetchedClients);
       if(fetchedAdvisors) {
         setAdvisors(fetchedAdvisors);
+      }
+      if (fetchedOpportunities) {
+        setOpportunities(fetchedOpportunities);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -184,13 +192,13 @@ export default function ClientsPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast, canManage]);
+  }, [toast, userInfo]);
 
   useEffect(() => {
-    if (!authLoading) {
+    if (!authLoading && userInfo) {
       fetchData();
     }
-  }, [authLoading, fetchData]);
+  }, [authLoading, userInfo, fetchData]);
   
   useEffect(() => {
     if (userInfo) {
@@ -201,21 +209,41 @@ export default function ClientsPage() {
   useEffect(() => {
     setRowSelection({});
   }, [searchTerm, showOnlyMyClients, showDuplicates]);
+  
+   const clientOpportunityData = useMemo(() => {
+    if (opportunities.length === 0) return {};
+
+    const data: Record<string, { openOpps: number; totalValue: number }> = {};
+    
+    clients.forEach(client => {
+      data[client.id] = { openOpps: 0, totalValue: 0 };
+    });
+
+    opportunities.forEach(opp => {
+      if (data[opp.clientId]) {
+        if (opp.stage !== 'Cerrado - Ganado' && opp.stage !== 'Cerrado - Perdido') {
+            data[opp.clientId].openOpps += 1;
+            data[opp.clientId].totalValue += opp.value;
+        }
+      }
+    });
+
+    return data;
+  }, [opportunities, clients]);
 
 
   const displayedClients = useMemo(() => {
-    let clientsToShow = clients;
+    let clientsToShow = clients.map(client => client ? {...client} : null).filter(Boolean) as Client[];
 
     if (showOnlyMyClients && userInfo) {
-        clientsToShow = clients.filter(client => client && client.ownerId === userInfo.id);
+        clientsToShow = clientsToShow.filter(client => client.ownerId === userInfo.id);
     }
 
     if (showDuplicates) {
         const potentialDuplicates = new Set<string>();
-        const allClientNames = clients.map(c => ({ id: c.id, name: c.denominacion, rz: c.razonSocial }));
+        const allClientNames = clientsToShow.map(c => ({ id: c.id, name: c.denominacion, rz: c.razonSocial }));
 
-        clients.forEach(client => {
-            if (!client) return;
+        clientsToShow.forEach(client => {
             const others = allClientNames.filter(c => c.id !== client.id);
             const nameTargets = others.map(o => o.name).filter(Boolean);
             const rzTargets = others.map(o => o.rz).filter(Boolean);
@@ -242,7 +270,7 @@ export default function ClientsPage() {
             }
         });
         
-        clientsToShow = clients.filter(c => c && potentialDuplicates.has(c.id));
+        clientsToShow = clientsToShow.filter(c => potentialDuplicates.has(c.id));
     }
 
 
@@ -252,7 +280,6 @@ export default function ClientsPage() {
     const lowercasedFilter = searchTerm.toLowerCase();
     return clientsToShow.filter(client => {
       // Defensive coding to prevent crash
-      if (!client) return false;
       const denominacion = client.denominacion || '';
       const razonSocial = client.razonSocial || '';
       return (
@@ -309,7 +336,7 @@ export default function ClientsPage() {
 
   const handleBulkDelete = async () => {
     const idsToDelete = Object.keys(rowSelection);
-    console.log('IDs to delete:', idsToDelete);
+    console.log("IDs a eliminar:", idsToDelete);
     if (idsToDelete.length === 0 || !userInfo) return;
 
     setIsBulkDeleting(true);
@@ -328,7 +355,11 @@ export default function ClientsPage() {
   }
 
   const handleReassignClient = async (newOwnerId: string) => {
-    if (clientsToReassign.length === 0 || !userInfo || !canManage) return;
+    const clientsToUpdate = clientsToReassign.length > 0
+      ? clientsToReassign
+      : clients.filter(c => Object.keys(rowSelection).includes(c.id));
+
+    if (clientsToUpdate.length === 0 || !userInfo || !canManage) return;
     
     const newOwner = advisors.find(a => a.id === newOwnerId);
     if (!newOwner) {
@@ -336,7 +367,7 @@ export default function ClientsPage() {
       return;
     }
     
-    const updates = clientsToReassign.map(client => ({
+    const updates = clientsToUpdate.map(client => ({
         id: client.id,
         denominacion: client.denominacion,
         data: { ownerId: newOwner.id, ownerName: newOwner.name }
@@ -344,14 +375,16 @@ export default function ClientsPage() {
 
     try {
       await bulkUpdateClients(updates, userInfo.id, userInfo.name);
-      toast({ title: "Clientes Reasignados", description: `${clientsToReassign.length} cliente(s) han sido asignado(s) a ${newOwner.name}.`});
+      toast({ title: "Clientes Reasignados", description: `${clientsToUpdate.length} cliente(s) han sido asignado(s) a ${newOwner.name}.`});
       fetchData();
       setRowSelection({});
+      setClientsToReassign([]);
     } catch (error) {
       console.error("Error reassigning clients:", error);
       toast({ title: "Error al reasignar clientes", variant: "destructive" });
     }
   };
+
 
   const validateCuit = async (cuit: string, clientId?: string): Promise<string | false> => {
     if (!cuit) return false;
@@ -372,6 +405,8 @@ export default function ClientsPage() {
   
   const columns = useMemo<ColumnDef<Client>[]>(() => {
     const canViewDetails = (client: Client) => userInfo && client && (isBoss || (userInfo.role === 'Asesor' && client.ownerId === userInfo.id));
+    const canSeeOppData = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
+
 
     let cols: ColumnDef<Client>[] = [];
 
@@ -432,11 +467,19 @@ export default function ClientsPage() {
       },
       {
         header: 'Negocios Abiertos',
-        cell: () => '-',
+        cell: ({ row }) => {
+          if (!canSeeOppData) return '-';
+          const data = clientOpportunityData[row.original.id];
+          return data ? data.openOpps : 0;
+        },
       },
       {
         header: 'Valor Total',
-        cell: () => '-',
+        cell: ({ row }) => {
+           if (!canSeeOppData) return '-';
+          const data = clientOpportunityData[row.original.id];
+          return data ? `$${data.totalValue.toLocaleString('es-AR')}` : '$0';
+        },
       },
       {
         id: 'actions',
@@ -473,7 +516,7 @@ export default function ClientsPage() {
     ]);
     
     return cols;
-  }, [userInfo, isBoss, canManage]);
+  }, [userInfo, isBoss, canManage, clientOpportunityData]);
 
   if (authLoading || loading) {
     return (
