@@ -118,10 +118,12 @@ export async function uploadFileToDrive(accessToken: string, file: File, opportu
 }
 
 export async function deleteFileFromDrive(accessToken: string, fileUrl: string) {
-    const fileId = fileUrl.split('/d/')[1];
-    if (!fileId) {
+    const fileIdMatch = fileUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (!fileIdMatch || !fileIdMatch[1]) {
         throw new Error('Invalid Google Drive file URL for deletion.');
     }
+    const fileId = fileIdMatch[1];
+
 
     const response = await fetch(`${DRIVE_API_URL}/files/${fileId}`, {
         method: 'DELETE',

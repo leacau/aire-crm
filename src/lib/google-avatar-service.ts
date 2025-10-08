@@ -67,31 +67,61 @@ export async function uploadAvatarToDrive(accessToken: string, file: File, userI
     const fileExtension = file.name.split('.').pop();
     const fileName = `${userId}.${fileExtension}`;
 
-    const fileMetadata = {
-        name: fileName,
-        parents: [configFolderId],
-    };
-
-    const formData = new FormData();
-    formData.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
-    formData.append('file', file);
-
-    const response = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=multipart&fields=id`, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${accessToken}`,
-        },
-        body: formData,
+    // Search for existing file for this user
+    const searchQuery = `'${configFolderId}' in parents and name='${fileName}' and trashed=false`;
+    const searchResponse = await fetch(`${DRIVE_API_URL}/files?q=${encodeURIComponent(searchQuery)}&fields=files(id)`, {
+         headers: { 'Authorization': `Bearer ${accessToken}` }
     });
+    const searchData = await searchResponse.json();
     
-    if (!response.ok) {
-         const error = await response.json();
-         console.error('Google Drive API Error (Upload):', error);
-         throw new Error('Failed to upload file to Google Drive: ' + (error.error?.message || 'Unknown error'));
+    let fileId: string;
+
+    if (searchData.files && searchData.files.length > 0) {
+        // File exists, update it
+        fileId = searchData.files[0].id;
+        const updateResponse = await fetch(`${DRIVE_UPLOAD_URL}/${fileId}?uploadType=media`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': file.type,
+            },
+            body: file,
+        });
+
+        if (!updateResponse.ok) {
+            const error = await updateResponse.json();
+            console.error('Google Drive API Error (Update):', error);
+            throw new Error('Failed to update file in Google Drive: ' + (error.error?.message || 'Unknown error'));
+        }
+        const updatedFileData = await updateResponse.json();
+        fileId = updatedFileData.id;
+
+    } else {
+        // File does not exist, create it
+        const fileMetadata = {
+            name: fileName,
+            parents: [configFolderId],
+        };
+
+        const formData = new FormData();
+        formData.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
+        formData.append('file', file);
+
+        const createResponse = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=multipart&fields=id`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+            body: formData,
+        });
+        
+        if (!createResponse.ok) {
+             const error = await createResponse.json();
+             console.error('Google Drive API Error (Upload):', error);
+             throw new Error('Failed to upload file to Google Drive: ' + (error.error?.message || 'Unknown error'));
+        }
+        const createdFileData = await createResponse.json();
+        fileId = createdFileData.id;
     }
 
-    const uploadedFileData = await response.json();
-    const fileId = uploadedFileData.id;
 
     // Make the file publicly readable
     await fetch(`${DRIVE_API_URL}/files/${fileId}/permissions`, {
@@ -106,6 +136,6 @@ export async function uploadAvatarToDrive(accessToken: string, file: File, userI
         })
     });
     
-    // Return the web view link for direct embedding
-    return `https://lh3.googleusercontent.com/d/${fileId}`;
+    // Bust cache by adding a timestamp
+    return `https://lh3.googleusercontent.com/d/${fileId}?t=${new Date().getTime()}`;
 }

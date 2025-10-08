@@ -211,14 +211,12 @@ export function OpportunityDetailsDialog({
     }
 
     setIsUploading(true);
-    const token = await getGoogleAccessToken();
-    if (!token) {
-        toast({ title: "Error de Autenticación", description: "No se pudo obtener el token de acceso de Google. Intenta iniciar sesión de nuevo.", variant: "destructive" });
-        setIsUploading(false);
-        return;
-    }
-    
     try {
+        const token = await getGoogleAccessToken();
+        if (!token) {
+            throw new Error("No se pudo obtener el token de acceso de Google. Intenta iniciar sesión de nuevo.");
+        }
+    
         const file = acceptedFiles[0];
         const fileUrl = await uploadFileToDrive(token, file, oppId);
         
@@ -241,18 +239,17 @@ export function OpportunityDetailsDialog({
   const { getRootProps, getInputProps, isDragActive, isFocused } = useDropzone({
     onDrop,
     multiple: false,
-    disabled: !isEditing || !editedOpportunity.id
+    disabled: !isEditing
   });
 
   const handleFileDelete = async (fileToDelete: ProposalFile) => {
     if (!confirm(`¿Estás seguro de que quieres eliminar el archivo "${fileToDelete.name}"?`)) return;
 
-    const token = await getGoogleAccessToken();
-    if (!token) {
-        toast({ title: "Error de Autenticación", variant: "destructive" });
-        return;
-    }
     try {
+      const token = await getGoogleAccessToken();
+      if (!token) {
+          throw new Error("No se pudo obtener el token de acceso de Google.");
+      }
       await deleteFileFromDrive(token, fileToDelete.url);
       setEditedOpportunity(prev => ({
           ...prev,
@@ -381,7 +378,7 @@ export function OpportunityDetailsDialog({
                         <span>Subiendo archivo...</span>
                     </div>
                 ) : !isEditing ? (
-                     <p className="text-center text-sm text-muted-foreground">Debes guardar la oportunidad primero para poder subir archivos.</p>
+                     <p className="text-center text-sm text-muted-foreground">Guarda la oportunidad primero para poder subir archivos.</p>
                 ) : (
                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <Paperclip className="h-6 w-6" />

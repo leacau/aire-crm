@@ -116,7 +116,7 @@ export default function SettingsPage() {
                     <input {...getInputProps()} disabled={isUploading} />
                     {user?.photoURL ? (
                         <>
-                           <Image src={user.photoURL} alt="Foto de perfil" layout="fill" objectFit="cover" className="rounded-lg" />
+                           <Image src={user.photoURL} alt="Foto de perfil" layout="fill" objectFit="cover" className="rounded-lg" unoptimized/>
                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity rounded-lg">
                                 <UploadCloud className="h-8 w-8 text-white" />
                                 <p className="text-white text-sm mt-2 text-center">Cambiar foto</p>
