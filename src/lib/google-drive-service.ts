@@ -103,13 +103,13 @@ export async function uploadFileToDrive(accessToken: string, file: File, opportu
     const uploadResponse = await fetch(locationUrl, {
         method: 'PUT',
         headers: {
-            'Content-Length': file.size.toString(),
+            'Content-Range': `bytes 0-${file.size - 1}/${file.size}`,
         },
         body: file,
     });
     
     if (!uploadResponse.ok) {
-        const error = await uploadResponse.json();
+        const error = await uploadResponse.json().catch(() => ({})); // Catch if response is not JSON
         console.error('Google Drive API Error (Upload):', error);
         throw new Error('Failed to upload file to Google Drive: ' + (error.error?.message || 'Unknown error'));
     }

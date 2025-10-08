@@ -74,15 +74,18 @@ export async function uploadAvatarToDrive(accessToken: string, file: File, userI
     });
     const searchData = await searchResponse.json();
     
-    let fileId: string;
     let resumableUrl: string;
 
     if (searchData.files && searchData.files.length > 0) {
         // File exists, initiate resumable update
-        fileId = searchData.files[0].id;
+        const fileId = searchData.files[0].id;
         const initResponse = await fetch(`${DRIVE_UPLOAD_URL}/${fileId}?uploadType=resumable`, {
             method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${accessToken}` },
+            headers: { 
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json; charset=UTF-8',
+            },
+            body: JSON.stringify({}), // Empty body for update initiation
         });
         if (!initResponse.ok) throw new Error('Failed to initiate avatar update.');
         resumableUrl = initResponse.headers.get('Location')!;
@@ -108,18 +111,20 @@ export async function uploadAvatarToDrive(accessToken: string, file: File, userI
     // Upload the file content to the resumable URL
     const uploadResponse = await fetch(resumableUrl, {
         method: 'PUT',
-        headers: { 'Content-Length': file.size.toString() },
+        headers: { 
+            'Content-Range': `bytes 0-${file.size - 1}/${file.size}`,
+        },
         body: file,
     });
 
     if (!uploadResponse.ok) {
-        const error = await uploadResponse.json();
+        const error = await uploadResponse.json().catch(() => ({})); // Catch if response is not JSON
         console.error('Google Drive API Error (Avatar Upload):', error);
         throw new Error('Failed to upload avatar to Google Drive: ' + (error.error?.message || 'Unknown error'));
     }
 
     const uploadedFileData = await uploadResponse.json();
-    fileId = uploadedFileData.id;
+    const fileId = uploadedFileData.id;
 
 
     // Make the file publicly readable
