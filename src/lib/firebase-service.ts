@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole } from './types';
 import { logActivity } from './activity-logger';
 
 const usersCollection = collection(db, 'users');
@@ -85,7 +85,7 @@ export const getAllUsers = async (role?: User['role']): Promise<User[]> => {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
 };
 
-export const getUsersByRole = async (role: User['role']): Promise<User[]> => {
+export const getUsersByRole = async (role: UserRole): Promise<User[]> => {
     const q = query(usersCollection, where("role", "==", role));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
@@ -147,7 +147,7 @@ export const createClient = async (
         newClientData.newClientDate = serverTimestamp();
     } else {
         newClientData.isNewClient = false;
-        newClientData.newClientDate = deleteField();
+        // Do not add newClientDate if it's not a new client
     }
     
     if (newClientData.agencyId === undefined) {
