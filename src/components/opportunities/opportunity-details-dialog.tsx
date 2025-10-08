@@ -180,6 +180,7 @@ export function OpportunityDetailsDialog({
     if (isEditing && opportunity) {
       const changes = Object.keys(editedOpportunity).reduce((acc, key) => {
         const oppKey = key as keyof Opportunity;
+        if (oppKey === 'proposalFiles') return acc; // Handle files separately
         // @ts-ignore
         if (JSON.stringify(editedOpportunity[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
           // @ts-ignore
@@ -187,6 +188,11 @@ export function OpportunityDetailsDialog({
         }
         return acc;
       }, {} as Partial<Opportunity>);
+
+      // Explicitly check for changes in proposalFiles array
+      if (JSON.stringify(editedOpportunity.proposalFiles) !== JSON.stringify(opportunity.proposalFiles)) {
+          changes.proposalFiles = editedOpportunity.proposalFiles;
+      }
 
       if (Object.keys(changes).length > 0) {
           onUpdate(changes);
@@ -204,11 +210,16 @@ export function OpportunityDetailsDialog({
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles.length) return;
     
-    const oppId = editedOpportunity.id;
-    if (!oppId || !client) {
-      toast({ title: 'Error de Oportunidad', description: 'Guarda la oportunidad antes de subir archivos.', variant: 'destructive' });
+    if (!isEditing || !editedOpportunity.id) {
+      toast({ title: 'Guarda la oportunidad primero', description: 'Debes guardar la oportunidad antes de poder subir archivos.', variant: 'destructive' });
       return;
     }
+
+    if (!client) {
+      toast({ title: 'Error de Cliente', description: 'No se pudo identificar al cliente de la oportunidad.', variant: 'destructive' });
+      return;
+    }
+
 
     setIsUploading(true);
     try {
@@ -218,7 +229,7 @@ export function OpportunityDetailsDialog({
         }
     
         const file = acceptedFiles[0];
-        const fileUrl = await uploadFileToDrive(token, file, oppId);
+        const fileUrl = await uploadFileToDrive(token, file, editedOpportunity.id);
         
         const newFile: ProposalFile = { name: file.name, url: fileUrl };
 
@@ -234,7 +245,7 @@ export function OpportunityDetailsDialog({
     } finally {
         setIsUploading(false);
     }
-  }, [editedOpportunity.id, getGoogleAccessToken, toast, client]);
+  }, [isEditing, editedOpportunity.id, getGoogleAccessToken, toast, client]);
 
   const { getRootProps, getInputProps, isDragActive, isFocused } = useDropzone({
     onDrop,
