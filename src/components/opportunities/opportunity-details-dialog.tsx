@@ -207,26 +207,26 @@ export function OpportunityDetailsDialog({
     
     const clientId = editedOpportunity.clientId;
     if (!clientId) {
-      toast({ title: 'Error', description: 'No se pudo encontrar el cliente para esta oportunidad.', variant: 'destructive' });
+      toast({ title: 'Error de Cliente', description: 'No se pudo identificar el cliente para esta oportunidad.', variant: 'destructive' });
       return;
     }
 
     setIsUploading(true);
     const token = await getGoogleAccessToken();
     if (!token) {
-        toast({ title: "Error de autenticación", description: "No se pudo obtener el token de acceso de Google. Intenta iniciar sesión de nuevo.", variant: "destructive" });
+        toast({ title: "Error de Autenticación", description: "No se pudo obtener el token de acceso de Google. Intenta iniciar sesión de nuevo.", variant: "destructive" });
         setIsUploading(false);
         return;
     }
     
     try {
         const clientData = await getClient(clientId);
-        if (!clientData) throw new Error('Client data not found');
+        if (!clientData) throw new Error('No se encontraron los datos del cliente.');
 
         const file = acceptedFiles[0];
         const folderStructure = {
             clientName: clientData.denominacion,
-            opportunityName: editedOpportunity.title || 'Nueva Oportunidad'
+            opportunityName: editedOpportunity.title || 'Oportunidad Sin Título'
         };
 
         const fileUrl = await uploadFileToDrive(token, file, folderStructure);
@@ -238,9 +238,10 @@ export function OpportunityDetailsDialog({
             proposalFiles: [...(prev.proposalFiles || []), newFile]
         }));
 
-        toast({ title: "Archivo subido", description: `${file.name} se ha adjuntado correctamente.` });
+        toast({ title: "Archivo Subido", description: `${file.name} se ha adjuntado correctamente.` });
     } catch (error: any) {
-        toast({ title: "Error al subir el archivo", description: error.message, variant: "destructive" });
+        console.error("File upload error:", error);
+        toast({ title: "Error al Subir el Archivo", description: error.message, variant: "destructive" });
     } finally {
         setIsUploading(false);
     }
@@ -257,7 +258,7 @@ export function OpportunityDetailsDialog({
 
     const token = await getGoogleAccessToken();
     if (!token) {
-        toast({ title: "Error de autenticación", variant: "destructive" });
+        toast({ title: "Error de Autenticación", variant: "destructive" });
         return;
     }
     try {
@@ -266,9 +267,9 @@ export function OpportunityDetailsDialog({
           ...prev,
           proposalFiles: prev.proposalFiles?.filter(f => f.url !== fileToDelete.url) || []
       }));
-      toast({ title: "Archivo eliminado" });
+      toast({ title: "Archivo Eliminado" });
     } catch (error: any) {
-       toast({ title: "Error al eliminar el archivo de Drive", description: error.message, variant: "destructive" });
+       toast({ title: "Error al Eliminar Archivo de Drive", description: error.message, variant: "destructive" });
     }
   };
 
@@ -376,8 +377,8 @@ export function OpportunityDetailsDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Archivos de Propuesta</Label>
-            <div {...getRootProps()} className={cn(
+            <Label htmlFor="proposal-files">Archivos de Propuesta</Label>
+            <div {...getRootProps({id: 'proposal-files'})} className={cn(
                 "flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors",
                 (isDragActive || isFocused) && "border-primary",
                 !editedOpportunity.title?.trim() ? "bg-muted/50 cursor-not-allowed" : "hover:border-primary/50"
@@ -439,6 +440,7 @@ export function OpportunityDetailsDialog({
                       <div key={option} className="flex items-center space-x-2">
                           <Checkbox
                               id={`period-${option}`}
+                              name='periodicidad'
                               checked={editedOpportunity.periodicidad?.includes(option)}
                               onCheckedChange={(checked) => handleMultiCheckboxChange('periodicidad', option, !!checked)}
                           />
@@ -474,6 +476,7 @@ export function OpportunityDetailsDialog({
                       <div key={option} className="flex items-center space-x-2">
                           <Checkbox
                               id={`payment-${option}`}
+                              name='formaDePago'
                               checked={editedOpportunity.formaDePago?.includes(option)}
                               onCheckedChange={(checked) => handleMultiCheckboxChange('formaDePago', option, !!checked)}
                           />

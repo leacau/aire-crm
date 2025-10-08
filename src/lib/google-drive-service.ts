@@ -28,7 +28,8 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
     });
 
     if (!searchResponse.ok) {
-        throw new Error(`Failed to search for folder '${sanitizedName}' in Google Drive.`);
+        const errorText = await searchResponse.text();
+        throw new Error(`Failed to search for folder '${sanitizedName}'. Status: ${searchResponse.status}. Body: ${errorText}`);
     }
 
     const searchData = await searchResponse.json();
@@ -61,7 +62,7 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
     if (!createResponse.ok) {
         const error = await createResponse.json();
         console.error("Error creating folder", error);
-        throw new Error(`Failed to create folder '${sanitizedName}' in Google Drive.`);
+        throw new Error(`Failed to create folder '${sanitizedName}'.`);
     }
 
     const createData = await createResponse.json();
