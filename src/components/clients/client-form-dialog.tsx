@@ -152,13 +152,13 @@ export function ClientFormDialog({
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
           {!isEditing && (
              <div className="flex items-center space-x-2">
-                <Checkbox id="isNewClient" checked={formData.isNewClient} onCheckedChange={(checked) => handleCheckboxChange('isNewClient', checked)} />
+                <Checkbox id="isNewClient" name="isNewClient" checked={formData.isNewClient} onCheckedChange={(checked) => handleCheckboxChange('isNewClient', checked)} />
                 <Label htmlFor="isNewClient" className="font-normal">Marcar como Cliente Nuevo</Label>
             </div>
           )}
           {isEditing && (
              <div className="flex items-center space-x-2">
-                <Checkbox id="isDeactivated" checked={formData.isDeactivated} onCheckedChange={(checked) => handleCheckboxChange('isDeactivated', checked)} />
+                <Checkbox id="isDeactivated" name="isDeactivated" checked={formData.isDeactivated} onCheckedChange={(checked) => handleCheckboxChange('isDeactivated', checked)} />
                 <Label htmlFor="isDeactivated" className="font-normal">Dar de baja al cliente</Label>
             </div>
           )}
@@ -185,7 +185,7 @@ export function ClientFormDialog({
               Condición IVA
             </Label>
             <Select name="condicionIVA" value={formData.condicionIVA} onValueChange={(value: CondicionIVA) => handleSelectChange('condicionIVA', value)}>
-                <SelectTrigger className="col-span-3">
+                <SelectTrigger id="condicionIVA" className="col-span-3">
                     <SelectValue placeholder="Selecciona una condición" />
                 </SelectTrigger>
                 <SelectContent>
@@ -198,7 +198,7 @@ export function ClientFormDialog({
               Provincia
             </Label>
             <Select name="provincia" value={formData.provincia} onValueChange={(value) => handleSelectChange('provincia', value)}>
-                <SelectTrigger className="col-span-3">
+                <SelectTrigger id="provincia" className="col-span-3">
                     <SelectValue placeholder="Selecciona una provincia" />
                 </SelectTrigger>
                 <SelectContent>
@@ -217,7 +217,7 @@ export function ClientFormDialog({
               Tipo Entidad
             </Label>
              <Select name="tipoEntidad" value={formData.tipoEntidad} onValueChange={(value: TipoEntidad) => handleSelectChange('tipoEntidad', value)}>
-                <SelectTrigger className="col-span-3">
+                <SelectTrigger id="tipoEntidad" className="col-span-3">
                     <SelectValue placeholder="Selecciona un tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -248,7 +248,7 @@ export function ClientFormDialog({
               Agencia
             </Label>
              <Select name="agencyId" value={formData.agencyId || 'none'} onValueChange={(value) => handleSelectChange('agencyId', value)}>
-                <SelectTrigger className="col-span-3">
+                <SelectTrigger id="agencyId" className="col-span-3">
                     <SelectValue placeholder="Asignar a una agencia (opcional)" />
                 </SelectTrigger>
                 <SelectContent>

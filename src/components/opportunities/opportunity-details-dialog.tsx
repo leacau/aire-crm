@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -419,13 +420,13 @@ export function OpportunityDetailsDialog({
             <div className="space-y-2">
                 <Label htmlFor="stage">Etapa</Label>
                 <Select onValueChange={(v: OpportunityStage) => handleSelectChange('stage', v)} value={editedOpportunity.stage}>
-                    <SelectTrigger><SelectValue/></SelectTrigger>
+                    <SelectTrigger id="stage"><SelectValue/></SelectTrigger>
                     <SelectContent>{opportunityStages.map(stage => <SelectItem key={stage} value={stage}>{stage}</SelectItem>)}</SelectContent>
                 </Select>
             </div>
           </div>
            <div className="space-y-2">
-              <Label>Periodicidad</Label>
+              <Label htmlFor="periodicidad">Periodicidad</Label>
               <div className="flex flex-wrap gap-x-4 gap-y-2">
                   {periodicidadOptions.map(option => (
                       <div key={option} className="flex items-center space-x-2">
@@ -448,7 +449,7 @@ export function OpportunityDetailsDialog({
                 <div className="space-y-2">
                     <Label htmlFor="agencyId">Agencia</Label>
                     <Select value={editedOpportunity.agencyId || ''} onValueChange={(v) => handleSelectChange('agencyId', v)}>
-                        <SelectTrigger><SelectValue placeholder="Seleccionar agencia..." /></SelectTrigger>
+                        <SelectTrigger id="agencyId"><SelectValue placeholder="Seleccionar agencia..." /></SelectTrigger>
                         <SelectContent>
                             {agencies.map(agency => (
                                 <SelectItem key={agency.id} value={agency.id}>{agency.name}</SelectItem>
@@ -521,7 +522,7 @@ export function OpportunityDetailsDialog({
               </div>
 
                <div className="flex items-center space-x-2 pt-2">
-                  <Checkbox id="pagado" checked={editedOpportunity.pagado} onCheckedChange={(c) => handleCheckboxChange('pagado', c)} disabled={!isInvoiceSet}/>
+                  <Checkbox id="pagado" name="pagado" checked={editedOpportunity.pagado} onCheckedChange={(c) => handleCheckboxChange('pagado', c)} disabled={!isInvoiceSet}/>
                   <Label htmlFor="pagado">Pagado</Label>
               </div>
 

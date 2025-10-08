@@ -540,7 +540,7 @@ export default function ClientsPage() {
             </div>
         )}
          <div className="flex items-center space-x-2">
-            <Checkbox id="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
+            <Checkbox id="my-clients" name="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
             <Label htmlFor="my-clients" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis clientes</Label>
         </div>
         <Button variant="outline" onClick={() => setShowDuplicates(s => !s)}>

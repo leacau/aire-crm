@@ -6,8 +6,17 @@ const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files';
 const ROOT_FOLDER_NAME = 'CRM-Aire';
 const CLIENTS_FOLDER_NAME = 'Clientes';
 
+// Sanitize folder names to remove invalid characters for Google Drive
+function sanitizeFolderName(name: string): string {
+    if (!name) return 'Sin Nombre';
+    // Replace invalid characters with a hyphen. Invalid characters are / \ ? * < > : | " '
+    return name.replace(/[\\/?*<>:|"]/g, '-').trim();
+}
+
+
 async function findOrCreateFolder(accessToken: string, folderName: string, parentId?: string): Promise<string> {
-    let query = `mimeType='application/vnd.google-apps.folder' and name='${folderName.replace(/'/g, "\\'")}' and trashed=false`;
+    const sanitizedName = sanitizeFolderName(folderName);
+    let query = `mimeType='application/vnd.google-apps.folder' and name='${sanitizedName.replace(/'/g, "\\'")}' and trashed=false`;
     if (parentId) {
         query += ` and '${parentId}' in parents`;
     } else {
@@ -19,7 +28,7 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
     });
 
     if (!searchResponse.ok) {
-        throw new Error(`Failed to search for folder '${folderName}' in Google Drive.`);
+        throw new Error(`Failed to search for folder '${sanitizedName}' in Google Drive.`);
     }
 
     const searchData = await searchResponse.json();
@@ -29,7 +38,7 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
 
     // Folder not found, create it
     const folderMetadata: { name: string; mimeType: string; parents?: string[] } = {
-        name: folderName,
+        name: sanitizedName,
         mimeType: 'application/vnd.google-apps.folder',
     };
     if (parentId) {
@@ -48,7 +57,7 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
     if (!createResponse.ok) {
         const error = await createResponse.json();
         console.error("Error creating folder", error);
-        throw new Error(`Failed to create folder '${folderName}' in Google Drive.`);
+        throw new Error(`Failed to create folder '${sanitizedName}' in Google Drive.`);
     }
 
     const createData = await createResponse.json();
