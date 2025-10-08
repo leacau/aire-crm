@@ -13,6 +13,13 @@ function sanitizeFolderName(name: string): string {
     return name.replace(/[\\/?*<>:|"]/g, '-').trim();
 }
 
+// Sanitize file names to remove invalid characters for Google Drive
+function sanitizeFileName(name: string): string {
+    if (!name) return 'archivo-sin-nombre';
+    // Replace only characters that are invalid for Drive file names.
+    return name.replace(/[/\\]/g, '-').trim();
+}
+
 
 async function findOrCreateFolder(accessToken: string, folderName: string, parentId?: string): Promise<string> {
     const sanitizedName = sanitizeFolderName(folderName);
@@ -74,7 +81,7 @@ export async function uploadFileToDrive(accessToken: string, file: File, opportu
     const opportunityFolderId = await findOrCreateFolder(accessToken, opportunityId, opportunitiesFolderId);
 
     const fileMetadata = {
-        name: file.name,
+        name: sanitizeFileName(file.name),
         parents: [opportunityFolderId],
     };
 

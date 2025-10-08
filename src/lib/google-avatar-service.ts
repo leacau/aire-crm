@@ -6,6 +6,14 @@ const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files';
 const ROOT_FOLDER_NAME = 'CRM-AIRE';
 const CONFIG_FOLDER_NAME = 'config';
 
+// Sanitize file names to remove invalid characters for Google Drive
+function sanitizeFileName(name: string): string {
+    if (!name) return 'archivo-sin-nombre';
+    // Replace only characters that are invalid for Drive file names.
+    return name.replace(/[/\\]/g, '-').trim();
+}
+
+
 async function findOrCreateFolder(accessToken: string, folderName: string, parentId?: string): Promise<string> {
     let query = `mimeType='application/vnd.google-apps.folder' and name='${folderName.replace(/'/g, "\\'")}' and trashed=false`;
     if (parentId) {
@@ -75,41 +83,43 @@ export async function uploadAvatarToDrive(accessToken: string, file: File, userI
     const searchData = await searchResponse.json();
     
     let resumableUrl: string;
+    let method: 'POST' | 'PATCH';
 
     if (searchData.files && searchData.files.length > 0) {
         // File exists, initiate resumable update
         const fileId = searchData.files[0].id;
-        const initResponse = await fetch(`${DRIVE_UPLOAD_URL}/${fileId}?uploadType=resumable`, {
-            method: 'PATCH',
-            headers: { 
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json; charset=UTF-8',
-            },
-            body: JSON.stringify({}), // Empty body for update initiation
-        });
-        if (!initResponse.ok) throw new Error('Failed to initiate avatar update.');
-        resumableUrl = initResponse.headers.get('Location')!;
+        method = 'PATCH';
+        resumableUrl = `${DRIVE_UPLOAD_URL}/${fileId}?uploadType=resumable`;
     } else {
         // File does not exist, initiate resumable create
-        const fileMetadata = { name: fileName, parents: [configFolderId] };
-        const initResponse = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=resumable`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json; charset=UTF-8',
-            },
-            body: JSON.stringify(fileMetadata),
-        });
-        if (!initResponse.ok) throw new Error('Failed to initiate avatar creation.');
-        resumableUrl = initResponse.headers.get('Location')!;
+        method = 'POST';
+        resumableUrl = `${DRIVE_UPLOAD_URL}?uploadType=resumable`;
     }
     
-    if (!resumableUrl) {
+    const fileMetadata = { name: sanitizeFileName(fileName), parents: [configFolderId] };
+
+    const initResponse = await fetch(resumableUrl, {
+        method: method,
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: JSON.stringify(method === 'POST' ? fileMetadata : {}),
+    });
+
+    if (!initResponse.ok) {
+        const errorData = await initResponse.json().catch(() => ({}));
+        console.error('Failed to initiate avatar upload.', errorData);
+        throw new Error('Failed to initiate avatar upload: ' + (errorData?.error?.message || initResponse.statusText));
+    }
+    const locationUrl = initResponse.headers.get('Location');
+    
+    if (!locationUrl) {
         throw new Error('Could not get resumable URL for avatar upload.');
     }
 
     // Upload the file content to the resumable URL
-    const uploadResponse = await fetch(resumableUrl, {
+    const uploadResponse = await fetch(locationUrl, {
         method: 'PUT',
         headers: { 
             'Content-Range': `bytes 0-${file.size - 1}/${file.size}`,
