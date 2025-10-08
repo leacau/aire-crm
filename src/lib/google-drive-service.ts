@@ -34,7 +34,6 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
 
     const searchData = await searchResponse.json();
     if (searchData.files && searchData.files.length > 0) {
-        // Find the exact match in case Drive search is fuzzy
         const exactMatch = searchData.files.find((f: {name: string}) => f.name === sanitizedName);
         if (exactMatch) {
             return exactMatch.id;
@@ -79,28 +78,46 @@ export async function uploadFileToDrive(accessToken: string, file: File, opportu
         parents: [opportunityFolderId],
     };
 
-    const formData = new FormData();
-    formData.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
-    formData.append('file', file);
-
-    const response = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=multipart&fields=id`, {
+    // Step 1: Initiate a resumable upload session
+    const initResponse = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=resumable`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json; charset=UTF-8',
         },
-        body: formData,
+        body: JSON.stringify(fileMetadata),
     });
-    
-    if (!response.ok) {
-         const error = await response.json();
-         console.error('Google Drive API Error (Upload):', error);
-         throw new Error('Failed to upload file to Google Drive: ' + (error.error?.message || 'Unknown error'));
+
+    if (!initResponse.ok) {
+        const error = await initResponse.json();
+        console.error('Google Drive API Error (Init Resumable):', error);
+        throw new Error('Failed to initiate file upload session: ' + (error.error?.message || 'Unknown error'));
     }
 
-    const uploadedFileData = await response.json();
+    const locationUrl = initResponse.headers.get('Location');
+    if (!locationUrl) {
+        throw new Error('Failed to get resumable upload URL from Google Drive.');
+    }
+
+    // Step 2: Upload the file content
+    const uploadResponse = await fetch(locationUrl, {
+        method: 'PUT',
+        headers: {
+            'Content-Length': file.size.toString(),
+        },
+        body: file,
+    });
+    
+    if (!uploadResponse.ok) {
+        const error = await uploadResponse.json();
+        console.error('Google Drive API Error (Upload):', error);
+        throw new Error('Failed to upload file to Google Drive: ' + (error.error?.message || 'Unknown error'));
+    }
+
+    const uploadedFileData = await uploadResponse.json();
     const fileId = uploadedFileData.id;
 
-    // Make the file publicly readable
+    // Step 3: Make the file publicly readable
     await fetch(`${DRIVE_API_URL}/files/${fileId}/permissions`, {
         method: 'POST',
         headers: {
@@ -113,9 +130,10 @@ export async function uploadFileToDrive(accessToken: string, file: File, opportu
         })
     });
     
-    // Return the web view link for direct embedding
+    // Return the web view link for direct embedding/linking
     return `https://lh3.googleusercontent.com/d/${fileId}`;
 }
+
 
 export async function deleteFileFromDrive(accessToken: string, fileUrl: string) {
     const fileIdMatch = fileUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);

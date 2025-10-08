@@ -75,52 +75,51 @@ export async function uploadAvatarToDrive(accessToken: string, file: File, userI
     const searchData = await searchResponse.json();
     
     let fileId: string;
+    let resumableUrl: string;
 
     if (searchData.files && searchData.files.length > 0) {
-        // File exists, update it
+        // File exists, initiate resumable update
         fileId = searchData.files[0].id;
-        const updateResponse = await fetch(`${DRIVE_UPLOAD_URL}/${fileId}?uploadType=media`, {
+        const initResponse = await fetch(`${DRIVE_UPLOAD_URL}/${fileId}?uploadType=resumable`, {
             method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        if (!initResponse.ok) throw new Error('Failed to initiate avatar update.');
+        resumableUrl = initResponse.headers.get('Location')!;
+    } else {
+        // File does not exist, initiate resumable create
+        const fileMetadata = { name: fileName, parents: [configFolderId] };
+        const initResponse = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=resumable`, {
+            method: 'POST',
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': file.type,
+                'Content-Type': 'application/json; charset=UTF-8',
             },
-            body: file,
+            body: JSON.stringify(fileMetadata),
         });
-
-        if (!updateResponse.ok) {
-            const error = await updateResponse.json();
-            console.error('Google Drive API Error (Update):', error);
-            throw new Error('Failed to update file in Google Drive: ' + (error.error?.message || 'Unknown error'));
-        }
-        const updatedFileData = await updateResponse.json();
-        fileId = updatedFileData.id;
-
-    } else {
-        // File does not exist, create it
-        const fileMetadata = {
-            name: fileName,
-            parents: [configFolderId],
-        };
-
-        const formData = new FormData();
-        formData.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
-        formData.append('file', file);
-
-        const createResponse = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=multipart&fields=id`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-            body: formData,
-        });
-        
-        if (!createResponse.ok) {
-             const error = await createResponse.json();
-             console.error('Google Drive API Error (Upload):', error);
-             throw new Error('Failed to upload file to Google Drive: ' + (error.error?.message || 'Unknown error'));
-        }
-        const createdFileData = await createResponse.json();
-        fileId = createdFileData.id;
+        if (!initResponse.ok) throw new Error('Failed to initiate avatar creation.');
+        resumableUrl = initResponse.headers.get('Location')!;
     }
+    
+    if (!resumableUrl) {
+        throw new Error('Could not get resumable URL for avatar upload.');
+    }
+
+    // Upload the file content to the resumable URL
+    const uploadResponse = await fetch(resumableUrl, {
+        method: 'PUT',
+        headers: { 'Content-Length': file.size.toString() },
+        body: file,
+    });
+
+    if (!uploadResponse.ok) {
+        const error = await uploadResponse.json();
+        console.error('Google Drive API Error (Avatar Upload):', error);
+        throw new Error('Failed to upload avatar to Google Drive: ' + (error.error?.message || 'Unknown error'));
+    }
+
+    const uploadedFileData = await uploadResponse.json();
+    fileId = uploadedFileData.id;
 
 
     // Make the file publicly readable
