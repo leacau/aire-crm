@@ -2,10 +2,10 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { updateProfile, sendPasswordResetEmail } from 'firebase/auth';
+import { updateProfile } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
@@ -82,26 +82,6 @@ export default function SettingsPage() {
     accept: { 'image/*': ['.jpeg', '.png', '.gif', '.jpg'] },
     multiple: false,
   });
-
-  const handlePasswordReset = async () => {
-    if (!user || !user.email) return;
-    setLoading(true);
-    try {
-      await sendPasswordResetEmail(auth, user.email);
-      toast({
-        title: 'Correo enviado',
-        description: 'Revisa tu bandeja de entrada para restablecer tu contraseña.',
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (authLoading) {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
@@ -194,19 +174,6 @@ export default function SettingsPage() {
                 </CardContent>
             </Card>
            )}
-          <Card>
-            <CardHeader>
-              <CardTitle>Contraseña</CardTitle>
-              <CardDescription>
-                Haz clic en el botón para recibir un correo electrónico y restablecer tu contraseña.
-              </CardDescription>
-            </CardHeader>
-            <CardFooter className="border-t px-6 py-4">
-              <Button onClick={handlePasswordReset} variant="outline" disabled={loading}>
-                {loading ? <Spinner size="small" /> : 'Enviar correo de restablecimiento'}
-              </Button>
-            </CardFooter>
-          </Card>
         </div>
       </main>
     </div>
