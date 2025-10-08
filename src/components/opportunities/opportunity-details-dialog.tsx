@@ -205,7 +205,7 @@ export function OpportunityDetailsDialog({
     if (!acceptedFiles.length) return;
     
     const oppId = editedOpportunity.id;
-    if (!oppId) {
+    if (!oppId || !client) {
       toast({ title: 'Error de Oportunidad', description: 'Guarda la oportunidad antes de subir archivos.', variant: 'destructive' });
       return;
     }
@@ -234,7 +234,7 @@ export function OpportunityDetailsDialog({
     } finally {
         setIsUploading(false);
     }
-  }, [editedOpportunity.id, getGoogleAccessToken, toast]);
+  }, [editedOpportunity.id, getGoogleAccessToken, toast, client]);
 
   const { getRootProps, getInputProps, isDragActive, isFocused } = useDropzone({
     onDrop,
@@ -392,13 +392,13 @@ export function OpportunityDetailsDialog({
                   <ul className="divide-y rounded-md border">
                       {editedOpportunity.proposalFiles.map((file, index) => (
                           <li key={index} className="flex items-center justify-between p-2">
-                            <div className="flex items-center gap-2">
-                              <FileIcon className="h-4 w-4 text-muted-foreground"/>
-                              <Link href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileIcon className="h-4 w-4 text-muted-foreground flex-shrink-0"/>
+                              <Link href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate" title={file.name}>
                                 {file.name}
                               </Link>
                             </div>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFileDelete(file)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => handleFileDelete(file)}>
                               <X className="h-4 w-4 text-destructive"/>
                             </Button>
                           </li>
