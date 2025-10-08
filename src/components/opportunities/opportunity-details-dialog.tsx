@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -22,17 +22,21 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { format, parse } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency } from '@/lib/firebase-service';
-import { PlusCircle } from 'lucide-react';
+import { getAgencies, createAgency, getClient } from '@/lib/firebase-service';
+import { uploadFileToDrive, deleteFileFromDrive } from '@/lib/google-drive-service';
+import { PlusCircle, Paperclip, X, File as FileIcon, Loader2 } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
+import { useDropzone } from 'react-dropzone';
+import Link from 'next/link';
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +74,7 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     formaDePago: [],
     fechaFacturacion: '',
     fechaInicioPauta: '',
+    proposalFiles: [],
 });
 
 const NewAgencyDialog = ({ onAgencyCreated }: { onAgencyCreated: (newAgency: Agency) => void }) => {
@@ -141,9 +146,10 @@ export function OpportunityDetailsDialog({
   onCreate = () => {},
   client
 }: OpportunityDetailsDialogProps) {
-  const { userInfo, isBoss } = useAuth();
+  const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   const getInitialData = () => {
       if (opportunity) return { ...opportunity };
@@ -194,6 +200,76 @@ export function OpportunityDetailsDialog({
     }
     onOpenChange(false);
   };
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (!acceptedFiles.length) return;
+    
+    const clientId = editedOpportunity.clientId;
+    if (!clientId) {
+      toast({ title: 'Error', description: 'No se pudo encontrar el cliente para esta oportunidad.', variant: 'destructive' });
+      return;
+    }
+
+    setIsUploading(true);
+    const token = await getGoogleAccessToken();
+    if (!token) {
+        toast({ title: "Error de autenticación", description: "No se pudo obtener el token de acceso de Google. Intenta iniciar sesión de nuevo.", variant: "destructive" });
+        setIsUploading(false);
+        return;
+    }
+    
+    try {
+        const clientData = await getClient(clientId);
+        if (!clientData) throw new Error('Client data not found');
+
+        const file = acceptedFiles[0];
+        const folderStructure = {
+            clientName: clientData.denominacion,
+            opportunityName: editedOpportunity.title || 'Nueva Oportunidad'
+        };
+
+        const fileUrl = await uploadFileToDrive(token, file, folderStructure);
+        
+        const newFile: ProposalFile = { name: file.name, url: fileUrl };
+
+        setEditedOpportunity(prev => ({
+            ...prev,
+            proposalFiles: [...(prev.proposalFiles || []), newFile]
+        }));
+
+        toast({ title: "Archivo subido", description: `${file.name} se ha adjuntado correctamente.` });
+    } catch (error: any) {
+        toast({ title: "Error al subir el archivo", description: error.message, variant: "destructive" });
+    } finally {
+        setIsUploading(false);
+    }
+  }, [editedOpportunity.clientId, editedOpportunity.title, getGoogleAccessToken, toast]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    multiple: false,
+  });
+
+  const handleFileDelete = async (fileToDelete: ProposalFile) => {
+    if (!confirm(`¿Estás seguro de que quieres eliminar el archivo "${fileToDelete.name}"?`)) return;
+
+    const token = await getGoogleAccessToken();
+    if (!token) {
+        toast({ title: "Error de autenticación", variant: "destructive" });
+        return;
+    }
+    try {
+      await deleteFileFromDrive(token, fileToDelete.url);
+      setEditedOpportunity(prev => ({
+          ...prev,
+          proposalFiles: prev.proposalFiles?.filter(f => f.url !== fileToDelete.url) || []
+      }));
+      toast({ title: "Archivo eliminado" });
+    } catch (error: any) {
+       toast({ title: "Error al eliminar el archivo de Drive", description: error.message, variant: "destructive" });
+    }
+  };
+
 
   const handleBonusDecision = (decision: 'Autorizado' | 'Rechazado') => {
     if (!userInfo) return;
@@ -288,7 +364,7 @@ export function OpportunityDetailsDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
-          <div className="space-y-2">
+           <div className="space-y-2">
               <Label htmlFor="title">Título</Label>
               <Input id="title" name="title" value={editedOpportunity.title || ''} onChange={handleChange}/>
           </div>
@@ -402,8 +478,48 @@ export function OpportunityDetailsDialog({
 
                <div className="space-y-2">
                 <Label htmlFor="propuestaCerrada">Propuesta Cerrada</Label>
-                <Input id="propuestaCerrada" name="propuestaCerrada" value={editedOpportunity.propuestaCerrada || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}/>
+                <Textarea id="propuestaCerrada" name="propuestaCerrada" value={editedOpportunity.propuestaCerrada || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}/>
               </div>
+
+              {/* File Uploader */}
+              <div className="space-y-2">
+                <Label>Archivos de Propuesta</Label>
+                <div {...getRootProps()} className={cn("flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors hover:border-primary/50", isDragActive && "border-primary bg-primary/10")}>
+                    <input {...getInputProps()} />
+                    {isUploading ? (
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                            <Loader2 className="h-6 w-6 animate-spin" />
+                            <span>Subiendo archivo...</span>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                            <Paperclip className="h-6 w-6" />
+                            <span>Arrastra un archivo aquí, o haz clic para seleccionar</span>
+                        </div>
+                    )}
+                </div>
+                {editedOpportunity.proposalFiles && editedOpportunity.proposalFiles.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                      <h4 className="font-medium text-sm">Archivos Adjuntos:</h4>
+                      <ul className="divide-y rounded-md border">
+                          {editedOpportunity.proposalFiles.map((file, index) => (
+                              <li key={index} className="flex items-center justify-between p-2">
+                                <div className="flex items-center gap-2">
+                                  <FileIcon className="h-4 w-4 text-muted-foreground"/>
+                                  <Link href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate">
+                                    {file.name}
+                                  </Link>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFileDelete(file)}>
+                                  <X className="h-4 w-4 text-destructive"/>
+                                </Button>
+                              </li>
+                          ))}
+                      </ul>
+                  </div>
+                )}
+              </div>
+
 
                <div className="flex items-center space-x-2 pt-2">
                   <Checkbox id="pagado" checked={editedOpportunity.pagado} onCheckedChange={(c) => handleCheckboxChange('pagado', c)} disabled={!isInvoiceSet}/>

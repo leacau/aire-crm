@@ -274,58 +274,41 @@ export const deleteClient = async (
 };
 
 export const bulkDeleteClients = async (clientIds: string[], userId: string, userName: string): Promise<void> => {
-  if (!clientIds || clientIds.length === 0) return;
-
-  console.log(`[bulkDeleteClients] Received request to delete IDs:`, clientIds);
-
-  const batch = writeBatch(db);
-
-  for (const clientId of clientIds) {
-    const clientRef = doc(db, 'clients', clientId);
-    batch.delete(clientRef);
-
-    console.log(`Processing client ID: ${clientId}`);
-
-    // Delete associated opportunities
-    const oppsQuery = query(opportunitiesCollection, where('clientId', '==', clientId));
-    const oppsSnap = await getDocs(oppsQuery);
-    oppsSnap.forEach(doc => {
-      console.log(`  Deleting opportunity: ${doc.id}`);
-      batch.delete(doc.ref);
+    if (!clientIds || clientIds.length === 0) return;
+  
+    const batch = writeBatch(db);
+  
+    for (const clientId of clientIds) {
+      const clientRef = doc(db, 'clients', clientId);
+      batch.delete(clientRef);
+  
+      const oppsQuery = query(opportunitiesCollection, where('clientId', '==', clientId));
+      const oppsSnap = await getDocs(oppsQuery);
+      oppsSnap.forEach(doc => batch.delete(doc.ref));
+  
+      const activitiesQuery = query(clientActivitiesCollection, where('clientId', '==', clientId));
+      const activitiesSnap = await getDocs(activitiesQuery);
+      activitiesSnap.forEach(doc => batch.delete(doc.ref));
+  
+      const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', clientId));
+      const peopleSnap = await getDocs(peopleQuery);
+      peopleSnap.forEach(doc => batch.delete(doc.ref));
+    }
+  
+    await batch.commit();
+  
+    await logActivity({
+      userId,
+      userName,
+      type: 'delete',
+      entityType: 'client',
+      entityId: 'multiple',
+      entityName: 'multiple',
+      details: `eliminó <strong>${clientIds.length}</strong> clientes de forma masiva`,
+      ownerName: userName,
     });
-
-    // Delete associated activities
-    const activitiesQuery = query(clientActivitiesCollection, where('clientId', '==', clientId));
-    const activitiesSnap = await getDocs(activitiesQuery);
-    activitiesSnap.forEach(doc => {
-      console.log(`  Deleting activity: ${doc.id}`);
-      batch.delete(doc.ref);
-    });
-
-    // Delete associated people
-    const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', clientId));
-    const peopleSnap = await getDocs(peopleQuery);
-    peopleSnap.forEach(doc => {
-      console.log(`  Deleting person: ${doc.id}`);
-      batch.delete(doc.ref);
-    });
-  }
-
-  await batch.commit();
-  console.log(`[bulkDeleteClients] Batch commit successful for ${clientIds.length} clients.`);
-
-
-  await logActivity({
-    userId,
-    userName,
-    type: 'delete',
-    entityType: 'client',
-    entityId: 'multiple',
-    entityName: 'multiple',
-    details: `eliminó <strong>${clientIds.length}</strong> clientes de forma masiva`,
-    ownerName: userName,
-  });
 };
+
 
 export const bulkUpdateClients = async (
     updates: { id: string; denominacion: string; data: Partial<Omit<Client, 'id'>> }[],

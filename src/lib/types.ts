@@ -1,4 +1,5 @@
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -14,6 +15,10 @@ export type Periodicidad = typeof periodicidadOptions[number];
 export const formaDePagoOptions = ['Anticipado', 'A fecha', '30 días', '45 días', '60 días', '90 días'] as const;
 export type FormaDePago = typeof formaDePagoOptions[number];
 
+export type ProposalFile = {
+  name: string;
+  url: string;
+};
 
 export type Opportunity = {
   id: string;
@@ -41,6 +46,7 @@ export type Opportunity = {
   formaDePago?: FormaDePago[];
   fechaFacturacion?: string; // formato "dd/MM"
   fechaInicioPauta?: string; // formato "YYYY-MM-DD"
+  proposalFiles?: ProposalFile[];
 };
 
 export type Person = {

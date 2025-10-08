@@ -3,18 +3,23 @@
 
 const DRIVE_API_URL = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files';
-const FOLDER_NAME = 'CRM-Aire';
-const SUBFOLDER_NAME = 'configuracion';
+const ROOT_FOLDER_NAME = 'CRM-Aire';
+const CLIENTS_FOLDER_NAME = 'Clientes';
 
 async function findOrCreateFolder(accessToken: string, folderName: string, parentId?: string): Promise<string> {
-    const query = `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false` + (parentId ? ` and '${parentId}' in parents` : '');
+    let query = `mimeType='application/vnd.google-apps.folder' and name='${folderName.replace(/'/g, "\\'")}' and trashed=false`;
+    if (parentId) {
+        query += ` and '${parentId}' in parents`;
+    } else {
+        query += ` and 'root' in parents`;
+    }
     
     const searchResponse = await fetch(`${DRIVE_API_URL}/files?q=${encodeURIComponent(query)}&fields=files(id)`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
     });
 
     if (!searchResponse.ok) {
-        throw new Error('Failed to search for folder in Google Drive.');
+        throw new Error(`Failed to search for folder '${folderName}' in Google Drive.`);
     }
 
     const searchData = await searchResponse.json();
@@ -41,27 +46,36 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
     });
 
     if (!createResponse.ok) {
-        throw new Error('Failed to create folder in Google Drive.');
+        const error = await createResponse.json();
+        console.error("Error creating folder", error);
+        throw new Error(`Failed to create folder '${folderName}' in Google Drive.`);
     }
 
     const createData = await createResponse.json();
     return createData.id;
 }
 
-export async function uploadFileToDrive(accessToken: string, file: File): Promise<string> {
-    const mainFolderId = await findOrCreateFolder(accessToken, FOLDER_NAME);
-    const subFolderId = await findOrCreateFolder(accessToken, SUBFOLDER_NAME, mainFolderId);
+interface FolderStructure {
+    clientName: string;
+    opportunityName: string;
+}
+
+export async function uploadFileToDrive(accessToken: string, file: File, folderStructure: FolderStructure): Promise<string> {
+    const rootFolderId = await findOrCreateFolder(accessToken, ROOT_FOLDER_NAME);
+    const clientsFolderId = await findOrCreateFolder(accessToken, CLIENTS_FOLDER_NAME, rootFolderId);
+    const clientFolderId = await findOrCreateFolder(accessToken, folderStructure.clientName, clientsFolderId);
+    const opportunityFolderId = await findOrCreateFolder(accessToken, folderStructure.opportunityName, clientFolderId);
 
     const fileMetadata = {
-        name: `profile-pic-${Date.now()}.${file.name.split('.').pop()}`,
-        parents: [subFolderId],
+        name: file.name,
+        parents: [opportunityFolderId],
     };
 
     const formData = new FormData();
     formData.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
     formData.append('file', file);
 
-    const response = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=multipart`, {
+    const response = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=multipart&fields=id`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -93,4 +107,24 @@ export async function uploadFileToDrive(accessToken: string, file: File): Promis
     
     // Return the web view link for direct embedding
     return `https://lh3.googleusercontent.com/d/${fileId}`;
+}
+
+export async function deleteFileFromDrive(accessToken: string, fileUrl: string) {
+    const fileId = fileUrl.split('/d/')[1];
+    if (!fileId) {
+        throw new Error('Invalid Google Drive file URL for deletion.');
+    }
+
+    const response = await fetch(`${DRIVE_API_URL}/files/${fileId}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${accessToken}`
+        }
+    });
+
+    if (!response.ok && response.status !== 204) {
+        const error = await response.json();
+        console.error('Google Drive API Error (Delete):', error);
+        throw new Error('Failed to delete file from Google Drive: ' + (error.error?.message || 'Unknown error'));
+    }
 }
