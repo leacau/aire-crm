@@ -15,7 +15,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { ArrowLeft, Shield, UploadCloud } from 'lucide-react';
 import Link from 'next/link';
 import { useDropzone } from 'react-dropzone';
-import { uploadFileToDrive } from '@/lib/google-drive-service';
+import { uploadAvatarToDrive } from '@/lib/google-avatar-service';
 import { updateUserProfile } from '@/lib/firebase-service';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -60,7 +60,7 @@ export default function SettingsPage() {
             throw new Error("No se pudo obtener el token de acceso de Google. Intenta iniciar sesión de nuevo.");
         }
 
-        const fileUrl = await uploadFileToDrive(token, file);
+        const fileUrl = await uploadAvatarToDrive(token, file, user.uid);
         
         await updateProfile(user, { photoURL: fileUrl });
         await updateUserProfile(user.uid, { photoURL: fileUrl });
@@ -167,8 +167,8 @@ export default function SettingsPage() {
                     </div>
                     {userInfo && (
                       <div className="grid gap-2">
-                        <Label>Email</Label>
-                        <Input value={userInfo.email} disabled />
+                        <Label htmlFor="email">Email</Label>
+                        <Input id="email" value={userInfo.email} disabled />
                       </div>
                     )}
                     <Button type="submit" disabled={loading} className="w-full sm:w-auto">
