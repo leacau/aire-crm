@@ -89,7 +89,7 @@ export async function uploadFileToDrive(accessToken: string, file: File, opportu
     });
 
     if (!initResponse.ok) {
-        const error = await initResponse.json();
+        const error = await initResponse.json().catch(() => ({}));
         console.error('Google Drive API Error (Init Resumable):', error);
         throw new Error('Failed to initiate file upload session: ' + (error.error?.message || 'Unknown error'));
     }

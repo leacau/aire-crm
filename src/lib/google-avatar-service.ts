@@ -112,8 +112,7 @@ export async function uploadAvatarToDrive(accessToken: string, file: File, userI
     const uploadResponse = await fetch(resumableUrl, {
         method: 'PUT',
         headers: { 
-            'Content-Type': file.type,
-            'Content-Length': file.size.toString()
+            'Content-Range': `bytes 0-${file.size - 1}/${file.size}`,
         },
         body: file,
     });
