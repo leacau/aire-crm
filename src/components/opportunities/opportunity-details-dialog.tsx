@@ -372,6 +372,45 @@ export function OpportunityDetailsDialog({
               <Label htmlFor="details">Descripción</Label>
               <Textarea id="details" name="details" value={editedOpportunity.details || ''} onChange={handleChange}/>
           </div>
+
+          <div className="space-y-2">
+            <Label>Archivos de Propuesta</Label>
+            <div {...getRootProps()} className={cn("flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors hover:border-primary/50", isDragActive && "border-primary bg-primary/10")}>
+                <input {...getInputProps()} />
+                {isUploading ? (
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <span>Subiendo archivo...</span>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Paperclip className="h-6 w-6" />
+                        <span>Arrastra un archivo aquí, o haz clic para seleccionar</span>
+                    </div>
+                )}
+            </div>
+            {editedOpportunity.proposalFiles && editedOpportunity.proposalFiles.length > 0 && (
+              <div className="mt-4 space-y-2">
+                  <h4 className="font-medium text-sm">Archivos Adjuntos:</h4>
+                  <ul className="divide-y rounded-md border">
+                      {editedOpportunity.proposalFiles.map((file, index) => (
+                          <li key={index} className="flex items-center justify-between p-2">
+                            <div className="flex items-center gap-2">
+                              <FileIcon className="h-4 w-4 text-muted-foreground"/>
+                              <Link href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate">
+                                {file.name}
+                              </Link>
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFileDelete(file)}>
+                              <X className="h-4 w-4 text-destructive"/>
+                            </Button>
+                          </li>
+                      ))}
+                  </ul>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
                 <Label htmlFor="value">Valor</Label>
@@ -480,46 +519,6 @@ export function OpportunityDetailsDialog({
                 <Label htmlFor="propuestaCerrada">Propuesta Cerrada</Label>
                 <Textarea id="propuestaCerrada" name="propuestaCerrada" value={editedOpportunity.propuestaCerrada || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}/>
               </div>
-
-              {/* File Uploader */}
-              <div className="space-y-2">
-                <Label>Archivos de Propuesta</Label>
-                <div {...getRootProps()} className={cn("flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors hover:border-primary/50", isDragActive && "border-primary bg-primary/10")}>
-                    <input {...getInputProps()} />
-                    {isUploading ? (
-                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                            <Loader2 className="h-6 w-6 animate-spin" />
-                            <span>Subiendo archivo...</span>
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                            <Paperclip className="h-6 w-6" />
-                            <span>Arrastra un archivo aquí, o haz clic para seleccionar</span>
-                        </div>
-                    )}
-                </div>
-                {editedOpportunity.proposalFiles && editedOpportunity.proposalFiles.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                      <h4 className="font-medium text-sm">Archivos Adjuntos:</h4>
-                      <ul className="divide-y rounded-md border">
-                          {editedOpportunity.proposalFiles.map((file, index) => (
-                              <li key={index} className="flex items-center justify-between p-2">
-                                <div className="flex items-center gap-2">
-                                  <FileIcon className="h-4 w-4 text-muted-foreground"/>
-                                  <Link href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate">
-                                    {file.name}
-                                  </Link>
-                                </div>
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFileDelete(file)}>
-                                  <X className="h-4 w-4 text-destructive"/>
-                                </Button>
-                              </li>
-                          ))}
-                      </ul>
-                  </div>
-                )}
-              </div>
-
 
                <div className="flex items-center space-x-2 pt-2">
                   <Checkbox id="pagado" checked={editedOpportunity.pagado} onCheckedChange={(c) => handleCheckboxChange('pagado', c)} disabled={!isInvoiceSet}/>
