@@ -3,8 +3,8 @@
 
 const DRIVE_API_URL = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files';
-const ROOT_FOLDER_NAME = 'CRM-Aire';
-const CLIENTS_FOLDER_NAME = 'Clientes';
+const ROOT_FOLDER_NAME = 'CRM-AIRE';
+const OPPORTUNITIES_FOLDER_NAME = 'Oportunidades';
 
 // Sanitize folder names to remove invalid characters for Google Drive
 function sanitizeFolderName(name: string): string {
@@ -69,16 +69,10 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
     return createData.id;
 }
 
-interface FolderStructure {
-    clientName: string;
-    opportunityName: string;
-}
-
-export async function uploadFileToDrive(accessToken: string, file: File, folderStructure: FolderStructure): Promise<string> {
+export async function uploadFileToDrive(accessToken: string, file: File, opportunityId: string): Promise<string> {
     const rootFolderId = await findOrCreateFolder(accessToken, ROOT_FOLDER_NAME);
-    const clientsFolderId = await findOrCreateFolder(accessToken, CLIENTS_FOLDER_NAME, rootFolderId);
-    const clientFolderId = await findOrCreateFolder(accessToken, folderStructure.clientName, clientsFolderId);
-    const opportunityFolderId = await findOrCreateFolder(accessToken, folderStructure.opportunityName, clientFolderId);
+    const opportunitiesFolderId = await findOrCreateFolder(accessToken, OPPORTUNITIES_FOLDER_NAME, rootFolderId);
+    const opportunityFolderId = await findOrCreateFolder(accessToken, opportunityId, opportunitiesFolderId);
 
     const fileMetadata = {
         name: file.name,

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -31,7 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getClient } from '@/lib/firebase-service';
+import { getAgencies, createAgency } from '@/lib/firebase-service';
 import { uploadFileToDrive, deleteFileFromDrive } from '@/lib/google-drive-service';
 import { PlusCircle, Paperclip, X, File as FileIcon, Loader2 } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
@@ -205,9 +204,9 @@ export function OpportunityDetailsDialog({
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles.length) return;
     
-    const clientId = editedOpportunity.clientId;
-    if (!clientId) {
-      toast({ title: 'Error de Cliente', description: 'No se pudo identificar el cliente para esta oportunidad.', variant: 'destructive' });
+    const oppId = editedOpportunity.id;
+    if (!oppId) {
+      toast({ title: 'Error de Oportunidad', description: 'Guarda la oportunidad antes de subir archivos.', variant: 'destructive' });
       return;
     }
 
@@ -220,16 +219,8 @@ export function OpportunityDetailsDialog({
     }
     
     try {
-        const clientData = await getClient(clientId);
-        if (!clientData) throw new Error('No se encontraron los datos del cliente.');
-
         const file = acceptedFiles[0];
-        const folderStructure = {
-            clientName: clientData.denominacion,
-            opportunityName: editedOpportunity.title || 'Oportunidad Sin Título'
-        };
-
-        const fileUrl = await uploadFileToDrive(token, file, folderStructure);
+        const fileUrl = await uploadFileToDrive(token, file, oppId);
         
         const newFile: ProposalFile = { name: file.name, url: fileUrl };
 
@@ -245,12 +236,12 @@ export function OpportunityDetailsDialog({
     } finally {
         setIsUploading(false);
     }
-  }, [editedOpportunity.clientId, editedOpportunity.title, getGoogleAccessToken, toast]);
+  }, [editedOpportunity.id, getGoogleAccessToken, toast]);
 
   const { getRootProps, getInputProps, isDragActive, isFocused } = useDropzone({
     onDrop,
     multiple: false,
-    disabled: !editedOpportunity.title?.trim()
+    disabled: !isEditing || !editedOpportunity.id
   });
 
   const handleFileDelete = async (fileToDelete: ProposalFile) => {
@@ -381,7 +372,7 @@ export function OpportunityDetailsDialog({
             <div {...getRootProps({id: 'proposal-files'})} className={cn(
                 "flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors",
                 (isDragActive || isFocused) && "border-primary",
-                !editedOpportunity.title?.trim() ? "bg-muted/50 cursor-not-allowed" : "hover:border-primary/50"
+                !isEditing ? "bg-muted/50 cursor-not-allowed" : "hover:border-primary/50"
             )}>
                 <input {...getInputProps()} />
                 {isUploading ? (
@@ -389,8 +380,8 @@ export function OpportunityDetailsDialog({
                         <Loader2 className="h-6 w-6 animate-spin" />
                         <span>Subiendo archivo...</span>
                     </div>
-                ) : !editedOpportunity.title?.trim() ? (
-                     <p className="text-center text-sm text-muted-foreground">Por favor, ingresa un título para la oportunidad antes de subir archivos.</p>
+                ) : !isEditing ? (
+                     <p className="text-center text-sm text-muted-foreground">Debes guardar la oportunidad primero para poder subir archivos.</p>
                 ) : (
                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <Paperclip className="h-6 w-6" />

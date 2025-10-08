@@ -3,7 +3,8 @@
 
 const DRIVE_API_URL = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files';
-const ROOT_AVATAR_FOLDER_NAME = 'CRM-Avatares';
+const ROOT_FOLDER_NAME = 'CRM-AIRE';
+const CONFIG_FOLDER_NAME = 'config';
 
 async function findOrCreateFolder(accessToken: string, folderName: string, parentId?: string): Promise<string> {
     let query = `mimeType='application/vnd.google-apps.folder' and name='${folderName.replace(/'/g, "\\'")}' and trashed=false`;
@@ -13,17 +14,21 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
         query += ` and 'root' in parents`;
     }
     
-    const searchResponse = await fetch(`${DRIVE_API_URL}/files?q=${encodeURIComponent(query)}&fields=files(id)`, {
+    const searchResponse = await fetch(`${DRIVE_API_URL}/files?q=${encodeURIComponent(query)}&fields=files(id, name)`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
     });
 
     if (!searchResponse.ok) {
-        throw new Error(`Failed to search for folder '${folderName}' in Google Drive.`);
+        const errorText = await searchResponse.text();
+        throw new Error(`Error buscando la carpeta '${folderName}'. Estado: ${searchResponse.status}. Detalle: ${errorText}`);
     }
 
     const searchData = await searchResponse.json();
-    if (searchData.files.length > 0) {
-        return searchData.files[0].id;
+    if (searchData.files && searchData.files.length > 0) {
+        const exactMatch = searchData.files.find((f: {name: string}) => f.name === folderName);
+        if (exactMatch) {
+            return exactMatch.id;
+        }
     }
 
     // Folder not found, create it
@@ -46,8 +51,8 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
 
     if (!createResponse.ok) {
         const error = await createResponse.json();
-        console.error("Error creating folder", error);
-        throw new Error(`Failed to create folder '${folderName}' in Google Drive.`);
+        console.error("Error creando la carpeta", error);
+        throw new Error(`Error al crear la carpeta '${folderName}'.`);
     }
 
     const createData = await createResponse.json();
@@ -56,14 +61,15 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
 
 
 export async function uploadAvatarToDrive(accessToken: string, file: File, userId: string): Promise<string> {
-    const rootFolderId = await findOrCreateFolder(accessToken, ROOT_AVATAR_FOLDER_NAME);
+    const rootFolderId = await findOrCreateFolder(accessToken, ROOT_FOLDER_NAME);
+    const configFolderId = await findOrCreateFolder(accessToken, CONFIG_FOLDER_NAME, rootFolderId);
 
     const fileExtension = file.name.split('.').pop();
     const fileName = `${userId}.${fileExtension}`;
 
     const fileMetadata = {
         name: fileName,
-        parents: [rootFolderId],
+        parents: [configFolderId],
     };
 
     const formData = new FormData();
@@ -103,4 +109,3 @@ export async function uploadAvatarToDrive(accessToken: string, file: File, userI
     // Return the web view link for direct embedding
     return `https://lh3.googleusercontent.com/d/${fileId}`;
 }
-
