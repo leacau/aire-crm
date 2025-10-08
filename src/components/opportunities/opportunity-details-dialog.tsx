@@ -246,9 +246,10 @@ export function OpportunityDetailsDialog({
     }
   }, [editedOpportunity.clientId, editedOpportunity.title, getGoogleAccessToken, toast]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, isFocused } = useDropzone({
     onDrop,
     multiple: false,
+    disabled: !editedOpportunity.title?.trim()
   });
 
   const handleFileDelete = async (fileToDelete: ProposalFile) => {
@@ -376,13 +377,19 @@ export function OpportunityDetailsDialog({
 
           <div className="space-y-2">
             <Label>Archivos de Propuesta</Label>
-            <div {...getRootProps()} className={cn("flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors hover:border-primary/50", isDragActive && "border-primary bg-primary/10")}>
+            <div {...getRootProps()} className={cn(
+                "flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors",
+                (isDragActive || isFocused) && "border-primary",
+                !editedOpportunity.title?.trim() ? "bg-muted/50 cursor-not-allowed" : "hover:border-primary/50"
+            )}>
                 <input {...getInputProps()} />
                 {isUploading ? (
                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <Loader2 className="h-6 w-6 animate-spin" />
                         <span>Subiendo archivo...</span>
                     </div>
+                ) : !editedOpportunity.title?.trim() ? (
+                     <p className="text-center text-sm text-muted-foreground">Por favor, ingresa un título para la oportunidad antes de subir archivos.</p>
                 ) : (
                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <Paperclip className="h-6 w-6" />

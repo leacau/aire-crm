@@ -23,7 +23,7 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
         query += ` and 'root' in parents`;
     }
     
-    const searchResponse = await fetch(`${DRIVE_API_URL}/files?q=${encodeURIComponent(query)}&fields=files(id)`, {
+    const searchResponse = await fetch(`${DRIVE_API_URL}/files?q=${encodeURIComponent(query)}&fields=files(id, name)`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
     });
 
@@ -32,8 +32,12 @@ async function findOrCreateFolder(accessToken: string, folderName: string, paren
     }
 
     const searchData = await searchResponse.json();
-    if (searchData.files.length > 0) {
-        return searchData.files[0].id;
+    if (searchData.files && searchData.files.length > 0) {
+        // Find the exact match in case Drive search is fuzzy
+        const exactMatch = searchData.files.find((f: {name: string}) => f.name === sanitizedName);
+        if (exactMatch) {
+            return exactMatch.id;
+        }
     }
 
     // Folder not found, create it
