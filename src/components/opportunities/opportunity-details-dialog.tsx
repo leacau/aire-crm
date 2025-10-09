@@ -31,11 +31,8 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency } from '@/lib/firebase-service';
-import { uploadFileToDrive, deleteFileFromDrive } from '@/lib/google-drive-service';
-import { PlusCircle, Paperclip, X, File as FileIcon, Loader2 } from 'lucide-react';
+import { PlusCircle } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
-import { useDropzone } from 'react-dropzone';
-import Link from 'next/link';
 
 import {
   AlertDialog,
@@ -146,11 +143,10 @@ export function OpportunityDetailsDialog({
   onCreate = () => {},
   client
 }: OpportunityDetailsDialogProps) {
-  const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
+  const { userInfo, isBoss } = useAuth();
   const { toast } = useToast();
   const [agencies, setAgencies] = useState<Agency[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-
+  
   const getInitialData = () => {
       if (opportunity) return { ...opportunity };
       return getInitialOpportunityData(client);
@@ -180,7 +176,6 @@ export function OpportunityDetailsDialog({
     if (isEditing && opportunity) {
       const changes = Object.keys(editedOpportunity).reduce((acc, key) => {
         const oppKey = key as keyof Opportunity;
-        if (oppKey === 'proposalFiles') return acc; // Handle files separately
         // @ts-ignore
         if (JSON.stringify(editedOpportunity[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
           // @ts-ignore
@@ -188,11 +183,6 @@ export function OpportunityDetailsDialog({
         }
         return acc;
       }, {} as Partial<Opportunity>);
-
-      // Explicitly check for changes in proposalFiles array
-      if (JSON.stringify(editedOpportunity.proposalFiles) !== JSON.stringify(opportunity.proposalFiles)) {
-          changes.proposalFiles = editedOpportunity.proposalFiles;
-      }
 
       if (Object.keys(changes).length > 0) {
           onUpdate(changes);
@@ -206,72 +196,6 @@ export function OpportunityDetailsDialog({
     }
     onOpenChange(false);
   };
-
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (!acceptedFiles.length) return;
-    
-    if (!isEditing || !editedOpportunity.id) {
-      toast({ title: 'Guarda la oportunidad primero', description: 'Debes guardar la oportunidad antes de poder subir archivos.', variant: 'destructive' });
-      return;
-    }
-
-    if (!client) {
-      toast({ title: 'Error de Cliente', description: 'No se pudo identificar al cliente de la oportunidad.', variant: 'destructive' });
-      return;
-    }
-
-
-    setIsUploading(true);
-    try {
-        const token = await getGoogleAccessToken();
-        if (!token) {
-            throw new Error("No se pudo obtener el token de acceso de Google. Intenta iniciar sesión de nuevo.");
-        }
-    
-        const file = acceptedFiles[0];
-        const fileUrl = await uploadFileToDrive(token, file, editedOpportunity.id);
-        
-        const newFile: ProposalFile = { name: file.name, url: fileUrl };
-
-        setEditedOpportunity(prev => ({
-            ...prev,
-            proposalFiles: [...(prev.proposalFiles || []), newFile]
-        }));
-
-        toast({ title: "Archivo Subido", description: `${file.name} se ha adjuntado correctamente.` });
-    } catch (error: any) {
-        console.error("File upload error:", error);
-        toast({ title: "Error al Subir el Archivo", description: error.message, variant: "destructive" });
-    } finally {
-        setIsUploading(false);
-    }
-  }, [isEditing, editedOpportunity.id, getGoogleAccessToken, toast, client]);
-
-  const { getRootProps, getInputProps, isDragActive, isFocused } = useDropzone({
-    onDrop,
-    multiple: false,
-    disabled: !isEditing
-  });
-
-  const handleFileDelete = async (fileToDelete: ProposalFile) => {
-    if (!confirm(`¿Estás seguro de que quieres eliminar el archivo "${fileToDelete.name}"?`)) return;
-
-    try {
-      const token = await getGoogleAccessToken();
-      if (!token) {
-          throw new Error("No se pudo obtener el token de acceso de Google.");
-      }
-      await deleteFileFromDrive(token, fileToDelete.url);
-      setEditedOpportunity(prev => ({
-          ...prev,
-          proposalFiles: prev.proposalFiles?.filter(f => f.url !== fileToDelete.url) || []
-      }));
-      toast({ title: "Archivo Eliminado" });
-    } catch (error: any) {
-       toast({ title: "Error al Eliminar Archivo de Drive", description: error.message, variant: "destructive" });
-    }
-  };
-
 
   const handleBonusDecision = (decision: 'Autorizado' | 'Rechazado') => {
     if (!userInfo) return;
@@ -373,50 +297,6 @@ export function OpportunityDetailsDialog({
           <div className="space-y-2">
               <Label htmlFor="details">Descripción</Label>
               <Textarea id="details" name="details" value={editedOpportunity.details || ''} onChange={handleChange}/>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="proposal-files">Archivos de Propuesta</Label>
-            <div {...getRootProps({id: 'proposal-files'})} className={cn(
-                "flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors",
-                (isDragActive || isFocused) && "border-primary",
-                !isEditing ? "bg-muted/50 cursor-not-allowed" : "hover:border-primary/50"
-            )}>
-                <input {...getInputProps()} />
-                {isUploading ? (
-                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                        <Loader2 className="h-6 w-6 animate-spin" />
-                        <span>Subiendo archivo...</span>
-                    </div>
-                ) : !isEditing ? (
-                     <p className="text-center text-sm text-muted-foreground">Guarda la oportunidad primero para poder subir archivos.</p>
-                ) : (
-                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                        <Paperclip className="h-6 w-6" />
-                        <span>Arrastra un archivo aquí, o haz clic para seleccionar</span>
-                    </div>
-                )}
-            </div>
-            {editedOpportunity.proposalFiles && editedOpportunity.proposalFiles.length > 0 && (
-              <div className="mt-4 space-y-2">
-                  <h4 className="font-medium text-sm">Archivos Adjuntos:</h4>
-                  <ul className="divide-y rounded-md border">
-                      {editedOpportunity.proposalFiles.map((file, index) => (
-                          <li key={index} className="flex items-center justify-between p-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <FileIcon className="h-4 w-4 text-muted-foreground flex-shrink-0"/>
-                              <Link href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate" title={file.name}>
-                                {file.name}
-                              </Link>
-                            </div>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => handleFileDelete(file)}>
-                              <X className="h-4 w-4 text-destructive"/>
-                            </Button>
-                          </li>
-                      ))}
-                  </ul>
-              </div>
-            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
