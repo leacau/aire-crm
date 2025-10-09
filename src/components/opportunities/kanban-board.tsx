@@ -146,11 +146,11 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
         <CardHeader className="p-4">
           <div className="flex justify-between items-start">
             <CardTitle className="text-base font-semibold leading-tight">
-              {opportunity.title}
+              {opportunity.clientName}
             </CardTitle>
             <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
           </div>
-          <p className="text-sm text-muted-foreground pt-1">{opportunity.clientName}</p>
+          <p className="text-sm text-muted-foreground pt-1">{opportunity.title}</p>
         </CardHeader>
         <CardContent className="p-4 pt-0">
           <div className="flex justify-between items-center">
