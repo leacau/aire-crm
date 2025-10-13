@@ -113,7 +113,6 @@ export type ClientActivity = {
     id: string;
     clientId: string;
     clientName?: string; // Add clientName for easier display in dashboard
-    opportunityId?: string; // Optional link to an opportunity
     userId: string;
     userName: string;
     type: ClientActivityType;

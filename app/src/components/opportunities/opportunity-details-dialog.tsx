@@ -37,7 +37,6 @@ import { LinkifiedText } from '@/components/ui/linkified-text';
 import { useDropzone } from 'react-dropzone';
 import { uploadFileToDrive, deleteFileFromDrive } from '@/lib/google-drive-service';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
-import { OpportunityActivity } from './opportunity-activity';
 
 import {
   AlertDialog,
@@ -512,16 +511,6 @@ export function OpportunityDetailsDialog({
                               )}
                           </div>
                       )}
-                  </AccordionContent>
-                </AccordionItem>
-                 <AccordionItem value="item-3">
-                  <AccordionTrigger>Tareas y Actividades</AccordionTrigger>
-                  <AccordionContent className="pt-4">
-                    <OpportunityActivity 
-                        opportunityId={opportunity.id}
-                        clientId={opportunity.clientId}
-                        clientName={opportunity.clientName}
-                    />
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
