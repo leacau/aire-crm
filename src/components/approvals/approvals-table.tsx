@@ -11,6 +11,7 @@ import { es } from 'date-fns/locale';
 import { Badge } from '../ui/badge';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
+import { LinkifiedText } from '../ui/linkified-text';
 
 interface ApprovalsTableProps {
   opportunities: Opportunity[];
@@ -72,6 +73,12 @@ export const ApprovalsTable = ({ opportunities, onRowClick, clientsMap, usersMap
       accessorKey: 'bonificacionEstado',
       header: 'Estado',
       cell: ({ row }) => getBonusStatusPill(row.original.bonificacionEstado)
+    },
+    {
+      accessorKey: 'bonificacionObservaciones',
+      header: 'Observaciones',
+      cell: ({ row }) => row.original.bonificacionObservaciones ? <LinkifiedText text={row.original.bonificacionObservaciones} /> : '-',
+      size: 250,
     },
     {
       id: 'decision',

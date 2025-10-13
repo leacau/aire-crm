@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -177,7 +178,6 @@ export function OpportunityDetailsDialog({
     if (isEditing && opportunity) {
         const changes = Object.keys(editedOpportunity).reduce((acc, key) => {
             const oppKey = key as keyof Opportunity;
-             // Use JSON.stringify for a deep comparison, especially for arrays like proposalFiles
             if (JSON.stringify(editedOpportunity[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
                 // @ts-ignore
                 acc[oppKey] = editedOpportunity[oppKey];
@@ -281,13 +281,21 @@ export function OpportunityDetailsDialog({
       return <span className={cn(baseClasses, statusMap[status])}>{status}</span>;
   }
   
-  type EditableField = 'details' | 'observaciones' | 'propuestaCerrada';
+  type EditableField = 'details' | 'observaciones' | 'propuestaCerrada' | 'bonificacionObservaciones';
   const [editingField, setEditingField] = useState<EditableField | null>(null);
 
   const renderEditableTextarea = (field: EditableField, label: string) => {
     const isEditingThisField = editingField === field;
     const value = editedOpportunity[field] || '';
-    const isDisabled = !isCloseWon && field === 'propuestaCerrada';
+    let isDisabled = false;
+
+    if (field === 'propuestaCerrada' && !isCloseWon) {
+        isDisabled = true;
+    }
+    if (field === 'bonificacionObservaciones' && !isBoss) {
+        isDisabled = true;
+    }
+
 
     return (
         <div className="space-y-2">
@@ -301,7 +309,7 @@ export function OpportunityDetailsDialog({
                     onBlur={() => setEditingField(null)}
                     autoFocus
                     disabled={isDisabled}
-                    placeholder={isDisabled ? 'Solo para Cierre Ganado' : ''}
+                    placeholder={isDisabled ? 'No disponible' : ''}
                 />
             ) : (
                 <div
@@ -315,7 +323,7 @@ export function OpportunityDetailsDialog({
                         <LinkifiedText text={value} />
                     ) : (
                         <span className="text-muted-foreground">
-                            {isDisabled ? 'Solo para Cierre Ganado' : `Clic para editar...`}
+                            {isDisabled ? 'No disponible' : `Clic para editar...`}
                         </span>
                     )}
                 </div>
@@ -463,6 +471,8 @@ export function OpportunityDetailsDialog({
                             {getBonusStatusPill(editedOpportunity.bonificacionEstado)}
                         </div>
                         
+                        {renderEditableTextarea('bonificacionObservaciones', 'Observaciones de la Decisión')}
+
                         {editedOpportunity.bonificacionEstado === 'Pendiente' && isBoss && (
                              <div className="flex gap-2 mt-2">
                                 <Button size="sm" variant="destructive" onClick={() => handleBonusDecision('Rechazado')}>

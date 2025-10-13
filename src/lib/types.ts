@@ -39,6 +39,7 @@ export type Opportunity = {
   bonificacionAutorizadoPorId?: string;
   bonificacionAutorizadoPorNombre?: string;
   bonificacionFechaAutorizacion?: string;
+  bonificacionObservaciones?: string;
   // Nuevos campos
   periodicidad?: Periodicidad[];
   facturaPorAgencia?: boolean;
