@@ -1,12 +1,9 @@
 
 import type { Metadata } from 'next';
 import './globals.css';
-import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
-import { AppSidebar } from '@/components/layout/app-sidebar';
-import { AuthProvider } from '@/hooks/use-auth.tsx';
+import { AuthProvider } from '@/hooks/use-auth';
 import { Analytics } from '@vercel/analytics/next';
-import { AuthLayout } from '@/components/layout/auth-layout';
 
 export const metadata: Metadata = {
   title: 'CRM Aire de Santa Fe',
@@ -28,9 +25,7 @@ export default function RootLayout({
         <meta name="google" content="notranslate" />
       </head>
       <body className="font-body antialiased">
-        <AuthProvider>
-          <AuthLayout>{children}</AuthLayout>
-        </AuthProvider>
+        <AuthProvider>{children}</AuthProvider>
         <Toaster />
         <Analytics />
       </body>
