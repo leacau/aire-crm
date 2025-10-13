@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -32,12 +31,9 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency } from '@/lib/firebase-service';
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { PlusCircle } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { LinkifiedText } from '@/components/ui/linkified-text';
-import { useDropzone } from 'react-dropzone';
-import { uploadFileToDrive, deleteFileFromDrive } from '@/lib/google-drive-service';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
 
 import {
   AlertDialog,
@@ -50,7 +46,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { OpportunityActivity } from './opportunity-activity';
 
 interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
@@ -451,82 +446,63 @@ export function OpportunityDetailsDialog({
           </div>
           
            {renderEditableTextarea('observaciones', 'Observaciones')}
-           
-            {isEditing && (
-              <Accordion type="multiple" className="w-full">
-                <AccordionItem value="item-1">
-                  <AccordionTrigger>Detalles de Cierre y Facturación</AccordionTrigger>
-                  <AccordionContent className="space-y-4 pt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="facturaNo">Factura Nº</Label>
-                        <Input id="facturaNo" name="facturaNo" value={editedOpportunity.facturaNo || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}/>
-                      </div>
-                      <div className="space-y-2">
-                          <Label htmlFor="valorCerrado">Valor Cerrado</Label>
-                          <Input id="valorCerrado" name="valorCerrado" type="number" value={editedOpportunity.valorCerrado || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''} />
-                      </div>
+
+          {isEditing && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="facturaNo">Factura Nº</Label>
+                  <Input id="facturaNo" name="facturaNo" value={editedOpportunity.facturaNo || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}/>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="valorCerrado">Valor Cerrado</Label>
+                    <Input id="valorCerrado" name="valorCerrado" type="number" value={editedOpportunity.valorCerrado || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''} />
+                </div>
+              </div>
+
+               {renderEditableTextarea('propuestaCerrada', 'Propuesta Cerrada')}
+
+               <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox id="pagado" name="pagado" checked={editedOpportunity.pagado} onCheckedChange={(c) => handleCheckboxChange('pagado', c)} disabled={!isInvoiceSet}/>
+                  <Label htmlFor="pagado">Pagado</Label>
+              </div>
+
+              <div className="space-y-2">
+                  <Label htmlFor="bonificacionDetalle">Detalle Bonificación</Label>
+                  <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!canEditBonus} placeholder={!canEditBonus ? 'Solo en Negociación o Cierre Ganado' : 'Ej: 10% Descuento'}/>
+              </div>
+
+              {hasBonusRequest && (
+                    <div className="grid grid-cols-1 gap-3 p-3 mt-2 border rounded-lg bg-muted/50 col-span-full">
+                        <h4 className="font-semibold text-sm">Gestión de Bonificación</h4>
+                        <div className="flex items-center justify-between">
+                            <Label>Estado</Label>
+                            {getBonusStatusPill(editedOpportunity.bonificacionEstado)}
+                        </div>
+                        
+                        {renderEditableTextarea('bonificacionObservaciones', 'Observaciones de la Decisión')}
+
+                        {editedOpportunity.bonificacionEstado === 'Pendiente' && isBoss && (
+                             <div className="flex gap-2 mt-2">
+                                <Button size="sm" variant="destructive" onClick={() => handleBonusDecision('Rechazado')}>
+                                    Rechazar
+                                </Button>
+                                <Button size="sm" onClick={() => handleBonusDecision('Autorizado')}>
+                                    Autorizar
+                                </Button>
+                            </div>
+                        )}
+
+                        {(editedOpportunity.bonificacionEstado === 'Autorizado' || editedOpportunity.bonificacionEstado === 'Rechazado') && (
+                            <div className="text-xs text-muted-foreground space-y-1 mt-1">
+                                <p>Decisión por: {editedOpportunity.bonificacionAutorizadoPorNombre}</p>
+                                <p>Fecha: {editedOpportunity.bonificacionFechaAutorizacion ? format(new Date(editedOpportunity.bonificacionFechaAutorizacion), "PPP p", { locale: es }) : '-'}</p>
+                            </div>
+                        )}
                     </div>
-
-                     {renderEditableTextarea('propuestaCerrada', 'Propuesta Cerrada')}
-
-                     <div className="flex items-center space-x-2 pt-2">
-                        <Checkbox id="pagado" name="pagado" checked={editedOpportunity.pagado} onCheckedChange={(c) => handleCheckboxChange('pagado', c)} disabled={!isInvoiceSet}/>
-                        <Label htmlFor="pagado">Pagado</Label>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="item-2">
-                  <AccordionTrigger>Bonificación</AccordionTrigger>
-                  <AccordionContent className="space-y-4 pt-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="bonificacionDetalle">Detalle Bonificación</Label>
-                        <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!canEditBonus} placeholder={!canEditBonus ? 'Solo en Negociación o Cierre Ganado' : 'Ej: 10% Descuento'}/>
-                    </div>
-
-                    {hasBonusRequest && (
-                          <div className="grid grid-cols-1 gap-3 p-3 mt-2 border rounded-lg bg-muted/50 col-span-full">
-                              <h4 className="font-semibold text-sm">Gestión de Bonificación</h4>
-                              <div className="flex items-center justify-between">
-                                  <Label>Estado</Label>
-                                  {getBonusStatusPill(editedOpportunity.bonificacionEstado)}
-                              </div>
-                              
-                              {renderEditableTextarea('bonificacionObservaciones', 'Observaciones de la Decisión')}
-
-                              {editedOpportunity.bonificacionEstado === 'Pendiente' && isBoss && (
-                                  <div className="flex gap-2 mt-2">
-                                      <Button size="sm" variant="destructive" onClick={() => handleBonusDecision('Rechazado')}>
-                                          Rechazar
-                                      </Button>
-                                      <Button size="sm" onClick={() => handleBonusDecision('Autorizado')}>
-                                          Autorizar
-                                      </Button>
-                                  </div>
-                              )}
-
-                              {(editedOpportunity.bonificacionEstado === 'Autorizado' || editedOpportunity.bonificacionEstado === 'Rechazado') && (
-                                  <div className="text-xs text-muted-foreground space-y-1 mt-1">
-                                      <p>Decisión por: {editedOpportunity.bonificacionAutorizadoPorNombre}</p>
-                                      <p>Fecha: {editedOpportunity.bonificacionFechaAutorizacion ? format(new Date(editedOpportunity.bonificacionFechaAutorizacion), "PPP p", { locale: es }) : '-'}</p>
-                                  </div>
-                              )}
-                          </div>
-                      )}
-                  </AccordionContent>
-                </AccordionItem>
-                 <AccordionItem value="item-3">
-                  <AccordionTrigger>Tareas y Actividades</AccordionTrigger>
-                  <AccordionContent>
-                    <OpportunityActivity 
-                      opportunityId={opportunity.id} 
-                      clientId={opportunity.clientId}
-                      clientName={opportunity.clientName}
-                    />
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            )}
+                )}
+            </>
+          )}
 
         </div>
         <DialogFooter>
