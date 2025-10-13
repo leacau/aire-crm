@@ -430,7 +430,7 @@ export default function ClientsPage() {
                 <span className="font-medium">{client.denominacion}</span>
               )}
                <div className="flex items-center gap-2 mt-1">
-                 {isBoss && userInfo && client.ownerId !== userInfo.id && (
+                 {userInfo && client.ownerId !== userInfo.id && (
                     <p className="text-xs text-muted-foreground">{client.ownerName}</p>
                  )}
                  {client.isDeactivated && <Badge variant="destructive">Baja</Badge>}
