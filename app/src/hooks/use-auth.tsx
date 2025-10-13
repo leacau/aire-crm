@@ -2,10 +2,10 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
-import { getUserProfile, updateUserProfile } from '@/lib/firebase-service';
+import { getUserProfile } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
 
 interface AuthContextType {
@@ -37,9 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        setUser(firebaseUser);
         const profile = await getUserProfile(firebaseUser.uid);
-        
         if (profile) {
           const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';
           const finalProfile = { 
@@ -63,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUserInfo(defaultProfile);
             setIsBoss(false);
         }
+        setUser(firebaseUser);
       } else {
         setUser(null);
         setUserInfo(null);
@@ -92,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (storedToken) return storedToken;
 
         if (auth.currentUser) {
+            const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
             const provider = new GoogleAuthProvider();
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
@@ -113,20 +113,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
     };
 
-
-  if (loading && !publicRoutes.includes(pathname)) {
-    return null; // Don't render anything, prevents spinner import cycle
-  }
-
-  if (!loading && (user || publicRoutes.includes(pathname))) {
-    return (
+  return (
       <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken }}>
         {children}
       </AuthContext.Provider>
     );
-  }
-
-  return null;
 }
 
 export const useAuth = () => useContext(AuthContext);
