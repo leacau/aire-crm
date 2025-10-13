@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -176,7 +175,7 @@ export function OpportunityDetailsDialog({
 
  const handleSave = async () => {
     if (isEditing && opportunity) {
-        const changes = Object.keys(editedOpportunity).reduce((acc, key) => {
+        const changes: Partial<Opportunity> = Object.keys(editedOpportunity).reduce((acc, key) => {
             const oppKey = key as keyof Opportunity;
             if (JSON.stringify(editedOpportunity[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
                 // @ts-ignore
@@ -184,6 +183,10 @@ export function OpportunityDetailsDialog({
             }
             return acc;
         }, {} as Partial<Opportunity>);
+
+        if (JSON.stringify(editedOpportunity.proposalFiles) !== JSON.stringify(opportunity.proposalFiles)) {
+          changes.proposalFiles = editedOpportunity.proposalFiles;
+        }
 
         if (Object.keys(changes).length > 0) {
             onUpdate(changes);
@@ -230,6 +233,10 @@ export function OpportunityDetailsDialog({
                 if (prev.bonificacionEstado !== 'Autorizado' && prev.bonificacionEstado !== 'Rechazado') {
                     newState.bonificacionEstado = 'Pendiente';
                 }
+                 // Auto-move to "Negociación a Aprobar"
+                if (prev.stage === 'Negociación') {
+                    newState.stage = 'Negociación a Aprobar';
+                }
             } else {
                 delete newState.bonificacionEstado;
                 delete newState.bonificacionAutorizadoPorId;
@@ -267,6 +274,7 @@ export function OpportunityDetailsDialog({
   }
 
   const isCloseWon = editedOpportunity.stage === 'Cerrado - Ganado';
+  const canEditBonus = editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar';
   const isInvoiceSet = !!editedOpportunity.facturaNo;
   const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
 
@@ -460,7 +468,7 @@ export function OpportunityDetailsDialog({
 
               <div className="space-y-2">
                   <Label htmlFor="bonificacionDetalle">Detalle Bonificación</Label>
-                  <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado. Ej: 10% Descuento' : 'Ej: 10% Descuento'}/>
+                  <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!canEditBonus} placeholder={!canEditBonus ? 'Solo en Negociación o Cierre Ganado' : 'Ej: 10% Descuento'}/>
               </div>
 
               {hasBonusRequest && (

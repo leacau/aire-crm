@@ -28,6 +28,7 @@ const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'border-blue-500',
   'Propuesta': 'border-yellow-500',
   'Negociación': 'border-orange-500',
+  'Negociación a Aprobar': 'border-purple-500',
   'Cerrado - Ganado': 'border-green-500',
   'Cerrado - Perdido': 'border-red-500',
 };
