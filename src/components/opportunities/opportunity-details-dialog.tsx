@@ -33,6 +33,7 @@ import { es } from 'date-fns/locale';
 import { getAgencies, createAgency } from '@/lib/firebase-service';
 import { PlusCircle } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
+import { LinkifiedText } from '@/components/ui/linkified-text';
 
 import {
   AlertDialog,
@@ -172,21 +173,21 @@ export function OpportunityDetailsDialog({
 
   const isEditing = opportunity !== null;
 
-  const handleSave = async () => {
+ const handleSave = async () => {
     if (isEditing && opportunity) {
-      const changes = Object.keys(editedOpportunity).reduce((acc, key) => {
-        const oppKey = key as keyof Opportunity;
-        // @ts-ignore
-        if (JSON.stringify(editedOpportunity[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
-          // @ts-ignore
-          acc[oppKey] = editedOpportunity[oppKey];
-        }
-        return acc;
-      }, {} as Partial<Opportunity>);
+        const changes = Object.keys(editedOpportunity).reduce((acc, key) => {
+            const oppKey = key as keyof Opportunity;
+             // Use JSON.stringify for a deep comparison, especially for arrays like proposalFiles
+            if (JSON.stringify(editedOpportunity[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
+                // @ts-ignore
+                acc[oppKey] = editedOpportunity[oppKey];
+            }
+            return acc;
+        }, {} as Partial<Opportunity>);
 
-      if (Object.keys(changes).length > 0) {
-          onUpdate(changes);
-      }
+        if (Object.keys(changes).length > 0) {
+            onUpdate(changes);
+        }
     } else if (!isEditing) {
         const newOpp = {
             ...editedOpportunity,
@@ -195,7 +196,7 @@ export function OpportunityDetailsDialog({
         onCreate(newOpp);
     }
     onOpenChange(false);
-  };
+};
 
   const handleBonusDecision = (decision: 'Autorizado' | 'Rechazado') => {
     if (!userInfo) return;
@@ -279,6 +280,49 @@ export function OpportunityDetailsDialog({
       };
       return <span className={cn(baseClasses, statusMap[status])}>{status}</span>;
   }
+  
+  type EditableField = 'details' | 'observaciones' | 'propuestaCerrada';
+  const [editingField, setEditingField] = useState<EditableField | null>(null);
+
+  const renderEditableTextarea = (field: EditableField, label: string) => {
+    const isEditingThisField = editingField === field;
+    const value = editedOpportunity[field] || '';
+    const isDisabled = !isCloseWon && field === 'propuestaCerrada';
+
+    return (
+        <div className="space-y-2">
+            <Label htmlFor={field} onClick={() => !isDisabled && setEditingField(field)}>{label}</Label>
+            {isEditingThisField ? (
+                <Textarea
+                    id={field}
+                    name={field}
+                    value={value}
+                    onChange={handleChange}
+                    onBlur={() => setEditingField(null)}
+                    autoFocus
+                    disabled={isDisabled}
+                    placeholder={isDisabled ? 'Solo para Cierre Ganado' : ''}
+                />
+            ) : (
+                <div
+                    onClick={() => !isDisabled && setEditingField(field)}
+                    className={cn(
+                        "min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        isDisabled ? "cursor-not-allowed opacity-50" : "cursor-text"
+                    )}
+                >
+                    {value ? (
+                        <LinkifiedText text={value} />
+                    ) : (
+                        <span className="text-muted-foreground">
+                            {isDisabled ? 'Solo para Cierre Ganado' : `Clic para editar...`}
+                        </span>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -294,10 +338,7 @@ export function OpportunityDetailsDialog({
               <Label htmlFor="title">Título</Label>
               <Input id="title" name="title" value={editedOpportunity.title || ''} onChange={handleChange}/>
           </div>
-          <div className="space-y-2">
-              <Label htmlFor="details">Descripción</Label>
-              <Textarea id="details" name="details" value={editedOpportunity.details || ''} onChange={handleChange}/>
-          </div>
+          {renderEditableTextarea('details', 'Descripción')}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -387,10 +428,7 @@ export function OpportunityDetailsDialog({
             </div>
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="observaciones">Observaciones</Label>
-            <Textarea id="observaciones" name="observaciones" value={editedOpportunity.observaciones || ''} onChange={handleChange}/>
-          </div>
+           {renderEditableTextarea('observaciones', 'Observaciones')}
 
           {isEditing && (
             <>
@@ -405,10 +443,7 @@ export function OpportunityDetailsDialog({
                 </div>
               </div>
 
-               <div className="space-y-2">
-                <Label htmlFor="propuestaCerrada">Propuesta Cerrada</Label>
-                <Textarea id="propuestaCerrada" name="propuestaCerrada" value={editedOpportunity.propuestaCerrada || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}/>
-              </div>
+               {renderEditableTextarea('propuestaCerrada', 'Propuesta Cerrada')}
 
                <div className="flex items-center space-x-2 pt-2">
                   <Checkbox id="pagado" name="pagado" checked={editedOpportunity.pagado} onCheckedChange={(c) => handleCheckboxChange('pagado', c)} disabled={!isInvoiceSet}/>
