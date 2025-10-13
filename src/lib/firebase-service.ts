@@ -724,6 +724,11 @@ export const createClientActivity = async (
        delete dataToSave.dueDate;
     }
 
+    if (!activityData.opportunityId || activityData.opportunityId === 'none') {
+        delete dataToSave.opportunityId;
+        delete dataToSave.opportunityTitle;
+    }
+
 
     const docRef = await addDoc(clientActivitiesCollection, dataToSave);
     return docRef.id;

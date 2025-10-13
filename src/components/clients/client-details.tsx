@@ -38,6 +38,7 @@ import {
   Clock,
   BadgeAlert,
   Star,
+  CircleDollarSign,
 } from 'lucide-react';
 import {
   Table,
@@ -70,14 +71,14 @@ import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
 import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers } from '@/lib/firebase-service';
-import { sendEmail, createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/lib/google-gmail-service';
+import { sendEmail, createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Calendar } from '../ui/calendar';
-import { format, set, parse } from 'date-fns';
+import { format, set } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -99,6 +100,7 @@ const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'bg-blue-500',
   'Propuesta': 'bg-yellow-500',
   'Negociación': 'bg-orange-500',
+  'Negociación a Aprobar': 'bg-orange-500',
   'Cerrado - Ganado': 'bg-green-500',
   'Cerrado - Perdido': 'bg-red-500',
 };
@@ -144,6 +146,7 @@ export function ClientDetails({
   // New Activity State
   const [newActivityType, setNewActivityType] = useState<ClientActivityType | ''>('');
   const [newActivityObservation, setNewActivityObservation] = useState('');
+  const [newActivityOpportunityId, setNewActivityOpportunityId] = useState<string | undefined>();
   const [isTask, setIsTask] = useState(false);
   const [dueDate, setDueDate] = useState<Date | undefined>();
   const [dueTime, setDueTime] = useState<string>('09:00');
@@ -278,6 +281,7 @@ export function ClientDetails({
     setIsTask(false);
     setDueDate(undefined);
     setDueTime('09:00');
+    setNewActivityOpportunityId(undefined);
   };
 
   const combineDateAndTime = (date: Date, time: string): Date => {
@@ -303,9 +307,13 @@ export function ClientDetails({
         finalDueDate = combineDateAndTime(dueDate, dueTime);
     }
     
+    const selectedOpp = opportunities.find(opp => opp.id === newActivityOpportunityId);
+
     const activityPayload: Omit<ClientActivity, 'id' | 'timestamp'> = {
         clientId: client.id,
         clientName: client.denominacion,
+        opportunityId: newActivityOpportunityId,
+        opportunityTitle: selectedOpp?.title,
         type: newActivityType,
         observation: newActivityObservation,
         userId: userInfo.id,
@@ -784,7 +792,7 @@ export function ClientDetails({
                 <CardContent>
                     <div className="space-y-4 p-4 border rounded-md">
                         <h4 className="font-medium">Nueva Actividad</h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Select value={newActivityType} onValueChange={(value) => setNewActivityType(value as ClientActivityType)}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Tipo de actividad" />
@@ -793,26 +801,38 @@ export function ClientDetails({
                                     {clientActivityTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
                                 </SelectContent>
                             </Select>
-                            <Textarea 
-                                placeholder="Escribe una observación..." 
-                                value={newActivityObservation}
-                                onChange={(e) => setNewActivityObservation(e.target.value)}
-                                className="sm:col-span-2"
-                            />
-                        </div>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                            <div className="flex items-center space-x-2">
+                             <div className="flex items-center space-x-2">
                                 <Checkbox id="is-task" checked={isTask} onCheckedChange={(checked) => setIsTask(!!checked)} />
-                                <Label htmlFor="is-task" className='font-normal'>Crear como Tarea</Label>
+                                <Label htmlFor="is-task" className='font-normal'>Crear como Tarea/Recordatorio</Label>
                             </div>
-                            {isTask && (
-                                <div className="flex items-center gap-2">
+                        </div>
+                        <Textarea 
+                            placeholder="Escribe una observación..." 
+                            value={newActivityObservation}
+                            onChange={(e) => setNewActivityObservation(e.target.value)}
+                            className="sm:col-span-2"
+                        />
+                        {isTask && (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Oportunidad (Opcional)</Label>
+                                    <Select value={newActivityOpportunityId} onValueChange={setNewActivityOpportunityId}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Asociar a oportunidad..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">Ninguna</SelectItem>
+                                            {opportunities.map(opp => <SelectItem key={opp.id} value={opp.id}>{opp.title}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center gap-2 md:col-span-2">
                                   <Popover>
                                       <PopoverTrigger asChild>
                                       <Button
                                           variant={"outline"}
                                           className={cn(
-                                          "w-[200px] justify-start text-left font-normal",
+                                          "w-full justify-start text-left font-normal",
                                           !dueDate && "text-muted-foreground"
                                           )}
                                       >
@@ -840,8 +860,8 @@ export function ClientDetails({
                                     />
                                    </div>
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
                          <Button onClick={handleSaveClientActivity} disabled={isSavingActivity}>
                             {isSavingActivity ? (
                                 <>
@@ -882,6 +902,12 @@ export function ClientDetails({
                                             </span>
                                         </div>
                                         <p className="text-sm">{activity.observation}</p>
+                                        {activity.opportunityTitle && (
+                                          <p className="text-xs mt-1 font-medium flex items-center text-muted-foreground">
+                                            <CircleDollarSign className="h-3 w-3 mr-1" />
+                                            Oportunidad: {activity.opportunityTitle}
+                                          </p>
+                                        )}
                                         {activity.isTask && activity.dueDate && (
                                             <div className="flex items-center gap-2">
                                                 <p className="text-xs mt-1 font-medium flex items-center">

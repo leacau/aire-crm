@@ -112,7 +112,9 @@ export type ClientActivityType = typeof clientActivityTypes[number];
 export type ClientActivity = {
     id: string;
     clientId: string;
-    clientName?: string; // Add clientName for easier display in dashboard
+    clientName?: string;
+    opportunityId?: string;
+    opportunityTitle?: string;
     userId: string;
     userName: string;
     type: ClientActivityType;
