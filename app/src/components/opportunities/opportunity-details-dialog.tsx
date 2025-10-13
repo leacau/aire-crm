@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
@@ -31,9 +31,13 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency } from '@/lib/firebase-service';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Trash2 } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { LinkifiedText } from '@/components/ui/linkified-text';
+import { useDropzone } from 'react-dropzone';
+import { uploadFileToDrive, deleteFileFromDrive } from '@/lib/google-drive-service';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
+import { OpportunityActivity } from './opportunity-activity';
 
 import {
   AlertDialog,
@@ -72,6 +76,7 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     formaDePago: [],
     fechaFacturacion: '',
     fechaInicioPauta: '',
+    proposalFiles: [],
 });
 
 const NewAgencyDialog = ({ onAgencyCreated }: { onAgencyCreated: (newAgency: Agency) => void }) => {
@@ -162,7 +167,7 @@ export function OpportunityDetailsDialog({
             toast({ title: "Error al cargar agencias", variant: "destructive" });
         });
     }
-  }, [opportunity, isOpen, client, toast]);
+  }, [opportunity, isOpen, userInfo, client, toast]);
   
   const handleAgencyCreated = (newAgency: Agency) => {
     setAgencies(prev => [...prev, newAgency].sort((a,b) => a.name.localeCompare(b.name)));
@@ -176,13 +181,17 @@ export function OpportunityDetailsDialog({
     if (isEditing && opportunity) {
         const changes: Partial<Opportunity> = Object.keys(editedOpportunity).reduce((acc, key) => {
             const oppKey = key as keyof Opportunity;
-            // A deep-ish check for arrays and objects
             if (JSON.stringify(editedOpportunity[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
                 // @ts-ignore
                 acc[oppKey] = editedOpportunity[oppKey];
             }
             return acc;
         }, {} as Partial<Opportunity>);
+        
+        // This is a special check for arrays of objects
+        if (JSON.stringify(editedOpportunity.proposalFiles) !== JSON.stringify(opportunity.proposalFiles)) {
+          changes.proposalFiles = editedOpportunity.proposalFiles;
+        }
 
         if (Object.keys(changes).length > 0) {
             onUpdate(changes);
@@ -345,7 +354,7 @@ export function OpportunityDetailsDialog({
             {isEditing ? 'Edita los detalles de la oportunidad.' : 'Rellena los datos para crear una nueva oportunidad.'}
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-6 py-4 max-h-[70vh] overflow-y-auto pr-4">
+        <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
            <div className="space-y-2">
               <Label htmlFor="title">Título</Label>
               <Input id="title" name="title" value={editedOpportunity.title || ''} onChange={handleChange}/>
@@ -441,63 +450,82 @@ export function OpportunityDetailsDialog({
           </div>
           
            {renderEditableTextarea('observaciones', 'Observaciones')}
-
-          {isEditing && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="facturaNo">Factura Nº</Label>
-                  <Input id="facturaNo" name="facturaNo" value={editedOpportunity.facturaNo || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}/>
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="valorCerrado">Valor Cerrado</Label>
-                    <Input id="valorCerrado" name="valorCerrado" type="number" value={editedOpportunity.valorCerrado || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''} />
-                </div>
-              </div>
-
-               {renderEditableTextarea('propuestaCerrada', 'Propuesta Cerrada')}
-
-               <div className="flex items-center space-x-2 pt-2">
-                  <Checkbox id="pagado" name="pagado" checked={editedOpportunity.pagado} onCheckedChange={(c) => handleCheckboxChange('pagado', c)} disabled={!isInvoiceSet}/>
-                  <Label htmlFor="pagado">Pagado</Label>
-              </div>
-
-              <div className="space-y-2">
-                  <Label htmlFor="bonificacionDetalle">Detalle Bonificación</Label>
-                  <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!canEditBonus} placeholder={!canEditBonus ? 'Solo en Negociación o Cierre Ganado' : 'Ej: 10% Descuento'}/>
-              </div>
-
-              {hasBonusRequest && (
-                    <div className="grid grid-cols-1 gap-3 p-3 mt-2 border rounded-lg bg-muted/50 col-span-full">
-                        <h4 className="font-semibold text-sm">Gestión de Bonificación</h4>
-                        <div className="flex items-center justify-between">
-                            <Label>Estado</Label>
-                            {getBonusStatusPill(editedOpportunity.bonificacionEstado)}
-                        </div>
-                        
-                        {renderEditableTextarea('bonificacionObservaciones', 'Observaciones de la Decisión')}
-
-                        {editedOpportunity.bonificacionEstado === 'Pendiente' && isBoss && (
-                             <div className="flex gap-2 mt-2">
-                                <Button size="sm" variant="destructive" onClick={() => handleBonusDecision('Rechazado')}>
-                                    Rechazar
-                                </Button>
-                                <Button size="sm" onClick={() => handleBonusDecision('Autorizado')}>
-                                    Autorizar
-                                </Button>
-                            </div>
-                        )}
-
-                        {(editedOpportunity.bonificacionEstado === 'Autorizado' || editedOpportunity.bonificacionEstado === 'Rechazado') && (
-                            <div className="text-xs text-muted-foreground space-y-1 mt-1">
-                                <p>Decisión por: {editedOpportunity.bonificacionAutorizadoPorNombre}</p>
-                                <p>Fecha: {editedOpportunity.bonificacionFechaAutorizacion ? format(new Date(editedOpportunity.bonificacionFechaAutorizacion), "PPP p", { locale: es }) : '-'}</p>
-                            </div>
-                        )}
+           
+            {isEditing && (
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="item-1">
+                  <AccordionTrigger>Detalles de Cierre y Facturación</AccordionTrigger>
+                  <AccordionContent className="space-y-4 pt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="facturaNo">Factura Nº</Label>
+                        <Input id="facturaNo" name="facturaNo" value={editedOpportunity.facturaNo || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}/>
+                      </div>
+                      <div className="space-y-2">
+                          <Label htmlFor="valorCerrado">Valor Cerrado</Label>
+                          <Input id="valorCerrado" name="valorCerrado" type="number" value={editedOpportunity.valorCerrado || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''} />
+                      </div>
                     </div>
-                )}
-            </>
-          )}
+
+                     {renderEditableTextarea('propuestaCerrada', 'Propuesta Cerrada')}
+
+                     <div className="flex items-center space-x-2 pt-2">
+                        <Checkbox id="pagado" name="pagado" checked={editedOpportunity.pagado} onCheckedChange={(c) => handleCheckboxChange('pagado', c)} disabled={!isInvoiceSet}/>
+                        <Label htmlFor="pagado">Pagado</Label>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="item-2">
+                  <AccordionTrigger>Bonificación</AccordionTrigger>
+                  <AccordionContent className="space-y-4 pt-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="bonificacionDetalle">Detalle Bonificación</Label>
+                        <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!canEditBonus} placeholder={!canEditBonus ? 'Solo en Negociación o Cierre Ganado' : 'Ej: 10% Descuento'}/>
+                    </div>
+
+                    {hasBonusRequest && (
+                          <div className="grid grid-cols-1 gap-3 p-3 mt-2 border rounded-lg bg-muted/50 col-span-full">
+                              <h4 className="font-semibold text-sm">Gestión de Bonificación</h4>
+                              <div className="flex items-center justify-between">
+                                  <Label>Estado</Label>
+                                  {getBonusStatusPill(editedOpportunity.bonificacionEstado)}
+                              </div>
+                              
+                              {renderEditableTextarea('bonificacionObservaciones', 'Observaciones de la Decisión')}
+
+                              {editedOpportunity.bonificacionEstado === 'Pendiente' && isBoss && (
+                                  <div className="flex gap-2 mt-2">
+                                      <Button size="sm" variant="destructive" onClick={() => handleBonusDecision('Rechazado')}>
+                                          Rechazar
+                                      </Button>
+                                      <Button size="sm" onClick={() => handleBonusDecision('Autorizado')}>
+                                          Autorizar
+                                      </Button>
+                                  </div>
+                              )}
+
+                              {(editedOpportunity.bonificacionEstado === 'Autorizado' || editedOpportunity.bonificacionEstado === 'Rechazado') && (
+                                  <div className="text-xs text-muted-foreground space-y-1 mt-1">
+                                      <p>Decisión por: {editedOpportunity.bonificacionAutorizadoPorNombre}</p>
+                                      <p>Fecha: {editedOpportunity.bonificacionFechaAutorizacion ? format(new Date(editedOpportunity.bonificacionFechaAutorizacion), "PPP p", { locale: es }) : '-'}</p>
+                                  </div>
+                              )}
+                          </div>
+                      )}
+                  </AccordionContent>
+                </AccordionItem>
+                 <AccordionItem value="item-3">
+                  <AccordionTrigger>Tareas y Actividades</AccordionTrigger>
+                  <AccordionContent className="pt-4">
+                    <OpportunityActivity 
+                        opportunityId={opportunity.id}
+                        clientId={opportunity.clientId}
+                        clientName={opportunity.clientName}
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
 
         </div>
         <DialogFooter>

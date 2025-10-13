@@ -697,14 +697,12 @@ const convertActivityDoc = (doc: any): ClientActivity => {
 
 
 export const getClientActivities = async (clientId: string, opportunityId?: string): Promise<ClientActivity[]> => {
-    const conditions = [where('clientId', '==', clientId)];
+    let q;
     if (opportunityId) {
-        conditions.push(where('opportunityId', '==', opportunityId));
+        q = query(clientActivitiesCollection, where('opportunityId', '==', opportunityId), orderBy('timestamp', 'desc'));
     } else {
-        // If no opportunityId is provided, we might not want to fetch opportunity-specific tasks
-        // This logic can be adjusted based on requirements. For now, it gets all for the client.
+        q = query(clientActivitiesCollection, where('clientId', '==', clientId), orderBy('timestamp', 'desc'));
     }
-    const q = query(clientActivitiesCollection, ...conditions, orderBy('timestamp', 'desc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(convertActivityDoc);
 };
