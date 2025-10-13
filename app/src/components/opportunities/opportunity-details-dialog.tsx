@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -49,6 +50,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { OpportunityActivity } from './opportunity-activity';
 
 interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
@@ -451,7 +453,7 @@ export function OpportunityDetailsDialog({
            {renderEditableTextarea('observaciones', 'Observaciones')}
            
             {isEditing && (
-              <Accordion type="single" collapsible className="w-full">
+              <Accordion type="multiple" className="w-full">
                 <AccordionItem value="item-1">
                   <AccordionTrigger>Detalles de Cierre y Facturación</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-4">
@@ -511,6 +513,16 @@ export function OpportunityDetailsDialog({
                               )}
                           </div>
                       )}
+                  </AccordionContent>
+                </AccordionItem>
+                 <AccordionItem value="item-3">
+                  <AccordionTrigger>Tareas y Actividades</AccordionTrigger>
+                  <AccordionContent>
+                    <OpportunityActivity 
+                      opportunityId={opportunity.id} 
+                      clientId={opportunity.clientId}
+                      clientName={opportunity.clientName}
+                    />
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>

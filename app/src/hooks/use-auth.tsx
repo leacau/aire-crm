@@ -89,19 +89,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const getGoogleAccessToken = async (): Promise<string | null> => {
         let storedToken = sessionStorage.getItem('google-access-token');
         
-        // This is a simple check. A robust solution would check expiration.
-        // For this app's use case, re-authenticating on failure is acceptable.
         if (storedToken) return storedToken;
 
         if (auth.currentUser) {
             const provider = new GoogleAuthProvider();
-            // Re-request all necessary scopes to ensure the token is valid for all operations
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
             provider.addScope('https://www.googleapis.com/auth/drive.file');
             
             try {
-                // Re-authenticate to get a fresh token
                 const result = await signInWithPopup(auth, provider);
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 const token = credential?.accessToken;
@@ -111,7 +107,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             } catch (error) {
                 console.error("Error getting Google access token:", error);
-                // The user may have closed the popup, which is not a critical error.
                 return null;
             }
         }
@@ -131,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  return null; // Return null during transitional states
+  return null;
 }
 
 export const useAuth = () => useContext(AuthContext);

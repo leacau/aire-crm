@@ -697,7 +697,17 @@ const convertActivityDoc = (doc: any): ClientActivity => {
 
 
 export const getClientActivities = async (clientId: string, opportunityId?: string): Promise<ClientActivity[]> => {
-    const q = query(clientActivitiesCollection, where('clientId', '==', clientId), orderBy('timestamp', 'desc'));
+    let q;
+    if (opportunityId) {
+        q = query(
+            clientActivitiesCollection, 
+            where('clientId', '==', clientId),
+            where('opportunityId', '==', opportunityId),
+            orderBy('timestamp', 'desc')
+        );
+    } else {
+        q = query(clientActivitiesCollection, where('clientId', '==', clientId), orderBy('timestamp', 'desc'));
+    }
     const snapshot = await getDocs(q);
     return snapshot.docs.map(convertActivityDoc);
 };
