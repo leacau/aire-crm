@@ -7,9 +7,6 @@ import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { getUserProfile } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
-import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
-import { AppSidebar } from '@/components/layout/app-sidebar';
-import { Spinner } from '@/components/ui/spinner';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -28,32 +25,6 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 const publicRoutes = ['/login', '/register'];
-
-const AuthLayout = ({ children }: { children: React.ReactNode }) => {
-    const pathname = usePathname();
-    const { user, loading } = useAuth();
-    const isPublic = publicRoutes.includes(pathname);
-
-    if (loading) {
-        return <div className="flex h-screen w-full items-center justify-center"></div>;
-    }
-
-    if (isPublic) {
-        return <>{children}</>;
-    }
-
-    if (!user) {
-        // Redirection is handled in useAuth, but as a fallback, don't render children
-        return <div className="flex h-screen w-full items-center justify-center"></div>;
-    }
-
-    return (
-        <SidebarProvider>
-          <AppSidebar />
-          <SidebarInset>{children}</SidebarInset>
-        </SidebarProvider>
-    );
-};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -121,8 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
-        {loading && <div className="flex h-screen w-full items-center justify-center"><Spinner size="large" /></div>}
-        {!loading && <AuthLayout>{children}</AuthLayout>}
+        {children}
     </AuthContext.Provider>
   );
 }
@@ -134,4 +104,3 @@ export const useAuth = () => {
     }
     return context;
 };
-

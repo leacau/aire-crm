@@ -4,6 +4,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/hooks/use-auth';
 import { Analytics } from '@vercel/analytics/next';
+import { AuthLayout } from '@/components/layout/auth-layout';
 
 export const metadata: Metadata = {
   title: 'CRM Aire de Santa Fe',
@@ -25,7 +26,9 @@ export default function RootLayout({
         <meta name="google" content="notranslate" />
       </head>
       <body className="font-body antialiased">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+            <AuthLayout>{children}</AuthLayout>
+        </AuthProvider>
         <Toaster />
         <Analytics />
       </body>
