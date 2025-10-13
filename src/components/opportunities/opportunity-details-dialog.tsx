@@ -31,9 +31,10 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency } from '@/lib/firebase-service';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Clock } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { LinkifiedText } from '@/components/ui/linkified-text';
+import { TaskFormDialog } from './task-form-dialog';
 
 import {
   AlertDialog,
@@ -147,6 +148,7 @@ export function OpportunityDetailsDialog({
   const { userInfo, isBoss } = useAuth();
   const { toast } = useToast();
   const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   
   const getInitialData = () => {
       if (opportunity) return { ...opportunity };
@@ -341,13 +343,24 @@ export function OpportunityDetailsDialog({
 };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Detalles de la Oportunidad' : 'Nueva Oportunidad'}</DialogTitle>
-          <DialogDescription>
-            {isEditing ? 'Edita los detalles de la oportunidad.' : 'Rellena los datos para crear una nueva oportunidad.'}
-          </DialogDescription>
+          <div className="flex justify-between items-center">
+            <div>
+              <DialogTitle>{isEditing ? 'Detalles de la Oportunidad' : 'Nueva Oportunidad'}</DialogTitle>
+              <DialogDescription>
+                {isEditing ? 'Edita los detalles de la oportunidad.' : 'Rellena los datos para crear una nueva oportunidad.'}
+              </DialogDescription>
+            </div>
+            {isEditing && opportunity && (
+              <Button variant="ghost" size="icon" onClick={() => setIsTaskFormOpen(true)}>
+                <Clock className="h-5 w-5" />
+                <span className="sr-only">Crear Tarea/Recordatorio</span>
+              </Button>
+            )}
+          </div>
         </DialogHeader>
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
            <div className="space-y-2">
@@ -510,5 +523,14 @@ export function OpportunityDetailsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+     {isTaskFormOpen && opportunity && (
+        <TaskFormDialog
+            isOpen={isTaskFormOpen}
+            onOpenChange={setIsTaskFormOpen}
+            opportunity={opportunity}
+            client={client || { id: opportunity.clientId, name: opportunity.clientName }}
+        />
+     )}
+     </>
   );
 }
