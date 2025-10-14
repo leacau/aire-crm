@@ -1,4 +1,5 @@
 
+
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado } from './types';
@@ -19,11 +20,18 @@ export const getCanjes = async (): Promise<Canje[]> => {
     const snapshot = await getDocs(query(canjesCollection, orderBy("fechaCreacion", "desc")));
     return snapshot.docs.map(doc => {
       const data = doc.data();
+      const fechaCreacion = data.fechaCreacion instanceof Timestamp 
+          ? data.fechaCreacion.toDate().toISOString() 
+          : data.fechaCreacion;
+      const fechaAprobacion = data.fechaAprobacion instanceof Timestamp
+          ? data.fechaAprobacion.toDate().toISOString()
+          : data.fechaAprobacion;
+
       return { 
           id: doc.id,
           ...data,
-          fechaCreacion: (data.fechaCreacion as Timestamp).toDate().toISOString(),
-          fechaAprobacion: data.fechaAprobacion ? (data.fechaAprobacion as Timestamp).toDate().toISOString() : undefined,
+          fechaCreacion,
+          fechaAprobacion,
       } as Canje
     });
 };
