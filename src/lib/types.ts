@@ -40,6 +40,15 @@ export type Pautado = {
   fechaFin: string;
 };
 
+export type OrdenPautado = {
+    id: string;
+    fecha: string;
+    numeroOM: string;
+    ajustaPorInflacion: boolean;
+    tipoAjuste: string;
+    // ... add all other fields from the image
+};
+
 export type Opportunity = {
   id: string;
   title: string;
@@ -72,6 +81,7 @@ export type Opportunity = {
   fechaFacturacion?: string; 
   pautados?: Pautado[];
   proposalFiles?: ProposalFile[];
+  ordenesPautado?: OrdenPautado[];
 };
 
 export type Person = {

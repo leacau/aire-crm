@@ -30,13 +30,14 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice } from '@/lib/firebase-service';
-import { PlusCircle, Clock, Trash2 } from 'lucide-react';
+import { PlusCircle, Clock, Trash2, FileText } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { LinkifiedText } from '@/components/ui/linkified-text';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { invoiceStatusOptions } from '@/lib/types';
+import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
 
 import {
   AlertDialog,
@@ -75,6 +76,7 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     fechaFacturacion: '',
     pautados: [],
     proposalFiles: [],
+    ordenesPautado: [],
 });
 
 const NewAgencyDialog = ({ onAgencyCreated }: { onAgencyCreated: (newAgency: Agency) => void }) => {
@@ -151,6 +153,7 @@ export function OpportunityDetailsDialog({
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
+  const [isOrdenPautadoFormOpen, setIsOrdenPautadoFormOpen] = useState(false);
   
   const getInitialData = () => {
       if (opportunity) {
@@ -597,10 +600,16 @@ export function OpportunityDetailsDialog({
           <TabsContent value="pautado" className="space-y-4 py-4">
                 <div className="flex justify-between items-center">
                     <h4 className="font-medium">Períodos de Pautado</h4>
-                    <Button size="sm" onClick={handleAddPautado}>
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Añadir Pauta
-                    </Button>
+                    <div className="flex items-center gap-2">
+                         <Button size="sm" variant="outline" onClick={() => setIsOrdenPautadoFormOpen(true)}>
+                            <FileText className="mr-2 h-4 w-4" />
+                            Crear Orden de Pautado
+                        </Button>
+                        <Button size="sm" onClick={handleAddPautado}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Añadir Pauta
+                        </Button>
+                    </div>
                 </div>
                 <div className="space-y-2">
                     {(editedOpportunity.pautados || []).map((pautado) => (
@@ -634,7 +643,7 @@ export function OpportunityDetailsDialog({
                 </div>
                 <div className="p-4 bg-blue-50 border-l-4 border-blue-400 text-blue-800 rounded">
                     <p className="text-sm font-medium">Recordatorios Automáticos</p>
-                    <p className="text-xs">Al guardar una fecha de fin, se crearán eventos en el calendario del asesor 30, 15 y 7 días antes del vencimiento.</p>
+                    <p className="text-xs">Al guardar una fecha de fin, se creará un evento en el calendario del asesor 30, 15 y 7 días antes del vencimiento.</p>
                 </div>
           </TabsContent>
           
@@ -723,6 +732,15 @@ export function OpportunityDetailsDialog({
             client={client || { id: opportunity.clientId, name: opportunity.clientName }}
             userInfo={userInfo}
             getGoogleAccessToken={getGoogleAccessToken}
+        />
+     )}
+     {isOrdenPautadoFormOpen && opportunity && userInfo && (
+        <OrdenPautadoFormDialog
+            isOpen={isOrdenPautadoFormOpen}
+            onOpenChange={setIsOrdenPautadoFormOpen}
+            opportunity={opportunity}
+            client={client || { id: opportunity.clientId, name: opportunity.clientName }}
+            userInfo={userInfo}
         />
      )}
      </>
