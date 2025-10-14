@@ -100,7 +100,7 @@ export const updateCanje = async (
                 <p><em>${data.pedido || originalData.pedido}</em></p>
                 <p>Por un valor de <strong>$${(data.valorCanje || originalData.valorCanje).toLocaleString('es-AR')}</strong>.</p>
                 <p>Se requiere la aprobacion del canje.</p>
-                <p><a href="https://aire-crm.vercel.app/canjes">Ver canjes en el CRM</a></p>
+                <p><a href="https://aire-crm.vercel.app/canjes?id=${id}">Ver canje en el CRM</a></p>
                 <br/>
                 <p>Gracias</p>
             `;
@@ -118,7 +118,7 @@ export const updateCanje = async (
                     <p>El canje que solicitaste para el cliente <strong>${originalData.clienteName}</strong> ha sido aprobado.</p>
                     <p>Pedido: <em>${data.pedido || originalData.pedido}</em></p>
                     <p>Valor Aprobado: <strong>$${(data.valorCanje || originalData.valorCanje).toLocaleString('es-AR')}</strong></p>
-                    <p><a href="https://aire-crm.vercel.app/canjes">Ver canjes en el CRM</a></p>
+                    <p><a href="https://aire-crm.vercel.app/canjes?id=${id}">Ver canje en el CRM</a></p>
                  `;
                  await sendEmail({ accessToken, to: advisor.email, subject, body });
              }

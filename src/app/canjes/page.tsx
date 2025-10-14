@@ -1,7 +1,8 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { PlusCircle } from 'lucide-react';
@@ -29,9 +30,11 @@ const getStatusPill = (status?: string) => {
   return <Badge variant="outline" className={cn(statusMap[status], 'capitalize')}>{status}</Badge>;
 };
 
-export default function CanjesPage() {
+function CanjesPageComponent() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const canjeIdFromUrl = searchParams.get('id');
   
   const [canjes, setCanjes] = useState<Canje[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -42,6 +45,11 @@ export default function CanjesPage() {
   const [selectedCanje, setSelectedCanje] = useState<Canje | null>(null);
   
   const [sorting, setSorting] = useState<SortingState>([]);
+  
+  const handleOpenForm = useCallback((canje: Canje | null = null) => {
+    setSelectedCanje(canje);
+    setIsFormOpen(true);
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!userInfo) return;
@@ -57,6 +65,13 @@ export default function CanjesPage() {
       setClients(fetchedClients);
       setUsers(fetchedUsers);
 
+      if (canjeIdFromUrl) {
+        const canjeToOpen = fetchedCanjes.find(c => c.id === canjeIdFromUrl);
+        if (canjeToOpen) {
+          handleOpenForm(canjeToOpen);
+        }
+      }
+
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
@@ -66,18 +81,13 @@ export default function CanjesPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast, userInfo]);
+  }, [toast, userInfo, canjeIdFromUrl, handleOpenForm]);
 
   useEffect(() => {
     if (!authLoading && userInfo) {
       fetchData();
     }
   }, [authLoading, userInfo, fetchData]);
-
-  const handleOpenForm = (canje: Canje | null = null) => {
-    setSelectedCanje(canje);
-    setIsFormOpen(true);
-  };
   
   const handleSaveCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>, managerEmails?: string[]) => {
     if (!userInfo) return;
@@ -193,4 +203,16 @@ export default function CanjesPage() {
       )}
     </>
   );
+}
+
+export default function CanjesPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex h-full w-full items-center justify-center">
+                <Spinner size="large" />
+            </div>
+        }>
+            <CanjesPageComponent />
+        </Suspense>
+    )
 }
