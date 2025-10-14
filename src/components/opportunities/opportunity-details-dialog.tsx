@@ -309,20 +309,30 @@ export function OpportunityDetailsDialog({
   };
 
   const handleInvoiceChange = (invoiceId: string, field: keyof Invoice, value: any) => {
-    setInvoices(invoices.map(inv => inv.id === invoiceId ? { ...inv, [field]: value } : inv));
+    setInvoices(prevInvoices => 
+        prevInvoices.map(inv => (inv.id === invoiceId ? { ...inv, [field]: value } : inv))
+    );
   };
   
   const handleInvoiceUpdate = async (invoiceId: string) => {
     if (!userInfo) return;
-    const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
-    if (!invoiceToUpdate) return;
-    try {
-        await updateInvoice(invoiceId, invoiceToUpdate, userInfo.id, userInfo.name, opportunity!.clientName);
-        fetchInvoices();
-        toast({ title: "Factura actualizada" });
-    } catch(e) {
-        toast({ title: "Error al actualizar factura", variant: 'destructive' });
-    }
+    // We use a callback with setInvoices to ensure we get the latest state
+    setInvoices(currentInvoices => {
+        const invoiceToUpdate = currentInvoices.find(inv => inv.id === invoiceId);
+        if (invoiceToUpdate) {
+            updateInvoice(invoiceId, invoiceToUpdate, userInfo.id, userInfo.name, opportunity!.clientName)
+                .then(() => {
+                    toast({ title: "Factura actualizada" });
+                })
+                .catch((e) => {
+                    console.error("Failed to update invoice:", e);
+                    toast({ title: "Error al actualizar factura", variant: "destructive" });
+                    // Optionally revert UI change here if needed, though refetching might be better
+                    fetchInvoices(); 
+                });
+        }
+        return currentInvoices;
+    });
   }
 
   const handleInvoiceDelete = async (invoiceId: string) => {
@@ -555,21 +565,27 @@ export function OpportunityDetailsDialog({
                         {invoices.map((invoice) => (
                         <TableRow key={invoice.id}>
                             <TableCell>
-                                <Input value={invoice.invoiceNumber} onChange={(e) => handleInvoiceChange(invoice.id, 'invoiceNumber', e.target.value)} onBlur={() => handleInvoiceUpdate(invoice.id)}/>
+                                <Input value={invoice.invoiceNumber || ''} onChange={(e) => handleInvoiceChange(invoice.id, 'invoiceNumber', e.target.value)} onBlur={() => handleInvoiceUpdate(invoice.id)}/>
                             </TableCell>
                             <TableCell>
-                                <Input type="number" value={invoice.amount} onChange={(e) => handleInvoiceChange(invoice.id, 'amount', Number(e.target.value))} onBlur={() => handleInvoiceUpdate(invoice.id)}/>
+                                <Input type="number" value={invoice.amount || ''} onChange={(e) => handleInvoiceChange(invoice.id, 'amount', Number(e.target.value))} onBlur={() => handleInvoiceUpdate(invoice.id)}/>
                             </TableCell>
                             <TableCell>
-                                <Select value={invoice.status} onValueChange={(value) => {
-                                  const updatedInvoice = { ...invoices.find(i => i.id === invoice.id)!, status: value as Invoice['status'] };
-                                  if (value === 'Pagada' && !updatedInvoice.datePaid) {
-                                    updatedInvoice.datePaid = new Date().toISOString();
-                                  }
-                                  handleInvoiceChange(invoice.id, 'status', value)
-                                  handleInvoiceChange(invoice.id, 'datePaid', updatedInvoice.datePaid)
-                                  handleInvoiceUpdate(invoice.id);
-                                }}>
+                                <Select 
+                                    value={invoice.status} 
+                                    onValueChange={(value) => {
+                                        let updatedInvoice = { ...invoice, status: value as Invoice['status'] };
+                                        if (value === 'Pagada' && !invoice.datePaid) {
+                                            updatedInvoice.datePaid = new Date().toISOString();
+                                        }
+                                        // Update local state first to make sure the change is reflected
+                                        setInvoices(currentInvoices => 
+                                            currentInvoices.map(inv => inv.id === invoice.id ? updatedInvoice : inv)
+                                        );
+                                        // Then trigger the update to firebase
+                                        handleInvoiceUpdate(invoice.id);
+                                    }}
+                                >
                                     <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>
