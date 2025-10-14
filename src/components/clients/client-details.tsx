@@ -1,6 +1,6 @@
 'use client'
 import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice } from '@/lib/types';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Card,
   CardContent,
@@ -40,6 +40,7 @@ import {
   TrendingUp,
   Linkedin,
   ClipboardList,
+  FileDown,
 } from 'lucide-react';
 import {
   Table,
@@ -96,6 +97,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import { ClientPdf } from './client-pdf';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'bg-blue-500',
@@ -139,6 +143,7 @@ export function ClientDetails({
 }) {
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
+  const pdfRef = useRef<HTMLDivElement>(null);
   
   const [people, setPeople] = useState<Person[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -156,6 +161,7 @@ export function ClientDetails({
   const [dueTime, setDueTime] = useState('09:00');
   const [isSavingActivity, setIsSavingActivity] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
@@ -371,7 +377,7 @@ export function ClientDetails({
         fetchClientData(); // Refresh activities
     } catch (error) {
         console.error("Error saving client activity:", error);
-        toast({ title: "Error al guardar la actividad", variant: 'destructive'});
+        toast({ title: "Error al guardar la actividad", variant: 'destructive' });
     } finally {
         setIsSavingActivity(false);
     }
@@ -538,6 +544,44 @@ export function ClientDetails({
     }
   };
 
+  const handleGeneratePdf = async () => {
+    setIsGeneratingPdf(true);
+    const element = pdfRef.current;
+    if (!element) {
+      setIsGeneratingPdf(false);
+      return;
+    }
+
+    try {
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      
+      const ratio = imgWidth / imgHeight;
+      const widthInPdf = pdfWidth;
+      const heightInPdf = widthInPdf / ratio;
+      
+      let y = 0;
+      if (heightInPdf < pdfHeight) {
+        y = (pdfHeight - heightInPdf) / 2;
+      }
+      
+      pdf.addImage(imgData, 'PNG', 0, y, widthInPdf, heightInPdf);
+      pdf.save(`ALTA-${client.denominacion.replace(/ /g, "_")}.pdf`);
+    } catch (error) {
+      console.error("Error generating PDF", error);
+      toast({ title: "Error al generar el PDF", variant: "destructive" });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
 
   const ConvertToTaskPopover = ({ activity }: { activity: ClientActivity }) => {
     const [popoverOpen, setPopoverOpen] = useState(false);
@@ -583,6 +627,9 @@ export function ClientDetails({
   
   return (
     <>
+    <div style={{ position: 'fixed', left: '-200vw', top: 0, zIndex: -1 }}>
+        <ClientPdf ref={pdfRef} client={client} contact={people[0] || null} />
+    </div>
     <div className="space-y-6">
       <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
         <Card className='md:col-span-2'>
@@ -611,11 +658,16 @@ export function ClientDetails({
                         </div>
                     </div>
                 </div>
-                 {canEditClient && (
-                    <Button variant="outline" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => setIsClientFormOpen(true)}>
-                        <Edit className="h-4 w-4" />
-                    </Button>
-                )}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleGeneratePdf} disabled={isGeneratingPdf}>
+                        {isGeneratingPdf ? <Spinner size="small" /> : <FileDown className="h-4 w-4" />}
+                     </Button>
+                    {canEditClient && (
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setIsClientFormOpen(true)}>
+                            <Edit className="h-4 w-4" />
+                        </Button>
+                    )}
+                 </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
