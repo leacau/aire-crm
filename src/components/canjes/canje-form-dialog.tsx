@@ -20,13 +20,15 @@ import { canjeEstados, canjeTipos } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
 import { PlusCircle, Trash2 } from 'lucide-react';
+import { getAllUsers } from '@/lib/firebase-service';
+import { NotificacionDialog } from './notificacion-dialog';
 
 type CanjeFormData = Omit<Canje, 'id' | 'fechaCreacion'>;
 
 interface CanjeFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (canjeData: CanjeFormData) => void;
+  onSave: (canjeData: CanjeFormData, managerEmails?: string[]) => void;
   canje?: Canje | null;
   clients: Client[];
   users: User[];
@@ -41,6 +43,7 @@ const initialFormData = (user: User, clients: Client[]): CanjeFormData => {
         clienteName: firstClient?.denominacion || '',
         asesorId: user.id,
         asesorName: user.name,
+        pedido: '',
         facturas: [],
         valorAsociado: 0,
         valorCanje: 0,
@@ -61,6 +64,10 @@ export function CanjeFormDialog({
 }: CanjeFormDialogProps) {
   const [formData, setFormData] = useState<CanjeFormData>(initialFormData(currentUser, clients));
   const [isSaving, setIsSaving] = useState(false);
+  const [managers, setManagers] = useState<User[]>([]);
+  const [showNotificacionDialog, setShowNotificacionDialog] = useState(false);
+  const [originalState, setOriginalState] = useState<CanjeEstado | undefined>();
+
   const { toast } = useToast();
 
   const isEditing = canje !== null;
@@ -71,25 +78,46 @@ export function CanjeFormDialog({
       if (canje) {
         setFormData({
             ...canje,
+            pedido: canje.pedido || '',
             valorAsociado: canje.valorAsociado || 0,
             valorCanje: canje.valorCanje || 0,
             facturas: canje.facturas || [],
         });
+        setOriginalState(canje.estado);
       } else {
         setFormData(initialFormData(currentUser, clients));
+        setOriginalState('Pedido');
       }
       setIsSaving(false);
+      // Fetch managers
+      Promise.all([
+          getAllUsers('Jefe'),
+          getAllUsers('Gerencia'),
+          getAllUsers('Administracion'),
+      ]).then(([jefes, gerentes, admins]) => {
+          const combined = [...jefes, ...gerentes, ...admins];
+          const uniqueManagers = Array.from(new Map(combined.map(item => [item.id, item])).values());
+          setManagers(uniqueManagers);
+      });
     }
   }, [canje, isOpen, currentUser, clients]);
 
-  const handleSave = async () => {
+  const handleSave = async (managerEmails?: string[]) => {
     if (!formData.titulo.trim() || !formData.clienteId) {
       toast({ title: "Campos requeridos", description: "El título y el cliente son obligatorios.", variant: "destructive" });
       return;
     }
     setIsSaving(true);
-    onSave(formData);
+    onSave(formData, managerEmails);
     onOpenChange(false);
+  };
+  
+  const handleInitiateSave = () => {
+    if (isEditing && originalState !== 'Completo' && formData.estado === 'Completo') {
+        setShowNotificacionDialog(true);
+    } else {
+        handleSave();
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -147,6 +175,7 @@ export function CanjeFormDialog({
 
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -175,6 +204,11 @@ export function CanjeFormDialog({
           <div className="space-y-2">
             <Label>Asesor Asignado</Label>
             <Input value={formData.asesorName} disabled />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="pedido">Pedido de Canje</Label>
+            <Textarea id="pedido" name="pedido" value={formData.pedido || ''} onChange={handleChange} />
           </div>
           
           <div className="grid grid-cols-2 gap-4">
@@ -247,11 +281,20 @@ export function CanjeFormDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave} disabled={isSaving}>
+          <Button onClick={handleInitiateSave} disabled={isSaving}>
             {isSaving ? <Spinner size="small" color="white" /> : 'Guardar'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+     {showNotificacionDialog && (
+        <NotificacionDialog
+            isOpen={showNotificacionDialog}
+            onOpenChange={setShowNotificacionDialog}
+            managers={managers}
+            onConfirm={(emails) => handleSave(emails)}
+        />
+    )}
+    </>
   );
 }

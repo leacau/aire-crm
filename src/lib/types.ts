@@ -163,6 +163,7 @@ export type Canje = {
   asesorId: string;
   asesorName: string;
   titulo: string;
+  pedido: string;
   facturas?: CanjeFactura[];
   valorAsociado: number;
   valorCanje: number;

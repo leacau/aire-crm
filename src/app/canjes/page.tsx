@@ -30,7 +30,7 @@ const getStatusPill = (status?: string) => {
 };
 
 export default function CanjesPage() {
-  const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   
   const [canjes, setCanjes] = useState<Canje[]>([]);
@@ -79,12 +79,13 @@ export default function CanjesPage() {
     setIsFormOpen(true);
   };
   
-  const handleSaveCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>) => {
+  const handleSaveCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>, managerEmails?: string[]) => {
     if (!userInfo) return;
 
     try {
+      const token = await getGoogleAccessToken();
       if (selectedCanje) {
-        await updateCanje(selectedCanje.id, canjeData, userInfo.id, userInfo.name);
+        await updateCanje(selectedCanje.id, canjeData, userInfo.id, userInfo.name, token, managerEmails);
         toast({ title: "Canje Actualizado" });
       } else {
         await createCanje(canjeData, userInfo.id, userInfo.name);

@@ -4,6 +4,7 @@ import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado } from './types';
 import { logActivity } from './activity-logger';
+import { sendEmail } from './google-gmail-service';
 
 const usersCollection = collection(db, 'users');
 const clientsCollection = collection(db, 'clients');
@@ -57,7 +58,14 @@ export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>
     return docRef.id;
 };
 
-export const updateCanje = async (id: string, data: Partial<Omit<Canje, 'id'>>, userId: string, userName: string): Promise<void> => {
+export const updateCanje = async (
+    id: string, 
+    data: Partial<Omit<Canje, 'id'>>, 
+    userId: string, 
+    userName: string, 
+    accessToken: string | null, 
+    managerEmails: string[] = []
+): Promise<void> => {
     const docRef = doc(db, 'canjes', id);
     const originalDoc = await getDoc(docRef);
     if (!originalDoc.exists()) throw new Error('Canje not found');
@@ -84,6 +92,37 @@ export const updateCanje = async (id: string, data: Partial<Omit<Canje, 'id'>>, 
     let details = `actualizó el canje para <strong>${originalData.clienteName}</strong>`;
     if (data.estado && data.estado !== originalData.estado) {
         details = `cambió el estado del canje para <strong>${originalData.clienteName}</strong> a <strong>${data.estado}</strong>`;
+        
+        if (data.estado === 'Completo' && accessToken && managerEmails.length > 0) {
+            const subject = `${originalData.asesorName} ha completado el canje con ${originalData.clienteName}`;
+            const body = `
+                <p>Se ha completado el canje de:</p>
+                <p><em>${data.pedido || originalData.pedido}</em></p>
+                <p>Por un valor de <strong>$${(data.valorCanje || originalData.valorCanje).toLocaleString('es-AR')}</strong>.</p>
+                <p>Se requiere la aprobación del canje.</p>
+                <p><a href="https://crm-aire.web.app/clients/${originalData.clienteId}">Ver cliente</a></p>
+                <br/>
+                <p>Gracias</p>
+            `;
+            for (const email of managerEmails) {
+                 await sendEmail({ accessToken, to: email, subject, body });
+            }
+        }
+        
+        if (data.estado === 'Aprobado' && accessToken) {
+             const advisor = await getUserProfile(originalData.asesorId);
+             if (advisor && advisor.email) {
+                 const subject = `El canje con ${originalData.clienteName} ha sido aprobado`;
+                 const body = `
+                    <p>Hola ${advisor.name},</p>
+                    <p>El canje que solicitaste para el cliente <strong>${originalData.clienteName}</strong> ha sido aprobado.</p>
+                    <p>Pedido: <em>${data.pedido || originalData.pedido}</em></p>
+                    <p>Valor Aprobado: <strong>$${(data.valorCanje || originalData.valorCanje).toLocaleString('es-AR')}</strong></p>
+                    <p><a href="https://crm-aire.web.app/clients/${originalData.clienteId}">Ver cliente en el CRM</a></p>
+                 `;
+                 await sendEmail({ accessToken, to: advisor.email, subject, body });
+             }
+        }
     }
 
     await logActivity({
