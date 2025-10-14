@@ -19,9 +19,12 @@ export const getInvoices = async (): Promise<Invoice[]> => {
 };
 
 export const getInvoicesForOpportunity = async (opportunityId: string): Promise<Invoice[]> => {
-    const q = query(invoicesCollection, where("opportunityId", "==", opportunityId), orderBy("dateGenerated", "desc"));
+    const q = query(invoicesCollection, where("opportunityId", "==", opportunityId));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+    const invoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+    // Sort manually to avoid composite index requirement
+    invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
+    return invoices;
 };
 
 export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]> => {

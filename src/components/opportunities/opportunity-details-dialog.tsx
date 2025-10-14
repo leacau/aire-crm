@@ -168,14 +168,30 @@ export function OpportunityDetailsDialog({
 
   useEffect(() => {
     if (isOpen) {
-        setEditedOpportunity(getInitialData());
+        const initialData = getInitialData();
+        setEditedOpportunity(initialData);
         
         getAgencies().then(setAgencies).catch(() => {
             toast({ title: "Error al cargar agencias", variant: "destructive" });
         });
 
         if (opportunity) {
-          fetchInvoices();
+            getInvoicesForOpportunity(opportunity.id).then(fetchedInvoices => {
+                 // Handle legacy invoice data
+                const legacyInvoices: Invoice[] = [];
+                if (initialData.facturaNo || initialData.valorCerrado) {
+                    const legacyInvoice: Invoice = {
+                        id: 'legacy-0', // Dummy ID
+                        opportunityId: opportunity.id,
+                        invoiceNumber: initialData.facturaNo || 'N/A',
+                        amount: initialData.valorCerrado || 0,
+                        status: initialData.pagado ? 'Pagada' : 'Generada',
+                        dateGenerated: new Date().toISOString(),
+                    };
+                    legacyInvoices.push(legacyInvoice);
+                }
+                setInvoices([...legacyInvoices, ...fetchedInvoices]);
+            });
         } else {
           setInvoices([]);
         }
@@ -314,29 +330,32 @@ export function OpportunityDetailsDialog({
     );
   };
   
-  const handleInvoiceUpdate = async (invoiceId: string) => {
-    if (!userInfo) return;
-    // We use a callback with setInvoices to ensure we get the latest state
-    setInvoices(currentInvoices => {
-        const invoiceToUpdate = currentInvoices.find(inv => inv.id === invoiceId);
-        if (invoiceToUpdate) {
-            updateInvoice(invoiceId, invoiceToUpdate, userInfo.id, userInfo.name, opportunity!.clientName)
-                .then(() => {
-                    toast({ title: "Factura actualizada" });
-                })
-                .catch((e) => {
-                    console.error("Failed to update invoice:", e);
-                    toast({ title: "Error al actualizar factura", variant: "destructive" });
-                    // Optionally revert UI change here if needed, though refetching might be better
-                    fetchInvoices(); 
-                });
-        }
-        return currentInvoices;
-    });
+  const handleInvoiceUpdate = (invoiceId: string) => {
+    if (!userInfo || !opportunity) return;
+    const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
+    if (invoiceToUpdate && invoiceToUpdate.id.startsWith('legacy')) {
+        toast({title: "Factura Antigua", description: "Las facturas antiguas no se pueden modificar desde aquí."});
+        return;
+    }
+    if (invoiceToUpdate) {
+        updateInvoice(invoiceId, invoiceToUpdate, userInfo.id, userInfo.name, opportunity.clientName)
+            .then(() => {
+                toast({ title: "Factura actualizada" });
+            })
+            .catch((e) => {
+                console.error("Failed to update invoice:", e);
+                toast({ title: "Error al actualizar factura", variant: "destructive" });
+                fetchInvoices(); 
+            });
+    }
   }
 
   const handleInvoiceDelete = async (invoiceId: string) => {
     if (!userInfo || !opportunity) return;
+    if (invoiceId.startsWith('legacy')) {
+        toast({title: "Factura Antigua", description: "Las facturas antiguas no se pueden eliminar."});
+        return;
+    }
     try {
         await deleteInvoice(invoiceId, userInfo.id, userInfo.name, opportunity.clientName);
         setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
@@ -574,15 +593,17 @@ export function OpportunityDetailsDialog({
                                 <Select 
                                     value={invoice.status} 
                                     onValueChange={(value) => {
-                                        let updatedInvoice = { ...invoice, status: value as Invoice['status'] };
-                                        if (value === 'Pagada' && !invoice.datePaid) {
-                                            updatedInvoice.datePaid = new Date().toISOString();
-                                        }
-                                        // Update local state first to make sure the change is reflected
-                                        setInvoices(currentInvoices => 
-                                            currentInvoices.map(inv => inv.id === invoice.id ? updatedInvoice : inv)
-                                        );
-                                        // Then trigger the update to firebase
+                                        const updatedInvoices = invoices.map(inv => {
+                                            if (inv.id === invoice.id) {
+                                                const updatedInv = { ...inv, status: value as Invoice['status'] };
+                                                if (value === 'Pagada' && !inv.datePaid) {
+                                                    updatedInv.datePaid = new Date().toISOString();
+                                                }
+                                                return updatedInv;
+                                            }
+                                            return inv;
+                                        });
+                                        setInvoices(updatedInvoices);
                                         handleInvoiceUpdate(invoice.id);
                                     }}
                                 >

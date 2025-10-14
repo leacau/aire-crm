@@ -1,6 +1,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -47,7 +48,7 @@ export type Opportunity = {
   details?: string;
   observaciones?: string;
   
-  // Deprecated fields, replaced by invoices array
+  // Deprecated fields, kept for legacy data handling
   facturaNo?: string;
   valorCerrado?: number;
   pagado?: boolean;
