@@ -809,9 +809,9 @@ export const updateOpportunity = async (
         const clientSnap = await getDoc(doc(db, 'clients', originalData.clientId));
         if (clientSnap.exists()) {
             const clientData = clientSnap.data() as Client;
-            const ownerSnap = await getDoc(doc(db, 'users', clientData.ownerId));
-            if (ownerSnap.exists()) {
-                const ownerData = ownerSnap.data() as User;
+            const owner = await getUserProfile(clientData.ownerId);
+
+            if (owner && owner.email) {
                 const newPautados = data.pautados.filter(p => 
                     !originalData.pautados?.some(op => op.id === p.id && op.fechaFin === p.fechaFin)
                 );
@@ -826,7 +826,7 @@ export const updateOpportunity = async (
                         ];
                         for (const reminderDate of reminderDates) {
                             try {
-                                await createReminderEvent(accessToken, ownerData.email, clientData.denominacion, originalData.title, reminderDate);
+                                await createReminderEvent(accessToken, owner.email, clientData.denominacion, originalData.title, reminderDate);
                             } catch (e) {
                                 console.error(`Failed to create calendar reminder for ${reminderDate}:`, e);
                                 // Non-fatal, just log the error

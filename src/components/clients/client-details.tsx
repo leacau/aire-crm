@@ -38,6 +38,8 @@ import {
   Star,
   CircleDollarSign,
   TrendingUp,
+  Linkedin,
+  ClipboardList,
 } from 'lucide-react';
 import {
   Table,
@@ -112,6 +114,8 @@ const activityIcons: Record<ClientActivityType, React.ReactNode> = {
     'Reunión': <Users className="h-4 w-4" />,
     'Visita Aire': <BuildingIcon className="h-4 w-4" />,
     'Mail': <MailIcon className="h-4 w-4" />,
+    'LinkedIn': <Linkedin className="h-4 w-4" />,
+    'Otra': <ClipboardList className="h-4 w-4" />,
 };
 
 const systemActivityIcons: Record<string, React.ReactNode> = {
@@ -209,7 +213,8 @@ export function ClientDetails({
   const handleOpportunityUpdate = async (updatedOpp: Partial<Opportunity>) => {
     if(!selectedOpportunity || !userInfo) return;
     try {
-        await updateOpportunity(selectedOpportunity.id, updatedOpp, userInfo.id, userInfo.name, client.ownerName);
+        const accessToken = await getGoogleAccessToken();
+        await updateOpportunity(selectedOpportunity.id, updatedOpp, userInfo.id, userInfo.name, client.ownerName, accessToken);
         fetchClientData();
         toast({ title: 'Oportunidad Actualizada' });
     } catch (error) {
