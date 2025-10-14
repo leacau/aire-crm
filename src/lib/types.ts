@@ -64,6 +64,7 @@ export type Opportunity = {
   formaDePago?: FormaDePago[];
   fechaFacturacion?: string; 
   fechaInicioPauta?: string; 
+  fechaFinPauta?: string;
   proposalFiles?: ProposalFile[];
 };
 

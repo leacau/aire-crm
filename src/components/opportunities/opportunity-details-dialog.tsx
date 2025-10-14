@@ -23,7 +23,7 @@ import {
 import { opportunityStages } from '@/lib/data';
 import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, Invoice } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth } from '@/hooks/use-auth.tsx';
 import { Checkbox } from '../ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -74,6 +74,7 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     formaDePago: [],
     fechaFacturacion: '',
     fechaInicioPauta: '',
+    fechaFinPauta: '',
     proposalFiles: [],
 });
 
@@ -247,7 +248,7 @@ export function OpportunityDetailsDialog({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    let finalValue: string | number = value;
+    let finalValue: string | number | undefined = value;
 
     if (name === 'value' || name === 'valorCerrado') {
         finalValue = value === '' ? 0 : Number(value);
@@ -257,6 +258,11 @@ export function OpportunityDetailsDialog({
         const [year, month, day] = value.split('-');
         finalValue = `${day}/${month}`;
     }
+
+    if (name === 'fechaInicioPauta' || name === 'fechaFinPauta') {
+      finalValue = value ? value : undefined;
+    }
+
 
     setEditedOpportunity(prev => {
         const newState: Partial<Opportunity> = { ...prev, [name]: finalValue };
@@ -403,9 +409,10 @@ export function OpportunityDetailsDialog({
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto pr-4 -mr-4">
         <Tabs defaultValue="details">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="details">Detalles</TabsTrigger>
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
+            <TabsTrigger value="pautado">Pautado</TabsTrigger>
             <TabsTrigger value="bonus">Bonificación</TabsTrigger>
             <TabsTrigger value="billing">Facturación</TabsTrigger>
           </TabsList>
@@ -482,16 +489,6 @@ export function OpportunityDetailsDialog({
                       onChange={handleChange}
                     />
                 </div>
-                <div className="space-y-2">
-                    <Label htmlFor="fechaInicioPauta">Inicio de Pauta</Label>
-                    <Input 
-                      id="fechaInicioPauta" 
-                      name="fechaInicioPauta" 
-                      type="date"
-                      value={editedOpportunity.fechaInicioPauta || ''}
-                      onChange={handleChange}
-                    />
-                </div>
               </div>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                 <div className="flex items-center space-x-2 pt-6">
@@ -512,6 +509,35 @@ export function OpportunityDetailsDialog({
                         </Select>
                     </div>
                 )}
+              </div>
+          </TabsContent>
+
+          <TabsContent value="pautado" className="space-y-4 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="fechaInicioPauta">Inicio de Pauta</Label>
+                    <Input 
+                      id="fechaInicioPauta" 
+                      name="fechaInicioPauta" 
+                      type="date"
+                      value={editedOpportunity.fechaInicioPauta || ''}
+                      onChange={handleChange}
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="fechaFinPauta">Fin de Pauta</Label>
+                    <Input 
+                      id="fechaFinPauta" 
+                      name="fechaFinPauta" 
+                      type="date"
+                      value={editedOpportunity.fechaFinPauta || ''}
+                      onChange={handleChange}
+                    />
+                </div>
+              </div>
+              <div className="p-4 bg-blue-50 border-l-4 border-blue-400 text-blue-800 rounded">
+                <p className="text-sm font-medium">Próximamente: Notificaciones automáticas</p>
+                <p className="text-xs">Se enviará una notificación por correo 30 días antes de la finalización de la pauta.</p>
               </div>
           </TabsContent>
           
