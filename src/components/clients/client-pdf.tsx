@@ -3,6 +3,7 @@
 
 import React from 'react';
 import type { Client, Person } from '@/lib/types';
+import Image from 'next/image';
 
 interface ClientPdfProps {
   client: Client;
@@ -19,10 +20,8 @@ const TableRow = ({ label, value }: { label: string, value: string | undefined }
 export const ClientPdf = React.forwardRef<HTMLDivElement, ClientPdfProps>(({ client, contact }, ref) => {
     return (
       <div ref={ref} className="bg-white p-12" style={{ width: '210mm', minHeight: '297mm', fontFamily: 'Arial, sans-serif' }}>
-        <header className="flex justify-end mb-16">
-            <div className="bg-[#ED6E73] text-white font-bold text-4xl p-6 px-12">
-                AIRE
-            </div>
+        <header className="flex justify-start mb-16">
+            <Image src="/aire-logo-red.png" alt="AIRE Logo" width={150} height={150} />
         </header>
 
         <main>
