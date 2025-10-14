@@ -19,6 +19,7 @@ import type { Canje, CanjeEstado, CanjeTipo, Client, User } from '@/lib/types';
 import { canjeEstados, canjeTipos } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
+import { PlusCircle, Trash2 } from 'lucide-react';
 
 type CanjeFormData = Omit<Canje, 'id' | 'fechaCreacion'>;
 
@@ -40,7 +41,7 @@ const initialFormData = (user: User, clients: Client[]): CanjeFormData => {
         clienteName: firstClient?.denominacion || '',
         asesorId: user.id,
         asesorName: user.name,
-        factura: '',
+        facturas: [],
         valorAsociado: 0,
         valorCanje: 0,
         estado: 'Pedido',
@@ -72,6 +73,7 @@ export function CanjeFormDialog({
             ...canje,
             valorAsociado: canje.valorAsociado || 0,
             valorCanje: canje.valorCanje || 0,
+            facturas: canje.facturas || [],
         });
       } else {
         setFormData(initialFormData(currentUser, clients));
@@ -116,6 +118,30 @@ export function CanjeFormDialog({
         }));
     }
   };
+
+  const handleAddFactura = () => {
+    setFormData(prev => ({
+      ...prev,
+      facturas: [...(prev.facturas || []), { numero: '', monto: 0 }],
+    }));
+  };
+
+  const handleFacturaChange = (index: number, field: 'numero' | 'monto', value: string | number) => {
+    setFormData(prev => {
+      const newFacturas = [...(prev.facturas || [])];
+      // @ts-ignore
+      newFacturas[index][field] = value;
+      return { ...prev, facturas: newFacturas };
+    });
+  };
+
+  const handleRemoveFactura = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      facturas: (prev.facturas || []).filter((_, i) => i !== index),
+    }));
+  };
+
 
   const availableEstados = canApprove ? canjeEstados : canjeEstados.filter(e => e !== 'Aprobado');
 
@@ -182,15 +208,40 @@ export function CanjeFormDialog({
               <Input id="valorCanje" name="valorCanje" type="number" value={formData.valorCanje} onChange={handleChange} />
             </div>
           </div>
-
+          
           <div className="space-y-2">
-            <Label htmlFor="factura">Factura</Label>
-            <Input id="factura" name="factura" value={formData.factura} onChange={handleChange} />
+            <div className="flex items-center justify-between">
+                <Label>Facturas</Label>
+                <Button variant="ghost" size="sm" onClick={handleAddFactura}>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Añadir
+                </Button>
+            </div>
+             <div className="space-y-2">
+                {(formData.facturas || []).map((factura, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                        <Input 
+                            placeholder="Número de Factura" 
+                            value={factura.numero} 
+                            onChange={(e) => handleFacturaChange(index, 'numero', e.target.value)}
+                        />
+                        <Input 
+                            type="number"
+                            placeholder="Monto" 
+                            value={factura.monto} 
+                            onChange={(e) => handleFacturaChange(index, 'monto', Number(e.target.value))}
+                        />
+                        <Button variant="ghost" size="icon" onClick={() => handleRemoveFactura(index)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                    </div>
+                ))}
+            </div>
           </div>
           
           <div className="space-y-2">
             <Label htmlFor="observaciones">Observaciones</Label>
-            <Textarea id="observaciones" name="observaciones" value={formData.observaciones} onChange={handleChange} />
+            <Textarea id="observaciones" name="observaciones" value={formData.observaciones || ''} onChange={handleChange} />
           </div>
           
         </div>

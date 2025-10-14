@@ -96,6 +96,16 @@ export default function CanjesPage() {
       toast({ title: "Error al guardar el canje", variant: "destructive" });
     }
   };
+  
+  const filteredCanjes = useMemo(() => {
+    if (!userInfo) return [];
+    if (isBoss) {
+      return canjes;
+    }
+    // Asesores only see their clients' canjes
+    const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
+    return canjes.filter(canje => userClientIds.has(canje.clienteId));
+  }, [canjes, clients, userInfo, isBoss]);
 
 
   const columns = useMemo<ColumnDef<Canje>[]>(() => [
@@ -125,12 +135,12 @@ export default function CanjesPage() {
     {
       accessorKey: 'valorAsociado',
       header: () => <div className="text-right">Valor Asociado</div>,
-      cell: ({ row }) => <div className="text-right">${row.original.valorAsociado.toLocaleString('es-AR')}</div>,
+      cell: ({ row }) => <div className="text-right">${(row.original.valorAsociado || 0).toLocaleString('es-AR')}</div>,
     },
     {
       accessorKey: 'valorCanje',
       header: () => <div className="text-right">Valor Canje</div>,
-      cell: ({ row }) => <div className="text-right">${row.original.valorCanje.toLocaleString('es-AR')}</div>,
+      cell: ({ row }) => <div className="text-right">${(row.original.valorCanje || 0).toLocaleString('es-AR')}</div>,
     },
     {
       accessorKey: 'fechaCreacion',
@@ -159,7 +169,7 @@ export default function CanjesPage() {
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
           <ResizableDataTable
             columns={columns}
-            data={canjes}
+            data={filteredCanjes}
             sorting={sorting}
             setSorting={setSorting}
             onRowClick={(canje) => handleOpenForm(canje)}

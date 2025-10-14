@@ -1,8 +1,5 @@
 
 
-
-
-
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -154,6 +151,11 @@ export const canjeEstados: CanjeEstado[] = ['Pedido', 'En gestión', 'Completo',
 export type CanjeTipo = 'Temporario' | 'Mensual Permanente';
 export const canjeTipos: CanjeTipo[] = ['Temporario', 'Mensual Permanente'];
 
+export type CanjeFactura = {
+    numero: string;
+    monto: number;
+};
+
 export type Canje = {
   id: string;
   clienteId: string;
@@ -161,7 +163,7 @@ export type Canje = {
   asesorId: string;
   asesorName: string;
   titulo: string;
-  factura: string;
+  facturas?: CanjeFactura[];
   valorAsociado: number;
   valorCanje: number;
   estado: CanjeEstado;

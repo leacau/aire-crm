@@ -1,3 +1,4 @@
+
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado } from './types';
@@ -56,6 +57,13 @@ export const updateCanje = async (id: string, data: Partial<Omit<Canje, 'id'>>, 
     const originalData = originalDoc.data() as Canje;
     
     const updateData: { [key: string]: any } = { ...data };
+    
+    // Clean up undefined fields before sending to Firestore
+    Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined) {
+            delete updateData[key];
+        }
+    });
 
     if (data.estado === 'Aprobado' && originalData.estado !== 'Aprobado') {
         updateData.fechaAprobacion = serverTimestamp();
