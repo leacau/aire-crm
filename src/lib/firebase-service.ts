@@ -1,8 +1,6 @@
-
-
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice } from './types';
 import { logActivity } from './activity-logger';
 
 const usersCollection = collection(db, 'users');
@@ -12,6 +10,85 @@ const opportunitiesCollection = collection(db, 'opportunities');
 const activitiesCollection = collection(db, 'activities');
 const clientActivitiesCollection = collection(db, 'client-activities');
 const agenciesCollection = collection(db, 'agencies');
+const invoicesCollection = collection(db, 'invoices');
+
+// --- Invoice Functions ---
+export const getInvoices = async (): Promise<Invoice[]> => {
+    const snapshot = await getDocs(query(invoicesCollection, orderBy("dateGenerated", "desc")));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+};
+
+export const getInvoicesForOpportunity = async (opportunityId: string): Promise<Invoice[]> => {
+    const q = query(invoicesCollection, where("opportunityId", "==", opportunityId), orderBy("dateGenerated", "desc"));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+};
+
+export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]> => {
+    const oppsSnapshot = await getDocs(query(opportunitiesCollection, where("clientId", "==", clientId)));
+    const opportunityIds = oppsSnapshot.docs.map(doc => doc.id);
+    if (opportunityIds.length === 0) return [];
+    
+    const q = query(invoicesCollection, where("opportunityId", "in", opportunityIds));
+    const invoicesSnapshot = await getDocs(q);
+    return invoicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+};
+
+export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: string, userName: string, ownerName: string): Promise<string> => {
+    const docRef = await addDoc(invoicesCollection, {
+        ...invoiceData,
+        dateGenerated: new Date(invoiceData.dateGenerated).toISOString(),
+    });
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'invoice',
+        entityId: docRef.id,
+        entityName: `Factura #${invoiceData.invoiceNumber || docRef.id}`,
+        details: `creó una factura para la oportunidad ID ${invoiceData.opportunityId}`,
+        ownerName: ownerName
+    });
+
+    return docRef.id;
+};
+
+export const updateInvoice = async (id: string, data: Partial<Invoice>, userId: string, userName: string, ownerName: string): Promise<void> => {
+    const docRef = doc(db, 'invoices', id);
+    await updateDoc(docRef, data);
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'invoice',
+        entityId: id,
+        entityName: `Factura #${data.invoiceNumber || id}`,
+        details: `actualizó la factura #${data.invoiceNumber || id}`,
+        ownerName: ownerName
+    });
+};
+
+export const deleteInvoice = async (id: string, userId: string, userName: string, ownerName: string): Promise<void> => {
+    const docRef = doc(db, 'invoices', id);
+    const invoiceSnap = await getDoc(docRef);
+    const invoiceData = invoiceSnap.data();
+
+    await deleteDoc(docRef);
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'invoice',
+        entityId: id,
+        entityName: `Factura #${invoiceData?.invoiceNumber || id}`,
+        details: `eliminó la factura #${invoiceData?.invoiceNumber || id}`,
+        ownerName: ownerName
+    });
+};
+
 
 
 // --- Agency Functions ---
@@ -256,6 +333,15 @@ export const deleteClient = async (
     const clientActivitiesSnap = await getDocs(clientActivitiesQuery);
     clientActivitiesSnap.forEach(doc => batch.delete(doc.ref));
 
+    // Delete invoices associated with the client's opportunities
+    const clientOpps = oppsSnap.docs.map(d => d.id);
+    if (clientOpps.length > 0) {
+      const invoicesQuery = query(invoicesCollection, where('opportunityId', 'in', clientOpps));
+      const invoicesSnap = await getDocs(invoicesQuery);
+      invoicesSnap.forEach(doc => batch.delete(doc.ref));
+    }
+
+
     // Finally, delete the client itself
     batch.delete(clientRef);
 
@@ -293,6 +379,14 @@ export const bulkDeleteClients = async (clientIds: string[], userId: string, use
       const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', clientId));
       const peopleSnap = await getDocs(peopleQuery);
       peopleSnap.forEach(doc => batch.delete(doc.ref));
+
+      // Delete invoices
+      const clientOpps = oppsSnap.docs.map(d => d.id);
+      if (clientOpps.length > 0) {
+        const invoicesQuery = query(invoicesCollection, where('opportunityId', 'in', clientOpps));
+        const invoicesSnap = await getDocs(invoicesQuery);
+        invoicesSnap.forEach(doc => batch.delete(doc.ref));
+      }
     }
   
     await batch.commit();
@@ -576,8 +670,18 @@ export const deleteOpportunity = async (
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) throw new Error("Opportunity not found");
     const opportunityData = docSnap.data() as Opportunity;
+
+    const batch = writeBatch(db);
+
+    // Delete invoices associated with the opportunity
+    const invoicesQuery = query(invoicesCollection, where('opportunityId', '==', id));
+    const invoicesSnap = await getDocs(invoicesQuery);
+    invoicesSnap.forEach(doc => batch.delete(doc.ref));
     
-    await deleteDoc(docRef);
+    // Delete opportunity
+    batch.delete(docRef);
+
+    await batch.commit();
 
     const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
     const clientOwnerName = clientSnap.exists() ? (clientSnap.data() as Client).ownerName : 'N/A';

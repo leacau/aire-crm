@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -7,8 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getClients, getAllUsers } from '@/lib/firebase-service';
-import type { Opportunity, Client, User } from '@/lib/types';
+import { getAllOpportunities, getClients, getAllUsers, getInvoices } from '@/lib/firebase-service';
+import type { Opportunity, Client, User, Invoice } from '@/lib/types';
 import Link from 'next/link';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { updateOpportunity } from '@/lib/firebase-service';
@@ -23,38 +21,53 @@ import { TableFooter, TableRow, TableCell } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 
-const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunity[], onRowClick: (opp: Opportunity) => void }) => {
-  const total = opportunities.reduce((acc, opp) => acc + (opp.valorCerrado || opp.value), 0);
+const BillingTable = ({ invoices, onRowClick, opportunitiesMap, clientsMap }: { invoices: Invoice[], onRowClick: (opp: Opportunity) => void, opportunitiesMap: Record<string, Opportunity>, clientsMap: Record<string, Client> }) => {
+  const total = invoices.reduce((acc, inv) => acc + inv.amount, 0);
 
-  const columns = useMemo<ColumnDef<Opportunity>[]>(() => [
+  type InvoiceRow = Invoice & { opportunity?: Opportunity; client?: Client };
+
+  const tableData: InvoiceRow[] = invoices.map(inv => ({
+    ...inv,
+    opportunity: opportunitiesMap[inv.opportunityId],
+    client: opportunitiesMap[inv.opportunityId] ? clientsMap[opportunitiesMap[inv.opportunityId].clientId] : undefined
+  }));
+
+  const columns = useMemo<ColumnDef<InvoiceRow>[]>(() => [
     {
-      accessorKey: 'title',
-      header: 'Título',
-      cell: ({ row }) => <div className="font-medium">{row.original.title}</div>,
+      accessorKey: 'opportunity.title',
+      header: 'Oportunidad',
+      cell: ({ row }) => (
+        <div 
+          className="font-medium text-primary hover:underline cursor-pointer"
+          onClick={() => row.original.opportunity && onRowClick(row.original.opportunity)}
+        >
+            {row.original.opportunity?.title}
+        </div>),
     },
     {
-      accessorKey: 'clientName',
+      accessorKey: 'client.denominacion',
       header: 'Cliente',
       cell: ({ row }) => (
-        <Link href={`/clients/${row.original.clientId}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
-          {row.original.clientName}
+        row.original.client ?
+        <Link href={`/clients/${row.original.client.id}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+          {row.original.client.denominacion}
         </Link>
+        : '-'
       ),
     },
     {
-      accessorKey: 'valorCerrado',
-      header: () => <div className="text-right">Valor Cerrado</div>,
+      accessorKey: 'amount',
+      header: () => <div className="text-right">Monto Factura</div>,
       cell: ({ row }) => {
-        const amount = row.original.valorCerrado || row.original.value;
-        return <div className="text-right">${amount.toLocaleString('es-AR')}</div>;
+        return <div className="text-right">${row.original.amount.toLocaleString('es-AR')}</div>;
       },
     },
     {
-      accessorKey: 'facturaNo',
+      accessorKey: 'invoiceNumber',
       header: 'Factura Nº',
-      cell: ({ row }) => row.original.facturaNo || '-',
+      cell: ({ row }) => row.original.invoiceNumber || '-',
     }
-  ], []);
+  ], [onRowClick]);
 
   const footerContent = (
     <TableFooter>
@@ -69,10 +82,10 @@ const BillingTable = ({ opportunities, onRowClick }: { opportunities: Opportunit
   return (
       <ResizableDataTable
         columns={columns}
-        data={opportunities}
-        onRowClick={onRowClick}
+        data={tableData}
+        emptyStateMessage="No hay facturas en esta sección."
         footerContent={footerContent}
-        emptyStateMessage="No hay oportunidades en esta sección."
+        enableRowResizing={false}
       />
   );
 };
@@ -81,6 +94,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,47 +103,38 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
   
-  const advisorClientIds = useMemo(() => {
-    if (selectedAdvisor === 'all') return null;
-    return new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
-  }, [clients, selectedAdvisor]);
+  const opportunitiesMap = useMemo(() => 
+    opportunities.reduce((acc, opp) => {
+        acc[opp.id] = opp;
+        return acc;
+    }, {} as Record<string, Opportunity>),
+  [opportunities]);
 
-  const filteredOpportunitiesByAdvisor = useMemo(() => {
-    if (!userInfo) return [];
-    
-    if (isBoss) {
-      if (selectedAdvisor === 'all') {
-        return opportunities;
-      }
-      return opportunities.filter(opp => advisorClientIds?.has(opp.clientId));
-    }
-    // For non-boss users, only show their opportunities
-    const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
-    return opportunities.filter(opp => userClientIds.has(opp.clientId));
-  }, [opportunities, clients, selectedAdvisor, isBoss, userInfo, advisorClientIds]);
+  const clientsMap = useMemo(() =>
+    clients.reduce((acc, client) => {
+      acc[client.id] = client;
+      return acc;
+    }, {} as Record<string, Client>),
+  [clients]);
 
-
-  const filteredOpportunities = filteredOpportunitiesByAdvisor.filter(opp => {
-    if (!dateRange?.from || !dateRange?.to) return true;
-    const closeDate = new Date(opp.closeDate);
-    return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
-  });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [allOpps, allClients, allAdvisors] = await Promise.all([
+      const [allOpps, allClients, allAdvisors, allInvoices] = await Promise.all([
         getAllOpportunities(),
         getClients(),
         getAllUsers('Asesor'),
+        getInvoices()
       ]);
       setOpportunities(allOpps);
       setClients(allClients);
       setAdvisors(allAdvisors);
+      setInvoices(allInvoices);
 
     } catch (error) {
-      console.error("Error fetching opportunities:", error);
-      toast({ title: 'Error al cargar oportunidades', variant: 'destructive' });
+      console.error("Error fetching billing data:", error);
+      toast({ title: 'Error al cargar datos de facturación', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -140,6 +145,33 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         fetchData();
     }
   }, [userInfo, fetchData]);
+
+  const filteredInvoices = useMemo(() => {
+    if (!userInfo) return [];
+    
+    let userClientIds: Set<string> | null = null;
+    if (isBoss) {
+      if (selectedAdvisor !== 'all') {
+        userClientIds = new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
+      }
+    } else {
+      userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
+    }
+    
+    let advisorFilteredInvoices = invoices;
+    if (userClientIds) {
+        const oppsForUser = new Set(opportunities.filter(opp => userClientIds!.has(opp.clientId)).map(opp => opp.id));
+        advisorFilteredInvoices = invoices.filter(inv => oppsForUser.has(inv.opportunityId));
+    }
+    
+    return advisorFilteredInvoices.filter(inv => {
+        if (!dateRange?.from || !dateRange?.to) return true;
+        const generationDate = new Date(inv.dateGenerated);
+        return isWithinInterval(generationDate, { start: dateRange.from, end: dateRange.to });
+    });
+
+  }, [invoices, opportunities, clients, selectedAdvisor, isBoss, userInfo, dateRange]);
+
 
   const handleUpdateOpportunity = async (updatedData: Partial<Opportunity>) => {
     if (!selectedOpportunity || !userInfo) return;
@@ -169,13 +201,9 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     );
   }
   
-  const closedWonOpps = filteredOpportunities.filter(
-    (opp) => opp.stage === 'Cerrado - Ganado'
-  );
-
-  const toInvoiceOpps = closedWonOpps.filter((opp) => !opp.facturaNo);
-  const toCollectOpps = closedWonOpps.filter((opp) => opp.facturaNo && !opp.pagado);
-  const paidOpps = closedWonOpps.filter((opp) => opp.facturaNo && opp.pagado);
+  const toInvoiceInvoices = filteredInvoices.filter(inv => inv.status === 'Generada');
+  const toCollectInvoices = filteredInvoices.filter(inv => inv.status === 'Enviada a Cobrar');
+  const paidInvoices = filteredInvoices.filter(inv => inv.status === 'Pagada');
 
   return (
     <div className="flex flex-col h-full">
@@ -203,13 +231,13 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             <TabsTrigger value="paid">Pagado</TabsTrigger>
           </TabsList>
           <TabsContent value="to-invoice">
-            <BillingTable opportunities={toInvoiceOpps} onRowClick={handleRowClick} />
+            <BillingTable invoices={toInvoiceInvoices} onRowClick={handleRowClick} opportunitiesMap={opportunitiesMap} clientsMap={clientsMap} />
           </TabsContent>
           <TabsContent value="to-collect">
-            <BillingTable opportunities={toCollectOpps} onRowClick={handleRowClick} />
+            <BillingTable invoices={toCollectInvoices} onRowClick={handleRowClick} opportunitiesMap={opportunitiesMap} clientsMap={clientsMap} />
           </TabsContent>
            <TabsContent value="paid">
-            <BillingTable opportunities={paidOpps} onRowClick={handleRowClick} />
+            <BillingTable invoices={paidInvoices} onRowClick={handleRowClick} opportunitiesMap={opportunitiesMap} clientsMap={clientsMap} />
           </TabsContent>
         </Tabs>
       </main>

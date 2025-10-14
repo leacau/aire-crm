@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useMemo } from 'react';
@@ -57,10 +55,10 @@ export const ApprovalsTable = ({ opportunities, onRowClick, clientsMap, usersMap
       }
     },
     {
-      accessorKey: 'valorCerrado',
-      header: () => <div className="text-right">Valor Cerrado</div>,
+      accessorKey: 'value',
+      header: () => <div className="text-right">Valor</div>,
       cell: ({ row }) => {
-        const amount = row.original.valorCerrado || row.original.value;
+        const amount = row.original.value;
         return <div className="text-right">${amount.toLocaleString('es-AR')}</div>;
       }
     },

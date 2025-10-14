@@ -1,5 +1,6 @@
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -21,6 +22,20 @@ export type ProposalFile = {
   url: string;
 };
 
+export const invoiceStatusOptions = ['Generada', 'Enviada a Cobrar', 'Pagada'] as const;
+export type InvoiceStatus = typeof invoiceStatusOptions[number];
+
+export type Invoice = {
+  id: string;
+  opportunityId: string;
+  invoiceNumber: string;
+  amount: number;
+  status: InvoiceStatus;
+  dateGenerated: string;
+  datePaid?: string;
+};
+
+
 export type Opportunity = {
   id: string;
   title: string;
@@ -31,23 +46,25 @@ export type Opportunity = {
   closeDate: string;
   details?: string;
   observaciones?: string;
+  
+  // Deprecated fields, replaced by invoices array
   facturaNo?: string;
   valorCerrado?: number;
-  propuestaCerrada?: string;
   pagado?: boolean;
+
   bonificacionDetalle?: string;
   bonificacionEstado?: BonificacionEstado;
   bonificacionAutorizadoPorId?: string;
   bonificacionAutorizadoPorNombre?: string;
   bonificacionFechaAutorizacion?: string;
   bonificacionObservaciones?: string;
-  // Nuevos campos
+  
   periodicidad?: Periodicidad[];
   facturaPorAgencia?: boolean;
   agencyId?: string;
   formaDePago?: FormaDePago[];
-  fechaFacturacion?: string; // formato "dd/MM"
-  fechaInicioPauta?: string; // formato "YYYY-MM-DD"
+  fechaFacturacion?: string; 
+  fechaInicioPauta?: string; 
   proposalFiles?: ProposalFile[];
 };
 
@@ -99,7 +116,7 @@ export type ActivityLog = {
   userName: string;
   ownerName: string;
   type: 'create' | 'update' | 'delete' | 'stage_change';
-  entityType: 'client' | 'person' | 'opportunity' | 'agency';
+  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action

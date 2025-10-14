@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, Invoice } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
@@ -29,11 +29,14 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency } from '@/lib/firebase-service';
-import { PlusCircle, Clock } from 'lucide-react';
+import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice } from '@/lib/firebase-service';
+import { PlusCircle, Clock, Trash2 } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { LinkifiedText } from '@/components/ui/linkified-text';
 import { TaskFormDialog } from './task-form-dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { invoiceStatusOptions } from '@/lib/types';
 
 import {
   AlertDialog,
@@ -65,7 +68,6 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     closeDate: new Date().toISOString().split('T')[0],
     clientName: client?.name || '',
     clientId: client?.id || '',
-    pagado: false,
     bonificacionDetalle: '',
     periodicidad: [],
     facturaPorAgencia: false,
@@ -147,6 +149,7 @@ export function OpportunityDetailsDialog({
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   
   const getInitialData = () => {
@@ -154,7 +157,14 @@ export function OpportunityDetailsDialog({
       return getInitialOpportunityData(client);
   }
 
-  const [editedOpportunity, setEditedOpportunity] = React.useState<Partial<Opportunity>>(getInitialData());
+  const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>(getInitialData());
+
+  const fetchInvoices = async () => {
+    if (opportunity) {
+        const fetchedInvoices = await getInvoicesForOpportunity(opportunity.id);
+        setInvoices(fetchedInvoices);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -163,6 +173,12 @@ export function OpportunityDetailsDialog({
         getAgencies().then(setAgencies).catch(() => {
             toast({ title: "Error al cargar agencias", variant: "destructive" });
         });
+
+        if (opportunity) {
+          fetchInvoices();
+        } else {
+          setInvoices([]);
+        }
     }
   }, [opportunity, isOpen, client, toast]);
   
@@ -274,9 +290,53 @@ export function OpportunityDetailsDialog({
     setEditedOpportunity(prev => ({...prev, [name]: value }));
   }
 
+  const handleAddInvoice = async () => {
+    if (!opportunity || !userInfo) return;
+    const newInvoice = {
+      opportunityId: opportunity.id,
+      invoiceNumber: '',
+      amount: 0,
+      status: 'Generada' as const,
+      dateGenerated: new Date().toISOString(),
+    };
+    try {
+      await createInvoice(newInvoice, userInfo.id, userInfo.name, opportunity.clientName);
+      fetchInvoices();
+      toast({ title: "Factura añadida" });
+    } catch (e) {
+      toast({ title: "Error al añadir factura", variant: "destructive" });
+    }
+  };
+
+  const handleInvoiceChange = (invoiceId: string, field: keyof Invoice, value: any) => {
+    setInvoices(invoices.map(inv => inv.id === invoiceId ? { ...inv, [field]: value } : inv));
+  };
+  
+  const handleInvoiceUpdate = async (invoice: Invoice) => {
+    if (!userInfo) return;
+    try {
+        await updateInvoice(invoice.id, invoice, userInfo.id, userInfo.name, opportunity!.clientName);
+        fetchInvoices();
+        toast({ title: "Factura actualizada" });
+    } catch(e) {
+        toast({ title: "Error al actualizar factura", variant: 'destructive' });
+    }
+  }
+
+  const handleInvoiceDelete = async (invoiceId: string) => {
+    if (!userInfo || !opportunity) return;
+    try {
+        await deleteInvoice(invoiceId, userInfo.id, userInfo.name, opportunity.clientName);
+        fetchInvoices();
+        toast({ title: "Factura eliminada" });
+    } catch(e) {
+        toast({ title: "Error al eliminar factura", variant: "destructive" });
+    }
+  }
+
+
   const isCloseWon = editedOpportunity.stage === 'Cerrado - Ganado';
   const canEditBonus = editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar';
-  const isInvoiceSet = !!editedOpportunity.facturaNo;
   const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
 
   const getBonusStatusPill = (status?: BonificacionEstado) => {
@@ -290,61 +350,10 @@ export function OpportunityDetailsDialog({
       return <span className={cn(baseClasses, statusMap[status])}>{status}</span>;
   }
   
-  type EditableField = 'details' | 'observaciones' | 'propuestaCerrada' | 'bonificacionObservaciones';
-  const [editingField, setEditingField] = useState<EditableField | null>(null);
-
-  const renderEditableTextarea = (field: EditableField, label: string) => {
-    const isEditingThisField = editingField === field;
-    const value = editedOpportunity[field] || '';
-    let isDisabled = false;
-
-    if (field === 'propuestaCerrada' && !isCloseWon) {
-        isDisabled = true;
-    }
-    if (field === 'bonificacionObservaciones' && !isBoss) {
-        isDisabled = true;
-    }
-
-
-    return (
-        <div className="space-y-2">
-            <Label htmlFor={field} onClick={() => !isDisabled && setEditingField(field)}>{label}</Label>
-            {isEditingThisField ? (
-                <Textarea
-                    id={field}
-                    name={field}
-                    value={value}
-                    onChange={handleChange}
-                    onBlur={() => setEditingField(null)}
-                    autoFocus
-                    disabled={isDisabled}
-                    placeholder={isDisabled ? 'No disponible' : ''}
-                />
-            ) : (
-                <div
-                    onClick={() => !isDisabled && setEditingField(field)}
-                    className={cn(
-                        "min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        isDisabled ? "cursor-not-allowed opacity-50" : "cursor-text"
-                    )}
-                >
-                    {value ? (
-                        <LinkifiedText text={value} />
-                    ) : (
-                        <span className="text-muted-foreground">
-                            {isDisabled ? 'No disponible' : `Clic para editar...`}
-                        </span>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-};
-
   return (
     <>
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <div className="flex justify-between items-center">
             <div>
@@ -353,7 +362,7 @@ export function OpportunityDetailsDialog({
                 {isEditing ? 'Edita los detalles de la oportunidad.' : 'Rellena los datos para crear una nueva oportunidad.'}
               </DialogDescription>
             </div>
-            {isEditing && opportunity && (
+            {isEditing && opportunity && userInfo && (
               <Button variant="ghost" size="icon" onClick={() => setIsTaskFormOpen(true)}>
                 <Clock className="h-5 w-5" />
                 <span className="sr-only">Crear Tarea/Recordatorio</span>
@@ -361,123 +370,121 @@ export function OpportunityDetailsDialog({
             )}
           </div>
         </DialogHeader>
-        <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
-           <div className="space-y-2">
-              <Label htmlFor="title">Título</Label>
-              <Input id="title" name="title" value={editedOpportunity.title || ''} onChange={handleChange}/>
-          </div>
-          {renderEditableTextarea('details', 'Descripción')}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="max-h-[70vh] overflow-y-auto pr-4 -mr-4">
+        <Tabs defaultValue="details">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="details">Detalles</TabsTrigger>
+            <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
+            <TabsTrigger value="bonus">Bonificación</TabsTrigger>
+            <TabsTrigger value="billing">Facturación</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="details" className="space-y-4 py-4">
             <div className="space-y-2">
-                <Label htmlFor="value">Valor</Label>
-                <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange}/>
+                <Label htmlFor="title">Título</Label>
+                <Input id="title" name="title" value={editedOpportunity.title || ''} onChange={handleChange}/>
             </div>
-            <div className="space-y-2">
-                <Label htmlFor="stage">Etapa</Label>
-                <Select onValueChange={(v: OpportunityStage) => handleSelectChange('stage', v)} value={editedOpportunity.stage}>
-                    <SelectTrigger id="stage"><SelectValue/></SelectTrigger>
-                    <SelectContent>{opportunityStages.map(stage => <SelectItem key={stage} value={stage}>{stage}</SelectItem>)}</SelectContent>
-                </Select>
-            </div>
-          </div>
-           <div className="space-y-2">
-              <Label htmlFor="periodicidad">Periodicidad</Label>
-              <div className="flex flex-wrap gap-x-4 gap-y-2">
-                  {periodicidadOptions.map(option => (
-                      <div key={option} className="flex items-center space-x-2">
-                          <Checkbox
-                              id={`period-${option}`}
-                              name='periodicidad'
-                              checked={editedOpportunity.periodicidad?.includes(option)}
-                              onCheckedChange={(checked) => handleMultiCheckboxChange('periodicidad', option, !!checked)}
-                          />
-                          <Label htmlFor={`period-${option}`} className="font-normal">{option}</Label>
-                      </div>
-                  ))}
-              </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-             <div className="flex items-center space-x-2 pt-6">
-                <Checkbox id="facturaPorAgencia" name="facturaPorAgencia" checked={editedOpportunity.facturaPorAgencia} onCheckedChange={(c) => handleCheckboxChange('facturaPorAgencia', c)} />
-                <Label htmlFor="facturaPorAgencia">Factura por Agencia</Label>
-            </div>
-            {editedOpportunity.facturaPorAgencia && (
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                    <Label htmlFor="agencyId">Agencia</Label>
-                    <Select value={editedOpportunity.agencyId || ''} onValueChange={(v) => handleSelectChange('agencyId', v)}>
-                        <SelectTrigger id="agencyId"><SelectValue placeholder="Seleccionar agencia..." /></SelectTrigger>
-                        <SelectContent>
-                            {agencies.map(agency => (
-                                <SelectItem key={agency.id} value={agency.id}>{agency.name}</SelectItem>
-                            ))}
-                            <NewAgencyDialog onAgencyCreated={handleAgencyCreated} />
-                        </SelectContent>
+                    <Label htmlFor="value">Valor</Label>
+                    <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange}/>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="stage">Etapa</Label>
+                    <Select onValueChange={(v: OpportunityStage) => handleSelectChange('stage', v)} value={editedOpportunity.stage}>
+                        <SelectTrigger id="stage"><SelectValue/></SelectTrigger>
+                        <SelectContent>{opportunityStages.map(stage => <SelectItem key={stage} value={stage}>{stage}</SelectItem>)}</SelectContent>
                     </Select>
                 </div>
-            )}
-          </div>
-           <div className="space-y-2">
-              <Label>Forma de Pago</Label>
-              <div className="flex flex-wrap gap-x-4 gap-y-2">
-                  {formaDePagoOptions.map(option => (
-                      <div key={option} className="flex items-center space-x-2">
-                          <Checkbox
-                              id={`payment-${option}`}
-                              name='formaDePago'
-                              checked={editedOpportunity.formaDePago?.includes(option)}
-                              onCheckedChange={(checked) => handleMultiCheckboxChange('formaDePago', option, !!checked)}
-                          />
-                          <Label htmlFor={`payment-${option}`} className="font-normal">{option}</Label>
-                      </div>
-                  ))}
               </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="details">Descripción</Label>
+                <Textarea id="details" name="details" value={editedOpportunity.details || ''} onChange={handleChange} />
+            </div>
             <div className="space-y-2">
-                <Label htmlFor="fechaFacturacion">Fecha de Facturación (Día/Mes)</Label>
-                <Input 
-                  id="fechaFacturacion" 
-                  name="fechaFacturacion"
-                  type="date"
-                  value={editedOpportunity.fechaFacturacion ? `2000-${editedOpportunity.fechaFacturacion.split('/')[1]}-${editedOpportunity.fechaFacturacion.split('/')[0]}` : ''}
-                  onChange={handleChange}
-                />
+                <Label htmlFor="observaciones">Observaciones</Label>
+                <Textarea id="observaciones" name="observaciones" value={editedOpportunity.observaciones || ''} onChange={handleChange} />
             </div>
-             <div className="space-y-2">
-                <Label htmlFor="fechaInicioPauta">Inicio de Pauta</Label>
-                <Input 
-                  id="fechaInicioPauta" 
-                  name="fechaInicioPauta" 
-                  type="date"
-                  value={editedOpportunity.fechaInicioPauta || ''}
-                  onChange={handleChange}
-                />
-            </div>
-          </div>
+          </TabsContent>
           
-           {renderEditableTextarea('observaciones', 'Observaciones')}
-
-          {isEditing && (
-            <>
+          <TabsContent value="conditions" className="space-y-4 py-4">
+              <div className="space-y-2">
+                  <Label htmlFor="periodicidad">Periodicidad</Label>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2">
+                      {periodicidadOptions.map(option => (
+                          <div key={option} className="flex items-center space-x-2">
+                              <Checkbox
+                                  id={`period-${option}`}
+                                  name='periodicidad'
+                                  checked={editedOpportunity.periodicidad?.includes(option)}
+                                  onCheckedChange={(checked) => handleMultiCheckboxChange('periodicidad', option, !!checked)}
+                              />
+                              <Label htmlFor={`period-${option}`} className="font-normal">{option}</Label>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Forma de Pago</Label>
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                    {formaDePagoOptions.map(option => (
+                        <div key={option} className="flex items-center space-x-2">
+                            <Checkbox
+                                id={`payment-${option}`}
+                                name='formaDePago'
+                                checked={editedOpportunity.formaDePago?.includes(option)}
+                                onCheckedChange={(checked) => handleMultiCheckboxChange('formaDePago', option, !!checked)}
+                            />
+                            <Label htmlFor={`payment-${option}`} className="font-normal">{option}</Label>
+                        </div>
+                    ))}
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="facturaNo">Factura Nº</Label>
-                  <Input id="facturaNo" name="facturaNo" value={editedOpportunity.facturaNo || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''}/>
+                    <Label htmlFor="fechaFacturacion">Fecha de Facturación (Día/Mes)</Label>
+                    <Input 
+                      id="fechaFacturacion" 
+                      name="fechaFacturacion"
+                      type="date"
+                      value={editedOpportunity.fechaFacturacion ? `2000-${editedOpportunity.fechaFacturacion.split('/')[1]}-${editedOpportunity.fechaFacturacion.split('/')[0]}` : ''}
+                      onChange={handleChange}
+                    />
                 </div>
                 <div className="space-y-2">
-                    <Label htmlFor="valorCerrado">Valor Cerrado</Label>
-                    <Input id="valorCerrado" name="valorCerrado" type="number" value={editedOpportunity.valorCerrado || ''} onChange={handleChange} disabled={!isCloseWon} placeholder={!isCloseWon ? 'Solo para Cierre Ganado' : ''} />
+                    <Label htmlFor="fechaInicioPauta">Inicio de Pauta</Label>
+                    <Input 
+                      id="fechaInicioPauta" 
+                      name="fechaInicioPauta" 
+                      type="date"
+                      value={editedOpportunity.fechaInicioPauta || ''}
+                      onChange={handleChange}
+                    />
                 </div>
               </div>
-
-               {renderEditableTextarea('propuestaCerrada', 'Propuesta Cerrada')}
-
-               <div className="flex items-center space-x-2 pt-2">
-                  <Checkbox id="pagado" name="pagado" checked={editedOpportunity.pagado} onCheckedChange={(c) => handleCheckboxChange('pagado', c)} disabled={!isInvoiceSet}/>
-                  <Label htmlFor="pagado">Pagado</Label>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                <div className="flex items-center space-x-2 pt-6">
+                    <Checkbox id="facturaPorAgencia" name="facturaPorAgencia" checked={editedOpportunity.facturaPorAgencia} onCheckedChange={(c) => handleCheckboxChange('facturaPorAgencia', c)} />
+                    <Label htmlFor="facturaPorAgencia">Factura por Agencia</Label>
+                </div>
+                {editedOpportunity.facturaPorAgencia && (
+                    <div className="space-y-2">
+                        <Label htmlFor="agencyId">Agencia</Label>
+                        <Select value={editedOpportunity.agencyId || ''} onValueChange={(v) => handleSelectChange('agencyId', v)}>
+                            <SelectTrigger id="agencyId"><SelectValue placeholder="Seleccionar agencia..." /></SelectTrigger>
+                            <SelectContent>
+                                {agencies.map(agency => (
+                                    <SelectItem key={agency.id} value={agency.id}>{agency.name}</SelectItem>
+                                ))}
+                                <NewAgencyDialog onAgencyCreated={handleAgencyCreated} />
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
               </div>
-
+          </TabsContent>
+          
+          <TabsContent value="bonus" className="space-y-4 py-4">
               <div className="space-y-2">
                   <Label htmlFor="bonificacionDetalle">Detalle Bonificación</Label>
                   <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!canEditBonus} placeholder={!canEditBonus ? 'Solo en Negociación o Cierre Ganado' : 'Ej: 10% Descuento'}/>
@@ -491,7 +498,18 @@ export function OpportunityDetailsDialog({
                             {getBonusStatusPill(editedOpportunity.bonificacionEstado)}
                         </div>
                         
-                        {renderEditableTextarea('bonificacionObservaciones', 'Observaciones de la Decisión')}
+                         <div className="space-y-2">
+                            <Label htmlFor="bonificacionObservaciones">Observaciones de la Decisión</Label>
+                            <Textarea
+                                id="bonificacionObservaciones"
+                                name="bonificacionObservaciones"
+                                value={editedOpportunity.bonificacionObservaciones || ''}
+                                onChange={handleChange}
+                                disabled={!isBoss}
+                                placeholder={!isBoss ? (editedOpportunity.bonificacionObservaciones || 'Sin observaciones') : 'Añadir observaciones...'}
+                            />
+                        </div>
+
 
                         {editedOpportunity.bonificacionEstado === 'Pendiente' && isBoss && (
                              <div className="flex gap-2 mt-2">
@@ -512,13 +530,71 @@ export function OpportunityDetailsDialog({
                         )}
                     </div>
                 )}
-            </>
-          )}
-
+          </TabsContent>
+          <TabsContent value="billing" className="py-4">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-medium">Facturas</h4>
+                  <Button size="sm" onClick={handleAddInvoice} disabled={!opportunity}>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Añadir Factura
+                  </Button>
+                </div>
+                 <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Nº Factura</TableHead>
+                            <TableHead>Monto</TableHead>
+                            <TableHead>Estado</TableHead>
+                            <TableHead className="w-12"></TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {invoices.map((invoice) => (
+                        <TableRow key={invoice.id}>
+                            <TableCell>
+                                <Input value={invoice.invoiceNumber} onChange={(e) => handleInvoiceChange(invoice.id, 'invoiceNumber', e.target.value)} onBlur={() => handleInvoiceUpdate(invoice)}/>
+                            </TableCell>
+                            <TableCell>
+                                <Input type="number" value={invoice.amount} onChange={(e) => handleInvoiceChange(invoice.id, 'amount', Number(e.target.value))} onBlur={() => handleInvoiceUpdate(invoice)}/>
+                            </TableCell>
+                            <TableCell>
+                                <Select value={invoice.status} onValueChange={(value) => {
+                                  const updatedInvoice = { ...invoice, status: value as Invoice['status'] };
+                                  if (value === 'Pagada') {
+                                    updatedInvoice.datePaid = new Date().toISOString();
+                                  }
+                                  handleInvoiceUpdate(updatedInvoice);
+                                }}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {invoiceStatusOptions.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </TableCell>
+                             <TableCell>
+                                <Button variant="ghost" size="icon" onClick={() => handleInvoiceDelete(invoice.id)}>
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                        ))}
+                         {invoices.length === 0 && (
+                            <TableRow>
+                                <TableCell colSpan={4} className="text-center h-24">No hay facturas para esta oportunidad.</TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+              </div>
+          </TabsContent>
+        </Tabs>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Guardar</Button>
+          <Button onClick={handleSave}>Guardar Cambios</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

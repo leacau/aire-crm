@@ -1,11 +1,9 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getAllUsers, getClients, updateUserProfile } from '@/lib/firebase-service';
-import type { Opportunity, User, Client, UserRole } from '@/lib/types';
+import { getAllOpportunities, getAllUsers, getClients, updateUserProfile, getInvoices } from '@/lib/firebase-service';
+import type { Opportunity, User, Client, UserRole, Invoice } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
@@ -25,6 +23,7 @@ const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia'];
 export function TeamPerformanceTable() {
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,14 +31,16 @@ export function TeamPerformanceTable() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [allOpps, allUsers, allClients] = await Promise.all([
+      const [allOpps, allUsers, allClients, allInvoices] = await Promise.all([
           getAllOpportunities(),
           getAllUsers(),
-          getClients()
+          getClients(),
+          getInvoices(),
       ]);
       setOpportunities(allOpps);
       setUsers(allUsers);
       setClients(allClients);
+      setInvoices(allInvoices);
     } catch (error) {
       console.error("Error fetching team data:", error);
       toast({ title: 'Error al cargar los datos del equipo', variant: 'destructive' });
@@ -73,8 +74,10 @@ export function TeamPerformanceTable() {
         const userOpps = isAdvisor ? opportunities.filter(opp => advisorClientIds.has(opp.clientId)) : [];
         
         const wonOpps = userOpps.filter(opp => opp.stage === 'Cerrado - Ganado');
-        const totalRevenue = wonOpps.reduce((sum, opp) => sum + (opp.valorCerrado || opp.value), 0);
-        
+        const wonOppIds = new Set(wonOpps.map(opp => opp.id));
+
+        const totalRevenue = invoices.filter(inv => wonOppIds.has(inv.opportunityId) && inv.status === 'Pagada').reduce((sum, inv) => sum + inv.amount, 0);
+
         const activeOpps = userOpps.filter(opp => opp.stage !== 'Cerrado - Ganado' && opp.stage !== 'Cerrado - Perdido');
         const pipelineValue = activeOpps.reduce((sum, opp) => sum + opp.value, 0);
 
@@ -86,7 +89,7 @@ export function TeamPerformanceTable() {
             pipelineValue
         };
     }).sort((a,b) => b.totalRevenue - a.totalRevenue); // Sort by revenue
-  }, [users, opportunities, clients]);
+  }, [users, opportunities, clients, invoices]);
   
   const columns = useMemo<ColumnDef<UserStats>[]>(() => [
     {
@@ -136,7 +139,7 @@ export function TeamPerformanceTable() {
     },
     {
       accessorKey: 'totalRevenue',
-      header: () => <div className="text-right">Ingresos</div>,
+      header: () => <div className="text-right">Ingresos (Pagados)</div>,
       cell: ({ row }) => <div className="text-right font-semibold">{row.original.user.role === 'Asesor' ? `$${row.original.totalRevenue.toLocaleString('es-AR')}` : '-'}</div>,
     },
     {

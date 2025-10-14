@@ -1,7 +1,5 @@
-
-
 'use client'
-import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User } from '@/lib/types';
+import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice } from '@/lib/types';
 import React, { useEffect, useState } from 'react';
 import {
   Card,
@@ -39,6 +37,7 @@ import {
   BadgeAlert,
   Star,
   CircleDollarSign,
+  TrendingUp,
 } from 'lucide-react';
 import {
   Table,
@@ -70,7 +69,7 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers } from '@/lib/firebase-service';
+import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers, getInvoicesForClient } from '@/lib/firebase-service';
 import { sendEmail, createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
@@ -139,6 +138,7 @@ export function ClientDetails({
   
   const [people, setPeople] = useState<Person[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clientActivities, setClientActivities] = useState<ClientActivity[]>([]);
   const [systemActivities, setSystemActivities] = useState<ActivityLog[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -149,7 +149,7 @@ export function ClientDetails({
   const [newActivityOpportunityId, setNewActivityOpportunityId] = useState<string | undefined>();
   const [isTask, setIsTask] = useState(false);
   const [dueDate, setDueDate] = useState<Date | undefined>();
-  const [dueTime, setDueTime] = useState<string>('09:00');
+  const [dueTime, setDueTime] = useState('09:00');
   const [isSavingActivity, setIsSavingActivity] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState<string | null>(null);
 
@@ -169,15 +169,17 @@ export function ClientDetails({
   const fetchClientData = async () => {
       if(!userInfo) return;
       try {
-        const [clientPeople, clientOpportunities, activities, systemLogs, allUsers] = await Promise.all([
+        const [clientPeople, clientOpportunities, clientInvoices, activities, systemLogs, allUsers] = await Promise.all([
             getPeopleByClientId(client.id),
             getOpportunitiesByClientId(client.id),
+            getInvoicesForClient(client.id),
             getClientActivities(client.id),
             getActivitiesForEntity(client.id),
             getAllUsers(),
         ]);
         setPeople(clientPeople);
         setOpportunities(clientOpportunities);
+        setInvoices(clientInvoices);
         setClientActivities(activities);
         setSystemActivities(systemLogs);
         setUsers(allUsers);
@@ -195,6 +197,9 @@ export function ClientDetails({
     acc[user.id] = user;
     return acc;
   }, {} as Record<string, User>);
+
+  const totalPaidInvoices = invoices.filter(inv => inv.status === 'Pagada').reduce((sum, inv) => sum + inv.amount, 0);
+
 
   const canEditClient = isBoss || (userInfo?.id === client.ownerId);
   const canEditContact = isBoss || (userInfo?.id === client.ownerId);
@@ -574,78 +579,92 @@ export function ClientDetails({
   return (
     <>
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="flex-1 min-w-0">
-                      <CardTitle className="text-2xl truncate">{client.denominacion}</CardTitle>
-                      <CardDescription className="truncate">{client.razonSocial}</CardDescription>
-                       <div className="flex items-center gap-2 mt-2">
-                        {client.isNewClient && client.newClientDate && (
-                          <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                            <Star className="h-3 w-3 mr-1" />
-                            Nuevo ({format(new Date(client.newClientDate), 'dd/MM/yy')})
-                          </Badge>
-                        )}
-                        {client.isDeactivated && (
-                          <Badge variant="destructive">
-                            <BadgeAlert className="h-3 w-3 mr-1" />
-                            Dado de Baja
-                            {client.deactivationHistory && client.deactivationHistory.length > 0 &&
-                              ` (${format(new Date(client.deactivationHistory[client.deactivationHistory.length - 1]), 'dd/MM/yy')})`
-                            }
-                          </Badge>
-                        )}
-                      </div>
-                  </div>
-              </div>
-               {canEditClient && (
-                  <Button variant="outline" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => setIsClientFormOpen(true)}>
-                      <Edit className="h-4 w-4" />
-                  </Button>
-              )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-           {client.cuit && (
-            <div className="flex items-center gap-3">
-              <FileDigit className="h-4 w-4 text-muted-foreground" />
-              <span>{client.cuit}</span>
+      <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
+        <Card className='md:col-span-2'>
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="flex-1 min-w-0">
+                        <CardTitle className="text-2xl truncate">{client.denominacion}</CardTitle>
+                        <CardDescription className="truncate">{client.razonSocial}</CardDescription>
+                         <div className="flex items-center gap-2 mt-2">
+                          {client.isNewClient && client.newClientDate && (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                              <Star className="h-3 w-3 mr-1" />
+                              Nuevo ({format(new Date(client.newClientDate), 'dd/MM/yy')})
+                            </Badge>
+                          )}
+                          {client.isDeactivated && (
+                            <Badge variant="destructive">
+                              <BadgeAlert className="h-3 w-3 mr-1" />
+                              Dado de Baja
+                              {client.deactivationHistory && client.deactivationHistory.length > 0 &&
+                                ` (${format(new Date(client.deactivationHistory[client.deactivationHistory.length - 1]), 'dd/MM/yy')})`
+                              }
+                            </Badge>
+                          )}
+                        </div>
+                    </div>
+                </div>
+                 {canEditClient && (
+                    <Button variant="outline" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => setIsClientFormOpen(true)}>
+                        <Edit className="h-4 w-4" />
+                    </Button>
+                )}
             </div>
-           )}
-           <div className="flex items-center gap-3">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <span>{client.condicionIVA}</span>
-          </div>
-           <div className="flex items-center gap-3">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-            <span>{client.rubro}</span>
-          </div>
-           <div className="flex items-center gap-3">
-            <Home className="h-4 w-4 text-muted-foreground" />
-            <span>{client.tipoEntidad}</span>
-          </div>
-           <div className="flex items-center gap-3">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <span>{client.localidad}, {client.provincia}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Mail className="h-4 w-4 text-muted-foreground" />
-            <span>{client.email}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Phone className="h-4 w-4 text-muted-foreground" />
-            <span>{client.phone}</span>
-          </div>
-           {client.observaciones && (
-              <div className="space-y-1 pt-2">
-                  <h4 className="font-medium text-sm">Observaciones</h4>
-                  <p className="text-muted-foreground whitespace-pre-wrap">{client.observaciones}</p>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+             {client.cuit && (
+              <div className="flex items-center gap-3">
+                <FileDigit className="h-4 w-4 text-muted-foreground" />
+                <span>{client.cuit}</span>
               </div>
-            )}
-        </CardContent>
-      </Card>
+             )}
+             <div className="flex items-center gap-3">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <span>{client.condicionIVA}</span>
+            </div>
+             <div className="flex items-center gap-3">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <span>{client.rubro}</span>
+            </div>
+             <div className="flex items-center gap-3">
+              <Home className="h-4 w-4 text-muted-foreground" />
+              <span>{client.tipoEntidad}</span>
+            </div>
+             <div className="flex items-center gap-3">
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <span>{client.localidad}, {client.provincia}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <span>{client.email}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <span>{client.phone}</span>
+            </div>
+             {client.observaciones && (
+                <div className="space-y-1 pt-2">
+                    <h4 className="font-medium text-sm">Observaciones</h4>
+                    <p className="text-muted-foreground whitespace-pre-wrap">{client.observaciones}</p>
+                </div>
+              )}
+          </CardContent>
+        </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    Total Histórico Facturado
+                </CardTitle>
+                <CardDescription>Suma de todas las facturas pagadas de este cliente.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                 <p className="text-3xl font-bold">${totalPaidInvoices.toLocaleString('es-AR')}</p>
+            </CardContent>
+        </Card>
+      </div>
 
       <Tabs defaultValue="opportunities" className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">

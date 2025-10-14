@@ -1,11 +1,10 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getAllUsers, getClients } from '@/lib/firebase-service';
-import type { Opportunity, User, Client } from '@/lib/types';
+import { getAllOpportunities, getAllUsers, getClients, getInvoices } from '@/lib/firebase-service';
+import type { Opportunity, User, Client, Invoice } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval } from 'date-fns';
@@ -25,6 +24,7 @@ const COLORS = {
 export function PipelineByAdvisorChart({ dateRange, selectedAdvisor }: PipelineByAdvisorChartProps) {
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,14 +33,16 @@ export function PipelineByAdvisorChart({ dateRange, selectedAdvisor }: PipelineB
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [allOpps, allAdvisors, allClients] = await Promise.all([
+        const [allOpps, allAdvisors, allClients, allInvoices] = await Promise.all([
             getAllOpportunities(),
             getAllUsers('Asesor'),
             getClients(),
+            getInvoices(),
         ]);
         setOpportunities(allOpps);
         setAdvisors(allAdvisors);
         setClients(allClients);
+        setInvoices(allInvoices);
       } catch (error) {
         console.error("Error fetching report data:", error);
         toast({ title: 'Error al cargar los datos del reporte', variant: 'destructive' });
@@ -71,17 +73,16 @@ export function PipelineByAdvisorChart({ dateRange, selectedAdvisor }: PipelineB
     for(const opp of filteredOpps) {
         const client = clients.find(c => c.id === opp.clientId);
         if (client && client.ownerId && salesByAdvisor[client.ownerId]) {
-            const value = opp.valorCerrado || opp.value;
-            if (opp.stage === 'Nuevo') {
-                salesByAdvisor[client.ownerId].nuevo += value;
-            } else if (opp.stage === 'Propuesta' || opp.stage === 'Negociación') {
+            const value = opp.value;
+            if (opp.stage === 'Nuevo' || opp.stage === 'Propuesta' || opp.stage === 'Negociación' || opp.stage === 'Negociación a Aprobar') {
                 salesByAdvisor[client.ownerId].negociacion += value;
             } else if (opp.stage === 'Cerrado - Ganado') {
-                if (opp.pagado) {
-                    salesByAdvisor[client.ownerId].ganadoPagado += value;
-                } else {
-                    salesByAdvisor[client.ownerId].ganadoNoPagado += value;
-                }
+                const oppInvoices = invoices.filter(inv => inv.opportunityId === opp.id);
+                const paidAmount = oppInvoices.filter(i => i.status === 'Pagada').reduce((sum, i) => sum + i.amount, 0);
+                const unpaidAmount = oppInvoices.filter(i => i.status !== 'Pagada').reduce((sum, i) => sum + i.amount, 0);
+
+                salesByAdvisor[client.ownerId].ganadoPagado += paidAmount;
+                salesByAdvisor[client.ownerId].ganadoNoPagado += unpaidAmount;
             }
         }
     }
@@ -91,7 +92,7 @@ export function PipelineByAdvisorChart({ dateRange, selectedAdvisor }: PipelineB
       ...salesByAdvisor[advisor.id]
     }));
 
-  }, [opportunities, advisors, clients, dateRange, selectedAdvisor]);
+  }, [opportunities, advisors, clients, invoices, dateRange, selectedAdvisor]);
 
   if (loading) {
     return (
@@ -140,9 +141,8 @@ export function PipelineByAdvisorChart({ dateRange, selectedAdvisor }: PipelineB
           content={<CustomTooltip />}
         />
         <Legend wrapperStyle={{ fontSize: '12px' }} />
-        <Bar dataKey="nuevo" name="Nuevo" stackId="a" fill={COLORS.nuevo} />
-        <Bar dataKey="negociacion" name="Propuesta/Negociación" stackId="a" fill={COLORS.negociacion} />
-        <Bar dataKey="ganadoNoPagado" name="Ganado (No Pagado)" stackId="a" fill={COLORS.ganadoNoPagado} />
+        <Bar dataKey="negociacion" name="Pipeline (Propuesta/Negociación)" stackId="a" fill={COLORS.negociacion} />
+        <Bar dataKey="ganadoNoPagado" name="Ganado (Facturado, no pagado)" stackId="a" fill={COLORS.ganadoNoPagado} />
         <Bar dataKey="ganadoPagado" name="Ganado (Pagado)" stackId="a" fill={COLORS.ganadoPagado} radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>

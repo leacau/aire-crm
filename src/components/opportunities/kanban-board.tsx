@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -47,7 +46,7 @@ const KanbanColumn = ({
   opportunities: Opportunity[];
   onCardDrop: (e: React.DragEvent<HTMLDivElement>, stage: OpportunityStage) => void;
 }) => {
-  const columnTotal = opportunities.reduce((sum, opp) => sum + (opp.valorCerrado || opp.value), 0);
+  const columnTotal = opportunities.reduce((sum, opp) => sum + opp.value, 0);
 
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -132,9 +131,7 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
   
   const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor' || userInfo?.role === 'Gerencia';
 
-  const displayValue = opportunity.valorCerrado && opportunity.stage === 'Cerrado - Ganado'
-    ? opportunity.valorCerrado
-    : opportunity.value;
+  const displayValue = opportunity.value;
 
   return (
     <>
