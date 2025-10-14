@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -20,11 +19,10 @@ import { format, set } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { CalendarIcon, Clock } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { createClientActivity } from '@/lib/firebase-service';
 import { createCalendarEvent } from '@/lib/google-gmail-service';
-import type { Opportunity, ClientActivity, ClientActivityType } from '@/lib/types';
+import type { Opportunity, ClientActivity, User } from '@/lib/types';
 import { Spinner } from '../ui/spinner';
 
 interface TaskFormDialogProps {
@@ -32,6 +30,8 @@ interface TaskFormDialogProps {
   onOpenChange: (isOpen: boolean) => void;
   opportunity: Opportunity;
   client: { id: string; name: string };
+  userInfo: User;
+  getGoogleAccessToken: () => Promise<string | null>;
 }
 
 const combineDateAndTime = (date: Date, time: string): Date => {
@@ -39,8 +39,7 @@ const combineDateAndTime = (date: Date, time: string): Date => {
   return set(date, { hours, minutes, seconds: 0, milliseconds: 0 });
 };
 
-export function TaskFormDialog({ isOpen, onOpenChange, opportunity, client }: TaskFormDialogProps) {
-  const { userInfo, getGoogleAccessToken } = useAuth();
+export function TaskFormDialog({ isOpen, onOpenChange, opportunity, client, userInfo, getGoogleAccessToken }: TaskFormDialogProps) {
   const { toast } = useToast();
 
   const [observation, setObservation] = useState(`Seguimiento: ${opportunity.title}\n\nEnlace al cliente: /clients/${client.id}`);
@@ -55,7 +54,7 @@ export function TaskFormDialog({ isOpen, onOpenChange, opportunity, client }: Ta
   };
 
   const handleSave = async () => {
-    if (!observation.trim() || !dueDate || !dueTime || !userInfo) {
+    if (!observation.trim() || !dueDate || !dueTime) {
       toast({ title: "Datos incompletos", description: "Asegúrate de completar la observación, fecha y hora.", variant: "destructive" });
       return;
     }

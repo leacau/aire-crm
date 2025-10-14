@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -145,7 +144,7 @@ export function OpportunityDetailsDialog({
   onCreate = () => {},
   client
 }: OpportunityDetailsDialogProps) {
-  const { userInfo, isBoss } = useAuth();
+  const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
@@ -165,7 +164,7 @@ export function OpportunityDetailsDialog({
             toast({ title: "Error al cargar agencias", variant: "destructive" });
         });
     }
-  }, [opportunity, isOpen, userInfo, client, toast]);
+  }, [opportunity, isOpen, client, toast]);
   
   const handleAgencyCreated = (newAgency: Agency) => {
     setAgencies(prev => [...prev, newAgency].sort((a,b) => a.name.localeCompare(b.name)));
@@ -523,12 +522,14 @@ export function OpportunityDetailsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-     {isTaskFormOpen && opportunity && (
+     {isTaskFormOpen && opportunity && userInfo && (
         <TaskFormDialog
             isOpen={isTaskFormOpen}
             onOpenChange={setIsTaskFormOpen}
             opportunity={opportunity}
             client={client || { id: opportunity.clientId, name: opportunity.clientName }}
+            userInfo={userInfo}
+            getGoogleAccessToken={getGoogleAccessToken}
         />
      )}
      </>
