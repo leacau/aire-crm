@@ -760,8 +760,9 @@ const createReminderEvent = async (accessToken: string, ownerEmail: string, clie
         reminders: {
             useDefault: false,
             overrides: [
-                { method: 'email', minutes: 24 * 60 }, // 1 day before
-                { method: 'popup', minutes: 24 * 60 },
+                { method: 'popup', minutes: 30 * 24 * 60 }, // 30 days
+                { method: 'popup', minutes: 15 * 24 * 60 }, // 15 days
+                { method: 'popup', minutes: 7 * 24 * 60 },  // 7 days
                 { method: 'popup', minutes: 10 },
             ],
         },
@@ -818,19 +819,12 @@ export const updateOpportunity = async (
 
                 for (const pautado of newPautados) {
                     if (pautado.fechaFin) {
-                        const endDate = new Date(pautado.fechaFin);
-                        const reminderDates = [
-                            new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000), // 30 days before
-                            new Date(endDate.getTime() - 15 * 24 * 60 * 60 * 1000), // 15 days before
-                            new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000),  // 7 days before
-                        ];
-                        for (const reminderDate of reminderDates) {
-                            try {
-                                await createReminderEvent(accessToken, owner.email, clientData.denominacion, originalData.title, reminderDate);
-                            } catch (e) {
-                                console.error(`Failed to create calendar reminder for ${reminderDate}:`, e);
-                                // Non-fatal, just log the error
-                            }
+                        try {
+                            const endDate = new Date(pautado.fechaFin);
+                            await createReminderEvent(accessToken, owner.email, clientData.denominacion, originalData.title, endDate);
+                        } catch (e) {
+                            console.error(`Failed to create calendar reminder for pautado ${pautado.id}:`, e);
+                            // Non-fatal, just log the error
                         }
                     }
                 }
