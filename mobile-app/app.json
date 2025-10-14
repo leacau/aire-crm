@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Aire CRM Mobile",
+    "slug": "aire-crm-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#0f172a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.airecrm.app"
+    },
+    "android": {
+      "package": "com.airecrm.app",
+      "versionCode": 1
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "00000000-0000-0000-0000-000000000000"
+      }
+    }
+  }
+}
