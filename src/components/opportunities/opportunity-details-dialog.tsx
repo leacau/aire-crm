@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, Invoice } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, Invoice, Pautado } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { Checkbox } from '../ui/checkbox';
@@ -73,8 +73,7 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     facturaPorAgencia: false,
     formaDePago: [],
     fechaFacturacion: '',
-    fechaInicioPauta: '',
-    fechaFinPauta: '',
+    pautados: [],
     proposalFiles: [],
 });
 
@@ -154,7 +153,19 @@ export function OpportunityDetailsDialog({
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   
   const getInitialData = () => {
-      if (opportunity) return { ...opportunity };
+      if (opportunity) {
+        const data = { ...opportunity };
+        if (!data.pautados && (data.fechaInicioPauta || data.fechaFinPauta)) {
+          data.pautados = [{
+            id: 'legacy-pautado-0',
+            fechaInicio: data.fechaInicioPauta || '',
+            fechaFin: data.fechaFinPauta || ''
+          }];
+        } else if (!data.pautados) {
+            data.pautados = [];
+        }
+        return data;
+      }
       return getInitialOpportunityData(client);
   }
 
@@ -258,11 +269,6 @@ export function OpportunityDetailsDialog({
         const [year, month, day] = value.split('-');
         finalValue = `${day}/${month}`;
     }
-
-    if (name === 'fechaInicioPauta' || name === 'fechaFinPauta') {
-      finalValue = value ? value : undefined;
-    }
-
 
     setEditedOpportunity(prev => {
         const newState: Partial<Opportunity> = { ...prev, [name]: finalValue };
@@ -371,6 +377,33 @@ export function OpportunityDetailsDialog({
     }
   }
 
+  const handleAddPautado = () => {
+    const newPautado = {
+        id: `pautado-${Date.now()}`, // Simple unique ID for client-side state
+        fechaInicio: '',
+        fechaFin: '',
+    };
+    setEditedOpportunity(prev => ({
+        ...prev,
+        pautados: [...(prev.pautados || []), newPautado]
+    }));
+  };
+
+  const handlePautadoChange = (id: string, field: 'fechaInicio' | 'fechaFin', value: string) => {
+    setEditedOpportunity(prev => ({
+        ...prev,
+        pautados: (prev.pautados || []).map(p => 
+            p.id === id ? { ...p, [field]: value } : p
+        )
+    }));
+  };
+
+  const handleRemovePautado = (id: string) => {
+    setEditedOpportunity(prev => ({
+        ...prev,
+        pautados: (prev.pautados || []).filter(p => p.id !== id)
+    }));
+  };
 
   const isCloseWon = editedOpportunity.stage === 'Cerrado - Ganado';
   const canEditBonus = editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar';
@@ -412,8 +445,8 @@ export function OpportunityDetailsDialog({
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="details">Detalles</TabsTrigger>
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
-            <TabsTrigger value="pautado">Pautado</TabsTrigger>
             <TabsTrigger value="bonus">Bonificación</TabsTrigger>
+            <TabsTrigger value="pautado">Pautado</TabsTrigger>
             <TabsTrigger value="billing">Facturación</TabsTrigger>
           </TabsList>
           
@@ -511,35 +544,6 @@ export function OpportunityDetailsDialog({
                 )}
               </div>
           </TabsContent>
-
-          <TabsContent value="pautado" className="space-y-4 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <Label htmlFor="fechaInicioPauta">Inicio de Pauta</Label>
-                    <Input 
-                      id="fechaInicioPauta" 
-                      name="fechaInicioPauta" 
-                      type="date"
-                      value={editedOpportunity.fechaInicioPauta || ''}
-                      onChange={handleChange}
-                    />
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="fechaFinPauta">Fin de Pauta</Label>
-                    <Input 
-                      id="fechaFinPauta" 
-                      name="fechaFinPauta" 
-                      type="date"
-                      value={editedOpportunity.fechaFinPauta || ''}
-                      onChange={handleChange}
-                    />
-                </div>
-              </div>
-              <div className="p-4 bg-blue-50 border-l-4 border-blue-400 text-blue-800 rounded">
-                <p className="text-sm font-medium">Próximamente: Notificaciones automáticas</p>
-                <p className="text-xs">Se enviará una notificación por correo 30 días antes de la finalización de la pauta.</p>
-              </div>
-          </TabsContent>
           
           <TabsContent value="bonus" className="space-y-4 py-4">
               <div className="space-y-2">
@@ -588,6 +592,51 @@ export function OpportunityDetailsDialog({
                     </div>
                 )}
           </TabsContent>
+
+          <TabsContent value="pautado" className="space-y-4 py-4">
+                <div className="flex justify-between items-center">
+                    <h4 className="font-medium">Períodos de Pautado</h4>
+                    <Button size="sm" onClick={handleAddPautado}>
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Añadir Pauta
+                    </Button>
+                </div>
+                <div className="space-y-2">
+                    {(editedOpportunity.pautados || []).map((pautado) => (
+                        <div key={pautado.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-center p-2 border rounded-md">
+                             <div className="space-y-1">
+                                <Label htmlFor={`pautado-inicio-${pautado.id}`}>Inicio de Pauta</Label>
+                                <Input 
+                                  id={`pautado-inicio-${pautado.id}`}
+                                  type="date"
+                                  value={pautado.fechaInicio || ''}
+                                  onChange={(e) => handlePautadoChange(pautado.id, 'fechaInicio', e.target.value)}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor={`pautado-fin-${pautado.id}`}>Fin de Pauta</Label>
+                                <Input 
+                                  id={`pautado-fin-${pautado.id}`}
+                                  type="date"
+                                  value={pautado.fechaFin || ''}
+                                  onChange={(e) => handlePautadoChange(pautado.id, 'fechaFin', e.target.value)}
+                                />
+                            </div>
+                             <Button variant="ghost" size="icon" onClick={() => handleRemovePautado(pautado.id)} className="self-end">
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                        </div>
+                    ))}
+                    {(editedOpportunity.pautados?.length || 0) === 0 && (
+                        <p className="text-center text-sm text-muted-foreground py-4">No hay períodos de pautado definidos.</p>
+                    )}
+                </div>
+                <div className="p-4 bg-blue-50 border-l-4 border-blue-400 text-blue-800 rounded">
+                    <p className="text-sm font-medium">Próximamente: Notificaciones automáticas</p>
+                    <p className="text-xs">Se enviará una notificación por correo 30 días antes de la finalización de la pauta.</p>
+                </div>
+          </TabsContent>
+          
           <TabsContent value="billing" className="py-4">
               <div className="space-y-4">
                 <div className="flex justify-between items-center">

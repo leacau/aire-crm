@@ -34,6 +34,11 @@ export type Invoice = {
   datePaid?: string;
 };
 
+export type Pautado = {
+  id: string;
+  fechaInicio: string;
+  fechaFin: string;
+};
 
 export type Opportunity = {
   id: string;
@@ -50,6 +55,8 @@ export type Opportunity = {
   facturaNo?: string;
   valorCerrado?: number;
   pagado?: boolean;
+  fechaInicioPauta?: string;
+  fechaFinPauta?: string;
 
   bonificacionDetalle?: string;
   bonificacionEstado?: BonificacionEstado;
@@ -63,8 +70,7 @@ export type Opportunity = {
   agencyId?: string;
   formaDePago?: FormaDePago[];
   fechaFacturacion?: string; 
-  fechaInicioPauta?: string; 
-  fechaFinPauta?: string;
+  pautados?: Pautado[];
   proposalFiles?: ProposalFile[];
 };
 
