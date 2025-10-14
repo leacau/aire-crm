@@ -35,10 +35,12 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
 };
 
 export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: string, userName: string, ownerName: string): Promise<string> => {
-    const docRef = await addDoc(invoicesCollection, {
+    const dataToSave = {
         ...invoiceData,
         dateGenerated: new Date(invoiceData.dateGenerated).toISOString(),
-    });
+    };
+    
+    const docRef = await addDoc(invoicesCollection, dataToSave);
     
     await logActivity({
         userId,
@@ -56,7 +58,7 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
 
 export const updateInvoice = async (id: string, data: Partial<Invoice>, userId: string, userName: string, ownerName: string): Promise<void> => {
     const docRef = doc(db, 'invoices', id);
-    const updateData: Partial<Invoice> = {...data};
+    const updateData: Partial<Invoice> & { [key: string]: any } = {...data};
 
     // Ensure we don't try to update the ID
     delete updateData.id;
