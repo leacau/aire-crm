@@ -2,6 +2,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -117,7 +118,7 @@ export type ActivityLog = {
   userName: string;
   ownerName: string;
   type: 'create' | 'update' | 'delete' | 'stage_change';
-  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice';
+  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action
@@ -146,6 +147,31 @@ export type ClientActivity = {
     completedByUserName?: string;
     googleCalendarEventId?: string;
 }
+
+export type CanjeEstado = 'Pedido' | 'En gestión' | 'Completo' | 'Aprobado';
+export const canjeEstados: CanjeEstado[] = ['Pedido', 'En gestión', 'Completo', 'Aprobado'];
+
+export type CanjeTipo = 'Temporario' | 'Mensual Permanente';
+export const canjeTipos: CanjeTipo[] = ['Temporario', 'Mensual Permanente'];
+
+export type Canje = {
+  id: string;
+  clienteId: string;
+  clienteName: string;
+  asesorId: string;
+  asesorName: string;
+  titulo: string;
+  factura: string;
+  valorAsociado: number;
+  valorCanje: number;
+  estado: CanjeEstado;
+  tipo: CanjeTipo;
+  observaciones?: string;
+  fechaCreacion: string;
+  fechaAprobacion?: string;
+  aprobadoPorId?: string;
+  aprobadoPorName?: string;
+};
 
 
 export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Admin';

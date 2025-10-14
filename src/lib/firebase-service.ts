@@ -1,6 +1,6 @@
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado } from './types';
 import { logActivity } from './activity-logger';
 
 const usersCollection = collection(db, 'users');
@@ -11,6 +11,78 @@ const activitiesCollection = collection(db, 'activities');
 const clientActivitiesCollection = collection(db, 'client-activities');
 const agenciesCollection = collection(db, 'agencies');
 const invoicesCollection = collection(db, 'invoices');
+const canjesCollection = collection(db, 'canjes');
+
+// --- Canje Functions ---
+export const getCanjes = async (): Promise<Canje[]> => {
+    const snapshot = await getDocs(query(canjesCollection, orderBy("fechaCreacion", "desc")));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return { 
+          id: doc.id,
+          ...data,
+          fechaCreacion: (data.fechaCreacion as Timestamp).toDate().toISOString(),
+          fechaAprobacion: data.fechaAprobacion ? (data.fechaAprobacion as Timestamp).toDate().toISOString() : undefined,
+      } as Canje
+    });
+};
+
+export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>, userId: string, userName: string): Promise<string> => {
+    const dataToSave = {
+        ...canjeData,
+        fechaCreacion: serverTimestamp(),
+    };
+    const docRef = await addDoc(canjesCollection, dataToSave);
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'canje',
+        entityId: docRef.id,
+        entityName: `Canje para ${canjeData.clienteName}`,
+        details: `creó un canje para el cliente <strong>${canjeData.clienteName}</strong>`,
+        ownerName: canjeData.asesorName,
+    });
+
+    return docRef.id;
+};
+
+export const updateCanje = async (id: string, data: Partial<Omit<Canje, 'id'>>, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'canjes', id);
+    const originalDoc = await getDoc(docRef);
+    if (!originalDoc.exists()) throw new Error('Canje not found');
+
+    const originalData = originalDoc.data() as Canje;
+    
+    const updateData: { [key: string]: any } = { ...data };
+
+    if (data.estado === 'Aprobado' && originalData.estado !== 'Aprobado') {
+        updateData.fechaAprobacion = serverTimestamp();
+        updateData.aprobadoPorId = userId;
+        updateData.aprobadoPorName = userName;
+    }
+
+    await updateDoc(docRef, updateData);
+
+    let details = `actualizó el canje para <strong>${originalData.clienteName}</strong>`;
+    if (data.estado && data.estado !== originalData.estado) {
+        details = `cambió el estado del canje para <strong>${originalData.clienteName}</strong> a <strong>${data.estado}</strong>`;
+    }
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'canje',
+        entityId: id,
+        entityName: `Canje para ${originalData.clienteName}`,
+        details: details,
+        ownerName: originalData.asesorName,
+    });
+};
+
+
 
 // --- Invoice Functions ---
 export const getInvoices = async (): Promise<Invoice[]> => {
