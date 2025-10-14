@@ -300,8 +300,8 @@ export function OpportunityDetailsDialog({
       dateGenerated: new Date().toISOString(),
     };
     try {
-      await createInvoice(newInvoice, userInfo.id, userInfo.name, opportunity.clientName);
-      fetchInvoices();
+      const newInvoiceId = await createInvoice(newInvoice, userInfo.id, userInfo.name, opportunity.clientName);
+      setInvoices(prev => [...prev, { id: newInvoiceId, ...newInvoice }]);
       toast({ title: "Factura añadida" });
     } catch (e) {
       toast({ title: "Error al añadir factura", variant: "destructive" });
@@ -312,10 +312,12 @@ export function OpportunityDetailsDialog({
     setInvoices(invoices.map(inv => inv.id === invoiceId ? { ...inv, [field]: value } : inv));
   };
   
-  const handleInvoiceUpdate = async (invoice: Invoice) => {
+  const handleInvoiceUpdate = async (invoiceId: string) => {
     if (!userInfo) return;
+    const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
+    if (!invoiceToUpdate) return;
     try {
-        await updateInvoice(invoice.id, invoice, userInfo.id, userInfo.name, opportunity!.clientName);
+        await updateInvoice(invoiceId, invoiceToUpdate, userInfo.id, userInfo.name, opportunity!.clientName);
         fetchInvoices();
         toast({ title: "Factura actualizada" });
     } catch(e) {
@@ -327,7 +329,7 @@ export function OpportunityDetailsDialog({
     if (!userInfo || !opportunity) return;
     try {
         await deleteInvoice(invoiceId, userInfo.id, userInfo.name, opportunity.clientName);
-        fetchInvoices();
+        setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
         toast({ title: "Factura eliminada" });
     } catch(e) {
         toast({ title: "Error al eliminar factura", variant: "destructive" });
@@ -553,18 +555,20 @@ export function OpportunityDetailsDialog({
                         {invoices.map((invoice) => (
                         <TableRow key={invoice.id}>
                             <TableCell>
-                                <Input value={invoice.invoiceNumber} onChange={(e) => handleInvoiceChange(invoice.id, 'invoiceNumber', e.target.value)} onBlur={() => handleInvoiceUpdate(invoice)}/>
+                                <Input value={invoice.invoiceNumber} onChange={(e) => handleInvoiceChange(invoice.id, 'invoiceNumber', e.target.value)} onBlur={() => handleInvoiceUpdate(invoice.id)}/>
                             </TableCell>
                             <TableCell>
-                                <Input type="number" value={invoice.amount} onChange={(e) => handleInvoiceChange(invoice.id, 'amount', Number(e.target.value))} onBlur={() => handleInvoiceUpdate(invoice)}/>
+                                <Input type="number" value={invoice.amount} onChange={(e) => handleInvoiceChange(invoice.id, 'amount', Number(e.target.value))} onBlur={() => handleInvoiceUpdate(invoice.id)}/>
                             </TableCell>
                             <TableCell>
                                 <Select value={invoice.status} onValueChange={(value) => {
-                                  const updatedInvoice = { ...invoice, status: value as Invoice['status'] };
-                                  if (value === 'Pagada') {
+                                  const updatedInvoice = { ...invoices.find(i => i.id === invoice.id)!, status: value as Invoice['status'] };
+                                  if (value === 'Pagada' && !updatedInvoice.datePaid) {
                                     updatedInvoice.datePaid = new Date().toISOString();
                                   }
-                                  handleInvoiceUpdate(updatedInvoice);
+                                  handleInvoiceChange(invoice.id, 'status', value)
+                                  handleInvoiceChange(invoice.id, 'datePaid', updatedInvoice.datePaid)
+                                  handleInvoiceUpdate(invoice.id);
                                 }}>
                                     <SelectTrigger>
                                         <SelectValue />

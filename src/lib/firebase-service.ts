@@ -56,7 +56,16 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
 
 export const updateInvoice = async (id: string, data: Partial<Invoice>, userId: string, userName: string, ownerName: string): Promise<void> => {
     const docRef = doc(db, 'invoices', id);
-    await updateDoc(docRef, data);
+    const updateData: Partial<Invoice> = {...data};
+
+    // Ensure we don't try to update the ID
+    delete updateData.id;
+
+    if (updateData.status === 'Pagada' && !updateData.datePaid) {
+        updateData.datePaid = new Date().toISOString();
+    }
+    
+    await updateDoc(docRef, updateData);
     
     await logActivity({
         userId,
