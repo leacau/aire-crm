@@ -633,8 +633,8 @@ export function OpportunityDetailsDialog({
                     )}
                 </div>
                 <div className="p-4 bg-blue-50 border-l-4 border-blue-400 text-blue-800 rounded">
-                    <p className="text-sm font-medium">Próximamente: Notificaciones automáticas</p>
-                    <p className="text-xs">Se enviará una notificación por correo 30 días antes de la finalización de la pauta.</p>
+                    <p className="text-sm font-medium">Recordatorios Automáticos</p>
+                    <p className="text-xs">Al guardar una fecha de fin, se crearán eventos en el calendario del asesor 30, 15 y 7 días antes del vencimiento.</p>
                 </div>
           </TabsContent>
           
