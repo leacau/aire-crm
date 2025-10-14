@@ -467,7 +467,7 @@ export function ClientDetails({
             <p><strong>Tarea:</strong> ${task.observation}</p>
             <p><strong>Cliente:</strong> ${task.clientName}</p>
             ${task.dueDate ? `<p><strong>Vence:</strong> ${format(new Date(task.dueDate), 'PPP p', { locale: es })}</p>` : ''}
-            <p>Puedes ver más detalles en el <a href="https://crm-aire.web.app/clients/${task.clientId}">CRM</a>.</p>
+            <p>Puedes ver más detalles en el <a href="https://aire-crm.vercel.app/clients/${task.clientId}">CRM</a>.</p>
         `;
 
         await sendEmail({
