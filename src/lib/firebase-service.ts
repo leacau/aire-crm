@@ -2,9 +2,9 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado } from './types';
 import { logActivity } from './activity-logger';
-import { sendEmail } from './google-gmail-service';
+import { sendEmail, createCalendarEvent } from './google-gmail-service';
 
 const usersCollection = collection(db, 'users');
 const clientsCollection = collection(db, 'clients');
@@ -750,12 +750,32 @@ export const createOpportunity = async (
     return docRef.id;
 };
 
+const createReminderEvent = async (accessToken: string, ownerEmail: string, clientName: string, opportunityTitle: string, dueDate: Date) => {
+    const event = {
+        summary: `Vencimiento Pauta: ${clientName}`,
+        description: `Recordatorio de vencimiento de pauta para la oportunidad "${opportunityTitle}".\nCliente: ${clientName}`,
+        start: { date: dueDate.toISOString().split('T')[0] },
+        end: { date: dueDate.toISOString().split('T')[0] },
+        attendees: [{ email: ownerEmail }, { email: 'lchena@airedesantafe.com.ar' }],
+        reminders: {
+            useDefault: false,
+            overrides: [
+                { method: 'email', minutes: 24 * 60 }, // 1 day before
+                { method: 'popup', minutes: 24 * 60 },
+                { method: 'popup', minutes: 10 },
+            ],
+        },
+    };
+    await createCalendarEvent(accessToken, event);
+};
+
 export const updateOpportunity = async (
     id: string, 
     data: Partial<Omit<Opportunity, 'id'>>,
     userId: string,
     userName: string,
-    ownerName: string
+    ownerName: string,
+    accessToken?: string | null
 ): Promise<void> => {
     const docRef = doc(db, 'opportunities', id);
     const docSnap = await getDoc(docRef);
@@ -783,6 +803,41 @@ export const updateOpportunity = async (
 
 
     await updateDoc(docRef, updateData);
+
+    // --- Pautado Calendar Event Logic ---
+    if (data.pautados && accessToken) {
+        const clientSnap = await getDoc(doc(db, 'clients', originalData.clientId));
+        if (clientSnap.exists()) {
+            const clientData = clientSnap.data() as Client;
+            const ownerSnap = await getDoc(doc(db, 'users', clientData.ownerId));
+            if (ownerSnap.exists()) {
+                const ownerData = ownerSnap.data() as User;
+                const newPautados = data.pautados.filter(p => 
+                    !originalData.pautados?.some(op => op.id === p.id && op.fechaFin === p.fechaFin)
+                );
+
+                for (const pautado of newPautados) {
+                    if (pautado.fechaFin) {
+                        const endDate = new Date(pautado.fechaFin);
+                        const reminderDates = [
+                            new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000), // 30 days before
+                            new Date(endDate.getTime() - 15 * 24 * 60 * 60 * 1000), // 15 days before
+                            new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000),  // 7 days before
+                        ];
+                        for (const reminderDate of reminderDates) {
+                            try {
+                                await createReminderEvent(accessToken, ownerData.email, clientData.denominacion, originalData.title, reminderDate);
+                            } catch (e) {
+                                console.error(`Failed to create calendar reminder for ${reminderDate}:`, e);
+                                // Non-fatal, just log the error
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
     const activityDetails = {
         userId,

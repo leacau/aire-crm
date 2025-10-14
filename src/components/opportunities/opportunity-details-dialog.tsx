@@ -54,7 +54,7 @@ interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onUpdate: (opportunity: Partial<Opportunity>) => void;
+  onUpdate: (opportunity: Partial<Opportunity>, accessToken?: string | null) => void;
   onCreate?: (opportunity: Omit<Opportunity, 'id'>) => void;
   client?: {id: string, name: string}
 }
@@ -234,7 +234,8 @@ export function OpportunityDetailsDialog({
         }
 
         if (Object.keys(changes).length > 0) {
-            onUpdate(changes);
+            const accessToken = await getGoogleAccessToken();
+            onUpdate(changes, accessToken);
         }
     } else if (!isEditing) {
         const newOpp = {
