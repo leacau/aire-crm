@@ -175,9 +175,9 @@ export type CanjeFactura = {
 
 export type Canje = {
   id: string;
-  clienteId: string;
+  clienteId?: string; // Optional
   clienteName: string;
-  asesorId: string;
+  asesorId?: string; // Optional
   asesorName: string;
   titulo: string;
   pedido: string;

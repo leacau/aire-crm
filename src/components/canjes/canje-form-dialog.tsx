@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -35,12 +36,11 @@ interface CanjeFormDialogProps {
   currentUser: User;
 }
 
-const initialFormData = (user: User, clients: Client[]): CanjeFormData => {
-    const firstClient = clients.find(c => c.ownerId === user.id) || clients[0];
+const initialFormData = (user: User): CanjeFormData => {
     return {
         titulo: '',
-        clienteId: firstClient?.id || '',
-        clienteName: firstClient?.denominacion || '',
+        clienteId: undefined,
+        clienteName: '',
         asesorId: user.id,
         asesorName: user.name,
         pedido: '',
@@ -62,11 +62,12 @@ export function CanjeFormDialog({
   users,
   currentUser,
 }: CanjeFormDialogProps) {
-  const [formData, setFormData] = useState<CanjeFormData>(initialFormData(currentUser, clients));
+  const [formData, setFormData] = useState<CanjeFormData>(initialFormData(currentUser));
   const [isSaving, setIsSaving] = useState(false);
   const [managers, setManagers] = useState<User[]>([]);
   const [showNotificacionDialog, setShowNotificacionDialog] = useState(false);
   const [originalState, setOriginalState] = useState<CanjeEstado | undefined>();
+  const [isManualClient, setIsManualClient] = useState(false);
 
   const { toast } = useToast();
 
@@ -84,9 +85,11 @@ export function CanjeFormDialog({
             facturas: canje.facturas || [],
         });
         setOriginalState(canje.estado);
+        setIsManualClient(!canje.clienteId);
       } else {
-        setFormData(initialFormData(currentUser, clients));
+        setFormData(initialFormData(currentUser));
         setOriginalState('Pedido');
+        setIsManualClient(false);
       }
       setIsSaving(false);
       // Fetch managers
@@ -100,10 +103,10 @@ export function CanjeFormDialog({
           setManagers(uniqueManagers);
       });
     }
-  }, [canje, isOpen, currentUser, clients]);
+  }, [canje, isOpen, currentUser]);
 
   const handleSave = async (managerEmails?: string[]) => {
-    if (!formData.titulo.trim() || !formData.clienteId) {
+    if (!formData.titulo.trim() || !formData.clienteName.trim()) {
       toast({ title: "Campos requeridos", description: "El título y el cliente son obligatorios.", variant: "destructive" });
       return;
     }
@@ -129,20 +132,32 @@ export function CanjeFormDialog({
   };
 
   const handleSelectChange = (name: keyof CanjeFormData, value: string) => {
-    if (name === 'clienteId') {
-        const selectedClient = clients.find(c => c.id === value);
+    setFormData(prev => ({
+        ...prev,
+        [name]: value,
+    }));
+  };
+  
+  const handleClientSelection = (clientId: string) => {
+    if (clientId === 'manual') {
+        setIsManualClient(true);
+        setFormData(prev => ({
+            ...prev,
+            clienteId: undefined,
+            clienteName: '',
+            asesorId: currentUser.id,
+            asesorName: currentUser.name,
+        }));
+    } else {
+        setIsManualClient(false);
+        const selectedClient = clients.find(c => c.id === clientId);
         const owner = users.find(u => u.id === selectedClient?.ownerId);
         setFormData(prev => ({
             ...prev,
-            clienteId: value,
+            clienteId: clientId,
             clienteName: selectedClient?.denominacion || '',
-            asesorId: owner?.id || '',
+            asesorId: owner?.id,
             asesorName: owner?.name || '',
-        }));
-    } else {
-        setFormData(prev => ({
-            ...prev,
-            [name]: value,
         }));
     }
   };
@@ -193,12 +208,22 @@ export function CanjeFormDialog({
 
           <div className="space-y-2">
             <Label htmlFor="clienteId">Cliente</Label>
-            <Select name="clienteId" value={formData.clienteId} onValueChange={(value) => handleSelectChange('clienteId', value)}>
-              <SelectTrigger id="clienteId"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {isManualClient ? (
+                 <Input 
+                    name="clienteName" 
+                    placeholder="Nombre del cliente potencial"
+                    value={formData.clienteName} 
+                    onChange={handleChange} 
+                />
+            ) : (
+                <Select value={formData.clienteId || ''} onValueChange={handleClientSelection}>
+                  <SelectTrigger id="clienteId"><SelectValue placeholder="Seleccionar cliente..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Ingresar cliente manualmente...</SelectItem>
+                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+            )}
           </div>
           
           <div className="space-y-2">
