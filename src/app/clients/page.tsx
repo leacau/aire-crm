@@ -158,6 +158,7 @@ export default function ClientsPage() {
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
+  const [selectedAdvisor, setSelectedAdvisor] = useState('all');
 
 
   const fetchData = useCallback(async () => {
@@ -208,7 +209,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     setRowSelection({});
-  }, [searchTerm, showOnlyMyClients, showDuplicates]);
+  }, [searchTerm, showOnlyMyClients, showDuplicates, selectedAdvisor]);
   
    const clientOpportunityData = useMemo(() => {
     if (opportunities.length === 0) return {};
@@ -237,6 +238,8 @@ export default function ClientsPage() {
 
     if (showOnlyMyClients && userInfo) {
         clientsToShow = clientsToShow.filter(client => client.ownerId === userInfo.id);
+    } else if (canManage && selectedAdvisor !== 'all') {
+        clientsToShow = clientsToShow.filter(client => client.ownerId === selectedAdvisor);
     }
 
     if (showDuplicates) {
@@ -286,7 +289,7 @@ export default function ClientsPage() {
         razonSocial.toLowerCase().includes(lowercasedFilter)
       );
     });
-  }, [clients, searchTerm, showOnlyMyClients, userInfo, showDuplicates]);
+  }, [clients, searchTerm, showOnlyMyClients, userInfo, showDuplicates, canManage, selectedAdvisor]);
 
 
   const handleSaveClient = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>) => {
@@ -538,6 +541,19 @@ export default function ClientsPage() {
                     Eliminar ({selectedCount})
                 </Button>
             </div>
+        )}
+        {canManage && (
+          <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor} disabled={showOnlyMyClients}>
+            <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectValue placeholder="Filtrar por asesor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los asesores</SelectItem>
+              {advisors.map(advisor => (
+                <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
          <div className="flex items-center space-x-2">
             <Checkbox id="my-clients" name="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
