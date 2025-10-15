@@ -10,12 +10,14 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
 import { createUserProfile, getUserProfile } from '@/lib/firebase-service';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -75,6 +77,14 @@ export default function LoginPage() {
                 {loading ? 'Iniciando sesión...' : 'Iniciar sesión con Google'}
             </Button>
         </CardContent>
+        <CardFooter className="flex justify-center gap-4 text-sm">
+            <Link href="/terms-of-service" className="text-muted-foreground hover:text-primary underline-offset-4 hover:underline">
+                Condiciones del Servicio
+            </Link>
+            <Link href="/privacy-policy" className="text-muted-foreground hover:text-primary underline-offset-4 hover:underline">
+                Política de Privacidad
+            </Link>
+        </CardFooter>
       </Card>
     </div>
   );
