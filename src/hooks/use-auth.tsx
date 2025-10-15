@@ -26,7 +26,7 @@ const AuthContext = createContext<AuthContextType>({
   getGoogleAccessToken: async () => null,
 });
 
-const publicRoutes = ['/login', '/register'];
+const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service'];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
