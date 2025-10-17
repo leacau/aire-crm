@@ -284,9 +284,11 @@ export default function ClientsPage() {
     return clientsToShow.filter(client => {
       const denominacion = client.denominacion || '';
       const razonSocial = client.razonSocial || '';
+      const cuit = client.cuit || '';
       return (
         denominacion.toLowerCase().includes(lowercasedFilter) ||
-        razonSocial.toLowerCase().includes(lowercasedFilter)
+        razonSocial.toLowerCase().includes(lowercasedFilter) ||
+        cuit.includes(lowercasedFilter)
       );
     });
   }, [clients, searchTerm, showOnlyMyClients, userInfo, showDuplicates, canManage, selectedAdvisor]);
@@ -491,7 +493,7 @@ export default function ClientsPage() {
                   </DropdownMenuItem>
                 )}
                 {isBoss && (
-                  <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setIsBulkDeleteDialogOpen(true)}}>
+                  <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setRowSelection({[client.id]: true}); setIsBulkDeleteDialogOpen(true);}}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Eliminar
                   </DropdownMenuItem>
@@ -524,7 +526,7 @@ export default function ClientsPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
                 type="search"
-                placeholder="Buscar..."
+                placeholder="Buscar por Denominación, Razón Social o CUIT..."
                 className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[330px]"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
