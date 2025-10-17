@@ -739,6 +739,7 @@ export const createOpportunity = async (
      // Remove legacy fields on creation
     delete dataToSave.fechaInicioPauta;
     delete dataToSave.fechaFinPauta;
+    delete dataToSave.pagado;
 
     const docRef = await addDoc(opportunitiesCollection, {
         ...dataToSave,
@@ -810,6 +811,7 @@ export const updateOpportunity = async (
     // Remove legacy fields on update
     delete updateData.fechaInicioPauta;
     delete updateData.fechaFinPauta;
+    delete updateData.pagado;
 
 
     await updateDoc(docRef, updateData);

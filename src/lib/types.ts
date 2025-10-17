@@ -64,7 +64,6 @@ export type Opportunity = {
   // Deprecated fields, kept for legacy data handling
   facturaNo?: string;
   valorCerrado?: number;
-  pagado?: boolean;
   fechaInicioPauta?: string;
   fechaFinPauta?: string;
 

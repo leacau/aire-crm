@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, Invoice, Pautado } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, Invoice, Pautado, InvoiceStatus } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { Checkbox } from '../ui/checkbox';
@@ -32,7 +32,6 @@ import { es } from 'date-fns/locale';
 import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice } from '@/lib/firebase-service';
 import { PlusCircle, Clock, Trash2, FileText } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
-import { LinkifiedText } from '@/components/ui/linkified-text';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -185,7 +184,7 @@ export function OpportunityDetailsDialog({
                 invoiceNumber: opportunity.facturaNo || 'N/A',
                 amount: opportunity.valorCerrado || 0,
                 date: new Date().toISOString().split('T')[0],
-                status: opportunity.pagado ? 'Pagada' : 'Generada',
+                status: 'Generada', // Legacy invoices default to Generada
                 dateGenerated: new Date().toISOString(),
             };
             if (!fetchedInvoices.some(inv => inv.invoiceNumber === legacyInvoice.invoiceNumber && inv.amount === legacyInvoice.amount)) {
@@ -366,8 +365,8 @@ export function OpportunityDetailsDialog({
     if (!userInfo || !opportunity) return;
     const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
 
-    if (invoiceToUpdate?.id.startsWith('legacy') || invoiceToUpdate?.id.startsWith('new-invoice')) {
-        toast({title: "Factura Antigua o No Guardada", description: "Las facturas antiguas o no guardadas no se pueden modificar."});
+    if (invoiceToUpdate?.id.startsWith('legacy')) {
+        toast({title: "Factura Antigua", description: "Las facturas antiguas no se pueden modificar."});
         return;
     }
     if (invoiceToUpdate) {
@@ -388,8 +387,8 @@ export function OpportunityDetailsDialog({
 
   const handleInvoiceDelete = async (invoiceId: string) => {
     if (!userInfo || !opportunity) return;
-    if (invoiceId.startsWith('legacy') || invoiceId.startsWith('new-invoice')) {
-        toast({title: "Factura Antigua o No Guardada", description: "Estas facturas no se pueden eliminar."});
+    if (invoiceId.startsWith('legacy')) {
+        toast({title: "Factura Antigua", description: "Estas facturas no se pueden eliminar."});
         return;
     }
     try {
@@ -718,11 +717,16 @@ export function OpportunityDetailsDialog({
                                     value={invoice.status} 
                                     onValueChange={(value) => {
                                         const invoiceId = invoice.id;
-                                        setInvoices(prevInvoices => 
-                                            prevInvoices.map(inv => (inv.id === invoiceId ? { ...inv, status: value as InvoiceStatus } : inv))
-                                        );
-                                        // Use a timeout to ensure state has updated before saving
-                                        setTimeout(() => handleInvoiceUpdate(invoiceId), 0);
+                                        // We need to use a functional update for the state AND call the update function
+                                        // with the correct value directly, because state updates might be batched.
+                                        handleInvoiceChange(invoiceId, 'status', value as InvoiceStatus);
+                                        // Use a timeout to ensure state has likely updated for the update function call
+                                        // or pass the value directly. Better to pass directly.
+                                        const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
+                                        if (invoiceToUpdate) {
+                                            const updatedInvoice = { ...invoiceToUpdate, status: value as InvoiceStatus };
+                                            handleInvoiceUpdate(updatedInvoice.id);
+                                        }
                                     }}
                                 >
                                     <SelectTrigger>
