@@ -305,12 +305,13 @@ export default function ClientsPage() {
     }
 
     try {
-      const newClientId = await createClient(clientData, userInfo.id, userInfo.name);
+      await createClient(clientData, userInfo.id, userInfo.name);
       toast({
         title: "Cliente Creado",
         description: `${clientData.denominacion} ha sido añadido a la lista.`,
       });
       fetchData(); // Refresh the list
+      setIsFormOpen(false); // Close dialog on successful creation
     } catch (error) {
         console.error("Error creating client:", error);
         toast({

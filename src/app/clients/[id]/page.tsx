@@ -27,33 +27,34 @@ export default function ClientPage() {
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [loadingClient, setLoadingClient] = useState(true);
 
-  useEffect(() => {
-    const fetchClient = async () => {
-      if (!id) return;
-      setLoadingClient(true);
-      try {
-        const [fetchedClient, allFetchedClients] = await Promise.all([
-            getClient(id),
-            getClients()
-        ]);
+  const fetchClientData = async () => {
+    if (!id) return;
+    setLoadingClient(true);
+    try {
+      const [fetchedClient, allFetchedClients] = await Promise.all([
+          getClient(id),
+          getClients()
+      ]);
 
-        if (fetchedClient) {
-          setClient(fetchedClient);
-          setAllClients(allFetchedClients);
-        } else {
-          toast({ title: "Cliente no encontrado", variant: "destructive" });
-          router.push('/clients');
-        }
-      } catch (error) {
-        console.error("Error fetching client:", error);
-        toast({ title: "Error al cargar el cliente", variant: "destructive" });
+      if (fetchedClient) {
+        setClient(fetchedClient);
+        setAllClients(allFetchedClients);
+      } else {
+        toast({ title: "Cliente no encontrado", variant: "destructive" });
         router.push('/clients');
-      } finally {
-        setLoadingClient(false);
       }
-    };
+    } catch (error) {
+      console.error("Error fetching client:", error);
+      toast({ title: "Error al cargar el cliente", variant: "destructive" });
+      router.push('/clients');
+    } finally {
+      setLoadingClient(false);
+    }
+  };
 
-    fetchClient();
+
+  useEffect(() => {
+    fetchClientData();
   }, [id, router, toast]);
 
   const userHasAccess = useMemo(() => {
@@ -78,8 +79,9 @@ export default function ClientPage() {
     if (!client || !userInfo) return;
     try {
         await updateClient(client.id, updatedData, userInfo.id, userInfo.name);
-        setClient(prev => prev ? { ...prev, ...updatedData } : null);
-        toast({ title: "Cliente Actualizado", description: "Los datos del cliente se han guardado." });
+        // No toast here, it's handled in the form dialog
+        // Refetch data to show updated values on the page
+        await fetchClientData();
     } catch (error) {
         console.error("Error updating client:", error);
         toast({ title: "Error al actualizar", variant: "destructive" });
@@ -88,7 +90,10 @@ export default function ClientPage() {
 
   const validateCuit = async (cuit: string, clientId?: string): Promise<string | false> => {
     if (!cuit) return false;
-    const existingClient = allClients.find(c => c.cuit === cuit && c.id !== clientId);
+    // Ensure allClients is fresh
+    const currentClients = await getClients();
+    setAllClients(currentClients);
+    const existingClient = currentClients.find(c => c.cuit === cuit && c.id !== clientId);
     if (existingClient) {
       return `El CUIT ya pertenece al cliente "${existingClient.denominacion}", asignado a ${existingClient.ownerName}.`;
     }

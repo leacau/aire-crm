@@ -114,8 +114,19 @@ export function ClientFormDialog({
         }
     }
     
-    onSave(formData);
-    onOpenChange(false);
+    try {
+        onSave(formData);
+        if (isEditing) {
+            toast({
+                title: "Cliente Actualizado",
+                description: "Los datos del cliente se han guardado.",
+            });
+        }
+    } catch (error) {
+        console.error("Error saving client:", error);
+    } finally {
+        setIsSaving(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -265,7 +276,7 @@ export function ClientFormDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button>
           <Button onClick={handleSave} disabled={isSaving}>
             {isSaving ? <Spinner size="small" color="white" /> : 'Guardar'}
           </Button>
