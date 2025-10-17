@@ -696,7 +696,16 @@ export const deletePerson = async (
 
 export const getAllOpportunities = async (): Promise<Opportunity[]> => {
     const snapshot = await getDocs(opportunitiesCollection);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
+      // Convert server timestamp to string if it exists
+      if (data.updatedAt && data.updatedAt instanceof Timestamp) {
+        // @ts-ignore
+        opp.updatedAt = data.updatedAt.toDate().toISOString();
+      }
+      return opp;
+    });
 };
 
 export const getOpportunitiesByClientId = async (clientId: string): Promise<Opportunity[]> => {
@@ -1062,3 +1071,5 @@ export const updateClientActivity = async (
 
     await updateDoc(docRef, updateData);
 };
+
+    
