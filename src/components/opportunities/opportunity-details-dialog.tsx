@@ -184,10 +184,10 @@ export function OpportunityDetailsDialog({
                 opportunityId: opportunity.id,
                 invoiceNumber: opportunity.facturaNo || 'N/A',
                 amount: opportunity.valorCerrado || 0,
+                date: new Date().toISOString().split('T')[0],
                 status: opportunity.pagado ? 'Pagada' : 'Generada',
                 dateGenerated: new Date().toISOString(),
             };
-            // Avoid adding duplicate legacy invoice if it's already in fetchedInvoices
             if (!fetchedInvoices.some(inv => inv.invoiceNumber === legacyInvoice.invoiceNumber && inv.amount === legacyInvoice.amount)) {
                 legacyInvoices.push(legacyInvoice);
             }
@@ -326,28 +326,35 @@ export function OpportunityDetailsDialog({
   const handleAddInvoice = async () => {
     if (!opportunity || !userInfo) return;
     
+    const tempId = `new-invoice-${Date.now()}`;
+    const newInvoiceData: Invoice = {
+        id: tempId,
+        opportunityId: opportunity.id,
+        invoiceNumber: '',
+        amount: 0,
+        date: new Date().toISOString().split('T')[0], // Default to today
+        status: 'Generada' as const,
+        dateGenerated: new Date().toISOString(),
+    };
+    
+    setInvoices(prev => [...prev, newInvoiceData]);
+
     try {
-      const newInvoiceData = {
-          opportunityId: opportunity.id,
-          invoiceNumber: '',
-          amount: 0,
-          status: 'Generada' as const,
-          dateGenerated: new Date().toISOString(),
-      };
-      const newInvoiceId = await createInvoice(newInvoiceData, userInfo.id, userInfo.name, opportunity.clientName);
-      
-      const newInvoiceWithId: Invoice = {
-          ...newInvoiceData,
-          id: newInvoiceId,
-      }
-      setInvoices(prev => [...prev, newInvoiceWithId]);
-      
-      toast({ title: "Factura añadida" });
+        const { id: _, ...dataToSave } = newInvoiceData;
+        const newInvoiceId = await createInvoice(dataToSave, userInfo.id, userInfo.name, opportunity.clientName);
+        
+        // Update the temporary ID with the real ID from Firestore
+        setInvoices(prev => prev.map(inv => inv.id === tempId ? { ...inv, id: newInvoiceId } : inv));
+
+        toast({ title: "Factura añadida" });
     } catch (e) {
-      console.error("Error adding invoice", e);
-      toast({ title: "Error al añadir factura", variant: "destructive" });
+        console.error("Error adding invoice", e);
+        // Remove the temporary invoice on failure
+        setInvoices(prev => prev.filter(inv => inv.id !== tempId));
+        toast({ title: "Error al añadir factura", variant: "destructive" });
     }
   };
+
 
   const handleInvoiceChange = (invoiceId: string, field: keyof Invoice, value: any) => {
     setInvoices(prevInvoices => 
@@ -359,12 +366,12 @@ export function OpportunityDetailsDialog({
     if (!userInfo || !opportunity) return;
     const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
 
-    if (invoiceToUpdate?.id.startsWith('legacy')) {
-        toast({title: "Factura Antigua", description: "Las facturas antiguas no se pueden modificar."});
+    if (invoiceToUpdate?.id.startsWith('legacy') || invoiceToUpdate?.id.startsWith('new-invoice')) {
+        toast({title: "Factura Antigua o No Guardada", description: "Las facturas antiguas o no guardadas no se pueden modificar."});
         return;
     }
     if (invoiceToUpdate) {
-        const updateData = { ...invoiceToUpdate };
+        const updateData: Partial<Invoice> = { ...invoiceToUpdate };
         delete updateData.id; // Don't send id in update payload
 
         updateInvoice(invoiceId, updateData, userInfo.id, userInfo.name, opportunity.clientName)
@@ -381,8 +388,8 @@ export function OpportunityDetailsDialog({
 
   const handleInvoiceDelete = async (invoiceId: string) => {
     if (!userInfo || !opportunity) return;
-    if (invoiceId.startsWith('legacy')) {
-        toast({title: "Factura Antigua", description: "Estas facturas no se pueden eliminar."});
+    if (invoiceId.startsWith('legacy') || invoiceId.startsWith('new-invoice')) {
+        toast({title: "Factura Antigua o No Guardada", description: "Estas facturas no se pueden eliminar."});
         return;
     }
     try {
@@ -674,6 +681,7 @@ export function OpportunityDetailsDialog({
                     <TableHeader>
                         <TableRow>
                             <TableHead>Nº Factura</TableHead>
+                            <TableHead>Fecha Factura</TableHead>
                             <TableHead>Monto</TableHead>
                             <TableHead>Estado</TableHead>
                             <TableHead className="w-12"></TableHead>
@@ -691,6 +699,14 @@ export function OpportunityDetailsDialog({
                             </TableCell>
                             <TableCell>
                                 <Input 
+                                  type="date"
+                                  value={invoice.date || ''}
+                                  onChange={(e) => handleInvoiceChange(invoice.id, 'date', e.target.value)}
+                                  onBlur={() => handleInvoiceUpdate(invoice.id)}
+                                />
+                            </TableCell>
+                            <TableCell>
+                                <Input 
                                   type="number" 
                                   value={invoice.amount || ''} 
                                   onChange={(e) => handleInvoiceChange(invoice.id, 'amount', Number(e.target.value))} 
@@ -701,9 +717,12 @@ export function OpportunityDetailsDialog({
                                 <Select 
                                     value={invoice.status} 
                                     onValueChange={(value) => {
-                                        handleInvoiceChange(invoice.id, 'status', value);
-                                        // Wait for state to update before calling handleInvoiceUpdate
-                                        setTimeout(() => handleInvoiceUpdate(invoice.id), 0);
+                                        const invoiceId = invoice.id;
+                                        setInvoices(prevInvoices => 
+                                            prevInvoices.map(inv => (inv.id === invoiceId ? { ...inv, status: value as InvoiceStatus } : inv))
+                                        );
+                                        // Use a timeout to ensure state has updated before saving
+                                        setTimeout(() => handleInvoiceUpdate(invoiceId), 0);
                                     }}
                                 >
                                     <SelectTrigger>
@@ -723,7 +742,7 @@ export function OpportunityDetailsDialog({
                         ))}
                          {invoices.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={4} className="text-center h-24">No hay facturas para esta oportunidad.</TableCell>
+                                <TableCell colSpan={5} className="text-center h-24">No hay facturas para esta oportunidad.</TableCell>
                             </TableRow>
                         )}
                     </TableBody>

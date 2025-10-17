@@ -14,7 +14,8 @@ import { updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
+import { isWithinInterval, startOfMonth, endOfMonth, format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -86,6 +87,14 @@ const BillingTable = ({
 
     if (type === 'invoices') {
         cols.push({
+            accessorKey: 'date',
+            header: 'Fecha Factura',
+            cell: ({ row }) => {
+              const invoice = row.original as Invoice;
+              return invoice.date ? format(new Date(invoice.date), 'P', { locale: es }) : '-';
+            },
+        });
+        cols.push({
             accessorKey: 'amount',
             header: () => <div className="text-right">Monto Factura</div>,
             cell: ({ row }) => <div className="text-right">${row.original.amount.toLocaleString('es-AR')}</div>,
@@ -111,7 +120,7 @@ const BillingTable = ({
   const footerContent = (
     <TableFooter>
       <TableRow>
-        <TableCell colSpan={2} className="font-bold">Total</TableCell>
+        <TableCell colSpan={type === 'invoices' ? 3 : 2} className="font-bold">Total</TableCell>
         <TableCell className="text-right font-bold">${total.toLocaleString('es-AR')}</TableCell>
         {type === 'invoices' && <TableCell></TableCell>}
       </TableRow>
@@ -203,7 +212,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { toInvoiceOpps, toCollectInvoices, paidInvoices } = useMemo(() => {
     if (!userInfo) return { toInvoiceOpps: [], toCollectInvoices: [], paidInvoices: [] };
     
-    // 1. Filter opportunities by user/advisor and date range
     let userClientIds: Set<string> | null = null;
     if (isBoss) {
         if (selectedAdvisor !== 'all') {
@@ -218,16 +226,13 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         advisorFilteredOpps = opportunities.filter(opp => userClientIds!.has(opp.clientId));
     }
     
-    const dateFilteredOpps = advisorFilteredOpps.filter(opp => {
+    const wonOppsInPeriod = advisorFilteredOpps.filter(opp => {
         if (opp.stage !== 'Cerrado - Ganado') return false;
         if (!dateRange?.from || !dateRange?.to) return true;
         
-        // updatedAt will be a string from Firestore, closeDate might be too
+        // Use closeDate as the primary date for winning an opportunity
         const closeDate = new Date(opp.closeDate);
-        // @ts-ignore - Assuming updatedAt exists from firebase-service
-        const updatedAt = opp.updatedAt ? new Date(opp.updatedAt) : closeDate;
-        
-        return isWithinInterval(updatedAt, { start: dateRange.from, end: dateRange.to });
+        return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
     });
 
     const invoicesByOppId = invoices.reduce((acc, inv) => {
@@ -242,7 +247,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     const toCollectInvoices: Invoice[] = [];
     const paidInvoices: Invoice[] = [];
     
-    dateFilteredOpps.forEach(opp => {
+    wonOppsInPeriod.forEach(opp => {
         const oppInvoices = invoicesByOppId[opp.id] || [];
         
         if (oppInvoices.length === 0) {
