@@ -139,7 +139,7 @@ export type ActivityLog = {
   timestamp: string;
 };
 
-export const clientActivityTypes = ['Llamada', 'WhatsApp', 'Meet', 'Reunión', 'Visita Aire', 'Mail', 'LinkedIn', 'Otra'] as const;
+export const clientActivityTypes = ['Llamada', 'WhatsApp', 'Meet', 'Reunión', 'Visita Aire', 'Visita a empresa', 'Mail', 'LinkedIn', 'Otra'] as const;
 export type ClientActivityType = typeof clientActivityTypes[number];
 
 export type ClientActivity = {

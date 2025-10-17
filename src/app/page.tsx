@@ -23,7 +23,7 @@ import {
   CalendarClock,
   CheckCircle,
 } from 'lucide-react';
-import type { Opportunity, Client, ActivityLog, ClientActivity, User } from '@/lib/types';
+import type { Opportunity, Client, ActivityLog, ClientActivity, User, Invoice } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
   getAllOpportunities,
@@ -33,11 +33,12 @@ import {
   getAllClientActivities,
   updateClientActivity,
   getAllUsers,
+  getInvoices,
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, isToday, isTomorrow, startOfToday, format } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -154,6 +155,7 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [tasks, setTasks] = useState<ClientActivity[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -169,11 +171,12 @@ export default function DashboardPage() {
     const fetchData = async () => {
       setLoadingData(true);
       try {
-        const [allOpps, allClients, allActivities, allTasks, allUsers, allAdvisors] = await Promise.all([
+        const [allOpps, allClients, allActivities, allTasks, allInvoices, allUsers, allAdvisors] = await Promise.all([
             getAllOpportunities(),
             getClients(),
             getActivities(100),
             getAllClientActivities(),
+            getInvoices(),
             getAllUsers(),
             getAllUsers('Asesor'),
         ]);
@@ -182,6 +185,7 @@ export default function DashboardPage() {
         setClients(allClients);
         setActivities(allActivities);
         setTasks(allTasks);
+        setInvoices(allInvoices);
         setUsers(allUsers);
         setAdvisors(allAdvisors);
 
@@ -205,38 +209,45 @@ export default function DashboardPage() {
     userOpportunities, 
     userClients, 
     userActivities, 
-    userTasks 
+    userTasks,
+    userInvoices
   } = useMemo(() => {
-    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [] };
+    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [], userInvoices: [] };
     
     if (isBoss) {
       if (selectedAdvisor === 'all') {
-        return { userOpportunities: opportunities, userClients: clients, userActivities: activities, userTasks: tasks.filter(t => t.isTask) };
+        return { userOpportunities: opportunities, userClients: clients, userActivities: activities, userTasks: tasks.filter(t => t.isTask), userInvoices: invoices };
       }
+      const oppsForAdvisor = opportunities.filter(opp => advisorClientIds?.has(opp.clientId));
+      const oppIdsForAdvisor = new Set(oppsForAdvisor.map(o => o.id));
       return {
-        userOpportunities: opportunities.filter(opp => advisorClientIds?.has(opp.clientId)),
+        userOpportunities: oppsForAdvisor,
         userClients: clients.filter(c => c.ownerId === selectedAdvisor),
         userActivities: activities.filter(act => {
             const client = clients.find(c => c.id === act.entityId);
             return client?.ownerId === selectedAdvisor;
         }),
-        userTasks: tasks.filter(t => t.isTask && advisorClientIds?.has(t.clientId))
+        userTasks: tasks.filter(t => t.isTask && advisorClientIds?.has(t.clientId)),
+        userInvoices: invoices.filter(inv => oppIdsForAdvisor.has(inv.opportunityId))
       }
     }
 
     // For non-boss users
     const ownClientIds = new Set(clients.filter(client => client.ownerId === userInfo.id).map(c => c.id));
+    const oppsForUser = opportunities.filter(opp => ownClientIds.has(opp.clientId));
+    const oppIdsForUser = new Set(oppsForUser.map(o => o.id));
     return {
-        userOpportunities: opportunities.filter(opp => ownClientIds.has(opp.clientId)),
+        userOpportunities: oppsForUser,
         userClients: clients.filter(client => client.ownerId === userInfo.id),
         userActivities: activities.filter(act => {
             const client = clients.find(c => c.id === act.entityId);
             return client && client.ownerId === userInfo.id;
         }),
-        userTasks: tasks.filter(t => t.isTask && ownClientIds.has(t.clientId))
+        userTasks: tasks.filter(t => t.isTask && ownClientIds.has(t.clientId)),
+        userInvoices: invoices.filter(inv => oppIdsForUser.has(inv.opportunityId))
     }
 
-  }, [userInfo, isBoss, opportunities, clients, activities, tasks, selectedAdvisor, advisorClientIds]);
+  }, [userInfo, isBoss, opportunities, clients, activities, tasks, invoices, selectedAdvisor, advisorClientIds]);
 
 
   const today = startOfToday();
@@ -372,14 +383,26 @@ export default function DashboardPage() {
   }).slice(0, 10);
 
 
-  const totalRevenue = filteredOpportunities
-    .filter((o) => o.stage === 'Cerrado - Ganado')
-    .reduce((acc, o) => acc + (o.valorCerrado || o.value), 0);
+  const invoicesInCurrentMonth = userInvoices.filter(inv => {
+    const generationDate = new Date(inv.dateGenerated);
+    const today = new Date();
+    return generationDate.getMonth() === today.getMonth() && generationDate.getFullYear() === today.getFullYear();
+  });
+
+  const totalPaidInCurrentMonth = invoicesInCurrentMonth.filter(i => i.status === 'Pagada').reduce((acc, i) => acc + i.amount, 0);
+  const totalToCollectInCurrentMonth = invoicesInCurrentMonth.filter(i => i.status !== 'Pagada').reduce((acc, i) => acc + i.amount, 0);
+  const totalRevenueCurrentMonth = totalPaidInCurrentMonth + totalToCollectInCurrentMonth;
+  
 
   const activeOpportunities = filteredOpportunities.filter(
-    (o) => o.stage !== 'Cerrado - Ganado' && o.stage !== 'Cerrado - Perdido'
+    (o) => ['Propuesta', 'Negociación', 'Negociación a Aprobar', 'Cerrado - Ganado'].includes(o.stage)
   );
-  const forecastedRevenue = activeOpportunities.reduce((acc, o) => acc + o.value * 0.5, 0);
+  
+  const opportunityIdsWithInvoices = new Set(userInvoices.map(inv => inv.opportunityId));
+  const forecastedRevenue = activeOpportunities
+    .filter(o => !opportunityIdsWithInvoices.has(o.id))
+    .reduce((acc, o) => acc + o.value, 0);
+
   
   const totalClients = userClients.length;
 
@@ -411,20 +434,21 @@ export default function DashboardPage() {
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-          <Link href="/billing?tab=paid">
+          <Link href="/billing?tab=to-collect">
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Ingresos Totales
+                  Facturación del Mes
                 </CardTitle>
                 <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${totalRevenue.toLocaleString('es-AR')}
+                  ${totalRevenueCurrentMonth.toLocaleString('es-AR')}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Total de negocios ganados en el período.
+                  Pagado: ${totalPaidInCurrentMonth.toLocaleString('es-AR')} / 
+                  A cobrar: ${totalToCollectInCurrentMonth.toLocaleString('es-AR')}
                 </p>
               </CardContent>
             </Card>
@@ -439,7 +463,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {activeOpportunities.length}
+                  {filteredOpportunities.filter(o => o.stage !== 'Cerrado - Ganado' && o.stage !== 'Cerrado - Perdido').length}
                 </div>
                 <p className="text-xs text-muted-foreground">Oportunidades en curso en el período.</p>
               </CardContent>
@@ -470,7 +494,7 @@ export default function DashboardPage() {
                   ${forecastedRevenue.toLocaleString('es-AR')}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Basado en el pipeline del período.
+                  Pipeline activo sin facturar.
                 </p>
               </CardContent>
             </Card>

@@ -117,6 +117,7 @@ const activityIcons: Record<ClientActivityType, React.ReactNode> = {
     'Meet': <Video className="h-4 w-4" />,
     'Reunión': <Users className="h-4 w-4" />,
     'Visita Aire': <BuildingIcon className="h-4 w-4" />,
+    'Visita a empresa': <Building className="h-4 w-4" />,
     'Mail': <MailIcon className="h-4 w-4" />,
     'LinkedIn': <Linkedin className="h-4 w-4" />,
     'Otra': <ClipboardList className="h-4 w-4" />,
