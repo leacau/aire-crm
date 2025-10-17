@@ -3,28 +3,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getAllUsers, getClients, getInvoices } from '@/lib/firebase-service';
-import type { Opportunity, User, Client, Invoice } from '@/lib/types';
+import { getAllOpportunities, getAllUsers, getClients } from '@/lib/firebase-service';
+import type { Opportunity, User, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval } from 'date-fns';
 
-interface PipelineByAdvisorChartProps {
+interface OpportunitiesByStageChartProps {
     dateRange?: DateRange;
     selectedAdvisor: string;
 }
 
-const COLORS = {
-  nuevo: 'hsl(var(--chart-1))',
-  negociacion: 'hsl(var(--chart-2))',
-  ganadoPagado: 'hsl(var(--chart-3))',
-  ganadoNoPagado: 'hsl(var(--chart-4))',
+const STAGE_COLORS = {
+  Nuevo: 'hsl(var(--chart-1))',
+  Propuesta: 'hsl(var(--chart-2))',
+  Negociación: 'hsl(var(--chart-3))',
+  'Negociación a Aprobar': 'hsl(var(--chart-4))',
 };
 
-export function PipelineByAdvisorChart({ dateRange, selectedAdvisor }: PipelineByAdvisorChartProps) {
+export function OpportunitiesByStageChart({ dateRange, selectedAdvisor }: OpportunitiesByStageChartProps) {
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,16 +32,14 @@ export function PipelineByAdvisorChart({ dateRange, selectedAdvisor }: PipelineB
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [allOpps, allAdvisors, allClients, allInvoices] = await Promise.all([
+        const [allOpps, allAdvisors, allClients] = await Promise.all([
             getAllOpportunities(),
             getAllUsers('Asesor'),
             getClients(),
-            getInvoices(),
         ]);
         setOpportunities(allOpps);
         setAdvisors(allAdvisors);
         setClients(allClients);
-        setInvoices(allInvoices);
       } catch (error) {
         console.error("Error fetching report data:", error);
         toast({ title: 'Error al cargar los datos del reporte', variant: 'destructive' });
@@ -64,35 +61,30 @@ export function PipelineByAdvisorChart({ dateRange, selectedAdvisor }: PipelineB
       ? advisors
       : advisors.filter(adv => adv.id === selectedAdvisor);
 
-    const salesByAdvisor: { [key: string]: { nuevo: number; negociacion: number; ganadoPagado: number; ganadoNoPagado: number } } = {};
+    const oppsByAdvisor: { [key: string]: { [stage: string]: number } } = {};
 
     relevantAdvisors.forEach(adv => {
-        salesByAdvisor[adv.id] = { nuevo: 0, negociacion: 0, ganadoPagado: 0, ganadoNoPagado: 0 };
+        oppsByAdvisor[adv.id] = { 'Nuevo': 0, 'Propuesta': 0, 'Negociación': 0, 'Negociación a Aprobar': 0 };
     });
 
     for(const opp of filteredOpps) {
         const client = clients.find(c => c.id === opp.clientId);
-        if (client && client.ownerId && salesByAdvisor[client.ownerId]) {
-            const value = opp.value;
-            if (opp.stage === 'Nuevo' || opp.stage === 'Propuesta' || opp.stage === 'Negociación' || opp.stage === 'Negociación a Aprobar') {
-                salesByAdvisor[client.ownerId].negociacion += value;
-            } else if (opp.stage === 'Cerrado - Ganado') {
-                const oppInvoices = invoices.filter(inv => inv.opportunityId === opp.id);
-                const paidAmount = oppInvoices.filter(i => i.status === 'Pagada').reduce((sum, i) => sum + i.amount, 0);
-                const unpaidAmount = oppInvoices.filter(i => i.status !== 'Pagada').reduce((sum, i) => sum + i.amount, 0);
-
-                salesByAdvisor[client.ownerId].ganadoPagado += paidAmount;
-                salesByAdvisor[client.ownerId].ganadoNoPagado += unpaidAmount;
+        if (client && client.ownerId && oppsByAdvisor[client.ownerId]) {
+            const stage = opp.stage;
+            if (stage in oppsByAdvisor[client.ownerId]) {
+                 oppsByAdvisor[client.ownerId][stage]++;
+            } else if (stage === 'Negociación a Aprobar') { // Combine with Negotiation for simplicity
+                 oppsByAdvisor[client.ownerId]['Negociación']++;
             }
         }
     }
     
     return relevantAdvisors.map(advisor => ({
       name: advisor.name,
-      ...salesByAdvisor[advisor.id]
+      ...oppsByAdvisor[advisor.id],
     }));
 
-  }, [opportunities, advisors, clients, invoices, dateRange, selectedAdvisor]);
+  }, [opportunities, advisors, clients, dateRange, selectedAdvisor]);
 
   if (loading) {
     return (
@@ -109,7 +101,7 @@ export function PipelineByAdvisorChart({ dateRange, selectedAdvisor }: PipelineB
           <p className="font-bold text-foreground mb-2">{label}</p>
           {payload.map((p: any, index: number) => (
              <p key={index} style={{ color: p.color }} className="text-sm">
-                {`${p.name}: $${p.value.toLocaleString('es-AR')}`}
+                {`${p.name}: ${p.value}`}
              </p>
           ))}
         </div>
@@ -134,16 +126,17 @@ export function PipelineByAdvisorChart({ dateRange, selectedAdvisor }: PipelineB
              fontSize={12}
              tickLine={false}
              axisLine={false}
-             tickFormatter={(value) => `$${(value as number / 1000).toLocaleString('es-AR')}k`}
+             allowDecimals={false}
         />
         <Tooltip
           cursor={{ fill: 'hsl(var(--muted))' }}
           content={<CustomTooltip />}
         />
         <Legend wrapperStyle={{ fontSize: '12px' }} />
-        <Bar dataKey="negociacion" name="Pipeline (Propuesta/Negociación)" stackId="a" fill={COLORS.negociacion} />
-        <Bar dataKey="ganadoNoPagado" name="Ganado (Facturado, no pagado)" stackId="a" fill={COLORS.ganadoNoPagado} />
-        <Bar dataKey="ganadoPagado" name="Ganado (Pagado)" stackId="a" fill={COLORS.ganadoPagado} radius={[4, 4, 0, 0]} />
+        <Bar dataKey="Nuevo" stackId="a" fill={STAGE_COLORS.Nuevo} radius={[4, 4, 0, 0]}/>
+        <Bar dataKey="Propuesta" stackId="a" fill={STAGE_COLORS.Propuesta} />
+        <Bar dataKey="Negociación" stackId="a" fill={STAGE_COLORS.Negociación} />
+        <Bar dataKey="Negociación a Aprobar" name="Negociación a Aprobar" stackId="a" fill={STAGE_COLORS['Negociación a Aprobar']} />
       </BarChart>
     </ResponsiveContainer>
   );

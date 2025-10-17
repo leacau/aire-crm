@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, Suspense, useEffect } from 'react';
@@ -13,9 +14,10 @@ import dynamic from 'next/dynamic';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getAllUsers } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
+import { ActiveClientsReport } from '@/components/reports/active-clients-report';
 
 
-const PipelineByAdvisorChart = dynamic(() => import('@/components/reports/pipeline-by-advisor-chart').then(mod => mod.PipelineByAdvisorChart), {
+const OpportunitiesByStageChart = dynamic(() => import('@/components/reports/opportunities-by-stage-chart').then(mod => mod.OpportunitiesByStageChart), {
   ssr: false,
   loading: () => <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>,
 });
@@ -64,16 +66,17 @@ export default function ReportsPage() {
             </Select>
           )}
       </Header>
-      <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
+      <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
+        <ActiveClientsReport selectedAdvisor={selectedAdvisor} />
         <Card>
             <CardHeader>
-                <CardTitle>Pipeline por Asesor</CardTitle>
+                <CardTitle>Estado de Oportunidades por Asesor</CardTitle>
                 <CardDescription>
-                    Valor total de oportunidades por etapa para cada asesor en el período seleccionado.
+                    Cantidad de oportunidades por etapa para cada asesor en el período seleccionado.
                 </CardDescription>
             </CardHeader>
             <CardContent className="h-[400px] w-full">
-                <PipelineByAdvisorChart dateRange={dateRange} selectedAdvisor={selectedAdvisor}/>
+                <OpportunitiesByStageChart dateRange={dateRange} selectedAdvisor={selectedAdvisor}/>
             </CardContent>
         </Card>
       </main>
