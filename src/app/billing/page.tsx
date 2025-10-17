@@ -14,7 +14,7 @@ import { updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, startOfMonth, endOfMonth, format } from 'date-fns';
+import { isWithinInterval, startOfMonth, endOfMonth, format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
@@ -230,9 +230,14 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         if (opp.stage !== 'Cerrado - Ganado') return false;
         if (!dateRange?.from || !dateRange?.to) return true;
         
-        // Use closeDate as the primary date for winning an opportunity
-        const closeDate = new Date(opp.closeDate);
-        return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
+        // Use closeDate or updatedAt to determine if it was won in the period
+        const closeDate = opp.closeDate ? parseISO(opp.closeDate) : null;
+        const updatedAt = (opp as any).updatedAt ? new Date((opp as any).updatedAt.seconds * 1000) : null;
+        
+        const winDate = closeDate || updatedAt;
+        if (!winDate) return false;
+
+        return isWithinInterval(winDate, { start: dateRange.from, end: dateRange.to });
     });
 
     const invoicesByOppId = invoices.reduce((acc, inv) => {
@@ -300,7 +305,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   
   return (
     <div className="flex flex-col h-full">
-      <Header title="Facturación">
+      <Header title="Estado de Cobranzas">
          <DateRangePicker date={dateRange} onDateChange={setDateRange} />
           {isBoss && (
             <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>

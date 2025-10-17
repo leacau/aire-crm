@@ -15,7 +15,7 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat } from 'lucide-react';
+import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
@@ -25,7 +25,8 @@ const menuItems = [
   { href: '/opportunities', label: 'Oportunidades', icon: CircleDollarSign, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/clients', label: 'Clientes', icon: Users, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/canjes', label: 'Canjes', icon: Repeat, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/billing', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
+  { href: '/invoices', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
+  { href: '/billing', label: 'Cobranzas', icon: Banknote, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/calendar', label: 'Calendario', icon: Calendar, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, roles: ['Jefe', 'Gerencia'] },
   { href: '/activity', label: 'Actividad', icon: LayoutList, roles: ['Jefe', 'Gerencia'] },
@@ -40,7 +41,10 @@ function MenuLink({ item }: { item: typeof menuItems[0] }) {
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
-    return pathname.startsWith(href);
+    // Exact match for /billing, otherwise prefix match
+    if (href === '/billing') return pathname === '/billing';
+    if (href === '/invoices') return pathname === '/invoices';
+    return pathname.startsWith(href) && href !== '/';
   };
 
   return (
