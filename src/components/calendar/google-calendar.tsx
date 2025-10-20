@@ -25,6 +25,7 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { CalendarToolbar } from './calendar-toolbar';
+import { getUserProfile } from '@/lib/firebase-service';
 
 
 const locales = {
@@ -56,8 +57,12 @@ interface EventFormData {
   description: string;
 }
 
-export function GoogleCalendar() {
-  const { getGoogleAccessToken } = useAuth();
+interface GoogleCalendarProps {
+    selectedUserId?: string;
+}
+
+export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
+  const { userInfo, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,13 +77,27 @@ export function GoogleCalendar() {
 
 
   const fetchEvents = useCallback(async () => {
+    if (!userInfo) return;
     setLoading(true);
     setError(null);
+    
+    let calendarId = 'primary';
+    if (selectedUserId && selectedUserId !== userInfo.id) {
+        const userToView = await getUserProfile(selectedUserId);
+        if (userToView?.email) {
+            calendarId = userToView.email;
+        } else {
+            setError(`No se pudo encontrar el email para el usuario seleccionado.`);
+            setLoading(false);
+            return;
+        }
+    }
+
     const token = await getGoogleAccessToken();
 
     if (token) {
       try {
-        const eventItems = await getCalendarEvents(token);
+        const eventItems = await getCalendarEvents(token, calendarId);
         const formattedEvents = eventItems.map((item: any) => ({
           id: item.id,
           title: item.summary,
@@ -90,25 +109,31 @@ export function GoogleCalendar() {
         setEvents(formattedEvents);
       } catch (err: any) {
         console.error(err);
-        setError(`No se pudieron cargar los eventos del calendario. ${err.message}`);
+        setError(`No se pudieron cargar los eventos del calendario. Es posible que no tengas permisos para ver este calendario. Detalle: ${err.message}`);
       }
     } else {
       setError('No se pudo obtener el permiso para acceder a Google Calendar.');
     }
     setLoading(false);
-  }, [getGoogleAccessToken]);
+  }, [getGoogleAccessToken, userInfo, selectedUserId]);
 
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
 
   const handleSelectSlot = useCallback(({ start, end }: { start: Date; end: Date }) => {
+    // Disable creating events on other people's calendars
+    if(selectedUserId !== userInfo?.id) return;
+    
     setSelectedEvent(null);
     setFormData({ start, end, title: '', description: '' });
     setIsDialogOpen(true);
-  }, []);
+  }, [selectedUserId, userInfo?.id]);
 
   const handleSelectEvent = useCallback((event: CalendarEvent) => {
+    // Disable editing events on other people's calendars
+    if(selectedUserId !== userInfo?.id) return;
+
     setSelectedEvent(event);
     setFormData({
       start: event.start,
@@ -117,7 +142,7 @@ export function GoogleCalendar() {
       description: event.description,
     });
     setIsDialogOpen(true);
-  }, []);
+  }, [selectedUserId, userInfo?.id]);
   
   const handleSaveEvent = async () => {
     const token = await getGoogleAccessToken();
