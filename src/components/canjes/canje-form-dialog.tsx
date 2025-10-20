@@ -166,7 +166,7 @@ export function CanjeFormDialog({
   const isAssignedAdvisor = formData.asesorId === currentUser.id;
 
   const canEditPedido = isCreator && formData.estado === 'Pedido';
-  const canEditAsignacion = canManageAll && !formData.clienteId;
+  const canEditAsignacion = canManageAll;
   const canEditNegociacion = isAssignedAdvisor && ['En gestión', 'Pedido'].includes(formData.estado);
   const canEditCulminacion = canManageAll && formData.estado === 'Culminado';
 
@@ -216,13 +216,21 @@ export function CanjeFormDialog({
           </fieldset>
 
           {/* Seccion Asignacion */}
-          <fieldset disabled={!canManageAll && isEditing} className="space-y-4 p-4 border rounded-md">
+          <fieldset disabled={!canEditAsignacion} className="space-y-4 p-4 border rounded-md">
             <legend className="font-semibold px-1 text-primary">2. Asignación</legend>
             <div className="space-y-2">
               <Label htmlFor="clienteId">Cliente</Label>
-              {isManualClient ? ( <Input name="clienteName" placeholder="Nombre del cliente potencial" value={formData.clienteName} onChange={handleChange} /> ) : (
-                <Select value={formData.clienteId || ''} onValueChange={handleClientSelection}><SelectTrigger id="clienteId"><SelectValue placeholder="Seleccionar cliente..." /></SelectTrigger>
-                  <SelectContent><SelectItem value="manual">Ingresar cliente nuevo...</SelectItem>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}</SelectContent>
+              {isManualClient && !isEditing ? ( 
+                <Input name="clienteName" placeholder="Nombre del cliente potencial" value={formData.clienteName} onChange={handleChange} /> 
+              ) : (
+                <Select value={formData.clienteId || ''} onValueChange={handleClientSelection}>
+                  <SelectTrigger id="clienteId">
+                    <SelectValue placeholder="Seleccionar cliente..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {!isEditing && <SelectItem value="manual">Ingresar cliente nuevo...</SelectItem>}
+                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               )}
             </div>
