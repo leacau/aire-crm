@@ -28,6 +28,8 @@ export default function GrillaPage() {
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [programToDelete, setProgramToDelete] = useState<Program | null>(null);
 
+  const canManage = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
+
 
   const fetchPrograms = useCallback(async () => {
     setLoading(true);
@@ -110,7 +112,7 @@ export default function GrillaPage() {
               Volver a la semana
             </Button>
           )}
-          {isBoss && (
+          {canManage && (
              <Button onClick={() => openProgramForm()}>
                 <PlusCircle className="mr-2 h-4 w-4"/>
                 Nuevo Programa
@@ -124,7 +126,7 @@ export default function GrillaPage() {
                 onDayClick={handleDayClick} 
                 onEditProgram={openProgramForm}
                 onDeleteProgram={(p) => setProgramToDelete(p)}
-                canManage={isBoss}
+                canManage={!!canManage}
             />
           ) : (
             <GrillaDiaria date={selectedDate} programs={programs} />
