@@ -23,13 +23,22 @@ export const getCanjes = async (): Promise<Canje[]> => {
       const data = doc.data();
       const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
       
-      return { 
+      const canje: Canje = { 
           id: doc.id,
           ...data,
           fechaCreacion: convertTimestamp(data.fechaCreacion),
           fechaResolucion: convertTimestamp(data.fechaResolucion),
           fechaCulminacion: convertTimestamp(data.fechaCulminacion),
-      } as Canje
+      } as Canje;
+      
+      if (canje.historialMensual) {
+        canje.historialMensual = canje.historialMensual.map(h => ({
+          ...h,
+          fechaEstado: convertTimestamp(h.fechaEstado),
+        })).sort((a,b) => b.mes.localeCompare(a.mes));
+      }
+
+      return canje;
     });
 };
 
@@ -46,6 +55,9 @@ export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>
             delete dataToSave[key];
         }
     });
+    
+    // Ensure history is not saved on creation
+    delete dataToSave.historialMensual;
 
     const docRef = await addDoc(canjesCollection, dataToSave);
     
@@ -87,6 +99,13 @@ export const updateCanje = async (
         updateData.culminadoPorId = userId;
         updateData.culminadoPorName = userName;
     }
+    
+    if (data.historialMensual) {
+        updateData.historialMensual = data.historialMensual.map(h => ({
+            ...h,
+            fechaEstado: new Date(h.fechaEstado), // Convert back to Date for Firestore
+        }));
+    }
 
     await updateDoc(docRef, updateData);
 
@@ -97,6 +116,10 @@ export const updateCanje = async (
     if (data.clienteId && data.clienteId !== originalData.clienteId) {
         details = `asignó el canje <strong>${originalData.titulo}</strong> al cliente <strong>${data.clienteName}</strong>`
     }
+    if(data.historialMensual) {
+        details = `actualizó el historial mensual del canje <strong>${originalData.titulo}</strong>`;
+    }
+
 
     await logActivity({
         userId,

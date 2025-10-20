@@ -16,16 +16,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { Canje, CanjeEstado, CanjeTipo, Client, User, CanjeEstadoFinal } from '@/lib/types';
-import { canjeEstados, canjeTipos, canjeEstadoFinalOptions } from '@/lib/types';
+import type { Canje, CanjeEstado, CanjeTipo, Client, User, CanjeEstadoFinal, HistorialMensualItem, HistorialMensualEstado } from '@/lib/types';
+import { canjeEstados, canjeTipos, canjeEstadoFinalOptions, historialMensualEstados } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
 import { PlusCircle, Trash2, CalendarIcon } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Calendar } from '../ui/calendar';
-import { format } from 'date-fns';
+import { format, getYear, getMonth, set } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 type CanjeFormData = Omit<Canje, 'id' | 'fechaCreacion'>;
 
@@ -57,8 +58,26 @@ const initialFormData = (user: User): CanjeFormData => {
         estadoFinal: undefined,
         comentarioFinal: '',
         fechaCulminacion: undefined,
+        historialMensual: [],
     };
 };
+
+// Generate month options for the last 2 years and next 2 years
+const generateMonthOptions = () => {
+    const options: { label: string, value: string }[] = [];
+    const today = new Date();
+    for (let i = -24; i <= 24; i++) {
+        const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+        const year = getYear(date);
+        const month = getMonth(date) + 1;
+        const value = `${year}-${String(month).padStart(2, '0')}`;
+        const label = format(date, "MMMM yyyy", { locale: es });
+        options.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) });
+    }
+    return options.reverse();
+};
+const monthOptions = generateMonthOptions();
+
 
 export function CanjeFormDialog({
   isOpen,
@@ -72,6 +91,7 @@ export function CanjeFormDialog({
   const [formData, setFormData] = useState<CanjeFormData>(initialFormData(currentUser));
   const [isSaving, setIsSaving] = useState(false);
   const [isManualClient, setIsManualClient] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState('');
 
   const { toast } = useToast();
 
@@ -88,6 +108,7 @@ export function CanjeFormDialog({
         setIsManualClient(false);
       }
       setIsSaving(false);
+      setSelectedMonth('');
     }
   }, [canje, isOpen, currentUser]);
 
@@ -160,19 +181,54 @@ export function CanjeFormDialog({
   const handleRemoveFactura = (index: number) => {
     setFormData(prev => ({ ...prev, facturas: (prev.facturas || []).filter((_, i) => i !== index) }));
   };
+  
+  const handleRegisterMonth = () => {
+    if (!selectedMonth || formData.historialMensual?.some(h => h.mes === selectedMonth)) {
+        toast({ title: "Mes inválido o ya registrado", variant: "destructive" });
+        return;
+    }
+    const newEntry: HistorialMensualItem = {
+        mes: selectedMonth,
+        estado: 'Pendiente',
+        fechaEstado: new Date().toISOString(),
+    };
+    const newHistory = [...(formData.historialMensual || []), newEntry].sort((a, b) => b.mes.localeCompare(a.mes));
+    setFormData(prev => ({...prev, historialMensual: newHistory }));
+    onSave({...formData, historialMensual: newHistory});
+  };
+
+  const handleHistoryChange = (mes: string, field: 'estado' | 'comentario', value: string) => {
+      const updatedHistory = (formData.historialMensual || []).map(h => {
+        if (h.mes === mes) {
+            return {
+                ...h,
+                [field]: value,
+                ...(field === 'estado' && {
+                    fechaEstado: new Date().toISOString(),
+                    responsableId: currentUser.id,
+                    responsableName: currentUser.name,
+                }),
+            };
+        }
+        return h;
+      }).sort((a, b) => b.mes.localeCompare(a.mes));
+      setFormData(prev => ({ ...prev, historialMensual: updatedHistory }));
+      onSave({...formData, historialMensual: updatedHistory });
+  };
+
 
   // Determine editable fields based on role and state
   const isCreator = canManageAll;
   const isAssignedAdvisor = formData.asesorId === currentUser.id;
 
   const canEditPedido = isCreator && formData.estado === 'Pedido';
-  const canEditAsignacion = canManageAll;
+  const canEditAsignacion = canManageAll && !formData.clienteId;
   const canEditNegociacion = isAssignedAdvisor && ['En gestión', 'Pedido'].includes(formData.estado);
   const canEditCulminacion = canManageAll && formData.estado === 'Culminado';
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{isEditing ? 'Editar Canje' : 'Nuevo Pedido de Canje'}</DialogTitle>
           <DialogDescription>
@@ -181,7 +237,6 @@ export function CanjeFormDialog({
         </DialogHeader>
         <div className="grid gap-6 py-4 max-h-[70vh] overflow-y-auto pr-4">
           
-          {/* Seccion Pedido */}
           <fieldset disabled={!isCreator && isEditing} className="space-y-4 p-4 border rounded-md">
             <legend className="font-semibold px-1 text-primary">1. Pedido de Canje</legend>
             <div className="space-y-2">
@@ -215,23 +270,21 @@ export function CanjeFormDialog({
             </div>
           </fieldset>
 
-          {/* Seccion Asignacion */}
           <fieldset disabled={!canEditAsignacion} className="space-y-4 p-4 border rounded-md">
             <legend className="font-semibold px-1 text-primary">2. Asignación</legend>
             <div className="space-y-2">
               <Label htmlFor="clienteId">Cliente</Label>
-              {isManualClient && !isEditing ? ( 
-                <Input name="clienteName" placeholder="Nombre del cliente potencial" value={formData.clienteName} onChange={handleChange} /> 
-              ) : (
+              {(isManualClient && !isEditing) || !formData.clienteId ? ( 
                 <Select value={formData.clienteId || ''} onValueChange={handleClientSelection}>
                   <SelectTrigger id="clienteId">
                     <SelectValue placeholder="Seleccionar cliente..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {!isEditing && <SelectItem value="manual">Ingresar cliente nuevo...</SelectItem>}
                     {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              ) : (
+                <Input value={formData.clienteName} disabled />
               )}
             </div>
             <div className="space-y-2">
@@ -240,7 +293,6 @@ export function CanjeFormDialog({
             </div>
           </fieldset>
           
-          {/* Seccion Negociacion y Resolucion */}
           <fieldset disabled={!canEditNegociacion && !canManageAll} className="space-y-4 p-4 border rounded-md">
             <legend className="font-semibold px-1 text-primary">3. Negociación y Resolución</legend>
             <div className="space-y-2">
@@ -249,7 +301,7 @@ export function CanjeFormDialog({
             </div>
              <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="valorCanje">{formData.tipo === 'Mensual Permanente' ? 'Valor Canje Mensual' : 'Valor Canje'}</Label>
+                <Label htmlFor="valorCanje">{formData.tipo === 'Mensual' ? 'Valor Canje Mensual' : 'Valor Canje'}</Label>
                 <Input id="valorCanje" name="valorCanje" type="number" value={formData.valorCanje} onChange={handleChange} />
               </div>
                <div className="space-y-2">
@@ -262,7 +314,6 @@ export function CanjeFormDialog({
             </div>
           </fieldset>
           
-           {/* Seccion Aprobacion Final */}
            <fieldset disabled={!canEditCulminacion} className="space-y-4 p-4 border rounded-md bg-muted/30">
             <legend className="font-semibold px-1 text-primary">4. Aprobación Final (Gerencia)</legend>
              <div className="grid grid-cols-2 gap-4">
@@ -294,6 +345,87 @@ export function CanjeFormDialog({
                 Marcar como Aprobado y Finalizado
              </Button>
            </fieldset>
+           
+           {isEditing && formData.tipo === 'Mensual' && formData.estado === 'Aprobado' && (
+                <fieldset className="space-y-4 p-4 border rounded-md">
+                    <legend className="font-semibold px-1 text-primary">5. Historial y Gestión Mensual</legend>
+                    <div className="flex items-end gap-2">
+                         <div className="flex-1 space-y-1">
+                            <Label htmlFor="month-selector">Seleccionar Mes a Registrar</Label>
+                            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                <SelectTrigger id="month-selector">
+                                    <SelectValue placeholder="Ej: Enero 2024" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {monthOptions.map(opt => (
+                                        <SelectItem key={opt.value} value={opt.value} disabled={formData.historialMensual?.some(h => h.mes === opt.value)}>
+                                            {opt.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <Button onClick={handleRegisterMonth} disabled={!selectedMonth}>
+                           Registrar Mes
+                        </Button>
+                    </div>
+
+                    <div className="max-h-60 overflow-y-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Mes</TableHead>
+                                    <TableHead>Estado</TableHead>
+                                    <TableHead>Comentario</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {formData.historialMensual && formData.historialMensual.length > 0 ? (
+                                    formData.historialMensual.map(item => (
+                                        <TableRow key={item.mes}>
+                                            <TableCell className="font-medium capitalize">{format(new Date(`${item.mes}-02`), 'MMMM yyyy', { locale: es })}</TableCell>
+                                            <TableCell>
+                                                <Select 
+                                                    value={item.estado}
+                                                    onValueChange={(v: HistorialMensualEstado) => handleHistoryChange(item.mes, 'estado', v)}
+                                                    disabled={!canManageAll}
+                                                >
+                                                    <SelectTrigger className={cn(
+                                                        item.estado === 'Pendiente' && 'bg-yellow-100 border-yellow-300',
+                                                        item.estado === 'Aprobado' && 'bg-green-100 border-green-300',
+                                                        item.estado === 'Rechazado' && 'bg-red-100 border-red-300',
+                                                    )}>
+                                                        <SelectValue/>
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {historialMensualEstados.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Input
+                                                    value={item.comentario || ''}
+                                                    onBlur={(e) => handleHistoryChange(item.mes, 'comentario', e.target.value)}
+                                                    onChange={(e) => {
+                                                        const updatedHistory = (formData.historialMensual || []).map(h => h.mes === item.mes ? {...h, comentario: e.target.value} : h);
+                                                        setFormData(prev => ({...prev, historialMensual: updatedHistory}));
+                                                    }}
+                                                    disabled={!canManageAll}
+                                                    placeholder="Añadir comentario..."
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="text-center h-24">No hay registros mensuales.</TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </fieldset>
+           )}
 
         </div>
         <DialogFooter>

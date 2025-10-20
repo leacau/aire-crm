@@ -159,8 +159,8 @@ export type ClientActivity = {
 export type CanjeEstado = 'Pedido' | 'En gestión' | 'Culminado' | 'Aprobado';
 export const canjeEstados: CanjeEstado[] = ['Pedido', 'En gestión', 'Culminado', 'Aprobado'];
 
-export type CanjeTipo = 'Temporario' | 'Mensual Permanente';
-export const canjeTipos: CanjeTipo[] = ['Temporario', 'Mensual Permanente'];
+export type CanjeTipo = 'Temporario' | 'Mensual';
+export const canjeTipos: CanjeTipo[] = ['Temporario', 'Mensual'];
 
 export const canjeEstadoFinalOptions = ['Total', 'Parcial'] as const;
 export type CanjeEstadoFinal = typeof canjeEstadoFinalOptions[number];
@@ -168,6 +168,18 @@ export type CanjeEstadoFinal = typeof canjeEstadoFinalOptions[number];
 export type CanjeFactura = {
     numero: string;
     monto: number;
+};
+
+export type HistorialMensualEstado = 'Pendiente' | 'Aprobado' | 'Rechazado';
+export const historialMensualEstados: HistorialMensualEstado[] = ['Pendiente', 'Aprobado', 'Rechazado'];
+
+export type HistorialMensualItem = {
+    mes: string; // "YYYY-MM"
+    estado: HistorialMensualEstado;
+    fechaEstado: string;
+    responsableId?: string;
+    responsableName?: string;
+    comentario?: string;
 };
 
 export type Canje = {
@@ -192,6 +204,8 @@ export type Canje = {
   fechaCulminacion?: string;
   culminadoPorId?: string;
   culminadoPorName?: string;
+  
+  historialMensual?: HistorialMensualItem[];
 };
 
 
