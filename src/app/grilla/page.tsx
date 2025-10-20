@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 
 export default function GrillaPage() {
-  const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const { userInfo, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
   const [view, setView] = useState<'semanal' | 'diaria'>('semanal');
@@ -129,7 +129,11 @@ export default function GrillaPage() {
                 canManage={!!canManage}
             />
           ) : (
-            <GrillaDiaria date={selectedDate} programs={programs} />
+            <GrillaDiaria 
+                date={selectedDate} 
+                programs={programs}
+                canManage={!!canManage}
+            />
           )}
         </main>
       </div>

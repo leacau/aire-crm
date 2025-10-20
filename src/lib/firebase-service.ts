@@ -49,7 +49,12 @@ export const getCommercialItems = async (date: string): Promise<CommercialItem[]
 };
 
 export const saveCommercialItem = async (itemData: Omit<CommercialItem, 'id'>, userId: string): Promise<string> => {
-    const docRef = await addDoc(commercialItemsCollection, { ...itemData, createdBy: userId });
+    const dataToSave = { ...itemData, createdBy: userId };
+    if (!dataToSave.clientId) {
+      delete dataToSave.clientId;
+      delete dataToSave.clientName;
+    }
+    const docRef = await addDoc(commercialItemsCollection, dataToSave);
     return docRef.id;
 };
 
