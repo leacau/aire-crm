@@ -156,11 +156,14 @@ export type ClientActivity = {
     googleCalendarEventId?: string;
 }
 
-export type CanjeEstado = 'Pedido' | 'En gestión' | 'Completo' | 'Aprobado';
-export const canjeEstados: CanjeEstado[] = ['Pedido', 'En gestión', 'Completo', 'Aprobado'];
+export type CanjeEstado = 'Pedido' | 'En gestión' | 'Culminado' | 'Aprobado';
+export const canjeEstados: CanjeEstado[] = ['Pedido', 'En gestión', 'Culminado', 'Aprobado'];
 
 export type CanjeTipo = 'Temporario' | 'Mensual Permanente';
 export const canjeTipos: CanjeTipo[] = ['Temporario', 'Mensual Permanente'];
+
+export const canjeEstadoFinalOptions = ['Total', 'Parcial'] as const;
+export type CanjeEstadoFinal = typeof canjeEstadoFinalOptions[number];
 
 export type CanjeFactura = {
     numero: string;
@@ -169,12 +172,13 @@ export type CanjeFactura = {
 
 export type Canje = {
   id: string;
-  clienteId?: string; // Optional
+  clienteId?: string;
   clienteName: string;
-  asesorId?: string; // Optional
+  asesorId?: string;
   asesorName: string;
   titulo: string;
   pedido: string;
+  fechaResolucion?: string;
   facturas?: CanjeFactura[];
   valorAsociado: number;
   valorCanje: number;
@@ -182,9 +186,12 @@ export type Canje = {
   tipo: CanjeTipo;
   observaciones?: string;
   fechaCreacion: string;
-  fechaAprobacion?: string;
-  aprobadoPorId?: string;
-  aprobadoPorName?: string;
+  
+  estadoFinal?: CanjeEstadoFinal;
+  comentarioFinal?: string;
+  fechaCulminacion?: string;
+  culminadoPorId?: string;
+  culminadoPorName?: string;
 };
 
 

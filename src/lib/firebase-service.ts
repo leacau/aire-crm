@@ -21,27 +21,32 @@ export const getCanjes = async (): Promise<Canje[]> => {
     const snapshot = await getDocs(query(canjesCollection, orderBy("fechaCreacion", "desc")));
     return snapshot.docs.map(doc => {
       const data = doc.data();
-      const fechaCreacion = data.fechaCreacion instanceof Timestamp 
-          ? data.fechaCreacion.toDate().toISOString() 
-          : data.fechaCreacion;
-      const fechaAprobacion = data.fechaAprobacion instanceof Timestamp
-          ? data.fechaAprobacion.toDate().toISOString()
-          : data.fechaAprobacion;
-
+      const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+      
       return { 
           id: doc.id,
           ...data,
-          fechaCreacion,
-          fechaAprobacion,
+          fechaCreacion: convertTimestamp(data.fechaCreacion),
+          fechaResolucion: convertTimestamp(data.fechaResolucion),
+          fechaCulminacion: convertTimestamp(data.fechaCulminacion),
       } as Canje
     });
 };
 
 export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>, userId: string, userName: string): Promise<string> => {
-    const dataToSave = {
+    const dataToSave: { [key: string]: any } = {
         ...canjeData,
         fechaCreacion: serverTimestamp(),
+        creadoPorId: userId,
+        creadoPorName: userName,
     };
+
+    Object.keys(dataToSave).forEach(key => {
+        if (dataToSave[key] === undefined) {
+            delete dataToSave[key];
+        }
+    });
+
     const docRef = await addDoc(canjesCollection, dataToSave);
     
     await logActivity({
@@ -50,9 +55,9 @@ export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>
         type: 'create',
         entityType: 'canje',
         entityId: docRef.id,
-        entityName: `Canje para ${canjeData.clienteName}`,
-        details: `creó un canje para el cliente <strong>${canjeData.clienteName}</strong>`,
-        ownerName: canjeData.asesorName,
+        entityName: canjeData.titulo,
+        details: `creó un pedido de canje: <strong>${canjeData.titulo}</strong>`,
+        ownerName: canjeData.asesorName || userName,
     });
 
     return docRef.id;
@@ -62,9 +67,7 @@ export const updateCanje = async (
     id: string, 
     data: Partial<Omit<Canje, 'id'>>, 
     userId: string, 
-    userName: string, 
-    accessToken: string | null, 
-    managerEmails: string[] = []
+    userName: string
 ): Promise<void> => {
     const docRef = doc(db, 'canjes', id);
     const originalDoc = await getDoc(docRef);
@@ -74,55 +77,25 @@ export const updateCanje = async (
     
     const updateData: { [key: string]: any } = { ...data };
     
-    // Clean up undefined fields before sending to Firestore
     Object.keys(updateData).forEach(key => {
         if (updateData[key] === undefined) {
-            delete updateData[key];
+            updateData[key] = deleteField();
         }
     });
 
     if (data.estado === 'Aprobado' && originalData.estado !== 'Aprobado') {
-        updateData.fechaAprobacion = serverTimestamp();
-        updateData.aprobadoPorId = userId;
-        updateData.aprobadoPorName = userName;
+        updateData.culminadoPorId = userId;
+        updateData.culminadoPorName = userName;
     }
 
     await updateDoc(docRef, updateData);
 
-    let details = `actualizó el canje para <strong>${originalData.clienteName}</strong>`;
+    let details = `actualizó el canje <strong>${originalData.titulo}</strong>`;
     if (data.estado && data.estado !== originalData.estado) {
-        details = `cambió el estado del canje para <strong>${originalData.clienteName}</strong> a <strong>${data.estado}</strong>`;
-        
-        if (data.estado === 'Completo' && accessToken && managerEmails.length > 0) {
-            const subject = `${originalData.asesorName} ha completado el canje con ${originalData.clienteName}`;
-            const body = `
-                <p>Se ha completado el canje de:</p>
-                <p><em>${data.pedido || originalData.pedido}</em></p>
-                <p>Por un valor de <strong>$${(data.valorCanje || originalData.valorCanje).toLocaleString('es-AR')}</strong>.</p>
-                <p>Se requiere la aprobacion del canje.</p>
-                <p><a href="https://aire-crm.vercel.app/canjes?id=${id}">Ver canje en el CRM</a></p>
-                <br/>
-                <p>Gracias</p>
-            `;
-            for (const email of managerEmails) {
-                 await sendEmail({ accessToken, to: email, subject, body });
-            }
-        }
-        
-        if (data.estado === 'Aprobado' && accessToken) {
-             const advisor = await getUserProfile(originalData.asesorId);
-             if (advisor && advisor.email) {
-                 const subject = `El canje con ${originalData.clienteName} ha sido aprobado`;
-                 const body = `
-                    <p>Hola ${advisor.name},</p>
-                    <p>El canje que solicitaste para el cliente <strong>${originalData.clienteName}</strong> ha sido aprobado.</p>
-                    <p>Pedido: <em>${data.pedido || originalData.pedido}</em></p>
-                    <p>Valor Aprobado: <strong>$${(data.valorCanje || originalData.valorCanje).toLocaleString('es-AR')}</strong></p>
-                    <p><a href="https://aire-crm.vercel.app/canjes?id=${id}">Ver canje en el CRM</a></p>
-                 `;
-                 await sendEmail({ accessToken, to: advisor.email, subject, body });
-             }
-        }
+        details = `cambió el estado del canje <strong>${originalData.titulo}</strong> a <strong>${data.estado}</strong>`;
+    }
+    if (data.clienteId && data.clienteId !== originalData.clienteId) {
+        details = `asignó el canje <strong>${originalData.titulo}</strong> al cliente <strong>${data.clienteName}</strong>`
     }
 
     await logActivity({
@@ -131,9 +104,29 @@ export const updateCanje = async (
         type: 'update',
         entityType: 'canje',
         entityId: id,
-        entityName: `Canje para ${originalData.clienteName}`,
+        entityName: originalData.titulo,
         details: details,
-        ownerName: originalData.asesorName,
+        ownerName: data.asesorName || originalData.asesorName,
+    });
+};
+
+export const deleteCanje = async (id: string, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'canjes', id);
+    const canjeSnap = await getDoc(docRef);
+    if (!canjeSnap.exists()) throw new Error("Canje not found");
+    const canjeData = canjeSnap.data() as Canje;
+
+    await deleteDoc(docRef);
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'canje',
+        entityId: id,
+        entityName: canjeData.titulo,
+        details: `eliminó el canje <strong>${canjeData.titulo}</strong>`,
+        ownerName: canjeData.asesorName || userName,
     });
 };
 
