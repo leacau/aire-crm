@@ -71,6 +71,7 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [formData, setFormData] = useState<Partial<EventFormData>>({});
+  const [isReadOnly, setIsReadOnly] = useState(false);
 
   const [date, setDate] = useState(new Date());
   const [view, setView] = useState<View>(Views.MONTH);
@@ -126,15 +127,16 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
     if(selectedUserId !== userInfo?.id) return;
     
     setSelectedEvent(null);
+    setIsReadOnly(false);
     setFormData({ start, end, title: '', description: '' });
     setIsDialogOpen(true);
   }, [selectedUserId, userInfo?.id]);
 
   const handleSelectEvent = useCallback((event: CalendarEvent) => {
-    // Disable editing events on other people's calendars
-    if(selectedUserId !== userInfo?.id) return;
-
+    const readOnly = selectedUserId !== userInfo?.id;
+    
     setSelectedEvent(event);
+    setIsReadOnly(readOnly);
     setFormData({
       start: event.start,
       end: event.end,
@@ -259,9 +261,12 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{selectedEvent ? 'Editar Evento' : 'Crear Nuevo Evento'}</DialogTitle>
+            <DialogTitle>{selectedEvent ? (isReadOnly ? 'Detalles del Evento' : 'Editar Evento') : 'Crear Nuevo Evento'}</DialogTitle>
             <DialogDescription>
-              {selectedEvent ? 'Edita los detalles de tu evento.' : 'Completa los detalles para crear un nuevo evento en tu Google Calendar.'}
+              {selectedEvent 
+                ? (isReadOnly ? 'Viendo los detalles de un evento del calendario.' : 'Edita los detalles de tu evento.') 
+                : 'Completa los detalles para crear un nuevo evento en tu Google Calendar.'
+              }
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -271,6 +276,7 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
                     id="title"
                     value={formData.title || ''}
                     onChange={(e) => setFormData(p => ({...p, title: e.target.value}))}
+                    readOnly={isReadOnly}
                 />
             </div>
              <div className="space-y-2">
@@ -279,6 +285,7 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
                     id="description"
                     value={formData.description || ''}
                     onChange={(e) => setFormData(p => ({...p, description: e.target.value}))}
+                    readOnly={isReadOnly}
                 />
             </div>
              <div className="grid grid-cols-2 gap-4">
@@ -289,6 +296,7 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
                         type="datetime-local"
                         value={formData.start && !isNaN(new Date(formData.start).valueOf()) ? format(new Date(formData.start), "yyyy-MM-dd'T'HH:mm") : ''}
                         onChange={(e) => setFormData(p => ({...p, start: new Date(e.target.value)}))}
+                        readOnly={isReadOnly}
                     />
                 </div>
                 <div className="space-y-2">
@@ -298,17 +306,18 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
                         type="datetime-local"
                         value={formData.end && !isNaN(new Date(formData.end).valueOf()) ? format(new Date(formData.end), "yyyy-MM-dd'T'HH:mm") : ''}
                         onChange={(e) => setFormData(p => ({...p, end: new Date(e.target.value)}))}
+                        readOnly={isReadOnly}
                     />
                 </div>
              </div>
           </div>
           <DialogFooter className="sm:justify-between">
-            {selectedEvent ? (
+            {selectedEvent && !isReadOnly ? (
                 <Button variant="destructive" onClick={handleDeleteEvent}>Eliminar</Button>
             ) : <div />}
             <div className='flex gap-2'>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={handleSaveEvent}>Guardar</Button>
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cerrar</Button>
+              {!isReadOnly && <Button onClick={handleSaveEvent}>Guardar</Button>}
             </div>
           </DialogFooter>
         </DialogContent>
