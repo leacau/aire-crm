@@ -679,8 +679,7 @@ export function OpportunityDetailsDialog({
                                     value={invoice.status} 
                                     onValueChange={(value) => {
                                         handleInvoiceChange(invoice.id, 'status', value as InvoiceStatus);
-                                        // Use a timeout to allow state to update before saving
-                                        setTimeout(() => handleInvoiceUpdate(invoice.id), 0);
+                                        handleInvoiceUpdate(invoice.id);
                                     }}
                                 >
                                     <SelectTrigger>
