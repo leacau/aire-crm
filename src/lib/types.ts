@@ -1,6 +1,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -235,4 +236,34 @@ export type User = {
 // It includes client fields and the ownerName for assignment.
 export type ClientImportMapping = Partial<Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>> & {
   ownerName?: string;
+};
+
+
+// --- Grilla Comercial Types ---
+
+export type Program = {
+  id: string;
+  name: string;
+  startTime: string; // "HH:MM"
+  endTime: string;   // "HH:MM"
+  daysOfWeek: number[]; // 0=Sunday, 1=Monday, ..., 6=Saturday
+  color: string; // e.g., 'bg-blue-200'
+};
+
+export const commercialItemTypes = ['Bloque temático', 'Auspicio', 'Nota', 'PNT', 'Pauta'] as const;
+export type CommercialItemType = typeof commercialItemTypes[number];
+
+export const commercialItemStatus = ['Disponible', 'Vendido', 'Reservado'] as const;
+export type CommercialItemStatus = typeof commercialItemStatus[number];
+
+export type CommercialItem = {
+  id: string;
+  programId: string;
+  date: string; // YYYY-MM-DD
+  type: CommercialItemType;
+  description: string;
+  status: CommercialItemStatus;
+  clientId?: string;
+  clientName?: string;
+  opportunityId?: string;
 };

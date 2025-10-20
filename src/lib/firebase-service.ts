@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado, HistorialMensualItem } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado, HistorialMensualItem, Program, CommercialItem } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 
@@ -15,6 +15,32 @@ const clientActivitiesCollection = collection(db, 'client-activities');
 const agenciesCollection = collection(db, 'agencies');
 const invoicesCollection = collection(db, 'invoices');
 const canjesCollection = collection(db, 'canjes');
+const programsCollection = collection(db, 'programs');
+const commercialItemsCollection = collection(db, 'commercial_items');
+
+// --- Grilla Comercial Functions ---
+
+export const getPrograms = async (): Promise<Program[]> => {
+    const snapshot = await getDocs(query(programsCollection, orderBy("startTime")));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Program));
+};
+
+export const saveProgram = async (programData: Omit<Program, 'id'>, userId: string): Promise<string> => {
+    const docRef = await addDoc(programsCollection, { ...programData, createdBy: userId });
+    return docRef.id;
+};
+
+export const getCommercialItems = async (date: string): Promise<CommercialItem[]> => {
+    const q = query(commercialItemsCollection, where("date", "==", date));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CommercialItem));
+};
+
+export const saveCommercialItem = async (itemData: Omit<CommercialItem, 'id'>, userId: string): Promise<string> => {
+    const docRef = await addDoc(commercialItemsCollection, { ...itemData, createdBy: userId });
+    return docRef.id;
+};
+
 
 // --- Canje Functions ---
 export const getCanjes = async (): Promise<Canje[]> => {
@@ -57,7 +83,11 @@ export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>
         }
     });
     
-    delete dataToSave.historialMensual;
+    // Do not save this on creation, it's for monthly management
+    if (dataToSave.historialMensual) {
+      delete dataToSave.historialMensual;
+    }
+
 
     const docRef = await addDoc(canjesCollection, dataToSave);
     
@@ -101,7 +131,7 @@ export const updateCanje = async (
         updateData.culminadoPorName = userName;
     }
     
-    // Handle 'Mensual' history items
+    // Handle 'Mensual' history items (convert dates back to strings for Firestore)
     if (data.historialMensual) {
         updateData.historialMensual = data.historialMensual.map(h => {
             const historyItem: Partial<HistorialMensualItem> = { ...h };
@@ -728,6 +758,14 @@ export const getAllOpportunities = async (): Promise<Opportunity[]> => {
         // @ts-ignore
         opp.updatedAt = data.updatedAt.toDate().toISOString();
       }
+       if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
+          // If it's a string, ensure it's in the right format for consistency.
+          // This handles old and new data.
+          opp.closeDate = new Date(data.closeDate).toISOString().split('T')[0];
+      } else if (data.closeDate instanceof Timestamp) {
+          opp.closeDate = data.closeDate.toDate().toISOString().split('T')[0];
+      }
+
       return opp;
     });
 };
