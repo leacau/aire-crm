@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado, HistorialMensualItem } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 
@@ -35,6 +35,7 @@ export const getCanjes = async (): Promise<Canje[]> => {
         canje.historialMensual = canje.historialMensual.map(h => ({
           ...h,
           fechaEstado: convertTimestamp(h.fechaEstado),
+          fechaCulminacion: convertTimestamp(h.fechaCulminacion),
         })).sort((a,b) => b.mes.localeCompare(a.mes));
       }
 
@@ -56,7 +57,6 @@ export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>
         }
     });
     
-    // Ensure history is not saved on creation
     delete dataToSave.historialMensual;
 
     const docRef = await addDoc(canjesCollection, dataToSave);
@@ -95,16 +95,24 @@ export const updateCanje = async (
         }
     });
 
-    if (data.estado === 'Aprobado' && originalData.estado !== 'Aprobado') {
+    // Handle canje 'Una vez' approval
+    if (data.tipo === 'Una vez' && data.estado === 'Aprobado' && originalData.estado !== 'Aprobado') {
         updateData.culminadoPorId = userId;
         updateData.culminadoPorName = userName;
     }
     
+    // Handle 'Mensual' history items
     if (data.historialMensual) {
-        updateData.historialMensual = data.historialMensual.map(h => ({
-            ...h,
-            fechaEstado: new Date(h.fechaEstado), // Convert back to Date for Firestore
-        }));
+        updateData.historialMensual = data.historialMensual.map(h => {
+            const historyItem: Partial<HistorialMensualItem> = { ...h };
+            if (historyItem.fechaEstado) {
+                historyItem.fechaEstado = new Date(historyItem.fechaEstado).toISOString();
+            }
+            if (historyItem.fechaCulminacion) {
+                historyItem.fechaCulminacion = new Date(historyItem.fechaCulminacion).toISOString();
+            }
+            return historyItem;
+        });
     }
 
     await updateDoc(docRef, updateData);

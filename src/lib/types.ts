@@ -1,5 +1,6 @@
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -159,8 +160,8 @@ export type ClientActivity = {
 export type CanjeEstado = 'Pedido' | 'En gestión' | 'Culminado' | 'Aprobado';
 export const canjeEstados: CanjeEstado[] = ['Pedido', 'En gestión', 'Culminado', 'Aprobado'];
 
-export type CanjeTipo = 'Temporario' | 'Mensual';
-export const canjeTipos: CanjeTipo[] = ['Temporario', 'Mensual'];
+export type CanjeTipo = 'Una vez' | 'Mensual';
+export const canjeTipos: CanjeTipo[] = ['Una vez', 'Mensual'];
 
 export const canjeEstadoFinalOptions = ['Total', 'Parcial'] as const;
 export type CanjeEstadoFinal = typeof canjeEstadoFinalOptions[number];
@@ -180,7 +181,17 @@ export type HistorialMensualItem = {
     responsableId?: string;
     responsableName?: string;
     comentario?: string;
+
+    // Campos de negociación y aprobación para este mes
+    valorCanje?: number;
+    observaciones?: string;
+    estadoFinal?: CanjeEstadoFinal;
+    comentarioFinal?: string;
+    fechaCulminacion?: string;
+    culminadoPorId?: string;
+    culminadoPorName?: string;
 };
+
 
 export type Canje = {
   id: string;
