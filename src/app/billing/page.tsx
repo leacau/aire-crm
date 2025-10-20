@@ -230,11 +230,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         if (opp.stage !== 'Cerrado - Ganado') return false;
         if (!dateRange?.from || !dateRange?.to) return true;
         
-        // Use closeDate or updatedAt to determine if it was won in the period
-        const closeDate = opp.closeDate ? parseISO(opp.closeDate) : null;
-        const updatedAt = (opp as any).updatedAt ? new Date((opp as any).updatedAt.seconds * 1000) : null;
-        
-        const winDate = closeDate || updatedAt;
+        const winDate = opp.closeDate ? parseISO(opp.closeDate) : null;
         if (!winDate) return false;
 
         return isWithinInterval(winDate, { start: dateRange.from, end: dateRange.to });
@@ -256,15 +252,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         const oppInvoices = invoicesByOppId[opp.id] || [];
         
         if (oppInvoices.length === 0) {
-            // Rule 1: A Facturar
             toInvoiceOpps.push(opp);
         } else {
             const hasPaidInvoice = oppInvoices.some(inv => inv.status === 'Pagada');
             if (hasPaidInvoice) {
-                // Rule 3: Pagado
                 paidInvoices.push(...oppInvoices.filter(inv => inv.status === 'Pagada'));
             } else {
-                // Rule 2: A Cobrar
                 toCollectInvoices.push(...oppInvoices);
             }
         }

@@ -22,6 +22,7 @@ import {
   CalendarCheck,
   CalendarClock,
   CheckCircle,
+  Lightbulb,
 } from 'lucide-react';
 import type { Opportunity, Client, ActivityLog, ClientActivity, User, Invoice } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
@@ -38,7 +39,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -159,12 +160,19 @@ export default function DashboardPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [notified, setNotified] = useState(false);
   const [selectedTaskStatus, setSelectedTaskStatus] = useState<TaskStatus | null>(null);
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
   const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
   const tasksSectionRef = useRef<HTMLDivElement>(null);
+
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const today = new Date();
+    return {
+      from: startOfMonth(today),
+      to: endOfMonth(today),
+    };
+  });
 
 
   useEffect(() => {
@@ -210,16 +218,14 @@ export default function DashboardPage() {
     userClients, 
     userActivities, 
     userTasks,
-    userInvoices
   } = useMemo(() => {
-    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [], userInvoices: [] };
+    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [] };
     
     if (isBoss) {
       if (selectedAdvisor === 'all') {
-        return { userOpportunities: opportunities, userClients: clients, userActivities: activities, userTasks: tasks.filter(t => t.isTask), userInvoices: invoices };
+        return { userOpportunities: opportunities, userClients: clients, userActivities: activities, userTasks: tasks.filter(t => t.isTask) };
       }
       const oppsForAdvisor = opportunities.filter(opp => advisorClientIds?.has(opp.clientId));
-      const oppIdsForAdvisor = new Set(oppsForAdvisor.map(o => o.id));
       return {
         userOpportunities: oppsForAdvisor,
         userClients: clients.filter(c => c.ownerId === selectedAdvisor),
@@ -228,14 +234,12 @@ export default function DashboardPage() {
             return client?.ownerId === selectedAdvisor;
         }),
         userTasks: tasks.filter(t => t.isTask && advisorClientIds?.has(t.clientId)),
-        userInvoices: invoices.filter(inv => oppIdsForAdvisor.has(inv.opportunityId))
       }
     }
 
     // For non-boss users
     const ownClientIds = new Set(clients.filter(client => client.ownerId === userInfo.id).map(c => c.id));
     const oppsForUser = opportunities.filter(opp => ownClientIds.has(opp.clientId));
-    const oppIdsForUser = new Set(oppsForUser.map(o => o.id));
     return {
         userOpportunities: oppsForUser,
         userClients: clients.filter(client => client.ownerId === userInfo.id),
@@ -244,10 +248,9 @@ export default function DashboardPage() {
             return client && client.ownerId === userInfo.id;
         }),
         userTasks: tasks.filter(t => t.isTask && ownClientIds.has(t.clientId)),
-        userInvoices: invoices.filter(inv => oppIdsForUser.has(inv.opportunityId))
     }
 
-  }, [userInfo, isBoss, opportunities, clients, activities, tasks, invoices, selectedAdvisor, advisorClientIds]);
+  }, [userInfo, isBoss, opportunities, clients, activities, tasks, selectedAdvisor, advisorClientIds]);
 
 
   const today = startOfToday();
@@ -372,8 +375,8 @@ export default function DashboardPage() {
 
   const filteredOpportunities = userOpportunities.filter(opp => {
     if (!dateRange?.from || !dateRange?.to) return true;
-    const closeDate = new Date(opp.closeDate);
-    return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
+    const oppDate = opp.closeDate ? parseISO(opp.closeDate) : new Date(); // Use today if no close date
+    return isWithinInterval(oppDate, { start: dateRange.from, end: dateRange.to });
   });
   
   const filteredActivities = userActivities.filter(activity => {
@@ -383,27 +386,21 @@ export default function DashboardPage() {
   }).slice(0, 10);
 
 
-  const invoicesInCurrentMonth = userInvoices.filter(inv => {
-    const generationDate = new Date(inv.dateGenerated);
-    const today = new Date();
-    return generationDate.getMonth() === today.getMonth() && generationDate.getFullYear() === today.getFullYear();
-  });
+  const wonOppsInPeriod = filteredOpportunities.filter(opp => opp.stage === 'Cerrado - Ganado');
+  const wonOppsValue = wonOppsInPeriod.reduce((acc, opp) => acc + opp.value, 0);
+  const wonOppIds = new Set(wonOppsInPeriod.map(opp => opp.id));
+  const invoicesForWonOpps = invoices.filter(inv => wonOppIds.has(inv.opportunityId));
+  const totalPaidInPeriod = invoicesForWonOpps.filter(inv => inv.status === 'Pagada').reduce((acc, inv) => acc + inv.amount, 0);
+  const totalToCollectInPeriod = invoicesForWonOpps.filter(inv => inv.status !== 'Pagada').reduce((acc, inv) => acc + inv.amount, 0);
 
-  const totalPaidInCurrentMonth = invoicesInCurrentMonth.filter(i => i.status === 'Pagada').reduce((acc, i) => acc + i.amount, 0);
-  const totalToCollectInCurrentMonth = invoicesInCurrentMonth.filter(i => i.status !== 'Pagada').reduce((acc, i) => acc + i.amount, 0);
-  const totalRevenueCurrentMonth = totalPaidInCurrentMonth + totalToCollectInCurrentMonth;
-  
-
-  const activeOpportunities = filteredOpportunities.filter(
-    (o) => ['Propuesta', 'Negociación', 'Negociación a Aprobar', 'Cerrado - Ganado'].includes(o.stage)
-  );
-  
-  const opportunityIdsWithInvoices = new Set(userInvoices.map(inv => inv.opportunityId));
-  const forecastedRevenue = activeOpportunities
-    .filter(o => !opportunityIdsWithInvoices.has(o.id))
+  const prospectingValue = filteredOpportunities
+    .filter(o => o.stage === 'Nuevo')
+    .reduce((acc, o) => acc + o.value, 0);
+    
+  const forecastedValue = filteredOpportunities
+    .filter(o => ['Propuesta', 'Negociación', 'Negociación a Aprobar'].includes(o.stage))
     .reduce((acc, o) => acc + o.value, 0);
 
-  
   const totalClients = userClients.length;
 
   return (
@@ -438,17 +435,35 @@ export default function DashboardPage() {
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Facturación del Mes
+                  Facturación del Período
                 </CardTitle>
                 <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${totalRevenueCurrentMonth.toLocaleString('es-AR')}
+                  ${wonOppsValue.toLocaleString('es-AR')}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Pagado: ${totalPaidInCurrentMonth.toLocaleString('es-AR')} / 
-                  A cobrar: ${totalToCollectInCurrentMonth.toLocaleString('es-AR')}
+                  Pagado: ${totalPaidInPeriod.toLocaleString('es-AR')} / 
+                  A cobrar: ${totalToCollectInPeriod.toLocaleString('es-AR')}
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+           <Link href="/opportunities">
+            <Card className="hover:bg-muted/50 transition-colors">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Ingresos Previstos
+                </CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  ${forecastedValue.toLocaleString('es-AR')}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Propuesta, Negociación y Aprobación.
                 </p>
               </CardContent>
             </Card>
@@ -457,15 +472,15 @@ export default function DashboardPage() {
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Oportunidades Activas
+                  En Prospección
                 </CardTitle>
-                <Activity className="h-4 w-4 text-muted-foreground" />
+                <Lightbulb className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {filteredOpportunities.filter(o => o.stage !== 'Cerrado - Ganado' && o.stage !== 'Cerrado - Perdido').length}
+                  ${prospectingValue.toLocaleString('es-AR')}
                 </div>
-                <p className="text-xs text-muted-foreground">Oportunidades en curso en el período.</p>
+                <p className="text-xs text-muted-foreground">Oportunidades en etapa "Nuevo".</p>
               </CardContent>
             </Card>
           </Link>
@@ -477,28 +492,10 @@ export default function DashboardPage() {
             <CardContent>
               <div className="text-2xl font-bold">{totalClients}</div>
               <p className="text-xs text-muted-foreground">
-                Total de clientes registrados.
+                Total de clientes en cartera.
               </p>
             </CardContent>
           </Card>
-           <Link href="/opportunities">
-            <Card className="hover:bg-muted/50 transition-colors">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Ingresos Previstos
-                </CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  ${forecastedRevenue.toLocaleString('es-AR')}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Pipeline activo sin facturar.
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
         </div>
 
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-1 gap-6" ref={tasksSectionRef}>

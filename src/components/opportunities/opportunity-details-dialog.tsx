@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -157,13 +158,7 @@ export function OpportunityDetailsDialog({
   const getInitialData = () => {
       if (opportunity) {
         const data = { ...opportunity };
-        if (!data.pautados && (data.fechaInicioPauta || data.fechaFinPauta)) {
-          data.pautados = [{
-            id: 'legacy-pautado-0',
-            fechaInicio: data.fechaInicioPauta || '',
-            fechaFin: data.fechaFinPauta || ''
-          }];
-        } else if (!data.pautados) {
+        if (!data.pautados) {
             data.pautados = [];
         }
         return data;
@@ -176,22 +171,7 @@ export function OpportunityDetailsDialog({
   const fetchInvoices = useCallback(async () => {
     if (opportunity) {
         const fetchedInvoices = await getInvoicesForOpportunity(opportunity.id);
-        const legacyInvoices: Invoice[] = [];
-        if (opportunity.facturaNo || opportunity.valorCerrado) {
-            const legacyInvoice: Invoice = {
-                id: 'legacy-0', // Dummy ID
-                opportunityId: opportunity.id,
-                invoiceNumber: opportunity.facturaNo || 'N/A',
-                amount: opportunity.valorCerrado || 0,
-                date: new Date().toISOString().split('T')[0],
-                status: 'Generada', // Legacy invoices default to Generada
-                dateGenerated: new Date().toISOString(),
-            };
-            if (!fetchedInvoices.some(inv => inv.invoiceNumber === legacyInvoice.invoiceNumber && inv.amount === legacyInvoice.amount)) {
-                legacyInvoices.push(legacyInvoice);
-            }
-        }
-        setInvoices([...legacyInvoices, ...fetchedInvoices]);
+        setInvoices(fetchedInvoices);
     }
   }, [opportunity]);
 
@@ -265,7 +245,7 @@ export function OpportunityDetailsDialog({
     const { name, value } = e.target;
     let finalValue: string | number | undefined = value;
 
-    if (name === 'value' || name === 'valorCerrado') {
+    if (name === 'value') {
         finalValue = value === '' ? 0 : Number(value);
     }
     
@@ -325,9 +305,7 @@ export function OpportunityDetailsDialog({
   const handleAddInvoice = async () => {
     if (!opportunity || !userInfo) return;
     
-    const tempId = `new-invoice-${Date.now()}`;
-    const newInvoiceData: Invoice = {
-        id: tempId,
+    const newInvoiceData: Omit<Invoice, 'id'> = {
         opportunityId: opportunity.id,
         invoiceNumber: '',
         amount: 0,
@@ -335,28 +313,21 @@ export function OpportunityDetailsDialog({
         status: 'Generada' as const,
         dateGenerated: new Date().toISOString(),
     };
-    
-    setInvoices(prev => [...prev, newInvoiceData]);
 
     try {
-        const { id: _, ...dataToSave } = newInvoiceData;
-        const newInvoiceId = await createInvoice(dataToSave, userInfo.id, userInfo.name, opportunity.clientName);
-        
-        // Update the temporary ID with the real ID from Firestore
-        setInvoices(prev => prev.map(inv => inv.id === tempId ? { ...inv, id: newInvoiceId } : inv));
-
+        const newInvoiceId = await createInvoice(newInvoiceData, userInfo.id, userInfo.name, opportunity.clientName);
+        const newInvoiceWithId: Invoice = { ...newInvoiceData, id: newInvoiceId };
+        setInvoices(prev => [...prev, newInvoiceWithId]);
         toast({ title: "Factura añadida" });
     } catch (e) {
         console.error("Error adding invoice", e);
-        // Remove the temporary invoice on failure
-        setInvoices(prev => prev.filter(inv => inv.id !== tempId));
         toast({ title: "Error al añadir factura", variant: "destructive" });
     }
   };
 
 
   const handleInvoiceChange = (invoiceId: string, field: keyof Invoice, value: any) => {
-    setInvoices(prevInvoices => 
+     setInvoices(prevInvoices => 
         prevInvoices.map(inv => (inv.id === invoiceId ? { ...inv, [field]: value } : inv))
     );
   };
@@ -365,13 +336,8 @@ export function OpportunityDetailsDialog({
     if (!userInfo || !opportunity) return;
     const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
 
-    if (invoiceToUpdate?.id.startsWith('legacy')) {
-        toast({title: "Factura Antigua", description: "Las facturas antiguas no se pueden modificar."});
-        return;
-    }
     if (invoiceToUpdate) {
-        const updateData: Partial<Invoice> = { ...invoiceToUpdate };
-        delete updateData.id; // Don't send id in update payload
+        const {id, ...updateData} = invoiceToUpdate;
 
         updateInvoice(invoiceId, updateData, userInfo.id, userInfo.name, opportunity.clientName)
             .then(() => {
@@ -387,10 +353,6 @@ export function OpportunityDetailsDialog({
 
   const handleInvoiceDelete = async (invoiceId: string) => {
     if (!userInfo || !opportunity) return;
-    if (invoiceId.startsWith('legacy')) {
-        toast({title: "Factura Antigua", description: "Estas facturas no se pueden eliminar."});
-        return;
-    }
     try {
         await deleteInvoice(invoiceId, userInfo.id, userInfo.name, opportunity.clientName);
         setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
@@ -716,17 +678,9 @@ export function OpportunityDetailsDialog({
                                 <Select 
                                     value={invoice.status} 
                                     onValueChange={(value) => {
-                                        const invoiceId = invoice.id;
-                                        // We need to use a functional update for the state AND call the update function
-                                        // with the correct value directly, because state updates might be batched.
-                                        handleInvoiceChange(invoiceId, 'status', value as InvoiceStatus);
-                                        // Use a timeout to ensure state has likely updated for the update function call
-                                        // or pass the value directly. Better to pass directly.
-                                        const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
-                                        if (invoiceToUpdate) {
-                                            const updatedInvoice = { ...invoiceToUpdate, status: value as InvoiceStatus };
-                                            handleInvoiceUpdate(updatedInvoice.id);
-                                        }
+                                        handleInvoiceChange(invoice.id, 'status', value as InvoiceStatus);
+                                        // Use a timeout to allow state to update before saving
+                                        setTimeout(() => handleInvoiceUpdate(invoice.id), 0);
                                     }}
                                 >
                                     <SelectTrigger>

@@ -29,7 +29,7 @@ export type Invoice = {
   opportunityId: string;
   invoiceNumber: string;
   amount: number;
-  date: string; // Added invoice date
+  date: string; 
   status: InvoiceStatus;
   dateGenerated: string;
   datePaid?: string;
@@ -61,12 +61,6 @@ export type Opportunity = {
   details?: string;
   observaciones?: string;
   
-  // Deprecated fields, kept for legacy data handling
-  facturaNo?: string;
-  valorCerrado?: number;
-  fechaInicioPauta?: string;
-  fechaFinPauta?: string;
-
   bonificacionDetalle?: string;
   bonificacionEstado?: BonificacionEstado;
   bonificacionAutorizadoPorId?: string;

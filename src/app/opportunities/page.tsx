@@ -10,13 +10,21 @@ import React, { useState, useEffect } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getAllUsers } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
+import { startOfMonth, endOfMonth } from 'date-fns';
 
 
 export default function OpportunitiesPage() {
   const { isBoss } = useAuth();
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
+  
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const today = new Date();
+    return {
+      from: startOfMonth(today),
+      to: endOfMonth(today),
+    };
+  });
 
   useEffect(() => {
     if(isBoss) {

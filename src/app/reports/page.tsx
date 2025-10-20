@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, Suspense, useEffect } from 'react';
@@ -15,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getAllUsers } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
 import { ActiveClientsReport } from '@/components/reports/active-clients-report';
+import { startOfMonth, endOfMonth } from 'date-fns';
 
 
 const OpportunitiesByStageChart = dynamic(() => import('@/components/reports/opportunities-by-stage-chart').then(mod => mod.OpportunitiesByStageChart), {
@@ -26,9 +26,16 @@ const OpportunitiesByStageChart = dynamic(() => import('@/components/reports/opp
 export default function ReportsPage() {
   const { userInfo, loading, isBoss } = useAuth();
   const router = useRouter();
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
+
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const today = new Date();
+    return {
+      from: startOfMonth(today),
+      to: endOfMonth(today),
+    };
+  });
 
 
   useEffect(() => {
