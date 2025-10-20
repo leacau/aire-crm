@@ -26,9 +26,21 @@ export const getPrograms = async (): Promise<Program[]> => {
 };
 
 export const saveProgram = async (programData: Omit<Program, 'id'>, userId: string): Promise<string> => {
-    const docRef = await addDoc(programsCollection, { ...programData, createdBy: userId });
+    const docRef = await addDoc(programsCollection, { ...programData, createdBy: userId, createdAt: serverTimestamp() });
     return docRef.id;
 };
+
+export const updateProgram = async (programId: string, programData: Partial<Omit<Program, 'id'>>, userId: string): Promise<void> => {
+    const docRef = doc(db, 'programs', programId);
+    await updateDoc(docRef, { ...programData, updatedBy: userId, updatedAt: serverTimestamp() });
+};
+
+export const deleteProgram = async (programId: string, userId: string): Promise<void> => {
+    const docRef = doc(db, 'programs', programId);
+    await deleteDoc(docRef);
+    // Optionally log this activity
+};
+
 
 export const getCommercialItems = async (date: string): Promise<CommercialItem[]> => {
     const q = query(commercialItemsCollection, where("date", "==", date));

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -30,7 +30,7 @@ const days = [
     { id: 4, label: 'Jueves' },
     { id: 5, label: 'Viernes' },
     { id: 6, label: 'Sábado' },
-    { id: 0, label: 'Domingo' },
+    { id: 7, label: 'Domingo' },
 ];
 
 export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: ProgramFormDialogProps) {
@@ -39,7 +39,34 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
   const [endTime, setEndTime] = useState('');
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([]);
   const [color, setColor] = useState('bg-gray-100');
+  const [conductores, setConductores] = useState('');
+  const [productores, setProductores] = useState('');
   const { toast } = useToast();
+
+  const isEditing = !!program;
+
+  useEffect(() => {
+    if (isOpen) {
+      if (program) {
+        setName(program.name);
+        setStartTime(program.startTime);
+        setEndTime(program.endTime);
+        setDaysOfWeek(program.daysOfWeek);
+        setColor(program.color);
+        setConductores(program.conductores || '');
+        setProductores(program.productores || '');
+      } else {
+        // Reset form for new program
+        setName('');
+        setStartTime('');
+        setEndTime('');
+        setDaysOfWeek([]);
+        setColor('bg-gray-100');
+        setConductores('');
+        setProductores('');
+      }
+    }
+  }, [program, isOpen]);
 
   const handleDayChange = (dayId: number, checked: boolean | 'indeterminate') => {
     setDaysOfWeek(prev => 
@@ -49,10 +76,10 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
 
   const handleSave = () => {
     if (!name || !startTime || !endTime || daysOfWeek.length === 0) {
-      toast({ title: "Campos incompletos", variant: 'destructive' });
+      toast({ title: "Campos incompletos", description: "Nombre, horarios y al menos un día son requeridos.", variant: 'destructive' });
       return;
     }
-    onSave({ name, startTime, endTime, daysOfWeek, color });
+    onSave({ name, startTime, endTime, daysOfWeek, color, conductores, productores });
     onOpenChange(false);
   };
 
@@ -60,12 +87,12 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{program ? 'Editar Programa' : 'Nuevo Programa'}</DialogTitle>
+          <DialogTitle>{isEditing ? 'Editar Programa' : 'Nuevo Programa'}</DialogTitle>
           <DialogDescription>
-            Define un nuevo programa para la grilla comercial.
+            {isEditing ? 'Actualiza los detalles del programa.' : 'Define un nuevo programa para la grilla comercial.'}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
             <div className="space-y-2">
                 <Label htmlFor="program-name">Nombre del Programa</Label>
                 <Input id="program-name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -96,10 +123,18 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
                 </div>
              </div>
              <div className="space-y-2">
+                <Label htmlFor="conductores">Conductor(es)</Label>
+                <Input id="conductores" value={conductores} onChange={(e) => setConductores(e.target.value)} placeholder="Ej: Juan Perez, Maria Gomez" />
+            </div>
+             <div className="space-y-2">
+                <Label htmlFor="productores">Productor(es)</Label>
+                <Input id="productores" value={productores} onChange={(e) => setProductores(e.target.value)} placeholder="Ej: Ana Garcia" />
+            </div>
+             <div className="space-y-2">
                 <Label>Color de Identificación</Label>
                 {/* A simple color picker for now */}
                 <div className="flex gap-2">
-                   {['bg-blue-100', 'bg-red-100', 'bg-green-100', 'bg-yellow-100', 'bg-purple-100', 'bg-pink-100'].map(c => (
+                   {['bg-blue-100', 'bg-red-100', 'bg-green-100', 'bg-yellow-100', 'bg-purple-100', 'bg-pink-100', 'bg-gray-100'].map(c => (
                       <button key={c} onClick={() => setColor(c)} className={`h-8 w-8 rounded-full ${c} ${color === c ? 'ring-2 ring-primary' : ''}`}></button>
                    ))}
                 </div>

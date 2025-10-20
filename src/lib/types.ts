@@ -2,6 +2,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -246,8 +247,10 @@ export type Program = {
   name: string;
   startTime: string; // "HH:MM"
   endTime: string;   // "HH:MM"
-  daysOfWeek: number[]; // 0=Sunday, 1=Monday, ..., 6=Saturday
+  daysOfWeek: number[]; // 1=Monday, ..., 7=Sunday
   color: string; // e.g., 'bg-blue-200'
+  conductores?: string;
+  productores?: string;
 };
 
 export const commercialItemTypes = ['Bloque temático', 'Auspicio', 'Nota', 'PNT', 'Pauta'] as const;
