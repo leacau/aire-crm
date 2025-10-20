@@ -163,7 +163,6 @@ export function CanjeFormDialog({
     };
     const newHistory = [...(formData.historialMensual || []), newEntry].sort((a, b) => b.mes.localeCompare(a.mes));
     setFormData(prev => ({...prev, historialMensual: newHistory }));
-    handleSave(); // Save changes
   };
   
   const handleHistoryChange = (mes: string, field: keyof HistorialMensualItem, value: any) => {
@@ -185,7 +184,7 @@ export function CanjeFormDialog({
   };
 
   const isAssignedAdvisor = formData.asesorId === currentUser.id;
-  const canEditPedido = canManageAll && (!isEditing || formData.estado === 'Pedido');
+  const canEditPedido = canManageAll || !isEditing;
   const canEditAsignacion = canManageAll && !formData.clienteId;
   const canEditNegociacion = isAssignedAdvisor && ['En gestión', 'Pedido'].includes(formData.estado);
 
@@ -200,7 +199,7 @@ export function CanjeFormDialog({
         </DialogHeader>
         <div className="grid gap-6 py-4 max-h-[70vh] overflow-y-auto pr-4">
           
-          <fieldset disabled={!canEditPedido && isEditing} className="space-y-4 p-4 border rounded-md">
+          <fieldset disabled={!canEditPedido} className="space-y-4 p-4 border rounded-md">
             <legend className="font-semibold px-1 text-primary">1. Pedido de Canje</legend>
             <div className="space-y-2">
               <Label htmlFor="titulo">Título del Canje</Label>
