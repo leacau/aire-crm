@@ -120,8 +120,8 @@ export function CanjeFormDialog({
             ...prev,
             clienteId: undefined,
             clienteName: '',
-            asesorId: undefined,
-            asesorName: '',
+            asesorId: currentUser.id,
+            asesorName: currentUser.name,
         }));
     } else {
         setIsManualClient(false);
@@ -192,17 +192,26 @@ export function CanjeFormDialog({
               <Label htmlFor="pedido">Detalle del Pedido</Label>
               <Textarea id="pedido" name="pedido" value={formData.pedido || ''} onChange={handleChange} />
             </div>
-            <div className="space-y-2">
-              <Label>Fecha de Resolución Necesaria</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !formData.fechaResolucion && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.fechaResolucion ? format(new Date(formData.fechaResolucion), "PPP", { locale: es }) : <span>Selecciona una fecha</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={formData.fechaResolucion ? new Date(formData.fechaResolucion) : undefined} onSelect={(d) => handleDateChange('fechaResolucion', d)} initialFocus /></PopoverContent>
-              </Popover>
+             <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label>Fecha de Resolución Necesaria</Label>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                        <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !formData.fechaResolucion && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.fechaResolucion ? format(new Date(formData.fechaResolucion), "PPP", { locale: es }) : <span>Selecciona una fecha</span>}
+                        </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={formData.fechaResolucion ? new Date(formData.fechaResolucion) : undefined} onSelect={(d) => handleDateChange('fechaResolucion', d)} initialFocus /></PopoverContent>
+                    </Popover>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="tipo">Tipo de Canje</Label>
+                    <Select name="tipo" value={formData.tipo} onValueChange={(value: CanjeTipo) => handleSelectChange('tipo', value)}>
+                      <SelectTrigger id="tipo"><SelectValue /></SelectTrigger>
+                      <SelectContent>{canjeTipos.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+                    </Select>
+                </div>
             </div>
           </fieldset>
 
@@ -232,7 +241,7 @@ export function CanjeFormDialog({
             </div>
              <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="valorCanje">Valor Canje</Label>
+                <Label htmlFor="valorCanje">{formData.tipo === 'Mensual Permanente' ? 'Valor Canje Mensual' : 'Valor Canje'}</Label>
                 <Input id="valorCanje" name="valorCanje" type="number" value={formData.valorCanje} onChange={handleChange} />
               </div>
                <div className="space-y-2">
