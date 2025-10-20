@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -10,58 +10,105 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { CommercialItem } from '@/lib/types';
+import type { CommercialItem, Program, Client, Opportunity } from '@/lib/types';
 import { commercialItemTypes, commercialItemStatus } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { getClients } from '@/lib/firebase-service'; // Assuming you have this
-import type { Client } from '@/lib/types';
+import { getClients, getAllOpportunities } from '@/lib/firebase-service';
+import { Calendar } from '../ui/calendar';
+import type { DateRange } from 'react-day-picker';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 interface CommercialItemFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (item: Omit<CommercialItem, 'id' | 'date' | 'programId'>) => void;
+  onSave: (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[]) => void;
   item?: CommercialItem | null;
+  programs: Program[];
 }
 
-export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item }: CommercialItemFormDialogProps) {
+export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, programs }: CommercialItemFormDialogProps) {
+  const [programId, setProgramId] = useState<string | undefined>();
   const [type, setType] = useState<CommercialItem['type']>('Pauta');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<CommercialItem['status']>('Disponible');
   const [clientId, setClientId] = useState<string | undefined>();
+  const [opportunityId, setOpportunityId] = useState<string | undefined>();
+  
+  const [dates, setDates] = useState<Date[] | undefined>();
+
   const [clients, setClients] = useState<Client[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  
   const { toast } = useToast();
 
-  React.useEffect(() => {
-    // Fetch clients when dialog opens
+  useEffect(() => {
     if (isOpen) {
+      // Fetch clients and opportunities when dialog opens
       getClients().then(setClients).catch(err => console.error("Failed to fetch clients", err));
+      getAllOpportunities().then(setOpportunities).catch(err => console.error("Failed to fetch opportunities", err));
+      
+      // Reset form state
+      setProgramId(undefined);
+      setType('Pauta');
+      setDescription('');
+      setStatus('Disponible');
+      setClientId(undefined);
+      setOpportunityId(undefined);
+      setDates(undefined);
     }
   }, [isOpen]);
+  
+  const clientOpportunities = clientId ? opportunities.filter(opp => opp.clientId === clientId) : [];
+
 
   const handleSave = () => {
-    if (!description.trim()) {
-      toast({ title: 'La descripción es obligatoria', variant: 'destructive' });
+    if (!programId || !description.trim() || !dates || dates.length === 0) {
+      toast({ title: 'Campos obligatorios', description: 'Programa, descripción y al menos una fecha son requeridos.', variant: 'destructive' });
       return;
     }
     const clientName = clients.find(c => c.id === clientId)?.denominacion;
-    onSave({ type, description, status, clientId, clientName });
+    const opportunityTitle = opportunities.find(o => o.id === opportunityId)?.title;
+    onSave({ programId, type, description, status, clientId, clientName, opportunityId, opportunityTitle }, dates);
     onOpenChange(false);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{item ? 'Editar' : 'Nuevo'} Elemento Comercial</DialogTitle>
           <DialogDescription>
-            Añade un nuevo espacio comercial a la grilla.
+            Añade un nuevo espacio comercial a la grilla para uno o varios días.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
+          <div className="space-y-2">
+            <Label htmlFor="programId">Programa</Label>
+             <Select value={programId} onValueChange={setProgramId}>
+                <SelectTrigger id="programId"><SelectValue placeholder="Seleccionar programa..." /></SelectTrigger>
+                <SelectContent>
+                  {programs.sort((a,b) => a.name.localeCompare(b.name)).map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Fechas de Emisión</Label>
+             <Calendar
+                mode="multiple"
+                selected={dates}
+                onSelect={setDates}
+                locale={es}
+                className="rounded-md border"
+            />
+            <p className="text-sm text-muted-foreground">
+                {dates?.length ? `${dates.length} día(s) seleccionado(s).` : 'Selecciona una o más fechas.'}
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="item-type">Tipo</Label>
@@ -83,24 +130,35 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item }:
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="item-description">Descripción</Label>
+            <Label htmlFor="item-description">Descripción / Anunciante</Label>
             <Textarea id="item-description" value={description} onChange={e => setDescription(e.target.value)} />
           </div>
           {status !== 'Disponible' && (
-            <div className="space-y-2">
-              <Label htmlFor="item-client">Cliente</Label>
-              <Select value={clientId} onValueChange={setClientId}>
-                <SelectTrigger id="item-client"><SelectValue placeholder="Asignar cliente..." /></SelectTrigger>
-                <SelectContent>
-                  {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="item-client">Cliente</Label>
+                  <Select value={clientId} onValueChange={setClientId}>
+                    <SelectTrigger id="item-client"><SelectValue placeholder="Asignar cliente..." /></SelectTrigger>
+                    <SelectContent>
+                      {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                 <div className="space-y-2">
+                  <Label htmlFor="item-opportunity">Oportunidad</Label>
+                  <Select value={opportunityId} onValueChange={setOpportunityId} disabled={!clientId}>
+                    <SelectTrigger id="item-opportunity"><SelectValue placeholder="Asignar oportunidad..." /></SelectTrigger>
+                    <SelectContent>
+                      {clientOpportunities.map(o => <SelectItem key={o.id} value={o.id}>{o.title}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
             </div>
           )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Guardar</Button>
+          <Button onClick={handleSave}>Guardar Elemento(s)</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

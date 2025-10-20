@@ -9,10 +9,11 @@ import { Spinner } from '@/components/ui/spinner';
 import { GrillaSemanal } from '@/components/grilla/grilla-semanal';
 import { GrillaDiaria } from '@/components/grilla/grilla-diaria';
 import { ProgramFormDialog } from '@/components/grilla/program-form-dialog';
-import type { Program } from '@/lib/types';
-import { getPrograms, saveProgram, updateProgram, deleteProgram } from '@/lib/firebase-service';
+import type { Program, CommercialItem } from '@/lib/types';
+import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialItem } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { CommercialItemFormDialog } from '@/components/grilla/commercial-item-form-dialog';
 
 
 export default function GrillaPage() {
@@ -25,6 +26,7 @@ export default function GrillaPage() {
   const [loading, setLoading] = useState(true);
 
   const [isProgramFormOpen, setIsProgramFormOpen] = useState(false);
+  const [isItemFormOpen, setIsItemFormOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [programToDelete, setProgramToDelete] = useState<Program | null>(null);
 
@@ -93,6 +95,18 @@ export default function GrillaPage() {
         setProgramToDelete(null);
     }
   };
+  
+  const handleSaveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[]) => {
+      if (!userInfo) return;
+      try {
+        await saveCommercialItem(item, dates, userInfo.id);
+        toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
+        // Optionally refresh data if needed, for now the daily view will fetch it
+      } catch (error) {
+          console.error("Error saving commercial item(s):", error);
+          toast({ title: 'Error al guardar el elemento', variant: 'destructive' });
+      }
+  };
 
 
   if (authLoading || loading) {
@@ -113,10 +127,16 @@ export default function GrillaPage() {
             </Button>
           )}
           {canManage && (
-             <Button onClick={() => openProgramForm()}>
-                <PlusCircle className="mr-2 h-4 w-4"/>
-                Nuevo Programa
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => openProgramForm()}>
+                  <PlusCircle className="mr-2 h-4 w-4"/>
+                  Nuevo Programa
+              </Button>
+              <Button variant="secondary" onClick={() => setIsItemFormOpen(true)}>
+                  <PlusCircle className="mr-2 h-4 w-4"/>
+                  Nuevo Elemento Comercial
+              </Button>
+            </div>
           )}
         </Header>
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
@@ -143,6 +163,14 @@ export default function GrillaPage() {
         onSave={handleSaveProgram}
         program={selectedProgram}
       />
+      {canManage && (
+        <CommercialItemFormDialog
+            isOpen={isItemFormOpen}
+            onOpenChange={setIsItemFormOpen}
+            onSave={handleSaveCommercialItem}
+            programs={programs}
+        />
+      )}
       <AlertDialog open={!!programToDelete} onOpenChange={(open) => !open && setProgramToDelete(null)}>
         <AlertDialogContent>
             <AlertDialogHeader>

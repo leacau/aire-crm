@@ -3,6 +3,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -269,4 +270,5 @@ export type CommercialItem = {
   clientId?: string;
   clientName?: string;
   opportunityId?: string;
+  opportunityTitle?: string;
 };

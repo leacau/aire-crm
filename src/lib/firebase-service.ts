@@ -48,14 +48,32 @@ export const getCommercialItems = async (date: string): Promise<CommercialItem[]
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CommercialItem));
 };
 
-export const saveCommercialItem = async (itemData: Omit<CommercialItem, 'id'>, userId: string): Promise<string> => {
-    const dataToSave = { ...itemData, createdBy: userId };
-    if (!dataToSave.clientId) {
-      delete dataToSave.clientId;
-      delete dataToSave.clientName;
+export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string): Promise<void> => {
+    const batch = writeBatch(db);
+
+    for (const date of dates) {
+        const docRef = doc(collection(db, 'commercial_items'));
+        const formattedDate = date.toISOString().split('T')[0];
+
+        const itemData: Omit<CommercialItem, 'id'> = {
+            ...item,
+            date: formattedDate,
+        };
+
+        const dataToSave = { ...itemData, createdBy: userId };
+        if (!dataToSave.clientId) {
+            delete dataToSave.clientId;
+            delete dataToSave.clientName;
+        }
+        if (!dataToSave.opportunityId) {
+            delete dataToSave.opportunityId;
+            delete dataToSave.opportunityTitle;
+        }
+
+        batch.set(docRef, dataToSave);
     }
-    const docRef = await addDoc(commercialItemsCollection, dataToSave);
-    return docRef.id;
+    
+    await batch.commit();
 };
 
 
