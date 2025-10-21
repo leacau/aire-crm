@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -10,11 +11,11 @@ import { GrillaSemanal } from '@/components/grilla/grilla-semanal';
 import { GrillaDiaria } from '@/components/grilla/grilla-diaria';
 import { ProgramFormDialog } from '@/components/grilla/program-form-dialog';
 import type { Program, CommercialItem } from '@/lib/types';
-import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialItem, updateCommercialItem } from '@/lib/firebase-service';
+import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialItem, updateCommercialItem, deleteCommercialItem } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { CommercialItemFormDialog } from '@/components/grilla/commercial-item-form-dialog';
-import { addDays, format } from 'date-fns';
+import { addDays, format, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 
@@ -113,15 +114,32 @@ export default function GrillaPage() {
     }
   };
   
-  const handleSaveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[]) => {
+  const handleSaveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, newDates: Date[]) => {
       if (!userInfo) return;
       try {
         if (selectedItem) { // Editing existing item
-            await updateCommercialItem(selectedItem.id, { ...item, date: format(dates[0], 'yyyy-MM-dd')});
-            toast({ title: 'Elemento comercial actualizado' });
+            // Check if the original date is still in the new dates
+            const originalDateStr = format(new Date(selectedItem.date), 'yyyy-MM-dd');
+            const newDatesStr = newDates.map(d => format(d, 'yyyy-MM-dd'));
+
+            const isOriginalDateKept = newDatesStr.includes(originalDateStr);
+
+            // Update original item if its date is kept, or create new and delete old
+            if (isOriginalDateKept) {
+                await updateCommercialItem(selectedItem.id, item);
+                const datesToAdd = newDates.filter(d => !isSameDay(d, new Date(selectedItem.date)));
+                if (datesToAdd.length > 0) {
+                  await saveCommercialItem(item, datesToAdd, userInfo.id);
+                }
+            } else {
+                await deleteCommercialItem(selectedItem.id);
+                await saveCommercialItem(item, newDates, userInfo.id);
+            }
+             toast({ title: 'Elemento comercial actualizado' });
+
         } else { // Creating new items
-            await saveCommercialItem(item, dates, userInfo.id);
-            toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
+            await saveCommercialItem(item, newDates, userInfo.id);
+            toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${newDates.length} elemento(s) han sido creados.` });
         }
         
         if(view === 'diaria') {

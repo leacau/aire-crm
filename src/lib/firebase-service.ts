@@ -118,6 +118,11 @@ export const updateCommercialItem = async (itemId: string, itemData: Partial<Omi
     await updateDoc(docRef, dataToUpdate);
 }
 
+export const deleteCommercialItem = async (itemId: string): Promise<void> => {
+    const docRef = doc(db, 'commercial_items', itemId);
+    await deleteDoc(docRef);
+};
+
 
 // --- Canje Functions ---
 export const getCanjes = async (): Promise<Canje[]> => {

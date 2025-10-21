@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -100,6 +101,8 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
     onSave({ programId, type, description, status, clientId, clientName, opportunityId, opportunityTitle }, dates);
     onOpenChange(false);
   };
+  
+  const showAssignmentFields = status !== 'Disponible';
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -126,9 +129,9 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
           <div className="space-y-2">
             <Label>Fechas de Emisión</Label>
              <Calendar
-                mode={isEditing ? 'single' : 'multiple'}
-                selected={isEditing ? dates?.[0] : dates}
-                onSelect={isEditing ? (day) => setDates(day ? [day] : []) : setDates}
+                mode="multiple"
+                selected={dates}
+                onSelect={setDates}
                 locale={es}
                 className="rounded-md border"
             />
@@ -161,7 +164,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
             <Label htmlFor="item-description">Descripción / Anunciante</Label>
             <Textarea id="item-description" value={description} onChange={e => setDescription(e.target.value)} />
           </div>
-          {status !== 'Disponible' && (
+          {showAssignmentFields && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="item-client">Cliente</Label>
