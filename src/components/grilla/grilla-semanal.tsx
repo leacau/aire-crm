@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -72,7 +73,7 @@ export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeletePro
               <span className="capitalize">{format(day, 'eeee', { locale: es })}</span>
               <span className={cn(
                 "block text-sm font-normal text-muted-foreground",
-                isToday(day) && "text-primary font-bold"
+                 isToday(day) && "text-primary font-bold"
               )}>
                 {format(day, 'd', { locale: es })}
               </span>

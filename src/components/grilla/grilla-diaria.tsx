@@ -58,7 +58,7 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
   
   useEffect(() => {
     fetchData();
-  }, [fetchData, programs]); // Added programs to dependency array
+  }, [fetchData]);
 
   const userClientIds = useMemo(() => {
     if (!userInfo || canManage) return null;
@@ -67,6 +67,7 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
 
   const canEditItem = (item: CommercialItem) => {
     if (canManage) return true;
+    if (item.status === 'Disponible') return false; // Advisors cannot edit available items
     if (userClientIds && item.clientId) {
       return userClientIds.has(item.clientId);
     }
@@ -96,9 +97,9 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
           const programItems = items.filter(item => item.programId === program.id);
           return (
             <Card key={program.id}>
-              <CardHeader className={cn("p-4 flex flex-row items-center justify-between", program.color)}>
+              <CardHeader className={cn("p-3 sm:p-4 flex flex-row items-center justify-between", program.color)}>
                  <div className='cursor-pointer flex-1' onClick={() => onAddItemClick(program.id, date)}>
-                    <CardTitle className="text-lg">
+                    <CardTitle className="text-md sm:text-lg">
                         {program.name} <span className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</span>
                     </CardTitle>
                  </div>
@@ -108,7 +109,7 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
                     </Button>
                  )}
               </CardHeader>
-              <CardContent className="p-4 space-y-3">
+              <CardContent className="p-2 sm:p-4 space-y-3">
                 {programItems.length > 0 ? (
                    programItems.map(item => {
                      const isEditable = canEditItem(item);
@@ -116,14 +117,14 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
                       <div 
                         key={item.id} 
                         className={cn(
-                          "flex items-center justify-between p-2 rounded-md border bg-muted/50",
+                          "flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 rounded-md border bg-muted/50 gap-2",
                           isEditable && "cursor-pointer hover:bg-muted/80"
                         )}
                         onClick={() => isEditable && onItemClick(item)}
                       >
-                          <div>
+                          <div className="flex-1">
                               <p className="font-medium">{item.description}</p>
-                              <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
                                 <p>{item.type}</p>
                                 {item.clientName && (
                                   <Link href={`/clients/${item.clientId}`} className="flex items-center gap-1 hover:underline" onClick={(e) => e.stopPropagation()}>
@@ -139,7 +140,7 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
                                 )}
                               </div>
                           </div>
-                          <Badge className={statusColors[item.status]}>{item.status}</Badge>
+                          <Badge className={cn("self-start sm:self-center", statusColors[item.status])}>{item.status}</Badge>
                       </div>
                      )
                    })
