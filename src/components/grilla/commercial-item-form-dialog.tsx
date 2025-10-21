@@ -23,17 +23,19 @@ import type { DateRange } from 'react-day-picker';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAuth } from '@/hooks/use-auth';
+import { Trash2 } from 'lucide-react';
 
 interface CommercialItemFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   onSave: (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[]) => void;
+  onDelete: (item: CommercialItem) => void;
   item?: CommercialItem | null;
   programs: Program[];
   preselectedData?: { programId?: string, date?: Date } | null;
 }
 
-export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, programs, preselectedData }: CommercialItemFormDialogProps) {
+export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelete, item, programs, preselectedData }: CommercialItemFormDialogProps) {
   const { userInfo, isBoss } = useAuth();
   const [programId, setProgramId] = useState<string | undefined>();
   const [type, setType] = useState<CommercialItem['type']>('Pauta');
@@ -49,10 +51,10 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
   
   const { toast } = useToast();
   const isEditing = !!item;
+  const canManage = isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Gerencia';
 
   useEffect(() => {
     if (isOpen) {
-      // Fetch clients and opportunities when dialog opens
       Promise.all([
         getClients(),
         getAllOpportunities()
@@ -70,7 +72,6 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
         setOpportunityId(item.opportunityId);
         setDates([new Date(item.date)]);
       } else {
-        // Reset form state for creation
         setProgramId(preselectedData?.programId);
         setType('Pauta');
         setDescription('');
@@ -84,9 +85,9 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
   
   const filteredClients = useMemo(() => {
     if (!userInfo) return [];
-    if (isBoss) return allClients;
+    if (canManage) return allClients;
     return allClients.filter(c => c.ownerId === userInfo.id);
-  }, [allClients, isBoss, userInfo]);
+  }, [allClients, canManage, userInfo]);
   
   const clientOpportunities = clientId ? opportunities.filter(opp => opp.clientId === clientId) : [];
 
@@ -100,6 +101,13 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
     
     onSave({ programId, type, description, status, clientId, clientName, opportunityId, opportunityTitle }, dates);
     onOpenChange(false);
+  };
+
+  const handleDelete = () => {
+    if (item) {
+      onDelete(item);
+      onOpenChange(false);
+    }
   };
   
   const showAssignmentFields = status !== 'Disponible';
@@ -187,9 +195,19 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
             </div>
           )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Guardar Elemento(s)</Button>
+        <DialogFooter className="sm:justify-between">
+          <div>
+            {isEditing && canManage && (
+              <Button variant="destructive" onClick={handleDelete}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Eliminar
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button onClick={handleSave}>Guardar Cambios</Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

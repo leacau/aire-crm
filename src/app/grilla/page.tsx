@@ -33,6 +33,7 @@ export default function GrillaPage() {
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [programToDelete, setProgramToDelete] = useState<Program | null>(null);
   const [selectedItem, setSelectedItem] = useState<CommercialItem | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<CommercialItem | null>(null);
   const [preselectedDataForItem, setPreselectedDataForItem] = useState<{ programId?: string, date?: Date } | null>(null);
 
   const canManage = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
@@ -118,13 +119,11 @@ export default function GrillaPage() {
       if (!userInfo) return;
       try {
         if (selectedItem) { // Editing existing item
-            // Check if the original date is still in the new dates
             const originalDateStr = format(new Date(selectedItem.date), 'yyyy-MM-dd');
             const newDatesStr = newDates.map(d => format(d, 'yyyy-MM-dd'));
 
             const isOriginalDateKept = newDatesStr.includes(originalDateStr);
 
-            // Update original item if its date is kept, or create new and delete old
             if (isOriginalDateKept) {
                 await updateCommercialItem(selectedItem.id, item);
                 const datesToAdd = newDates.filter(d => !isSameDay(d, new Date(selectedItem.date)));
@@ -143,7 +142,6 @@ export default function GrillaPage() {
         }
         
         if(view === 'diaria') {
-            // Force a refresh of items in daily view
             setView('semanal');
             setTimeout(() => setView('diaria'), 0);
         }
@@ -151,6 +149,26 @@ export default function GrillaPage() {
           console.error("Error saving commercial item(s):", error);
           toast({ title: 'Error al guardar el elemento', variant: 'destructive' });
       }
+  };
+
+  const handleDeleteItem = async () => {
+    if (!itemToDelete) return;
+    try {
+      await deleteCommercialItem(itemToDelete.id);
+      toast({ title: 'Elemento comercial eliminado' });
+      setIsItemFormOpen(false); // Close the dialog if it was open
+      
+      // Refresh view
+      if (view === 'diaria') {
+        setView('semanal');
+        setTimeout(() => setView('diaria'), 0);
+      }
+    } catch (error) {
+      console.error("Error deleting commercial item:", error);
+      toast({ title: 'Error al eliminar el elemento', variant: 'destructive' });
+    } finally {
+      setItemToDelete(null);
+    }
   };
 
 
@@ -228,16 +246,17 @@ export default function GrillaPage() {
         onSave={handleSaveProgram}
         program={selectedProgram}
       />
-      {canManage && (
+      {
         <CommercialItemFormDialog
             isOpen={isItemFormOpen}
             onOpenChange={setIsItemFormOpen}
             onSave={handleSaveCommercialItem}
+            onDelete={item => setItemToDelete(item)}
             item={selectedItem}
             programs={programs}
             preselectedData={preselectedDataForItem}
         />
-      )}
+      }
       <AlertDialog open={!!programToDelete} onOpenChange={(open) => !open && setProgramToDelete(null)}>
         <AlertDialogContent>
             <AlertDialogHeader>
@@ -249,6 +268,22 @@ export default function GrillaPage() {
             <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
                 <AlertDialogAction onClick={handleDeleteProgram} variant="destructive">
+                    Eliminar
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>¿Eliminar Elemento Comercial?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Esta acción es irreversible y eliminará permanentemente el elemento: "{itemToDelete?.description}".
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteItem} variant="destructive">
                     Eliminar
                 </AlertDialogAction>
             </AlertDialogFooter>
