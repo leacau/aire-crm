@@ -99,8 +99,8 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
             <Card key={program.id}>
               <CardHeader className={cn("p-3 sm:p-4 flex flex-row items-center justify-between", program.color)}>
                  <div className='cursor-pointer flex-1' onClick={() => onAddItemClick(program.id, date)}>
-                    <CardTitle className="text-md sm:text-lg">
-                        {program.name} <span className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</span>
+                    <CardTitle className="text-sm sm:text-lg">
+                        {program.name} <span className="font-normal text-xs sm:text-sm">({program.schedule.startTime} - {program.schedule.endTime})</span>
                     </CardTitle>
                  </div>
                  {canManage && (
@@ -117,30 +117,30 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
                       <div 
                         key={item.id} 
                         className={cn(
-                          "flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 rounded-md border bg-muted/50 gap-2",
+                          "flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 rounded-md border bg-muted/50 gap-2 sm:gap-4",
                           isEditable && "cursor-pointer hover:bg-muted/80"
                         )}
                         onClick={() => isEditable && onItemClick(item)}
                       >
-                          <div className="flex-1">
-                              <p className="font-medium">{item.description}</p>
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
+                          <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{item.description}</p>
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
                                 <p>{item.type}</p>
                                 {item.clientName && (
-                                  <Link href={`/clients/${item.clientId}`} className="flex items-center gap-1 hover:underline" onClick={(e) => e.stopPropagation()}>
-                                    <Building className="h-3 w-3" />
-                                    {item.clientName}
+                                  <Link href={`/clients/${item.clientId}`} className="flex items-center gap-1 hover:underline truncate" onClick={(e) => e.stopPropagation()}>
+                                    <Building className="h-3 w-3 shrink-0" />
+                                    <span className="truncate">{item.clientName}</span>
                                   </Link>
                                 )}
                                  {item.opportunityTitle && (
-                                   <p className="flex items-center gap-1">
-                                    <CircleDollarSign className="h-3 w-3" />
-                                    {item.opportunityTitle}
+                                   <p className="flex items-center gap-1 truncate">
+                                    <CircleDollarSign className="h-3 w-3 shrink-0" />
+                                    <span className="truncate">{item.opportunityTitle}</span>
                                    </p>
                                 )}
                               </div>
                           </div>
-                          <Badge className={cn("self-start sm:self-center", statusColors[item.status])}>{item.status}</Badge>
+                          <Badge className={cn("self-start sm:self-center shrink-0", statusColors[item.status])}>{item.status}</Badge>
                       </div>
                      )
                    })

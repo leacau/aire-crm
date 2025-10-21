@@ -127,9 +127,7 @@ export default function GrillaPage() {
             await saveCommercialItem(item, dates, userInfo.id);
             toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
         }
-        fetchPrograms();
-        setView('semanal');
-        setTimeout(() => setView('diaria'), 0);
+        fetchPrograms(); // This will trigger re-fetch in children components
       } catch (error) {
           console.error("Error saving commercial item(s):", error);
           toast({ title: 'Error al guardar el elemento', variant: 'destructive' });
@@ -157,9 +155,7 @@ export default function GrillaPage() {
         toast({ title: 'Elemento(s) comercial(es) eliminado(s)' });
         setIsDeleteItemDialogOpen(false);
         setItemToDelete(null);
-        fetchPrograms();
-        setView('semanal');
-        setTimeout(() => setView('diaria'), 0);
+        fetchPrograms(); // This will trigger re-fetch in children components
     } catch (error) {
         console.error("Error deleting commercial item(s):", error);
         toast({ title: 'Error al eliminar el elemento', variant: 'destructive' });
@@ -192,33 +188,36 @@ export default function GrillaPage() {
         <Header title="Grilla Comercial">
           <div className="flex flex-col sm:flex-row items-center gap-2">
             {view === 'semanal' && (
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 md:gap-4">
                   <div className="flex items-center gap-1">
                       <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}><ArrowLeft className="h-4 w-4" /></Button>
                       <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}><ArrowRight className="h-4 w-4" /></Button>
                   </div>
-                  <h3 className="text-lg font-semibold capitalize min-w-[150px] text-center">
+                  <h3 className="text-base sm:text-lg font-semibold capitalize min-w-[120px] text-center">
                     {format(currentDate, 'MMMM yyyy', { locale: es })}
                   </h3>
               </div>
             )}
-            {view === 'diaria' && (
-              <Button variant="outline" onClick={handleBackToWeek}>
-                Volver a la semana
-              </Button>
-            )}
-            {canManage && (
-              <div className="flex items-center gap-2">
-                <Button onClick={() => openProgramForm()} size="sm">
-                    <PlusCircle className="mr-2 h-4 w-4"/>
-                    Programa
+            <div className='flex items-center gap-2'>
+                {view === 'diaria' && (
+                <Button variant="outline" onClick={handleBackToWeek}>
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Semana
                 </Button>
-                <Button variant="secondary" onClick={() => { setSelectedItem(null); setPreselectedDataForItem(null); setIsItemFormOpen(true);}} size="sm">
-                    <PlusCircle className="mr-2 h-4 w-4"/>
-                    Elemento
-                </Button>
-              </div>
-            )}
+                )}
+                {canManage && (
+                <div className="flex items-center gap-2">
+                    <Button onClick={() => openProgramForm()} size="sm">
+                        <PlusCircle className="mr-2 h-4 w-4"/>
+                        Programa
+                    </Button>
+                    <Button variant="secondary" onClick={() => { setSelectedItem(null); setPreselectedDataForItem(null); setIsItemFormOpen(true);}} size="sm">
+                        <PlusCircle className="mr-2 h-4 w-4"/>
+                        Elemento
+                    </Button>
+                </div>
+                )}
+            </div>
           </div>
         </Header>
         <main className="flex-1 overflow-auto p-2 sm:p-4 md:p-6">

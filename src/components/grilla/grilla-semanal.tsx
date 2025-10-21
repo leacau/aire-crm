@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { Program, CommercialItem } from '@/lib/types';
 import { addDays, startOfWeek, format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Card } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { MoreHorizontal, Edit, Trash2 } from 'lucide-react';
@@ -65,9 +65,21 @@ export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeletePro
             .sort((a,b) => a.schedule.startTime.localeCompare(b.schedule.startTime));
 
         return (
-          <div key={day.toISOString()} className="flex flex-col gap-4">
+          <div key={day.toISOString()} className="flex flex-col gap-2 md:gap-4">
+            <Card className="md:hidden cursor-pointer hover:bg-muted/50" onClick={() => onDayClick(day)}>
+                <CardHeader className="p-3">
+                    <CardTitle className={cn(
+                        "text-base font-semibold capitalize flex items-center justify-between",
+                        isToday(day) && "text-primary font-bold"
+                    )}>
+                        <span>{format(day, 'eeee d', { locale: es })}</span>
+                        <span className="text-sm font-normal text-muted-foreground">{'>'}</span>
+                    </CardTitle>
+                </CardHeader>
+            </Card>
+
             <h3 
-              className="text-center font-semibold text-lg cursor-pointer hover:text-primary"
+              className="text-center font-semibold text-lg cursor-pointer hover:text-primary hidden md:block"
               onClick={() => onDayClick(day)}
             >
               <span className="capitalize">{format(day, 'eeee', { locale: es })}</span>
@@ -78,7 +90,7 @@ export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeletePro
                 {format(day, 'd', { locale: es })}
               </span>
             </h3>
-            <div className="space-y-2">
+            <div className="space-y-2 hidden md:block">
                 {programsForDay.map(programWithSchedule => {
                   const dayKey = format(day, 'yyyy-MM-dd');
                   const hasAvailability = availability[`${dayKey}-${programWithSchedule.id}`];
