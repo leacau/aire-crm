@@ -127,7 +127,7 @@ export default function GrillaPage() {
             await saveCommercialItem(item, dates, userInfo.id);
             toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
         }
-        fetchPrograms(); // This will trigger re-fetch in children components
+        fetchPrograms();
       } catch (error) {
           console.error("Error saving commercial item(s):", error);
           toast({ title: 'Error al guardar el elemento', variant: 'destructive' });
@@ -155,7 +155,7 @@ export default function GrillaPage() {
         toast({ title: 'Elemento(s) comercial(es) eliminado(s)' });
         setIsDeleteItemDialogOpen(false);
         setItemToDelete(null);
-        fetchPrograms(); // This will trigger re-fetch in children components
+        fetchPrograms();
     } catch (error) {
         console.error("Error deleting commercial item(s):", error);
         toast({ title: 'Error al eliminar el elemento', variant: 'destructive' });
@@ -186,39 +186,35 @@ export default function GrillaPage() {
     <>
       <div className="flex flex-col h-full">
         <Header title="Grilla Comercial">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {view === 'semanal' && (
-              <div className="flex items-center gap-2 md:gap-4">
-                  <div className="flex items-center gap-1">
-                      <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}><ArrowLeft className="h-4 w-4" /></Button>
-                      <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}><ArrowRight className="h-4 w-4" /></Button>
-                  </div>
-                  <h3 className="text-base sm:text-lg font-semibold capitalize min-w-[120px] text-center">
-                    {format(currentDate, 'MMMM yyyy', { locale: es })}
-                  </h3>
-              </div>
+            {view === 'diaria' ? (
+                <Button variant="outline" onClick={handleBackToWeek}>
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Semana
+                </Button>
+            ) : (
+                <div className="flex items-center gap-2 md:gap-4">
+                    <div className="flex items-center gap-1">
+                        <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}><ArrowLeft className="h-4 w-4" /></Button>
+                        <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}><ArrowRight className="h-4 w-4" /></Button>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-semibold capitalize min-w-[120px] text-center">
+                        {format(currentDate, 'MMMM yyyy', { locale: es })}
+                    </h3>
+                </div>
             )}
             
-            {view === 'diaria' && (
-            <Button variant="outline" onClick={handleBackToWeek}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Semana
-            </Button>
-            )}
-
             {canManage && (
-            <div className="flex items-center gap-2">
-                <Button onClick={() => openProgramForm()} size="sm">
-                    <PlusCircle className="mr-2 h-4 w-4"/>
-                    Programa
-                </Button>
-                <Button variant="secondary" onClick={() => { setSelectedItem(null); setPreselectedDataForItem(null); setIsItemFormOpen(true);}} size="sm">
-                    <PlusCircle className="mr-2 h-4 w-4"/>
-                    Elemento
-                </Button>
-            </div>
+                <div className="flex items-center gap-2">
+                    <Button onClick={() => openProgramForm()} size="sm">
+                        <PlusCircle className="mr-2 h-4 w-4"/>
+                        Programa
+                    </Button>
+                    <Button variant="secondary" onClick={() => { setSelectedItem(null); setPreselectedDataForItem(null); setIsItemFormOpen(true);}} size="sm">
+                        <PlusCircle className="mr-2 h-4 w-4"/>
+                        Elemento
+                    </Button>
+                </div>
             )}
-          </div>
         </Header>
         <main className="flex-1 overflow-auto p-2 sm:p-4 md:p-6">
           {view === 'semanal' ? (
