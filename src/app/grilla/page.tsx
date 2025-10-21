@@ -186,7 +186,7 @@ export default function GrillaPage() {
     <>
       <div className="flex flex-col h-full">
         <Header title="Grilla Comercial">
-          <div className="flex flex-col sm:flex-row items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {view === 'semanal' && (
               <div className="flex items-center gap-2 md:gap-4">
                   <div className="flex items-center gap-1">
@@ -198,26 +198,26 @@ export default function GrillaPage() {
                   </h3>
               </div>
             )}
-            <div className='flex items-center gap-2'>
-                {view === 'diaria' && (
-                <Button variant="outline" onClick={handleBackToWeek}>
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Semana
+            
+            {view === 'diaria' && (
+            <Button variant="outline" onClick={handleBackToWeek}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Semana
+            </Button>
+            )}
+
+            {canManage && (
+            <div className="flex items-center gap-2">
+                <Button onClick={() => openProgramForm()} size="sm">
+                    <PlusCircle className="mr-2 h-4 w-4"/>
+                    Programa
                 </Button>
-                )}
-                {canManage && (
-                <div className="flex items-center gap-2">
-                    <Button onClick={() => openProgramForm()} size="sm">
-                        <PlusCircle className="mr-2 h-4 w-4"/>
-                        Programa
-                    </Button>
-                    <Button variant="secondary" onClick={() => { setSelectedItem(null); setPreselectedDataForItem(null); setIsItemFormOpen(true);}} size="sm">
-                        <PlusCircle className="mr-2 h-4 w-4"/>
-                        Elemento
-                    </Button>
-                </div>
-                )}
+                <Button variant="secondary" onClick={() => { setSelectedItem(null); setPreselectedDataForItem(null); setIsItemFormOpen(true);}} size="sm">
+                    <PlusCircle className="mr-2 h-4 w-4"/>
+                    Elemento
+                </Button>
             </div>
+            )}
           </div>
         </Header>
         <main className="flex-1 overflow-auto p-2 sm:p-4 md:p-6">
