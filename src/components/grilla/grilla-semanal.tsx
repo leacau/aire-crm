@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -28,7 +29,14 @@ export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeletePro
     <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
       {weekDays.map(day => {
         const dayOfWeek = day.getDay() === 0 ? 7 : day.getDay(); // Adjust Sunday to be 7
-        const programsForDay = programs.filter(p => p.daysOfWeek.includes(dayOfWeek));
+        
+        const programsForDay = programs
+            .flatMap(p => 
+                p.schedules
+                 .filter(s => s.daysOfWeek.includes(dayOfWeek))
+                 .map(s => ({ ...p, schedule: s }))
+            )
+            .sort((a,b) => a.schedule.startTime.localeCompare(b.schedule.startTime));
 
         return (
           <div key={day.toISOString()} className="flex flex-col gap-4">
@@ -40,18 +48,15 @@ export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeletePro
               <span className="block text-sm font-normal text-muted-foreground">{format(day, 'd', { locale: es })}</span>
             </h3>
             <div className="space-y-2">
-                {programsForDay
-                  .sort((a,b) => a.startTime.localeCompare(b.startTime))
-                  .map(program => (
+                {programsForDay.map(programWithSchedule => (
                   <Card 
-                    key={program.id} 
-                    className={cn("text-center text-sm p-2 relative group", program.color)}
-                    
+                    key={`${programWithSchedule.id}-${programWithSchedule.schedule.id}`} 
+                    className={cn("text-center text-sm p-2 relative group", programWithSchedule.color)}
                   >
                     <div onClick={() => onDayClick(day)} className="cursor-pointer">
-                      <p className="font-semibold">{program.name}</p>
-                      <p className="text-xs">{program.startTime} - {program.endTime}</p>
-                      <p className="text-xs text-muted-foreground truncate">{program.conductores}</p>
+                      <p className="font-semibold">{programWithSchedule.name}</p>
+                      <p className="text-xs">{programWithSchedule.schedule.startTime} - {programWithSchedule.schedule.endTime}</p>
+                      <p className="text-xs text-muted-foreground truncate">{programWithSchedule.conductores}</p>
                     </div>
                     {canManage && (
                         <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -62,11 +67,11 @@ export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeletePro
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent>
-                                    <DropdownMenuItem onClick={() => onEditProgram(program)}>
+                                    <DropdownMenuItem onClick={() => onEditProgram(programs.find(p => p.id === programWithSchedule.id)!)}>
                                         <Edit className="mr-2 h-4 w-4" />
                                         Editar
                                     </DropdownMenuItem>
-                                     <DropdownMenuItem onClick={() => onDeleteProgram(program)} className="text-destructive">
+                                     <DropdownMenuItem onClick={() => onDeleteProgram(programs.find(p => p.id === programWithSchedule.id)!)} className="text-destructive">
                                         <Trash2 className="mr-2 h-4 w-4" />
                                         Eliminar
                                     </DropdownMenuItem>

@@ -4,6 +4,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -243,15 +244,24 @@ export type ClientImportMapping = Partial<Omit<Client, 'id' | 'personIds' | 'own
 
 // --- Grilla Comercial Types ---
 
+export type ProgramSchedule = {
+  id: string;
+  daysOfWeek: number[];
+  startTime: string; // "HH:MM"
+  endTime: string;   // "HH:MM"
+}
+
 export type Program = {
   id: string;
   name: string;
-  startTime: string; // "HH:MM"
-  endTime: string;   // "HH:MM"
-  daysOfWeek: number[]; // 1=Monday, ..., 7=Sunday
+  schedules: ProgramSchedule[];
   color: string; // e.g., 'bg-blue-200'
   conductores?: string;
   productores?: string;
+  // DEPRECATED
+  startTime?: string;
+  endTime?: string;
+  daysOfWeek?: number[];
 };
 
 export const commercialItemTypes = ['Bloque temático', 'Auspicio', 'Nota', 'PNT', 'Pauta'] as const;

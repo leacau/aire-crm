@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado, HistorialMensualItem, Program, CommercialItem } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado, HistorialMensualItem, Program, CommercialItem, ProgramSchedule } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 
@@ -21,18 +21,44 @@ const commercialItemsCollection = collection(db, 'commercial_items');
 // --- Grilla Comercial Functions ---
 
 export const getPrograms = async (): Promise<Program[]> => {
-    const snapshot = await getDocs(query(programsCollection, orderBy("startTime")));
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Program));
+    const snapshot = await getDocs(query(programsCollection, orderBy("name")));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      // On-the-fly migration for old data structure
+      if (!data.schedules) {
+        return {
+          id: doc.id,
+          ...data,
+          schedules: [{
+            id: 'default',
+            daysOfWeek: data.daysOfWeek || [],
+            startTime: data.startTime || '',
+            endTime: data.endTime || '',
+          }]
+        } as Program;
+      }
+      return { id: doc.id, ...data } as Program
+    });
 };
 
 export const saveProgram = async (programData: Omit<Program, 'id'>, userId: string): Promise<string> => {
-    const docRef = await addDoc(programsCollection, { ...programData, createdBy: userId, createdAt: serverTimestamp() });
+    const dataToSave = { ...programData };
+    // @ts-ignore - Remove deprecated fields before saving
+    delete dataToSave.startTime;
+    delete dataToSave.endTime;
+    delete dataToSave.daysOfWeek;
+    const docRef = await addDoc(programsCollection, { ...dataToSave, createdBy: userId, createdAt: serverTimestamp() });
     return docRef.id;
 };
 
 export const updateProgram = async (programId: string, programData: Partial<Omit<Program, 'id'>>, userId: string): Promise<void> => {
     const docRef = doc(db, 'programs', programId);
-    await updateDoc(docRef, { ...programData, updatedBy: userId, updatedAt: serverTimestamp() });
+    const dataToUpdate = { ...programData };
+    // @ts-ignore
+    delete dataToUpdate.startTime;
+    delete dataToUpdate.endTime;
+    delete dataToUpdate.daysOfWeek;
+    await updateDoc(docRef, { ...dataToUpdate, updatedBy: userId, updatedAt: serverTimestamp() });
 };
 
 export const deleteProgram = async (programId: string, userId: string): Promise<void> => {
