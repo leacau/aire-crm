@@ -18,6 +18,7 @@ interface GrillaDiariaProps {
   date: Date;
   programs: Program[];
   canManage: boolean;
+  onAddItem: (programId: string, date: Date) => void;
 }
 
 const statusColors: Record<CommercialItem['status'], string> = {
@@ -26,7 +27,7 @@ const statusColors: Record<CommercialItem['status'], string> = {
   'Vendido': 'bg-green-200 text-green-800',
 };
 
-export function GrillaDiaria({ date, programs, canManage }: GrillaDiariaProps) {
+export function GrillaDiaria({ date, programs, canManage, onAddItem }: GrillaDiariaProps) {
   const { userInfo } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<CommercialItem[]>([]);
@@ -54,8 +55,12 @@ export function GrillaDiaria({ date, programs, canManage }: GrillaDiariaProps) {
 
   const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay(); // Adjust Sunday
   const programsForDay = programs
-    .filter(p => p.daysOfWeek.includes(dayOfWeek))
-    .sort((a,b) => a.startTime.localeCompare(b.startTime));
+    .filter(p => p.schedules.some(s => s.daysOfWeek.includes(dayOfWeek)))
+    .map(p => {
+        const scheduleForDay = p.schedules.find(s => s.daysOfWeek.includes(dayOfWeek));
+        return { ...p, schedule: scheduleForDay! };
+    })
+    .sort((a,b) => a.schedule.startTime.localeCompare(b.schedule.startTime));
 
   return (
     <div className="space-y-6">
@@ -69,7 +74,12 @@ export function GrillaDiaria({ date, programs, canManage }: GrillaDiariaProps) {
           return (
             <Card key={program.id}>
               <CardHeader className={cn("p-4 flex flex-row items-center justify-between", program.color)}>
-                <CardTitle className="text-lg">{program.name} <span className="font-normal text-sm">({program.startTime} - {program.endTime})</span></CardTitle>
+                 <CardTitle 
+                    className={cn("text-lg", canManage && "cursor-pointer hover:underline")}
+                    onClick={() => canManage && onAddItem(program.id, date)}
+                 >
+                    {program.name} <span className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</span>
+                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 space-y-3">
                 {loadingItems ? (

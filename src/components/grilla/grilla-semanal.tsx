@@ -1,8 +1,7 @@
-
 'use client';
 
-import React from 'react';
-import type { Program } from '@/lib/types';
+import React, { useState, useEffect, useMemo } from 'react';
+import type { Program, CommercialItem } from '@/lib/types';
 import { addDays, startOfWeek, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Card } from '@/components/ui/card';
@@ -10,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { MoreHorizontal, Edit, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { getCommercialItems } from '@/lib/firebase-service';
 
 interface GrillaSemanalProps {
   programs: Program[];
@@ -17,13 +17,38 @@ interface GrillaSemanalProps {
   onEditProgram: (program: Program) => void;
   onDeleteProgram: (program: Program) => void;
   canManage: boolean;
+  currentDate: Date;
 }
 
-export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeleteProgram, canManage }: GrillaSemanalProps) {
-  const today = new Date();
-  const startOfThisWeek = startOfWeek(today, { weekStartsOn: 1 }); // Monday
+export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeleteProgram, canManage, currentDate }: GrillaSemanalProps) {
+  const startOfGivenWeek = startOfWeek(currentDate, { weekStartsOn: 1 }); // Monday
+  const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(startOfGivenWeek, i));
 
-  const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(startOfThisWeek, i));
+  const [availability, setAvailability] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const fetchAvailability = async () => {
+      const promises = weekDays.map(day => getCommercialItems(format(day, 'yyyy-MM-dd')));
+      const results = await Promise.all(promises);
+      
+      const newAvailability: Record<string, boolean> = {};
+      results.forEach((dailyItems, index) => {
+        const dayKey = format(weekDays[index], 'yyyy-MM-dd');
+        const programIdsWithAvailability = new Set(
+          dailyItems
+            .filter(item => item.status === 'Disponible')
+            .map(item => item.programId)
+        );
+        programs.forEach(program => {
+            newAvailability[`${dayKey}-${program.id}`] = programIdsWithAvailability.has(program.id);
+        });
+      });
+      setAvailability(newAvailability);
+    };
+
+    fetchAvailability();
+  }, [currentDate, programs]);
+
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
@@ -48,39 +73,47 @@ export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeletePro
               <span className="block text-sm font-normal text-muted-foreground">{format(day, 'd', { locale: es })}</span>
             </h3>
             <div className="space-y-2">
-                {programsForDay.map(programWithSchedule => (
-                  <Card 
-                    key={`${programWithSchedule.id}-${programWithSchedule.schedule.id}`} 
-                    className={cn("text-center text-sm p-2 relative group", programWithSchedule.color)}
-                  >
-                    <div onClick={() => onDayClick(day)} className="cursor-pointer">
-                      <p className="font-semibold">{programWithSchedule.name}</p>
-                      <p className="text-xs">{programWithSchedule.schedule.startTime} - {programWithSchedule.schedule.endTime}</p>
-                      <p className="text-xs text-muted-foreground truncate">{programWithSchedule.conductores}</p>
-                    </div>
-                    {canManage && (
-                        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6">
-                                        <MoreHorizontal className="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent>
-                                    <DropdownMenuItem onClick={() => onEditProgram(programs.find(p => p.id === programWithSchedule.id)!)}>
-                                        <Edit className="mr-2 h-4 w-4" />
-                                        Editar
-                                    </DropdownMenuItem>
-                                     <DropdownMenuItem onClick={() => onDeleteProgram(programs.find(p => p.id === programWithSchedule.id)!)} className="text-destructive">
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        Eliminar
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
-                    )}
-                  </Card>
-                ))}
+                {programsForDay.map(programWithSchedule => {
+                  const dayKey = format(day, 'yyyy-MM-dd');
+                  const hasAvailability = availability[`${dayKey}-${programWithSchedule.id}`];
+
+                  return (
+                    <Card 
+                      key={`${programWithSchedule.id}-${programWithSchedule.schedule.id}`} 
+                      className={cn("text-center text-sm p-2 relative group", programWithSchedule.color)}
+                    >
+                      <div onClick={() => onDayClick(day)} className="cursor-pointer">
+                        <p className="font-semibold flex items-center justify-center gap-1">
+                           {hasAvailability && <span className="text-green-500 text-lg leading-none -mt-1">•</span>}
+                           {programWithSchedule.name}
+                        </p>
+                        <p className="text-xs">{programWithSchedule.schedule.startTime} - {programWithSchedule.schedule.endTime}</p>
+                        <p className="text-xs text-muted-foreground truncate">{programWithSchedule.conductores}</p>
+                      </div>
+                      {canManage && (
+                          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                                          <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent>
+                                      <DropdownMenuItem onClick={() => onEditProgram(programs.find(p => p.id === programWithSchedule.id)!)}>
+                                          <Edit className="mr-2 h-4 w-4" />
+                                          Editar
+                                      </DropdownMenuItem>
+                                       <DropdownMenuItem onClick={() => onDeleteProgram(programs.find(p => p.id === programWithSchedule.id)!)} className="text-destructive">
+                                          <Trash2 className="mr-2 h-4 w-4" />
+                                          Eliminar
+                                      </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                              </DropdownMenu>
+                          </div>
+                      )}
+                    </Card>
+                  );
+                })}
             </div>
           </div>
         );

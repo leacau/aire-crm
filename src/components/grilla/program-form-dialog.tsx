@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -168,9 +167,13 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
             </div>
              <div className="space-y-2">
                 <Label>Color de Identificación</Label>
-                <div className="flex gap-2">
-                   {['bg-blue-100', 'bg-red-100', 'bg-green-100', 'bg-yellow-100', 'bg-purple-100', 'bg-pink-100', 'bg-gray-100'].map(c => (
-                      <button key={c} onClick={() => setColor(c)} className={`h-8 w-8 rounded-full ${c} ${color === c ? 'ring-2 ring-primary' : ''}`}></button>
+                <div className="flex flex-wrap gap-2">
+                   {[
+                    'bg-red-100', 'bg-orange-100', 'bg-amber-100', 'bg-yellow-100', 'bg-lime-100', 'bg-green-100', 
+                    'bg-emerald-100', 'bg-teal-100', 'bg-cyan-100', 'bg-sky-100', 'bg-blue-100', 'bg-indigo-100', 
+                    'bg-violet-100', 'bg-purple-100', 'bg-fuchsia-100', 'bg-pink-100', 'bg-rose-100', 'bg-gray-100'
+                   ].map(c => (
+                      <button key={c} onClick={() => setColor(c)} className={`h-8 w-8 rounded-full ${c} transition-transform hover:scale-110 ${color === c ? 'ring-2 ring-primary ring-offset-2' : ''}`}></button>
                    ))}
                 </div>
             </div>

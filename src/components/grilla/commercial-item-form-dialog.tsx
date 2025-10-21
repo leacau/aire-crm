@@ -28,9 +28,10 @@ interface CommercialItemFormDialogProps {
   onSave: (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[]) => void;
   item?: CommercialItem | null;
   programs: Program[];
+  preselectedData?: { programId?: string, date?: Date } | null;
 }
 
-export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, programs }: CommercialItemFormDialogProps) {
+export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, programs, preselectedData }: CommercialItemFormDialogProps) {
   const [programId, setProgramId] = useState<string | undefined>();
   const [type, setType] = useState<CommercialItem['type']>('Pauta');
   const [description, setDescription] = useState('');
@@ -52,15 +53,15 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
       getAllOpportunities().then(setOpportunities).catch(err => console.error("Failed to fetch opportunities", err));
       
       // Reset form state
-      setProgramId(undefined);
+      setProgramId(preselectedData?.programId);
       setType('Pauta');
       setDescription('');
       setStatus('Disponible');
       setClientId(undefined);
       setOpportunityId(undefined);
-      setDates(undefined);
+      setDates(preselectedData?.date ? [preselectedData.date] : undefined);
     }
-  }, [isOpen]);
+  }, [isOpen, preselectedData]);
   
   const clientOpportunities = clientId ? opportunities.filter(opp => opp.clientId === clientId) : [];
 

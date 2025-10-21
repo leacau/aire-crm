@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { PlusCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, PlusCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { GrillaSemanal } from '@/components/grilla/grilla-semanal';
@@ -14,6 +14,7 @@ import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialI
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { CommercialItemFormDialog } from '@/components/grilla/commercial-item-form-dialog';
+import { addDays } from 'date-fns';
 
 
 export default function GrillaPage() {
@@ -21,7 +22,7 @@ export default function GrillaPage() {
   const { toast } = useToast();
 
   const [view, setView] = useState<'semanal' | 'diaria'>('semanal');
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,6 +30,7 @@ export default function GrillaPage() {
   const [isItemFormOpen, setIsItemFormOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [programToDelete, setProgramToDelete] = useState<Program | null>(null);
+  const [preselectedDataForItem, setPreselectedDataForItem] = useState<{ programId?: string, date?: Date } | null>(null);
 
   const canManage = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
 
@@ -52,8 +54,13 @@ export default function GrillaPage() {
 
 
   const handleDayClick = (day: Date) => {
-    setSelectedDate(day);
+    setCurrentDate(day);
     setView('diaria');
+  };
+  
+  const handleAddItemClick = (programId: string, date: Date) => {
+    setPreselectedDataForItem({ programId, date });
+    setIsItemFormOpen(true);
   };
 
   const handleBackToWeek = () => {
@@ -101,7 +108,11 @@ export default function GrillaPage() {
       try {
         await saveCommercialItem(item, dates, userInfo.id);
         toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
-        // Optionally refresh data if needed, for now the daily view will fetch it
+        if(view === 'diaria') {
+            // Force a refresh of items in daily view
+            setView('semanal');
+            setTimeout(() => setView('diaria'), 0);
+        }
       } catch (error) {
           console.error("Error saving commercial item(s):", error);
           toast({ title: 'Error al guardar el elemento', variant: 'destructive' });
@@ -117,10 +128,22 @@ export default function GrillaPage() {
     );
   }
 
+  const navigateWeek = (direction: 'next' | 'prev') => {
+    const amount = direction === 'next' ? 7 : -7;
+    setCurrentDate(prev => addDays(prev, amount));
+  };
+
+
   return (
     <>
       <div className="flex flex-col h-full">
         <Header title="Grilla Comercial">
+          {view === 'semanal' && (
+             <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}><ArrowLeft className="h-4 w-4" /></Button>
+                <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}><ArrowRight className="h-4 w-4" /></Button>
+             </div>
+          )}
           {view === 'diaria' && (
             <Button variant="outline" onClick={handleBackToWeek}>
               Volver a la semana
@@ -132,7 +155,7 @@ export default function GrillaPage() {
                   <PlusCircle className="mr-2 h-4 w-4"/>
                   Nuevo Programa
               </Button>
-              <Button variant="secondary" onClick={() => setIsItemFormOpen(true)}>
+              <Button variant="secondary" onClick={() => { setPreselectedDataForItem(null); setIsItemFormOpen(true);}}>
                   <PlusCircle className="mr-2 h-4 w-4"/>
                   Nuevo Elemento Comercial
               </Button>
@@ -147,12 +170,14 @@ export default function GrillaPage() {
                 onEditProgram={openProgramForm}
                 onDeleteProgram={(p) => setProgramToDelete(p)}
                 canManage={!!canManage}
+                currentDate={currentDate}
             />
           ) : (
             <GrillaDiaria 
-                date={selectedDate} 
+                date={currentDate} 
                 programs={programs}
                 canManage={!!canManage}
+                onAddItem={handleAddItemClick}
             />
           )}
         </main>
@@ -169,6 +194,7 @@ export default function GrillaPage() {
             onOpenChange={setIsItemFormOpen}
             onSave={handleSaveCommercialItem}
             programs={programs}
+            preselectedData={preselectedDataForItem}
         />
       )}
       <AlertDialog open={!!programToDelete} onOpenChange={(open) => !open && setProgramToDelete(null)}>
