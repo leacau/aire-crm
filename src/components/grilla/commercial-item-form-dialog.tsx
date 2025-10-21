@@ -106,7 +106,6 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
   const handleDelete = () => {
     if (item) {
       onDelete(item);
-      onOpenChange(false);
     }
   };
   

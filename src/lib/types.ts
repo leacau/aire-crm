@@ -5,6 +5,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -277,6 +278,7 @@ export type CommercialItem = {
   type: CommercialItemType;
   description: string;
   status: CommercialItemStatus;
+  seriesId?: string;
   clientId?: string;
   clientName?: string;
   opportunityId?: string;

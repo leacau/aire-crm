@@ -74,8 +74,15 @@ export const getCommercialItems = async (date: string): Promise<CommercialItem[]
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CommercialItem));
 };
 
+export const getCommercialItemsBySeries = async (seriesId: string): Promise<CommercialItem[]> => {
+    const q = query(commercialItemsCollection, where("seriesId", "==", seriesId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CommercialItem));
+};
+
 export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string): Promise<void> => {
     const batch = writeBatch(db);
+    const seriesId = doc(collection(db, 'dummy')).id; // Generate a unique ID for the series
 
     for (const date of dates) {
         const docRef = doc(collection(db, 'commercial_items'));
@@ -84,6 +91,7 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
         const itemData: Omit<CommercialItem, 'id'> = {
             ...item,
             date: formattedDate,
+            seriesId: dates.length > 1 ? seriesId : undefined,
         };
 
         const dataToSave = { ...itemData, createdBy: userId };
@@ -118,9 +126,14 @@ export const updateCommercialItem = async (itemId: string, itemData: Partial<Omi
     await updateDoc(docRef, dataToUpdate);
 }
 
-export const deleteCommercialItem = async (itemId: string): Promise<void> => {
-    const docRef = doc(db, 'commercial_items', itemId);
-    await deleteDoc(docRef);
+export const deleteCommercialItem = async (itemIds: string[]): Promise<void> => {
+    if (itemIds.length === 0) return;
+    const batch = writeBatch(db);
+    itemIds.forEach(id => {
+        const docRef = doc(db, 'commercial_items', id);
+        batch.delete(docRef);
+    });
+    await batch.commit();
 };
 
 

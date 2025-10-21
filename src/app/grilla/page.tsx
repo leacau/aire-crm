@@ -11,10 +11,11 @@ import { GrillaSemanal } from '@/components/grilla/grilla-semanal';
 import { GrillaDiaria } from '@/components/grilla/grilla-diaria';
 import { ProgramFormDialog } from '@/components/grilla/program-form-dialog';
 import type { Program, CommercialItem } from '@/lib/types';
-import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialItem, updateCommercialItem, deleteCommercialItem } from '@/lib/firebase-service';
+import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialItem, updateCommercialItem, deleteCommercialItem, getCommercialItemsBySeries } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { CommercialItemFormDialog } from '@/components/grilla/commercial-item-form-dialog';
+import { DeleteItemDialog } from '@/components/grilla/delete-item-dialog';
 import { addDays, format, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -30,6 +31,7 @@ export default function GrillaPage() {
 
   const [isProgramFormOpen, setIsProgramFormOpen] = useState(false);
   const [isItemFormOpen, setIsItemFormOpen] = useState(false);
+  const [isDeleteItemDialogOpen, setIsDeleteItemDialogOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [programToDelete, setProgramToDelete] = useState<Program | null>(null);
   const [selectedItem, setSelectedItem] = useState<CommercialItem | null>(null);
@@ -115,32 +117,15 @@ export default function GrillaPage() {
     }
   };
   
-  const handleSaveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, newDates: Date[]) => {
+  const handleSaveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[]) => {
       if (!userInfo) return;
       try {
         if (selectedItem) { // Editing existing item
-            const originalDateStr = format(new Date(selectedItem.date), 'yyyy-MM-dd');
-            const newDatesStr = newDates.map(d => format(d, 'yyyy-MM-dd'));
-
-            const isOriginalDateKept = newDatesStr.includes(originalDateStr);
-
-            if (isOriginalDateKept) {
-                // If original date is kept, update it and create new ones for other dates.
-                await updateCommercialItem(selectedItem.id, item);
-                const datesToAdd = newDates.filter(d => !isSameDay(d, new Date(selectedItem.date)));
-                if (datesToAdd.length > 0) {
-                  await saveCommercialItem(item, datesToAdd, userInfo.id);
-                }
-            } else {
-                // If original date is removed, delete it and create all new ones.
-                await deleteCommercialItem(selectedItem.id);
-                await saveCommercialItem(item, newDates, userInfo.id);
-            }
-             toast({ title: 'Elemento comercial actualizado' });
-
+            await updateCommercialItem(selectedItem.id, item);
+            toast({ title: 'Elemento comercial actualizado' });
         } else { // Creating new items
-            await saveCommercialItem(item, newDates, userInfo.id);
-            toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${newDates.length} elemento(s) han sido creados.` });
+            await saveCommercialItem(item, dates, userInfo.id);
+            toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
         }
         
         if(view === 'diaria') {
@@ -153,24 +138,42 @@ export default function GrillaPage() {
       }
   };
 
-  const handleDeleteItem = async () => {
-    if (!itemToDelete) return;
+  const handleDeleteItem = async (item: CommercialItem, deleteMode: 'single' | 'forward' | 'all') => {
+    if (!canManage) return;
+
     try {
-      await deleteCommercialItem(itemToDelete.id);
-      toast({ title: 'Elemento comercial eliminado' });
-      setIsItemFormOpen(false); // Close the dialog if it was open
-      
-      // Force a re-render of the daily view to show the change
-      if (view === 'diaria') {
-        setView('semanal');
-        setTimeout(() => setView('diaria'), 0);
-      }
+        let idsToDelete = [item.id];
+        if (item.seriesId && (deleteMode === 'forward' || deleteMode === 'all')) {
+            const seriesItems = await getCommercialItemsBySeries(item.seriesId);
+            if (deleteMode === 'all') {
+                idsToDelete = seriesItems.map(i => i.id);
+            } else { // forward
+                idsToDelete = seriesItems
+                    .filter(i => new Date(i.date) >= new Date(item.date))
+                    .map(i => i.id);
+            }
+        }
+        
+        await deleteCommercialItem(idsToDelete);
+
+        toast({ title: 'Elemento(s) comercial(es) eliminado(s)' });
+        setIsDeleteItemDialogOpen(false);
+        setItemToDelete(null);
+
+        // Force a re-render of the daily view to show the change
+        if (view === 'diaria') {
+            setView('semanal');
+            setTimeout(() => setView('diaria'), 0);
+        }
     } catch (error) {
-      console.error("Error deleting commercial item:", error);
-      toast({ title: 'Error al eliminar el elemento', variant: 'destructive' });
-    } finally {
-      setItemToDelete(null);
+        console.error("Error deleting commercial item(s):", error);
+        toast({ title: 'Error al eliminar el elemento', variant: 'destructive' });
     }
+  };
+  
+  const openDeleteItemDialog = (item: CommercialItem) => {
+    setItemToDelete(item);
+    setIsDeleteItemDialogOpen(true);
   };
 
 
@@ -248,18 +251,18 @@ export default function GrillaPage() {
         onSave={handleSaveProgram}
         program={selectedProgram}
       />
-      {
+      {isItemFormOpen && (
         <CommercialItemFormDialog
             isOpen={isItemFormOpen}
             onOpenChange={setIsItemFormOpen}
             onSave={handleSaveCommercialItem}
-            onDelete={item => setItemToDelete(item)}
+            onDelete={openDeleteItemDialog}
             item={selectedItem}
             programs={programs}
             preselectedData={preselectedDataForItem}
         />
-      }
-      <AlertDialog open={!!programToDelete} onOpenChange={(open) => !open && setProgramToDelete(null)}>
+      )}
+       <AlertDialog open={!!programToDelete} onOpenChange={(open) => !open && setProgramToDelete(null)}>
         <AlertDialogContent>
             <AlertDialogHeader>
                 <AlertDialogTitle>¿Eliminar Programa?</AlertDialogTitle>
@@ -275,22 +278,15 @@ export default function GrillaPage() {
             </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
-        <AlertDialogContent>
-            <AlertDialogHeader>
-                <AlertDialogTitle>¿Eliminar Elemento Comercial?</AlertDialogTitle>
-                <AlertDialogDescription>
-                    Esta acción es irreversible y eliminará permanentemente el elemento: "{itemToDelete?.description}".
-                </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteItem} variant="destructive">
-                    Eliminar
-                </AlertDialogAction>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      
+      {itemToDelete && (
+          <DeleteItemDialog
+            isOpen={isDeleteItemDialogOpen}
+            onOpenChange={setIsDeleteItemDialogOpen}
+            item={itemToDelete}
+            onConfirmDelete={handleDeleteItem}
+        />
+      )}
     </>
   );
 }
