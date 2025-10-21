@@ -125,12 +125,14 @@ export default function GrillaPage() {
             const isOriginalDateKept = newDatesStr.includes(originalDateStr);
 
             if (isOriginalDateKept) {
+                // If original date is kept, update it and create new ones for other dates.
                 await updateCommercialItem(selectedItem.id, item);
                 const datesToAdd = newDates.filter(d => !isSameDay(d, new Date(selectedItem.date)));
                 if (datesToAdd.length > 0) {
                   await saveCommercialItem(item, datesToAdd, userInfo.id);
                 }
             } else {
+                // If original date is removed, delete it and create all new ones.
                 await deleteCommercialItem(selectedItem.id);
                 await saveCommercialItem(item, newDates, userInfo.id);
             }
@@ -158,7 +160,7 @@ export default function GrillaPage() {
       toast({ title: 'Elemento comercial eliminado' });
       setIsItemFormOpen(false); // Close the dialog if it was open
       
-      // Refresh view
+      // Force a re-render of the daily view to show the change
       if (view === 'diaria') {
         setView('semanal');
         setTimeout(() => setView('diaria'), 0);
