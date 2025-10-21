@@ -10,7 +10,7 @@ import { GrillaSemanal } from '@/components/grilla/grilla-semanal';
 import { GrillaDiaria } from '@/components/grilla/grilla-diaria';
 import { ProgramFormDialog } from '@/components/grilla/program-form-dialog';
 import type { Program, CommercialItem } from '@/lib/types';
-import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialItem } from '@/lib/firebase-service';
+import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialItem, updateCommercialItem } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { CommercialItemFormDialog } from '@/components/grilla/commercial-item-form-dialog';
@@ -31,6 +31,7 @@ export default function GrillaPage() {
   const [isItemFormOpen, setIsItemFormOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [programToDelete, setProgramToDelete] = useState<Program | null>(null);
+  const [selectedItem, setSelectedItem] = useState<CommercialItem | null>(null);
   const [preselectedDataForItem, setPreselectedDataForItem] = useState<{ programId?: string, date?: Date } | null>(null);
 
   const canManage = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
@@ -59,13 +60,14 @@ export default function GrillaPage() {
     setView('diaria');
   };
   
-  const handleAddItemClick = (programId: string, date: Date) => {
-    setPreselectedDataForItem({ programId, date });
+  const handleItemClick = (item: CommercialItem) => {
+    setSelectedItem(item);
     setIsItemFormOpen(true);
   };
 
   const handleBackToWeek = () => {
     setView('semanal');
+    setSelectedItem(null); // Clear selection when going back
   };
 
   const openProgramForm = (program: Program | null = null) => {
@@ -107,8 +109,14 @@ export default function GrillaPage() {
   const handleSaveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[]) => {
       if (!userInfo) return;
       try {
-        await saveCommercialItem(item, dates, userInfo.id);
-        toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
+        if (selectedItem) { // Editing existing item
+            await updateCommercialItem(selectedItem.id, item);
+            toast({ title: 'Elemento comercial actualizado' });
+        } else { // Creating new items
+            await saveCommercialItem(item, dates, userInfo.id);
+            toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
+        }
+        
         if(view === 'diaria') {
             // Force a refresh of items in daily view
             setView('semanal');
@@ -161,7 +169,7 @@ export default function GrillaPage() {
                   <PlusCircle className="mr-2 h-4 w-4"/>
                   Nuevo Programa
               </Button>
-              <Button variant="secondary" onClick={() => { setPreselectedDataForItem(null); setIsItemFormOpen(true);}}>
+              <Button variant="secondary" onClick={() => { setSelectedItem(null); setPreselectedDataForItem(null); setIsItemFormOpen(true);}}>
                   <PlusCircle className="mr-2 h-4 w-4"/>
                   Nuevo Elemento Comercial
               </Button>
@@ -183,7 +191,7 @@ export default function GrillaPage() {
                 date={currentDate} 
                 programs={programs}
                 canManage={!!canManage}
-                onAddItem={handleAddItemClick}
+                onItemClick={handleItemClick}
             />
           )}
         </main>
@@ -199,6 +207,7 @@ export default function GrillaPage() {
             isOpen={isItemFormOpen}
             onOpenChange={setIsItemFormOpen}
             onSave={handleSaveCommercialItem}
+            item={selectedItem}
             programs={programs}
             preselectedData={preselectedDataForItem}
         />

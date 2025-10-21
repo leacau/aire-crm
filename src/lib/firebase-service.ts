@@ -102,6 +102,22 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
     await batch.commit();
 };
 
+export const updateCommercialItem = async (itemId: string, itemData: Partial<Omit<CommercialItem, 'id'>>): Promise<void> => {
+    const docRef = doc(db, 'commercial_items', itemId);
+    const dataToUpdate: {[key:string]: any} = {...itemData};
+    
+    if (!dataToUpdate.clientId) {
+        dataToUpdate.clientId = deleteField();
+        dataToUpdate.clientName = deleteField();
+    }
+    if (!dataToUpdate.opportunityId) {
+        dataToUpdate.opportunityId = deleteField();
+        dataToUpdate.opportunityTitle = deleteField();
+    }
+
+    await updateDoc(docRef, dataToUpdate);
+}
+
 
 // --- Canje Functions ---
 export const getCanjes = async (): Promise<Canje[]> => {

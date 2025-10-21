@@ -18,7 +18,7 @@ interface GrillaDiariaProps {
   date: Date;
   programs: Program[];
   canManage: boolean;
-  onAddItem: (programId: string, date: Date) => void;
+  onItemClick: (item: CommercialItem) => void;
 }
 
 const statusColors: Record<CommercialItem['status'], string> = {
@@ -27,7 +27,7 @@ const statusColors: Record<CommercialItem['status'], string> = {
   'Vendido': 'bg-green-200 text-green-800',
 };
 
-export function GrillaDiaria({ date, programs, canManage, onAddItem }: GrillaDiariaProps) {
+export function GrillaDiaria({ date, programs, canManage, onItemClick }: GrillaDiariaProps) {
   const { userInfo } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<CommercialItem[]>([]);
@@ -74,10 +74,7 @@ export function GrillaDiaria({ date, programs, canManage, onAddItem }: GrillaDia
           return (
             <Card key={program.id}>
               <CardHeader className={cn("p-4 flex flex-row items-center justify-between", program.color)}>
-                 <CardTitle 
-                    className={cn("text-lg", canManage && "cursor-pointer hover:underline")}
-                    onClick={() => canManage && onAddItem(program.id, date)}
-                 >
+                 <CardTitle className="text-lg">
                     {program.name} <span className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</span>
                  </CardTitle>
               </CardHeader>
@@ -86,7 +83,14 @@ export function GrillaDiaria({ date, programs, canManage, onAddItem }: GrillaDia
                    <div className="flex justify-center items-center h-20"><Spinner /></div>
                 ) : programItems.length > 0 ? (
                    programItems.map(item => (
-                      <div key={item.id} className="flex items-center justify-between p-2 rounded-md border bg-muted/50">
+                      <div 
+                        key={item.id} 
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded-md border bg-muted/50",
+                          canManage && "cursor-pointer hover:bg-muted/80"
+                        )}
+                        onClick={() => canManage && onItemClick(item)}
+                      >
                           <div>
                               <p className="font-medium">{item.description}</p>
                               <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">

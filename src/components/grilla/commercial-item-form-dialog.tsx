@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,7 @@ import { Calendar } from '../ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { useAuth } from '@/hooks/use-auth';
 
 interface CommercialItemFormDialogProps {
   isOpen: boolean;
@@ -32,6 +33,7 @@ interface CommercialItemFormDialogProps {
 }
 
 export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, programs, preselectedData }: CommercialItemFormDialogProps) {
+  const { userInfo, isBoss } = useAuth();
   const [programId, setProgramId] = useState<string | undefined>();
   const [type, setType] = useState<CommercialItem['type']>('Pauta');
   const [description, setDescription] = useState('');
@@ -41,38 +43,60 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
   
   const [dates, setDates] = useState<Date[] | undefined>();
 
-  const [clients, setClients] = useState<Client[]>([]);
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   
   const { toast } = useToast();
+  const isEditing = !!item;
 
   useEffect(() => {
     if (isOpen) {
       // Fetch clients and opportunities when dialog opens
-      getClients().then(setClients).catch(err => console.error("Failed to fetch clients", err));
-      getAllOpportunities().then(setOpportunities).catch(err => console.error("Failed to fetch opportunities", err));
+      Promise.all([
+        getClients(),
+        getAllOpportunities()
+      ]).then(([clients, opps]) => {
+        setAllClients(clients);
+        setOpportunities(opps);
+      }).catch(err => console.error("Failed to fetch data", err));
       
-      // Reset form state
-      setProgramId(preselectedData?.programId);
-      setType('Pauta');
-      setDescription('');
-      setStatus('Disponible');
-      setClientId(undefined);
-      setOpportunityId(undefined);
-      setDates(preselectedData?.date ? [preselectedData.date] : undefined);
+      if (isEditing && item) {
+        setProgramId(item.programId);
+        setType(item.type);
+        setDescription(item.description);
+        setStatus(item.status);
+        setClientId(item.clientId);
+        setOpportunityId(item.opportunityId);
+        setDates([new Date(item.date)]);
+      } else {
+        // Reset form state for creation
+        setProgramId(preselectedData?.programId);
+        setType('Pauta');
+        setDescription('');
+        setStatus('Disponible');
+        setClientId(undefined);
+        setOpportunityId(undefined);
+        setDates(preselectedData?.date ? [preselectedData.date] : undefined);
+      }
     }
-  }, [isOpen, preselectedData]);
+  }, [isOpen, item, isEditing, preselectedData]);
+  
+  const filteredClients = useMemo(() => {
+    if (!userInfo) return [];
+    if (isBoss) return allClients;
+    return allClients.filter(c => c.ownerId === userInfo.id);
+  }, [allClients, isBoss, userInfo]);
   
   const clientOpportunities = clientId ? opportunities.filter(opp => opp.clientId === clientId) : [];
-
 
   const handleSave = () => {
     if (!programId || !description.trim() || !dates || dates.length === 0) {
       toast({ title: 'Campos obligatorios', description: 'Programa, descripción y al menos una fecha son requeridos.', variant: 'destructive' });
       return;
     }
-    const clientName = clients.find(c => c.id === clientId)?.denominacion;
+    const clientName = allClients.find(c => c.id === clientId)?.denominacion;
     const opportunityTitle = opportunities.find(o => o.id === opportunityId)?.title;
+    
     onSave({ programId, type, description, status, clientId, clientName, opportunityId, opportunityTitle }, dates);
     onOpenChange(false);
   };
@@ -83,13 +107,16 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
         <DialogHeader>
           <DialogTitle>{item ? 'Editar' : 'Nuevo'} Elemento Comercial</DialogTitle>
           <DialogDescription>
-            Añade un nuevo espacio comercial a la grilla para uno o varios días.
+            {isEditing 
+                ? 'Modifica el estado y los detalles del elemento comercial.'
+                : 'Añade un nuevo espacio comercial a la grilla para uno o varios días.'
+            }
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
           <div className="space-y-2">
             <Label htmlFor="programId">Programa</Label>
-             <Select value={programId} onValueChange={setProgramId}>
+             <Select value={programId} onValueChange={setProgramId} disabled={isEditing}>
                 <SelectTrigger id="programId"><SelectValue placeholder="Seleccionar programa..." /></SelectTrigger>
                 <SelectContent>
                   {programs.sort((a,b) => a.name.localeCompare(b.name)).map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
@@ -104,6 +131,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
                 onSelect={setDates}
                 locale={es}
                 className="rounded-md border"
+                disabled={isEditing}
             />
             <p className="text-sm text-muted-foreground">
                 {dates?.length ? `${dates.length} día(s) seleccionado(s).` : 'Selecciona una o más fechas.'}
@@ -141,7 +169,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
                   <Select value={clientId} onValueChange={setClientId}>
                     <SelectTrigger id="item-client"><SelectValue placeholder="Asignar cliente..." /></SelectTrigger>
                     <SelectContent>
-                      {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
+                      {filteredClients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
