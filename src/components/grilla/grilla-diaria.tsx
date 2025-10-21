@@ -58,7 +58,7 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
   
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, programs]); // Added programs to dependency array
 
   const userClientIds = useMemo(() => {
     if (!userInfo || canManage) return null;
@@ -97,9 +97,11 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
           return (
             <Card key={program.id}>
               <CardHeader className={cn("p-4 flex flex-row items-center justify-between", program.color)}>
-                 <CardTitle className="text-lg">
-                    {program.name} <span className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</span>
-                 </CardTitle>
+                 <div className='cursor-pointer flex-1' onClick={() => onAddItemClick(program.id, date)}>
+                    <CardTitle className="text-lg">
+                        {program.name} <span className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</span>
+                    </CardTitle>
+                 </div>
                  {canManage && (
                     <Button variant="ghost" size="icon" className="h-8 w-8 bg-black/10 hover:bg-black/20" onClick={() => onAddItemClick(program.id, date)}>
                         <PlusCircle className="h-5 w-5 text-white" />

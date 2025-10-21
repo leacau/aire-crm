@@ -127,11 +127,7 @@ export default function GrillaPage() {
             await saveCommercialItem(item, dates, userInfo.id);
             toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
         }
-        
-        if(view === 'diaria') {
-            setView('semanal');
-            setTimeout(() => setView('diaria'), 0);
-        }
+        fetchPrograms(); // This will trigger re-fetch in children components that depend on programs
       } catch (error) {
           console.error("Error saving commercial item(s):", error);
           toast({ title: 'Error al guardar el elemento', variant: 'destructive' });
@@ -159,12 +155,7 @@ export default function GrillaPage() {
         toast({ title: 'Elemento(s) comercial(es) eliminado(s)' });
         setIsDeleteItemDialogOpen(false);
         setItemToDelete(null);
-
-        // Force a re-render of the daily view to show the change
-        if (view === 'diaria') {
-            setView('semanal');
-            setTimeout(() => setView('diaria'), 0);
-        }
+        fetchPrograms(); // Refresh data
     } catch (error) {
         console.error("Error deleting commercial item(s):", error);
         toast({ title: 'Error al eliminar el elemento', variant: 'destructive' });
@@ -241,6 +232,7 @@ export default function GrillaPage() {
                 canManage={!!canManage}
                 onItemClick={handleItemClick}
                 onAddItemClick={handleOpenItemForm}
+                key={currentDate.toISOString() + programs.length} // Force re-render on data change
             />
           )}
         </main>
