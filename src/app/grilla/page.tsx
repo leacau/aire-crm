@@ -14,7 +14,8 @@ import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialI
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { CommercialItemFormDialog } from '@/components/grilla/commercial-item-form-dialog';
-import { addDays } from 'date-fns';
+import { addDays, format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 
 export default function GrillaPage() {
@@ -139,9 +140,14 @@ export default function GrillaPage() {
       <div className="flex flex-col h-full">
         <Header title="Grilla Comercial">
           {view === 'semanal' && (
-             <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}><ArrowLeft className="h-4 w-4" /></Button>
-                <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}><ArrowRight className="h-4 w-4" /></Button>
+             <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1">
+                    <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}><ArrowLeft className="h-4 w-4" /></Button>
+                    <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}><ArrowRight className="h-4 w-4" /></Button>
+                </div>
+                <h3 className="text-lg font-semibold capitalize min-w-[150px] text-center">
+                  {format(currentDate, 'MMMM yyyy', { locale: es })}
+                </h3>
              </div>
           )}
           {view === 'diaria' && (

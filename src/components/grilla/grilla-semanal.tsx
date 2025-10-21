@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Program, CommercialItem } from '@/lib/types';
-import { addDays, startOfWeek, format } from 'date-fns';
+import { addDays, startOfWeek, format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -70,7 +70,12 @@ export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeletePro
               onClick={() => onDayClick(day)}
             >
               <span className="capitalize">{format(day, 'eeee', { locale: es })}</span>
-              <span className="block text-sm font-normal text-muted-foreground">{format(day, 'd', { locale: es })}</span>
+              <span className={cn(
+                "block text-sm font-normal text-muted-foreground",
+                isToday(day) && "text-primary font-bold"
+              )}>
+                {format(day, 'd', { locale: es })}
+              </span>
             </h3>
             <div className="space-y-2">
                 {programsForDay.map(programWithSchedule => {
