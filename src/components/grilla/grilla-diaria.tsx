@@ -11,14 +11,16 @@ import { useToast } from '@/hooks/use-toast';
 import { getCommercialItems } from '@/lib/firebase-service';
 import { Spinner } from '../ui/spinner';
 import { useAuth } from '@/hooks/use-auth';
-import { Building, CircleDollarSign } from 'lucide-react';
+import { Building, CircleDollarSign, PlusCircle } from 'lucide-react';
 import Link from 'next/link';
+import { Button } from '../ui/button';
 
 interface GrillaDiariaProps {
   date: Date;
   programs: Program[];
   canManage: boolean;
   onItemClick: (item: CommercialItem) => void;
+  onAddItemClick: (programId: string, date: Date) => void;
 }
 
 const statusColors: Record<CommercialItem['status'], string> = {
@@ -27,7 +29,7 @@ const statusColors: Record<CommercialItem['status'], string> = {
   'Vendido': 'bg-green-200 text-green-800',
 };
 
-export function GrillaDiaria({ date, programs, canManage, onItemClick }: GrillaDiariaProps) {
+export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItemClick }: GrillaDiariaProps) {
   const { userInfo } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<CommercialItem[]>([]);
@@ -77,6 +79,11 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick }: GrillaD
                  <CardTitle className="text-lg">
                     {program.name} <span className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</span>
                  </CardTitle>
+                 {canManage && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 bg-black/10 hover:bg-black/20" onClick={() => onAddItemClick(program.id, date)}>
+                        <PlusCircle className="h-5 w-5 text-white" />
+                    </Button>
+                 )}
               </CardHeader>
               <CardContent className="p-4 space-y-3">
                 {loadingItems ? (

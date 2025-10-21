@@ -64,6 +64,13 @@ export default function GrillaPage() {
     setSelectedItem(item);
     setIsItemFormOpen(true);
   };
+  
+  const handleOpenItemForm = (programId: string, date: Date) => {
+    setSelectedItem(null);
+    setPreselectedDataForItem({ programId, date });
+    setIsItemFormOpen(true);
+  }
+
 
   const handleBackToWeek = () => {
     setView('semanal');
@@ -110,7 +117,7 @@ export default function GrillaPage() {
       if (!userInfo) return;
       try {
         if (selectedItem) { // Editing existing item
-            await updateCommercialItem(selectedItem.id, item);
+            await updateCommercialItem(selectedItem.id, { ...item, date: format(dates[0], 'yyyy-MM-dd')});
             toast({ title: 'Elemento comercial actualizado' });
         } else { // Creating new items
             await saveCommercialItem(item, dates, userInfo.id);
@@ -192,6 +199,7 @@ export default function GrillaPage() {
                 programs={programs}
                 canManage={!!canManage}
                 onItemClick={handleItemClick}
+                onAddItemClick={handleOpenItemForm}
             />
           )}
         </main>

@@ -126,12 +126,11 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, item, p
           <div className="space-y-2">
             <Label>Fechas de Emisión</Label>
              <Calendar
-                mode="multiple"
-                selected={dates}
-                onSelect={setDates}
+                mode={isEditing ? 'single' : 'multiple'}
+                selected={isEditing ? dates?.[0] : dates}
+                onSelect={isEditing ? (day) => setDates(day ? [day] : []) : setDates}
                 locale={es}
                 className="rounded-md border"
-                disabled={isEditing}
             />
             <p className="text-sm text-muted-foreground">
                 {dates?.length ? `${dates.length} día(s) seleccionado(s).` : 'Selecciona una o más fechas.'}
