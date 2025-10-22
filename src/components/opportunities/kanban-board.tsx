@@ -30,6 +30,7 @@ const stageColors: Record<OpportunityStage, string> = {
   'Negociación a Aprobar': 'border-purple-500',
   'Cerrado - Ganado': 'border-green-500',
   'Cerrado - Perdido': 'border-red-500',
+  'Cerrado - No Definido': 'border-gray-500',
 };
 
 interface KanbanBoardProps {

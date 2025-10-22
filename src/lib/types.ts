@@ -1,16 +1,10 @@
 
-
-
-
-
-
-
-
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
   | 'Negociación'
   | 'Negociación a Aprobar'
+  | 'Cerrado - No Definido'
   | 'Cerrado - Ganado'
   | 'Cerrado - Perdido';
 
