@@ -98,8 +98,8 @@ export const GrillaPdf = React.forwardRef<HTMLDivElement, GrillaPdfProps>(({ pro
                     {options.dateType === 'generic' ? 'Semana Tipo' : format(startOfGivenWeek, "MMMM yyyy", { locale: es })}
                 </h2>
             </div>
-            <div className="w-24 h-auto">
-                 <img src="/logo.webp" alt="Logo AIRE" style={{width: '100px', height: 'auto' }} />
+            <div className="w-12 h-auto">
+                 <img src="/logo.webp" alt="Logo AIRE" style={{width: '50px', height: 'auto' }} />
             </div>
         </header>
 
