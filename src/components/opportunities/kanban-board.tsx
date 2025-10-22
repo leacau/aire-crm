@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -36,6 +37,8 @@ const stageColors: Record<OpportunityStage, string> = {
 interface KanbanBoardProps {
   dateRange?: DateRange;
   selectedAdvisor: string;
+  selectedClient: string;
+  onClientListChange: (clients: { id: string; name: string }[]) => void;
 }
 
 const KanbanColumn = ({
@@ -190,7 +193,7 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
   );
 };
 
-export function KanbanBoard({ dateRange, selectedAdvisor }: KanbanBoardProps) {
+export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClientListChange }: KanbanBoardProps) {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -253,14 +256,30 @@ export function KanbanBoard({ dateRange, selectedAdvisor }: KanbanBoardProps) {
     }
     
     if (dateRange?.from && dateRange?.to) {
-      return opps.filter(opp => {
+      opps = opps.filter(opp => {
         const closeDate = new Date(opp.closeDate);
         return isWithinInterval(closeDate, { start: dateRange.from!, end: dateRange.to! });
       });
     }
 
+    if (selectedClient !== 'all') {
+      opps = opps.filter(opp => opp.clientId === selectedClient);
+    }
+
     return opps;
-  }, [opportunities, clients, userInfo, isBoss, selectedAdvisor, dateRange, advisorClientIds]);
+  }, [opportunities, clients, userInfo, isBoss, selectedAdvisor, dateRange, advisorClientIds, selectedClient]);
+
+
+  useEffect(() => {
+    const uniqueClients = filteredOpportunities.reduce((acc, opp) => {
+        if (!acc.some(client => client.id === opp.clientId)) {
+            acc.push({ id: opp.clientId, name: opp.clientName });
+        }
+        return acc;
+    }, [] as { id: string, name: string }[]).sort((a,b) => a.name.localeCompare(b.name));
+    
+    onClientListChange(uniqueClients);
+}, [filteredOpportunities, onClientListChange]);
 
 
   const handleCardDrop = async (e: React.DragEvent<HTMLDivElement>, newStage: OpportunityStage) => {

@@ -17,6 +17,8 @@ export default function OpportunitiesPage() {
   const { isBoss } = useAuth();
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
+  const [clientList, setClientList] = useState<{ id: string; name: string }[]>([]);
+  const [selectedClient, setSelectedClient] = useState<string>('all');
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const today = new Date();
@@ -31,6 +33,12 @@ export default function OpportunitiesPage() {
       getAllUsers('Asesor').then(setAdvisors);
     }
   }, [isBoss]);
+  
+  useEffect(() => {
+    // Reset client filter when advisor changes
+    setSelectedClient('all');
+  }, [selectedAdvisor, dateRange]);
+
 
   return (
     <div className="flex flex-col h-full">
@@ -49,9 +57,25 @@ export default function OpportunitiesPage() {
               </SelectContent>
             </Select>
           )}
+          <Select value={selectedClient} onValueChange={setSelectedClient}>
+            <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="Filtrar por cliente" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="all">Todos los clientes</SelectItem>
+                {clientList.map(client => (
+                    <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
       </Header>
       <main className="flex-1 overflow-x-auto">
-        <KanbanBoard dateRange={dateRange} selectedAdvisor={selectedAdvisor} />
+        <KanbanBoard 
+          dateRange={dateRange} 
+          selectedAdvisor={selectedAdvisor}
+          selectedClient={selectedClient}
+          onClientListChange={setClientList}
+        />
       </main>
     </div>
   );
