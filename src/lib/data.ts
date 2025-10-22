@@ -6,8 +6,8 @@ export const opportunityStages: OpportunityStage[] = [
   'Propuesta',
   'Negociación',
   'Negociación a Aprobar',
-  'Cerrado - No Definido',
   'Cerrado - Ganado',
+  'Cerrado - No Definido',
   'Cerrado - Perdido',
 ];
 
