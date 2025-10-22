@@ -31,7 +31,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice } from '@/lib/firebase-service';
-import { PlusCircle, Clock, Trash2, FileText } from 'lucide-react';
+import { PlusCircle, Clock, Trash2, FileText, Save } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -642,10 +642,10 @@ export function OpportunityDetailsDialog({
                     <TableHeader>
                         <TableRow>
                             <TableHead>Nº Factura</TableHead>
-                            <TableHead>Fecha Factura</TableHead>
+                            <TableHead>Fecha</TableHead>
                             <TableHead>Monto</TableHead>
                             <TableHead>Estado</TableHead>
-                            <TableHead className="w-12"></TableHead>
+                            <TableHead className="w-[100px] text-right">Acciones</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -655,7 +655,6 @@ export function OpportunityDetailsDialog({
                                 <Input 
                                   value={invoice.invoiceNumber || ''} 
                                   onChange={(e) => handleInvoiceChange(invoice.id, 'invoiceNumber', e.target.value)} 
-                                  onBlur={() => handleInvoiceUpdate(invoice.id)}
                                 />
                             </TableCell>
                             <TableCell>
@@ -663,7 +662,6 @@ export function OpportunityDetailsDialog({
                                   type="date"
                                   value={invoice.date || ''}
                                   onChange={(e) => handleInvoiceChange(invoice.id, 'date', e.target.value)}
-                                  onBlur={() => handleInvoiceUpdate(invoice.id)}
                                 />
                             </TableCell>
                             <TableCell>
@@ -671,16 +669,12 @@ export function OpportunityDetailsDialog({
                                   type="number" 
                                   value={invoice.amount || ''} 
                                   onChange={(e) => handleInvoiceChange(invoice.id, 'amount', Number(e.target.value))} 
-                                  onBlur={() => handleInvoiceUpdate(invoice.id)}
                                 />
                             </TableCell>
                             <TableCell>
                                 <Select 
                                     value={invoice.status} 
-                                    onValueChange={(value) => {
-                                        handleInvoiceChange(invoice.id, 'status', value as InvoiceStatus);
-                                        handleInvoiceUpdate(invoice.id);
-                                    }}
+                                    onValueChange={(value) => handleInvoiceChange(invoice.id, 'status', value as InvoiceStatus)}
                                 >
                                     <SelectTrigger>
                                         <SelectValue />
@@ -690,7 +684,10 @@ export function OpportunityDetailsDialog({
                                     </SelectContent>
                                 </Select>
                             </TableCell>
-                             <TableCell>
+                             <TableCell className="text-right">
+                                <Button variant="ghost" size="icon" onClick={() => handleInvoiceUpdate(invoice.id)}>
+                                  <Save className="h-4 w-4" />
+                                </Button>
                                 <Button variant="ghost" size="icon" onClick={() => handleInvoiceDelete(invoice.id)}>
                                     <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
