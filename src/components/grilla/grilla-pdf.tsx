@@ -7,6 +7,7 @@ import { addDays, startOfWeek, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { getCommercialItems } from '@/lib/firebase-service';
+import Image from 'next/image';
 
 interface GrillaPdfProps {
   programs: Program[];
@@ -91,10 +92,18 @@ export const GrillaPdf = React.forwardRef<HTMLDivElement, GrillaPdfProps>(({ pro
 
     return (
       <div ref={ref} className="bg-white p-4">
-        <h1 className="text-xl font-bold text-center mb-2">GRILLA COMERCIAL AIRE DE SANTA FE</h1>
-        <h2 className="text-lg font-semibold text-center mb-4 capitalize">
-            {options.dateType === 'generic' ? 'Semana Tipo' : format(startOfGivenWeek, "MMMM yyyy", { locale: es })}
-        </h2>
+         <header className="flex justify-between items-start mb-4">
+            <div>
+                <h1 className="text-xl font-bold">Aire de Santa Fe - Grilla semanal</h1>
+                <h2 className="text-lg font-semibold capitalize text-gray-600">
+                    {options.dateType === 'generic' ? 'Semana Tipo' : format(startOfGivenWeek, "MMMM yyyy", { locale: es })}
+                </h2>
+            </div>
+            <div className="w-24 h-auto">
+                 <Image src="/aire-logo-red.png" alt="Logo AIRE" width={100} height={100} />
+            </div>
+        </header>
+
         {loading && options.includeItems ? (
             <p>Cargando datos para el PDF...</p>
         ) : (
