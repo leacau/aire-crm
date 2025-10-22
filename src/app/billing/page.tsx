@@ -6,137 +6,17 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getClients, getAllUsers, getInvoices } from '@/lib/firebase-service';
+import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice } from '@/lib/firebase-service';
 import type { Opportunity, Client, User, Invoice } from '@/lib/types';
-import Link from 'next/link';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, startOfMonth, endOfMonth, format, parseISO } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { isWithinInterval, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ResizableDataTable } from '@/components/ui/resizable-data-table';
-import type { ColumnDef } from '@tanstack/react-table';
-import { TableFooter, TableRow, TableCell } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-
-const BillingTable = ({ 
-  items, 
-  type,
-  onRowClick, 
-  clientsMap, 
-  usersMap,
-  opportunitiesMap
-}: { 
-  items: (Opportunity | Invoice)[];
-  type: 'opportunities' | 'invoices';
-  onRowClick: (opp: Opportunity) => void;
-  clientsMap: Record<string, Client>;
-  usersMap: Record<string, User>;
-  opportunitiesMap: Record<string, Opportunity>;
-}) => {
-
-  const columns = useMemo<ColumnDef<Opportunity | Invoice>[]>(() => {
-    let cols: ColumnDef<any>[] = [
-      {
-        accessorKey: 'opportunityTitle',
-        header: 'Oportunidad',
-        cell: ({ row }) => {
-          const isOpp = type === 'opportunities';
-          const opp = isOpp ? row.original : opportunitiesMap[row.original.opportunityId];
-          if (!opp) return '-';
-          return (
-            <div 
-              className="font-medium text-primary hover:underline cursor-pointer"
-              onClick={() => onRowClick(opp)}
-            >
-                {opp.title}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: 'clientName',
-        header: 'Cliente',
-        cell: ({ row }) => {
-            const isOpp = type === 'opportunities';
-            const opp = isOpp ? row.original : opportunitiesMap[row.original.opportunityId];
-            if (!opp) return '-';
-            const client = clientsMap[opp.clientId];
-            if (!client) return opp.clientName;
-            
-            return (
-                <Link href={`/clients/${client.id}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
-                {client.denominacion}
-                </Link>
-            );
-        },
-      },
-    ];
-
-    if (type === 'opportunities') {
-        cols.push({
-            accessorKey: 'value',
-            header: () => <div className="text-right">Monto Oportunidad</div>,
-            cell: ({ row }) => <div className="text-right">${row.original.value.toLocaleString('es-AR')}</div>,
-        });
-    }
-
-    if (type === 'invoices') {
-        cols.push({
-            accessorKey: 'date',
-            header: 'Fecha Factura',
-            cell: ({ row }) => {
-              const invoice = row.original as Invoice;
-              return invoice.date ? format(new Date(invoice.date), 'P', { locale: es }) : '-';
-            },
-        });
-        cols.push({
-            accessorKey: 'amount',
-            header: () => <div className="text-right">Monto Factura</div>,
-            cell: ({ row }) => <div className="text-right">${row.original.amount.toLocaleString('es-AR')}</div>,
-        });
-        cols.push({
-            accessorKey: 'invoiceNumber',
-            header: 'Factura Nº',
-            cell: ({ row }) => row.original.invoiceNumber || '-',
-        });
-    }
-
-    return cols;
-
-  }, [type, onRowClick, clientsMap, opportunitiesMap]);
-
-  const total = items.reduce((acc, item) => {
-    if (type === 'invoices') return acc + (item as Invoice).amount;
-    if (type === 'opportunities') return acc + (item as Opportunity).value;
-    return acc;
-  }, 0);
-
-
-  const footerContent = (
-    <TableFooter>
-      <TableRow>
-        <TableCell colSpan={type === 'invoices' ? 3 : 2} className="font-bold">Total</TableCell>
-        <TableCell className="text-right font-bold">${total.toLocaleString('es-AR')}</TableCell>
-        {type === 'invoices' && <TableCell></TableCell>}
-      </TableRow>
-    </TableFooter>
-  );
-
-  return (
-      <ResizableDataTable
-        columns={columns}
-        data={items}
-        emptyStateMessage="No hay items en esta sección."
-        footerContent={footerContent}
-        enableRowResizing={false}
-      />
-  );
-};
+import { BillingTable } from '@/components/billing/billing-table';
 
 function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
@@ -212,56 +92,46 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { toInvoiceOpps, toCollectInvoices, paidInvoices } = useMemo(() => {
     if (!userInfo) return { toInvoiceOpps: [], toCollectInvoices: [], paidInvoices: [] };
     
-    let userClientIds: Set<string> | null = null;
-    if (isBoss) {
-        if (selectedAdvisor !== 'all') {
-            userClientIds = new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
-        }
-    } else {
-        userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
-    }
-    
-    let advisorFilteredOpps = opportunities;
-    if (userClientIds) {
-        advisorFilteredOpps = opportunities.filter(opp => userClientIds!.has(opp.clientId));
-    }
-    
-    const wonOppsInPeriod = advisorFilteredOpps.filter(opp => {
-        if (opp.stage !== 'Cerrado - Ganado') return false;
+    const isDateInRange = (dateStr: string) => {
         if (!dateRange?.from || !dateRange?.to) return true;
-        
-        const winDate = opp.closeDate ? parseISO(opp.closeDate) : null;
-        if (!winDate) return false;
+        const date = parseISO(dateStr);
+        return isWithinInterval(date, { start: dateRange.from, end: dateRange.to });
+    }
 
-        return isWithinInterval(winDate, { start: dateRange.from, end: dateRange.to });
+    const advisorClientIds = isBoss && selectedAdvisor !== 'all' 
+        ? new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id))
+        : null;
+
+    // A Facturar
+    const wonOppsInPeriod = opportunities.filter(opp => {
+        const isOwner = isBoss ? (advisorClientIds ? advisorClientIds.has(opp.clientId) : true) : clients.find(c => c.id === opp.clientId)?.ownerId === userInfo.id;
+        if (!isOwner || opp.stage !== 'Cerrado - Ganado') return false;
+        
+        return opp.closeDate ? isDateInRange(opp.closeDate) : false;
     });
 
-    const invoicesByOppId = invoices.reduce((acc, inv) => {
-        if (!acc[inv.opportunityId]) {
-            acc[inv.opportunityId] = [];
-        }
-        acc[inv.opportunityId].push(inv);
-        return acc;
-    }, {} as Record<string, Invoice[]>);
+    const oppsWithInvoices = new Set(invoices.map(inv => inv.opportunityId));
+    const toInvoiceOpps = wonOppsInPeriod.filter(opp => !oppsWithInvoices.has(opp.id));
 
-    const toInvoiceOpps: Opportunity[] = [];
-    const toCollectInvoices: Invoice[] = [];
-    const paidInvoices: Invoice[] = [];
+    // A Cobrar y Pagado
+    let userFilteredInvoices = invoices;
+    if (isBoss) {
+      if (selectedAdvisor !== 'all') {
+        const advisorOppIds = new Set(opportunities.filter(o => advisorClientIds?.has(o.clientId)).map(o => o.id));
+        userFilteredInvoices = invoices.filter(inv => advisorOppIds.has(inv.opportunityId));
+      }
+    } else {
+      const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
+      const userOppIds = new Set(opportunities.filter(o => userClientIds.has(o.clientId)).map(o => o.id));
+      userFilteredInvoices = invoices.filter(inv => userOppIds.has(inv.opportunityId));
+    }
     
-    wonOppsInPeriod.forEach(opp => {
-        const oppInvoices = invoicesByOppId[opp.id] || [];
-        
-        if (oppInvoices.length === 0) {
-            toInvoiceOpps.push(opp);
-        } else {
-            const hasPaidInvoice = oppInvoices.some(inv => inv.status === 'Pagada');
-            if (hasPaidInvoice) {
-                paidInvoices.push(...oppInvoices.filter(inv => inv.status === 'Pagada'));
-            } else {
-                toCollectInvoices.push(...oppInvoices);
-            }
-        }
-    });
+    const toCollectInvoices = userFilteredInvoices.filter(inv => 
+        inv.date && isDateInRange(inv.date) && inv.status !== 'Pagada'
+    );
+    const paidInvoices = userFilteredInvoices.filter(inv => 
+        inv.datePaid && isDateInRange(inv.datePaid) && inv.status === 'Pagada'
+    );
 
     return { toInvoiceOpps, toCollectInvoices, paidInvoices };
 
@@ -282,6 +152,35 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       toast({ title: "Error al actualizar", variant: "destructive" });
     }
   };
+
+  const handleMarkAsPaid = async (invoiceId: string) => {
+    if (!userInfo) return;
+
+    const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
+    if (!invoiceToUpdate) return;
+    
+    const opp = opportunities.find(o => o.id === invoiceToUpdate.opportunityId);
+    if (!opp) return;
+    
+    const client = clients.find(c => c.id === opp.clientId);
+    if (!client) return;
+    
+    try {
+      setInvoices(prev => prev.map(inv => inv.id === invoiceId ? {...inv, status: 'Pagada'} : inv));
+      
+      await updateInvoice(invoiceId, { status: 'Pagada' }, userInfo.id, userInfo.name, client.ownerName);
+
+      toast({ title: `Factura #${invoiceToUpdate.invoiceNumber} marcada como pagada.`});
+
+      // Refetch data to ensure UI is fully consistent after the update
+      setTimeout(fetchData, 300);
+
+    } catch(error) {
+        console.error("Error marking invoice as paid:", error);
+        toast({ title: "Error al actualizar la factura", variant: "destructive"});
+        fetchData(); // Revert optimistic update
+    }
+  }
   
   const handleRowClick = (opp: Opportunity) => {
       setSelectedOpportunity(opp);
@@ -325,7 +224,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             <BillingTable items={toInvoiceOpps} type="opportunities" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} />
           </TabsContent>
           <TabsContent value="to-collect">
-            <BillingTable items={toCollectInvoices} type="invoices" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} />
+            <BillingTable items={toCollectInvoices} type="invoices" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} onMarkAsPaid={handleMarkAsPaid} />
           </TabsContent>
            <TabsContent value="paid">
             <BillingTable items={paidInvoices} type="invoices" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} />
@@ -362,5 +261,7 @@ export default function BillingPage() {
     </React.Suspense>
   );
 }
+
+    
 
     

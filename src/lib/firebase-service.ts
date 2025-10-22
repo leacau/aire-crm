@@ -82,7 +82,7 @@ export const getCommercialItemsBySeries = async (seriesId: string): Promise<Comm
 
 export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string): Promise<void> => {
     const batch = writeBatch(db);
-    const seriesId = doc(collection(db, 'dummy')).id; // Generate a unique ID for the series
+    const seriesId = dates.length > 1 ? doc(collection(db, 'dummy')).id : undefined;
 
     for (const date of dates) {
         const docRef = doc(collection(db, 'commercial_items'));
@@ -91,7 +91,7 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
         const itemData: Omit<CommercialItem, 'id'> = {
             ...item,
             date: formattedDate,
-            seriesId: dates.length > 1 ? seriesId : undefined,
+            seriesId: seriesId,
         };
 
         const dataToSave = { ...itemData, createdBy: userId };
@@ -291,7 +291,15 @@ export const deleteCanje = async (id: string, userId: string, userName: string):
 // --- Invoice Functions ---
 export const getInvoices = async (): Promise<Invoice[]> => {
     const snapshot = await getDocs(query(invoicesCollection, orderBy("dateGenerated", "desc")));
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return { 
+          id: doc.id,
+          ...data,
+          dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
+          datePaid: data.datePaid instanceof Timestamp ? data.datePaid.toDate().toISOString() : data.datePaid,
+       } as Invoice
+    });
 };
 
 export const getInvoicesForOpportunity = async (opportunityId: string): Promise<Invoice[]> => {
@@ -335,7 +343,7 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
     return docRef.id;
 };
 
-export const updateInvoice = async (id: string, data: Partial<Invoice>, userId: string, userName: string, ownerName: string): Promise<void> => {
+export const updateInvoice = async (id: string, data: Partial<Omit<Invoice, 'id'>>, userId: string, userName: string, ownerName: string): Promise<void> => {
     const docRef = doc(db, 'invoices', id);
     const updateData: Partial<Invoice> & { [key: string]: any } = {...data};
 
@@ -1230,5 +1238,7 @@ export const updateClientActivity = async (
 
     await updateDoc(docRef, updateData);
 };
+
+    
 
     
