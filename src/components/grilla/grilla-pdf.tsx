@@ -7,7 +7,6 @@ import { addDays, startOfWeek, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { getCommercialItems } from '@/lib/firebase-service';
-import Image from 'next/image';
 
 interface GrillaPdfProps {
   programs: Program[];
@@ -100,7 +99,7 @@ export const GrillaPdf = React.forwardRef<HTMLDivElement, GrillaPdfProps>(({ pro
                 </h2>
             </div>
             <div className="w-24 h-auto">
-                 <Image src="/aire-logo-red.png" alt="Logo AIRE" width={100} height={100} />
+                 <img src="/logo.webp" alt="Logo AIRE" style={{width: '100px', height: 'auto' }} />
             </div>
         </header>
 
