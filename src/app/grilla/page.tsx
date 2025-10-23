@@ -134,13 +134,27 @@ export default function GrillaPage() {
       if (!userInfo) return;
       try {
         if (selectedItem) { // Editing existing item
-            await updateCommercialItem(selectedItem.id, item);
+             if (selectedItem.seriesId) {
+                // If it's part of a series, update the whole series
+                await saveCommercialItem({ ...item, seriesId: selectedItem.seriesId }, dates, userInfo.id, true);
+            } else if (dates.length > 1) {
+                // If it wasn't a series but now is, create a new series
+                const newSeriesId = await saveCommercialItem(item, dates, userInfo.id);
+                // Assign the new seriesId to the original item being edited
+                await updateCommercialItem(selectedItem.id, { seriesId: newSeriesId });
+            } else {
+                // Single item update
+                await updateCommercialItem(selectedItem.id, item);
+            }
             toast({ title: 'Elemento comercial actualizado' });
         } else { // Creating new items
             await saveCommercialItem(item, dates, userInfo.id);
             toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
         }
-        fetchPrograms();
+        // Instead of fetching all programs, we can just invalidate the specific days' data if we had a cache.
+        // For simplicity, we refetch. A more complex app could optimize this.
+        setView('semanal');
+        setTimeout(() => setView('diaria'), 50); // Force re-render of daily view
       } catch (error) {
           console.error("Error saving commercial item(s):", error);
           toast({ title: 'Error al guardar el elemento', variant: 'destructive' });
@@ -168,7 +182,8 @@ export default function GrillaPage() {
         toast({ title: 'Elemento(s) comercial(es) eliminado(s)' });
         setIsDeleteItemDialogOpen(false);
         setItemToDelete(null);
-        fetchPrograms();
+        setView('semanal');
+        setTimeout(() => setView('diaria'), 50); // Force re-render of daily view
     } catch (error) {
         console.error("Error deleting commercial item(s):", error);
         toast({ title: 'Error al eliminar el elemento', variant: 'destructive' });

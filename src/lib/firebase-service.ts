@@ -94,34 +94,62 @@ export const createCommercialItem = async (item: Omit<CommercialItem, 'id'>): Pr
 };
 
 
-export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string): Promise<void> => {
+export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string, isEditingSeries?: boolean): Promise<string | void> => {
     const batch = writeBatch(db);
-    const seriesId = dates.length > 1 ? doc(collection(db, 'dummy')).id : undefined;
+    const newSeriesId = item.seriesId || doc(collection(db, 'dummy')).id;
 
-    for (const date of dates) {
-        const docRef = doc(collection(db, 'commercial_items'));
-        const formattedDate = date.toISOString().split('T')[0];
+    const formattedDates = new Set(dates.map(d => d.toISOString().split('T')[0]));
 
-        const itemData: Omit<CommercialItem, 'id'> = {
-            ...item,
-            date: formattedDate,
-            seriesId: seriesId,
-        };
+    if (isEditingSeries && item.seriesId) {
+        // If editing, find existing items in the series to update or delete
+        const existingItems = await getCommercialItemsBySeries(item.seriesId);
+        const existingDates = new Set(existingItems.map(i => i.date));
 
-        const dataToSave = { ...itemData, createdBy: userId };
-        if (!dataToSave.clientId) {
-            delete dataToSave.clientId;
-            delete dataToSave.clientName;
-        }
-        if (!dataToSave.opportunityId) {
-            delete dataToSave.opportunityId;
-            delete dataToSave.opportunityTitle;
+        // Delete items that are no longer in the selected dates
+        for (const existingItem of existingItems) {
+            if (!formattedDates.has(existingItem.date)) {
+                const docRef = doc(db, 'commercial_items', existingItem.id);
+                batch.delete(docRef);
+            }
         }
 
-        batch.set(docRef, dataToSave);
+        // Update existing or create new for the selected dates
+        for (const dateStr of formattedDates) {
+            const existingItem = existingItems.find(i => i.date === dateStr);
+            const dataToSave = { ...item, seriesId: newSeriesId, date: dateStr, updatedBy: userId, updatedAt: serverTimestamp() };
+            
+            const docRef = existingItem ? doc(db, 'commercial_items', existingItem.id) : doc(collection(db, 'commercial_items'));
+            batch.set(docRef, dataToSave, { merge: true });
+        }
+
+    } else {
+        // Creating a new series or single item
+        for (const date of dates) {
+            const docRef = doc(collection(db, 'commercial_items'));
+            const formattedDate = date.toISOString().split('T')[0];
+
+            const itemData: Omit<CommercialItem, 'id'> = {
+                ...item,
+                date: formattedDate,
+                seriesId: dates.length > 1 ? newSeriesId : undefined,
+            };
+
+            const dataToSave = { ...itemData, createdBy: userId };
+             if (!dataToSave.clientId) {
+                delete dataToSave.clientId;
+                delete dataToSave.clientName;
+            }
+            if (!dataToSave.opportunityId) {
+                delete dataToSave.opportunityId;
+                delete dataToSave.opportunityTitle;
+            }
+
+            batch.set(docRef, dataToSave);
+        }
     }
     
     await batch.commit();
+    return newSeriesId;
 };
 
 export const updateCommercialItem = async (itemId: string, itemData: Partial<Omit<CommercialItem, 'id'>>): Promise<void> => {
@@ -139,6 +167,10 @@ export const updateCommercialItem = async (itemId: string, itemData: Partial<Omi
     if (dataToUpdate.pntReadAt === undefined) {
         dataToUpdate.pntReadAt = deleteField();
     }
+     if (dataToUpdate.seriesId) {
+        dataToUpdate.seriesId = dataToUpdate.seriesId;
+    }
+
 
     await updateDoc(docRef, dataToUpdate);
 }
@@ -1259,4 +1291,5 @@ export const updateClientActivity = async (
     
 
     
+
 
