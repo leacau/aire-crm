@@ -277,4 +277,6 @@ export type CommercialItem = {
   clientName?: string;
   opportunityId?: string;
   opportunityTitle?: string;
+  pntRead?: boolean;
+  pntReadAt?: string;
 };

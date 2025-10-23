@@ -71,7 +71,15 @@ export const deleteProgram = async (programId: string, userId: string): Promise<
 export const getCommercialItems = async (date: string): Promise<CommercialItem[]> => {
     const q = query(commercialItemsCollection, where("date", "==", date));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CommercialItem));
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+        return { 
+            id: doc.id, 
+            ...data,
+            pntReadAt: convertTimestamp(data.pntReadAt),
+        } as CommercialItem
+    });
 };
 
 export const getCommercialItemsBySeries = async (seriesId: string): Promise<CommercialItem[]> => {
@@ -121,6 +129,9 @@ export const updateCommercialItem = async (itemId: string, itemData: Partial<Omi
     if (!dataToUpdate.opportunityId) {
         dataToUpdate.opportunityId = deleteField();
         dataToUpdate.opportunityTitle = deleteField();
+    }
+    if (dataToUpdate.pntReadAt === undefined) {
+        dataToUpdate.pntReadAt = deleteField();
     }
 
     await updateDoc(docRef, dataToUpdate);
