@@ -6,8 +6,8 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import type { Program, CommercialItem } from '@/lib/types';
-import { getPrograms, getCommercialItems, updateCommercialItem, createCommercialItem } from '@/lib/firebase-service';
+import type { Program, CommercialItem, Client } from '@/lib/types';
+import { getPrograms, getCommercialItems, updateCommercialItem, createCommercialItem, getClients } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { format, startOfToday } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -17,6 +17,8 @@ import { Label } from '@/components/ui/label';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Input } from '@/components/ui/input';
 import { PlusCircle } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface PntItemProps {
   item: CommercialItem;
@@ -43,14 +45,14 @@ const PntItem: React.FC<PntItemProps> = ({ item, onToggleRead }) => {
         <Label 
           htmlFor={`pnt-${item.id}`}
           className={cn(
-            "font-semibold text-base leading-none",
+            "font-semibold text-base leading-none whitespace-pre-wrap",
             isRead && "line-through text-muted-foreground"
           )}
         >
           {item.description}
         </Label>
         <p className={cn("text-sm", isRead && "text-muted-foreground")}>
-          {item.opportunityTitle || 'PNT Genérico'}
+          {item.clientName || 'PNT Genérico'}
         </p>
         {isRead && item.pntReadAt && (
           <p className="text-xs text-muted-foreground pt-1">
@@ -64,9 +66,15 @@ const PntItem: React.FC<PntItemProps> = ({ item, onToggleRead }) => {
 
 const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: () => void }) => {
     const [description, setDescription] = useState('');
+    const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
+    const [clients, setClients] = useState<Client[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const { userInfo } = useAuth();
     const { toast } = useToast();
+
+    useEffect(() => {
+        getClients().then(setClients);
+    }, []);
 
     const handleAddPnt = async () => {
         if (!description.trim() || !userInfo) {
@@ -75,16 +83,21 @@ const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: 
         }
         setIsSaving(true);
         try {
+            const selectedClient = clients.find(c => c.id === selectedClientId);
+
             const newItem: Omit<CommercialItem, 'id'> = {
                 programId,
                 date: format(new Date(), 'yyyy-MM-dd'),
                 type: 'PNT',
                 description,
                 status: 'Vendido', // PNTs are considered sold by default
-                createdBy: userInfo.id
+                createdBy: userInfo.id,
+                clientId: selectedClient?.id,
+                clientName: selectedClient?.denominacion
             };
             await createCommercialItem(newItem);
             setDescription('');
+            setSelectedClientId(undefined);
             onPntAdded(); // Callback to refresh the list
             toast({ title: 'PNT añadido correctamente' });
         } catch (error) {
@@ -96,18 +109,29 @@ const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: 
     };
 
     return (
-        <div className="flex items-center gap-2 mt-4 p-3 border-t">
-            <Input 
+        <div className="flex flex-col gap-2 mt-4 p-3 border-t">
+            <Textarea 
                 placeholder="Añadir nuevo PNT..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                onKeyDown={(e) => { if(e.key === 'Enter') handleAddPnt() }}
                 disabled={isSaving}
+                rows={3}
             />
-            <Button onClick={handleAddPnt} disabled={isSaving}>
-                {isSaving ? <Spinner size="small" /> : <PlusCircle className="h-4 w-4" />}
-                <span className="sr-only">Añadir PNT</span>
-            </Button>
+            <div className="flex items-center gap-2">
+                 <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                    <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Cliente (Opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">Ninguno</SelectItem>
+                        {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Button onClick={handleAddPnt} disabled={isSaving} size="icon">
+                    {isSaving ? <Spinner size="small" /> : <PlusCircle className="h-4 w-4" />}
+                    <span className="sr-only">Añadir PNT</span>
+                </Button>
+            </div>
         </div>
     );
 };
@@ -217,7 +241,7 @@ export default function PntsPage() {
       <Header title={`PNTs - ${format(today, 'PPPP', { locale: es })}`} />
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         {programsForToday.length > 0 ? (
-            <Accordion type="multiple" className="w-full space-y-4">
+            <Accordion type="multiple" className="w-full space-y-4" defaultValue={programsForToday.map(p => p.id)}>
                 {programsForToday.map(program => (
                     <AccordionItem value={program.id} key={program.id} className="border-b-0">
                         <AccordionTrigger className={cn("flex rounded-lg border p-4 text-left hover:no-underline", program.color)}>

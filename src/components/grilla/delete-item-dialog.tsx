@@ -4,7 +4,6 @@
 import React from 'react';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -31,6 +30,7 @@ export function DeleteItemDialog({ isOpen, onOpenChange, item, onConfirmDelete }
 
   const handleConfirm = () => {
     onConfirmDelete(item, deleteMode);
+    onOpenChange(false); // Close the dialog after confirming
   };
   
   const formattedDate = format(new Date(item.date), "PPP", { locale: es });
