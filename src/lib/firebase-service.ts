@@ -88,6 +88,12 @@ export const getCommercialItemsBySeries = async (seriesId: string): Promise<Comm
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CommercialItem));
 };
 
+export const createCommercialItem = async (item: Omit<CommercialItem, 'id'>): Promise<string> => {
+    const docRef = await addDoc(commercialItemsCollection, { ...item });
+    return docRef.id;
+};
+
+
 export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string): Promise<void> => {
     const batch = writeBatch(db);
     const seriesId = dates.length > 1 ? doc(collection(db, 'dummy')).id : undefined;
@@ -1253,3 +1259,4 @@ export const updateClientActivity = async (
     
 
     
+
