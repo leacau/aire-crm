@@ -24,6 +24,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAuth } from '@/hooks/use-auth';
 import { Trash2 } from 'lucide-react';
+import { Input } from '../ui/input';
 
 interface CommercialItemFormDialogProps {
   isOpen: boolean;
@@ -39,7 +40,9 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
   const { userInfo, isBoss } = useAuth();
   const [programId, setProgramId] = useState<string | undefined>();
   const [type, setType] = useState<CommercialItem['type']>('Pauta');
+  const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [bloque, setBloque] = useState('');
   const [status, setStatus] = useState<CommercialItem['status']>('Disponible');
   const [clientId, setClientId] = useState<string | undefined>();
   const [opportunityId, setOpportunityId] = useState<string | undefined>();
@@ -66,7 +69,9 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
       if (isEditing && item) {
         setProgramId(item.programId);
         setType(item.type);
+        setTitle(item.title || '');
         setDescription(item.description);
+        setBloque(item.bloque || '');
         setStatus(item.status);
         setClientId(item.clientId);
         setOpportunityId(item.opportunityId);
@@ -74,7 +79,9 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
       } else {
         setProgramId(preselectedData?.programId);
         setType('Pauta');
+        setTitle('');
         setDescription('');
+        setBloque('');
         setStatus('Disponible');
         setClientId(undefined);
         setOpportunityId(undefined);
@@ -99,7 +106,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
     const clientName = allClients.find(c => c.id === clientId)?.denominacion;
     const opportunityTitle = opportunities.find(o => o.id === opportunityId)?.title;
     
-    onSave({ programId, type, description, status, clientId, clientName, opportunityId, opportunityTitle }, dates);
+    onSave({ programId, type, title, description, bloque, status, clientId, clientName, opportunityId, opportunityTitle }, dates);
     onOpenChange(false);
   };
 
@@ -167,10 +174,26 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
               </Select>
             </div>
           </div>
+          
+          {type === 'PNT' && (
+            <div className="space-y-2">
+              <Label htmlFor="item-title">Título del PNT</Label>
+              <Input id="item-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Título para identificación rápida"/>
+            </div>
+          )}
+
+          {type === 'Auspicio' && (
+             <div className="space-y-2">
+              <Label htmlFor="item-bloque">Bloque / Sección</Label>
+              <Input id="item-bloque" value={bloque} onChange={e => setBloque(e.target.value)} placeholder="Ej: Deportes, Clima, Política..."/>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label htmlFor="item-description">Descripción / Anunciante</Label>
+            <Label htmlFor="item-description">Descripción / Anunciante / Texto</Label>
             <Textarea id="item-description" value={description} onChange={e => setDescription(e.target.value)} />
           </div>
+
           {showAssignmentFields && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">

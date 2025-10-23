@@ -123,9 +123,9 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
                         onClick={() => isEditable && onItemClick(item)}
                       >
                           <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate">{item.description}</p>
+                              <p className="font-medium truncate">{item.title || item.description}</p>
                               <div className="flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
-                                <p>{item.type}</p>
+                                <p>{item.type}{item.bloque && ` - ${item.bloque}`}</p>
                                 {item.clientName && (
                                   <Link href={`/clients/${item.clientId}`} className="flex items-center gap-1 hover:underline truncate" onClick={(e) => e.stopPropagation()}>
                                     <Building className="h-3 w-3 shrink-0" />

@@ -270,7 +270,9 @@ export type CommercialItem = {
   programId: string;
   date: string; // YYYY-MM-DD
   type: CommercialItemType;
+  title?: string;
   description: string;
+  bloque?: string;
   status: CommercialItemStatus;
   seriesId?: string;
   clientId?: string;
@@ -279,4 +281,5 @@ export type CommercialItem = {
   opportunityTitle?: string;
   pntRead?: boolean;
   pntReadAt?: string;
+  createdBy?: string;
 };

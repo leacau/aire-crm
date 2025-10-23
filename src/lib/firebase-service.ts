@@ -89,7 +89,7 @@ export const getCommercialItemsBySeries = async (seriesId: string): Promise<Comm
 };
 
 export const createCommercialItem = async (item: Omit<CommercialItem, 'id'>): Promise<string> => {
-    const docRef = await addDoc(commercialItemsCollection, { ...item });
+    const docRef = await addDoc(commercialItemsCollection, { ...item, createdAt: serverTimestamp() });
     return docRef.id;
 };
 
@@ -1291,5 +1291,6 @@ export const updateClientActivity = async (
     
 
     
+
 
 

@@ -45,13 +45,16 @@ const PntItem: React.FC<PntItemProps> = ({ item, onToggleRead }) => {
         <Label 
           htmlFor={`pnt-${item.id}`}
           className={cn(
-            "font-semibold text-base leading-none whitespace-pre-wrap",
+            "font-semibold text-base leading-none",
             isRead && "line-through text-muted-foreground"
           )}
         >
-          {item.description}
+          {item.title}
         </Label>
-        <p className={cn("text-sm", isRead && "text-muted-foreground")}>
+        <p className={cn("text-sm whitespace-pre-wrap", isRead && "text-muted-foreground")}>
+          {item.description}
+        </p>
+        <p className={cn("text-sm pt-1 font-medium", isRead && "text-muted-foreground")}>
           {item.clientName || 'PNT Genérico'}
         </p>
         {isRead && item.pntReadAt && (
@@ -65,6 +68,7 @@ const PntItem: React.FC<PntItemProps> = ({ item, onToggleRead }) => {
 };
 
 const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: () => void }) => {
+    const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
     const [clients, setClients] = useState<Client[]>([]);
@@ -77,8 +81,8 @@ const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: 
     }, []);
 
     const handleAddPnt = async () => {
-        if (!description.trim() || !userInfo) {
-            toast({ title: 'La descripción no puede estar vacía.', variant: 'destructive' });
+        if (!title.trim() || !description.trim() || !userInfo) {
+            toast({ title: 'El título y el texto del PNT no pueden estar vacíos.', variant: 'destructive' });
             return;
         }
         setIsSaving(true);
@@ -89,6 +93,7 @@ const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: 
                 programId,
                 date: format(new Date(), 'yyyy-MM-dd'),
                 type: 'PNT',
+                title,
                 description,
                 status: 'Vendido', // PNTs are considered sold by default
                 createdBy: userInfo.id,
@@ -96,6 +101,7 @@ const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: 
                 clientName: selectedClient?.denominacion
             };
             await createCommercialItem(newItem);
+            setTitle('');
             setDescription('');
             setSelectedClientId(undefined);
             onPntAdded(); // Callback to refresh the list
@@ -110,8 +116,14 @@ const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: 
 
     return (
         <div className="flex flex-col gap-2 mt-4 p-3 border-t">
+            <Input 
+                placeholder="Título del PNT (para identificación rápida)"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                disabled={isSaving}
+            />
             <Textarea 
-                placeholder="Añadir nuevo PNT..."
+                placeholder="Texto a leer del PNT..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={isSaving}
@@ -127,7 +139,7 @@ const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: 
                         {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                <Button onClick={handleAddPnt} disabled={isSaving} size="icon">
+                <Button onClick={handleAddPnt} disabled={isSaving || !title.trim() || !description.trim()} size="icon">
                     {isSaving ? <Spinner size="small" /> : <PlusCircle className="h-4 w-4" />}
                     <span className="sr-only">Añadir PNT</span>
                 </Button>
