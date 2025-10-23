@@ -180,7 +180,18 @@ export default function PntsPage() {
         const scheduleForDay = program.schedules.find(s => s.daysOfWeek.includes(dayOfWeek));
         if (!scheduleForDay) return null;
         
-        const programPnts = pnts.filter(pnt => pnt.programId === program.id);
+        const programPnts = pnts.filter(pnt => pnt.programId === program.id)
+          .sort((a, b) => {
+              if (a.pntRead && !b.pntRead) return 1; // b (unread) comes first
+              if (!a.pntRead && b.pntRead) return -1; // a (unread) comes first
+              if (a.pntRead && b.pntRead) {
+                // Both are read, sort by read time ascending (older first)
+                return new Date(a.pntReadAt!).getTime() - new Date(b.pntReadAt!).getTime();
+              }
+              // Both are unread, keep original order (or add more specific sorting if needed)
+              return 0;
+          });
+
 
         return {
           ...program,
