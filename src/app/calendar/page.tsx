@@ -27,7 +27,7 @@ export default function CalendarPage() {
   }, [isBoss, userInfo]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full w-full">
       <Header title="Calendario">
         {isBoss && (
             <Select value={selectedUserId} onValueChange={setSelectedUserId}>
@@ -42,7 +42,7 @@ export default function CalendarPage() {
             </Select>
           )}
       </Header>
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden">
         <GoogleCalendar key={selectedUserId} selectedUserId={selectedUserId} />
       </main>
     </div>
