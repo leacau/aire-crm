@@ -27,7 +27,7 @@ export default function CalendarPage() {
   }, [isBoss, userInfo]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full">
       <Header title="Calendario">
         {isBoss && (
             <Select value={selectedUserId} onValueChange={setSelectedUserId}>
