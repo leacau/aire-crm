@@ -98,6 +98,9 @@
     background-color: hsl(var(--primary) / 0.8);
     border-color: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .rbc-day-slot .rbc-event {
      border-color: hsl(var(--primary));
