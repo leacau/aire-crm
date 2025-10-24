@@ -165,29 +165,37 @@ export default function GrillaPage() {
     if (!canManage) return;
 
     try {
-        let idsToDelete = [item.id];
-        if (item.seriesId && (deleteMode === 'forward' || deleteMode === 'all')) {
+        let idsToDelete: string[] = [];
+        if (deleteMode === 'single') {
+            idsToDelete.push(item.id);
+        } else if (item.seriesId) {
             const seriesItems = await getCommercialItemsBySeries(item.seriesId);
             if (deleteMode === 'all') {
                 idsToDelete = seriesItems.map(i => i.id);
-            } else { // forward
+            } else { // 'forward'
                 idsToDelete = seriesItems
                     .filter(i => new Date(i.date) >= new Date(item.date))
                     .map(i => i.id);
             }
+        } else {
+          // It's a single item without a series, so we can only delete it.
+          idsToDelete.push(item.id);
         }
         
-        await deleteCommercialItem(idsToDelete);
-
-        toast({ title: 'Elemento(s) comercial(es) eliminado(s)' });
+        if (idsToDelete.length > 0) {
+            await deleteCommercialItem(idsToDelete);
+            toast({ title: `Se eliminaron ${idsToDelete.length} elemento(s)` });
+        }
+        
         setIsDeleteItemDialogOpen(false);
         setItemToDelete(null);
+        // Force a re-render of the daily view to reflect changes
         setView('semanal');
-        setTimeout(() => setView('diaria'), 50); // Force re-render of daily view
-    } catch (error) {
-        console.error("Error deleting commercial item(s):", error);
-        toast({ title: 'Error al eliminar el elemento', variant: 'destructive' });
-    }
+        setTimeout(() => setView('diaria'), 50);
+      } catch (error) {
+          console.error("Error deleting commercial item(s):", error);
+          toast({ title: 'Error al eliminar el elemento', variant: 'destructive' });
+      }
   };
   
   const openDeleteItemDialog = (item: CommercialItem) => {
@@ -358,7 +366,7 @@ export default function GrillaPage() {
         </AlertDialogContent>
       </AlertDialog>
       
-      {itemToDelete && (
+      {itemToDelete && canManage && (
           <DeleteItemDialog
             isOpen={isDeleteItemDialogOpen}
             onOpenChange={setIsDeleteItemDialogOpen}

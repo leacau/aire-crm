@@ -113,6 +113,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
   const handleDelete = () => {
     if (item) {
       onDelete(item);
+      onOpenChange(false);
     }
   };
   
@@ -175,7 +176,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
             </div>
           </div>
           
-          {(type === 'PNT' || type === 'Auspicio') && (
+          {(type === 'PNT' || type === 'Auspicio' || type === 'Nota') && (
             <div className="space-y-2">
               <Label htmlFor="item-title">Título</Label>
               <Input id="item-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Título para identificación rápida"/>

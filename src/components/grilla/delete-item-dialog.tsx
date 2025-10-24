@@ -30,7 +30,6 @@ export function DeleteItemDialog({ isOpen, onOpenChange, item, onConfirmDelete }
 
   const handleConfirm = () => {
     onConfirmDelete(item, deleteMode);
-    onOpenChange(false); // Close the dialog after confirming
   };
   
   const formattedDate = format(new Date(item.date), "PPP", { locale: es });
@@ -41,7 +40,7 @@ export function DeleteItemDialog({ isOpen, onOpenChange, item, onConfirmDelete }
         <AlertDialogHeader>
           <AlertDialogTitle>¿Eliminar Elemento Comercial?</AlertDialogTitle>
           <AlertDialogDescription>
-            Estás a punto de eliminar "{item.description}" del día <strong>{formattedDate}</strong>.
+            Estás a punto de eliminar "{item.description || item.title}" del día <strong>{formattedDate}</strong>.
             {item.seriesId && ' Este elemento es parte de una serie.'}
           </AlertDialogDescription>
         </AlertDialogHeader>
