@@ -177,19 +177,19 @@ export default function ProspectsPage() {
 
         return (
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => handleConvertProspect(prospect)}>
+            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleConvertProspect(prospect); }}>
               <UserPlus className="mr-2 h-4 w-4" />
               Convertir a Cliente
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
+                <Button variant="ghost" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
                   <span className="sr-only">Abrir menú</span>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleOpenForm(prospect)}>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenForm(prospect); }}>
                   Editar
                 </DropdownMenuItem>
                 <DropdownMenuItem
