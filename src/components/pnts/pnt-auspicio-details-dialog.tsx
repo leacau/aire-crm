@@ -33,6 +33,7 @@ export function PntAuspicioDetailsDialog({
 
   const handleToggleRead = () => {
     onToggleRead(item, !item.pntRead);
+    onOpenChange(false);
   };
 
   return (
