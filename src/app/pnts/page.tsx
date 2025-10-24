@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format, startOfToday, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { CheckCircle, PlusCircle, ArrowLeft, ArrowRight, Mic, Star } from 'lucide-react';
+import { CheckCircle, PlusCircle, ArrowLeft, ArrowRight, Mic, Star, FileText } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PntAuspicioFormDialog } from '@/components/pnts/pnt-auspicio-form-dialog';
 import { PntAuspicioDetailsDialog } from '@/components/pnts/pnt-auspicio-details-dialog';
@@ -24,7 +24,9 @@ interface PntItemRowProps {
 
 const PntItemRow: React.FC<PntItemRowProps> = ({ item, onClick }) => {
   const isRead = !!item.pntRead;
-  const Icon = item.type === 'PNT' ? Mic : Star;
+  let Icon = Mic;
+  if (item.type === 'Auspicio') Icon = Star;
+  if (item.type === 'Nota') Icon = FileText;
 
   return (
     <div 
@@ -40,7 +42,10 @@ const PntItemRow: React.FC<PntItemRowProps> = ({ item, onClick }) => {
         <p className={cn("font-semibold leading-none truncate", isRead && "line-through")}>
             {item.title}
         </p>
-        <p className="text-xs">{item.type}</p>
+        <div className="flex items-center gap-4 text-xs">
+          <p>{item.type}</p>
+          {item.clientName && <p className="text-muted-foreground truncate">Cliente: {item.clientName}</p>}
+        </div>
       </div>
     </div>
   );
@@ -75,7 +80,7 @@ export default function PntsPage() {
       ]);
       
       setPrograms(fetchedPrograms);
-      setPnts(fetchedItems.filter(item => ['PNT', 'Auspicio'].includes(item.type)));
+      setPnts(fetchedItems.filter(item => ['PNT', 'Auspicio', 'Nota'].includes(item.type)));
       setClients(fetchedClients);
 
     } catch (error) {
@@ -216,7 +221,7 @@ export default function PntsPage() {
                                         <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />
                                       ))
                                   ) : (
-                                      <p className="text-center text-sm text-muted-foreground py-4">No hay PNTs ni Auspicios para este programa.</p>
+                                      <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
                                   )}
                                   </div>
                                   <div className="flex justify-center p-3 border-t">
@@ -257,4 +262,3 @@ export default function PntsPage() {
     </>
   );
 }
-

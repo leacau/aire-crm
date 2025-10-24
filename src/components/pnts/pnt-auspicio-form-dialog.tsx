@@ -19,7 +19,7 @@ import type { CommercialItem, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
 
-type ItemType = 'PNT' | 'Auspicio';
+type ItemType = 'PNT' | 'Auspicio' | 'Nota';
 
 interface PntAuspicioFormDialogProps {
   isOpen: boolean;
@@ -80,7 +80,7 @@ export function PntAuspicioFormDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Nuevo PNT o Auspicio</DialogTitle>
+          <DialogTitle>Nueva Pauta</DialogTitle>
           <DialogDescription>
             Completa los datos para añadir un nuevo elemento a la pauta del día.
           </DialogDescription>
@@ -93,6 +93,7 @@ export function PntAuspicioFormDialog({
                 <SelectContent>
                     <SelectItem value="PNT">PNT (Publicidad No Tradicional)</SelectItem>
                     <SelectItem value="Auspicio">Auspicio</SelectItem>
+                    <SelectItem value="Nota">Nota</SelectItem>
                 </SelectContent>
             </Select>
           </div>
