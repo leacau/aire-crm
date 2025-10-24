@@ -171,7 +171,15 @@ export const getCommercialItemsBySeries = async (seriesId: string): Promise<Comm
 };
 
 export const createCommercialItem = async (item: Omit<CommercialItem, 'id'>): Promise<string> => {
-    const docRef = await addDoc(commercialItemsCollection, { ...item, createdAt: serverTimestamp() });
+    const dataToSave: { [key: string]: any } = { ...item, createdAt: serverTimestamp() };
+
+    Object.keys(dataToSave).forEach(key => {
+        if (dataToSave[key] === undefined) {
+            delete dataToSave[key];
+        }
+    });
+
+    const docRef = await addDoc(commercialItemsCollection, dataToSave);
     return docRef.id;
 };
 
@@ -1462,6 +1470,7 @@ export const updateClientActivity = async (
     
 
     
+
 
 
 
