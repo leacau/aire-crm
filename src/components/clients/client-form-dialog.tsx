@@ -119,21 +119,21 @@ export function ClientFormDialog({
       isDeactivated: formData.isDeactivated || false,
     };
     
-    // If it's a new client being created from a prospect, it will have ownerId.
-    const ownerId = client?.ownerId || userInfo?.id;
-    const ownerName = client?.ownerName || userInfo?.name;
-
     try {
         if (isEditing) {
           // The onSave prop for editing is handled differently in client-details page
           onSave(finalData);
           toast({ title: "Cliente Actualizado", description: "Los datos del cliente se han guardado." });
-        } else if (ownerId && ownerName) {
-          await createClient(finalData, ownerId, ownerName);
-          toast({ title: "Cliente Creado", description: `${finalData.denominacion} ha sido añadido a la lista.`});
-          onSave(finalData); // Callback for prospect conversion
         } else {
-           throw new Error("No se pudo determinar el propietario del cliente.");
+           // For new clients, including those from prospects
+           const ownerId = client?.ownerId || userInfo?.id;
+           const ownerName = client?.ownerName || userInfo?.name;
+           if (!ownerId || !ownerName) {
+               throw new Error("No se pudo determinar el propietario del cliente.");
+           }
+           await createClient(finalData, ownerId, ownerName);
+           toast({ title: "Cliente Creado", description: `${finalData.denominacion} ha sido añadido a la lista.`});
+           onSave(finalData); // Callback for prospect conversion if applicable
         }
         onOpenChange(false);
     } catch (error: any) {

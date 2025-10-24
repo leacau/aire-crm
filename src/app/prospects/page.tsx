@@ -8,7 +8,7 @@ import { PlusCircle, UserPlus, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Prospect, User, Client } from '@/lib/types';
-import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers } from '@/lib/firebase-service';
+import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers, createClient } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
@@ -47,12 +47,13 @@ export default function ProspectsPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
+      const allowedOwnerRoles = ['Asesor', 'Jefe', 'Gerencia', 'Administracion'];
       const [fetchedProspects, fetchedUsers] = await Promise.all([
         getProspects(),
         getAllUsers(),
       ]);
       setProspects(fetchedProspects);
-      setUsers(fetchedUsers.filter(u => u.role === 'Asesor' || u.role === 'Jefe' || u.role === 'Gerencia'));
+      setUsers(fetchedUsers.filter(u => allowedOwnerRoles.includes(u.role)));
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: "Error al cargar los prospectos", variant: "destructive" });
@@ -108,11 +109,9 @@ export default function ProspectsPage() {
     setIsConverting(true);
   };
   
-  const handleClientCreatedFromProspect = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>) => {
-    // This is handled by the client page logic now.
-    // We just need to update the prospect's status.
-    if (prospectToConvert) {
-      await updateProspect(prospectToConvert.id, { status: 'Convertido' }, userInfo!.id, userInfo!.name);
+  const handleClientCreatedFromProspect = async () => {
+    if (prospectToConvert && userInfo) {
+      await updateProspect(prospectToConvert.id, { status: 'Convertido' }, userInfo.id, userInfo.name);
       toast({ title: "Prospecto Convertido", description: `${prospectToConvert.companyName} ahora es un cliente.`});
       setIsConverting(false);
       setProspectToConvert(null);
@@ -244,7 +243,11 @@ export default function ProspectsPage() {
             data={filteredProspects}
             sorting={sorting}
             setSorting={setSorting}
-            onRowClick={(prospect) => handleOpenForm(prospect)}
+            onRowClick={(prospect) => {
+              if (isBoss || userInfo?.id === prospect.ownerId) {
+                handleOpenForm(prospect);
+              }
+            }}
             getRowId={(row) => row.id}
             enableRowResizing={false}
             emptyStateMessage="No se encontraron prospectos."
@@ -263,13 +266,19 @@ export default function ProspectsPage() {
          <ClientFormDialog
             isOpen={isConverting}
             onOpenChange={setIsConverting}
-            onSave={(clientData) => {
-              // The createClient function needs to be called from the form,
-              // but we can listen for success and update the prospect.
-              // For simplicity, we assume success and update prospect status.
-              handleClientCreatedFromProspect(clientData);
+            onSave={async (clientData) => {
+              if (!userInfo) return;
+              try {
+                await createClient(
+                  clientData, 
+                  prospectToConvert.ownerId, 
+                  prospectToConvert.ownerName
+                );
+                await handleClientCreatedFromProspect();
+              } catch(e) {
+                toast({title: "Error al convertir prospecto", description: "No se pudo crear el cliente.", variant: "destructive"});
+              }
             }}
-            // Pre-fill form data from prospect
             client={{
               denominacion: prospectToConvert.companyName,
               razonSocial: prospectToConvert.companyName,
@@ -279,7 +288,7 @@ export default function ProspectsPage() {
               ownerId: prospectToConvert.ownerId,
               ownerName: prospectToConvert.ownerName,
             } as Partial<Client>}
-            onValidateCuit={async () => false} // Simplified for this context
+            onValidateCuit={async () => false} 
         />
       )}
 
