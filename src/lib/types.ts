@@ -1,4 +1,5 @@
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -142,7 +143,7 @@ export type ActivityLog = {
   userName: string;
   ownerName: string;
   type: 'create' | 'update' | 'delete' | 'stage_change';
-  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect';
+  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action
@@ -244,6 +245,7 @@ export type User = {
   role: UserRole;
   initials?: string;
   photoURL?: string;
+  deletedAt?: string;
 };
 
 // This type is used for mapping columns during import.

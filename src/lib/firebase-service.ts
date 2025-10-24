@@ -56,10 +56,11 @@ export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'create
 
 export const updateProspect = async (id: string, data: Partial<Omit<Prospect, 'id'>>, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'prospects', id);
-    await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
-
     const prospectSnap = await getDoc(docRef);
+    if (!prospectSnap.exists()) throw new Error('Prospect not found');
     const prospectData = prospectSnap.data() as Prospect;
+
+    await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
 
     let details = `actualizó el prospecto <strong>${prospectData.companyName}</strong>`;
     if (data.status && data.status !== prospectData.status) {
@@ -594,6 +595,59 @@ export const getUsersByRole = async (role: UserRole): Promise<User[]> => {
     const q = query(usersCollection, where("role", "==", role));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+};
+
+export const deleteUserAndReassignEntities = async (
+    userIdToDelete: string,
+    adminUserId: string,
+    adminUserName: string
+): Promise<void> => {
+    const userRef = doc(db, 'users', userIdToDelete);
+    const userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) throw new Error("Usuario no encontrado.");
+    const userData = userSnap.data() as User;
+
+    const batch = writeBatch(db);
+
+    // 1. Find all clients owned by the user and unassign them
+    const clientsQuery = query(clientsCollection, where('ownerId', '==', userIdToDelete));
+    const clientsSnapshot = await getDocs(clientsQuery);
+    clientsSnapshot.forEach(doc => {
+        batch.update(doc.ref, {
+            ownerId: deleteField(),
+            ownerName: deleteField()
+        });
+    });
+
+    // 2. Find all prospects owned by the user and unassign them
+    const prospectsQuery = query(prospectsCollection, where('ownerId', '==', userIdToDelete));
+    const prospectsSnapshot = await getDocs(prospectsQuery);
+    prospectsSnapshot.forEach(doc => {
+        batch.update(doc.ref, {
+            ownerId: deleteField(),
+            ownerName: deleteField()
+        });
+    });
+    
+    // 3. Delete the user document
+    batch.delete(userRef);
+
+    // Commit all changes in a single batch
+    await batch.commit();
+
+    // 4. Log the admin activity
+    await logActivity({
+        userId: adminUserId,
+        userName: adminUserName,
+        type: 'delete',
+        entityType: 'user',
+        entityId: userIdToDelete,
+        entityName: userData.name,
+        details: `eliminó al usuario <strong>${userData.name}</strong> y desasignó ${clientsSnapshot.size} cliente(s) y ${prospectsSnapshot.size} prospecto(s).`,
+        ownerName: adminUserName, // The action is owned by the admin
+    });
+
+    // Note: Deleting from Firebase Auth is a separate, client-side or admin SDK action and is not handled here.
 };
 
 
@@ -1372,6 +1426,7 @@ export const updateClientActivity = async (
     
 
     
+
 
 
 
