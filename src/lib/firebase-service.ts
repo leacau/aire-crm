@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado, HistorialMensualItem, Program, CommercialItem, ProgramSchedule } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 
@@ -17,6 +17,87 @@ const invoicesCollection = collection(db, 'invoices');
 const canjesCollection = collection(db, 'canjes');
 const programsCollection = collection(db, 'programs');
 const commercialItemsCollection = collection(db, 'commercial_items');
+const prospectsCollection = collection(db, 'prospects');
+
+
+// --- Prospect Functions ---
+export const getProspects = async (): Promise<Prospect[]> => {
+    const snapshot = await getDocs(query(prospectsCollection, orderBy("createdAt", "desc")));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return { 
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+      } as Prospect
+    });
+};
+
+export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'>, userId: string, userName: string): Promise<string> => {
+    const dataToSave = {
+        ...prospectData,
+        ownerId: userId,
+        ownerName: userName,
+        createdAt: serverTimestamp(),
+    };
+    const docRef = await addDoc(prospectsCollection, dataToSave);
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'prospect',
+        entityId: docRef.id,
+        entityName: prospectData.companyName,
+        details: `creó el prospecto <strong>${prospectData.companyName}</strong>`,
+        ownerName: userName,
+    });
+    return docRef.id;
+};
+
+export const updateProspect = async (id: string, data: Partial<Omit<Prospect, 'id'>>, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'prospects', id);
+    await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
+
+    const prospectSnap = await getDoc(docRef);
+    const prospectData = prospectSnap.data() as Prospect;
+
+    let details = `actualizó el prospecto <strong>${prospectData.companyName}</strong>`;
+    if (data.status && data.status !== prospectData.status) {
+        details = `cambió el estado del prospecto <strong>${prospectData.companyName}</strong> a <strong>${data.status}</strong>`;
+    }
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'prospect',
+        entityId: id,
+        entityName: prospectData.companyName,
+        details,
+        ownerName: prospectData.ownerName,
+    });
+};
+
+export const deleteProspect = async (id: string, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'prospects', id);
+    const prospectSnap = await getDoc(docRef);
+    if (!prospectSnap.exists()) throw new Error("Prospect not found");
+    const prospectData = prospectSnap.data() as Prospect;
+
+    await deleteDoc(docRef);
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'prospect',
+        entityId: id,
+        entityName: prospectData.companyName,
+        details: `eliminó el prospecto <strong>${prospectData.companyName}</strong>`,
+        ownerName: prospectData.ownerName,
+    });
+};
+
 
 // --- Grilla Comercial Functions ---
 
@@ -1291,6 +1372,7 @@ export const updateClientActivity = async (
     
 
     
+
 
 
 
