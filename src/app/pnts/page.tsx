@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Program, CommercialItem, Client, User } from '@/lib/types';
-import { getPrograms, getCommercialItems, updateCommercialItem, createCommercialItem, getClients } from '@/lib/firebase-service';
+import { getPrograms, getCommercialItems, updateCommercialItem, createCommercialItem, getClients, deleteCommercialItem, getCommercialItemsBySeries } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { format, startOfToday, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -16,6 +16,7 @@ import { CheckCircle, PlusCircle, ArrowLeft, ArrowRight, Mic, Star, FileText } f
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PntAuspicioFormDialog } from '@/components/pnts/pnt-auspicio-form-dialog';
 import { PntAuspicioDetailsDialog } from '@/components/pnts/pnt-auspicio-details-dialog';
+import { DeleteItemDialog } from '@/components/grilla/delete-item-dialog';
 
 interface PntItemRowProps {
   item: CommercialItem;
@@ -52,7 +53,7 @@ const PntItemRow: React.FC<PntItemRowProps> = ({ item, onClick }) => {
 };
 
 export default function PntsPage() {
-  const { userInfo, loading: authLoading } = useAuth();
+  const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   
   const [currentDate, setCurrentDate] = useState(startOfToday());
@@ -65,9 +66,11 @@ export default function PntsPage() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<CommercialItem | null>(null);
-  
+  const [isDeleteItemDialogOpen, setIsDeleteItemDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<CommercialItem | null>(null);
 
   const dayOfWeek = useMemo(() => currentDate.getDay() === 0 ? 7 : currentDate.getDay(), [currentDate]);
+  const canManage = isBoss || userInfo?.role === 'Gerencia';
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -141,6 +144,45 @@ export default function PntsPage() {
     }
   };
 
+  const handleDeleteItem = async (item: CommercialItem, deleteMode: 'single' | 'forward' | 'all') => {
+    if (!canManage) return;
+
+    try {
+        let idsToDelete: string[] = [];
+        if (deleteMode === 'single' || !item.seriesId) {
+            idsToDelete.push(item.id);
+        } else {
+            const seriesItems = await getCommercialItemsBySeries(item.seriesId);
+            if (deleteMode === 'all') {
+                idsToDelete = seriesItems.map(i => i.id);
+            } else { // 'forward'
+                idsToDelete = seriesItems
+                    .filter(i => new Date(i.date) >= new Date(item.date))
+                    .map(i => i.id);
+            }
+        }
+        
+        if (idsToDelete.length > 0) {
+            await deleteCommercialItem(idsToDelete);
+            toast({ title: `Se eliminaron ${idsToDelete.length} elemento(s)` });
+        }
+        
+        setIsDeleteItemDialogOpen(false);
+        setItemToDelete(null);
+        fetchData();
+      } catch (error) {
+          console.error("Error deleting commercial item(s):", error);
+          toast({ title: 'Error al eliminar el elemento', variant: 'destructive' });
+      }
+  };
+  
+  const openDeleteItemDialog = (item: CommercialItem) => {
+    setItemToDelete(item);
+    setIsDeleteItemDialogOpen(true);
+    setIsDetailsOpen(false); // Close details dialog when delete dialog opens
+  };
+
+
   const programsForToday = useMemo(() => {
     return programs
       .map(program => {
@@ -151,8 +193,8 @@ export default function PntsPage() {
           .sort((a, b) => {
               if (a.pntRead && !b.pntRead) return 1;
               if (!a.pntRead && b.pntRead) return -1;
-              if (a.pntRead && b.pntRead) {
-                return new Date(a.pntReadAt!).getTime() - new Date(b.pntReadAt!).getTime();
+              if (a.pntRead && b.pntRead && a.pntReadAt && b.pntReadAt) {
+                return new Date(a.pntReadAt).getTime() - new Date(b.pntReadAt).getTime();
               }
               return 0;
           });
@@ -257,6 +299,15 @@ export default function PntsPage() {
             onOpenChange={setIsDetailsOpen}
             item={selectedItem}
             onToggleRead={handleToggleRead}
+            onDelete={canManage ? openDeleteItemDialog : undefined}
+        />
+      )}
+      {itemToDelete && canManage && (
+          <DeleteItemDialog
+            isOpen={isDeleteItemDialogOpen}
+            onOpenChange={setIsDeleteItemDialogOpen}
+            item={itemToDelete}
+            onConfirmDelete={handleDeleteItem}
         />
       )}
     </>

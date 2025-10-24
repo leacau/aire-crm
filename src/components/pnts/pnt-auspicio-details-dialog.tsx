@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import type { CommercialItem } from '@/lib/types';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -22,6 +22,7 @@ interface PntAuspicioDetailsDialogProps {
   onOpenChange: (isOpen: boolean) => void;
   item: CommercialItem;
   onToggleRead: (item: CommercialItem, isRead: boolean) => void;
+  onDelete?: (item: CommercialItem) => void;
 }
 
 export function PntAuspicioDetailsDialog({
@@ -29,11 +30,18 @@ export function PntAuspicioDetailsDialog({
   onOpenChange,
   item,
   onToggleRead,
+  onDelete,
 }: PntAuspicioDetailsDialogProps) {
 
   const handleToggleRead = () => {
     onToggleRead(item, !item.pntRead);
     onOpenChange(false);
+  };
+  
+  const handleDelete = () => {
+    if (onDelete) {
+      onDelete(item);
+    }
   };
 
   return (
@@ -68,13 +76,23 @@ export function PntAuspicioDetailsDialog({
              </div>
           )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cerrar
-          </Button>
-          <Button onClick={handleToggleRead}>
-            {item.pntRead ? 'Marcar como No Leído' : 'Marcar como Leído'}
-          </Button>
+        <DialogFooter className="sm:justify-between">
+          <div>
+            {onDelete && (
+              <Button variant="destructive" onClick={handleDelete}>
+                <Trash2 className="mr-2 h-4 w-4"/>
+                Eliminar
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cerrar
+            </Button>
+            <Button onClick={handleToggleRead}>
+              {item.pntRead ? 'Marcar como No Leído' : 'Marcar como Leído'}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
