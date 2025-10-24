@@ -6,70 +6,29 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import type { Program, CommercialItem, Client } from '@/lib/types';
+import type { Program, CommercialItem, Client, CommercialItemType } from '@/lib/types';
 import { getPrograms, getCommercialItems, updateCommercialItem, createCommercialItem, getClients } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
-import { format, startOfToday } from 'date-fns';
+import { format, startOfToday, addDays, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Input } from '@/components/ui/input';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PautaDetailsDialog } from '@/components/pauta/pauta-details-dialog';
 
-interface PntItemProps {
-  item: CommercialItem;
-  onToggleRead: (item: CommercialItem, isRead: boolean) => void;
+interface AddPautaFormProps {
+  programId: string;
+  onPautaAdded: () => void;
 }
 
-const PntItem: React.FC<PntItemProps> = ({ item, onToggleRead }) => {
-  const isRead = !!item.pntRead;
-  
-  return (
-    <div 
-      className={cn(
-        "flex items-start space-x-4 p-3 rounded-lg border",
-        isRead ? "bg-muted/50" : "bg-background"
-      )}
-    >
-      <Checkbox
-        id={`pnt-${item.id}`}
-        checked={isRead}
-        onCheckedChange={(checked) => onToggleRead(item, !!checked)}
-        className="mt-1"
-      />
-      <div className="flex-1 space-y-1">
-        <Label 
-          htmlFor={`pnt-${item.id}`}
-          className={cn(
-            "font-semibold text-base leading-none",
-            isRead && "line-through text-muted-foreground"
-          )}
-        >
-          {item.title}
-        </Label>
-        <p className={cn("text-sm whitespace-pre-wrap", isRead && "text-muted-foreground")}>
-          {item.description}
-        </p>
-        <p className={cn("text-sm pt-1 font-medium", isRead && "text-muted-foreground")}>
-          {item.clientName || 'PNT Genérico'}
-        </p>
-        {isRead && item.pntReadAt && (
-          <p className="text-xs text-muted-foreground pt-1">
-            Leído a las {format(new Date(item.pntReadAt), 'HH:mm:ss', { locale: es })} hs
-          </p>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: () => void }) => {
+const AddPautaForm: React.FC<AddPautaFormProps> = ({ programId, onPautaAdded }) => {
+    const [type, setType] = useState<CommercialItemType>('PNT');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
+    const [bloque, setBloque] = useState('');
     const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
     const [clients, setClients] = useState<Client[]>([]);
     const [isSaving, setIsSaving] = useState(false);
@@ -80,9 +39,9 @@ const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: 
         getClients().then(setClients);
     }, []);
 
-    const handleAddPnt = async () => {
+    const handleAddPauta = async () => {
         if (!title.trim() || !description.trim() || !userInfo) {
-            toast({ title: 'El título y el texto del PNT no pueden estar vacíos.', variant: 'destructive' });
+            toast({ title: 'Título y texto son obligatorios.', variant: 'destructive' });
             return;
         }
         setIsSaving(true);
@@ -92,23 +51,28 @@ const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: 
             const newItem: Omit<CommercialItem, 'id'> = {
                 programId,
                 date: format(new Date(), 'yyyy-MM-dd'),
-                type: 'PNT',
+                type,
                 title,
                 description,
-                status: 'Vendido', // PNTs are considered sold by default
+                bloque: type === 'Auspicio' ? bloque : undefined,
+                status: 'Vendido',
                 createdBy: userInfo.id,
                 clientId: selectedClient?.id,
                 clientName: selectedClient?.denominacion
             };
             await createCommercialItem(newItem);
+            
+            // Reset form
             setTitle('');
             setDescription('');
+            setBloque('');
             setSelectedClientId(undefined);
-            onPntAdded(); // Callback to refresh the list
-            toast({ title: 'PNT añadido correctamente' });
+            
+            onPautaAdded(); 
+            toast({ title: `${type} añadido correctamente` });
         } catch (error) {
-            console.error("Error adding PNT:", error);
-            toast({ title: 'Error al añadir PNT', variant: 'destructive' });
+            console.error(`Error adding ${type}:`, error);
+            toast({ title: `Error al añadir ${type}`, variant: 'destructive' });
         } finally {
             setIsSaving(false);
         }
@@ -116,14 +80,30 @@ const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: 
 
     return (
         <div className="flex flex-col gap-2 mt-4 p-3 border-t">
+            <Select value={type} onValueChange={(v: CommercialItemType) => setType(v)}>
+                <SelectTrigger><SelectValue/></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="PNT">Añadir PNT</SelectItem>
+                    <SelectItem value="Auspicio">Añadir Auspicio</SelectItem>
+                </SelectContent>
+            </Select>
+
             <Input 
-                placeholder="Título del PNT (para identificación rápida)"
+                placeholder="Título (para identificación rápida)"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 disabled={isSaving}
             />
+            {type === 'Auspicio' && (
+                 <Input 
+                    placeholder="Sección / Bloque (Ej: Deportes)"
+                    value={bloque}
+                    onChange={(e) => setBloque(e.target.value)}
+                    disabled={isSaving}
+                />
+            )}
             <Textarea 
-                placeholder="Texto a leer del PNT..."
+                placeholder="Texto a leer..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={isSaving}
@@ -139,9 +119,9 @@ const AddPntForm = ({ programId, onPntAdded }: { programId: string, onPntAdded: 
                         {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                <Button onClick={handleAddPnt} disabled={isSaving || !title.trim() || !description.trim()} size="icon">
+                <Button onClick={handleAddPauta} disabled={isSaving || !title.trim() || !description.trim()} size="icon">
                     {isSaving ? <Spinner size="small" /> : <PlusCircle className="h-4 w-4" />}
-                    <span className="sr-only">Añadir PNT</span>
+                    <span className="sr-only">Añadir</span>
                 </Button>
             </div>
         </div>
@@ -153,13 +133,14 @@ export default function PntsPage() {
   const { userInfo, loading: authLoading } = useAuth();
   const { toast } = useToast();
   
+  const [currentDate, setCurrentDate] = useState(startOfToday());
   const [programs, setPrograms] = useState<Program[]>([]);
-  const [pnts, setPnts] = useState<CommercialItem[]>([]);
+  const [pautas, setPautas] = useState<CommercialItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPauta, setSelectedPauta] = useState<CommercialItem | null>(null);
 
-  const today = startOfToday();
-  const formattedDate = format(today, 'yyyy-MM-dd');
-  const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
+  const formattedDate = format(currentDate, 'yyyy-MM-dd');
+  const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -170,11 +151,11 @@ export default function PntsPage() {
       ]);
       
       setPrograms(fetchedPrograms);
-      setPnts(fetchedItems.filter(item => item.type === 'PNT'));
+      setPautas(fetchedItems.filter(item => item.type === 'PNT' || item.type === 'Auspicio'));
 
     } catch (error) {
       console.error("Error fetching data:", error);
-      toast({ title: "Error al cargar los PNTs", variant: "destructive" });
+      toast({ title: "Error al cargar las pautas", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -184,13 +165,12 @@ export default function PntsPage() {
     if (!authLoading) {
       fetchData();
     }
-  }, [authLoading, fetchData]);
+  }, [authLoading, fetchData, currentDate]);
 
   const handleToggleRead = async (item: CommercialItem, isRead: boolean) => {
-    const originalPnts = [...pnts];
+    const originalPautas = [...pautas];
     
-    // Optimistic UI update
-    setPnts(prev => prev.map(p => 
+    setPautas(prev => prev.map(p => 
       p.id === item.id 
         ? { ...p, pntRead: isRead, pntReadAt: isRead ? new Date().toISOString() : undefined }
         : p
@@ -202,13 +182,17 @@ export default function PntsPage() {
         pntReadAt: isRead ? new Date().toISOString() : undefined,
       };
       await updateCommercialItem(item.id, updateData);
+      setSelectedPauta(null);
     } catch (error) {
-      console.error("Error updating PNT status:", error);
-      toast({ title: "Error al actualizar el PNT", variant: "destructive" });
-      // Revert optimistic update on error
-      setPnts(originalPnts);
+      console.error("Error updating Pauta status:", error);
+      toast({ title: "Error al actualizar la pauta", variant: "destructive" });
+      setPautas(originalPautas);
     }
   };
+  
+  const handleDateChange = (direction: 'prev' | 'next') => {
+      setCurrentDate(prev => direction === 'next' ? addDays(prev, 1) : subDays(prev, 1));
+  }
 
   const programsForToday = useMemo(() => {
     return programs
@@ -216,28 +200,25 @@ export default function PntsPage() {
         const scheduleForDay = program.schedules.find(s => s.daysOfWeek.includes(dayOfWeek));
         if (!scheduleForDay) return null;
         
-        const programPnts = pnts.filter(pnt => pnt.programId === program.id)
+        const programPautas = pautas.filter(pnt => pnt.programId === program.id)
           .sort((a, b) => {
-              if (a.pntRead && !b.pntRead) return 1; // b (unread) comes first
-              if (!a.pntRead && b.pntRead) return -1; // a (unread) comes first
+              if (a.pntRead && !b.pntRead) return 1;
+              if (!a.pntRead && b.pntRead) return -1;
               if (a.pntRead && b.pntRead) {
-                // Both are read, sort by read time ascending (older first)
                 return new Date(a.pntReadAt!).getTime() - new Date(b.pntReadAt!).getTime();
               }
-              // Both are unread, keep original order (or add more specific sorting if needed)
               return 0;
           });
-
 
         return {
           ...program,
           schedule: scheduleForDay,
-          pnts: programPnts,
+          pautas: programPautas,
         };
       })
-      .filter((p): p is Program & { schedule: NonNullable<Program['schedules'][0]>, pnts: CommercialItem[] } => p !== null)
+      .filter((p): p is Program & { schedule: NonNullable<Program['schedules'][0]>, pautas: CommercialItem[] } => p !== null)
       .sort((a, b) => a!.schedule.startTime.localeCompare(b!.schedule.startTime));
-  }, [programs, pnts, dayOfWeek]);
+  }, [programs, pautas, dayOfWeek]);
 
 
   if (authLoading || loading) {
@@ -249,43 +230,69 @@ export default function PntsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <Header title={`PNTs - ${format(today, 'PPPP', { locale: es })}`} />
-      <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-        {programsForToday.length > 0 ? (
-            <Accordion type="multiple" className="w-full space-y-4" defaultValue={programsForToday.map(p => p.id)}>
-                {programsForToday.map(program => (
-                    <AccordionItem value={program.id} key={program.id} className="border-b-0">
-                        <AccordionTrigger className={cn("flex rounded-lg border p-4 text-left hover:no-underline", program.color)}>
-                            <div className="flex-1">
-                                <h3 className="font-bold text-lg">{program.name}</h3>
-                                <p className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</p>
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-0">
-                            <div className="border border-t-0 rounded-b-lg">
-                                <div className="p-4 space-y-3">
-                                {program.pnts.length > 0 ? (
-                                    program.pnts.map(pnt => (
-                                      <PntItem key={pnt.id} item={pnt} onToggleRead={handleToggleRead} />
-                                    ))
-                                ) : (
-                                    <p className="text-center text-sm text-muted-foreground py-4">No hay PNTs registrados para este programa.</p>
-                                )}
-                                </div>
-                                <AddPntForm programId={program.id} onPntAdded={fetchData} />
-                            </div>
-                        </AccordionContent>
-                    </AccordionItem>
-                ))}
-            </Accordion>
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full text-center p-8 border-2 border-dashed rounded-lg">
-             <h3 className="text-xl font-semibold">No hay programas para hoy</h3>
-             <p className="text-muted-foreground mt-2">La grilla de programas para el día de hoy está vacía.</p>
-          </div>
-        )}
-      </main>
-    </div>
+    <>
+      <div className="flex flex-col h-full">
+        <Header title="Pauta Diaria">
+            <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => handleDateChange('prev')}><ArrowLeft className="mr-2 h-4 w-4"/> Anterior</Button>
+                <span className="font-semibold text-lg capitalize w-48 text-center">{format(currentDate, 'PPPP', { locale: es })}</span>
+                <Button variant="outline" onClick={() => handleDateChange('next')}>Siguiente <ArrowRight className="ml-2 h-4 w-4"/></Button>
+            </div>
+        </Header>
+        <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
+          {programsForToday.length > 0 ? (
+              <Accordion type="multiple" className="w-full space-y-4" defaultValue={programsForToday.map(p => p.id)}>
+                  {programsForToday.map(program => (
+                      <AccordionItem value={program.id} key={program.id} className="border-b-0">
+                          <AccordionTrigger className={cn("flex rounded-lg border p-4 text-left hover:no-underline", program.color)}>
+                              <div className="flex-1">
+                                  <h3 className="font-bold text-lg">{program.name}</h3>
+                                  <p className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</p>
+                              </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="pt-0">
+                              <div className="border border-t-0 rounded-b-lg">
+                                  <div className="p-4 space-y-3">
+                                  {program.pautas.length > 0 ? (
+                                      program.pautas.map(pauta => (
+                                        <div 
+                                          key={pauta.id}
+                                          className={cn("flex items-center space-x-4 p-3 rounded-lg border cursor-pointer hover:bg-muted", pauta.pntRead ? "bg-muted/50" : "bg-background")}
+                                          onClick={() => setSelectedPauta(pauta)}
+                                        >
+                                          <div className="flex-1 space-y-1">
+                                              <p className={cn("font-semibold", pauta.pntRead && "line-through text-muted-foreground")}>{pauta.title}</p>
+                                              <p className={cn("text-xs text-muted-foreground", pauta.pntRead && "line-through")}>{pauta.type}</p>
+                                          </div>
+                                          {pauta.pntRead && <span className="text-xs text-muted-foreground">Leído</span>}
+                                        </div>
+                                      ))
+                                  ) : (
+                                      <p className="text-center text-sm text-muted-foreground py-4">No hay pautas registradas para este programa.</p>
+                                  )}
+                                  </div>
+                                  <AddPautaForm programId={program.id} onPautaAdded={fetchData} />
+                              </div>
+                          </AccordionContent>
+                      </AccordionItem>
+                  ))}
+              </Accordion>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8 border-2 border-dashed rounded-lg">
+               <h3 className="text-xl font-semibold">No hay programas para hoy</h3>
+               <p className="text-muted-foreground mt-2">La grilla de programas para el día de hoy está vacía.</p>
+            </div>
+          )}
+        </main>
+      </div>
+      {selectedPauta && (
+        <PautaDetailsDialog
+            isOpen={!!selectedPauta}
+            onOpenChange={() => setSelectedPauta(null)}
+            pauta={selectedPauta}
+            onToggleRead={handleToggleRead}
+        />
+      )}
+    </>
   );
 }

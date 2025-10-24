@@ -175,9 +175,9 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
             </div>
           </div>
           
-          {type === 'PNT' && (
+          {(type === 'PNT' || type === 'Auspicio') && (
             <div className="space-y-2">
-              <Label htmlFor="item-title">Título del PNT</Label>
+              <Label htmlFor="item-title">Título</Label>
               <Input id="item-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Título para identificación rápida"/>
             </div>
           )}
