@@ -20,7 +20,7 @@ import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/
 import type { Client, TipoEntidad, CondicionIVA, Agency } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
-import { getAgencies, createClient } from '@/lib/firebase-service';
+import { getAgencies, createClient, getClients } from '@/lib/firebase-service';
 import { Checkbox } from '../ui/checkbox';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -62,6 +62,7 @@ export function ClientFormDialog({
   const [formData, setFormData] = useState<ClientFormData>(initialFormData);
   const [isSaving, setIsSaving] = useState(false);
   const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [existingClients, setExistingClients] = useState<Client[]>([]);
   const { toast } = useToast();
 
   const isEditing = client && client.id;
@@ -75,7 +76,13 @@ export function ClientFormDialog({
         } else {
             setFormData(initialFormData);
         }
-        getAgencies().then(setAgencies);
+        Promise.all([
+          getAgencies(),
+          getClients()
+        ]).then(([agencies, clients]) => {
+          setAgencies(agencies);
+          setExistingClients(clients);
+        });
         setIsSaving(false);
     }
   }, [client, isOpen]);

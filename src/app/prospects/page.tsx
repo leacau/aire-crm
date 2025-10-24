@@ -8,7 +8,7 @@ import { PlusCircle, UserPlus, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Prospect, User, Client } from '@/lib/types';
-import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers, createClient } from '@/lib/firebase-service';
+import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
@@ -266,19 +266,7 @@ export default function ProspectsPage() {
          <ClientFormDialog
             isOpen={isConverting}
             onOpenChange={setIsConverting}
-            onSave={async (clientData) => {
-              if (!userInfo) return;
-              try {
-                await createClient(
-                  clientData, 
-                  prospectToConvert.ownerId, 
-                  prospectToConvert.ownerName
-                );
-                await handleClientCreatedFromProspect();
-              } catch(e) {
-                toast({title: "Error al convertir prospecto", description: "No se pudo crear el cliente.", variant: "destructive"});
-              }
-            }}
+            onSave={handleClientCreatedFromProspect}
             client={{
               denominacion: prospectToConvert.companyName,
               razonSocial: prospectToConvert.companyName,
