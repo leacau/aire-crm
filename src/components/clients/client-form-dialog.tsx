@@ -29,7 +29,7 @@ type ClientFormData = Partial<Omit<Client, 'id' | 'personIds' | 'deactivationHis
 interface ClientFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>) => void;
+  onSaveSuccess: (clientData?: any) => void;
   client?: Partial<Client> | null;
   onValidateCuit: (cuit: string, clientId?: string) => Promise<string | false>;
 }
@@ -54,7 +54,7 @@ const initialFormData: ClientFormData = {
 export function ClientFormDialog({
   isOpen,
   onOpenChange,
-  onSave,
+  onSaveSuccess,
   client = null,
   onValidateCuit,
 }: ClientFormDialogProps) {
@@ -62,7 +62,6 @@ export function ClientFormDialog({
   const [formData, setFormData] = useState<ClientFormData>(initialFormData);
   const [isSaving, setIsSaving] = useState(false);
   const [agencies, setAgencies] = useState<Agency[]>([]);
-  const [existingClients, setExistingClients] = useState<Client[]>([]);
   const { toast } = useToast();
 
   const isEditing = client && client.id;
@@ -70,19 +69,12 @@ export function ClientFormDialog({
   useEffect(() => {
     if (isOpen) {
         if (client) {
-            // Merge initial data with provided client data
             const combinedData = { ...initialFormData, ...client };
             setFormData(combinedData);
         } else {
             setFormData(initialFormData);
         }
-        Promise.all([
-          getAgencies(),
-          getClients()
-        ]).then(([agencies, clients]) => {
-          setAgencies(agencies);
-          setExistingClients(clients);
-        });
+        getAgencies().then(setAgencies);
         setIsSaving(false);
     }
   }, [client, isOpen]);
@@ -128,11 +120,10 @@ export function ClientFormDialog({
     
     try {
         if (isEditing) {
-          // The onSave prop for editing is handled differently in client-details page
-          onSave(finalData);
+          // This onSaveSuccess is now handled in client-details page, which calls the update function.
+          onSaveSuccess(finalData); 
           toast({ title: "Cliente Actualizado", description: "Los datos del cliente se han guardado." });
         } else {
-           // For new clients, including those from prospects
            const ownerId = client?.ownerId || userInfo?.id;
            const ownerName = client?.ownerName || userInfo?.name;
            if (!ownerId || !ownerName) {
@@ -140,7 +131,7 @@ export function ClientFormDialog({
            }
            await createClient(finalData, ownerId, ownerName);
            toast({ title: "Cliente Creado", description: `${finalData.denominacion} ha sido añadido a la lista.`});
-           onSave(finalData); // Callback for prospect conversion if applicable
+           onSaveSuccess(); // Callback for prospect conversion or simple creation.
         }
         onOpenChange(false);
     } catch (error: any) {

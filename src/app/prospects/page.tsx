@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -111,11 +112,17 @@ export default function ProspectsPage() {
   
   const handleClientCreatedFromProspect = async () => {
     if (prospectToConvert && userInfo) {
-      await updateProspect(prospectToConvert.id, { status: 'Convertido' }, userInfo.id, userInfo.name);
-      toast({ title: "Prospecto Convertido", description: `${prospectToConvert.companyName} ahora es un cliente.`});
-      setIsConverting(false);
-      setProspectToConvert(null);
-      fetchData();
+      try {
+        await updateProspect(prospectToConvert.id, { status: 'Convertido' }, userInfo.id, userInfo.name);
+        toast({ title: "Prospecto Convertido", description: `${prospectToConvert.companyName} ahora es un cliente.`});
+        fetchData();
+      } catch (error) {
+        console.error("Error updating prospect status:", error);
+        toast({ title: "Error al actualizar el estado del prospecto", variant: "destructive" });
+      } finally {
+        setIsConverting(false);
+        setProspectToConvert(null);
+      }
     }
   };
 
@@ -244,7 +251,7 @@ export default function ProspectsPage() {
             sorting={sorting}
             setSorting={setSorting}
             onRowClick={(prospect) => {
-              if (isBoss || userInfo?.id === prospect.ownerId) {
+              if ((isBoss || userInfo?.id === prospect.ownerId) && prospect.status !== 'Convertido') {
                 handleOpenForm(prospect);
               }
             }}
@@ -266,7 +273,7 @@ export default function ProspectsPage() {
          <ClientFormDialog
             isOpen={isConverting}
             onOpenChange={setIsConverting}
-            onSave={handleClientCreatedFromProspect}
+            onSaveSuccess={handleClientCreatedFromProspect}
             client={{
               denominacion: prospectToConvert.companyName,
               razonSocial: prospectToConvert.companyName,

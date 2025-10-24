@@ -222,7 +222,7 @@ export default function ClientsPage() {
 
     opportunities.forEach(opp => {
       if (data[opp.clientId]) {
-        if (opp.stage !== 'Cerrado - Ganado' && opp.stage !== 'Cerrado - Perdido') {
+        if (!['Cerrado - Ganado', 'Cerrado - Perdido', 'Cerrado - No Definido'].includes(opp.stage)) {
             data[opp.clientId].openOpps += 1;
             data[opp.clientId].totalValue += opp.value;
         }
@@ -292,35 +292,6 @@ export default function ClientsPage() {
       );
     });
   }, [clients, searchTerm, showOnlyMyClients, userInfo, showDuplicates, canManage, selectedAdvisor]);
-
-
-  const handleSaveClient = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>) => {
-    if (!userInfo) {
-        toast({
-            title: "Error",
-            description: "Debes iniciar sesión para crear un cliente.",
-            variant: "destructive",
-        });
-        return;
-    }
-
-    try {
-      await createClient(clientData, userInfo.id, userInfo.name);
-      toast({
-        title: "Cliente Creado",
-        description: `${clientData.denominacion} ha sido añadido a la lista.`,
-      });
-      fetchData(); // Refresh the list
-      setIsFormOpen(false); // Close dialog on successful creation
-    } catch (error) {
-        console.error("Error creating client:", error);
-        toast({
-            title: "Error al crear cliente",
-            description: "No se pudo guardar el cliente.",
-            variant: "destructive",
-        });
-    }
-  };
   
   const handleBulkDelete = async () => {
     const idsToDelete = Object.keys(rowSelection);
@@ -591,7 +562,10 @@ export default function ClientsPage() {
       <ClientFormDialog
         isOpen={isFormOpen}
         onOpenChange={setIsFormOpen}
-        onSave={handleSaveClient}
+        onSaveSuccess={() => {
+          fetchData();
+          setIsFormOpen(false);
+        }}
         onValidateCuit={validateCuit}
       />
     </div>
