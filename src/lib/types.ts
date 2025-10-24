@@ -115,6 +115,22 @@ export type Client = {
   deactivationHistory?: string[];
 };
 
+export const prospectStatusOptions = ['Nuevo', 'Contactado', 'Calificado', 'No Calificado', 'Convertido'] as const;
+export type ProspectStatus = typeof prospectStatusOptions[number];
+
+export type Prospect = {
+  id: string;
+  companyName: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  notes?: string;
+  status: ProspectStatus;
+  ownerId: string;
+  ownerName: string;
+  createdAt: string;
+};
+
 export type Agency = {
   id: string;
   name: string;
@@ -126,7 +142,7 @@ export type ActivityLog = {
   userName: string;
   ownerName: string;
   type: 'create' | 'update' | 'delete' | 'stage_change';
-  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje';
+  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action

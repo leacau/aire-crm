@@ -15,7 +15,7 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone } from 'lucide-react';
+import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
@@ -23,6 +23,7 @@ import { useAuth } from '@/hooks/use-auth';
 const menuItems = [
   { href: '/', label: 'Panel', icon: Home, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/opportunities', label: 'Oportunidades', icon: CircleDollarSign, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
+  { href: '/prospects', label: 'Prospectos', icon: Lightbulb, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/clients', label: 'Clientes', icon: Users, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/grilla', label: 'Grilla', icon: Grid3X3, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/pnts', label: 'PNTs', icon: Megaphone, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },

@@ -20,16 +20,17 @@ import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/
 import type { Client, TipoEntidad, CondicionIVA, Agency } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
-import { getAgencies } from '@/lib/firebase-service';
+import { getAgencies, createClient } from '@/lib/firebase-service';
 import { Checkbox } from '../ui/checkbox';
+import { useAuth } from '@/hooks/use-auth';
 
-type ClientFormData = Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>;
+type ClientFormData = Partial<Omit<Client, 'id' | 'personIds' | 'deactivationHistory' | 'newClientDate'>>;
 
 interface ClientFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (clientData: ClientFormData) => void;
-  client?: Client | null;
+  onSave: (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>) => void;
+  client?: Partial<Client> | null;
   onValidateCuit: (cuit: string, clientId?: string) => Promise<string | false>;
 }
 
@@ -57,32 +58,20 @@ export function ClientFormDialog({
   client = null,
   onValidateCuit,
 }: ClientFormDialogProps) {
+  const { userInfo } = useAuth();
   const [formData, setFormData] = useState<ClientFormData>(initialFormData);
   const [isSaving, setIsSaving] = useState(false);
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const { toast } = useToast();
 
-  const isEditing = client !== null;
+  const isEditing = client && client.id;
 
   useEffect(() => {
     if (isOpen) {
         if (client) {
-            setFormData({
-                denominacion: client.denominacion,
-                razonSocial: client.razonSocial,
-                cuit: client.cuit || '',
-                condicionIVA: client.condicionIVA,
-                provincia: client.provincia,
-                localidad: client.localidad,
-                tipoEntidad: client.tipoEntidad,
-                rubro: client.rubro,
-                email: client.email,
-                phone: client.phone,
-                observaciones: client.observaciones || '',
-                agencyId: client.agencyId,
-                isNewClient: client.isNewClient,
-                isDeactivated: client.isDeactivated,
-            });
+            // Merge initial data with provided client data
+            const combinedData = { ...initialFormData, ...client };
+            setFormData(combinedData);
         } else {
             setFormData(initialFormData);
         }
@@ -92,7 +81,7 @@ export function ClientFormDialog({
   }, [client, isOpen]);
 
   const handleSave = async () => {
-    if (!formData.denominacion.trim()) {
+    if (!formData.denominacion?.trim()) {
         toast({ title: "Campo requerido", description: "La Denominación es obligatoria.", variant: "destructive"});
         return;
     }
@@ -101,7 +90,6 @@ export function ClientFormDialog({
     
     if (formData.cuit) {
         const validationMessage = await onValidateCuit(formData.cuit, client?.id);
-
         if (validationMessage) {
             toast({
                 title: "CUIT Duplicado",
@@ -114,16 +102,43 @@ export function ClientFormDialog({
         }
     }
     
+    const finalData = {
+      denominacion: formData.denominacion,
+      razonSocial: formData.razonSocial || '',
+      cuit: formData.cuit || '',
+      condicionIVA: formData.condicionIVA || 'Consumidor Final',
+      provincia: formData.provincia || '',
+      localidad: formData.localidad || '',
+      tipoEntidad: formData.tipoEntidad || 'Privada',
+      rubro: formData.rubro || '',
+      email: formData.email || '',
+      phone: formData.phone || '',
+      observaciones: formData.observaciones || '',
+      agencyId: formData.agencyId,
+      isNewClient: formData.isNewClient || false,
+      isDeactivated: formData.isDeactivated || false,
+    };
+    
+    // If it's a new client being created from a prospect, it will have ownerId.
+    const ownerId = client?.ownerId || userInfo?.id;
+    const ownerName = client?.ownerName || userInfo?.name;
+
     try {
-        onSave(formData);
         if (isEditing) {
-            toast({
-                title: "Cliente Actualizado",
-                description: "Los datos del cliente se han guardado.",
-            });
+          // The onSave prop for editing is handled differently in client-details page
+          onSave(finalData);
+          toast({ title: "Cliente Actualizado", description: "Los datos del cliente se han guardado." });
+        } else if (ownerId && ownerName) {
+          await createClient(finalData, ownerId, ownerName);
+          toast({ title: "Cliente Creado", description: `${finalData.denominacion} ha sido añadido a la lista.`});
+          onSave(finalData); // Callback for prospect conversion
+        } else {
+           throw new Error("No se pudo determinar el propietario del cliente.");
         }
-    } catch (error) {
+        onOpenChange(false);
+    } catch (error: any) {
         console.error("Error saving client:", error);
+        toast({ title: "Error al guardar el cliente", description: error.message, variant: "destructive"});
     } finally {
         setIsSaving(false);
     }
@@ -131,10 +146,7 @@ export function ClientFormDialog({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSelectChange = (name: keyof ClientFormData, value: string) => {
