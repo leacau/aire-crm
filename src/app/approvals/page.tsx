@@ -17,7 +17,7 @@ import { updateOpportunity } from '@/lib/firebase-service';
 import { useRouter } from 'next/navigation';
 
 function ApprovalsPageComponent() {
-  const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -68,7 +68,8 @@ function ApprovalsPageComponent() {
       const client = clients.find(c => c.id === selectedOpportunity.clientId);
       if (!client) throw new Error("Client not found for opportunity");
 
-      await updateOpportunity(selectedOpportunity.id, updatedData, userInfo.id, userInfo.name, client.ownerName);
+      const accessToken = await getGoogleAccessToken();
+      await updateOpportunity(selectedOpportunity.id, updatedData, userInfo.id, userInfo.name, client.ownerName, accessToken);
       fetchData(); // Refresca la lista después de la actualización
       toast({ title: "Oportunidad Actualizada" });
     } catch (error) {

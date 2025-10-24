@@ -1147,6 +1147,42 @@ export const updateOpportunity = async (
         updatedAt: serverTimestamp()
     };
     
+    // --- Bonus Approval Logic ---
+    const bonusStateChanged = data.bonificacionEstado && data.bonificacionEstado !== originalData.bonificacionEstado && originalData.bonificacionEstado === 'Pendiente';
+    if (bonusStateChanged) {
+        // If bonus is approved/rejected, move stage back to Negotiation
+        if (originalData.stage === 'Negociación a Aprobar') {
+            updateData.stage = 'Negociación';
+        }
+        
+        // Send email notification
+        if (accessToken) {
+            const clientSnap = await getDoc(doc(db, 'clients', originalData.clientId));
+            if (clientSnap.exists()) {
+                const clientData = clientSnap.data() as Client;
+                const advisor = await getUserProfile(clientData.ownerId);
+                if (advisor && advisor.email) {
+                    try {
+                        const subject = `Respuesta de bonificación para ${originalData.title}`;
+                        const body = `
+                            <p>Hola ${advisor.name},</p>
+                            <p>Se ha tomado una decisión sobre la solicitud de bonificación para la oportunidad <strong>"${originalData.title}"</strong> del cliente <strong>${originalData.clientName}</strong>.</p>
+                            <p><strong>Decisión:</strong> ${data.bonificacionEstado}</p>
+                            ${data.bonificacionObservaciones ? `<p><strong>Observaciones:</strong> ${data.bonificacionObservaciones}</p>` : ''}
+                            <p>La oportunidad ha vuelto a la etapa de "Negociación".</p>
+                            <p>Puedes ver los detalles en el <a href="https://aire-crm.vercel.app/clients/${originalData.clientId}">CRM</a>.</p>
+                        `;
+                        await sendEmail({ accessToken, to: advisor.email, subject, body });
+                    } catch (e) {
+                         console.error("Failed to send bonus notification email:", e);
+                         // Don't block the main operation if email fails.
+                    }
+                }
+            }
+        }
+    }
+
+
     if (data.bonificacionDetalle !== undefined && !data.bonificacionDetalle.trim()) {
         updateData.bonificacionEstado = deleteField();
         updateData.bonificacionAutorizadoPorId = deleteField();
@@ -1426,6 +1462,7 @@ export const updateClientActivity = async (
     
 
     
+
 
 
 
