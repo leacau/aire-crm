@@ -6,128 +6,45 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import type { Program, CommercialItem, Client, CommercialItemType } from '@/lib/types';
+import type { Program, CommercialItem, Client, User } from '@/lib/types';
 import { getPrograms, getCommercialItems, updateCommercialItem, createCommercialItem, getClients } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
-import { format, startOfToday, addDays, subDays } from 'date-fns';
+import { format, startOfToday, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { CheckCircle, PlusCircle, ArrowLeft, ArrowRight, Mic, Star } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Input } from '@/components/ui/input';
-import { PlusCircle, ArrowLeft, ArrowRight } from 'lucide-react';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PautaDetailsDialog } from '@/components/pauta/pauta-details-dialog';
+import { PntAuspicioFormDialog } from '@/components/pnts/pnt-auspicio-form-dialog';
+import { PntAuspicioDetailsDialog } from '@/components/pnts/pnt-auspicio-details-dialog';
 
-interface AddPautaFormProps {
-  programId: string;
-  onPautaAdded: () => void;
+interface PntItemRowProps {
+  item: CommercialItem;
+  onClick: (item: CommercialItem) => void;
 }
 
-const AddPautaForm: React.FC<AddPautaFormProps> = ({ programId, onPautaAdded }) => {
-    const [type, setType] = useState<CommercialItemType>('PNT');
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [bloque, setBloque] = useState('');
-    const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
-    const [clients, setClients] = useState<Client[]>([]);
-    const [isSaving, setIsSaving] = useState(false);
-    const { userInfo } = useAuth();
-    const { toast } = useToast();
+const PntItemRow: React.FC<PntItemRowProps> = ({ item, onClick }) => {
+  const isRead = !!item.pntRead;
+  const Icon = item.type === 'PNT' ? Mic : Star;
 
-    useEffect(() => {
-        getClients().then(setClients);
-    }, []);
-
-    const handleAddPauta = async () => {
-        if (!title.trim() || !description.trim() || !userInfo) {
-            toast({ title: 'Título y texto son obligatorios.', variant: 'destructive' });
-            return;
-        }
-        setIsSaving(true);
-        try {
-            const selectedClient = clients.find(c => c.id === selectedClientId);
-
-            const newItem: Omit<CommercialItem, 'id'> = {
-                programId,
-                date: format(new Date(), 'yyyy-MM-dd'),
-                type,
-                title,
-                description,
-                bloque: type === 'Auspicio' ? bloque : undefined,
-                status: 'Vendido',
-                createdBy: userInfo.id,
-                clientId: selectedClient?.id,
-                clientName: selectedClient?.denominacion
-            };
-            await createCommercialItem(newItem);
-            
-            // Reset form
-            setTitle('');
-            setDescription('');
-            setBloque('');
-            setSelectedClientId(undefined);
-            
-            onPautaAdded(); 
-            toast({ title: `${type} añadido correctamente` });
-        } catch (error) {
-            console.error(`Error adding ${type}:`, error);
-            toast({ title: `Error al añadir ${type}`, variant: 'destructive' });
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    return (
-        <div className="flex flex-col gap-2 mt-4 p-3 border-t">
-            <Select value={type} onValueChange={(v: CommercialItemType) => setType(v)}>
-                <SelectTrigger><SelectValue/></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="PNT">Añadir PNT</SelectItem>
-                    <SelectItem value="Auspicio">Añadir Auspicio</SelectItem>
-                </SelectContent>
-            </Select>
-
-            <Input 
-                placeholder="Título (para identificación rápida)"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                disabled={isSaving}
-            />
-            {type === 'Auspicio' && (
-                 <Input 
-                    placeholder="Sección / Bloque (Ej: Deportes)"
-                    value={bloque}
-                    onChange={(e) => setBloque(e.target.value)}
-                    disabled={isSaving}
-                />
-            )}
-            <Textarea 
-                placeholder="Texto a leer..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                disabled={isSaving}
-                rows={3}
-            />
-            <div className="flex items-center gap-2">
-                 <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                    <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Cliente (Opcional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="none">Ninguno</SelectItem>
-                        {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-                <Button onClick={handleAddPauta} disabled={isSaving || !title.trim() || !description.trim()} size="icon">
-                    {isSaving ? <Spinner size="small" /> : <PlusCircle className="h-4 w-4" />}
-                    <span className="sr-only">Añadir</span>
-                </Button>
-            </div>
-        </div>
-    );
+  return (
+    <div 
+      className={cn(
+        "flex items-center space-x-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/80",
+        isRead ? "bg-muted/50 text-muted-foreground" : "bg-background"
+      )}
+      onClick={() => onClick(item)}
+    >
+      {isRead && <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />}
+      {!isRead && <Icon className="h-5 w-5 text-primary flex-shrink-0" />}
+      <div className="flex-1 space-y-1 overflow-hidden">
+        <p className={cn("font-semibold leading-none truncate", isRead && "line-through")}>
+            {item.title}
+        </p>
+        <p className="text-xs">{item.type}</p>
+      </div>
+    </div>
+  );
 };
-
 
 export default function PntsPage() {
   const { userInfo, loading: authLoading } = useAuth();
@@ -135,64 +52,89 @@ export default function PntsPage() {
   
   const [currentDate, setCurrentDate] = useState(startOfToday());
   const [programs, setPrograms] = useState<Program[]>([]);
-  const [pautas, setPautas] = useState<CommercialItem[]>([]);
+  const [pnts, setPnts] = useState<CommercialItem[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPauta, setSelectedPauta] = useState<CommercialItem | null>(null);
 
-  const formattedDate = format(currentDate, 'yyyy-MM-dd');
-  const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<CommercialItem | null>(null);
+  
+
+  const dayOfWeek = useMemo(() => currentDate.getDay() === 0 ? 7 : currentDate.getDay(), [currentDate]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    const formattedDate = format(currentDate, 'yyyy-MM-dd');
     try {
-      const [fetchedPrograms, fetchedItems] = await Promise.all([
+      const [fetchedPrograms, fetchedItems, fetchedClients] = await Promise.all([
         getPrograms(),
         getCommercialItems(formattedDate),
+        getClients(),
       ]);
       
       setPrograms(fetchedPrograms);
-      setPautas(fetchedItems.filter(item => item.type === 'PNT' || item.type === 'Auspicio'));
+      setPnts(fetchedItems.filter(item => ['PNT', 'Auspicio'].includes(item.type)));
+      setClients(fetchedClients);
 
     } catch (error) {
       console.error("Error fetching data:", error);
-      toast({ title: "Error al cargar las pautas", variant: "destructive" });
+      toast({ title: "Error al cargar los datos", variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [formattedDate, toast]);
+  }, [currentDate, toast]);
 
   useEffect(() => {
     if (!authLoading) {
       fetchData();
     }
-  }, [authLoading, fetchData, currentDate]);
+  }, [authLoading, fetchData]);
+
+  const handleItemSave = async (itemData: Omit<CommercialItem, 'id' | 'date'>) => {
+    if (!userInfo || !selectedProgramId) return;
+
+    try {
+        const newItem: Omit<CommercialItem, 'id'> = {
+            ...itemData,
+            programId: selectedProgramId,
+            date: format(currentDate, 'yyyy-MM-dd'),
+            status: 'Vendido',
+            createdBy: userInfo.id,
+        };
+        await createCommercialItem(newItem);
+        fetchData();
+        toast({ title: `${itemData.type} añadido correctamente` });
+    } catch(error) {
+        console.error("Error saving item:", error);
+        toast({ title: `Error al añadir ${itemData.type}`, variant: "destructive" });
+    }
+  };
 
   const handleToggleRead = async (item: CommercialItem, isRead: boolean) => {
-    const originalPautas = [...pautas];
+    const originalPnts = [...pnts];
     
-    setPautas(prev => prev.map(p => 
+    // Optimistic UI update
+    setPnts(prev => prev.map(p => 
       p.id === item.id 
         ? { ...p, pntRead: isRead, pntReadAt: isRead ? new Date().toISOString() : undefined }
         : p
     ));
+    setSelectedItem(prev => prev ? { ...prev, pntRead: isRead, pntReadAt: isRead ? new Date().toISOString() : undefined } : null);
 
     try {
-      const updateData: Partial<CommercialItem> = {
+      await updateCommercialItem(item.id, {
         pntRead: isRead,
         pntReadAt: isRead ? new Date().toISOString() : undefined,
-      };
-      await updateCommercialItem(item.id, updateData);
-      setSelectedPauta(null);
+      });
     } catch (error) {
-      console.error("Error updating Pauta status:", error);
-      toast({ title: "Error al actualizar la pauta", variant: "destructive" });
-      setPautas(originalPautas);
+      console.error("Error updating PNT status:", error);
+      toast({ title: "Error al actualizar estado", variant: "destructive" });
+      setPnts(originalPnts);
+      setSelectedItem(item);
     }
   };
-  
-  const handleDateChange = (direction: 'prev' | 'next') => {
-      setCurrentDate(prev => direction === 'next' ? addDays(prev, 1) : subDays(prev, 1));
-  }
 
   const programsForToday = useMemo(() => {
     return programs
@@ -200,7 +142,7 @@ export default function PntsPage() {
         const scheduleForDay = program.schedules.find(s => s.daysOfWeek.includes(dayOfWeek));
         if (!scheduleForDay) return null;
         
-        const programPautas = pautas.filter(pnt => pnt.programId === program.id)
+        const programPnts = pnts.filter(pnt => pnt.programId === program.id)
           .sort((a, b) => {
               if (a.pntRead && !b.pntRead) return 1;
               if (!a.pntRead && b.pntRead) return -1;
@@ -213,12 +155,28 @@ export default function PntsPage() {
         return {
           ...program,
           schedule: scheduleForDay,
-          pautas: programPautas,
+          items: programPnts,
         };
       })
-      .filter((p): p is Program & { schedule: NonNullable<Program['schedules'][0]>, pautas: CommercialItem[] } => p !== null)
+      .filter((p): p is Program & { schedule: NonNullable<Program['schedules'][0]>, items: CommercialItem[] } => p !== null)
       .sort((a, b) => a!.schedule.startTime.localeCompare(b!.schedule.startTime));
-  }, [programs, pautas, dayOfWeek]);
+  }, [programs, pnts, dayOfWeek]);
+
+
+  const navigateDay = (direction: 'next' | 'prev') => {
+    const amount = direction === 'next' ? 1 : -1;
+    setCurrentDate(prev => addDays(prev, amount));
+  };
+  
+  const openFormModal = (progId: string) => {
+    setSelectedProgramId(progId);
+    setIsFormOpen(true);
+  };
+  
+  const openDetailsModal = (item: CommercialItem) => {
+    setSelectedItem(item);
+    setIsDetailsOpen(true);
+  };
 
 
   if (authLoading || loading) {
@@ -232,11 +190,11 @@ export default function PntsPage() {
   return (
     <>
       <div className="flex flex-col h-full">
-        <Header title="Pauta Diaria">
+        <Header title={`Pauta del Día - ${format(currentDate, 'PPPP', { locale: es })}`}>
             <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={() => handleDateChange('prev')}><ArrowLeft className="mr-2 h-4 w-4"/> Anterior</Button>
-                <span className="font-semibold text-lg capitalize w-48 text-center">{format(currentDate, 'PPPP', { locale: es })}</span>
-                <Button variant="outline" onClick={() => handleDateChange('next')}>Siguiente <ArrowRight className="ml-2 h-4 w-4"/></Button>
+                <Button variant="outline" size="icon" onClick={() => navigateDay('prev')}><ArrowLeft className="h-4 w-4" /></Button>
+                <Button variant="outline" onClick={() => setCurrentDate(startOfToday())}>Hoy</Button>
+                <Button variant="outline" size="icon" onClick={() => navigateDay('next')}><ArrowRight className="h-4 w-4" /></Button>
             </div>
         </Header>
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
@@ -253,25 +211,20 @@ export default function PntsPage() {
                           <AccordionContent className="pt-0">
                               <div className="border border-t-0 rounded-b-lg">
                                   <div className="p-4 space-y-3">
-                                  {program.pautas.length > 0 ? (
-                                      program.pautas.map(pauta => (
-                                        <div 
-                                          key={pauta.id}
-                                          className={cn("flex items-center space-x-4 p-3 rounded-lg border cursor-pointer hover:bg-muted", pauta.pntRead ? "bg-muted/50" : "bg-background")}
-                                          onClick={() => setSelectedPauta(pauta)}
-                                        >
-                                          <div className="flex-1 space-y-1">
-                                              <p className={cn("font-semibold", pauta.pntRead && "line-through text-muted-foreground")}>{pauta.title}</p>
-                                              <p className={cn("text-xs text-muted-foreground", pauta.pntRead && "line-through")}>{pauta.type}</p>
-                                          </div>
-                                          {pauta.pntRead && <span className="text-xs text-muted-foreground">Leído</span>}
-                                        </div>
+                                  {program.items.length > 0 ? (
+                                      program.items.map(item => (
+                                        <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />
                                       ))
                                   ) : (
-                                      <p className="text-center text-sm text-muted-foreground py-4">No hay pautas registradas para este programa.</p>
+                                      <p className="text-center text-sm text-muted-foreground py-4">No hay PNTs ni Auspicios para este programa.</p>
                                   )}
                                   </div>
-                                  <AddPautaForm programId={program.id} onPautaAdded={fetchData} />
+                                  <div className="flex justify-center p-3 border-t">
+                                    <Button variant="outline" size="sm" onClick={() => openFormModal(program.id)}>
+                                        <PlusCircle className="mr-2 h-4 w-4" />
+                                        Nuevo
+                                    </Button>
+                                  </div>
                               </div>
                           </AccordionContent>
                       </AccordionItem>
@@ -285,14 +238,23 @@ export default function PntsPage() {
           )}
         </main>
       </div>
-      {selectedPauta && (
-        <PautaDetailsDialog
-            isOpen={!!selectedPauta}
-            onOpenChange={() => setSelectedPauta(null)}
-            pauta={selectedPauta}
+
+      <PntAuspicioFormDialog
+        isOpen={isFormOpen}
+        onOpenChange={setIsFormOpen}
+        clients={clients}
+        onSave={handleItemSave}
+      />
+      
+      {selectedItem && (
+        <PntAuspicioDetailsDialog
+            isOpen={isDetailsOpen}
+            onOpenChange={setIsDetailsOpen}
+            item={selectedItem}
             onToggleRead={handleToggleRead}
         />
       )}
     </>
   );
 }
+

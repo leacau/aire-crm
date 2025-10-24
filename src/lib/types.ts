@@ -1,5 +1,4 @@
 
-
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -288,7 +287,7 @@ export type CommercialItem = {
   programId: string;
   date: string; // YYYY-MM-DD
   type: CommercialItemType;
-  title?: string;
+  title: string;
   description: string;
   bloque?: string;
   status: CommercialItemStatus;
