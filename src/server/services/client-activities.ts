@@ -30,6 +30,10 @@ const toClientActivity = (doc: QueryDocumentSnapshot): ClientActivity => {
 export type CreateClientActivityInput = Omit<ClientActivity, 'id' | 'timestamp'>;
 export type UpdateClientActivityInput = Partial<Omit<ClientActivity, 'id'>>;
 
+export async function deleteClientActivity(id: string): Promise<void> {
+  await clientActivitiesCollection.doc(id).delete();
+}
+
 export async function listClientActivities(clientId?: string): Promise<ClientActivity[]> {
   const baseQuery = clientId
     ? clientActivitiesCollection.where('clientId', '==', clientId)

@@ -5,6 +5,7 @@ import {
   CreateClientActivityInput,
   UpdateClientActivityInput,
   createClientActivity,
+  deleteClientActivity,
   listClientActivities,
   updateClientActivity,
 } from '@/server/services/client-activities';
@@ -45,6 +46,10 @@ const updateSchema = z.object({
     dueDate: value.dueDate ?? undefined,
     googleCalendarEventId: value.googleCalendarEventId ?? undefined,
   })),
+});
+
+const deleteSchema = z.object({
+  id: z.string().min(1),
 });
 
 export async function GET(request: NextRequest) {
@@ -93,6 +98,18 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-export async function DELETE() {
-  return NextResponse.json({ error: 'Method not implemented' }, { status: 405 });
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const parsed = deleteSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    }
+
+    await deleteClientActivity(parsed.data.id);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete activity:', error);
+    return NextResponse.json({ error: 'Failed to delete activity' }, { status: 500 });
+  }
 }
