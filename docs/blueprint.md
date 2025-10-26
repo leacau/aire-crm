@@ -19,3 +19,13 @@
 - Use clean and professional icons to represent different actions and entities.
 - Prioritize a clear and intuitive layout, ensuring key information is easily accessible.
 - Subtle animations on data updates.
+
+## Firebase Admin Configuration
+
+- Generate a Firebase service account key in the [Firebase console](https://console.firebase.google.com/): go to *Project Settings* → *Service Accounts* → *Firebase Admin SDK* and click **Generate new private key**.
+- Store the downloaded JSON file securely. Copy the following values into your environment variables:
+  - `FIREBASE_ADMIN_PROJECT_ID`: the `project_id` from the JSON.
+  - `FIREBASE_ADMIN_CLIENT_EMAIL`: the `client_email` field.
+  - `FIREBASE_ADMIN_PRIVATE_KEY`: the `private_key` field. Replace escaped `\n` sequences with real newlines when storing locally.
+- These variables allow the backend helpers in `src/server/firebase-admin.ts` and `src/server/auth.ts` to access Firestore securely and validate Firebase Authentication ID tokens.
+- Client-side Firebase configuration continues to use the existing `NEXT_PUBLIC_FIREBASE_*` variables defined in `.env.example`.
