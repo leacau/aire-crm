@@ -12,11 +12,12 @@ import { useToast } from '@/hooks/use-toast';
 import { format, startOfToday, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { CheckCircle, PlusCircle, ArrowLeft, ArrowRight, Mic, Star, FileText } from 'lucide-react';
+import { CheckCircle, PlusCircle, ArrowLeft, ArrowRight, Mic, Star, FileText, InfoIcon } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PntAuspicioFormDialog } from '@/components/pnts/pnt-auspicio-form-dialog';
 import { PntAuspicioDetailsDialog } from '@/components/pnts/pnt-auspicio-details-dialog';
 import { DeleteItemDialog } from '@/components/grilla/delete-item-dialog';
+import Link from 'next/link';
 
 interface PntItemRowProps {
   item: CommercialItem;
@@ -250,9 +251,16 @@ export default function PntsPage() {
                   {programsForToday.map(program => (
                       <AccordionItem value={program.id} key={program.id} className="border-b-0">
                           <AccordionTrigger className={cn("flex rounded-lg border p-4 text-left hover:no-underline", program.color)}>
-                              <div className="flex-1">
-                                  <h3 className="font-bold text-lg">{program.name}</h3>
-                                  <p className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</p>
+                              <div className="flex-1 flex items-center gap-2">
+                                <Link href={`/grilla/${program.id}`} onClick={(e) => e.stopPropagation()}>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 bg-black/10 hover:bg-black/20 text-white">
+                                    <InfoIcon className="h-5 w-5" />
+                                  </Button>
+                                </Link>
+                                <div className="flex-1">
+                                    <h3 className="font-bold text-lg">{program.name}</h3>
+                                    <p className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</p>
+                                </div>
                               </div>
                           </AccordionTrigger>
                           <AccordionContent className="pt-0">
