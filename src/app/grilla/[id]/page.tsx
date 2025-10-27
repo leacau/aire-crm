@@ -58,11 +58,9 @@ export default function ProgramDetailsPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title={program.name}>
-        <Button asChild variant="outline">
-          <Link href="/grilla">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver a la Grilla
-          </Link>
+        <Button variant="outline" onClick={() => router.back()}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Volver
         </Button>
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
