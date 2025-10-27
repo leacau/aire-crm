@@ -126,6 +126,12 @@ export default function ProspectsPage() {
     }
   };
 
+  const advisorsWithProspects = useMemo(() => {
+    if (!isBoss) return [];
+    const advisorIdsWithProspects = new Set(prospects.map(p => p.ownerId));
+    return users.filter(user => advisorIdsWithProspects.has(user.id));
+  }, [prospects, users, isBoss]);
+
   const filteredProspects = useMemo(() => {
     if (!userInfo) return [];
     let userProspects = prospects;
@@ -229,7 +235,7 @@ export default function ProspectsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los asesores</SelectItem>
-                {users.map(advisor => (
+                {advisorsWithProspects.map(advisor => (
                   <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
                 ))}
               </SelectContent>

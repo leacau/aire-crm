@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import type { Client, Opportunity, User } from '@/lib/types';
-import { createClient, getClients, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients, getAllOpportunities } from '@/lib/firebase-service';
+import { getClients, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients, getAllOpportunities } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -231,6 +231,12 @@ export default function ClientsPage() {
 
     return data;
   }, [opportunities, clients]);
+
+  const advisorsWithClients = useMemo(() => {
+    if (!canManage) return [];
+    const ownerIdsWithClients = new Set(clients.map(client => client.ownerId));
+    return advisors.filter(advisor => ownerIdsWithClients.has(advisor.id));
+  }, [clients, advisors, canManage]);
 
 
   const displayedClients = useMemo(() => {
@@ -523,7 +529,7 @@ export default function ClientsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los asesores</SelectItem>
-              {advisors.map(advisor => (
+              {advisorsWithClients.map(advisor => (
                 <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
               ))}
             </SelectContent>

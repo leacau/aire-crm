@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Header } from '@/components/layout/header';
@@ -6,18 +7,19 @@ import { KanbanBoard } from '@/components/opportunities/kanban-board';
 import { useAuth } from '@/hooks/use-auth';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getAllUsers } from '@/lib/firebase-service';
-import type { User } from '@/lib/types';
+import { getAllUsers, getClients } from '@/lib/firebase-service';
+import type { User, Client } from '@/lib/types';
 import { startOfMonth, endOfMonth } from 'date-fns';
 
 
 export default function OpportunitiesPage() {
   const { isBoss } = useAuth();
-  const [advisors, setAdvisors] = useState<User[]>([]);
+  const [allAdvisors, setAllAdvisors] = useState<User[]>([]);
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
   const [clientList, setClientList] = useState<{ id: string; name: string }[]>([]);
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<string>('all');
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
@@ -30,7 +32,13 @@ export default function OpportunitiesPage() {
 
   useEffect(() => {
     if(isBoss) {
-      getAllUsers('Asesor').then(setAdvisors);
+      Promise.all([
+        getAllUsers('Asesor'),
+        getClients()
+      ]).then(([advisors, clients]) => {
+        setAllAdvisors(advisors);
+        setAllClients(clients);
+      });
     }
   }, [isBoss]);
   
@@ -38,6 +46,17 @@ export default function OpportunitiesPage() {
     // Reset client filter when advisor changes
     setSelectedClient('all');
   }, [selectedAdvisor, dateRange]);
+
+  const advisorsInList = useMemo(() => {
+    if (!isBoss) return [];
+    const clientIdsInList = new Set(clientList.map(c => c.id));
+    const advisorIdsInList = new Set(
+      allClients
+        .filter(client => clientIdsInList.has(client.id))
+        .map(client => client.ownerId)
+    );
+    return allAdvisors.filter(advisor => advisorIdsInList.has(advisor.id));
+  }, [clientList, allClients, allAdvisors, isBoss]);
 
 
   return (
@@ -51,7 +70,7 @@ export default function OpportunitiesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los asesores</SelectItem>
-                {advisors.map(advisor => (
+                {advisorsInList.map(advisor => (
                   <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
                 ))}
               </SelectContent>
