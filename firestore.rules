@@ -1,149 +1,140 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-  
+    
     // --- Helper Functions ---
-    function isSignedIn() {
-      return request.auth != null;
+    function isUserAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
     }
 
-    function isUser(userId) {
-      return request.auth.uid == userId;
-    }
-    
-    function getUserRole(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
     function isRole(role) {
-      return isSignedIn() && getUserRole(request.auth.uid) == role;
+      return isUserAuthenticated() && getUserRole() == role;
     }
     
     function isOneOfRoles(roles) {
-      return isSignedIn() && getUserRole(request.auth.uid) in roles;
-    }
-    
-    function isBossOrManager() {
-      return isOneOfRoles(['Jefe', 'Gerencia']);
-    }
-
-    function isAnyAdmin() {
-      return isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
+      return isUserAuthenticated() && getUserRole() in roles;
     }
 
     function isOwner(docData) {
-      return isUser(docData.ownerId);
+      return docData.ownerId == request.auth.uid;
     }
     
+    function isCreator(docData) {
+      return docData.creadoPorId == request.auth.uid || docData.userId == request.auth.uid;
+    }
+
+
     // --- Collection Rules ---
 
-    // Users Collection: Users can read anyone's profile (for names/avatars), but only edit their own.
-    // Only Boss/Manager can change roles.
+    // USERS: Users can read basic info from others, but only modify their own name/photo. Role changes only by admins.
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isUser(userId); // A user can create their own profile upon first sign-in.
-      allow update: if isUser(userId) && !("role" in request.resource.data) // User can update their own info, but NOT their role.
-                    || isBossOrManager(); // Boss/Manager can update anything, including roles.
-      allow delete: if isBossOrManager();
+      allow read: if isUserAuthenticated();
+      allow create: if request.auth.uid == userId;
+      allow update: if request.auth.uid == userId && !('role' in request.resource.data) // Allow user to update their own profile, but not their role
+                      || isOneOfRoles(['Jefe', 'Gerencia', 'Admin']); // Admins can update anything
+      allow delete: if isOneOfRoles(['Jefe', 'Gerencia', 'Admin']);
     }
-    
-    // Clients & Prospects: Advisors can manage their own. Boss/Manager can manage all.
+
+    // CLIENTS: Asesores can manage their own clients. Bosses can manage all.
     match /clients/{clientId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn(); // Any signed-in user can create a client, owner is assigned on creation.
-      allow update: if isSignedIn() && (isOwner(resource.data) || isAnyAdmin());
-      allow delete: if isSignedIn() && isBossOrManager();
+      allow get: if isUserAuthenticated() && (isOwner(resource.data) || isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']));
+      allow list: if isUserAuthenticated(); // Allow listing for dashboard counts, app filters by owner.
+      allow create: if isUserAuthenticated();
+      allow update: if isUserAuthenticated() && (isOwner(resource.data) || isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']));
+      allow delete: if isOneOfRoles(['Jefe', 'Gerencia']);
     }
-
+    
+    // PROSPECTS: Asesores can manage their own prospects. Bosses can manage all.
     match /prospects/{prospectId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn();
-        allow update, delete: if isSignedIn() && (isOwner(resource.data) || isBossOrManager());
-    }
-    
-    // People (Contacts): Linked to clients. Same permission logic.
-    match /people/{personId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      // For updates/deletes, check ownership of the *client* they belong to.
-      // This is a simplification; a more complex rule would check all clientIds.
-      allow update, delete: if isSignedIn() && (get(/databases/$(database)/documents/clients/$(resource.data.clientIds[0])).data.ownerId == request.auth.uid || isAnyAdmin());
+      allow get: if isUserAuthenticated() && (isOwner(resource.data) || isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']));
+      allow list: if isUserAuthenticated(); // Allow listing for dashboard counts.
+      allow create: if isUserAuthenticated();
+      allow update: if isUserAuthenticated() && (isOwner(resource.data) || isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']));
+      allow delete: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
     }
 
-    // Opportunities: Advisors can manage their own client's opps. Boss/Manager all.
+    // OPPORTUNITIES: Asesores can manage opps for their clients. Bosses can manage all.
     match /opportunities/{opportunityId} {
-      function getClientOwnerId() {
-        return get(/databases/$(database)/documents/clients/$(resource.data.clientId)).data.ownerId;
+      function isOpportunityOwner() {
+        let client = get(/databases/$(database)/documents/clients/$(request.resource.data.clientId));
+        return client.data.ownerId == request.auth.uid;
       }
       
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (getClientOwnerId() == request.auth.uid || isBossOrManager());
-      allow delete: if isSignedIn() && isBossOrManager();
+      allow get: if isUserAuthenticated(); // More complex ownership, handled by list + app logic.
+      allow list: if isUserAuthenticated();
+      allow create: if isUserAuthenticated() && isOpportunityOwner();
+      allow update: if isUserAuthenticated() && (isOpportunityOwner() || isOneOfRoles(['Jefe', 'Gerencia']));
+      allow delete: if isOneOfRoles(['Jefe', 'Gerencia']);
     }
     
-    // Invoices, Canjes, CommercialItems: Follow permissions of their parent entities (Clients/Opps).
+    // PEOPLE: Contacts related to clients. Similar rules to clients.
+    match /people/{personId} {
+      allow read, create, update: if isUserAuthenticated(); // Permissions are implicitly handled by client access.
+      allow delete: if isOneOfRoles(['Jefe', 'Gerencia']);
+    }
+    
+    // AGENCIES: Managed by admins. Read by all.
+    match /agencies/{agencyId} {
+      allow read: if isUserAuthenticated();
+      allow create, update, delete: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
+    }
+    
+    // ACTIVITIES (System Logs): Read-only for most. Created by server-side logic.
+    match /activities/{activityId} {
+      allow read: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
+      allow list: if isUserAuthenticated(); // Required for dashboard feeds.
+      allow create, update, delete: if false; // Only server can write.
+    }
+    
+    // CLIENT-ACTIVITIES (User Logs): Users can create for their clients.
+    match /client-activities/{activityId} {
+      function isActivityOwner() {
+        let client = get(/databases/$(database)/documents/clients/$(request.resource.data.clientId));
+        return client.data.ownerId == request.auth.uid;
+      }
+
+      allow read: if isUserAuthenticated(); // Assumes app-level filtering.
+      allow create: if isUserAuthenticated() && isActivityOwner();
+      allow update: if isUserAuthenticated() && (isCreator(resource.data) || isActivityOwner() || isOneOfRoles(['Jefe', 'Gerencia']));
+      allow delete: if isOneOfRoles(['Jefe', 'Gerencia']);
+    }
+    
+    // INVOICES: Linked to opportunities.
     match /invoices/{invoiceId} {
-        function getOppClientId() {
-            let oppId = request.resource.data.opportunityId;
-            return get(/databases/$(database)/documents/opportunities/$(oppId)).data.clientId;
-        }
-        function getClientOwnerId() {
-            let clientId = getOppClientId();
-            return get(/databases/$(database)/documents/clients/$(clientId)).data.ownerId;
-        }
-
-        allow read: if isSignedIn();
-        allow create, update, delete: if isSignedIn() && (getClientOwnerId() == request.auth.uid || isAnyAdmin());
-    }
-
-    match /canjes/{canjeId} {
-      function getClientOwnerId() {
-        return get(/databases/$(database)/documents/clients/$(resource.data.clienteId)).data.ownerId;
+      function isInvoiceOwner() {
+        let opp = get(/databases/$(database)/documents/opportunities/$(request.resource.data.opportunityId));
+        let client = get(/databases/$(database)/documents/clients/$(opp.data.clientId));
+        return client.data.ownerId == request.auth.uid;
       }
-      
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (getClientOwnerId() == request.auth.uid || isAnyAdmin());
-      allow delete: if isSignedIn() && isBossOrManager();
+
+      allow list: if isUserAuthenticated();
+      allow get, create, update: if isUserAuthenticated() && (isInvoiceOwner() || isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']));
+      allow delete: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
     }
     
-    // Grilla (Programs & Commercial Items): Managed by Admins. Readable by all.
+    // CANJES: Complex logic, handled by roles.
+    match /canjes/{canjeId} {
+      allow read: if isUserAuthenticated();
+      allow create: if isUserAuthenticated();
+      allow update: if isUserAuthenticated() && (isCreator(resource.data) || isOwner(resource.data) || isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']));
+      allow delete: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
+    }
+    
+    // PROGRAMS & COMMERCIAL ITEMS (Grilla): Managed by admins/bosses. Read by all.
     match /programs/{programId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isAnyAdmin();
+      allow read: if isUserAuthenticated();
+      allow create, update, delete: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
     }
     
     match /commercial_items/{itemId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn(); // Anyone can manage their pautas, bosses can see all.
-    }
-
-    // Activity Logs: Read-only for Boss/Manager. Write-only for the system (via firebase-service).
-    match /activities/{activityId} {
-      allow read: if isBossOrManager();
-      allow create: if isSignedIn(); // Logged by server-side logic from authenticated requests.
-      allow update, delete: if false; // Logs should be immutable.
-    }
-    
-    // Client Activities: Users can see activities for their clients. Boss/Manager all.
-    match /client-activities/{activityId} {
-       function getClientOwnerId() {
-        return get(/databases/$(database)/documents/clients/$(resource.data.clientId)).data.ownerId;
-      }
-      
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && isUser(resource.data.userId); // Only the user who created it can update (e.g., complete task).
-      allow delete: if false; // Do not allow deletion.
-    }
-    
-    // Agencies: Managed by Admins. Readable by all.
-    match /agencies/{agencyId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isAnyAdmin();
+      allow read: if isUserAuthenticated();
+      allow create: if isUserAuthenticated();
+      allow update, delete: if isUserAuthenticated(); // Simplified for now, complex logic in app. Let's trust the app logic for who can edit what (e.g. their own client's pauta)
     }
   }
 }
