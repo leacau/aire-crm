@@ -6,6 +6,7 @@ import { AppSidebar } from '@/components/layout/app-sidebar';
 import { AuthProvider } from '@/hooks/use-auth.tsx';
 import { AuthLayout } from '@/components/layout/auth-layout';
 import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 export const metadata: Metadata = {
   title: 'CRM Aire de Santa Fe',
@@ -34,6 +35,7 @@ export default function RootLayout({
         </AuthProvider>
         <Toaster />
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
