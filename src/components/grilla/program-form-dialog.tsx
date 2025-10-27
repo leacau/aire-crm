@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -16,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import type { Program, ProgramSchedule } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, Trash2 } from 'lucide-react';
+import { Textarea } from '../ui/textarea';
 
 interface ProgramFormDialogProps {
   isOpen: boolean;
@@ -36,6 +38,7 @@ const days = [
 
 export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: ProgramFormDialogProps) {
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [schedules, setSchedules] = useState<ProgramSchedule[]>([]);
   const [color, setColor] = useState('bg-gray-100');
   const [conductores, setConductores] = useState('');
@@ -48,6 +51,7 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
     if (isOpen) {
       if (program) {
         setName(program.name);
+        setDescription(program.description || '');
         setSchedules(program.schedules || []);
         setColor(program.color);
         setConductores(program.conductores || '');
@@ -55,6 +59,7 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
       } else {
         // Reset form for new program
         setName('');
+        setDescription('');
         setSchedules([{ id: `sched-${Date.now()}`, daysOfWeek: [], startTime: '', endTime: '' }]);
         setColor('bg-gray-100');
         setConductores('');
@@ -96,7 +101,7 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
       return;
     }
     // @ts-ignore
-    onSave({ name, schedules, color, conductores, productores });
+    onSave({ name, description, schedules, color, conductores, productores });
     onOpenChange(false);
   };
 
@@ -164,6 +169,10 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
              <div className="space-y-2">
                 <Label htmlFor="productores">Productor(es)</Label>
                 <Input id="productores" value={productores} onChange={(e) => setProductores(e.target.value)} placeholder="Ej: Ana Garcia" />
+            </div>
+             <div className="space-y-2">
+                <Label htmlFor="description">Descripción del Programa</Label>
+                <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe brevemente el programa, su público, etc." />
             </div>
              <div className="space-y-2">
                 <Label>Color de Identificación</Label>

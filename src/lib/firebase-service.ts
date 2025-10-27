@@ -123,6 +123,15 @@ export const getPrograms = async (): Promise<Program[]> => {
     });
 };
 
+export const getProgram = async (id: string): Promise<Program | null> => {
+    const docRef = doc(db, 'programs', id);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() } as Program;
+    }
+    return null;
+}
+
 export const saveProgram = async (programData: Omit<Program, 'id'>, userId: string): Promise<string> => {
     const dataToSave = { ...programData };
     // @ts-ignore - Remove deprecated fields before saving

@@ -267,6 +267,7 @@ export type ProgramSchedule = {
 export type Program = {
   id: string;
   name: string;
+  description?: string;
   schedules: ProgramSchedule[];
   color: string; // e.g., 'bg-blue-200'
   conductores?: string;

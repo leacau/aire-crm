@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getCommercialItems, getClients } from '@/lib/firebase-service';
 import { Spinner } from '../ui/spinner';
 import { useAuth } from '@/hooks/use-auth';
-import { Building, CircleDollarSign, PlusCircle } from 'lucide-react';
+import { Building, CircleDollarSign, PlusCircle, InfoIcon } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '../ui/button';
 
@@ -98,10 +98,17 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
           return (
             <Card key={program.id}>
               <CardHeader className={cn("p-3 sm:p-4 flex flex-row items-center justify-between", program.color)}>
-                 <div className='cursor-pointer flex-1' onClick={() => onAddItemClick(program.id, date)}>
-                    <CardTitle className="text-sm sm:text-lg">
-                        {program.name} <span className="font-normal text-xs sm:text-sm">({program.schedule.startTime} - {program.schedule.endTime})</span>
-                    </CardTitle>
+                 <div className='flex-1 flex items-center gap-2'>
+                    <Link href={`/grilla/${program.id}`} onClick={e => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 bg-black/10 hover:bg-black/20 text-white">
+                            <InfoIcon className="h-5 w-5" />
+                        </Button>
+                    </Link>
+                    <div className='cursor-pointer' onClick={() => onAddItemClick(program.id, date)}>
+                        <CardTitle className="text-sm sm:text-lg">
+                            {program.name} <span className="font-normal text-xs sm:text-sm">({program.schedule.startTime} - {program.schedule.endTime})</span>
+                        </CardTitle>
+                    </div>
                  </div>
                  {canManage && (
                     <Button variant="ghost" size="icon" className="h-8 w-8 bg-black/10 hover:bg-black/20" onClick={() => onAddItemClick(program.id, date)}>
