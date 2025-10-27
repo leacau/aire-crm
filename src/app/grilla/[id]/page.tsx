@@ -9,11 +9,11 @@ import { ArrowLeft, Clock, CalendarDays, Tv, User } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
 import { getProgram } from '@/lib/firebase-service';
-import type { Program, ProgramSchedule } from '@/lib/types';
+import type { Program } from '@/lib/types';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 
-const dayLabels = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const dayLabels = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 export default function ProgramDetailsPage() {
   const params = useParams();
@@ -96,7 +96,7 @@ export default function ProgramDetailsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {program.schedules.map(schedule => (
+                {program.schedules && program.schedules.map(schedule => (
                   <div key={schedule.id} className="p-3 border rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div className="flex items-center gap-2 font-medium">
                       <Clock className="h-5 w-5 text-primary" />
@@ -105,9 +105,13 @@ export default function ProgramDetailsPage() {
                     <div className="flex items-center gap-2">
                        <CalendarDays className="h-5 w-5 text-primary" />
                        <div className="flex flex-wrap gap-1">
-                        {schedule.daysOfWeek.sort().map(day => (
-                          <Badge key={day} variant="secondary">{dayLabels[day % 7]}</Badge>
-                        ))}
+                        {schedule.daysOfWeek.sort().map(day => {
+                          // Sunday (0 or 7) should map to Domingo (index 0)
+                          const dayIndex = day === 7 ? 0 : day;
+                          return (
+                            <Badge key={day} variant="secondary">{dayLabels[dayIndex]}</Badge>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
