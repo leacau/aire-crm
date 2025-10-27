@@ -1,0 +1,149 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // --- Helper Functions ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function getUserRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+
+    function isRole(role) {
+      return isSignedIn() && getUserRole(request.auth.uid) == role;
+    }
+    
+    function isOneOfRoles(roles) {
+      return isSignedIn() && getUserRole(request.auth.uid) in roles;
+    }
+    
+    function isBossOrManager() {
+      return isOneOfRoles(['Jefe', 'Gerencia']);
+    }
+
+    function isAnyAdmin() {
+      return isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
+    }
+
+    function isOwner(docData) {
+      return isUser(docData.ownerId);
+    }
+    
+    // --- Collection Rules ---
+
+    // Users Collection: Users can read anyone's profile (for names/avatars), but only edit their own.
+    // Only Boss/Manager can change roles.
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isUser(userId); // A user can create their own profile upon first sign-in.
+      allow update: if isUser(userId) && !("role" in request.resource.data) // User can update their own info, but NOT their role.
+                    || isBossOrManager(); // Boss/Manager can update anything, including roles.
+      allow delete: if isBossOrManager();
+    }
+    
+    // Clients & Prospects: Advisors can manage their own. Boss/Manager can manage all.
+    match /clients/{clientId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn(); // Any signed-in user can create a client, owner is assigned on creation.
+      allow update: if isSignedIn() && (isOwner(resource.data) || isAnyAdmin());
+      allow delete: if isSignedIn() && isBossOrManager();
+    }
+
+    match /prospects/{prospectId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() && (isOwner(resource.data) || isBossOrManager());
+    }
+    
+    // People (Contacts): Linked to clients. Same permission logic.
+    match /people/{personId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      // For updates/deletes, check ownership of the *client* they belong to.
+      // This is a simplification; a more complex rule would check all clientIds.
+      allow update, delete: if isSignedIn() && (get(/databases/$(database)/documents/clients/$(resource.data.clientIds[0])).data.ownerId == request.auth.uid || isAnyAdmin());
+    }
+
+    // Opportunities: Advisors can manage their own client's opps. Boss/Manager all.
+    match /opportunities/{opportunityId} {
+      function getClientOwnerId() {
+        return get(/databases/$(database)/documents/clients/$(resource.data.clientId)).data.ownerId;
+      }
+      
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (getClientOwnerId() == request.auth.uid || isBossOrManager());
+      allow delete: if isSignedIn() && isBossOrManager();
+    }
+    
+    // Invoices, Canjes, CommercialItems: Follow permissions of their parent entities (Clients/Opps).
+    match /invoices/{invoiceId} {
+        function getOppClientId() {
+            let oppId = request.resource.data.opportunityId;
+            return get(/databases/$(database)/documents/opportunities/$(oppId)).data.clientId;
+        }
+        function getClientOwnerId() {
+            let clientId = getOppClientId();
+            return get(/databases/$(database)/documents/clients/$(clientId)).data.ownerId;
+        }
+
+        allow read: if isSignedIn();
+        allow create, update, delete: if isSignedIn() && (getClientOwnerId() == request.auth.uid || isAnyAdmin());
+    }
+
+    match /canjes/{canjeId} {
+      function getClientOwnerId() {
+        return get(/databases/$(database)/documents/clients/$(resource.data.clienteId)).data.ownerId;
+      }
+      
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (getClientOwnerId() == request.auth.uid || isAnyAdmin());
+      allow delete: if isSignedIn() && isBossOrManager();
+    }
+    
+    // Grilla (Programs & Commercial Items): Managed by Admins. Readable by all.
+    match /programs/{programId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAnyAdmin();
+    }
+    
+    match /commercial_items/{itemId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn(); // Anyone can manage their pautas, bosses can see all.
+    }
+
+    // Activity Logs: Read-only for Boss/Manager. Write-only for the system (via firebase-service).
+    match /activities/{activityId} {
+      allow read: if isBossOrManager();
+      allow create: if isSignedIn(); // Logged by server-side logic from authenticated requests.
+      allow update, delete: if false; // Logs should be immutable.
+    }
+    
+    // Client Activities: Users can see activities for their clients. Boss/Manager all.
+    match /client-activities/{activityId} {
+       function getClientOwnerId() {
+        return get(/databases/$(database)/documents/clients/$(resource.data.clientId)).data.ownerId;
+      }
+      
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && isUser(resource.data.userId); // Only the user who created it can update (e.g., complete task).
+      allow delete: if false; // Do not allow deletion.
+    }
+    
+    // Agencies: Managed by Admins. Readable by all.
+    match /agencies/{agencyId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAnyAdmin();
+    }
+  }
+}
