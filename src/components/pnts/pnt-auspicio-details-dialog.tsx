@@ -59,7 +59,7 @@ export function PntAuspicioDetailsDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="h-[95vh] w-[95vw] sm:h-[80vh] sm:w-[80vw] max-w-[95vw] sm:max-w-[80vw] flex flex-col">
         <DialogHeader>
             <div className="flex justify-between items-start">
                 <div className="flex-1">
@@ -78,7 +78,7 @@ export function PntAuspicioDetailsDialog({
                 </div>
             </div>
         </DialogHeader>
-        <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
+        <div className="flex-1 grid gap-4 py-4 overflow-y-auto pr-4">
           
           {item.bloque && (
             <div className="space-y-1">
