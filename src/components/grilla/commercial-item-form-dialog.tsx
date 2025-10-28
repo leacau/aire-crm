@@ -36,6 +36,12 @@ interface CommercialItemFormDialogProps {
   preselectedData?: { programId?: string; date?: Date; dates?: Date[] } | null;
 }
 
+const parseDateString = (dateString: string) => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
+};
+
+
 export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelete, item, programs, preselectedData }: CommercialItemFormDialogProps) {
   const { userInfo, isBoss } = useAuth();
   const [programId, setProgramId] = useState<string | undefined>();
@@ -75,11 +81,11 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
         setStatus(item.status);
         setClientId(item.clientId);
         setOpportunityId(item.opportunityId);
-        // If it's a series, preselectedData.dates will be populated. If not, use the item's own date.
+        
         if (preselectedData?.dates) {
           setDates(preselectedData.dates);
         } else {
-          setDates([new Date(item.date)]);
+          setDates([parseDateString(item.date)]);
         }
       } else if (preselectedData) { // Creating new item with preselected data
         setProgramId(preselectedData.programId);

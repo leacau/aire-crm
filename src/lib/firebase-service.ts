@@ -171,6 +171,12 @@ export const deleteProgram = async (programId: string, userId: string): Promise<
     // Optionally log this activity
 };
 
+const parseDateWithTimezone = (dateString: string) => {
+    // For "YYYY-MM-DD", this creates a date at midnight in the local timezone,
+    // avoiding the off-by-one error caused by UTC conversion.
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
+};
 
 export const getCommercialItems = async (date: string): Promise<CommercialItem[]> => {
     const q = query(commercialItemsCollection, where("date", "==", date));
@@ -212,7 +218,7 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
 
     const formattedDates = new Set(dates.map(d => d.toISOString().split('T')[0]));
     
-    const itemToSave = {...item};
+    const itemToSave: {[key: string]: any} = {...item};
     if (!itemToSave.clientId) {
       delete itemToSave.clientId;
       delete itemToSave.clientName;
@@ -250,7 +256,7 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
             const formattedDate = date.toISOString().split('T')[0];
 
             const itemData: Omit<CommercialItem, 'id'> = {
-                ...itemToSave,
+                ...item,
                 date: formattedDate,
                 seriesId: dates.length > 1 ? newSeriesId : undefined,
             };

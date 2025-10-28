@@ -26,6 +26,10 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { GrillaPdf } from '@/components/grilla/grilla-pdf';
 
+const parseDateString = (dateString: string) => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
+};
 
 export default function GrillaPage() {
   const { userInfo, loading: authLoading } = useAuth();
@@ -86,13 +90,13 @@ export default function GrillaPage() {
     if (item.seriesId) {
         try {
             const seriesItems = await getCommercialItemsBySeries(item.seriesId);
-            dates = seriesItems.map(i => new Date(i.date));
+            dates = seriesItems.map(i => parseDateString(i.date));
         } catch (e) {
             console.error("Failed to fetch series items", e);
-            dates = [new Date(item.date)]; // Fallback
+            dates = [parseDateString(item.date)]; // Fallback
         }
     } else {
-        dates = [new Date(item.date)];
+        dates = [parseDateString(item.date)];
     }
     
     setPreselectedDataForItem({ dates });
@@ -192,7 +196,7 @@ export default function GrillaPage() {
                 idsToDelete = seriesItems.map(i => i.id);
             } else { // 'forward'
                 idsToDelete = seriesItems
-                    .filter(i => new Date(i.date) >= new Date(item.date))
+                    .filter(i => parseDateString(i.date) >= parseDateString(item.date))
                     .map(i => i.id);
             }
         }
