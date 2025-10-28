@@ -76,8 +76,8 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
         setClientId(item.clientId);
         setOpportunityId(item.opportunityId);
         setDates(preselectedData?.dates);
-      } else { // Creating new item
-        setProgramId(preselectedData?.programId);
+      } else if (preselectedData) { // Creating new item with preselected data
+        setProgramId(preselectedData.programId);
         setType('Pauta');
         setTitle('');
         setDescription('');
@@ -85,8 +85,12 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
         setStatus('Disponible');
         setClientId(undefined);
         setOpportunityId(undefined);
-        setDates(preselectedData?.date ? [preselectedData.date] : preselectedData?.dates);
+        setDates(preselectedData.dates);
       }
+    } else {
+        // Reset state on close
+        setSelectedItem(null);
+        setPreselectedDataForItem(null);
     }
   }, [isOpen, item, preselectedData]);
   
@@ -118,6 +122,10 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
   };
   
   const showAssignmentFields = status !== 'Disponible';
+
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>

@@ -78,31 +78,31 @@ export default function GrillaPage() {
   };
   
   const handleItemClick = async (item: CommercialItem) => {
-    setIsItemFormOpen(false); // Close it first to ensure state is fresh
-    setLoading(true); // Show a loading state if necessary
+    setIsItemFormOpen(false); // Ensure form is closed before loading
+    setLoading(true);
     setSelectedItem(item);
 
+    let dates: Date[] = [];
     if (item.seriesId) {
-      try {
-        const seriesItems = await getCommercialItemsBySeries(item.seriesId);
-        const seriesDates = seriesItems.map(i => new Date(i.date));
-        setPreselectedDataForItem({ dates: seriesDates });
-      } catch (e) {
-        console.error("Failed to fetch series items", e);
-        // Fallback to single date if series fetch fails
-        setPreselectedDataForItem({ dates: [new Date(item.date)] });
-      }
+        try {
+            const seriesItems = await getCommercialItemsBySeries(item.seriesId);
+            dates = seriesItems.map(i => new Date(i.date));
+        } catch (e) {
+            console.error("Failed to fetch series items", e);
+            dates = [new Date(item.date)]; // Fallback
+        }
     } else {
-      setPreselectedDataForItem({ dates: [new Date(item.date)] });
+        dates = [new Date(item.date)];
     }
     
+    setPreselectedDataForItem({ dates });
     setLoading(false);
     setIsItemFormOpen(true);
   };
   
   const handleOpenItemForm = (programId: string, date: Date) => {
     setSelectedItem(null);
-    setPreselectedDataForItem({ programId, date });
+    setPreselectedDataForItem({ programId, date, dates: [date] });
     setIsItemFormOpen(true);
   }
 
@@ -353,17 +353,15 @@ export default function GrillaPage() {
         onSave={handleSaveProgram}
         program={selectedProgram}
       />
-      {isItemFormOpen && (
-        <CommercialItemFormDialog
-            isOpen={isItemFormOpen}
-            onOpenChange={setIsItemFormOpen}
-            onSave={handleSaveCommercialItem}
-            onDelete={openDeleteItemDialog}
-            item={selectedItem}
-            programs={programs}
-            preselectedData={preselectedDataForItem}
-        />
-      )}
+      <CommercialItemFormDialog
+          isOpen={isItemFormOpen}
+          onOpenChange={setIsItemFormOpen}
+          onSave={handleSaveCommercialItem}
+          onDelete={openDeleteItemDialog}
+          item={selectedItem}
+          programs={programs}
+          preselectedData={preselectedDataForItem}
+      />
        <AlertDialog open={!!programToDelete} onOpenChange={(open) => !open && setProgramToDelete(null)}>
         <AlertDialogContent>
             <AlertDialogHeader>
