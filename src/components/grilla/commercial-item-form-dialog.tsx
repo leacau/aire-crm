@@ -87,10 +87,6 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
         setOpportunityId(undefined);
         setDates(preselectedData.dates);
       }
-    } else {
-        // Reset state on close
-        setSelectedItem(null);
-        setPreselectedDataForItem(null);
     }
   }, [isOpen, item, preselectedData]);
   
@@ -244,5 +240,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
     </Dialog>
   );
 }
+
+    
 
     
