@@ -5,6 +5,7 @@ import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, a
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
+import { format } from 'date-fns';
 
 const usersCollection = collection(db, 'users');
 const clientsCollection = collection(db, 'clients');
