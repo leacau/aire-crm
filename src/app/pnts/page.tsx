@@ -12,8 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import { format, startOfToday, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { CheckCircle, PlusCircle, ArrowLeft, ArrowRight, Mic, Star, FileText, InfoIcon } from 'lucide-react';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { CheckCircle, PlusCircle, ArrowLeft, ArrowRight, Mic, Star, FileText, InfoIcon, ChevronDown } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { PntAuspicioFormDialog } from '@/components/pnts/pnt-auspicio-form-dialog';
 import { PntAuspicioDetailsDialog } from '@/components/pnts/pnt-auspicio-details-dialog';
 import { DeleteItemDialog } from '@/components/grilla/delete-item-dialog';
@@ -227,7 +227,7 @@ export default function PntsPage() {
   };
 
 
-  if (authLoading || loading) {
+  if (authLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
@@ -246,51 +246,58 @@ export default function PntsPage() {
             </div>
         </Header>
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-          {programsForToday.length > 0 ? (
-              <Accordion type="multiple" className="w-full space-y-4" defaultValue={programsForToday.map(p => p.id)}>
-                  {programsForToday.map(program => (
-                      <AccordionItem value={program.id} key={program.id} className="border-b-0">
-                          <AccordionTrigger className={cn("flex rounded-lg border p-4 text-left hover:no-underline", program.color)}>
-                              <div className="flex-1 flex items-center gap-2">
-                                <Link href={`/grilla/${program.id}`} onClick={(e) => e.stopPropagation()}>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 bg-black/10 hover:bg-black/20 text-white">
-                                    <InfoIcon className="h-5 w-5" />
-                                  </Button>
-                                </Link>
-                                <div className="flex-1">
-                                    <h3 className="font-bold text-lg">{program.name}</h3>
-                                    <p className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</p>
-                                </div>
-                              </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="pt-0">
-                              <div className="border border-t-0 rounded-b-lg">
-                                  <div className="p-4 space-y-3">
-                                  {program.items.length > 0 ? (
-                                      program.items.map(item => (
-                                        <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />
-                                      ))
-                                  ) : (
-                                      <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
-                                  )}
-                                  </div>
-                                  <div className="flex justify-center p-3 border-t">
-                                    <Button variant="outline" size="sm" onClick={() => openFormModal(program.id)}>
-                                        <PlusCircle className="mr-2 h-4 w-4" />
-                                        Nuevo
+            {loading ? (
+                <div className="flex justify-center items-center h-64">
+                    <Spinner size="large" />
+                </div>
+            ) : programsForToday.length > 0 ? (
+                <div className="w-full space-y-4">
+                    {programsForToday.map(program => (
+                        <Collapsible key={program.id} defaultOpen={true} className="border rounded-lg">
+                           <CollapsibleTrigger asChild>
+                             <div className={cn("flex w-full cursor-pointer items-center justify-between rounded-t-lg p-4 text-left", program.color)}>
+                               <div className="flex-1 flex items-center gap-2">
+                                  <Link href={`/grilla/${program.id}`} onClick={(e) => e.stopPropagation()}>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 bg-black/10 hover:bg-black/20 text-white">
+                                      <InfoIcon className="h-5 w-5" />
                                     </Button>
+                                  </Link>
+                                  <div className="flex-1">
+                                      <h3 className="font-bold text-lg">{program.name}</h3>
+                                      <p className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</p>
                                   </div>
+                                </div>
+                                <ChevronDown className="h-5 w-5 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                               </div>
-                          </AccordionContent>
-                      </AccordionItem>
-                  ))}
-              </Accordion>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center p-8 border-2 border-dashed rounded-lg">
-               <h3 className="text-xl font-semibold">No hay programas para hoy</h3>
-               <p className="text-muted-foreground mt-2">La grilla de programas para el día de hoy está vacía.</p>
-            </div>
-          )}
+                           </CollapsibleTrigger>
+                           <CollapsibleContent>
+                               <div className="border-t">
+                                   <div className="p-4 space-y-3">
+                                   {program.items.length > 0 ? (
+                                       program.items.map(item => (
+                                         <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />
+                                       ))
+                                   ) : (
+                                       <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
+                                   )}
+                                   </div>
+                                   <div className="flex justify-center p-3 border-t">
+                                     <Button variant="outline" size="sm" onClick={() => openFormModal(program.id)}>
+                                         <PlusCircle className="mr-2 h-4 w-4" />
+                                         Nuevo
+                                     </Button>
+                                   </div>
+                               </div>
+                           </CollapsibleContent>
+                        </Collapsible>
+                    ))}
+                </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center p-8 border-2 border-dashed rounded-lg">
+                 <h3 className="text-xl font-semibold">No hay programas para hoy</h3>
+                 <p className="text-muted-foreground mt-2">La grilla de programas para el día de hoy está vacía.</p>
+              </div>
+            )}
         </main>
       </div>
 
