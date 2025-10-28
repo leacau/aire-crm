@@ -121,7 +121,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent class="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{item ? 'Editar' : 'Nuevo'} Elemento Comercial</DialogTitle>
           <DialogDescription>
@@ -131,8 +131,8 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
             }
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
-          <div className="space-y-2">
+        <div class="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
+          <div class="space-y-2">
             <Label htmlFor="programId">Programa</Label>
              <Select value={programId} onValueChange={setProgramId} disabled={isEditing}>
                 <SelectTrigger id="programId"><SelectValue placeholder="Seleccionar programa..." /></SelectTrigger>
@@ -141,22 +141,22 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
                 </SelectContent>
               </Select>
           </div>
-          <div className="space-y-2">
+          <div class="space-y-2">
             <Label>Fechas de Emisión</Label>
              <Calendar
                 mode="multiple"
                 selected={dates}
                 onSelect={setDates}
                 locale={es}
-                className="rounded-md border"
+                class="rounded-md border"
             />
-            <p className="text-sm text-muted-foreground">
+            <p class="text-sm text-muted-foreground">
                 {dates?.length ? `${dates.length} día(s) seleccionado(s).` : 'Selecciona una o más fechas.'}
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-2">
               <Label htmlFor="item-type">Tipo</Label>
               <Select value={type} onValueChange={(v) => setType(v as CommercialItem['type'])}>
                 <SelectTrigger id="item-type"><SelectValue /></SelectTrigger>
@@ -165,7 +165,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div class="space-y-2">
               <Label htmlFor="item-status">Estado</Label>
               <Select value={status} onValueChange={(v) => setStatus(v as CommercialItem['status'])}>
                 <SelectTrigger id="item-status"><SelectValue /></SelectTrigger>
@@ -177,27 +177,27 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
           </div>
           
           {(type === 'PNT' || type === 'Auspicio' || type === 'Nota') && (
-            <div className="space-y-2">
+            <div class="space-y-2">
               <Label htmlFor="item-title">Título</Label>
               <Input id="item-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Título para identificación rápida"/>
             </div>
           )}
 
           {type === 'Auspicio' && (
-             <div className="space-y-2">
+             <div class="space-y-2">
               <Label htmlFor="item-bloque">Bloque / Sección</Label>
               <Input id="item-bloque" value={bloque} onChange={e => setBloque(e.target.value)} placeholder="Ej: Deportes, Clima, Política..."/>
             </div>
           )}
 
-          <div className="space-y-2">
+          <div class="space-y-2">
             <Label htmlFor="item-description">Descripción / Anunciante / Texto</Label>
             <Textarea id="item-description" value={description} onChange={e => setDescription(e.target.value)} />
           </div>
 
           {showAssignmentFields && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-2">
                   <Label htmlFor="item-client">Cliente</Label>
                   <Select value={clientId} onValueChange={setClientId}>
                     <SelectTrigger id="item-client"><SelectValue placeholder="Asignar cliente..." /></SelectTrigger>
@@ -206,7 +206,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
                     </SelectContent>
                   </Select>
                 </div>
-                 <div className="space-y-2">
+                 <div class="space-y-2">
                   <Label htmlFor="item-opportunity">Oportunidad</Label>
                   <Select value={opportunityId} onValueChange={setOpportunityId} disabled={!clientId}>
                     <SelectTrigger id="item-opportunity"><SelectValue placeholder="Asignar oportunidad..." /></SelectTrigger>
@@ -218,16 +218,16 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
             </div>
           )}
         </div>
-        <DialogFooter className="sm:justify-between">
+        <DialogFooter class="sm:justify-between">
           <div>
             {isEditing && canManage && (
               <Button variant="destructive" onClick={handleDelete}>
-                <Trash2 className="mr-2 h-4 w-4" />
+                <Trash2 class="mr-2 h-4 w-4" />
                 Eliminar
               </Button>
             )}
           </div>
-          <div className="flex gap-2">
+          <div class="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button onClick={handleSave}>Guardar Cambios</Button>
           </div>
@@ -236,3 +236,5 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
     </Dialog>
   );
 }
+
+    

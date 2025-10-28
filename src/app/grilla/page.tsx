@@ -210,7 +210,7 @@ export default function GrillaPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
+      <div class="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
       </div>
     );
@@ -276,45 +276,45 @@ export default function GrillaPage() {
             options={pdfOptions}
         />
       </div>
-      <div className="flex flex-col h-full">
+      <div class="flex flex-col h-full">
         <Header title="Grilla Comercial">
-            <div className="flex items-center gap-2 flex-wrap justify-end">
+            <div class="flex items-center gap-2 flex-wrap justify-end">
               {view === 'diaria' ? (
-                  <Button variant="outline" onClick={handleBackToWeek} className="flex items-center gap-2">
-                      <ArrowLeft className="h-4 w-4" />
+                  <Button variant="outline" onClick={handleBackToWeek} class="flex items-center gap-2">
+                      <ArrowLeft class="h-4 w-4" />
                       Semana
                   </Button>
               ) : (
-                  <div className="flex items-center gap-2 md:gap-4">
-                      <div className="flex items-center gap-1">
-                          <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}><ArrowLeft className="h-4 w-4" /></Button>
-                          <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}><ArrowRight className="h-4 w-4" /></Button>
+                  <div class="flex items-center gap-2 md:gap-4">
+                      <div class="flex items-center gap-1">
+                          <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}><ArrowLeft class="h-4 w-4" /></Button>
+                          <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}><ArrowRight class="h-4 w-4" /></Button>
                       </div>
-                      <h3 className="text-base sm:text-lg font-semibold capitalize min-w-[120px] text-center">
+                      <h3 class="text-base sm:text-lg font-semibold capitalize min-w-[120px] text-center">
                           {format(currentDate, 'MMMM yyyy', { locale: es })}
                       </h3>
                   </div>
               )}
               
               {canManage && (
-                  <div className="flex items-center gap-2">
+                  <div class="flex items-center gap-2">
                       <Button onClick={() => openProgramForm()} size="sm">
-                          <PlusCircle className="mr-2 h-4 w-4"/>
+                          <PlusCircle class="mr-2 h-4 w-4"/>
                           Programa
                       </Button>
                       <Button variant="secondary" onClick={() => { setSelectedItem(null); setPreselectedDataForItem(null); setIsItemFormOpen(true);}} size="sm">
-                          <PlusCircle className="mr-2 h-4 w-4"/>
+                          <PlusCircle class="mr-2 h-4 w-4"/>
                           Elemento
                       </Button>
                   </div>
               )}
               <Button onClick={() => setIsPdfDialogOpen(true)} size="sm" variant="outline">
-                <Download className="mr-2 h-4 w-4" />
+                <Download class="mr-2 h-4 w-4" />
                 Exportar PDF
               </Button>
             </div>
         </Header>
-        <main className="flex-1 overflow-auto p-2 sm:p-4 md:p-6">
+        <main class="flex-1 overflow-auto p-2 sm:p-4 md:p-6">
           {view === 'semanal' ? (
             <GrillaSemanal 
                 programs={programs} 
@@ -386,33 +386,33 @@ export default function GrillaPage() {
                     Elige las opciones para tu exportación.
                 </DialogDescription>
             </DialogHeader>
-            <div className="space-y-6 py-4">
-                <div className="space-y-3">
-                    <Label className="font-semibold">Tipo de Fecha</Label>
+            <div class="space-y-6 py-4">
+                <div class="space-y-3">
+                    <Label class="font-semibold">Tipo de Fecha</Label>
                     <RadioGroup 
                         defaultValue="generic" 
                         value={pdfOptions.dateType}
                         onValueChange={(value) => setPdfOptions(prev => ({...prev, dateType: value}))}
                     >
-                        <div className="flex items-center space-x-2">
+                        <div class="flex items-center space-x-2">
                             <RadioGroupItem value="generic" id="date-generic" />
-                            <Label htmlFor="date-generic" className="font-normal">Semana Genérica (Lunes a Domingo)</Label>
+                            <Label htmlFor="date-generic" class="font-normal">Semana Genérica (Lunes a Domingo)</Label>
                         </div>
-                         <div className="flex items-center space-x-2">
+                         <div class="flex items-center space-x-2">
                             <RadioGroupItem value="dated" id="date-dated" />
-                            <Label htmlFor="date-dated" className="font-normal">Semana con Fechas (actualmente visible)</Label>
+                            <Label htmlFor="date-dated" class="font-normal">Semana con Fechas (actualmente visible)</Label>
                         </div>
                     </RadioGroup>
                 </div>
-                 <div className="space-y-3">
-                     <Label className="font-semibold">Contenido</Label>
-                     <div className="flex items-center space-x-2">
+                 <div class="space-y-3">
+                     <Label class="font-semibold">Contenido</Label>
+                     <div class="flex items-center space-x-2">
                         <Checkbox 
                             id="include-items"
                             checked={pdfOptions.includeItems}
                             onCheckedChange={(checked) => setPdfOptions(prev => ({...prev, includeItems: !!checked}))}
                         />
-                        <Label htmlFor="include-items" className="font-normal">Incluir Elementos Comerciales</Label>
+                        <Label htmlFor="include-items" class="font-normal">Incluir Elementos Comerciales</Label>
                     </div>
                 </div>
             </div>
@@ -427,3 +427,5 @@ export default function GrillaPage() {
     </>
   );
 }
+
+    

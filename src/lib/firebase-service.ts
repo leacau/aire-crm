@@ -1488,3 +1488,5 @@ export const updateClientActivity = async (
 
     await updateDoc(docRef, updateData);
 };
+
+    
