@@ -33,7 +33,7 @@ interface CommercialItemFormDialogProps {
   onDelete: (item: CommercialItem) => void;
   item?: CommercialItem | null;
   programs: Program[];
-  preselectedData?: { programId?: string, date?: Date, dates?: Date[] } | null;
+  preselectedData?: { programId?: string; date?: Date; dates?: Date[] } | null;
 }
 
 export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelete, item, programs, preselectedData }: CommercialItemFormDialogProps) {
@@ -66,7 +66,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
         setOpportunities(opps);
       }).catch(err => console.error("Failed to fetch data", err));
       
-      if (isEditing && item) {
+      if (item) { // Editing existing item
         setProgramId(item.programId);
         setType(item.type);
         setTitle(item.title || '');
@@ -75,8 +75,8 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
         setStatus(item.status);
         setClientId(item.clientId);
         setOpportunityId(item.opportunityId);
-        setDates(preselectedData?.dates || [new Date(item.date)]);
-      } else {
+        setDates(preselectedData?.dates);
+      } else { // Creating new item
         setProgramId(preselectedData?.programId);
         setType('Pauta');
         setTitle('');
@@ -88,7 +88,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
         setDates(preselectedData?.date ? [preselectedData.date] : preselectedData?.dates);
       }
     }
-  }, [isOpen, item, isEditing, preselectedData]);
+  }, [isOpen, item, preselectedData]);
   
   const filteredClients = useMemo(() => {
     if (!userInfo) return [];

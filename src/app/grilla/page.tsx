@@ -78,14 +78,25 @@ export default function GrillaPage() {
   };
   
   const handleItemClick = async (item: CommercialItem) => {
+    setIsItemFormOpen(false); // Close it first to ensure state is fresh
+    setLoading(true); // Show a loading state if necessary
     setSelectedItem(item);
+
     if (item.seriesId) {
-      const seriesItems = await getCommercialItemsBySeries(item.seriesId);
-      const seriesDates = seriesItems.map(i => new Date(i.date));
-      setPreselectedDataForItem({ dates: seriesDates });
+      try {
+        const seriesItems = await getCommercialItemsBySeries(item.seriesId);
+        const seriesDates = seriesItems.map(i => new Date(i.date));
+        setPreselectedDataForItem({ dates: seriesDates });
+      } catch (e) {
+        console.error("Failed to fetch series items", e);
+        // Fallback to single date if series fetch fails
+        setPreselectedDataForItem({ dates: [new Date(item.date)] });
+      }
     } else {
-      setPreselectedDataForItem(null);
+      setPreselectedDataForItem({ dates: [new Date(item.date)] });
     }
+    
+    setLoading(false);
     setIsItemFormOpen(true);
   };
   
