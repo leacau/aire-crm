@@ -127,7 +127,20 @@ export const getProgram = async (id: string): Promise<Program | null> => {
     const docRef = doc(db, 'programs', id);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as Program;
+        const data = docSnap.data();
+        if (!data.schedules) {
+            return {
+              id: docSnap.id,
+              ...data,
+              schedules: [{
+                id: 'default',
+                daysOfWeek: data.daysOfWeek || [],
+                startTime: data.startTime || '',
+                endTime: data.endTime || '',
+              }]
+            } as Program;
+        }
+        return { id: docSnap.id, ...data } as Program;
     }
     return null;
 }

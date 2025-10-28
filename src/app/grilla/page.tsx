@@ -44,7 +44,7 @@ export default function GrillaPage() {
   const [programToDelete, setProgramToDelete] = useState<Program | null>(null);
   const [selectedItem, setSelectedItem] = useState<CommercialItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<CommercialItem | null>(null);
-  const [preselectedDataForItem, setPreselectedDataForItem] = useState<{ programId?: string, date?: Date } | null>(null);
+  const [preselectedDataForItem, setPreselectedDataForItem] = useState<{ programId?: string, date?: Date, dates?: Date[] } | null>(null);
 
   // PDF Export State
   const [isPdfDialogOpen, setIsPdfDialogOpen] = useState(false);
@@ -77,8 +77,15 @@ export default function GrillaPage() {
     setView('diaria');
   };
   
-  const handleItemClick = (item: CommercialItem) => {
+  const handleItemClick = async (item: CommercialItem) => {
     setSelectedItem(item);
+    if (item.seriesId) {
+      const seriesItems = await getCommercialItemsBySeries(item.seriesId);
+      const seriesDates = seriesItems.map(i => new Date(i.date));
+      setPreselectedDataForItem({ dates: seriesDates });
+    } else {
+      setPreselectedDataForItem(null);
+    }
     setIsItemFormOpen(true);
   };
   
@@ -166,9 +173,9 @@ export default function GrillaPage() {
 
     try {
         let idsToDelete: string[] = [];
-        if (deleteMode === 'single') {
+        if (deleteMode === 'single' || !item.seriesId) {
             idsToDelete.push(item.id);
-        } else if (item.seriesId) {
+        } else {
             const seriesItems = await getCommercialItemsBySeries(item.seriesId);
             if (deleteMode === 'all') {
                 idsToDelete = seriesItems.map(i => i.id);
@@ -177,9 +184,6 @@ export default function GrillaPage() {
                     .filter(i => new Date(i.date) >= new Date(item.date))
                     .map(i => i.id);
             }
-        } else {
-          // It's a single item without a series, so we can only delete it.
-          idsToDelete.push(item.id);
         }
         
         if (idsToDelete.length > 0) {

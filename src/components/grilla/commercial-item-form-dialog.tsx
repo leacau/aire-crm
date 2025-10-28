@@ -33,7 +33,7 @@ interface CommercialItemFormDialogProps {
   onDelete: (item: CommercialItem) => void;
   item?: CommercialItem | null;
   programs: Program[];
-  preselectedData?: { programId?: string, date?: Date } | null;
+  preselectedData?: { programId?: string, date?: Date, dates?: Date[] } | null;
 }
 
 export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelete, item, programs, preselectedData }: CommercialItemFormDialogProps) {
@@ -75,7 +75,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
         setStatus(item.status);
         setClientId(item.clientId);
         setOpportunityId(item.opportunityId);
-        setDates([new Date(item.date)]);
+        setDates(preselectedData?.dates || [new Date(item.date)]);
       } else {
         setProgramId(preselectedData?.programId);
         setType('Pauta');
@@ -85,7 +85,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
         setStatus('Disponible');
         setClientId(undefined);
         setOpportunityId(undefined);
-        setDates(preselectedData?.date ? [preselectedData.date] : undefined);
+        setDates(preselectedData?.date ? [preselectedData.date] : preselectedData?.dates);
       }
     }
   }, [isOpen, item, isEditing, preselectedData]);
