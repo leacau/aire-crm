@@ -1,7 +1,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,9 +13,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import type { CommercialItem } from '@/lib/types';
-import { CheckCircle, Trash2 } from 'lucide-react';
+import { CheckCircle, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 interface PntAuspicioDetailsDialogProps {
   isOpen: boolean;
@@ -33,6 +34,8 @@ export function PntAuspicioDetailsDialog({
   onDelete,
 }: PntAuspicioDetailsDialogProps) {
 
+  const [fontSize, setFontSize] = useState(2); // 0:sm, 1:base, 2:lg, 3:xl, 4:2xl
+
   const handleToggleRead = () => {
     onToggleRead(item, !item.pntRead);
     onOpenChange(false);
@@ -44,14 +47,36 @@ export function PntAuspicioDetailsDialog({
     }
   };
 
+  const handleZoom = (direction: 'in' | 'out') => {
+    if (direction === 'in') {
+      setFontSize(prev => Math.min(prev + 1, 4));
+    } else {
+      setFontSize(prev => Math.max(prev - 1, 0));
+    }
+  };
+
+  const sizeClasses = ['text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl'];
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{item.title}</DialogTitle>
-          <DialogDescription>
-            {item.type} para el programa. {item.clientName && `Cliente: ${item.clientName}`}
-          </DialogDescription>
+            <div className="flex justify-between items-start">
+                <div className="flex-1">
+                    <DialogTitle>{item.title}</DialogTitle>
+                    <DialogDescription>
+                        {item.type} para el programa. {item.clientName && `Cliente: ${item.clientName}`}
+                    </DialogDescription>
+                </div>
+                <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => handleZoom('out')} disabled={fontSize === 0}>
+                        <ZoomOut className="h-5 w-5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleZoom('in')} disabled={fontSize === 4}>
+                        <ZoomIn className="h-5 w-5" />
+                    </Button>
+                </div>
+            </div>
         </DialogHeader>
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
           
@@ -64,9 +89,11 @@ export function PntAuspicioDetailsDialog({
 
           <div className="space-y-1">
             <Label className="font-semibold text-primary">Texto a leer</Label>
-            <p className="text-base whitespace-pre-wrap p-3 bg-muted rounded-md min-h-[150px]">
-              {item.description}
-            </p>
+            <div className="p-3 bg-muted rounded-md min-h-[150px]">
+                <p className={cn("whitespace-pre-wrap transition-all", sizeClasses[fontSize])}>
+                    {item.description}
+                </p>
+            </div>
           </div>
 
           {item.pntRead && item.pntReadAt && (
