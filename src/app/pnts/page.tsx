@@ -42,7 +42,7 @@ const PntItemRow: React.FC<PntItemRowProps> = ({ item, onClick }) => {
       {!isRead && <Icon className="h-5 w-5 text-primary flex-shrink-0" />}
       <div className="flex-1 space-y-1 overflow-hidden">
         <p className={cn("font-semibold leading-none truncate", isRead && "line-through")}>
-            {item.title}
+            {item.title || item.description}
         </p>
         <div className="flex items-center gap-4 text-xs">
           <p>{item.type}</p>
@@ -255,7 +255,7 @@ export default function PntsPage() {
                     {programsForToday.map(program => (
                         <Collapsible key={program.id} defaultOpen={true} className="border rounded-lg">
                            <CollapsibleTrigger asChild>
-                             <div className={cn("flex w-full cursor-pointer items-center justify-between rounded-t-lg p-4 text-left", program.color)}>
+                             <div className={cn("flex w-full cursor-pointer items-center justify-between rounded-t-lg p-4 text-left group", program.color)}>
                                <div className="flex-1 flex items-center gap-2">
                                   <Link href={`/grilla/${program.id}`} onClick={(e) => e.stopPropagation()}>
                                     <Button variant="ghost" size="icon" className="h-8 w-8 bg-black/10 hover:bg-black/20 text-white">
