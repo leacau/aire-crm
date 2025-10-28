@@ -152,23 +152,72 @@ export const saveProgram = async (programData: Omit<Program, 'id'>, userId: stri
     delete dataToSave.endTime;
     delete dataToSave.daysOfWeek;
     const docRef = await addDoc(programsCollection, { ...dataToSave, createdBy: userId, createdAt: serverTimestamp() });
+    
+    const userSnap = await getDoc(doc(db, 'users', userId));
+    const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'program',
+        entityId: docRef.id,
+        entityName: programData.name,
+        details: `creó el programa <strong>${programData.name}</strong>`,
+        ownerName: userName,
+    });
+
     return docRef.id;
 };
 
 export const updateProgram = async (programId: string, programData: Partial<Omit<Program, 'id'>>, userId: string): Promise<void> => {
     const docRef = doc(db, 'programs', programId);
+    const originalSnap = await getDoc(docRef);
+    if (!originalSnap.exists()) throw new Error("Program not found");
+
     const dataToUpdate = { ...programData };
     // @ts-ignore
     delete dataToUpdate.startTime;
     delete dataToUpdate.endTime;
     delete dataToUpdate.daysOfWeek;
     await updateDoc(docRef, { ...dataToUpdate, updatedBy: userId, updatedAt: serverTimestamp() });
+
+    const userSnap = await getDoc(doc(db, 'users', userId));
+    const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'program',
+        entityId: programId,
+        entityName: programData.name || originalSnap.data().name,
+        details: `actualizó el programa <strong>${programData.name || originalSnap.data().name}</strong>`,
+        ownerName: userName,
+    });
 };
 
 export const deleteProgram = async (programId: string, userId: string): Promise<void> => {
     const docRef = doc(db, 'programs', programId);
+    const originalSnap = await getDoc(docRef);
+    if (!originalSnap.exists()) throw new Error("Program not found");
+    const programName = originalSnap.data().name;
+
     await deleteDoc(docRef);
-    // Optionally log this activity
+    
+    const userSnap = await getDoc(doc(db, 'users', userId));
+    const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'program',
+        entityId: programId,
+        entityName: programName,
+        details: `eliminó el programa <strong>${programName}</strong>`,
+        ownerName: userName,
+    });
 };
 
 const parseDateWithTimezone = (dateString: string) => {
@@ -187,6 +236,7 @@ export const getCommercialItems = async (date: string): Promise<CommercialItem[]
         return { 
             id: doc.id, 
             ...data,
+            date: format(parseDateWithTimezone(data.date), 'yyyy-MM-dd'),
             pntReadAt: convertTimestamp(data.pntReadAt),
         } as CommercialItem
     });
@@ -195,11 +245,18 @@ export const getCommercialItems = async (date: string): Promise<CommercialItem[]
 export const getCommercialItemsBySeries = async (seriesId: string): Promise<CommercialItem[]> => {
     const q = query(commercialItemsCollection, where("seriesId", "==", seriesId));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CommercialItem));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return { 
+        id: doc.id, 
+        ...data,
+        date: format(parseDateWithTimezone(data.date), 'yyyy-MM-dd')
+      } as CommercialItem
+    });
 };
 
-export const createCommercialItem = async (item: Omit<CommercialItem, 'id'>): Promise<string> => {
-    const dataToSave: { [key: string]: any } = { ...item, createdAt: serverTimestamp() };
+export const createCommercialItem = async (item: Omit<CommercialItem, 'id'>, userId: string, userName: string): Promise<string> => {
+    const dataToSave: { [key: string]: any } = { ...item, createdAt: serverTimestamp(), createdBy: userId };
 
     Object.keys(dataToSave).forEach(key => {
         if (dataToSave[key] === undefined) {
@@ -208,6 +265,18 @@ export const createCommercialItem = async (item: Omit<CommercialItem, 'id'>): Pr
     });
 
     const docRef = await addDoc(commercialItemsCollection, dataToSave);
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'commercial_item',
+        entityId: docRef.id,
+        entityName: item.title || item.description,
+        details: `creó un elemento comercial <strong>${item.title || item.description}</strong>`,
+        ownerName: item.clientName || userName,
+    });
+
     return docRef.id;
 };
 
@@ -268,11 +337,30 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
     }
     
     await batch.commit();
+
+    const userSnap = await getDoc(doc(db, 'users', userId));
+    const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
+    
+    await logActivity({
+        userId,
+        userName,
+        type: isEditingSeries ? 'update' : 'create',
+        entityType: 'commercial_item_series',
+        entityId: newSeriesId,
+        entityName: item.title || item.description,
+        details: `${isEditingSeries ? 'actualizó' : 'creó'} ${dates.length} elemento(s) comerciales para <strong>${item.title || item.description}</strong>`,
+        ownerName: item.clientName || userName,
+    });
+
     return newSeriesId;
 };
 
-export const updateCommercialItem = async (itemId: string, itemData: Partial<Omit<CommercialItem, 'id'>>): Promise<void> => {
+export const updateCommercialItem = async (itemId: string, itemData: Partial<Omit<CommercialItem, 'id'>>, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'commercial_items', itemId);
+    const originalSnap = await getDoc(docRef);
+    if (!originalSnap.exists()) throw new Error("Commercial item not found");
+    const originalData = originalSnap.data() as CommercialItem;
+
     const dataToUpdate: {[key:string]: any} = {...itemData};
     
     if (!dataToUpdate.clientId) {
@@ -291,17 +379,46 @@ export const updateCommercialItem = async (itemId: string, itemData: Partial<Omi
     }
 
 
-    await updateDoc(docRef, dataToUpdate);
+    await updateDoc(docRef, {...dataToUpdate, updatedBy: userId, updatedAt: serverTimestamp()});
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'commercial_item',
+        entityId: itemId,
+        entityName: originalData.title || originalData.description,
+        details: `actualizó el elemento comercial <strong>${originalData.title || originalData.description}</strong>`,
+        ownerName: originalData.clientName || userName,
+    });
 }
 
-export const deleteCommercialItem = async (itemIds: string[]): Promise<void> => {
+export const deleteCommercialItem = async (itemIds: string[], userId: string, userName: string): Promise<void> => {
     if (itemIds.length === 0) return;
     const batch = writeBatch(db);
+
+    const firstItemRef = doc(db, 'commercial_items', itemIds[0]);
+    const firstItemSnap = await getDoc(firstItemRef);
+    const firstItemData = firstItemSnap.exists() ? firstItemSnap.data() as CommercialItem : null;
+
     itemIds.forEach(id => {
         const docRef = doc(db, 'commercial_items', id);
         batch.delete(docRef);
     });
     await batch.commit();
+
+    if (firstItemData) {
+        await logActivity({
+            userId,
+            userName,
+            type: 'delete',
+            entityType: 'commercial_item',
+            entityId: 'multiple',
+            entityName: firstItemData.title || firstItemData.description,
+            details: `eliminó ${itemIds.length} elemento(s) comercial(es) de la serie <strong>${firstItemData.title || firstItemData.description}</strong>`,
+            ownerName: firstItemData.clientName || userName,
+        });
+    }
 };
 
 
@@ -615,10 +732,26 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
 
 export const updateUserProfile = async (uid: string, data: Partial<User>): Promise<void> => {
     const userRef = doc(db, 'users', uid);
+    const originalSnap = await getDoc(userRef);
+    const originalData = originalSnap.data() as User;
+    
     await updateDoc(userRef, {
         ...data,
         updatedAt: serverTimestamp()
     });
+
+    if (data.role && data.role !== originalData.role) {
+        await logActivity({
+            userId: uid, // This might need to be the admin user ID
+            userName: data.name || originalData.name,
+            type: 'update',
+            entityType: 'user',
+            entityId: uid,
+            entityName: data.name || originalData.name,
+            details: `cambió el rol de <strong>${data.name || originalData.name}</strong> a <strong>${data.role}</strong>`,
+            ownerName: data.name || originalData.name,
+        });
+    }
 };
 
 
