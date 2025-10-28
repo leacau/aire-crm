@@ -46,25 +46,25 @@ export function PntAuspicioDetailsDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{item.title}</DialogTitle>
           <DialogDescription>
             {item.type} para el programa. {item.clientName && `Cliente: ${item.clientName}`}
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-4">
+        <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
           
           {item.bloque && (
             <div className="space-y-1">
               <Label className="font-semibold text-primary">Sección / Bloque</Label>
-              <p className="text-sm p-2 bg-muted rounded-md">{item.bloque}</p>
+              <p className="text-base p-2 bg-muted rounded-md">{item.bloque}</p>
             </div>
           )}
 
           <div className="space-y-1">
             <Label className="font-semibold text-primary">Texto a leer</Label>
-            <p className="text-sm whitespace-pre-wrap p-2 bg-muted rounded-md min-h-[100px]">
+            <p className="text-base whitespace-pre-wrap p-3 bg-muted rounded-md min-h-[150px]">
               {item.description}
             </p>
           </div>
