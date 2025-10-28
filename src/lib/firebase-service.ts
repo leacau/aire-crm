@@ -211,11 +211,20 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
     const newSeriesId = item.seriesId || doc(collection(db, 'dummy')).id;
 
     const formattedDates = new Set(dates.map(d => d.toISOString().split('T')[0]));
+    
+    const itemToSave = {...item};
+    if (!itemToSave.clientId) {
+      delete itemToSave.clientId;
+      delete itemToSave.clientName;
+    }
+    if (!itemToSave.opportunityId) {
+      delete itemToSave.opportunityId;
+      delete itemToSave.opportunityTitle;
+    }
 
     if (isEditingSeries && item.seriesId) {
         // If editing, find existing items in the series to update or delete
         const existingItems = await getCommercialItemsBySeries(item.seriesId);
-        const existingDates = new Set(existingItems.map(i => i.date));
 
         // Delete items that are no longer in the selected dates
         for (const existingItem of existingItems) {
@@ -228,7 +237,7 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
         // Update existing or create new for the selected dates
         for (const dateStr of formattedDates) {
             const existingItem = existingItems.find(i => i.date === dateStr);
-            const dataToSave = { ...item, seriesId: newSeriesId, date: dateStr, updatedBy: userId, updatedAt: serverTimestamp() };
+            const dataToSave = { ...itemToSave, seriesId: newSeriesId, date: dateStr, updatedBy: userId, updatedAt: serverTimestamp() };
             
             const docRef = existingItem ? doc(db, 'commercial_items', existingItem.id) : doc(collection(db, 'commercial_items'));
             batch.set(docRef, dataToSave, { merge: true });
@@ -241,20 +250,12 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
             const formattedDate = date.toISOString().split('T')[0];
 
             const itemData: Omit<CommercialItem, 'id'> = {
-                ...item,
+                ...itemToSave,
                 date: formattedDate,
                 seriesId: dates.length > 1 ? newSeriesId : undefined,
             };
 
             const dataToSave = { ...itemData, createdBy: userId };
-             if (!dataToSave.clientId) {
-                delete dataToSave.clientId;
-                delete dataToSave.clientName;
-            }
-            if (!dataToSave.opportunityId) {
-                delete dataToSave.opportunityId;
-                delete dataToSave.opportunityTitle;
-            }
 
             batch.set(docRef, dataToSave);
         }
