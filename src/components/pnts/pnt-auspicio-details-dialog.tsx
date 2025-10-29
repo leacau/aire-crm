@@ -44,7 +44,6 @@ export function PntAuspicioDetailsDialog({
   const handleDelete = () => {
     if (onDelete) {
       onDelete(item);
-      // Let the parent component handle closing the dialogs
     }
   };
 

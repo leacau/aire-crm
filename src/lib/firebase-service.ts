@@ -396,16 +396,18 @@ export const updateCommercialItem = async (itemId: string, itemData: Partial<Omi
 
 export const deleteCommercialItem = async (itemIds: string[], userId: string, userName: string): Promise<void> => {
     if (!itemIds || itemIds.length === 0) return;
-    const batch = writeBatch(db);
 
+    const batch = writeBatch(db);
+    
     const firstItemRef = doc(db, 'commercial_items', itemIds[0]);
     const firstItemSnap = await getDoc(firstItemRef);
     const firstItemData = firstItemSnap.exists() ? firstItemSnap.data() as CommercialItem : null;
-
-    itemIds.forEach(id => {
+    
+    for (const id of itemIds) {
         const docRef = doc(db, 'commercial_items', id);
         batch.delete(docRef);
-    });
+    }
+    
     await batch.commit();
 
     if (firstItemData) {

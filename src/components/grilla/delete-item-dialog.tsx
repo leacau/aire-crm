@@ -51,15 +51,15 @@ export function DeleteItemDialog({ isOpen, onOpenChange, item, onConfirmDelete }
                 <RadioGroup value={deleteMode} onValueChange={(value) => setDeleteMode(value as any)} className="mt-2 space-y-2">
                     <div className="flex items-center space-x-2">
                         <RadioGroupItem value="single" id="delete-single" />
-                        <Label htmlFor="delete-single" className="font-normal">Eliminar solo este día</Label>
+                        <Label htmlFor="delete-single" className="font-normal">Eliminar solo la pauta de este día</Label>
                     </div>
                     <div className="flex items-center space-x-2">
                         <RadioGroupItem value="forward" id="delete-forward" />
-                        <Label htmlFor="delete-forward" className="font-normal">Eliminar este y todos los días futuros</Label>
+                        <Label htmlFor="delete-forward" className="font-normal">Eliminar esta y todas las pautas futuras</Label>
                     </div>
                      <div className="flex items-center space-x-2">
                         <RadioGroupItem value="all" id="delete-all" />
-                        <Label htmlFor="delete-all" className="font-normal">Eliminar toda la serie (pasado y futuro)</Label>
+                        <Label htmlFor="delete-all" className="font-normal">Eliminar la serie completa (pasado y futuro)</Label>
                     </div>
                 </RadioGroup>
             </div>

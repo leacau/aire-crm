@@ -192,6 +192,7 @@ export default function PntsPage() {
   const openDeleteItemDialog = (item: CommercialItem) => {
     setItemToDelete(item);
     setIsDetailsOpen(false); // Close details dialog when delete dialog opens
+    setIsDeleteItemDialogOpen(true);
   };
 
 
