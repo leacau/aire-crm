@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -548,11 +546,10 @@ export function OpportunityDetailsDialog({
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto pr-4 -mr-4">
         <Tabs defaultValue="details">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="details">Detalles</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="details">Detalles y Propuesta</TabsTrigger>
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
             <TabsTrigger value="bonus">Bonificación</TabsTrigger>
-            <TabsTrigger value="pautado">Pautado</TabsTrigger>
           </TabsList>
           
           <TabsContent value="details" className="space-y-4 py-4">
@@ -604,8 +601,8 @@ export function OpportunityDetailsDialog({
                                 </div>
                                 <div className="space-y-2">
                                   {group.items.map(item => (
-                                    <div key={item.id} className="grid grid-cols-1 md:grid-cols-7 gap-x-3 gap-y-2 items-end">
-                                      <div className="md:col-span-2 space-y-1">
+                                    <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-x-3 gap-y-2 items-end">
+                                      <div className="md:col-span-3 space-y-1">
                                           <Label className="text-xs">Tipo</Label>
                                           <Select value={item.type} onValueChange={v => handleProposalTypeChange(item.id, v as any)}>
                                               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -619,12 +616,12 @@ export function OpportunityDetailsDialog({
                                               </SelectContent>
                                           </Select>
                                       </div>
-                                      <div className="space-y-1"><Label className="text-xs">Cant/Día</Label><Input type="number" value={item.cantidadDia} onChange={e => handleProposalItemChange(item.id, 'cantidadDia', Number(e.target.value))} /></div>
-                                      <div className="space-y-1"><Label className="text-xs">Cant/Mes</Label><Input type="number" value={item.cantidadMes} onChange={e => handleProposalItemChange(item.id, 'cantidadMes', Number(e.target.value))} /></div>
-                                      {(item.type === 'spotRadio' || item.type === 'spotTv') && <div className="space-y-1"><Label className="text-xs">Seg</Label><Input type="number" value={item.duracionSegundos} onChange={e => handleProposalItemChange(item.id, 'duracionSegundos', Number(e.target.value))} /></div>}
-                                      <div className={cn("space-y-1", (item.type !== 'spotRadio' && item.type !== 'spotTv') && "md:col-start-5")}><Label className="text-xs">Valor Unit.</Label><Input type="number" value={item.valorUnitario} disabled className="bg-gray-100"/></div>
-                                      <div className="space-y-1"><Label className="text-xs">Subtotal</Label><Input value={item.subtotal.toLocaleString('es-AR')} disabled className="font-bold bg-gray-100" /></div>
-                                      <div className="flex justify-end"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveProposalItem(item.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button></div>
+                                      {(item.type === 'spotRadio' || item.type === 'spotTv') && <div className="md:col-span-1 space-y-1"><Label className="text-xs">Seg</Label><Input type="number" value={item.duracionSegundos} onChange={e => handleProposalItemChange(item.id, 'duracionSegundos', Number(e.target.value))} /></div>}
+                                      <div className="md:col-span-1 space-y-1"><Label className="text-xs">Cant/Día</Label><Input type="number" value={item.cantidadDia} onChange={e => handleProposalItemChange(item.id, 'cantidadDia', Number(e.target.value))} /></div>
+                                      <div className="md:col-span-1 space-y-1"><Label className="text-xs">Días/Mes</Label><Input type="number" value={item.cantidadMes} onChange={e => handleProposalItemChange(item.id, 'cantidadMes', Number(e.target.value))} /></div>
+                                      <div className="md:col-span-2 space-y-1"><Label className="text-xs">Valor Unit.</Label><Input type="number" value={item.valorUnitario} disabled className="bg-gray-100"/></div>
+                                      <div className="md:col-span-2 space-y-1"><Label className="text-xs">Subtotal</Label><Input value={item.subtotal.toLocaleString('es-AR')} disabled className="font-bold bg-gray-100" /></div>
+                                      <div className="md:col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveProposalItem(item.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button></div>
                                     </div>
                                   ))}
                                 </div>
@@ -766,57 +763,6 @@ export function OpportunityDetailsDialog({
                     </div>
                 )}
           </TabsContent>
-
-          <TabsContent value="pautado" className="space-y-4 py-4">
-                <div className="flex justify-between items-center">
-                    <h4 className="font-medium">Períodos de Pautado</h4>
-                    <div className="flex items-center gap-2">
-                         <Button size="sm" variant="outline" onClick={() => setIsOrdenPautadoFormOpen(true)}>
-                            <FileText className="mr-2 h-4 w-4" />
-                            Crear Orden de Pautado
-                        </Button>
-                        <Button size="sm" onClick={handleAddPautado}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Añadir Pauta
-                        </Button>
-                    </div>
-                </div>
-                <div className="space-y-2">
-                    {(editedOpportunity.pautados || []).map((pautado) => (
-                        <div key={pautado.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-center p-2 border rounded-md">
-                             <div className="space-y-1">
-                                <Label htmlFor={`pautado-inicio-${pautado.id}`}>Inicio de Pauta</Label>
-                                <Input 
-                                  id={`pautado-inicio-${pautado.id}`}
-                                  type="date"
-                                  value={pautado.fechaInicio || ''}
-                                  onChange={(e) => handlePautadoChange(pautado.id, 'fechaInicio', e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <Label htmlFor={`pautado-fin-${pautado.id}`}>Fin de Pauta</Label>
-                                <Input 
-                                  id={`pautado-fin-${pautado.id}`}
-                                  type="date"
-                                  value={pautado.fechaFin || ''}
-                                  onChange={(e) => handlePautadoChange(pautado.id, 'fechaFin', e.target.value)}
-                                />
-                            </div>
-                             <Button variant="ghost" size="icon" onClick={() => handleRemovePautado(pautado.id)} className="self-end">
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                        </div>
-                    ))}
-                    {(editedOpportunity.pautados?.length || 0) === 0 && (
-                        <p className="text-center text-sm text-muted-foreground py-4">No hay períodos de pautado definidos.</p>
-                    )}
-                </div>
-                <div className="p-4 bg-blue-50 border-l-4 border-blue-400 text-blue-800 rounded">
-                    <p className="text-sm font-medium">Recordatorios Automáticos</p>
-                    <p className="text-xs">Al guardar una fecha de fin, se creará un evento en el calendario del asesor 30, 15 y 7 días antes del vencimiento.</p>
-                </div>
-          </TabsContent>
-          
         </Tabs>
         </div>
         <DialogFooter>
