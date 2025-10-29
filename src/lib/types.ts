@@ -51,12 +51,26 @@ export type OrdenPautado = {
     // ... add all other fields from the image
 };
 
+export type ProposalItem = {
+  id: string;
+  programId: string;
+  programName: string;
+  type: 'spotRadio' | 'spotTv' | 'pnt' | 'pntMasBarrida' | 'auspicio' | 'notaComercial';
+  label: string;
+  cantidadDia: number;
+  cantidadMes: number;
+  duracionSegundos?: number; // Only for spots
+  valorUnitario: number;
+  subtotal: number;
+};
+
+
 export type Opportunity = {
   id: string;
   title: string;
   clientName: string;
   clientId: string;
-  value: number;
+  value: number; // Valor final de la propuesta
   stage: OpportunityStage;
   closeDate: string;
   details?: string;
@@ -77,6 +91,10 @@ export type Opportunity = {
   pautados?: Pautado[];
   proposalFiles?: ProposalFile[];
   ordenesPautado?: OrdenPautado[];
+  
+  // New proposal fields
+  proposalItems?: ProposalItem[];
+  valorTarifario?: number; // Calculated value from rates
 };
 
 export type Person = {
@@ -143,7 +161,7 @@ export type ActivityLog = {
   userName: string;
   ownerName: string;
   type: 'create' | 'update' | 'delete' | 'stage_change';
-  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user';
+  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user' | 'program' | 'commercial_item' | 'commercial_item_series';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action
@@ -264,6 +282,15 @@ export type ProgramSchedule = {
   endTime: string;   // "HH:MM"
 }
 
+export type ProgramRates = {
+  spotRadio?: number;
+  spotTv?: number;
+  pnt?: number;
+  pntMasBarrida?: number;
+  auspicio?: number;
+  notaComercial?: number;
+};
+
 export type Program = {
   id: string;
   name: string;
@@ -272,6 +299,7 @@ export type Program = {
   color: string; // e.g., 'bg-blue-200'
   conductores?: string;
   productores?: string;
+  rates?: ProgramRates;
   // DEPRECATED
   startTime?: string;
   endTime?: string;
@@ -301,4 +329,6 @@ export type CommercialItem = {
   pntRead?: boolean;
   pntReadAt?: string;
   createdBy?: string;
+  updatedBy?: string;
+  updatedAt?: string;
 };

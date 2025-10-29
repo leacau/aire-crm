@@ -112,7 +112,7 @@ export default function PntsPage() {
             status: 'Vendido',
             createdBy: userInfo.id,
         };
-        await createCommercialItem(newItem);
+        await createCommercialItem(newItem, userInfo.id, userInfo.name);
         fetchData();
         toast({ title: `${itemData.type} añadido correctamente` });
     } catch(error) {
@@ -136,17 +136,17 @@ export default function PntsPage() {
       await updateCommercialItem(item.id, {
         pntRead: isRead,
         pntReadAt: isRead ? new Date().toISOString() : undefined,
-      });
+      }, userInfo!.id, userInfo!.name);
     } catch (error) {
       console.error("Error updating PNT status:", error);
-      toast({ title: "Error al actualizar estado", variant: "destructive" });
+      toast({ title: "Error al actualizar estado", variant: "destructive", description: (error as Error).message });
       setPnts(originalPnts);
       setSelectedItem(item);
     }
   };
 
   const handleDeleteItem = async (item: CommercialItem, deleteMode: 'single' | 'forward' | 'all') => {
-    if (!canManage) return;
+    if (!canManage || !userInfo) return;
 
     try {
         let idsToDelete: string[] = [];
@@ -164,7 +164,7 @@ export default function PntsPage() {
         }
         
         if (idsToDelete.length > 0) {
-            await deleteCommercialItem(idsToDelete);
+            await deleteCommercialItem(idsToDelete, userInfo.id, userInfo.name);
             toast({ title: `Se eliminaron ${idsToDelete.length} elemento(s)` });
         }
         

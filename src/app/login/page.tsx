@@ -19,6 +19,8 @@ import { Logo } from '@/components/logo';
 import { createUserProfile, getUserProfile } from '@/lib/firebase-service';
 import Link from 'next/link';
 
+const ALLOWED_DOMAINS = ['airedesantafe.com.ar', 'airedigital.com'];
+
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -33,9 +35,23 @@ export default function LoginPage() {
 
     try {
         const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        const emailDomain = user.email?.split('@')[1];
+
+        if (!emailDomain || !ALLOWED_DOMAINS.includes(emailDomain)) {
+            await auth.signOut(); // Sign out the user immediately
+            toast({
+                title: 'Acceso Denegado',
+                description: 'Solo se permiten usuarios con dominios @airedesantafe.com.ar o @airedigital.com.',
+                variant: 'destructive',
+            });
+            setLoading(false);
+            return;
+        }
+
+
         const credential = GoogleAuthProvider.credentialFromResult(result);
         const token = credential?.accessToken;
-        const user = result.user;
 
         // Store access token in session storage
         if (token) {
@@ -50,11 +66,14 @@ export default function LoginPage() {
 
         router.push('/');
     } catch (error: any) {
-        toast({
-            title: 'Error con Google Sign-In',
-            description: error.message,
-            variant: 'destructive',
-        });
+        // Don't show toast for user closing the popup
+        if (error.code !== 'auth/popup-closed-by-user') {
+            toast({
+                title: 'Error con Google Sign-In',
+                description: error.message,
+                variant: 'destructive',
+            });
+        }
     } finally {
         setLoading(false);
     }

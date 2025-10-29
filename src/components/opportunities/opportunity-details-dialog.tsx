@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, Invoice, Pautado, InvoiceStatus } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, Invoice, Pautado, InvoiceStatus, ProposalItem, Program } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { Checkbox } from '../ui/checkbox';
@@ -31,8 +31,8 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice } from '@/lib/firebase-service';
-import { PlusCircle, Clock, Trash2, FileText, Save } from 'lucide-react';
+import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, getPrograms } from '@/lib/firebase-service';
+import { PlusCircle, Clock, Trash2, FileText, Save, Calculator } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -78,6 +78,8 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     pautados: [],
     proposalFiles: [],
     ordenesPautado: [],
+    proposalItems: [],
+    valorTarifario: 0,
 });
 
 const NewAgencyDialog = ({ onAgencyCreated }: { onAgencyCreated: (newAgency: Agency) => void }) => {
@@ -152,6 +154,7 @@ export function OpportunityDetailsDialog({
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isOrdenPautadoFormOpen, setIsOrdenPautadoFormOpen] = useState(false);
@@ -159,9 +162,8 @@ export function OpportunityDetailsDialog({
   const getInitialData = () => {
       if (opportunity) {
         const data = { ...opportunity };
-        if (!data.pautados) {
-            data.pautados = [];
-        }
+        if (!data.pautados) data.pautados = [];
+        if (!data.proposalItems) data.proposalItems = [];
         return data;
       }
       return getInitialOpportunityData(client);
@@ -182,8 +184,14 @@ export function OpportunityDetailsDialog({
         const initialData = getInitialData();
         setEditedOpportunity(initialData);
         
-        getAgencies().then(setAgencies).catch(() => {
-            toast({ title: "Error al cargar agencias", variant: "destructive" });
+        Promise.all([
+          getAgencies(),
+          getPrograms()
+        ]).then(([agencies, programs]) => {
+          setAgencies(agencies);
+          setPrograms(programs);
+        }).catch(() => {
+            toast({ title: "Error al cargar datos auxiliares", variant: "destructive" });
         });
 
         if (opportunity) {
@@ -200,22 +208,41 @@ export function OpportunityDetailsDialog({
   }
 
 
-  const isEditing = opportunity !== null;
-
  const handleSave = async () => {
+    const oppToSave = { ...editedOpportunity };
+
+    // Final calculation before saving
+    const valorTarifario = (oppToSave.proposalItems || []).reduce((acc, item) => acc + item.subtotal, 0);
+    const valorFinal = oppToSave.value || 0;
+
+    oppToSave.valorTarifario = valorTarifario;
+    
+    // Auto-update bonus details
+    if (valorFinal !== valorTarifario) {
+        const diff = valorTarifario - valorFinal;
+        const percentage = valorTarifario > 0 ? (diff / valorTarifario) * 100 : 0;
+        oppToSave.bonificacionDetalle = `Descuento: $${diff.toLocaleString('es-AR')} (${percentage.toFixed(2)}%)`;
+        if (oppToSave.bonificacionEstado !== 'Autorizado' && oppToSave.bonificacionEstado !== 'Rechazado') {
+            oppToSave.bonificacionEstado = 'Pendiente';
+        }
+        if (oppToSave.stage === 'Negociación') {
+            oppToSave.stage = 'Negociación a Aprobar';
+        }
+    } else {
+        oppToSave.bonificacionDetalle = '';
+        delete oppToSave.bonificacionEstado;
+    }
+
     if (isEditing && opportunity) {
-        const changes: Partial<Opportunity> = Object.keys(editedOpportunity).reduce((acc, key) => {
+        const changes: Partial<Opportunity> = Object.keys(oppToSave).reduce((acc, key) => {
             const oppKey = key as keyof Opportunity;
-            if (JSON.stringify(editedOpportunity[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
+            // Use JSON.stringify for deep comparison of arrays/objects
+            if (JSON.stringify(oppToSave[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
                 // @ts-ignore
-                acc[oppKey] = editedOpportunity[oppKey];
+                acc[oppKey] = oppToSave[oppKey];
             }
             return acc;
         }, {} as Partial<Opportunity>);
-
-        if (JSON.stringify(editedOpportunity.proposalFiles) !== JSON.stringify(opportunity.proposalFiles)) {
-          changes.proposalFiles = editedOpportunity.proposalFiles;
-        }
 
         if (Object.keys(changes).length > 0) {
             const accessToken = await getGoogleAccessToken();
@@ -223,8 +250,7 @@ export function OpportunityDetailsDialog({
         }
     } else if (!isEditing) {
         const newOpp = {
-            ...editedOpportunity,
-            value: editedOpportunity.value || 0, // Ensure value is a number
+            ...oppToSave,
         } as Omit<Opportunity, 'id'>;
         onCreate(newOpp);
     }
@@ -255,28 +281,7 @@ export function OpportunityDetailsDialog({
         finalValue = `${day}/${month}`;
     }
 
-    setEditedOpportunity(prev => {
-        const newState: Partial<Opportunity> = { ...prev, [name]: finalValue };
-        
-        if (name === 'bonificacionDetalle') {
-            if (value.trim()) {
-                if (prev.bonificacionEstado !== 'Autorizado' && prev.bonificacionEstado !== 'Rechazado') {
-                    newState.bonificacionEstado = 'Pendiente';
-                }
-                 // Auto-move to "Negociación a Aprobar"
-                if (prev.stage === 'Negociación') {
-                    newState.stage = 'Negociación a Aprobar';
-                }
-            } else {
-                delete newState.bonificacionEstado;
-                delete newState.bonificacionAutorizadoPorId;
-                delete newState.bonificacionAutorizadoPorNombre;
-                delete newState.bonificacionFechaAutorizacion;
-            }
-        }
-
-        return newState;
-    });
+    setEditedOpportunity(prev => ({ ...prev, [name]: finalValue }));
   };
 
   const handleCheckboxChange = (name: keyof Opportunity, checked: boolean | "indeterminate") => {
@@ -392,6 +397,98 @@ export function OpportunityDetailsDialog({
     }));
   };
 
+  const handleProposalItemChange = (itemId: string, field: keyof ProposalItem, value: any) => {
+      setEditedOpportunity(prev => {
+          const newItems = (prev.proposalItems || []).map(item => {
+              if (item.id === itemId) {
+                  const updatedItem = { ...item, [field]: value };
+                  
+                  // Recalculate subtotal
+                  if (field === 'cantidadDia' || field === 'cantidadMes' || field === 'duracionSegundos' || field === 'valorUnitario') {
+                      const { cantidadDia, cantidadMes, duracionSegundos, valorUnitario } = updatedItem;
+                      if (['spotRadio', 'spotTv'].includes(updatedItem.type)) {
+                          updatedItem.subtotal = (cantidadDia * cantidadMes * (duracionSegundos || 0) * valorUnitario);
+                      } else {
+                          updatedItem.subtotal = (cantidadDia * cantidadMes * valorUnitario);
+                      }
+                  }
+                  return updatedItem;
+              }
+              return item;
+          });
+          return { ...prev, proposalItems: newItems };
+      });
+  };
+
+  const handleAddProposalItem = () => {
+      const newItem: ProposalItem = {
+          id: `prop-${Date.now()}`,
+          programId: '',
+          programName: '',
+          type: 'spotRadio',
+          label: 'Spot Radio',
+          cantidadDia: 1,
+          cantidadMes: 1,
+          duracionSegundos: 0,
+          valorUnitario: 0,
+          subtotal: 0,
+      };
+      setEditedOpportunity(prev => ({
+          ...prev,
+          proposalItems: [...(prev.proposalItems || []), newItem]
+      }));
+  };
+
+  const handleRemoveProposalItem = (itemId: string) => {
+      setEditedOpportunity(prev => ({
+          ...prev,
+          proposalItems: (prev.proposalItems || []).filter(item => item.id !== itemId)
+      }));
+  };
+
+  const handleProposalProgramChange = (itemId: string, programId: string) => {
+      const program = programs.find(p => p.id === programId);
+      if (!program) return;
+      setEditedOpportunity(prev => ({
+          ...prev,
+          proposalItems: (prev.proposalItems || []).map(item => 
+              item.id === itemId ? { ...item, programId, programName: program.name } : item
+          )
+      }));
+  };
+
+  const handleProposalTypeChange = (itemId: string, type: ProposalItem['type']) => {
+      const program = programs.find(p => p.id === editedOpportunity.proposalItems?.find(i => i.id === itemId)?.programId);
+      const rate = program?.rates?.[type] || 0;
+      const labels = {
+          spotRadio: 'Spot Radio',
+          spotTv: 'Spot TV',
+          pnt: 'PNT',
+          pntMasBarrida: 'PNT + Barrida',
+          auspicio: 'Auspicio',
+          notaComercial: 'Nota Comercial',
+      };
+      
+      setEditedOpportunity(prev => {
+          const newItems = (prev.proposalItems || []).map(item => {
+              if (item.id === itemId) {
+                  const updatedItem = { ...item, type, valorUnitario: rate, label: labels[type] };
+                  // Recalculate subtotal
+                  const { cantidadDia, cantidadMes, duracionSegundos, valorUnitario } = updatedItem;
+                  if (['spotRadio', 'spotTv'].includes(updatedItem.type)) {
+                      updatedItem.subtotal = (cantidadDia * cantidadMes * (duracionSegundos || 0) * valorUnitario);
+                  } else {
+                      updatedItem.subtotal = (cantidadDia * cantidadMes * valorUnitario);
+                  }
+                  return updatedItem;
+              }
+              return item;
+          });
+          return { ...prev, proposalItems: newItems };
+      });
+  };
+
+
   const isCloseWon = editedOpportunity.stage === 'Cerrado - Ganado';
   const canEditBonus = editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar';
   const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
@@ -406,11 +503,13 @@ export function OpportunityDetailsDialog({
       };
       return <span className={cn(baseClasses, statusMap[status])}>{status}</span>;
   }
+
+  const calculatedValue = (editedOpportunity.proposalItems || []).reduce((acc, item) => acc + item.subtotal, 0);
   
   return (
     <>
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
           <div className="flex justify-between items-center">
             <div>
@@ -429,8 +528,9 @@ export function OpportunityDetailsDialog({
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto pr-4 -mr-4">
         <Tabs defaultValue="details">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="details">Detalles</TabsTrigger>
+            <TabsTrigger value="proposal">Propuesta</TabsTrigger>
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
             <TabsTrigger value="bonus">Bonificación</TabsTrigger>
             <TabsTrigger value="pautado">Pautado</TabsTrigger>
@@ -444,7 +544,7 @@ export function OpportunityDetailsDialog({
             </div>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                    <Label htmlFor="value">Valor</Label>
+                    <Label htmlFor="value">Valor Final Propuesta</Label>
                     <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange}/>
                 </div>
                 <div className="space-y-2">
@@ -463,6 +563,69 @@ export function OpportunityDetailsDialog({
                 <Label htmlFor="observaciones">Observaciones</Label>
                 <Textarea id="observaciones" name="observaciones" value={editedOpportunity.observaciones || ''} onChange={handleChange} />
             </div>
+          </TabsContent>
+
+          <TabsContent value="proposal" className="space-y-4 py-4">
+              <div className="space-y-2">
+                  <div className="flex justify-between items-center mb-2">
+                      <h4 className="font-medium">Calculadora de Tarifas</h4>
+                      <Button size="sm" variant="outline" onClick={handleAddProposalItem}><PlusCircle className="mr-2 h-4 w-4" />Añadir Item</Button>
+                  </div>
+                  <div className="space-y-3">
+                      {(editedOpportunity.proposalItems || []).map(item => (
+                          <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end p-2 border rounded-md">
+                              <div className="space-y-1 md:col-span-3">
+                                  <Label className="text-xs">Programa</Label>
+                                  <Select value={item.programId} onValueChange={v => handleProposalProgramChange(item.id, v)}>
+                                      <SelectTrigger><SelectValue placeholder="Programa..." /></SelectTrigger>
+                                      <SelectContent>{programs.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+                                  </Select>
+                              </div>
+                              <div className="space-y-1 md:col-span-2">
+                                  <Label className="text-xs">Tipo</Label>
+                                  <Select value={item.type} onValueChange={v => handleProposalTypeChange(item.id, v as any)}>
+                                      <SelectTrigger><SelectValue placeholder="Tipo..." /></SelectTrigger>
+                                      <SelectContent>
+                                          <SelectItem value="spotRadio">Spot Radio</SelectItem>
+                                          <SelectItem value="spotTv">Spot TV</SelectItem>
+                                          <SelectItem value="pnt">PNT</SelectItem>
+                                          <SelectItem value="pntMasBarrida">PNT + Barrida</SelectItem>
+                                          <SelectItem value="auspicio">Auspicio</SelectItem>
+                                          <SelectItem value="notaComercial">Nota Comercial</SelectItem>
+                                      </SelectContent>
+                                  </Select>
+                              </div>
+                              <div className="space-y-1">
+                                  <Label className="text-xs">Cant/Día</Label>
+                                  <Input type="number" value={item.cantidadDia} onChange={e => handleProposalItemChange(item.id, 'cantidadDia', Number(e.target.value))} />
+                              </div>
+                              <div className="space-y-1">
+                                  <Label className="text-xs">Cant/Mes</Label>
+                                  <Input type="number" value={item.cantidadMes} onChange={e => handleProposalItemChange(item.id, 'cantidadMes', Number(e.target.value))} />
+                              </div>
+                              { (item.type === 'spotRadio' || item.type === 'spotTv') &&
+                                  <div className="space-y-1">
+                                      <Label className="text-xs">Segundos</Label>
+                                      <Input type="number" value={item.duracionSegundos} onChange={e => handleProposalItemChange(item.id, 'duracionSegundos', Number(e.target.value))} />
+                                  </div>
+                              }
+                               <div className="space-y-1 md:col-span-2">
+                                  <Label className="text-xs">Valor Unitario</Label>
+                                  <Input type="number" value={item.valorUnitario} onChange={e => handleProposalItemChange(item.id, 'valorUnitario', Number(e.target.value))} />
+                              </div>
+                              <div className="space-y-1 md:col-span-2">
+                                  <Label className="text-xs">Subtotal</Label>
+                                  <Input type="number" value={item.subtotal} disabled className="font-bold" />
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveProposalItem(item.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+              <div className="flex justify-end items-center gap-4 mt-4 p-2 bg-muted rounded-md">
+                    <Label className="font-bold">TOTAL TARIFARIO:</Label>
+                    <div className="text-xl font-bold">${calculatedValue.toLocaleString('es-AR')}</div>
+              </div>
           </TabsContent>
           
           <TabsContent value="conditions" className="space-y-4 py-4">

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -14,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { Program, ProgramSchedule } from '@/lib/types';
+import type { Program, ProgramSchedule, ProgramRates } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, Trash2 } from 'lucide-react';
 import { Textarea } from '../ui/textarea';
@@ -36,6 +37,15 @@ const days = [
     { id: 7, label: 'Do' },
 ];
 
+const rateFields: { key: keyof ProgramRates; label: string }[] = [
+    { key: 'spotRadio', label: 'Segundo Spot Radio' },
+    { key: 'spotTv', label: 'Segundo Spot TV' },
+    { key: 'pnt', label: 'PNT' },
+    { key: 'pntMasBarrida', label: 'PNT + Barrida TV' },
+    { key: 'auspicio', label: 'Auspicio' },
+    { key: 'notaComercial', label: 'Nota Comercial' },
+];
+
 export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: ProgramFormDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -43,6 +53,7 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
   const [color, setColor] = useState('bg-gray-100');
   const [conductores, setConductores] = useState('');
   const [productores, setProductores] = useState('');
+  const [rates, setRates] = useState<ProgramRates>({});
   const { toast } = useToast();
 
   const isEditing = !!program;
@@ -56,6 +67,7 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
         setColor(program.color);
         setConductores(program.conductores || '');
         setProductores(program.productores || '');
+        setRates(program.rates || {});
       } else {
         // Reset form for new program
         setName('');
@@ -64,6 +76,7 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
         setColor('bg-gray-100');
         setConductores('');
         setProductores('');
+        setRates({});
       }
     }
   }, [program, isOpen]);
@@ -94,6 +107,10 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
         setSchedules(schedules.filter((_, i) => i !== index));
     }
   };
+  
+  const handleRateChange = (field: keyof ProgramRates, value: string) => {
+    setRates(prev => ({ ...prev, [field]: Number(value) || 0 }));
+  }
 
   const handleSave = () => {
     if (!name || schedules.some(s => !s.startTime || !s.endTime || s.daysOfWeek.length === 0)) {
@@ -101,13 +118,13 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
       return;
     }
     // @ts-ignore
-    onSave({ name, description, schedules, color, conductores, productores });
+    onSave({ name, description, schedules, color, conductores, productores, rates });
     onOpenChange(false);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{isEditing ? 'Editar Programa' : 'Nuevo Programa'}</DialogTitle>
           <DialogDescription>
@@ -160,6 +177,23 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Añadir Horario
                 </Button>
+            </div>
+            
+             <div className="space-y-4">
+                <Label>Tarifas del Programa</Label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-3 border rounded-md">
+                    {rateFields.map(field => (
+                        <div key={field.key} className="space-y-1">
+                            <Label htmlFor={`rate-${field.key}`} className="text-xs">{field.label}</Label>
+                            <Input
+                                id={`rate-${field.key}`}
+                                type="number"
+                                value={rates[field.key] || ''}
+                                onChange={e => handleRateChange(field.key, e.target.value)}
+                            />
+                        </div>
+                    ))}
+                </div>
             </div>
 
              <div className="space-y-2">
