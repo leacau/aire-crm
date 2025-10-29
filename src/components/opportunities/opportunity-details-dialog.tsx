@@ -39,6 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { invoiceStatusOptions } from '@/lib/types';
 import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
 import {
   AlertDialog,
@@ -142,7 +143,6 @@ const NewAgencyDialog = ({ onAgencyCreated }: { onAgencyCreated: (newAgency: Age
     );
 };
 
-
 export function OpportunityDetailsDialog({
   opportunity,
   isOpen,
@@ -212,13 +212,11 @@ export function OpportunityDetailsDialog({
  const handleSave = async () => {
     const oppToSave = { ...editedOpportunity };
 
-    // Final calculation before saving
     const valorTarifario = (oppToSave.proposalItems || []).reduce((acc, item) => acc + item.subtotal, 0);
     const valorFinal = oppToSave.value || 0;
 
     oppToSave.valorTarifario = valorTarifario;
     
-    // Auto-update bonus details
     if (valorFinal !== valorTarifario) {
         const diff = valorTarifario - valorFinal;
         const percentage = valorTarifario > 0 ? (diff / valorTarifario) * 100 : 0;
@@ -237,7 +235,6 @@ export function OpportunityDetailsDialog({
     if (isEditing && opportunity) {
         const changes: Partial<Opportunity> = Object.keys(oppToSave).reduce((acc, key) => {
             const oppKey = key as keyof Opportunity;
-            // Use JSON.stringify for deep comparison of arrays/objects
             if (JSON.stringify(oppToSave[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
                 // @ts-ignore
                 acc[oppKey] = oppToSave[oppKey];
@@ -250,9 +247,7 @@ export function OpportunityDetailsDialog({
             onUpdate(changes, accessToken);
         }
     } else if (!isEditing) {
-        const newOpp = {
-            ...oppToSave,
-        } as Omit<Opportunity, 'id'>;
+        const newOpp = { ...oppToSave } as Omit<Opportunity, 'id'>;
         onCreate(newOpp);
     }
     onOpenChange(false);
@@ -277,11 +272,6 @@ export function OpportunityDetailsDialog({
         finalValue = value === '' ? 0 : Number(value);
     }
     
-    if (name === 'fechaFacturacion' && value) {
-        const [year, month, day] = value.split('-');
-        finalValue = `${day}/${month}`;
-    }
-
     setEditedOpportunity(prev => ({ ...prev, [name]: finalValue }));
   };
 
@@ -316,7 +306,7 @@ export function OpportunityDetailsDialog({
         opportunityId: opportunity.id,
         invoiceNumber: '',
         amount: 0,
-        date: new Date().toISOString().split('T')[0], // Default to today
+        date: new Date().toISOString().split('T')[0],
         status: 'Generada' as const,
         dateGenerated: new Date().toISOString(),
     };
@@ -372,30 +362,19 @@ export function OpportunityDetailsDialog({
 
   const handleAddPautado = () => {
     const newPautado = {
-        id: `pautado-${Date.now()}`, // Simple unique ID for client-side state
+        id: `pautado-${Date.now()}`,
         fechaInicio: '',
         fechaFin: '',
     };
-    setEditedOpportunity(prev => ({
-        ...prev,
-        pautados: [...(prev.pautados || []), newPautado]
-    }));
+    setEditedOpportunity(prev => ({ ...prev, pautados: [...(prev.pautados || []), newPautado] }));
   };
 
   const handlePautadoChange = (id: string, field: 'fechaInicio' | 'fechaFin', value: string) => {
-    setEditedOpportunity(prev => ({
-        ...prev,
-        pautados: (prev.pautados || []).map(p => 
-            p.id === id ? { ...p, [field]: value } : p
-        )
-    }));
+    setEditedOpportunity(prev => ({ ...prev, pautados: (prev.pautados || []).map(p => p.id === id ? { ...p, [field]: value } : p) }));
   };
 
   const handleRemovePautado = (id: string) => {
-    setEditedOpportunity(prev => ({
-        ...prev,
-        pautados: (prev.pautados || []).filter(p => p.id !== id)
-    }));
+    setEditedOpportunity(prev => ({ ...prev, pautados: (prev.pautados || []).filter(p => p.id !== id) }));
   };
 
   const handleProposalItemChange = (itemId: string, field: keyof ProposalItem, value: any) => {
@@ -403,8 +382,6 @@ export function OpportunityDetailsDialog({
           const newItems = (prev.proposalItems || []).map(item => {
               if (item.id === itemId) {
                   const updatedItem = { ...item, [field]: value };
-                  
-                  // Recalculate subtotal
                   if (field === 'cantidadDia' || field === 'cantidadMes' || field === 'duracionSegundos' || field === 'valorUnitario') {
                       const { cantidadDia, cantidadMes, duracionSegundos, valorUnitario } = updatedItem;
                       if (['spotRadio', 'spotTv'].includes(updatedItem.type)) {
@@ -421,40 +398,67 @@ export function OpportunityDetailsDialog({
       });
   };
 
-  const handleAddProposalItem = () => {
+  const handleAddProposalProgram = (programId: string) => {
+    if (!programId) return;
+    const program = programs.find(p => p.id === programId);
+    if (!program) return;
+    // Check if program already added to avoid duplicates
+    if ((editedOpportunity.proposalItems || []).some(item => item.programId === programId)) {
+        toast({ title: "Programa ya añadido", description: "Ya has añadido este programa. Puedes añadir más ítems dentro de él.", variant: "default"});
+        return;
+    }
+
+    const newItem: ProposalItem = {
+        id: `prop-${Date.now()}`,
+        programId: program.id,
+        programName: program.name,
+        type: 'spotRadio',
+        label: 'Spot Radio',
+        cantidadDia: 1,
+        cantidadMes: 1,
+        duracionSegundos: 0,
+        valorUnitario: program.rates?.spotRadio || 0,
+        subtotal: 0, // Will be recalculated
+    };
+    // Recalculate subtotal
+    const { cantidadDia, cantidadMes, duracionSegundos, valorUnitario } = newItem;
+    newItem.subtotal = (cantidadDia * cantidadMes * (duracionSegundos || 0) * valorUnitario);
+
+    setEditedOpportunity(prev => ({
+        ...prev,
+        proposalItems: [...(prev.proposalItems || []), newItem]
+    }));
+  };
+
+  const handleRemoveProposalProgramGroup = (programId: string) => {
+      setEditedOpportunity(prev => ({
+          ...prev,
+          proposalItems: (prev.proposalItems || []).filter(item => item.programId !== programId)
+      }));
+  };
+
+   const handleAddProposalItemToGroup = (programId: string) => {
+      const program = programs.find(p => p.id === programId);
+      if (!program) return;
+
       const newItem: ProposalItem = {
           id: `prop-${Date.now()}`,
-          programId: '',
-          programName: '',
+          programId: program.id,
+          programName: program.name,
           type: 'spotRadio',
           label: 'Spot Radio',
           cantidadDia: 1,
           cantidadMes: 1,
           duracionSegundos: 0,
-          valorUnitario: 0,
+          valorUnitario: program.rates?.spotRadio || 0,
           subtotal: 0,
       };
+      const { cantidadDia, cantidadMes, duracionSegundos, valorUnitario } = newItem;
+      newItem.subtotal = (cantidadDia * cantidadMes * (duracionSegundos || 0) * valorUnitario);
+
       setEditedOpportunity(prev => ({
           ...prev,
           proposalItems: [...(prev.proposalItems || []), newItem]
-      }));
-  };
-
-  const handleRemoveProposalItem = (itemId: string) => {
-      setEditedOpportunity(prev => ({
-          ...prev,
-          proposalItems: (prev.proposalItems || []).filter(item => item.id !== itemId)
-      }));
-  };
-
-  const handleProposalProgramChange = (itemId: string, programId: string) => {
-      const program = programs.find(p => p.id === programId);
-      if (!program) return;
-      setEditedOpportunity(prev => ({
-          ...prev,
-          proposalItems: (prev.proposalItems || []).map(item => 
-              item.id === itemId ? { ...item, programId, programName: program.name } : item
-          )
       }));
   };
 
@@ -474,7 +478,6 @@ export function OpportunityDetailsDialog({
           const newItems = (prev.proposalItems || []).map(item => {
               if (item.id === itemId) {
                   const updatedItem = { ...item, type, valorUnitario: rate, label: labels[type] };
-                  // Recalculate subtotal
                   const { cantidadDia, cantidadMes, duracionSegundos, valorUnitario } = updatedItem;
                   if (['spotRadio', 'spotTv'].includes(updatedItem.type)) {
                       updatedItem.subtotal = (cantidadDia * cantidadMes * (duracionSegundos || 0) * valorUnitario);
@@ -489,9 +492,20 @@ export function OpportunityDetailsDialog({
       });
   };
 
+  const calculatedValue = (editedOpportunity.proposalItems || []).reduce((acc, item) => acc + item.subtotal, 0);
+  
+  const proposalItemsByProgram = (editedOpportunity.proposalItems || []).reduce((acc, item) => {
+    if (!acc[item.programId]) {
+      acc[item.programId] = {
+        programName: item.programName,
+        items: []
+      };
+    }
+    acc[item.programId].items.push(item);
+    return acc;
+  }, {} as Record<string, { programName: string, items: ProposalItem[] }>);
 
-  const isCloseWon = editedOpportunity.stage === 'Cerrado - Ganado';
-  const canEditBonus = editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar';
+  const canEditBonus = isEditing && (editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar');
   const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
 
   const getBonusStatusPill = (status?: BonificacionEstado) => {
@@ -504,8 +518,6 @@ export function OpportunityDetailsDialog({
       };
       return <span className={cn(baseClasses, statusMap[status])}>{status}</span>;
   }
-
-  const calculatedValue = (editedOpportunity.proposalItems || []).reduce((acc, item) => acc + item.subtotal, 0);
   
   return (
     <>
@@ -529,13 +541,11 @@ export function OpportunityDetailsDialog({
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto pr-4 -mr-4">
         <Tabs defaultValue="details">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="details">Detalles</TabsTrigger>
-            <TabsTrigger value="proposal">Propuesta</TabsTrigger>
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
             <TabsTrigger value="bonus">Bonificación</TabsTrigger>
             <TabsTrigger value="pautado">Pautado</TabsTrigger>
-            <TabsTrigger value="billing">Facturación</TabsTrigger>
           </TabsList>
           
           <TabsContent value="details" className="space-y-4 py-4">
@@ -544,10 +554,6 @@ export function OpportunityDetailsDialog({
                 <Input id="title" name="title" value={editedOpportunity.title || ''} onChange={handleChange}/>
             </div>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <Label htmlFor="value">Valor Final Propuesta</Label>
-                    <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange}/>
-                </div>
                 <div className="space-y-2">
                     <Label htmlFor="stage">Etapa</Label>
                     <Select onValueChange={(v: OpportunityStage) => handleSelectChange('stage', v)} value={editedOpportunity.stage}>
@@ -564,71 +570,78 @@ export function OpportunityDetailsDialog({
                 <Label htmlFor="observaciones">Observaciones</Label>
                 <Textarea id="observaciones" name="observaciones" value={editedOpportunity.observaciones || ''} onChange={handleChange} />
             </div>
+             <div className="space-y-4 pt-4">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-lg font-semibold">Calculadora de Tarifas</CardTitle>
+                        <div className="flex items-center gap-2">
+                             <Select onValueChange={handleAddProposalProgram}>
+                                <SelectTrigger className="w-[200px] h-9">
+                                    <SelectValue placeholder="Añadir Programa" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {programs.map(p => (
+                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {Object.keys(proposalItemsByProgram).length > 0 ? (
+                        Object.entries(proposalItemsByProgram).map(([programId, group]) => (
+                            <div key={programId} className="p-3 border rounded-lg bg-muted/30">
+                                <div className="flex justify-between items-center mb-2">
+                                  <h4 className="font-semibold">{group.programName}</h4>
+                                  <Button variant="destructive" size="icon" className="h-7 w-7" onClick={() => handleRemoveProposalProgramGroup(programId)}><Trash2 className="h-4 w-4"/></Button>
+                                </div>
+                                <div className="space-y-2">
+                                  {group.items.map(item => (
+                                    <div key={item.id} className="grid grid-cols-12 gap-x-2 gap-y-1 items-end">
+                                      <div className="md:col-span-2 col-span-6 space-y-1">
+                                          <Label className="text-xs">Tipo</Label>
+                                          <Select value={item.type} onValueChange={v => handleProposalTypeChange(item.id, v as any)}>
+                                              <SelectTrigger><SelectValue /></SelectTrigger>
+                                              <SelectContent>
+                                                  <SelectItem value="spotRadio">Spot Radio</SelectItem>
+                                                  <SelectItem value="spotTv">Spot TV</SelectItem>
+                                                  <SelectItem value="pnt">PNT</SelectItem>
+                                                  <SelectItem value="pntMasBarrida">PNT + Barrida</SelectItem>
+                                                  <SelectItem value="auspicio">Auspicio</SelectItem>
+                                                  <SelectItem value="notaComercial">Nota Comercial</SelectItem>
+                                              </SelectContent>
+                                          </Select>
+                                      </div>
+                                      <div className="space-y-1 col-span-3 md:col-span-1"><Label className="text-xs">Cant/Día</Label><Input type="number" value={item.cantidadDia} onChange={e => handleProposalItemChange(item.id, 'cantidadDia', Number(e.target.value))} /></div>
+                                      <div className="space-y-1 col-span-3 md:col-span-1"><Label className="text-xs">Cant/Mes</Label><Input type="number" value={item.cantidadMes} onChange={e => handleProposalItemChange(item.id, 'cantidadMes', Number(e.target.value))} /></div>
+                                      {(item.type === 'spotRadio' || item.type === 'spotTv') && <div className="space-y-1 col-span-3 md:col-span-1"><Label className="text-xs">Seg</Label><Input type="number" value={item.duracionSegundos} onChange={e => handleProposalItemChange(item.id, 'duracionSegundos', Number(e.target.value))} /></div>}
+                                      <div className="space-y-1 col-span-3 md:col-span-2"><Label className="text-xs">Valor Unit.</Label><Input type="number" value={item.valorUnitario} disabled className="bg-gray-100"/></div>
+                                      <div className="space-y-1 col-span-4 md:col-span-2"><Label className="text-xs">Subtotal</Label><Input value={item.subtotal.toLocaleString('es-AR')} disabled className="font-bold bg-gray-100" /></div>
+                                      <div className="col-span-2 md:col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveProposalItem(item.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button></div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <Button size="sm" variant="ghost" className="mt-2" onClick={() => handleAddProposalItemToGroup(programId)}><PlusCircle className="mr-2 h-4 w-4"/>Añadir ítem a este programa</Button>
+                            </div>
+                        ))
+                      ) : (
+                        <p className="text-center text-sm text-muted-foreground py-4">Añade un programa para comenzar a construir la propuesta.</p>
+                      )}
+                    </CardContent>
+                </Card>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                    <div className="p-3 bg-muted rounded-md text-right">
+                        <Label className="font-bold text-base">TOTAL TARIFARIO:</Label>
+                        <p className="text-2xl font-bold">${calculatedValue.toLocaleString('es-AR')}</p>
+                    </div>
+                     <div className="space-y-2">
+                        <Label htmlFor="value" className="text-base font-bold">Valor Final Propuesta</Label>
+                        <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange} className="text-2xl font-bold h-12 text-right"/>
+                    </div>
+                </div>
+            </div>
           </TabsContent>
 
-          <TabsContent value="proposal" className="space-y-4 py-4">
-              <div className="space-y-2">
-                  <div className="flex justify-between items-center mb-2">
-                      <h4 className="font-medium">Calculadora de Tarifas</h4>
-                      <Button size="sm" variant="outline" onClick={handleAddProposalItem}><PlusCircle className="mr-2 h-4 w-4" />Añadir Item</Button>
-                  </div>
-                  <div className="space-y-3">
-                      {(editedOpportunity.proposalItems || []).map(item => (
-                          <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end p-2 border rounded-md">
-                              <div className="space-y-1 md:col-span-3">
-                                  <Label className="text-xs">Programa</Label>
-                                  <Select value={item.programId} onValueChange={v => handleProposalProgramChange(item.id, v)}>
-                                      <SelectTrigger><SelectValue placeholder="Programa..." /></SelectTrigger>
-                                      <SelectContent>{programs.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-                                  </Select>
-                              </div>
-                              <div className="space-y-1 md:col-span-2">
-                                  <Label className="text-xs">Tipo</Label>
-                                  <Select value={item.type} onValueChange={v => handleProposalTypeChange(item.id, v as any)}>
-                                      <SelectTrigger><SelectValue placeholder="Tipo..." /></SelectTrigger>
-                                      <SelectContent>
-                                          <SelectItem value="spotRadio">Spot Radio</SelectItem>
-                                          <SelectItem value="spotTv">Spot TV</SelectItem>
-                                          <SelectItem value="pnt">PNT</SelectItem>
-                                          <SelectItem value="pntMasBarrida">PNT + Barrida</SelectItem>
-                                          <SelectItem value="auspicio">Auspicio</SelectItem>
-                                          <SelectItem value="notaComercial">Nota Comercial</SelectItem>
-                                      </SelectContent>
-                                  </Select>
-                              </div>
-                              <div className="space-y-1">
-                                  <Label className="text-xs">Cant/Día</Label>
-                                  <Input type="number" value={item.cantidadDia} onChange={e => handleProposalItemChange(item.id, 'cantidadDia', Number(e.target.value))} />
-                              </div>
-                              <div className="space-y-1">
-                                  <Label className="text-xs">Cant/Mes</Label>
-                                  <Input type="number" value={item.cantidadMes} onChange={e => handleProposalItemChange(item.id, 'cantidadMes', Number(e.target.value))} />
-                              </div>
-                              { (item.type === 'spotRadio' || item.type === 'spotTv') &&
-                                  <div className="space-y-1">
-                                      <Label className="text-xs">Segundos</Label>
-                                      <Input type="number" value={item.duracionSegundos} onChange={e => handleProposalItemChange(item.id, 'duracionSegundos', Number(e.target.value))} />
-                                  </div>
-                              }
-                               <div className="space-y-1 md:col-span-2">
-                                  <Label className="text-xs">Valor Unitario</Label>
-                                  <Input type="number" value={item.valorUnitario} onChange={e => handleProposalItemChange(item.id, 'valorUnitario', Number(e.target.value))} />
-                              </div>
-                              <div className="space-y-1 md:col-span-2">
-                                  <Label className="text-xs">Subtotal</Label>
-                                  <Input type="number" value={item.subtotal} disabled className="font-bold" />
-                              </div>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveProposalItem(item.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-              <div className="flex justify-end items-center gap-4 mt-4 p-2 bg-muted rounded-md">
-                    <Label className="font-bold">TOTAL TARIFARIO:</Label>
-                    <div className="text-xl font-bold">${calculatedValue.toLocaleString('es-AR')}</div>
-              </div>
-          </TabsContent>
-          
           <TabsContent value="conditions" className="space-y-4 py-4">
               <div className="space-y-2">
                   <Label htmlFor="periodicidad">Periodicidad</Label>
@@ -664,13 +677,16 @@ export function OpportunityDetailsDialog({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                    <Label htmlFor="fechaFacturacion">Fecha de Facturación (Día/Mes)</Label>
+                    <Label htmlFor="fechaFacturacion">Día de Facturación (Día/Mes)</Label>
                     <Input 
                       id="fechaFacturacion" 
                       name="fechaFacturacion"
-                      type="date"
-                      value={editedOpportunity.fechaFacturacion ? `2000-${editedOpportunity.fechaFacturacion.split('/')[1]}-${editedOpportunity.fechaFacturacion.split('/')[0]}` : ''}
-                      onChange={handleChange}
+                      placeholder="DD/MM"
+                      value={editedOpportunity.fechaFacturacion || ''}
+                      onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9/]/g, '');
+                          setEditedOpportunity(prev => ({...prev, fechaFacturacion: val}));
+                      }}
                     />
                 </div>
               </div>
@@ -699,7 +715,7 @@ export function OpportunityDetailsDialog({
           <TabsContent value="bonus" className="space-y-4 py-4">
               <div className="space-y-2">
                   <Label htmlFor="bonificacionDetalle">Detalle Bonificación</Label>
-                  <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!canEditBonus} placeholder={!canEditBonus ? 'Solo en Negociación o Cierre Ganado' : 'Ej: 10% Descuento'}/>
+                  <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!canEditBonus} placeholder={!canEditBonus ? 'Se genera automáticamente si el valor final es menor al tarifario' : 'Ej: 10% Descuento'}/>
               </div>
 
               {hasBonusRequest && (
