@@ -398,6 +398,13 @@ export function OpportunityDetailsDialog({
       });
   };
 
+    const handleRemoveProposalItem = (itemId: string) => {
+        setEditedOpportunity(prev => ({
+            ...prev,
+            proposalItems: (prev.proposalItems || []).filter(item => item.id !== itemId)
+        }));
+    };
+
   const handleAddProposalProgram = (programId: string) => {
     if (!programId) return;
     const program = programs.find(p => p.id === programId);
@@ -597,8 +604,8 @@ export function OpportunityDetailsDialog({
                                 </div>
                                 <div className="space-y-2">
                                   {group.items.map(item => (
-                                    <div key={item.id} className="grid grid-cols-12 gap-x-2 gap-y-1 items-end">
-                                      <div className="md:col-span-2 col-span-6 space-y-1">
+                                    <div key={item.id} className="grid grid-cols-1 md:grid-cols-7 gap-x-3 gap-y-2 items-end">
+                                      <div className="md:col-span-2 space-y-1">
                                           <Label className="text-xs">Tipo</Label>
                                           <Select value={item.type} onValueChange={v => handleProposalTypeChange(item.id, v as any)}>
                                               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -612,12 +619,12 @@ export function OpportunityDetailsDialog({
                                               </SelectContent>
                                           </Select>
                                       </div>
-                                      <div className="space-y-1 col-span-3 md:col-span-1"><Label className="text-xs">Cant/Día</Label><Input type="number" value={item.cantidadDia} onChange={e => handleProposalItemChange(item.id, 'cantidadDia', Number(e.target.value))} /></div>
-                                      <div className="space-y-1 col-span-3 md:col-span-1"><Label className="text-xs">Cant/Mes</Label><Input type="number" value={item.cantidadMes} onChange={e => handleProposalItemChange(item.id, 'cantidadMes', Number(e.target.value))} /></div>
-                                      {(item.type === 'spotRadio' || item.type === 'spotTv') && <div className="space-y-1 col-span-3 md:col-span-1"><Label className="text-xs">Seg</Label><Input type="number" value={item.duracionSegundos} onChange={e => handleProposalItemChange(item.id, 'duracionSegundos', Number(e.target.value))} /></div>}
-                                      <div className="space-y-1 col-span-3 md:col-span-2"><Label className="text-xs">Valor Unit.</Label><Input type="number" value={item.valorUnitario} disabled className="bg-gray-100"/></div>
-                                      <div className="space-y-1 col-span-4 md:col-span-2"><Label className="text-xs">Subtotal</Label><Input value={item.subtotal.toLocaleString('es-AR')} disabled className="font-bold bg-gray-100" /></div>
-                                      <div className="col-span-2 md:col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveProposalItem(item.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button></div>
+                                      <div className="space-y-1"><Label className="text-xs">Cant/Día</Label><Input type="number" value={item.cantidadDia} onChange={e => handleProposalItemChange(item.id, 'cantidadDia', Number(e.target.value))} /></div>
+                                      <div className="space-y-1"><Label className="text-xs">Cant/Mes</Label><Input type="number" value={item.cantidadMes} onChange={e => handleProposalItemChange(item.id, 'cantidadMes', Number(e.target.value))} /></div>
+                                      {(item.type === 'spotRadio' || item.type === 'spotTv') && <div className="space-y-1"><Label className="text-xs">Seg</Label><Input type="number" value={item.duracionSegundos} onChange={e => handleProposalItemChange(item.id, 'duracionSegundos', Number(e.target.value))} /></div>}
+                                      <div className={cn("space-y-1", (item.type !== 'spotRadio' && item.type !== 'spotTv') && "md:col-start-5")}><Label className="text-xs">Valor Unit.</Label><Input type="number" value={item.valorUnitario} disabled className="bg-gray-100"/></div>
+                                      <div className="space-y-1"><Label className="text-xs">Subtotal</Label><Input value={item.subtotal.toLocaleString('es-AR')} disabled className="font-bold bg-gray-100" /></div>
+                                      <div className="flex justify-end"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveProposalItem(item.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button></div>
                                     </div>
                                   ))}
                                 </div>
@@ -810,80 +817,6 @@ export function OpportunityDetailsDialog({
                 </div>
           </TabsContent>
           
-          <TabsContent value="billing" className="py-4">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h4 className="font-medium">Facturas</h4>
-                  <Button size="sm" onClick={handleAddInvoice} disabled={!opportunity}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Añadir Factura
-                  </Button>
-                </div>
-                 <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Nº Factura</TableHead>
-                            <TableHead>Fecha</TableHead>
-                            <TableHead>Monto</TableHead>
-                            <TableHead>Estado</TableHead>
-                            <TableHead className="w-[100px] text-right">Acciones</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {invoices.map((invoice) => (
-                        <TableRow key={invoice.id}>
-                            <TableCell>
-                                <Input 
-                                  value={invoice.invoiceNumber || ''} 
-                                  onChange={(e) => handleInvoiceChange(invoice.id, 'invoiceNumber', e.target.value)} 
-                                />
-                            </TableCell>
-                            <TableCell>
-                                <Input 
-                                  type="date"
-                                  value={invoice.date || ''}
-                                  onChange={(e) => handleInvoiceChange(invoice.id, 'date', e.target.value)}
-                                />
-                            </TableCell>
-                            <TableCell>
-                                <Input 
-                                  type="number" 
-                                  value={invoice.amount || ''} 
-                                  onChange={(e) => handleInvoiceChange(invoice.id, 'amount', Number(e.target.value))} 
-                                />
-                            </TableCell>
-                            <TableCell>
-                                <Select 
-                                    value={invoice.status} 
-                                    onValueChange={(value) => handleInvoiceChange(invoice.id, 'status', value as InvoiceStatus)}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {invoiceStatusOptions.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </TableCell>
-                             <TableCell className="text-right">
-                                <Button variant="ghost" size="icon" onClick={() => handleInvoiceUpdate(invoice.id)}>
-                                  <Save className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={() => handleInvoiceDelete(invoice.id)}>
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                            </TableCell>
-                        </TableRow>
-                        ))}
-                         {invoices.length === 0 && (
-                            <TableRow>
-                                <TableCell colSpan={5} className="text-center h-24">No hay facturas para esta oportunidad.</TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-              </div>
-          </TabsContent>
         </Tabs>
         </div>
         <DialogFooter>
