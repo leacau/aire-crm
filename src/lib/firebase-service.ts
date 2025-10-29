@@ -395,7 +395,7 @@ export const updateCommercialItem = async (itemId: string, itemData: Partial<Omi
 }
 
 export const deleteCommercialItem = async (itemIds: string[], userId: string, userName: string): Promise<void> => {
-    if (itemIds.length === 0) return;
+    if (!itemIds || itemIds.length === 0) return;
     const batch = writeBatch(db);
 
     const firstItemRef = doc(db, 'commercial_items', itemIds[0]);

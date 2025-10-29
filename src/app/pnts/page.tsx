@@ -41,15 +41,17 @@ const PntItemRow: React.FC<PntItemRowProps> = ({ item, onClick }) => {
       )}
       onClick={() => onClick(item)}
     >
-      {isRead && <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />}
-      {!isRead && <Icon className="h-5 w-5 text-primary flex-shrink-0" />}
-      <div className="flex-1 space-y-1 overflow-hidden">
-        <p className={cn("font-semibold leading-none truncate", isRead && "line-through")}>
-            {item.title || item.description}
-        </p>
-        <div className="flex items-center gap-4 text-xs">
-          <p>{item.type}</p>
-          {item.clientName && <p className="text-muted-foreground truncate">Cliente: {item.clientName}</p>}
+      <div className='flex items-center gap-2 flex-1 min-w-0'>
+        {isRead && <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />}
+        {!isRead && <Icon className="h-5 w-5 text-primary flex-shrink-0" />}
+        <div className="flex-1 space-y-1 overflow-hidden">
+          <p className={cn("font-semibold leading-none truncate", isRead && "line-through")}>
+              {item.title || item.description}
+          </p>
+          <div className="flex items-center gap-4 text-xs">
+            <p>{item.type}</p>
+            {item.clientName && <p className="text-muted-foreground truncate">Cliente: {item.clientName}</p>}
+          </div>
         </div>
       </div>
        {isRead && item.pntReadAt && (
@@ -174,10 +176,9 @@ export default function PntsPage() {
             }
         }
         
-        if (idsToDelete.length > 0) {
-            await deleteCommercialItem(idsToDelete, userInfo.id, userInfo.name);
-            toast({ title: `Se eliminaron ${idsToDelete.length} elemento(s)` });
-        }
+        await deleteCommercialItem(idsToDelete, userInfo.id, userInfo.name);
+        
+        toast({ title: `Se eliminaron ${idsToDelete.length} elemento(s)` });
         
         setIsDeleteItemDialogOpen(false);
         setItemToDelete(null);
