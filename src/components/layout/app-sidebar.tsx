@@ -34,6 +34,7 @@ const menuItems = [
   { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, roles: ['Jefe', 'Gerencia'] },
   { href: '/activity', label: 'Actividad', icon: LayoutList, roles: ['Jefe', 'Gerencia'] },
   { href: '/team', label: 'Equipo', icon: Users, roles: ['Jefe', 'Gerencia'] },
+  { href: '/rates', label: 'Tarifas', icon: Banknote, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion']},
   { href: '/reports', label: 'Reportes', icon: BarChart, roles: ['Jefe', 'Gerencia'] },
   { href: '/import', label: 'Importar', icon: Upload, roles: ['Jefe', 'Gerencia', 'Administracion'] },
 ];
@@ -47,6 +48,7 @@ function MenuLink({ item }: { item: typeof menuItems[0] }) {
     // Exact match for /billing, otherwise prefix match
     if (href === '/billing') return pathname === '/billing';
     if (href === '/invoices') return pathname === '/invoices';
+    if (href === '/rates') return pathname === '/rates';
     return pathname.startsWith(href) && href !== '/';
   };
 
