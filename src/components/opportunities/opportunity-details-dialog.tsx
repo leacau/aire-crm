@@ -158,6 +158,7 @@ export function OpportunityDetailsDialog({
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isOrdenPautadoFormOpen, setIsOrdenPautadoFormOpen] = useState(false);
+  const isEditing = !!opportunity;
   
   const getInitialData = () => {
       if (opportunity) {
