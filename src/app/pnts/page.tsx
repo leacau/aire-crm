@@ -6,7 +6,7 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import type { Program, CommercialItem, Client, User } from '@/lib/types';
+import type { Program, CommercialItem, Client } from '@/lib/types';
 import { getPrograms, getCommercialItems, updateCommercialItem, createCommercialItem, getClients, deleteCommercialItem, getCommercialItemsBySeries } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { format, startOfToday, addDays } from 'date-fns';
@@ -18,6 +18,9 @@ import { PntAuspicioFormDialog } from '@/components/pnts/pnt-auspicio-form-dialo
 import { PntAuspicioDetailsDialog } from '@/components/pnts/pnt-auspicio-details-dialog';
 import { DeleteItemDialog } from '@/components/grilla/delete-item-dialog';
 import Link from 'next/link';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PntViewByProgram } from '@/components/pnts/pnt-view-by-program';
+
 
 interface PntItemRowProps {
   item: CommercialItem;
@@ -133,10 +136,11 @@ export default function PntsPage() {
     setSelectedItem(prev => prev ? { ...prev, pntRead: isRead, pntReadAt: isRead ? new Date().toISOString() : undefined } : null);
 
     try {
+      if (!userInfo) throw new Error("Usuario no autenticado");
       await updateCommercialItem(item.id, {
         pntRead: isRead,
         pntReadAt: isRead ? new Date().toISOString() : undefined,
-      }, userInfo!.id, userInfo!.name);
+      }, userInfo.id, userInfo.name);
     } catch (error) {
       console.error("Error updating PNT status:", error);
       toast({ title: "Error al actualizar estado", variant: "destructive", description: (error as Error).message });
@@ -246,58 +250,77 @@ export default function PntsPage() {
             </div>
         </Header>
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-            {loading ? (
-                <div className="flex justify-center items-center h-64">
-                    <Spinner size="large" />
-                </div>
-            ) : programsForToday.length > 0 ? (
-                <div className="w-full space-y-4">
-                    {programsForToday.map(program => (
-                        <Collapsible key={program.id} defaultOpen={true} className="border rounded-lg">
-                           <CollapsibleTrigger asChild>
-                             <div className={cn("flex w-full cursor-pointer items-center justify-between rounded-t-lg p-4 text-left group", program.color)}>
-                               <div className="flex-1 flex items-center gap-2">
-                                  <Link href={`/grilla/${program.id}`} onClick={(e) => e.stopPropagation()}>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 bg-black/10 hover:bg-black/20 text-white">
-                                      <InfoIcon className="h-5 w-5" />
-                                    </Button>
-                                  </Link>
-                                  <div className="flex-1">
-                                      <h3 className="font-bold text-lg">{program.name}</h3>
-                                      <p className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</p>
-                                  </div>
-                                </div>
-                                <ChevronDown className="h-5 w-5 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                              </div>
-                           </CollapsibleTrigger>
-                           <CollapsibleContent>
-                               <div className="border-t">
-                                   <div className="p-4 space-y-3">
-                                   {program.items.length > 0 ? (
-                                       program.items.map(item => (
-                                         <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />
-                                       ))
-                                   ) : (
-                                       <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
-                                   )}
-                                   </div>
-                                   <div className="flex justify-center p-3 border-t">
-                                     <Button variant="outline" size="sm" onClick={() => openFormModal(program.id)}>
-                                         <PlusCircle className="mr-2 h-4 w-4" />
-                                         Nuevo
-                                     </Button>
-                                   </div>
-                               </div>
-                           </CollapsibleContent>
-                        </Collapsible>
-                    ))}
-                </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center p-8 border-2 border-dashed rounded-lg">
-                 <h3 className="text-xl font-semibold">No hay programas para hoy</h3>
-                 <p className="text-muted-foreground mt-2">La grilla de programas para el día de hoy está vacía.</p>
-              </div>
-            )}
+            <Tabs defaultValue="by-program">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="by-program">Vista por Programa</TabsTrigger>
+                    <TabsTrigger value="general">Vista General del Día</TabsTrigger>
+                </TabsList>
+                <TabsContent value="by-program">
+                    {loading ? (
+                         <div className="flex justify-center items-center h-64"><Spinner size="large" /></div>
+                    ) : (
+                        <PntViewByProgram
+                            programs={programsForToday}
+                            onItemClick={openDetailsModal}
+                            onAddItemClick={openFormModal}
+                        />
+                    )}
+                </TabsContent>
+                <TabsContent value="general">
+                    {loading ? (
+                        <div className="flex justify-center items-center h-64">
+                            <Spinner size="large" />
+                        </div>
+                    ) : programsForToday.length > 0 ? (
+                        <div className="w-full space-y-4">
+                            {programsForToday.map(program => (
+                                <Collapsible key={program.id} defaultOpen={true} className="border rounded-lg">
+                                <CollapsibleTrigger asChild>
+                                    <div className={cn("flex w-full cursor-pointer items-center justify-between rounded-t-lg p-4 text-left group", program.color)}>
+                                    <div className="flex-1 flex items-center gap-2">
+                                        <Link href={`/grilla/${program.id}`} onClick={(e) => e.stopPropagation()}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 bg-black/10 hover:bg-black/20 text-white">
+                                            <InfoIcon className="h-5 w-5" />
+                                            </Button>
+                                        </Link>
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-lg">{program.name}</h3>
+                                            <p className="font-normal text-sm">({program.schedule.startTime} - {program.schedule.endTime})</p>
+                                        </div>
+                                    </div>
+                                    <ChevronDown className="h-5 w-5 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                    </div>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                    <div className="border-t">
+                                        <div className="p-4 space-y-3">
+                                        {program.items.length > 0 ? (
+                                            program.items.map(item => (
+                                            <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />
+                                            ))
+                                        ) : (
+                                            <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
+                                        )}
+                                        </div>
+                                        <div className="flex justify-center p-3 border-t">
+                                        <Button variant="outline" size="sm" onClick={() => openFormModal(program.id)}>
+                                            <PlusCircle className="mr-2 h-4 w-4" />
+                                            Nuevo
+                                        </Button>
+                                        </div>
+                                    </div>
+                                </CollapsibleContent>
+                                </Collapsible>
+                            ))}
+                        </div>
+                    ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-8 border-2 border-dashed rounded-lg">
+                        <h3 className="text-xl font-semibold">No hay programas para hoy</h3>
+                        <p className="text-muted-foreground mt-2">La grilla de programas para el día de hoy está vacía.</p>
+                    </div>
+                    )}
+                </TabsContent>
+            </Tabs>
         </main>
       </div>
 
