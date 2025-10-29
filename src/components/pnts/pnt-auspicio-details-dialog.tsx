@@ -56,6 +56,7 @@ export function PntAuspicioDetailsDialog({
   };
 
   const sizeClasses = ['text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl'];
+  const displayTitle = item.type === 'Auspicio' && item.bloque ? `${item.bloque} - ${item.title}` : item.title;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -63,7 +64,7 @@ export function PntAuspicioDetailsDialog({
         <DialogHeader>
             <div className="flex justify-between items-start">
                 <div className="flex-1">
-                    <DialogTitle>{item.title}</DialogTitle>
+                    <DialogTitle>{displayTitle}</DialogTitle>
                     <DialogDescription>
                         {item.type} para el programa. {item.clientName && `Cliente: ${item.clientName}`}
                     </DialogDescription>
@@ -80,7 +81,7 @@ export function PntAuspicioDetailsDialog({
         </DialogHeader>
         <div className="flex-1 grid gap-4 py-4 overflow-y-auto pr-4">
           
-          {item.bloque && (
+          {item.type === 'Auspicio' && item.bloque && (
             <div className="space-y-1">
               <Label className="font-semibold text-primary">Sección / Bloque</Label>
               <p className="text-base p-2 bg-muted rounded-md">{item.bloque}</p>

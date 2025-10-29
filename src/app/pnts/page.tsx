@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format, startOfToday, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { CheckCircle, PlusCircle, ArrowLeft, ArrowRight, Mic, Star, FileText, InfoIcon, ChevronDown } from 'lucide-react';
+import { CheckCircle, PlusCircle, ArrowLeft, ArrowRight, Mic, Star, FileText, InfoIcon, ChevronDown, Group } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { PntAuspicioFormDialog } from '@/components/pnts/pnt-auspicio-form-dialog';
 import { PntAuspicioDetailsDialog } from '@/components/pnts/pnt-auspicio-details-dialog';
@@ -203,14 +203,26 @@ export default function PntsPage() {
               }
               return 0;
           });
+        
+        const auspicios = programPnts.filter(item => item.type === 'Auspicio');
+        const otros = programPnts.filter(item => item.type !== 'Auspicio');
+
+        const auspiciosPorBloque = auspicios.reduce((acc, item) => {
+            const bloque = item.bloque || 'General';
+            if (!acc[bloque]) acc[bloque] = [];
+            acc[bloque].push(item);
+            return acc;
+        }, {} as Record<string, CommercialItem[]>);
+
 
         return {
           ...program,
           schedule: scheduleForDay,
-          items: programPnts,
+          items: otros,
+          auspicios: auspiciosPorBloque,
         };
       })
-      .filter((p): p is Program & { schedule: NonNullable<Program['schedules'][0]>, items: CommercialItem[] } => p !== null)
+      .filter((p): p is Program & { schedule: NonNullable<Program['schedules'][0]>, items: CommercialItem[], auspicios: Record<string, CommercialItem[]> } => p !== null)
       .sort((a, b) => a!.schedule.startTime.localeCompare(b!.schedule.startTime));
   }, [programs, pnts, dayOfWeek]);
 
@@ -294,12 +306,23 @@ export default function PntsPage() {
                                 <CollapsibleContent>
                                     <div className="border-t">
                                         <div className="p-4 space-y-3">
-                                        {program.items.length > 0 ? (
-                                            program.items.map(item => (
-                                            <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />
-                                            ))
+                                        {Object.keys(program.auspicios).length === 0 && program.items.length === 0 ? (
+                                             <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
                                         ) : (
-                                            <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
+                                            <>
+                                            {Object.entries(program.auspicios).map(([bloque, items]) => (
+                                                <div key={bloque} className="space-y-2">
+                                                    <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Group className="h-4 w-4"/> Bloque: {bloque}</h4>
+                                                    {items.map(item => <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />)}
+                                                </div>
+                                            ))}
+                                            {program.items.length > 0 && (
+                                                <div className="space-y-2 pt-2">
+                                                    {Object.keys(program.auspicios).length > 0 && <h4 className="font-semibold text-sm text-muted-foreground">Otros</h4>}
+                                                    {program.items.map(item => <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />)}
+                                                </div>
+                                            )}
+                                            </>
                                         )}
                                         </div>
                                         <div className="flex justify-center p-3 border-t">
