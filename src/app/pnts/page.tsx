@@ -52,6 +52,11 @@ const PntItemRow: React.FC<PntItemRowProps> = ({ item, onClick }) => {
           {item.clientName && <p className="text-muted-foreground truncate">Cliente: {item.clientName}</p>}
         </div>
       </div>
+       {isRead && item.pntReadAt && (
+        <p className="text-xs text-muted-foreground whitespace-nowrap">
+          {format(new Date(item.pntReadAt), 'HH:mm')}hs
+        </p>
+      )}
     </div>
   );
 };
@@ -140,6 +145,8 @@ export default function PntsPage() {
       await updateCommercialItem(item.id, {
         pntRead: isRead,
         pntReadAt: isRead ? new Date().toISOString() : undefined,
+        updatedBy: userInfo.id,
+        updatedAt: new Date().toISOString(),
       }, userInfo.id, userInfo.name);
     } catch (error) {
       console.error("Error updating PNT status:", error);
@@ -183,7 +190,6 @@ export default function PntsPage() {
   
   const openDeleteItemDialog = (item: CommercialItem) => {
     setItemToDelete(item);
-    setIsDeleteItemDialogOpen(true);
     setIsDetailsOpen(false); // Close details dialog when delete dialog opens
   };
 
@@ -205,7 +211,8 @@ export default function PntsPage() {
           });
         
         const auspicios = programPnts.filter(item => item.type === 'Auspicio');
-        const otros = programPnts.filter(item => item.type !== 'Auspicio');
+        const notas = programPnts.filter(item => item.type === 'Nota');
+        const otrosPnts = programPnts.filter(item => item.type === 'PNT');
 
         const auspiciosPorBloque = auspicios.reduce((acc, item) => {
             const bloque = item.bloque || 'General';
@@ -218,11 +225,12 @@ export default function PntsPage() {
         return {
           ...program,
           schedule: scheduleForDay,
-          items: otros,
+          pnts: otrosPnts,
+          notas: notas,
           auspicios: auspiciosPorBloque,
         };
       })
-      .filter((p): p is Program & { schedule: NonNullable<Program['schedules'][0]>, items: CommercialItem[], auspicios: Record<string, CommercialItem[]> } => p !== null)
+      .filter((p): p is Program & { schedule: NonNullable<Program['schedules'][0]>, pnts: CommercialItem[], notas: CommercialItem[], auspicios: Record<string, CommercialItem[]> } => p !== null)
       .sort((a, b) => a!.schedule.startTime.localeCompare(b!.schedule.startTime));
   }, [programs, pnts, dayOfWeek]);
 
@@ -306,20 +314,26 @@ export default function PntsPage() {
                                 <CollapsibleContent>
                                     <div className="border-t">
                                         <div className="p-4 space-y-3">
-                                        {Object.keys(program.auspicios).length === 0 && program.items.length === 0 ? (
+                                        {Object.keys(program.auspicios).length === 0 && program.notas.length === 0 && program.pnts.length === 0 ? (
                                              <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
                                         ) : (
                                             <>
                                             {Object.entries(program.auspicios).map(([bloque, items]) => (
                                                 <div key={bloque} className="space-y-2">
-                                                    <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Group className="h-4 w-4"/> Bloque: {bloque}</h4>
+                                                    <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Group className="h-4 w-4"/> Auspicios: {bloque}</h4>
                                                     {items.map(item => <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />)}
                                                 </div>
                                             ))}
-                                            {program.items.length > 0 && (
+                                            {program.notas.length > 0 && (
                                                 <div className="space-y-2 pt-2">
-                                                    {Object.keys(program.auspicios).length > 0 && <h4 className="font-semibold text-sm text-muted-foreground">Otros</h4>}
-                                                    {program.items.map(item => <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />)}
+                                                    <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><FileText className="h-4 w-4"/> Notas</h4>
+                                                    {program.notas.map(item => <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />)}
+                                                </div>
+                                            )}
+                                            {program.pnts.length > 0 && (
+                                                <div className="space-y-2 pt-2">
+                                                    <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Mic className="h-4 w-4"/> PNTs</h4>
+                                                    {program.pnts.map(item => <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />)}
                                                 </div>
                                             )}
                                             </>

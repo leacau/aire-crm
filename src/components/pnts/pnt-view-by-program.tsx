@@ -8,9 +8,10 @@ import type { Program, CommercialItem } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { CheckCircle, Mic, Star, FileText, PlusCircle, Group } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { format } from 'date-fns';
 
 interface PntViewByProgramProps {
-    programs: (Program & { items: CommercialItem[], auspicios: Record<string, CommercialItem[]> })[];
+    programs: (Program & { pnts: CommercialItem[], notas: CommercialItem[], auspicios: Record<string, CommercialItem[]> })[];
     onItemClick: (item: CommercialItem) => void;
     onAddItemClick: (programId: string) => void;
 }
@@ -45,6 +46,11 @@ const PntItemRow: React.FC<PntItemRowProps> = ({ item, onClick }) => {
           {item.clientName && <p className="text-muted-foreground truncate">Cliente: {item.clientName}</p>}
         </div>
       </div>
+        {isRead && item.pntReadAt && (
+            <p className="text-xs text-muted-foreground whitespace-nowrap">
+            {format(new Date(item.pntReadAt), 'HH:mm')}hs
+            </p>
+        )}
     </div>
   );
 };
@@ -75,20 +81,26 @@ export function PntViewByProgram({ programs, onItemClick, onAddItemClick }: PntV
                         <CardTitle>{selectedProgram.name}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                         {Object.keys(selectedProgram.auspicios).length === 0 && selectedProgram.items.length === 0 ? (
+                         {Object.keys(selectedProgram.auspicios).length === 0 && selectedProgram.notas.length === 0 && selectedProgram.pnts.length === 0 ? (
                              <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
                         ) : (
                             <>
                             {Object.entries(selectedProgram.auspicios).map(([bloque, items]) => (
                                 <div key={bloque} className="space-y-2">
-                                    <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Group className="h-4 w-4"/> Bloque: {bloque}</h4>
+                                    <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Group className="h-4 w-4"/> Auspicios: {bloque}</h4>
                                     {items.map(item => <PntItemRow key={item.id} item={item} onClick={onItemClick} />)}
                                 </div>
                             ))}
-                            {selectedProgram.items.length > 0 && (
+                             {selectedProgram.notas.length > 0 && (
                                 <div className="space-y-2 pt-2">
-                                    {Object.keys(selectedProgram.auspicios).length > 0 && <h4 className="font-semibold text-sm text-muted-foreground">Otros</h4>}
-                                    {selectedProgram.items.map(item => <PntItemRow key={item.id} item={item} onClick={onItemClick} />)}
+                                    <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><FileText className="h-4 w-4"/> Notas</h4>
+                                    {selectedProgram.notas.map(item => <PntItemRow key={item.id} item={item} onClick={onItemClick} />)}
+                                </div>
+                            )}
+                            {selectedProgram.pnts.length > 0 && (
+                                <div className="space-y-2 pt-2">
+                                     <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Mic className="h-4 w-4"/> PNTs</h4>
+                                    {selectedProgram.pnts.map(item => <PntItemRow key={item.id} item={item} onClick={onItemClick} />)}
                                 </div>
                             )}
                             </>
