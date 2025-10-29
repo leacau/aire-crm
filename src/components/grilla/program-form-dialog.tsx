@@ -19,6 +19,7 @@ import type { Program, ProgramSchedule, ProgramRates } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, Trash2 } from 'lucide-react';
 import { Textarea } from '../ui/textarea';
+import { useAuth } from '@/hooks/use-auth';
 
 interface ProgramFormDialogProps {
   isOpen: boolean;
@@ -47,6 +48,7 @@ const rateFields: { key: keyof ProgramRates; label: string }[] = [
 ];
 
 export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: ProgramFormDialogProps) {
+  const { userInfo } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [schedules, setSchedules] = useState<ProgramSchedule[]>([]);
@@ -57,6 +59,7 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
   const { toast } = useToast();
 
   const isEditing = !!program;
+  const canEditRates = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia';
 
   useEffect(() => {
     if (isOpen) {
@@ -179,8 +182,8 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
                 </Button>
             </div>
             
-             <div className="space-y-4">
-                <Label>Tarifas del Programa</Label>
+             <fieldset disabled={!canEditRates} className="space-y-4">
+                <legend className="font-semibold px-1 text-sm text-muted-foreground">{`Tarifas ${!canEditRates ? '(Solo Jefes/Gerentes)' : ''}`}</legend>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-3 border rounded-md">
                     {rateFields.map(field => (
                         <div key={field.key} className="space-y-1">
@@ -194,7 +197,7 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
                         </div>
                     ))}
                 </div>
-            </div>
+            </fieldset>
 
              <div className="space-y-2">
                 <Label htmlFor="conductores">Conductor(es)</Label>
