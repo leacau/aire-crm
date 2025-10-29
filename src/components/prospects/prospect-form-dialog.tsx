@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -20,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
-type ProspectFormData = Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'>;
+type ProspectFormData = Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName' | 'statusChangedAt'>;
 
 interface ProspectFormDialogProps {
   isOpen: boolean;
@@ -83,6 +84,8 @@ export function ProspectFormDialog({
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const filteredStatusOptions = prospectStatusOptions.filter(status => status !== 'Convertido' && status !== 'No Próspero');
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -114,7 +117,7 @@ export function ProspectFormDialog({
             <Select value={formData.status} onValueChange={(value: ProspectStatus) => setFormData(p => ({...p, status: value}))}>
               <SelectTrigger className="col-span-3"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {prospectStatusOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                {filteredStatusOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

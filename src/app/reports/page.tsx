@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, Suspense, useEffect } from 'react';
@@ -14,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getAllUsers } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
 import { ActiveClientsReport } from '@/components/reports/active-clients-report';
+import { ProspectsPerformanceReport } from '@/components/reports/prospects-performance-report';
 import { startOfMonth, endOfMonth } from 'date-fns';
 
 
@@ -74,6 +76,7 @@ export default function ReportsPage() {
           )}
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
+        <ProspectsPerformanceReport selectedAdvisor={selectedAdvisor} />
         <ActiveClientsReport selectedAdvisor={selectedAdvisor} />
         <Card>
             <CardHeader>

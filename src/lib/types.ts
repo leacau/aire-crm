@@ -1,5 +1,6 @@
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -134,7 +135,7 @@ export type Client = {
   deactivationHistory?: string[];
 };
 
-export const prospectStatusOptions = ['Nuevo', 'Contactado', 'Calificado', 'No Calificado', 'Convertido'] as const;
+export const prospectStatusOptions = ['Nuevo', 'Contactado', 'Calificado', 'No Próspero', 'Convertido'] as const;
 export type ProspectStatus = typeof prospectStatusOptions[number];
 
 export type Prospect = {
@@ -148,6 +149,7 @@ export type Prospect = {
   ownerId: string;
   ownerName: string;
   createdAt: string;
+  statusChangedAt?: string;
 };
 
 export type Agency = {

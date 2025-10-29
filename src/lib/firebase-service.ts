@@ -1,5 +1,6 @@
 
 
+
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus } from './types';
@@ -26,10 +27,12 @@ export const getProspects = async (): Promise<Prospect[]> => {
     const snapshot = await getDocs(query(prospectsCollection, orderBy("createdAt", "desc")));
     return snapshot.docs.map(doc => {
       const data = doc.data();
+      const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
       return { 
           id: doc.id,
           ...data,
-          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+          createdAt: convertTimestamp(data.createdAt),
+          statusChangedAt: convertTimestamp(data.statusChangedAt),
       } as Prospect
     });
 };

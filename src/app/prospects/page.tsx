@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, UserPlus, MoreHorizontal, Trash2 } from 'lucide-react';
+import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Prospect, User, Client } from '@/lib/types';
@@ -16,13 +16,13 @@ import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { ProspectFormDialog } from '@/components/prospects/prospect-form-dialog';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 
 export default function ProspectsPage() {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
@@ -39,10 +39,10 @@ export default function ProspectsPage() {
   const [prospectToConvert, setProspectToConvert] = useState<Prospect | null>(null);
   
   const [prospectToDelete, setProspectToDelete] = useState<Prospect | null>(null);
+  const [prospectToArchive, setProspectToArchive] = useState<Prospect | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
-  const [hideConverted, setHideConverted] = useState(true);
 
   const fetchData = useCallback(async () => {
     if (!userInfo) return;
@@ -113,7 +113,7 @@ export default function ProspectsPage() {
   const handleClientCreatedFromProspect = async () => {
     if (prospectToConvert && userInfo) {
       try {
-        await updateProspect(prospectToConvert.id, { status: 'Convertido' }, userInfo.id, userInfo.name);
+        await updateProspect(prospectToConvert.id, { status: 'Convertido', statusChangedAt: new Date().toISOString() }, userInfo.id, userInfo.name);
         toast({ title: "Prospecto Convertido", description: `${prospectToConvert.companyName} ahora es un cliente.`});
         fetchData();
       } catch (error) {
@@ -125,6 +125,21 @@ export default function ProspectsPage() {
       }
     }
   };
+
+  const handleArchiveProspect = async () => {
+    if (!prospectToArchive || !userInfo) return;
+    try {
+      await updateProspect(prospectToArchive.id, { status: 'No Próspero', statusChangedAt: new Date().toISOString() }, userInfo.id, userInfo.name);
+      toast({ title: "Prospecto Archivado" });
+      fetchData();
+    } catch (error) {
+      console.error("Error archiving prospect:", error);
+      toast({ title: "Error al archivar", variant: "destructive" });
+    } finally {
+      setProspectToArchive(null);
+    }
+  };
+
 
   const advisorsWithProspects = useMemo(() => {
     if (!isBoss) return [];
@@ -142,12 +157,12 @@ export default function ProspectsPage() {
       userProspects = prospects.filter(p => p.ownerId === selectedAdvisor);
     }
     
-    if (hideConverted) {
-      userProspects = userProspects.filter(p => p.status !== 'Convertido');
-    }
-
-    return userProspects;
-  }, [prospects, userInfo, isBoss, selectedAdvisor, hideConverted]);
+    return {
+      active: userProspects.filter(p => p.status !== 'Convertido' && p.status !== 'No Próspero'),
+      notProsperous: userProspects.filter(p => p.status === 'No Próspero'),
+      converted: userProspects.filter(p => p.status === 'Convertido'),
+    };
+  }, [prospects, userInfo, isBoss, selectedAdvisor]);
 
 
   const columns = useMemo<ColumnDef<Prospect>[]>(() => [
@@ -186,14 +201,16 @@ export default function ProspectsPage() {
       cell: ({ row }) => {
         const prospect = row.original;
         const canEdit = isBoss || userInfo?.id === prospect.ownerId;
-        if (!canEdit || prospect.status === 'Convertido') return null;
+        if (!canEdit) return null;
 
         return (
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleConvertProspect(prospect); }}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Convertir a Cliente
-            </Button>
+            {prospect.status !== 'Convertido' && (
+               <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleConvertProspect(prospect); }}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Convertir a Cliente
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
@@ -202,9 +219,18 @@ export default function ProspectsPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenForm(prospect); }}>
-                  Editar
-                </DropdownMenuItem>
+                {prospect.status !== 'Convertido' &&
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenForm(prospect); }}>
+                    Editar
+                  </DropdownMenuItem>
+                }
+                {prospect.status !== 'No Próspero' && prospect.status !== 'Convertido' &&
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setProspectToArchive(prospect); }}>
+                        <FolderX className="mr-2 h-4 w-4" />
+                        Marcar como No Próspero
+                    </DropdownMenuItem>
+                }
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive"
                   onClick={(e) => { e.stopPropagation(); setProspectToDelete(prospect); }}
@@ -241,30 +267,50 @@ export default function ProspectsPage() {
               </SelectContent>
             </Select>
           )}
-           <div className="flex items-center space-x-2">
-            <Checkbox id="hide-converted" checked={hideConverted} onCheckedChange={(checked) => setHideConverted(!!checked)} />
-            <Label htmlFor="hide-converted" className="whitespace-nowrap text-sm font-medium">Ocultar Convertidos</Label>
-        </div>
           <Button onClick={() => handleOpenForm()}>
             <PlusCircle className="mr-2" />
             Nuevo Prospecto
           </Button>
         </Header>
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-          <ResizableDataTable
-            columns={columns}
-            data={filteredProspects}
-            sorting={sorting}
-            setSorting={setSorting}
-            onRowClick={(prospect) => {
-              if ((isBoss || userInfo?.id === prospect.ownerId) && prospect.status !== 'Convertido') {
-                handleOpenForm(prospect);
-              }
-            }}
-            getRowId={(row) => row.id}
-            enableRowResizing={false}
-            emptyStateMessage="No se encontraron prospectos."
-          />
+            <Tabs defaultValue="active">
+                <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="active">Activos ({filteredProspects.active.length})</TabsTrigger>
+                    <TabsTrigger value="not-prosperous">No Prósperos ({filteredProspects.notProsperous.length})</TabsTrigger>
+                    <TabsTrigger value="converted">Convertidos ({filteredProspects.converted.length})</TabsTrigger>
+                </TabsList>
+                <TabsContent value="active">
+                    <ResizableDataTable
+                        columns={columns}
+                        data={filteredProspects.active}
+                        sorting={sorting}
+                        setSorting={setSorting}
+                        onRowClick={(prospect) => handleOpenForm(prospect)}
+                        getRowId={(row) => row.id}
+                        enableRowResizing={false}
+                        emptyStateMessage="No se encontraron prospectos activos."
+                    />
+                </TabsContent>
+                <TabsContent value="not-prosperous">
+                     <ResizableDataTable
+                        columns={columns}
+                        data={filteredProspects.notProsperous}
+                        onRowClick={(prospect) => handleOpenForm(prospect)}
+                        getRowId={(row) => row.id}
+                        enableRowResizing={false}
+                        emptyStateMessage="No hay prospectos en esta categoría."
+                    />
+                </TabsContent>
+                 <TabsContent value="converted">
+                     <ResizableDataTable
+                        columns={columns}
+                        data={filteredProspects.converted}
+                        getRowId={(row) => row.id}
+                        enableRowResizing={false}
+                        emptyStateMessage="No hay prospectos convertidos."
+                    />
+                </TabsContent>
+            </Tabs>
         </main>
       </div>
 
@@ -305,6 +351,23 @@ export default function ProspectsPage() {
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
                 <AlertDialogAction onClick={handleDeleteProspect} variant="destructive">
                     Eliminar
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+       <AlertDialog open={!!prospectToArchive} onOpenChange={(open) => !open && setProspectToArchive(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>¿Marcar como "No Próspero"?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Se moverá a "{prospectToArchive?.companyName}" a la pestaña de "No Prósperos". Podrás reactivarlo o convertirlo en cliente más adelante.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleArchiveProspect}>
+                    Confirmar
                 </AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
