@@ -6,11 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { Program, CommercialItem } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { CheckCircle, Mic, Star, FileText, PlusCircle } from 'lucide-react';
+import { CheckCircle, Mic, Star, FileText, PlusCircle, Group } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface PntViewByProgramProps {
-    programs: (Program & { items: CommercialItem[] })[];
+    programs: (Program & { items: CommercialItem[], auspicios: Record<string, CommercialItem[]> })[];
     onItemClick: (item: CommercialItem) => void;
     onAddItemClick: (programId: string) => void;
 }
@@ -75,12 +75,23 @@ export function PntViewByProgram({ programs, onItemClick, onAddItemClick }: PntV
                         <CardTitle>{selectedProgram.name}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                         {selectedProgram.items.length > 0 ? (
-                            selectedProgram.items.map(item => (
-                                <PntItemRow key={item.id} item={item} onClick={onItemClick} />
-                            ))
+                         {Object.keys(selectedProgram.auspicios).length === 0 && selectedProgram.items.length === 0 ? (
+                             <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
                         ) : (
-                            <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
+                            <>
+                            {Object.entries(selectedProgram.auspicios).map(([bloque, items]) => (
+                                <div key={bloque} className="space-y-2">
+                                    <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Group className="h-4 w-4"/> Bloque: {bloque}</h4>
+                                    {items.map(item => <PntItemRow key={item.id} item={item} onClick={onItemClick} />)}
+                                </div>
+                            ))}
+                            {selectedProgram.items.length > 0 && (
+                                <div className="space-y-2 pt-2">
+                                    {Object.keys(selectedProgram.auspicios).length > 0 && <h4 className="font-semibold text-sm text-muted-foreground">Otros</h4>}
+                                    {selectedProgram.items.map(item => <PntItemRow key={item.id} item={item} onClick={onItemClick} />)}
+                                </div>
+                            )}
+                            </>
                         )}
                          <div className="flex justify-center p-3 border-t">
                             <Button variant="outline" size="sm" onClick={() => onAddItemClick(selectedProgram.id)}>
@@ -99,4 +110,3 @@ export function PntViewByProgram({ programs, onItemClick, onAddItemClick }: PntV
         </div>
     );
 }
-
