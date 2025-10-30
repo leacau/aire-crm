@@ -1367,7 +1367,8 @@ export const updateOpportunity = async (
     if (data.agencyId === '' || data.agencyId === undefined) {
         updateData.agencyId = deleteField();
     }
-    // Remove legacy fields on update
+    
+    // Remove legacy 'pautados' field if it exists
     updateData.pautados = deleteField();
 
 
