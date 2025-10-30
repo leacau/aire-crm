@@ -35,6 +35,7 @@ import { findBestMatch } from 'string-similarity';
 import { Badge } from '@/components/ui/badge';
 import { ActivityFormDialog } from '@/components/clients/activity-form-dialog';
 import { cn } from '@/lib/utils';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 
 function ReassignClientDialog({ 
