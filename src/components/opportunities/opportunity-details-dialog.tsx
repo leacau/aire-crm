@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, Invoice, Pautado, InvoiceStatus, ProposalItem, Program } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, Invoice, OrdenPautado, InvoiceStatus, ProposalItem, Program } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { Checkbox } from '../ui/checkbox';
@@ -74,7 +74,6 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     facturaPorAgencia: false,
     formaDePago: [],
     fechaFacturacion: '',
-    pautados: [],
     proposalFiles: [],
     ordenesPautado: [],
     proposalItems: [],
@@ -161,7 +160,6 @@ export function OpportunityDetailsDialog({
   const getInitialData = () => {
       if (opportunity) {
         const data = { ...opportunity };
-        if (!data.pautados) data.pautados = [];
         if (!data.proposalItems) data.proposalItems = [];
         return data;
       }
@@ -480,26 +478,6 @@ export function OpportunityDetailsDialog({
       });
   };
   
-  const addPautado = () => {
-    const newPautado: Pautado = {
-        id: `pautado-${Date.now()}`,
-        fechaInicio: new Date().toISOString().split('T')[0],
-        fechaFin: new Date().toISOString().split('T')[0],
-    };
-    setEditedOpportunity(prev => ({ ...prev, pautados: [...(prev.pautados || []), newPautado] }));
-  };
-
-  const removePautado = (id: string) => {
-    setEditedOpportunity(prev => ({ ...prev, pautados: (prev.pautados || []).filter(p => p.id !== id) }));
-  };
-
-  const handlePautadoChange = (id: string, field: 'fechaInicio' | 'fechaFin', value: string) => {
-    setEditedOpportunity(prev => ({
-      ...prev,
-      pautados: (prev.pautados || []).map(p => (p.id === id ? { ...p, [field]: value } : p))
-    }));
-  };
-
   const calculatedValue = (editedOpportunity.proposalItems || []).reduce((acc, item) => acc + item.subtotal, 0);
   
   const proposalItemsByProgram = (editedOpportunity.proposalItems || []).reduce((acc, item) => {
@@ -549,11 +527,10 @@ export function OpportunityDetailsDialog({
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto pr-4 -mr-4">
         <Tabs defaultValue="details">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="details">Detalles</TabsTrigger>
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
             <TabsTrigger value="bonus">Bonificación</TabsTrigger>
-            <TabsTrigger value="pautado">Pautado</TabsTrigger>
             <TabsTrigger value="invoicing">Facturación</TabsTrigger>
           </TabsList>
           
@@ -769,35 +746,6 @@ export function OpportunityDetailsDialog({
                 )}
           </TabsContent>
           
-          <TabsContent value="pautado" className="space-y-4 py-4">
-              <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">Períodos de Pauta</h3>
-                   <Button size="sm" variant="outline" onClick={() => addPautado()}>
-                      <PlusCircle className="mr-2 h-4 w-4"/>Añadir Período
-                  </Button>
-              </div>
-              <div className="space-y-2">
-                  {(editedOpportunity.pautados || []).map((pautado, index) => (
-                      <div key={pautado.id} className="flex items-center gap-2">
-                          <Input type="date" value={pautado.fechaInicio} onChange={(e) => handlePautadoChange(pautado.id, 'fechaInicio', e.target.value)} />
-                          <span>-</span>
-                          <Input type="date" value={pautado.fechaFin} onChange={(e) => handlePautadoChange(pautado.id, 'fechaFin', e.target.value)} />
-                          <Button variant="ghost" size="icon" onClick={() => removePautado(pautado.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
-                      </div>
-                  ))}
-                   {(editedOpportunity.pautados || []).length === 0 && <p className="text-sm text-center text-muted-foreground py-4">No hay períodos de pauta definidos.</p>}
-              </div>
-
-               <div className="flex items-center justify-between mt-6">
-                  <h3 className="font-semibold">Órdenes de Pautado</h3>
-                   <Button size="sm" variant="outline" onClick={() => setIsOrdenPautadoFormOpen(true)}>
-                      <FileText className="mr-2 h-4 w-4"/>Generar Orden
-                  </Button>
-              </div>
-              {/* Aquí se listarán las órdenes generadas */}
-
-          </TabsContent>
-
           <TabsContent value="invoicing" className="space-y-4 py-4">
             <div className="flex items-center justify-between">
                 <h3 className="font-semibold">Facturas Asociadas</h3>

@@ -36,12 +36,6 @@ export type Invoice = {
   datePaid?: string;
 };
 
-export type Pautado = {
-  id: string;
-  fechaInicio: string;
-  fechaFin: string;
-};
-
 export type OrdenPautado = {
     id: string;
     fecha: string;
@@ -88,7 +82,7 @@ export type Opportunity = {
   agencyId?: string;
   formaDePago?: FormaDePago[];
   fechaFacturacion?: string; 
-  pautados?: Pautado[];
+  
   proposalFiles?: ProposalFile[];
   ordenesPautado?: OrdenPautado[];
   
@@ -332,4 +326,11 @@ export type CommercialItem = {
   createdBy?: string;
   updatedBy?: string;
   updatedAt?: string;
+};
+
+// DEPRECATED
+export type Pautado = {
+  id: string;
+  fechaInicio: string;
+  fechaFin: string;
 };

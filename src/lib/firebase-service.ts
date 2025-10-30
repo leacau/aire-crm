@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, Pautado, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format } from 'date-fns';
@@ -1372,34 +1372,6 @@ export const updateOpportunity = async (
 
 
     await updateDoc(docRef, updateData);
-
-    // --- Pautado Calendar Event Logic ---
-    if (data.pautados && accessToken) {
-        const clientSnap = await getDoc(doc(db, 'clients', originalData.clientId));
-        if (clientSnap.exists()) {
-            const clientData = clientSnap.data() as Client;
-            const owner = await getUserProfile(clientData.ownerId);
-
-            if (owner && owner.email) {
-                const newPautados = data.pautados.filter(p => 
-                    !originalData.pautados?.some(op => op.id === p.id && op.fechaFin === p.fechaFin)
-                );
-
-                for (const pautado of newPautados) {
-                    if (pautado.fechaFin) {
-                        try {
-                            const endDate = new Date(pautado.fechaFin);
-                            await createReminderEvent(accessToken, owner.email, clientData.denominacion, originalData.title, endDate);
-                        } catch (e) {
-                            console.error(`Failed to create calendar reminder for pautado ${pautado.id}:`, e);
-                            // Non-fatal, just log the error
-                        }
-                    }
-                }
-            }
-        }
-    }
-
 
     const activityDetails = {
         userId,
