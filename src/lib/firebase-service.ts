@@ -1260,10 +1260,9 @@ export const createOpportunity = async (
     if (dataToSave.agencyId === undefined) {
         delete dataToSave.agencyId;
     }
-     // Remove legacy fields on creation
-    delete dataToSave.fechaInicioPauta;
-    delete dataToSave.fechaFinPauta;
-    delete dataToSave.pagado;
+    // Remove legacy fields on creation
+    delete dataToSave.pautados;
+
 
     const docRef = await addDoc(opportunitiesCollection, {
         ...dataToSave,
@@ -1369,9 +1368,7 @@ export const updateOpportunity = async (
         updateData.agencyId = deleteField();
     }
     // Remove legacy fields on update
-    delete updateData.fechaInicioPauta;
-    delete updateData.fechaFinPauta;
-    delete updateData.pagado;
+    delete updateData.pautados;
 
 
     await updateDoc(docRef, updateData);

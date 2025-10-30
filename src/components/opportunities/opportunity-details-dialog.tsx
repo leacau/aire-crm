@@ -358,23 +358,6 @@ export function OpportunityDetailsDialog({
     }
   }
 
-  const handleAddPautado = () => {
-    const newPautado = {
-        id: `pautado-${Date.now()}`,
-        fechaInicio: '',
-        fechaFin: '',
-    };
-    setEditedOpportunity(prev => ({ ...prev, pautados: [...(prev.pautados || []), newPautado] }));
-  };
-
-  const handlePautadoChange = (id: string, field: 'fechaInicio' | 'fechaFin', value: string) => {
-    setEditedOpportunity(prev => ({ ...prev, pautados: (prev.pautados || []).map(p => p.id === id ? { ...p, [field]: value } : p) }));
-  };
-
-  const handleRemovePautado = (id: string) => {
-    setEditedOpportunity(prev => ({ ...prev, pautados: (prev.pautados || []).filter(p => p.id !== id) }));
-  };
-
   const handleProposalItemChange = (itemId: string, field: keyof ProposalItem, value: any) => {
       setEditedOpportunity(prev => {
           const newItems = (prev.proposalItems || []).map(item => {
@@ -546,11 +529,10 @@ export function OpportunityDetailsDialog({
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto pr-4 -mr-4">
         <Tabs defaultValue="details">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="details">Detalles</TabsTrigger>
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
             <TabsTrigger value="bonus">Bonificación</TabsTrigger>
-            <TabsTrigger value="pautado">Pautado</TabsTrigger>
             <TabsTrigger value="invoicing">Facturación</TabsTrigger>
           </TabsList>
           
@@ -766,28 +748,6 @@ export function OpportunityDetailsDialog({
                 )}
           </TabsContent>
           
-          <TabsContent value="pautado" className="space-y-4 py-4">
-              <h3 className="font-semibold">Períodos de Pauta</h3>
-              <div className="space-y-2">
-                  {(editedOpportunity.pautados || []).map((pautado, index) => (
-                      <div key={pautado.id} className="flex items-end gap-2">
-                          <div className="flex-1 grid grid-cols-2 gap-2">
-                              <div className="space-y-1">
-                                  <Label>Fecha de Inicio</Label>
-                                  <Input type="date" value={pautado.fechaInicio} onChange={e => handlePautadoChange(pautado.id, 'fechaInicio', e.target.value)} />
-                              </div>
-                              <div className="space-y-1">
-                                  <Label>Fecha de Fin</Label>
-                                  <Input type="date" value={pautado.fechaFin} onChange={e => handlePautadoChange(pautado.id, 'fechaFin', e.target.value)} />
-                              </div>
-                          </div>
-                          <Button variant="ghost" size="icon" onClick={() => handleRemovePautado(pautado.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                      </div>
-                  ))}
-              </div>
-              <Button variant="outline" size="sm" onClick={handleAddPautado}><PlusCircle className="mr-2 h-4" /> Añadir Período</Button>
-          </TabsContent>
-
           <TabsContent value="invoicing" className="space-y-4 py-4">
             <div className="flex items-center justify-between">
                 <h3 className="font-semibold">Facturas Asociadas</h3>
