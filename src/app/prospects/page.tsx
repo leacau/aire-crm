@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX } from 'lucide-react';
+import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Prospect, User, Client } from '@/lib/types';
@@ -22,6 +22,7 @@ import { ProspectFormDialog } from '@/components/prospects/prospect-form-dialog'
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
 
 
 export default function ProspectsPage() {
@@ -43,6 +44,7 @@ export default function ProspectsPage() {
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const fetchData = useCallback(async () => {
     if (!userInfo) return;
@@ -148,7 +150,8 @@ export default function ProspectsPage() {
   }, [prospects, users, isBoss]);
 
   const filteredProspects = useMemo(() => {
-    if (!userInfo) return [];
+    if (!userInfo) return { active: [], notProsperous: [], converted: [] };
+
     let userProspects = prospects;
 
     if (!isBoss) {
@@ -157,12 +160,22 @@ export default function ProspectsPage() {
       userProspects = prospects.filter(p => p.ownerId === selectedAdvisor);
     }
     
+    if (searchTerm.length >= 3) {
+      const lowercasedFilter = searchTerm.toLowerCase();
+      userProspects = userProspects.filter(p => 
+        p.companyName.toLowerCase().includes(lowercasedFilter) ||
+        p.contactName?.toLowerCase().includes(lowercasedFilter) ||
+        p.contactPhone?.toLowerCase().includes(lowercasedFilter) ||
+        p.contactEmail?.toLowerCase().includes(lowercasedFilter)
+      );
+    }
+
     return {
       active: userProspects.filter(p => p.status !== 'Convertido' && p.status !== 'No Próspero'),
       notProsperous: userProspects.filter(p => p.status === 'No Próspero'),
       converted: userProspects.filter(p => p.status === 'Convertido'),
     };
-  }, [prospects, userInfo, isBoss, selectedAdvisor]);
+  }, [prospects, userInfo, isBoss, selectedAdvisor, searchTerm]);
 
 
   const columns = useMemo<ColumnDef<Prospect>[]>(() => [
@@ -254,6 +267,16 @@ export default function ProspectsPage() {
     <>
       <div className="flex flex-col h-full">
         <Header title="Prospectos">
+          <div className="relative ml-auto flex-1 md:grow-0">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+                type="search"
+                placeholder="Buscar prospectos..."
+                className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[330px]"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
           {isBoss && (
             <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
               <SelectTrigger className="w-full sm:w-[200px]">
