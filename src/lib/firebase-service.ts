@@ -1368,7 +1368,7 @@ export const updateOpportunity = async (
         updateData.agencyId = deleteField();
     }
     // Remove legacy fields on update
-    delete updateData.pautados;
+    updateData.pautados = deleteField();
 
 
     await updateDoc(docRef, updateData);

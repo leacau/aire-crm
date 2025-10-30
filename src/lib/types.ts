@@ -327,10 +327,3 @@ export type CommercialItem = {
   updatedBy?: string;
   updatedAt?: string;
 };
-
-// DEPRECATED
-export type Pautado = {
-  id: string;
-  fechaInicio: string;
-  fechaFin: string;
-};
