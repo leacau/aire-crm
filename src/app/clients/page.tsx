@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog, CopyCheck } from 'lucide-react';
+import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog, CopyCheck, Activity } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
@@ -33,6 +33,7 @@ import type { ColumnDef, SortingState, RowSelectionState } from '@tanstack/react
 import { useRouter } from 'next/navigation';
 import { findBestMatch } from 'string-similarity';
 import { Badge } from '@/components/ui/badge';
+import { ActivityFormDialog } from '@/components/clients/activity-form-dialog';
 
 function ReassignClientDialog({ 
   clients, 
@@ -141,7 +142,7 @@ function BulkDeleteDialog({
 
 
 export default function ClientsPage() {
-  const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
@@ -159,6 +160,9 @@ export default function ClientsPage() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
+  
+  const [isActivityFormOpen, setIsActivityFormOpen] = useState(false);
+  const [selectedClientForActivity, setSelectedClientForActivity] = useState<Client | null>(null);
 
 
   const fetchData = useCallback(async () => {
@@ -365,6 +369,11 @@ export default function ClientsPage() {
     }
   };
   
+  const handleOpenActivityForm = (client: Client) => {
+    setSelectedClientForActivity(client);
+    setIsActivityFormOpen(true);
+  };
+  
   const columns = useMemo<ColumnDef<Client>[]>(() => {
     const canViewDetails = (client: Client) => userInfo && client && (isBoss || client.ownerId === userInfo.id);
     const canSeeOppData = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
@@ -404,7 +413,7 @@ export default function ClientsPage() {
         cell: ({ row }) => {
           const client = row.original;
           return (
-            <div>
+            <div className="group">
               {canViewDetails(client) ? (
                 <Link href={`/clients/${client.id}`} className="font-medium text-primary hover:underline">
                   {client.denominacion}
@@ -454,30 +463,43 @@ export default function ClientsPage() {
         cell: ({ row }) => {
           const client = row.original;
           return (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem asChild disabled={!canViewDetails(client)}>
-                  <Link href={`/clients/${client.id}`}>Ver detalles</Link>
-                </DropdownMenuItem>
-                {canManage && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setClientsToReassign([client]); }}>
-                    <UserCog className="mr-2 h-4 w-4" />
-                    Reasignar
+            <div className="flex items-center justify-end">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenActivityForm(client);
+                }}
+              >
+                <Activity className="h-4 w-4" />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem asChild disabled={!canViewDetails(client)}>
+                    <Link href={`/clients/${client.id}`}>Ver detalles</Link>
                   </DropdownMenuItem>
-                )}
-                {isBoss && (
-                  <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setRowSelection({[client.id]: true}); setIsBulkDeleteDialogOpen(true);}}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Eliminar
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  {canManage && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setClientsToReassign([client]); }}>
+                      <UserCog className="mr-2 h-4 w-4" />
+                      Reasignar
+                    </DropdownMenuItem>
+                  )}
+                  {isBoss && (
+                    <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setRowSelection({[client.id]: true}); setIsBulkDeleteDialogOpen(true);}}>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Eliminar
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           );
         },
       }
@@ -574,6 +596,16 @@ export default function ClientsPage() {
         }}
         onValidateCuit={validateCuit}
       />
+      {selectedClientForActivity && userInfo && (
+        <ActivityFormDialog
+          isOpen={isActivityFormOpen}
+          onOpenChange={setIsActivityFormOpen}
+          client={selectedClientForActivity}
+          userInfo={userInfo}
+          getGoogleAccessToken={getGoogleAccessToken}
+          onActivitySaved={() => fetchData()}
+        />
+      )}
     </div>
     <ReassignClientDialog 
       clients={clientsToReassign}
