@@ -215,7 +215,7 @@ export function OpportunityDetailsDialog({
 
     oppToSave.valorTarifario = valorTarifario;
     
-    if (valorFinal !== valorTarifario) {
+    if (valorFinal < valorTarifario) {
         const diff = valorTarifario - valorFinal;
         const percentage = valorTarifario > 0 ? (diff / valorTarifario) * 100 : 0;
         oppToSave.bonificacionDetalle = `Descuento: $${diff.toLocaleString('es-AR')} (${percentage.toFixed(2)}%)`;
@@ -380,7 +380,7 @@ export function OpportunityDetailsDialog({
           const newItems = (prev.proposalItems || []).map(item => {
               if (item.id === itemId) {
                   const updatedItem = { ...item, [field]: value };
-                  if (field === 'cantidadDia' || field === 'cantidadMes' || field === 'duracionSegundos' || field === 'valorUnitario') {
+                  if (['cantidadDia', 'cantidadMes', 'duracionSegundos', 'valorUnitario'].includes(field)) {
                       const { cantidadDia, cantidadMes, duracionSegundos, valorUnitario } = updatedItem;
                       if (['spotRadio', 'spotTv'].includes(updatedItem.type)) {
                           updatedItem.subtotal = (cantidadDia * cantidadMes * (duracionSegundos || 0) * valorUnitario);
@@ -546,9 +546,11 @@ export function OpportunityDetailsDialog({
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto pr-4 -mr-4">
         <Tabs defaultValue="details">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="details">Detalles y Propuesta</TabsTrigger>
+            <TabsTrigger value="pautado">Pautado</TabsTrigger>
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
+            <TabsTrigger value="invoicing">Facturación</TabsTrigger>
             <TabsTrigger value="bonus">Bonificación</TabsTrigger>
           </TabsList>
           
@@ -646,6 +648,28 @@ export function OpportunityDetailsDialog({
             </div>
           </TabsContent>
 
+          <TabsContent value="pautado" className="space-y-4 py-4">
+              <h3 className="font-semibold">Períodos de Pauta</h3>
+              <div className="space-y-2">
+                  {(editedOpportunity.pautados || []).map((pautado, index) => (
+                      <div key={pautado.id} className="flex items-end gap-2">
+                          <div className="flex-1 grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                  <Label>Fecha de Inicio</Label>
+                                  <Input type="date" value={pautado.fechaInicio} onChange={e => handlePautadoChange(pautado.id, 'fechaInicio', e.target.value)} />
+                              </div>
+                              <div className="space-y-1">
+                                  <Label>Fecha de Fin</Label>
+                                  <Input type="date" value={pautado.fechaFin} onChange={e => handlePautadoChange(pautado.id, 'fechaFin', e.target.value)} />
+                              </div>
+                          </div>
+                          <Button variant="ghost" size="icon" onClick={() => handleRemovePautado(pautado.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      </div>
+                  ))}
+              </div>
+              <Button variant="outline" size="sm" onClick={handleAddPautado}><PlusCircle className="mr-2 h-4" /> Añadir Período</Button>
+          </TabsContent>
+
           <TabsContent value="conditions" className="space-y-4 py-4">
               <div className="space-y-2">
                   <Label htmlFor="periodicidad">Periodicidad</Label>
@@ -716,6 +740,49 @@ export function OpportunityDetailsDialog({
               </div>
           </TabsContent>
           
+          <TabsContent value="invoicing" className="space-y-4 py-4">
+            <div className="flex items-center justify-between">
+                <h3 className="font-semibold">Facturas Asociadas</h3>
+                <Button size="sm" variant="outline" onClick={handleAddInvoice}><PlusCircle className="mr-2 h-4 w-4"/>Añadir Factura</Button>
+            </div>
+             <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Nº</TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Monto</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Acciones</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {invoices.length > 0 ? invoices.map(invoice => (
+                        <TableRow key={invoice.id}>
+                            <TableCell><Input value={invoice.invoiceNumber} onChange={e => handleInvoiceChange(invoice.id, 'invoiceNumber', e.target.value)} /></TableCell>
+                            <TableCell><Input type="date" value={invoice.date} onChange={e => handleInvoiceChange(invoice.id, 'date', e.target.value)} /></TableCell>
+                            <TableCell><Input type="number" value={invoice.amount} onChange={e => handleInvoiceChange(invoice.id, 'amount', Number(e.target.value))} /></TableCell>
+                            <TableCell>
+                                <Select value={invoice.status} onValueChange={(v: InvoiceStatus) => handleInvoiceChange(invoice.id, 'status', v)}>
+                                    <SelectTrigger><SelectValue/></SelectTrigger>
+                                    <SelectContent>
+                                        {invoiceStatusOptions.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </TableCell>
+                            <TableCell className="flex items-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleInvoiceUpdate(invoice.id)}><Save className="h-4 w-4"/></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleInvoiceDelete(invoice.id)}><Trash2 className="h-4 w-4"/></Button>
+                            </TableCell>
+                        </TableRow>
+                    )) : (
+                        <TableRow>
+                            <TableCell colSpan={5} className="text-center h-24">No hay facturas cargadas.</TableCell>
+                        </TableRow>
+                    )}
+                </TableBody>
+            </Table>
+          </TabsContent>
+
           <TabsContent value="bonus" className="space-y-4 py-4">
               <div className="space-y-2">
                   <Label htmlFor="bonificacionDetalle">Detalle Bonificación</Label>
