@@ -531,7 +531,7 @@ export function OpportunityDetailsDialog({
         <DialogHeader>
           <div className="flex justify-between items-center">
             <div>
-              <DialogTitle>{isEditing ? `Oportunidad para: ${opportunity?.clientName}` : `Nueva Oportunidad para: ${client?.name}`}</DialogTitle>
+              <DialogTitle>Oportunidad para: {isEditing ? opportunity?.clientName : client?.name}</DialogTitle>
               <DialogDescription>
                 {isEditing ? 'Edita los detalles de la oportunidad.' : 'Rellena los datos para crear una nueva oportunidad.'}
               </DialogDescription>
