@@ -1,5 +1,6 @@
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -36,14 +37,24 @@ export type Invoice = {
   datePaid?: string;
 };
 
+export type PautaType = 'Spot' | 'PNT' | 'Sorteo' | 'Nota';
+export const pautaTypes: PautaType[] = ['Spot', 'PNT', 'Sorteo', 'Nota'];
+
 export type OrdenPautado = {
     id: string;
-    fecha: string;
-    numeroOM: string;
-    ajustaPorInflacion: boolean;
-    tipoAjuste: string;
-    // ... add all other fields from the image
+    tipoPauta: PautaType;
+    programas?: string[];
+    dias?: number[]; // 1-7 for Mon-Sun
+    fechaInicio?: string;
+    fechaFin?: string;
+    // Spot specific
+    segundos?: number;
+    // PNT/Sorteo/Nota specific
+    repeticiones?: number;
+    textoPNT?: string;
+    textoPNTaprobado?: boolean;
 };
+
 
 export type ProposalItem = {
   id: string;

@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, Invoice, OrdenPautado, InvoiceStatus, ProposalItem, Program } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, Program } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { Checkbox } from '../ui/checkbox';
@@ -156,12 +156,14 @@ export function OpportunityDetailsDialog({
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isOrdenPautadoFormOpen, setIsOrdenPautadoFormOpen] = useState(false);
+  const [selectedOrden, setSelectedOrden] = useState<OrdenPautado | null>(null);
   const isEditing = !!opportunity;
   
   const getInitialData = () => {
       if (opportunity) {
         const data = { ...opportunity };
         if (!data.proposalItems) data.proposalItems = [];
+        if (!data.ordenesPautado) data.ordenesPautado = [];
         return data;
       }
       return getInitialOpportunityData(client);
@@ -296,202 +298,34 @@ export function OpportunityDetailsDialog({
     setEditedOpportunity(prev => ({...prev, [name]: value }));
   }
 
-  const handleAddInvoice = async () => {
-    if (!opportunity || !userInfo) return;
-    
-    const newInvoiceData: Omit<Invoice, 'id'> = {
-        opportunityId: opportunity.id,
-        invoiceNumber: '',
-        amount: 0,
-        date: new Date().toISOString().split('T')[0],
-        status: 'Generada' as const,
-        dateGenerated: new Date().toISOString(),
-    };
-
-    try {
-        const newInvoiceId = await createInvoice(newInvoiceData, userInfo.id, userInfo.name, opportunity.clientName);
-        const newInvoiceWithId: Invoice = { ...newInvoiceData, id: newInvoiceId };
-        setInvoices(prev => [...prev, newInvoiceWithId]);
-        toast({ title: "Factura añadida" });
-    } catch (e) {
-        console.error("Error adding invoice", e);
-        toast({ title: "Error al añadir factura", variant: "destructive" });
-    }
+  const handleSaveOrdenPautado = (orden: OrdenPautado) => {
+    setEditedOpportunity(prev => {
+      const ordenes = prev.ordenesPautado || [];
+      const existingIndex = ordenes.findIndex(o => o.id === orden.id);
+      let newOrdenes;
+      if (existingIndex > -1) {
+        newOrdenes = [...ordenes];
+        newOrdenes[existingIndex] = orden;
+      } else {
+        newOrdenes = [...ordenes, orden];
+      }
+      return { ...prev, ordenesPautado: newOrdenes };
+    });
   };
 
-
-  const handleInvoiceChange = (invoiceId: string, field: keyof Invoice, value: any) => {
-     setInvoices(prevInvoices => 
-        prevInvoices.map(inv => (inv.id === invoiceId ? { ...inv, [field]: value } : inv))
-    );
-  };
-  
-  const handleInvoiceUpdate = (invoiceId: string) => {
-    if (!userInfo || !opportunity) return;
-    const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
-
-    if (invoiceToUpdate) {
-        const {id, ...updateData} = invoiceToUpdate;
-
-        updateInvoice(invoiceId, updateData, userInfo.id, userInfo.name, opportunity.clientName)
-            .then(() => {
-                toast({ title: "Factura actualizada" });
-            })
-            .catch((e) => {
-                console.error("Failed to update invoice:", e);
-                toast({ title: "Error al actualizar factura", variant: "destructive" });
-                fetchInvoices(); 
-            });
-    }
-  }
-
-  const handleInvoiceDelete = async (invoiceId: string) => {
-    if (!userInfo || !opportunity) return;
-    try {
-        await deleteInvoice(invoiceId, userInfo.id, userInfo.name, opportunity.clientName);
-        setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
-        toast({ title: "Factura eliminada" });
-    } catch(e) {
-        console.error("Error deleting invoice", e);
-        toast({ title: "Error al eliminar factura", variant: "destructive" });
-    }
-  }
-
-  const handleProposalItemChange = (itemId: string, field: keyof ProposalItem, value: any) => {
-      setEditedOpportunity(prev => {
-          const newItems = (prev.proposalItems || []).map(item => {
-              if (item.id === itemId) {
-                  const updatedItem = { ...item, [field]: value };
-                  if (['cantidadDia', 'cantidadMes', 'duracionSegundos', 'valorUnitario'].includes(field)) {
-                      const { cantidadDia, cantidadMes, duracionSegundos, valorUnitario } = updatedItem;
-                      if (['spotRadio', 'spotTv'].includes(updatedItem.type)) {
-                          updatedItem.subtotal = (cantidadDia * cantidadMes * (duracionSegundos || 0) * valorUnitario);
-                      } else {
-                          updatedItem.subtotal = (cantidadDia * cantidadMes * valorUnitario);
-                      }
-                  }
-                  return updatedItem;
-              }
-              return item;
-          });
-          return { ...prev, proposalItems: newItems };
-      });
+  const handleEditOrdenPautado = (orden: OrdenPautado) => {
+    setSelectedOrden(orden);
+    setIsOrdenPautadoFormOpen(true);
   };
 
-    const handleRemoveProposalItem = (itemId: string) => {
-        setEditedOpportunity(prev => ({
-            ...prev,
-            proposalItems: (prev.proposalItems || []).filter(item => item.id !== itemId)
-        }));
-    };
-
-  const handleAddProposalProgram = (programId: string) => {
-    if (!programId) return;
-    const program = programs.find(p => p.id === programId);
-    if (!program) return;
-    // Check if program already added to avoid duplicates
-    if ((editedOpportunity.proposalItems || []).some(item => item.programId === programId)) {
-        toast({ title: "Programa ya añadido", description: "Ya has añadido este programa. Puedes añadir más ítems dentro de él.", variant: "default"});
-        return;
-    }
-
-    const newItem: ProposalItem = {
-        id: `prop-${Date.now()}`,
-        programId: program.id,
-        programName: program.name,
-        type: 'spotRadio',
-        label: 'Spot Radio',
-        cantidadDia: 1,
-        cantidadMes: 1,
-        duracionSegundos: 0,
-        valorUnitario: program.rates?.spotRadio || 0,
-        subtotal: 0, // Will be recalculated
-    };
-    // Recalculate subtotal
-    const { cantidadDia, cantidadMes, duracionSegundos, valorUnitario } = newItem;
-    newItem.subtotal = (cantidadDia * cantidadMes * (duracionSegundos || 0) * valorUnitario);
-
+  const handleDeleteOrdenPautado = (ordenId: string) => {
     setEditedOpportunity(prev => ({
-        ...prev,
-        proposalItems: [...(prev.proposalItems || []), newItem]
+      ...prev,
+      ordenesPautado: (prev.ordenesPautado || []).filter(o => o.id !== ordenId),
     }));
   };
 
-  const handleRemoveProposalProgramGroup = (programId: string) => {
-      setEditedOpportunity(prev => ({
-          ...prev,
-          proposalItems: (prev.proposalItems || []).filter(item => item.programId !== programId)
-      }));
-  };
-
-   const handleAddProposalItemToGroup = (programId: string) => {
-      const program = programs.find(p => p.id === programId);
-      if (!program) return;
-
-      const newItem: ProposalItem = {
-          id: `prop-${Date.now()}`,
-          programId: program.id,
-          programName: program.name,
-          type: 'spotRadio',
-          label: 'Spot Radio',
-          cantidadDia: 1,
-          cantidadMes: 1,
-          duracionSegundos: 0,
-          valorUnitario: program.rates?.spotRadio || 0,
-          subtotal: 0,
-      };
-      const { cantidadDia, cantidadMes, duracionSegundos, valorUnitario } = newItem;
-      newItem.subtotal = (cantidadDia * cantidadMes * (duracionSegundos || 0) * valorUnitario);
-
-      setEditedOpportunity(prev => ({
-          ...prev,
-          proposalItems: [...(prev.proposalItems || []), newItem]
-      }));
-  };
-
-  const handleProposalTypeChange = (itemId: string, type: ProposalItem['type']) => {
-      const program = programs.find(p => p.id === editedOpportunity.proposalItems?.find(i => i.id === itemId)?.programId);
-      const rate = program?.rates?.[type] || 0;
-      const labels = {
-          spotRadio: 'Spot Radio',
-          spotTv: 'Spot TV',
-          pnt: 'PNT',
-          pntMasBarrida: 'PNT + Barrida',
-          auspicio: 'Auspicio',
-          notaComercial: 'Nota Comercial',
-      };
-      
-      setEditedOpportunity(prev => {
-          const newItems = (prev.proposalItems || []).map(item => {
-              if (item.id === itemId) {
-                  const updatedItem = { ...item, type, valorUnitario: rate, label: labels[type] };
-                  const { cantidadDia, cantidadMes, duracionSegundos, valorUnitario } = updatedItem;
-                  if (['spotRadio', 'spotTv'].includes(updatedItem.type)) {
-                      updatedItem.subtotal = (cantidadDia * cantidadMes * (duracionSegundos || 0) * valorUnitario);
-                  } else {
-                      updatedItem.subtotal = (cantidadDia * cantidadMes * valorUnitario);
-                  }
-                  return updatedItem;
-              }
-              return item;
-          });
-          return { ...prev, proposalItems: newItems };
-      });
-  };
   
-  const calculatedValue = (editedOpportunity.proposalItems || []).reduce((acc, item) => acc + item.subtotal, 0);
-  
-  const proposalItemsByProgram = (editedOpportunity.proposalItems || []).reduce((acc, item) => {
-    if (!acc[item.programId]) {
-      acc[item.programId] = {
-        programName: item.programName,
-        items: []
-      };
-    }
-    acc[item.programId].items.push(item);
-    return acc;
-  }, {} as Record<string, { programName: string, items: ProposalItem[] }>);
-
   const canEditBonus = isEditing && (editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar');
   const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
 
@@ -533,7 +367,6 @@ export function OpportunityDetailsDialog({
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
             <TabsTrigger value="bonus">Bonificación</TabsTrigger>
             <TabsTrigger value="pautado">Pautado</TabsTrigger>
-            <TabsTrigger value="invoicing">Facturación</TabsTrigger>
           </TabsList>
           
           <TabsContent value="details" className="space-y-4 py-4">
@@ -682,114 +515,36 @@ export function OpportunityDetailsDialog({
                 )}
           </TabsContent>
           
-          <TabsContent value="pautado" className="space-y-4 py-4">
-             <div className="space-y-4 pt-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-lg font-semibold">Calculadora de Tarifas</CardTitle>
+          <TabsContent value="pautado" className="py-4">
+             <div className="flex justify-end mb-4">
+                <Button onClick={() => { setSelectedOrden(null); setIsOrdenPautadoFormOpen(true); }}>
+                  <PlusCircle className="mr-2 h-4 w-4"/>
+                  Añadir Orden de Pauta
+                </Button>
+            </div>
+            <div className="space-y-3">
+              {(editedOpportunity.ordenesPautado || []).map(orden => (
+                  <Card key={orden.id} className="bg-muted/30">
+                      <CardHeader className="flex flex-row items-center justify-between p-3">
+                        <CardTitle className="text-base">{orden.tipoPauta}</CardTitle>
                         <div className="flex items-center gap-2">
-                             <Select onValueChange={handleAddProposalProgram}>
-                                <SelectTrigger className="w-[200px] h-9">
-                                    <SelectValue placeholder="Añadir Programa" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {programs.map(p => (
-                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                           <Button variant="ghost" size="sm" onClick={() => handleEditOrdenPautado(orden)}>Editar</Button>
+                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteOrdenPautado(orden.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
                         </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {Object.keys(proposalItemsByProgram).length > 0 ? (
-                        Object.entries(proposalItemsByProgram).map(([programId, group]) => (
-                            <div key={programId} className="p-3 border rounded-lg bg-muted/30">
-                                <div className="flex justify-between items-center mb-2">
-                                  <h4 className="font-semibold">{group.programName}</h4>
-                                  <Button variant="destructive" size="icon" className="h-7 w-7" onClick={() => handleRemoveProposalProgramGroup(programId)}><Trash2 className="h-4 w-4"/></Button>
-                                </div>
-                                <div className="space-y-2">
-                                  {group.items.map(item => (
-                                    <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-x-3 gap-y-2 items-end">
-                                      <div className="md:col-span-3 space-y-1">
-                                          <Label className="text-xs">Tipo</Label>
-                                          <Select value={item.type} onValueChange={v => handleProposalTypeChange(item.id, v as any)}>
-                                              <SelectTrigger><SelectValue /></SelectTrigger>
-                                              <SelectContent>
-                                                  <SelectItem value="spotRadio">Spot Radio</SelectItem>
-                                                  <SelectItem value="spotTv">Spot TV</SelectItem>
-                                                  <SelectItem value="pnt">PNT</SelectItem>
-                                                  <SelectItem value="pntMasBarrida">PNT + Barrida</SelectItem>
-                                                  <SelectItem value="auspicio">Auspicio</SelectItem>
-                                                  <SelectItem value="notaComercial">Nota Comercial</SelectItem>
-                                              </SelectContent>
-                                          </Select>
-                                      </div>
-                                      {(item.type === 'spotRadio' || item.type === 'spotTv') && <div className="md:col-span-1 space-y-1"><Label className="text-xs">Seg</Label><Input type="number" value={item.duracionSegundos} onChange={e => handleProposalItemChange(item.id, 'duracionSegundos', Number(e.target.value))} /></div>}
-                                      <div className="md:col-span-1 space-y-1"><Label className="text-xs">Cant/Día</Label><Input type="number" value={item.cantidadDia} onChange={e => handleProposalItemChange(item.id, 'cantidadDia', Number(e.target.value))} /></div>
-                                      <div className="md:col-span-1 space-y-1"><Label className="text-xs">Días/Mes</Label><Input type="number" value={item.cantidadMes} onChange={e => handleProposalItemChange(item.id, 'cantidadMes', Number(e.target.value))} /></div>
-                                      <div className="md:col-span-2 space-y-1"><Label className="text-xs">Valor Unit.</Label><Input type="number" value={item.valorUnitario} disabled className="bg-gray-100"/></div>
-                                      <div className="md:col-span-2 space-y-1"><Label className="text-xs">Subtotal</Label><Input value={item.subtotal.toLocaleString('es-AR')} disabled className="font-bold bg-gray-100" /></div>
-                                      <div className="md:col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveProposalItem(item.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button></div>
-                                    </div>
-                                  ))}
-                                </div>
-                                <Button size="sm" variant="ghost" className="mt-2" onClick={() => handleAddProposalItemToGroup(programId)}><PlusCircle className="mr-2 h-4 w-4"/>Añadir ítem a este programa</Button>
-                            </div>
-                        ))
-                      ) : (
-                        <p className="text-center text-sm text-muted-foreground py-4">Añade un programa para comenzar a construir la propuesta.</p>
-                      )}
-                    </CardContent>
-                </Card>
-                 <div className="p-3 bg-muted rounded-md text-right">
-                    <Label className="font-bold text-base">TOTAL TARIFARIO:</Label>
-                    <p className="text-2xl font-bold">${calculatedValue.toLocaleString('es-AR')}</p>
-                </div>
+                      </CardHeader>
+                      <CardContent className="p-3 pt-0 text-sm text-muted-foreground">
+                        <p><strong>Programas:</strong> {orden.programas?.join(', ')}</p>
+                        <p><strong>Vigencia:</strong> {orden.fechaInicio ? format(new Date(orden.fechaInicio), 'P', {locale: es}) : ''} - {orden.fechaFin ? format(new Date(orden.fechaFin), 'P', {locale: es}) : ''}</p>
+                        <p><strong>Repeticiones:</strong> {orden.repeticiones} por día</p>
+                        {orden.tipoPauta === 'Spot' && <p><strong>Segundos:</strong> {orden.segundos}</p>}
+                        {orden.textoPNT && <p className="mt-2 pt-2 border-t"><strong>Texto PNT:</strong> {orden.textoPNT}</p>}
+                      </CardContent>
+                  </Card>
+              ))}
+               {(editedOpportunity.ordenesPautado || []).length === 0 && (
+                <p className="text-center text-muted-foreground py-8">No hay órdenes de pautado cargadas.</p>
+               )}
             </div>
-          </TabsContent>
-
-          <TabsContent value="invoicing" className="space-y-4 py-4">
-            <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Facturas Asociadas</h3>
-                <Button size="sm" variant="outline" onClick={handleAddInvoice}><PlusCircle className="mr-2 h-4 w-4"/>Añadir Factura</Button>
-            </div>
-             <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Nº</TableHead>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead>Monto</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Acciones</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {invoices.length > 0 ? invoices.map(invoice => (
-                        <TableRow key={invoice.id}>
-                            <TableCell><Input value={invoice.invoiceNumber} onChange={e => handleInvoiceChange(invoice.id, 'invoiceNumber', e.target.value)} /></TableCell>
-                            <TableCell><Input type="date" value={invoice.date} onChange={e => handleInvoiceChange(invoice.id, 'date', e.target.value)} /></TableCell>
-                            <TableCell><Input type="number" value={invoice.amount} onChange={e => handleInvoiceChange(invoice.id, 'amount', Number(e.target.value))} /></TableCell>
-                            <TableCell>
-                                <Select value={invoice.status} onValueChange={(v: InvoiceStatus) => handleInvoiceChange(invoice.id, 'status', v)}>
-                                    <SelectTrigger><SelectValue/></SelectTrigger>
-                                    <SelectContent>
-                                        {invoiceStatusOptions.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </TableCell>
-                            <TableCell className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleInvoiceUpdate(invoice.id)}><Save className="h-4 w-4"/></Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleInvoiceDelete(invoice.id)}><Trash2 className="h-4 w-4"/></Button>
-                            </TableCell>
-                        </TableRow>
-                    )) : (
-                        <TableRow>
-                            <TableCell colSpan={5} className="text-center h-24">No hay facturas cargadas.</TableCell>
-                        </TableRow>
-                    )}
-                </TableBody>
-            </Table>
           </TabsContent>
 
         </Tabs>
@@ -810,13 +565,13 @@ export function OpportunityDetailsDialog({
             getGoogleAccessToken={getGoogleAccessToken}
         />
      )}
-     {isOrdenPautadoFormOpen && opportunity && userInfo && (
+     {isOrdenPautadoFormOpen && (
         <OrdenPautadoFormDialog
             isOpen={isOrdenPautadoFormOpen}
             onOpenChange={setIsOrdenPautadoFormOpen}
-            opportunity={opportunity}
-            client={client || { id: opportunity.clientId, name: opportunity.clientName }}
-            userInfo={userInfo}
+            onSave={handleSaveOrdenPautado}
+            orden={selectedOrden}
+            programs={programs}
         />
      )}
      </>

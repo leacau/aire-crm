@@ -15,178 +15,237 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { Opportunity, OrdenPautado, User } from '@/lib/types';
+import type { OrdenPautado, PautaType, Program } from '@/lib/types';
+import { pautaTypes } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
-import { getClient, getUserProfile } from '@/lib/firebase-service';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { CalendarIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+import { Calendar } from '../ui/calendar';
+import type { DateRange } from 'react-day-picker';
 
 interface OrdenPautadoFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  opportunity: Opportunity;
-  client: { id: string, name: string };
-  userInfo: User;
+  onSave: (orden: OrdenPautado) => void;
+  orden?: OrdenPautado | null;
+  programs: Program[];
 }
 
-export function OrdenPautadoFormDialog({ isOpen, onOpenChange, opportunity, client, userInfo }: OrdenPautadoFormDialogProps) {
+const daysOfWeek = [
+    { id: 1, label: 'Lunes' },
+    { id: 2, label: 'Martes' },
+    { id: 3, label: 'Miércoles' },
+    { id: 4, label: 'Jueves' },
+    { id: 5, label: 'Viernes' },
+    { id: 6, label: 'Sábado' },
+    { id: 7, label: 'Domingo' },
+];
+
+export function OrdenPautadoFormDialog({ isOpen, onOpenChange, onSave, orden, programs }: OrdenPautadoFormDialogProps) {
   const [formData, setFormData] = useState<Partial<OrdenPautado>>({});
-  const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const { toast } = useToast();
 
   useEffect(() => {
-    const fetchInitialData = async () => {
-        setLoading(true);
-        const fullClient = await getClient(client.id);
-        const owner = fullClient ? await getUserProfile(fullClient.ownerId) : null;
-        
-        setFormData({
-            fecha: new Date().toISOString().split('T')[0],
-            cuit: fullClient?.cuit,
-            razonSocial: fullClient?.razonSocial,
-            denominacionComercial: fullClient?.denominacion,
-            rubro: fullClient?.rubro,
-            vendedor: owner?.name,
-            total: opportunity.value,
-        });
-        setLoading(false);
-    }
     if (isOpen) {
-        fetchInitialData();
+      if (orden) {
+        setFormData(orden);
+        setDateRange({
+            from: orden.fechaInicio ? new Date(orden.fechaInicio) : undefined,
+            to: orden.fechaFin ? new Date(orden.fechaFin) : undefined,
+        })
+      } else {
+        setFormData({
+            id: `op-${Date.now()}`,
+            tipoPauta: 'Spot',
+            dias: [],
+            programas: [],
+            repeticiones: 1,
+            segundos: 0,
+            textoPNT: '',
+            textoPNTaprobado: false,
+        });
+        setDateRange(undefined);
+      }
     }
-  }, [isOpen, client.id, opportunity.value]);
+  }, [isOpen, orden]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
+     const target = e.target as HTMLInputElement;
+
     if (type === 'checkbox') {
-        const { checked } = e.target as HTMLInputElement;
-        setFormData(prev => ({...prev, [name]: checked}));
+        setFormData(prev => ({...prev, [name]: target.checked}));
+    } else if (type === 'number') {
+        setFormData(prev => ({...prev, [name]: Number(value) }));
     } else {
         setFormData(prev => ({...prev, [name]: value}));
     }
   }
 
+  const handleDayChange = (dayId: number, checked: boolean | 'indeterminate') => {
+      setFormData(prev => {
+          const currentDays = prev.dias || [];
+          const newDays = checked 
+              ? [...currentDays, dayId]
+              : currentDays.filter(d => d !== dayId);
+          return { ...prev, dias: newDays.sort() };
+      });
+  }
+
   const handleSave = () => {
-    // TODO: Implement save logic
-    toast({ title: "Funcionalidad en desarrollo", description: "El guardado de la orden de pautado aún no está implementado." });
+    if (!formData.tipoPauta || !formData.programas || formData.programas.length === 0) {
+        toast({ title: "Datos incompletos", description: "El tipo de pauta y al menos un programa son requeridos.", variant: "destructive"});
+        return;
+    }
+
+    const finalData: OrdenPautado = {
+        ...formData,
+        fechaInicio: dateRange?.from?.toISOString(),
+        fechaFin: dateRange?.to?.toISOString(),
+    } as OrdenPautado;
+    
+    onSave(finalData);
     onOpenChange(false);
   };
-  
-  if (loading) {
-    return (
-      <Dialog open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContent>
-          <div className="flex justify-center items-center h-48">
-            <Spinner size="large" />
-          </div>
-        </DialogContent>
-      </Dialog>
-    )
-  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Orden de Publicidad Multipauta</DialogTitle>
+          <DialogTitle>{orden ? 'Editar' : 'Nueva'} Orden de Pauta</DialogTitle>
           <DialogDescription>
-            Complete los datos de la orden de pautado para la oportunidad "{opportunity.title}".
+            Define los detalles de la pauta publicitaria.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto pr-4 -mr-4 grid gap-4 py-4">
-            {/* Header Section */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
+          <div className="space-y-2">
+            <Label htmlFor="tipoPauta">Tipo de Pauta</Label>
+            <Select value={formData.tipoPauta} onValueChange={(v: PautaType) => setFormData(p => ({...p, tipoPauta: v}))}>
+                <SelectTrigger id="tipoPauta"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                    {pautaTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Vigencia de la Campaña</Label>
+             <Popover>
+                <PopoverTrigger asChild>
+                <Button
+                    id="date"
+                    variant={"outline"}
+                    className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !dateRange && "text-muted-foreground"
+                    )}
+                >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                    dateRange.to ? (
+                        <>
+                        {format(dateRange.from, "LLL dd, y")} -{" "}
+                        {format(dateRange.to, "LLL dd, y")}
+                        </>
+                    ) : (
+                        format(dateRange.from, "LLL dd, y")
+                    )
+                    ) : (
+                    <span>Selecciona un rango</span>
+                    )}
+                </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={dateRange?.from}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    numberOfMonths={2}
+                />
+                </PopoverContent>
+            </Popover>
+          </div>
+          
+           <div className="space-y-2">
+                <Label>Días de Repetición</Label>
+                <div className="flex flex-wrap gap-x-4 gap-y-2 p-3 border rounded-md">
+                    {daysOfWeek.map(day => (
+                        <div key={day.id} className="flex items-center space-x-2">
+                            <Checkbox 
+                                id={`day-${day.id}`} 
+                                checked={formData.dias?.includes(day.id)}
+                                onCheckedChange={(checked) => handleDayChange(day.id, checked)}
+                            />
+                            <Label htmlFor={`day-${day.id}`} className="font-normal">{day.label}</Label>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <Label>Programas</Label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 border rounded-md max-h-48 overflow-y-auto">
+                    {programs.map(prog => (
+                        <div key={prog.id} className="flex items-center space-x-2">
+                             <Checkbox 
+                                id={`prog-${prog.id}`} 
+                                checked={formData.programas?.includes(prog.name)}
+                                onCheckedChange={checked => {
+                                    setFormData(prev => {
+                                        const currentProgs = prev.programas || [];
+                                        const newProgs = checked ? [...currentProgs, prog.name] : currentProgs.filter(p => p !== prog.name);
+                                        return {...prev, programas: newProgs};
+                                    });
+                                }}
+                            />
+                            <Label htmlFor={`prog-${prog.id}`} className="font-normal">{prog.name}</Label>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {formData.tipoPauta === 'Spot' && (
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="segundos">Duración (segundos)</Label>
+                        <Input id="segundos" name="segundos" type="number" value={formData.segundos || ''} onChange={handleChange} />
+                    </div>
+                     <div className="space-y-2">
+                        <Label htmlFor="repeticiones">Repeticiones por Día</Label>
+                        <Input id="repeticiones" name="repeticiones" type="number" value={formData.repeticiones || ''} onChange={handleChange} />
+                    </div>
+                </div>
+            )}
+
+            {(formData.tipoPauta === 'PNT' || formData.tipoPauta === 'Sorteo' || formData.tipoPauta === 'Nota') && (
                 <div className="space-y-2">
-                    <Label>Fecha</Label>
-                    <Input type="date" name="fecha" value={formData.fecha || ''} onChange={handleChange} />
+                    <Label htmlFor="repeticiones">Repeticiones por Día</Label>
+                    <Input id="repeticiones" name="repeticiones" type="number" value={formData.repeticiones || ''} onChange={handleChange} />
                 </div>
+            )}
+            
+            {formData.tipoPauta === 'PNT' && (
                  <div className="space-y-2">
-                    <Label>Nº de OM</Label>
-                    <Input name="numeroOM" value={formData.numeroOM || ''} onChange={handleChange} />
-                </div>
-                 <div className="flex items-center gap-4 pt-6">
+                    <Label htmlFor="textoPNT">Glosa / Texto del PNT (Opcional)</Label>
+                    <Textarea id="textoPNT" name="textoPNT" value={formData.textoPNT || ''} onChange={handleChange} />
                     <div className="flex items-center space-x-2">
-                        <Checkbox id="ajustaPorInflacion" name="ajustaPorInflacion" checked={formData.ajustaPorInflacion} onCheckedChange={(checked) => setFormData(p => ({...p, ajustaPorInflacion: !!checked}))} />
-                        <Label htmlFor="ajustaPorInflacion" className="font-normal">Ajusta por inflación</Label>
-                    </div>
-                     <Input name="tipoAjuste" placeholder="Tipo de ajuste" value={formData.tipoAjuste || ''} onChange={handleChange} className="flex-1" />
-                </div>
-            </div>
-
-            {/* Client and Seller Section */}
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b pb-4">
-                 <div className="space-y-4">
-                     <div className="grid grid-cols-2 gap-2">
-                        <Input name="cuit" placeholder="CUIT" value={formData.cuit || ''} onChange={handleChange} />
-                        <Input name="denominacionComercial" placeholder="Denominación comercial" value={formData.denominacionComercial || ''} onChange={handleChange} />
-                    </div>
-                    <Input name="razonSocial" placeholder="Apellido y Nombre o Razón Social" value={formData.razonSocial || ''} onChange={handleChange} />
-                 </div>
-                  <div className="space-y-4">
-                     <div className="grid grid-cols-2 gap-2">
-                        <Input name="vendedor" placeholder="Nombre del vendedor" value={formData.vendedor || ''} onChange={handleChange} />
-                        <Input name="rubro" placeholder="Rubro/Sector" value={formData.rubro || ''} onChange={handleChange} />
-                    </div>
-                     <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                        <Label className="font-bold">TOTAL</Label>
-                        <Input name="total" type="number" placeholder="Total" value={formData.total?.toString() || ''} onChange={handleChange} className="text-right font-bold"/>
+                        <Checkbox id="textoPNTaprobado" name="textoPNTaprobado" checked={formData.textoPNTaprobado} onCheckedChange={(c) => setFormData(p => ({...p, textoPNTaprobado: !!c}))}/>
+                        <Label htmlFor="textoPNTaprobado" className="font-normal">Texto Aprobado para grilla</Label>
                     </div>
                  </div>
-             </div>
-
-            {/* AIRE SRL Section */}
-            <div className="space-y-4 border-b pb-4">
-                <h3 className="font-bold text-lg">AIRE SRL</h3>
-                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                    <Input name="srl_inicio" type="date" placeholder="Inicio" />
-                    <Input name="srl_fin" type="date" placeholder="Fin" />
-                    <Input name="srl_dias" type="number" placeholder="Días" />
-                     <div className="flex items-center space-x-2">
-                        <Checkbox id="srl_enviaMaterial" />
-                        <Label htmlFor="srl_enviaMaterial" className="font-normal">Envía material</Label>
-                    </div>
-                     <div className="flex items-center space-x-2">
-                        <Checkbox id="srl_solicitaCertificacion" />
-                        <Label htmlFor="srl_solicitaCertificacion" className="font-normal">Solicita certificación</Label>
-                    </div>
-                 </div>
-                 <Textarea placeholder="Observaciones Generales (objetivo del cliente, indicaciones, etc.)" />
-                 <Textarea placeholder="Grilla de Programa, Tipo de Aviso, etc." rows={6} />
-            </div>
-
-            {/* AIRE SAS Section */}
-            <div className="space-y-4">
-                 <h3 className="font-bold text-lg">AIRE SAS</h3>
-                 <Textarea placeholder="Grilla de Formato, Tipo, Detalle, etc." rows={6} />
-                 <div className="flex justify-end">
-                    <div className="w-full md:w-1/2 lg:w-1/3 space-y-2">
-                         <div className="flex items-center gap-2">
-                            <Label className="w-24">SUBTOTAL</Label>
-                            <Input type="number" className="text-right" />
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Label className="w-24">BON. GRAL</Label>
-                            <Input type="number" className="text-right" />
-                        </div>
-                         <div className="flex items-center gap-2">
-                            <Label className="w-24">TOTAL</Label>
-                            <Input type="number" className="text-right font-bold" />
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Label className="w-24">IVA (5%)</Label>
-                            <Input type="number" className="text-right" />
-                        </div>
-                         <div className="flex items-center gap-2">
-                            <Label className="w-24 font-bold">IMP. A</Label>
-                            <Input type="number" className="text-right font-bold" />
-                        </div>
-                    </div>
-                 </div>
-            </div>
+            )}
 
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Guardar Orden</Button>
+          <Button onClick={handleSave}>Guardar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
