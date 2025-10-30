@@ -8,7 +8,7 @@ import { getProspects, getAllUsers } from '@/lib/firebase-service';
 import type { User, Prospect } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, parseISO } from 'date-fns';
 
 interface ProspectsPerformanceReportProps {
   selectedAdvisor: string;
@@ -65,7 +65,7 @@ export function ProspectsPerformanceReport({ selectedAdvisor }: ProspectsPerform
       const conversionRate = totalDecided > 0 ? (converted.length / totalDecided) * 100 : 0;
       
       const conversionDurations = converted
-        .map(p => p.statusChangedAt && p.createdAt ? differenceInDays(new Date(p.statusChangedAt), new Date(p.createdAt)) : null)
+        .map(p => p.statusChangedAt && p.createdAt ? differenceInDays(parseISO(p.statusChangedAt), parseISO(p.createdAt)) : null)
         .filter((d): d is number => d !== null);
       
       const avgDaysToConvert = conversionDurations.length > 0 
@@ -73,7 +73,7 @@ export function ProspectsPerformanceReport({ selectedAdvisor }: ProspectsPerform
         : null;
 
       const archiveDurations = notProspered
-        .map(p => p.statusChangedAt && p.createdAt ? differenceInDays(new Date(p.statusChangedAt), new Date(p.createdAt)) : null)
+        .map(p => p.statusChangedAt && p.createdAt ? differenceInDays(parseISO(p.statusChangedAt), parseISO(p.createdAt)) : null)
         .filter((d): d is number => d !== null);
         
       const avgDaysToArchive = archiveDurations.length > 0
