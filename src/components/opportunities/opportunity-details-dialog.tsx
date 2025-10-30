@@ -527,10 +527,11 @@ export function OpportunityDetailsDialog({
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto pr-4 -mr-4">
         <Tabs defaultValue="details">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="details">Detalles</TabsTrigger>
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
             <TabsTrigger value="bonus">Bonificación</TabsTrigger>
+            <TabsTrigger value="pautado">Pautado</TabsTrigger>
             <TabsTrigger value="invoicing">Facturación</TabsTrigger>
           </TabsList>
           
@@ -539,13 +540,17 @@ export function OpportunityDetailsDialog({
                 <Label htmlFor="title">Título</Label>
                 <Input id="title" name="title" value={editedOpportunity.title || ''} onChange={handleChange}/>
             </div>
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                     <Label htmlFor="stage">Etapa</Label>
                     <Select onValueChange={(v: OpportunityStage) => handleSelectChange('stage', v)} value={editedOpportunity.stage}>
                         <SelectTrigger id="stage"><SelectValue/></SelectTrigger>
                         <SelectContent>{opportunityStages.map(stage => <SelectItem key={stage} value={stage}>{stage}</SelectItem>)}</SelectContent>
                     </Select>
+                </div>
+                 <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="value" className="text-base font-bold">Valor Final Propuesta</Label>
+                    <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange} className="text-2xl font-bold h-12 text-right"/>
                 </div>
               </div>
               <div className="space-y-2">
@@ -555,76 +560,6 @@ export function OpportunityDetailsDialog({
             <div className="space-y-2">
                 <Label htmlFor="observaciones">Observaciones</Label>
                 <Textarea id="observaciones" name="observaciones" value={editedOpportunity.observaciones || ''} onChange={handleChange} />
-            </div>
-             <div className="space-y-4 pt-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-lg font-semibold">Calculadora de Tarifas</CardTitle>
-                        <div className="flex items-center gap-2">
-                             <Select onValueChange={handleAddProposalProgram}>
-                                <SelectTrigger className="w-[200px] h-9">
-                                    <SelectValue placeholder="Añadir Programa" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {programs.map(p => (
-                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {Object.keys(proposalItemsByProgram).length > 0 ? (
-                        Object.entries(proposalItemsByProgram).map(([programId, group]) => (
-                            <div key={programId} className="p-3 border rounded-lg bg-muted/30">
-                                <div className="flex justify-between items-center mb-2">
-                                  <h4 className="font-semibold">{group.programName}</h4>
-                                  <Button variant="destructive" size="icon" className="h-7 w-7" onClick={() => handleRemoveProposalProgramGroup(programId)}><Trash2 className="h-4 w-4"/></Button>
-                                </div>
-                                <div className="space-y-2">
-                                  {group.items.map(item => (
-                                    <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-x-3 gap-y-2 items-end">
-                                      <div className="md:col-span-3 space-y-1">
-                                          <Label className="text-xs">Tipo</Label>
-                                          <Select value={item.type} onValueChange={v => handleProposalTypeChange(item.id, v as any)}>
-                                              <SelectTrigger><SelectValue /></SelectTrigger>
-                                              <SelectContent>
-                                                  <SelectItem value="spotRadio">Spot Radio</SelectItem>
-                                                  <SelectItem value="spotTv">Spot TV</SelectItem>
-                                                  <SelectItem value="pnt">PNT</SelectItem>
-                                                  <SelectItem value="pntMasBarrida">PNT + Barrida</SelectItem>
-                                                  <SelectItem value="auspicio">Auspicio</SelectItem>
-                                                  <SelectItem value="notaComercial">Nota Comercial</SelectItem>
-                                              </SelectContent>
-                                          </Select>
-                                      </div>
-                                      {(item.type === 'spotRadio' || item.type === 'spotTv') && <div className="md:col-span-1 space-y-1"><Label className="text-xs">Seg</Label><Input type="number" value={item.duracionSegundos} onChange={e => handleProposalItemChange(item.id, 'duracionSegundos', Number(e.target.value))} /></div>}
-                                      <div className="md:col-span-1 space-y-1"><Label className="text-xs">Cant/Día</Label><Input type="number" value={item.cantidadDia} onChange={e => handleProposalItemChange(item.id, 'cantidadDia', Number(e.target.value))} /></div>
-                                      <div className="md:col-span-1 space-y-1"><Label className="text-xs">Días/Mes</Label><Input type="number" value={item.cantidadMes} onChange={e => handleProposalItemChange(item.id, 'cantidadMes', Number(e.target.value))} /></div>
-                                      <div className="md:col-span-2 space-y-1"><Label className="text-xs">Valor Unit.</Label><Input type="number" value={item.valorUnitario} disabled className="bg-gray-100"/></div>
-                                      <div className="md:col-span-2 space-y-1"><Label className="text-xs">Subtotal</Label><Input value={item.subtotal.toLocaleString('es-AR')} disabled className="font-bold bg-gray-100" /></div>
-                                      <div className="md:col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveProposalItem(item.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button></div>
-                                    </div>
-                                  ))}
-                                </div>
-                                <Button size="sm" variant="ghost" className="mt-2" onClick={() => handleAddProposalItemToGroup(programId)}><PlusCircle className="mr-2 h-4 w-4"/>Añadir ítem a este programa</Button>
-                            </div>
-                        ))
-                      ) : (
-                        <p className="text-center text-sm text-muted-foreground py-4">Añade un programa para comenzar a construir la propuesta.</p>
-                      )}
-                    </CardContent>
-                </Card>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                    <div className="p-3 bg-muted rounded-md text-right">
-                        <Label className="font-bold text-base">TOTAL TARIFARIO:</Label>
-                        <p className="text-2xl font-bold">${calculatedValue.toLocaleString('es-AR')}</p>
-                    </div>
-                     <div className="space-y-2">
-                        <Label htmlFor="value" className="text-base font-bold">Valor Final Propuesta</Label>
-                        <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange} className="text-2xl font-bold h-12 text-right"/>
-                    </div>
-                </div>
             </div>
           </TabsContent>
 
@@ -746,6 +681,73 @@ export function OpportunityDetailsDialog({
                 )}
           </TabsContent>
           
+          <TabsContent value="pautado" className="space-y-4 py-4">
+             <div className="space-y-4 pt-4">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-lg font-semibold">Calculadora de Tarifas</CardTitle>
+                        <div className="flex items-center gap-2">
+                             <Select onValueChange={handleAddProposalProgram}>
+                                <SelectTrigger className="w-[200px] h-9">
+                                    <SelectValue placeholder="Añadir Programa" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {programs.map(p => (
+                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {Object.keys(proposalItemsByProgram).length > 0 ? (
+                        Object.entries(proposalItemsByProgram).map(([programId, group]) => (
+                            <div key={programId} className="p-3 border rounded-lg bg-muted/30">
+                                <div className="flex justify-between items-center mb-2">
+                                  <h4 className="font-semibold">{group.programName}</h4>
+                                  <Button variant="destructive" size="icon" className="h-7 w-7" onClick={() => handleRemoveProposalProgramGroup(programId)}><Trash2 className="h-4 w-4"/></Button>
+                                </div>
+                                <div className="space-y-2">
+                                  {group.items.map(item => (
+                                    <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-x-3 gap-y-2 items-end">
+                                      <div className="md:col-span-3 space-y-1">
+                                          <Label className="text-xs">Tipo</Label>
+                                          <Select value={item.type} onValueChange={v => handleProposalTypeChange(item.id, v as any)}>
+                                              <SelectTrigger><SelectValue /></SelectTrigger>
+                                              <SelectContent>
+                                                  <SelectItem value="spotRadio">Spot Radio</SelectItem>
+                                                  <SelectItem value="spotTv">Spot TV</SelectItem>
+                                                  <SelectItem value="pnt">PNT</SelectItem>
+                                                  <SelectItem value="pntMasBarrida">PNT + Barrida</SelectItem>
+                                                  <SelectItem value="auspicio">Auspicio</SelectItem>
+                                                  <SelectItem value="notaComercial">Nota Comercial</SelectItem>
+                                              </SelectContent>
+                                          </Select>
+                                      </div>
+                                      {(item.type === 'spotRadio' || item.type === 'spotTv') && <div className="md:col-span-1 space-y-1"><Label className="text-xs">Seg</Label><Input type="number" value={item.duracionSegundos} onChange={e => handleProposalItemChange(item.id, 'duracionSegundos', Number(e.target.value))} /></div>}
+                                      <div className="md:col-span-1 space-y-1"><Label className="text-xs">Cant/Día</Label><Input type="number" value={item.cantidadDia} onChange={e => handleProposalItemChange(item.id, 'cantidadDia', Number(e.target.value))} /></div>
+                                      <div className="md:col-span-1 space-y-1"><Label className="text-xs">Días/Mes</Label><Input type="number" value={item.cantidadMes} onChange={e => handleProposalItemChange(item.id, 'cantidadMes', Number(e.target.value))} /></div>
+                                      <div className="md:col-span-2 space-y-1"><Label className="text-xs">Valor Unit.</Label><Input type="number" value={item.valorUnitario} disabled className="bg-gray-100"/></div>
+                                      <div className="md:col-span-2 space-y-1"><Label className="text-xs">Subtotal</Label><Input value={item.subtotal.toLocaleString('es-AR')} disabled className="font-bold bg-gray-100" /></div>
+                                      <div className="md:col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveProposalItem(item.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button></div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <Button size="sm" variant="ghost" className="mt-2" onClick={() => handleAddProposalItemToGroup(programId)}><PlusCircle className="mr-2 h-4 w-4"/>Añadir ítem a este programa</Button>
+                            </div>
+                        ))
+                      ) : (
+                        <p className="text-center text-sm text-muted-foreground py-4">Añade un programa para comenzar a construir la propuesta.</p>
+                      )}
+                    </CardContent>
+                </Card>
+                 <div className="p-3 bg-muted rounded-md text-right">
+                    <Label className="font-bold text-base">TOTAL TARIFARIO:</Label>
+                    <p className="text-2xl font-bold">${calculatedValue.toLocaleString('es-AR')}</p>
+                </div>
+            </div>
+          </TabsContent>
+
           <TabsContent value="invoicing" className="space-y-4 py-4">
             <div className="flex items-center justify-between">
                 <h3 className="font-semibold">Facturas Asociadas</h3>
