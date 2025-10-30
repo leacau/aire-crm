@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -26,13 +26,13 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Calendar } from '../ui/calendar';
 import type { DateRange } from 'react-day-picker';
+import { getPrograms } from '@/lib/firebase-service';
 
 interface OrdenPautadoFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   onSave: (orden: OrdenPautado) => void;
   orden?: OrdenPautado | null;
-  programs: Program[];
 }
 
 const daysOfWeek = [
@@ -45,10 +45,15 @@ const daysOfWeek = [
     { id: 7, label: 'Domingo' },
 ];
 
-export function OrdenPautadoFormDialog({ isOpen, onOpenChange, onSave, orden, programs }: OrdenPautadoFormDialogProps) {
+export function OrdenPautadoFormDialog({ isOpen, onOpenChange, onSave, orden }: OrdenPautadoFormDialogProps) {
   const [formData, setFormData] = useState<Partial<OrdenPautado>>({});
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [programs, setPrograms] = useState<Program[]>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    getPrograms().then(setPrograms);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -112,6 +117,15 @@ export function OrdenPautadoFormDialog({ isOpen, onOpenChange, onSave, orden, pr
     onSave(finalData);
     onOpenChange(false);
   };
+  
+  const availablePrograms = useMemo(() => {
+    if (!formData.dias || formData.dias.length === 0) {
+      return programs;
+    }
+    return programs.filter(p => 
+        p.schedules.some(s => s.daysOfWeek.some(d => formData.dias!.includes(d)))
+    );
+  }, [programs, formData.dias]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -192,7 +206,7 @@ export function OrdenPautadoFormDialog({ isOpen, onOpenChange, onSave, orden, pr
             <div className="space-y-2">
                 <Label>Programas</Label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 border rounded-md max-h-48 overflow-y-auto">
-                    {programs.map(prog => (
+                    {availablePrograms.map(prog => (
                         <div key={prog.id} className="flex items-center space-x-2">
                              <Checkbox 
                                 id={`prog-${prog.id}`} 

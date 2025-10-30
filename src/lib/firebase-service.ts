@@ -1,9 +1,8 @@
 
 
-
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format } from 'date-fns';
@@ -397,7 +396,7 @@ export const updateCommercialItem = async (itemId: string, itemData: Partial<Omi
     });
 }
 
-export const deleteCommercialItem = async (itemIds: string[], userId: string, userName: string): Promise<void> => {
+export const deleteCommercialItem = async (itemIds: string[], userId?: string, userName?: string): Promise<void> => {
     if (!itemIds || itemIds.length === 0) return;
 
     const batch = writeBatch(db);
@@ -413,7 +412,7 @@ export const deleteCommercialItem = async (itemIds: string[], userId: string, us
     
     await batch.commit();
 
-    if (firstItemData) {
+    if (userId && userName && firstItemData) {
         await logActivity({
             userId,
             userName,
@@ -1304,6 +1303,70 @@ const createReminderEvent = async (accessToken: string, ownerEmail: string, clie
     await createCalendarEvent(accessToken, event);
 };
 
+const createCommercialItemsFromOpportunity = async (opportunity: Opportunity, userId: string, userName: string) => {
+    if (!opportunity.ordenesPautado || opportunity.ordenesPautado.length === 0) {
+        return;
+    }
+
+    const batch = writeBatch(db);
+    const newItems: Omit<CommercialItem, 'id'>[] = [];
+
+    for (const orden of opportunity.ordenesPautado) {
+        if (!orden.fechaInicio || !orden.fechaFin || !orden.programas || orden.programas.length === 0) continue;
+
+        let currentDate = parseDateWithTimezone(orden.fechaInicio);
+        const endDate = parseDateWithTimezone(orden.fechaFin);
+
+        while (currentDate <= endDate) {
+            const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
+            if (orden.dias?.includes(dayOfWeek)) {
+                for (const programName of orden.programas) {
+                    const program = (await getPrograms()).find(p => p.name === programName);
+                    if (program) {
+                        for (let i = 0; i < (orden.repeticiones || 1); i++) {
+                             const item: Omit<CommercialItem, 'id'> = {
+                                programId: program.id,
+                                date: format(currentDate, 'yyyy-MM-dd'),
+                                type: orden.tipoPauta === 'Spot' ? 'Pauta' : orden.tipoPauta,
+                                title: orden.tipoPauta === 'PNT' ? orden.textoPNT || opportunity.title : opportunity.title,
+                                description: orden.textoPNT || opportunity.title,
+                                status: 'Vendido',
+                                clientId: opportunity.clientId,
+                                clientName: opportunity.clientName,
+                                opportunityId: opportunity.id,
+                                opportunityTitle: opportunity.title,
+                                createdBy: userId,
+                            };
+                            newItems.push(item);
+                        }
+                    }
+                }
+            }
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+    }
+    
+    if (newItems.length > 0) {
+        for (const itemData of newItems) {
+            const docRef = doc(collection(db, 'commercial_items'));
+            batch.set(docRef, { ...itemData, createdAt: serverTimestamp() });
+        }
+        await batch.commit();
+
+        await logActivity({
+            userId,
+            userName,
+            type: 'create',
+            entityType: 'commercial_item_series',
+            entityId: opportunity.id,
+            entityName: opportunity.title,
+            details: `generó <strong>${newItems.length}</strong> pautas comerciales desde la oportunidad <strong>${opportunity.title}</strong>`,
+            ownerName: userName, // Assuming the person closing the deal is the owner of this log
+        });
+    }
+};
+
+
 export const updateOpportunity = async (
     id: string, 
     data: Partial<Omit<Opportunity, 'id'>>,
@@ -1355,6 +1418,12 @@ export const updateOpportunity = async (
                 }
             }
         }
+    }
+
+     // --- Generate Commercial Items on "Closed Won" ---
+    if (data.stage === 'Cerrado - Ganado' && originalData.stage !== 'Cerrado - Ganado') {
+        const fullOpportunityData = { ...originalData, ...data };
+        await createCommercialItemsFromOpportunity(fullOpportunityData, userId, userName);
     }
 
 

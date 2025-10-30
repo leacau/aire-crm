@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, Program } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { Checkbox } from '../ui/checkbox';
@@ -30,7 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, getPrograms } from '@/lib/firebase-service';
+import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice } from '@/lib/firebase-service';
 import { PlusCircle, Clock, Trash2, FileText, Save, Calculator } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
@@ -38,7 +38,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { invoiceStatusOptions } from '@/lib/types';
 import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
 import {
   AlertDialog,
@@ -77,8 +76,6 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     fechaFacturacion: '',
     proposalFiles: [],
     ordenesPautado: [],
-    proposalItems: [],
-    valorTarifario: 0,
 });
 
 const NewAgencyDialog = ({ onAgencyCreated }: { onAgencyCreated: (newAgency: Agency) => void }) => {
@@ -152,25 +149,16 @@ export function OpportunityDetailsDialog({
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const [agencies, setAgencies] = useState<Agency[]>([]);
-  const [programs, setPrograms] = useState<Program[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isOrdenPautadoFormOpen, setIsOrdenPautadoFormOpen] = useState(false);
   const [selectedOrden, setSelectedOrden] = useState<OrdenPautado | null>(null);
   const isEditing = !!opportunity;
+
+  const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>(() => 
+    isEditing ? opportunity : getInitialOpportunityData(client)
+  );
   
-  const getInitialData = () => {
-      if (opportunity) {
-        const data = { ...opportunity };
-        if (!data.proposalItems) data.proposalItems = [];
-        if (!data.ordenesPautado) data.ordenesPautado = [];
-        return data;
-      }
-      return getInitialOpportunityData(client);
-  }
-
-  const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>(getInitialData());
-
   const fetchInvoices = useCallback(async () => {
     if (opportunity) {
         const fetchedInvoices = await getInvoicesForOpportunity(opportunity.id);
@@ -181,26 +169,21 @@ export function OpportunityDetailsDialog({
 
   useEffect(() => {
     if (isOpen) {
-        const initialData = getInitialData();
+        const initialData = isEditing ? { ...opportunity } : getInitialOpportunityData(client);
+        if (!initialData.ordenesPautado) initialData.ordenesPautado = [];
         setEditedOpportunity(initialData);
         
-        Promise.all([
-          getAgencies(),
-          getPrograms()
-        ]).then(([agencies, programs]) => {
-          setAgencies(agencies);
-          setPrograms(programs);
-        }).catch(() => {
-            toast({ title: "Error al cargar datos auxiliares", variant: "destructive" });
-        });
+        getAgencies()
+            .then(setAgencies)
+            .catch(() => toast({ title: "Error al cargar agencias", variant: "destructive" }));
 
-        if (opportunity) {
+        if (isEditing) {
             fetchInvoices();
         } else {
-          setInvoices([]);
+            setInvoices([]);
         }
     }
-  }, [opportunity, isOpen, client, toast, fetchInvoices]);
+  }, [opportunity, isOpen, client, toast, fetchInvoices, isEditing]);
   
   const handleAgencyCreated = (newAgency: Agency) => {
     setAgencies(prev => [...prev, newAgency].sort((a,b) => a.name.localeCompare(b.name)));
@@ -209,34 +192,12 @@ export function OpportunityDetailsDialog({
 
 
  const handleSave = async () => {
-    const oppToSave = { ...editedOpportunity };
-
-    const valorTarifario = (oppToSave.proposalItems || []).reduce((acc, item) => acc + item.subtotal, 0);
-    const valorFinal = oppToSave.value || 0;
-
-    oppToSave.valorTarifario = valorTarifario;
-    
-    if (valorFinal < valorTarifario) {
-        const diff = valorTarifario - valorFinal;
-        const percentage = valorTarifario > 0 ? (diff / valorTarifario) * 100 : 0;
-        oppToSave.bonificacionDetalle = `Descuento: $${diff.toLocaleString('es-AR')} (${percentage.toFixed(2)}%)`;
-        if (oppToSave.bonificacionEstado !== 'Autorizado' && oppToSave.bonificacionEstado !== 'Rechazado') {
-            oppToSave.bonificacionEstado = 'Pendiente';
-        }
-        if (oppToSave.stage === 'Negociación') {
-            oppToSave.stage = 'Negociación a Aprobar';
-        }
-    } else {
-        oppToSave.bonificacionDetalle = '';
-        delete oppToSave.bonificacionEstado;
-    }
-
     if (isEditing && opportunity) {
-        const changes: Partial<Opportunity> = Object.keys(oppToSave).reduce((acc, key) => {
+        const changes: Partial<Opportunity> = Object.keys(editedOpportunity).reduce((acc, key) => {
             const oppKey = key as keyof Opportunity;
-            if (JSON.stringify(oppToSave[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
+            if (JSON.stringify(editedOpportunity[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
                 // @ts-ignore
-                acc[oppKey] = oppToSave[oppKey];
+                acc[oppKey] = editedOpportunity[oppKey];
             }
             return acc;
         }, {} as Partial<Opportunity>);
@@ -246,7 +207,7 @@ export function OpportunityDetailsDialog({
             onUpdate(changes, accessToken);
         }
     } else if (!isEditing) {
-        const newOpp = { ...oppToSave } as Omit<Opportunity, 'id'>;
+        const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
         onCreate(newOpp);
     }
     onOpenChange(false);
@@ -265,13 +226,7 @@ export function OpportunityDetailsDialog({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    let finalValue: string | number | undefined = value;
-
-    if (name === 'value') {
-        finalValue = value === '' ? 0 : Number(value);
-    }
-    
-    setEditedOpportunity(prev => ({ ...prev, [name]: finalValue }));
+    setEditedOpportunity(prev => ({ ...prev, [name]: value }));
   };
 
   const handleCheckboxChange = (name: keyof Opportunity, checked: boolean | "indeterminate") => {
@@ -324,7 +279,6 @@ export function OpportunityDetailsDialog({
       ordenesPautado: (prev.ordenesPautado || []).filter(o => o.id !== ordenId),
     }));
   };
-
   
   const canEditBonus = isEditing && (editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar');
   const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
@@ -367,6 +321,7 @@ export function OpportunityDetailsDialog({
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
             <TabsTrigger value="bonus">Bonificación</TabsTrigger>
             <TabsTrigger value="pautado">Pautado</TabsTrigger>
+            <TabsTrigger value="invoicing">Facturación</TabsTrigger>
           </TabsList>
           
           <TabsContent value="details" className="space-y-4 py-4">
@@ -374,7 +329,7 @@ export function OpportunityDetailsDialog({
                 <Label htmlFor="title">Título</Label>
                 <Input id="title" name="title" value={editedOpportunity.title || ''} onChange={handleChange}/>
             </div>
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label htmlFor="stage">Etapa</Label>
                     <Select onValueChange={(v: OpportunityStage) => handleSelectChange('stage', v)} value={editedOpportunity.stage}>
@@ -382,9 +337,9 @@ export function OpportunityDetailsDialog({
                         <SelectContent>{opportunityStages.map(stage => <SelectItem key={stage} value={stage}>{stage}</SelectItem>)}</SelectContent>
                     </Select>
                 </div>
-                 <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="value" className="text-base font-bold">Valor Final Propuesta</Label>
-                    <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange} className="text-2xl font-bold h-12 text-right"/>
+                 <div className="space-y-2">
+                    <Label htmlFor="value">Valor</Label>
+                    <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange} />
                 </div>
               </div>
               <div className="space-y-2">
@@ -470,7 +425,7 @@ export function OpportunityDetailsDialog({
           <TabsContent value="bonus" className="space-y-4 py-4">
               <div className="space-y-2">
                   <Label htmlFor="bonificacionDetalle">Detalle Bonificación</Label>
-                  <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!canEditBonus} placeholder={!canEditBonus ? 'Se genera automáticamente si el valor final es menor al tarifario' : 'Ej: 10% Descuento'}/>
+                  <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!canEditBonus} placeholder="Ej: 10% Descuento por pago anticipado..."/>
               </div>
 
               {hasBonusRequest && (
@@ -524,27 +479,59 @@ export function OpportunityDetailsDialog({
             </div>
             <div className="space-y-3">
               {(editedOpportunity.ordenesPautado || []).map(orden => (
-                  <Card key={orden.id} className="bg-muted/30">
-                      <CardHeader className="flex flex-row items-center justify-between p-3">
-                        <CardTitle className="text-base">{orden.tipoPauta}</CardTitle>
+                  <div key={orden.id} className="p-3 border rounded-md">
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold">{orden.tipoPauta}</p>
                         <div className="flex items-center gap-2">
                            <Button variant="ghost" size="sm" onClick={() => handleEditOrdenPautado(orden)}>Editar</Button>
                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteOrdenPautado(orden.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
                         </div>
-                      </CardHeader>
-                      <CardContent className="p-3 pt-0 text-sm text-muted-foreground">
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-2 space-y-1">
                         <p><strong>Programas:</strong> {orden.programas?.join(', ')}</p>
                         <p><strong>Vigencia:</strong> {orden.fechaInicio ? format(new Date(orden.fechaInicio), 'P', {locale: es}) : ''} - {orden.fechaFin ? format(new Date(orden.fechaFin), 'P', {locale: es}) : ''}</p>
                         <p><strong>Repeticiones:</strong> {orden.repeticiones} por día</p>
                         {orden.tipoPauta === 'Spot' && <p><strong>Segundos:</strong> {orden.segundos}</p>}
                         {orden.textoPNT && <p className="mt-2 pt-2 border-t"><strong>Texto PNT:</strong> {orden.textoPNT}</p>}
-                      </CardContent>
-                  </Card>
+                      </div>
+                  </div>
               ))}
                {(editedOpportunity.ordenesPautado || []).length === 0 && (
                 <p className="text-center text-muted-foreground py-8">No hay órdenes de pautado cargadas.</p>
                )}
             </div>
+          </TabsContent>
+          
+          <TabsContent value="invoicing" className="py-4">
+              <div className="flex justify-end mb-4">
+                 <Button onClick={() => onOpenChange(false)}>
+                    <a href="/invoices">Cargar Factura</a>
+                 </Button>
+              </div>
+              <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Nº Factura</TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Monto</TableHead>
+                        <TableHead>Estado</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {invoices.length > 0 ? invoices.map(invoice => (
+                        <TableRow key={invoice.id}>
+                            <TableCell>{invoice.invoiceNumber}</TableCell>
+                            <TableCell>{format(new Date(invoice.date), 'P', {locale: es})}</TableCell>
+                            <TableCell>${invoice.amount.toLocaleString('es-AR')}</TableCell>
+                            <TableCell>{invoice.status}</TableCell>
+                        </TableRow>
+                    )) : (
+                        <TableRow>
+                            <TableCell colSpan={4} className="h-24 text-center">No hay facturas para esta oportunidad.</TableCell>
+                        </TableRow>
+                    )}
+                </TableBody>
+              </Table>
           </TabsContent>
 
         </Tabs>
@@ -571,7 +558,6 @@ export function OpportunityDetailsDialog({
             onOpenChange={setIsOrdenPautadoFormOpen}
             onSave={handleSaveOrdenPautado}
             orden={selectedOrden}
-            programs={programs}
         />
      )}
      </>
