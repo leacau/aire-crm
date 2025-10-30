@@ -36,6 +36,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
 
 interface DataTablePaginationProps<TData> {
   table: ReturnType<typeof useReactTable<TData>>;
@@ -132,6 +133,7 @@ interface ResizableDataTableProps<TData, TValue> {
   rowSelection?: RowSelectionState;
   setRowSelection?: React.Dispatch<React.SetStateAction<RowSelectionState>>;
   getRowId?: (originalRow: TData, index: number, parent?: Row<TData>) => string;
+  rowClassName?: (row: Row<TData>) => string;
 }
 
 export function ResizableDataTable<TData, TValue>({
@@ -147,6 +149,7 @@ export function ResizableDataTable<TData, TValue>({
   rowSelection,
   setRowSelection,
   getRowId,
+  rowClassName,
 }: ResizableDataTableProps<TData, TValue>) {
   const isSortingEnabled = !!sorting && !!setSorting;
   const isRowSelectionEnabled = !!rowSelection && !!setRowSelection;
@@ -234,7 +237,7 @@ export function ResizableDataTable<TData, TValue>({
                       }
                       onRowClick?.(row.original)
                     }}
-                    className={cn(onRowClick && 'cursor-pointer')}
+                    className={cn(onRowClick && 'cursor-pointer', rowClassName?.(row))}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id} style={{ width: enableRowResizing && cell.column.columnDef.size ? cell.column.getSize() : 'auto' }}>

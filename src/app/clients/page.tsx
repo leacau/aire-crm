@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog, CopyCheck, Activity } from 'lucide-react';
+import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog, CopyCheck, Activity, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
@@ -34,6 +34,8 @@ import { useRouter } from 'next/navigation';
 import { findBestMatch } from 'string-similarity';
 import { Badge } from '@/components/ui/badge';
 import { ActivityFormDialog } from '@/components/clients/activity-form-dialog';
+import { cn } from '@/lib/utils';
+
 
 function ReassignClientDialog({ 
   clients, 
@@ -374,10 +376,25 @@ export default function ClientsPage() {
     setIsActivityFormOpen(true);
   };
   
+  const handleToggleAttention = async (client: Client) => {
+    if (!userInfo) return;
+    const needsAttention = !client.needsAttention;
+    try {
+      await updateClient(client.id, { needsAttention }, userInfo.id, userInfo.name);
+      toast({
+        title: needsAttention ? "Alerta Activada" : "Alerta Desactivada",
+        description: `El cliente ${client.denominacion} ha sido ${needsAttention ? 'marcado para' : 'desmarcado de'} atención.`
+      });
+      fetchData();
+    } catch(error) {
+      console.error("Error toggling attention:", error);
+      toast({ title: 'Error al cambiar la alerta', variant: 'destructive'});
+    }
+  };
+
   const columns = useMemo<ColumnDef<Client>[]>(() => {
     const canViewDetails = (client: Client) => userInfo && client && (isBoss || client.ownerId === userInfo.id);
     const canSeeOppData = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
-
 
     let cols: ColumnDef<Client>[] = [];
 
@@ -413,7 +430,19 @@ export default function ClientsPage() {
         cell: ({ row }) => {
           const client = row.original;
           return (
-            <div className="group">
+            <div className="group flex items-center gap-2">
+              {client.needsAttention && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <TriangleAlert className="h-4 w-4 text-amber-500" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Este cliente requiere atención.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {canViewDetails(client) ? (
                 <Link href={`/clients/${client.id}`} className="font-medium text-primary hover:underline">
                   {client.denominacion}
@@ -462,6 +491,8 @@ export default function ClientsPage() {
         id: 'actions',
         cell: ({ row }) => {
           const client = row.original;
+          const isOwner = userInfo?.id === client.ownerId;
+          
           return (
             <div className="flex items-center justify-end">
               <Button
@@ -490,6 +521,18 @@ export default function ClientsPage() {
                       <UserCog className="mr-2 h-4 w-4" />
                       Reasignar
                     </DropdownMenuItem>
+                  )}
+                  {canManage && (
+                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleToggleAttention(client); }}>
+                       <TriangleAlert className="mr-2 h-4 w-4" />
+                       {client.needsAttention ? "Quitar alerta" : "Llamar la atención"}
+                     </DropdownMenuItem>
+                  )}
+                  {isOwner && client.needsAttention && (
+                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleToggleAttention(client); }}>
+                       <TriangleAlert className="mr-2 h-4 w-4" />
+                       Marcar como revisado
+                     </DropdownMenuItem>
                   )}
                   {isBoss && (
                     <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setRowSelection({[client.id]: true}); setIsBulkDeleteDialogOpen(true);}}>
@@ -585,6 +628,7 @@ export default function ClientsPage() {
           }}
           getRowId={(row) => row.id}
           enableRowResizing={false}
+          rowClassName={(row) => row.original.needsAttention ? 'bg-amber-100/50 hover:bg-amber-100/70' : ''}
         />
       </main>
       <ClientFormDialog

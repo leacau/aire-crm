@@ -137,6 +137,7 @@ export type Client = {
   newClientDate?: string;
   isDeactivated?: boolean;
   deactivationHistory?: string[];
+  needsAttention?: boolean;
 };
 
 export const prospectStatusOptions = ['Nuevo', 'Contactado', 'Calificado', 'No Próspero', 'Convertido'] as const;
