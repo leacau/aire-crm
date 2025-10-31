@@ -26,7 +26,8 @@ export default function LicenciasPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      const fetchedRequests = await getVacationRequests();
+      // Pass user info to respect security rules
+      const fetchedRequests = await getVacationRequests(userInfo.id, userInfo.role);
       setRequests(fetchedRequests);
     } catch (error) {
       console.error("Error fetching license data:", error);
@@ -113,13 +114,6 @@ export default function LicenciasPage() {
     }
   };
 
-  const filteredRequests = useMemo(() => {
-    if (isBoss) {
-      return requests;
-    }
-    return requests.filter(r => r.userId === userInfo?.id);
-  }, [requests, userInfo, isBoss]);
-
 
   if (authLoading || loading) {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
@@ -138,7 +132,7 @@ export default function LicenciasPage() {
         </Header>
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
             <LicensesTable 
-                requests={filteredRequests}
+                requests={requests}
                 isManagerView={isBoss}
                 onUpdateRequest={handleUpdateRequest}
             />

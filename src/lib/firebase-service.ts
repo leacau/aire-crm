@@ -23,8 +23,16 @@ const licensesCollection = collection(db, 'licencias');
 
 // --- Vacation Request Functions ---
 
-export const getVacationRequests = async (): Promise<VacationRequest[]> => {
-    const snapshot = await getDocs(query(licensesCollection, orderBy("requestDate", "desc")));
+export const getVacationRequests = async (userId: string, userRole: UserRole): Promise<VacationRequest[]> => {
+    let q;
+    if (userRole === 'Jefe' || userRole === 'Gerencia' || userRole === 'Admin') {
+        // Managers can see all requests
+        q = query(licensesCollection, orderBy("requestDate", "desc"));
+    } else {
+        // Advisors can only see their own requests
+        q = query(licensesCollection, where("userId", "==", userId), orderBy("requestDate", "desc"));
+    }
+    const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRequest));
 };
 
