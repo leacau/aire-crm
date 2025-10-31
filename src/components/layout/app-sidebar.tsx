@@ -15,7 +15,7 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb } from 'lucide-react';
+import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb, ClipboardCheck } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
@@ -31,6 +31,7 @@ const menuItems = [
   { href: '/invoices', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/billing', label: 'Cobranzas', icon: Banknote, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/calendar', label: 'Calendario', icon: Calendar, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
+  { href: '/licencias', label: 'Licencias', icon: ClipboardCheck, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, roles: ['Jefe', 'Gerencia'] },
   { href: '/activity', label: 'Actividad', icon: LayoutList, roles: ['Jefe', 'Gerencia'] },
   { href: '/team', label: 'Equipo', icon: Users, roles: ['Jefe', 'Gerencia', 'Administracion'] },
@@ -49,6 +50,7 @@ function MenuLink({ item }: { item: typeof menuItems[0] }) {
     if (href === '/billing') return pathname === '/billing';
     if (href === '/invoices') return pathname === '/invoices';
     if (href === '/rates') return pathname === '/rates';
+    if (href === '/licencias') return pathname === '/licencias';
     return pathname.startsWith(href) && href !== '/';
   };
 

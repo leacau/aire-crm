@@ -167,7 +167,7 @@ export type ActivityLog = {
   userName: string;
   ownerName: string;
   type: 'create' | 'update' | 'delete' | 'stage_change';
-  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user' | 'program' | 'commercial_item' | 'commercial_item_series';
+  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user' | 'program' | 'commercial_item' | 'commercial_item_series' | 'licencia';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action
@@ -273,6 +273,23 @@ export type User = {
   deletedAt?: string;
   vacationDays?: number;
 };
+
+export type VacationRequestStatus = 'Pendiente' | 'Aprobado' | 'Rechazado';
+
+export type VacationRequest = {
+  id: string;
+  userId: string;
+  userName: string;
+  startDate: string; // "YYYY-MM-DD"
+  endDate: string; // "YYYY-MM-DD"
+  daysRequested: number;
+  returnDate: string; // "YYYY-MM-DD"
+  status: VacationRequestStatus;
+  requestDate: string;
+  approvedBy?: string;
+  approvedAt?: string;
+};
+
 
 // This type is used for mapping columns during import.
 // It includes client fields and the ownerName for assignment.
