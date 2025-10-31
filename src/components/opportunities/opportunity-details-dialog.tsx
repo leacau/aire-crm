@@ -155,6 +155,12 @@ export function OpportunityDetailsDialog({
   const [selectedOrden, setSelectedOrden] = useState<OrdenPautado | null>(null);
   const isEditing = !!opportunity;
 
+  const [newInvoice, setNewInvoice] = useState<{ number: string, date: string, amount: number }>({
+    number: '',
+    date: new Date().toISOString().split('T')[0],
+    amount: 0
+  });
+
   const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>(() => 
     isEditing ? opportunity : getInitialOpportunityData(client)
   );
@@ -279,6 +285,43 @@ export function OpportunityDetailsDialog({
       ordenesPautado: (prev.ordenesPautado || []).filter(o => o.id !== ordenId),
     }));
   };
+
+  const handleSaveInvoice = async () => {
+    if (!opportunity || !userInfo) return;
+    if (!newInvoice.number || newInvoice.amount <= 0) {
+      toast({ title: 'Datos de factura incompletos', variant: 'destructive'});
+      return;
+    }
+
+    try {
+      await createInvoice({
+        opportunityId: opportunity.id,
+        invoiceNumber: newInvoice.number,
+        amount: newInvoice.amount,
+        date: newInvoice.date,
+        status: 'Generada',
+        dateGenerated: new Date().toISOString(),
+      }, userInfo.id, userInfo.name, opportunity.clientName);
+      toast({ title: 'Factura creada' });
+      setNewInvoice({ number: '', date: new Date().toISOString().split('T')[0], amount: 0 });
+      fetchInvoices();
+    } catch(error) {
+      console.error("Error creating invoice", error);
+      toast({ title: 'Error al crear la factura', variant: 'destructive'});
+    }
+  }
+
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    if (!opportunity || !userInfo) return;
+    try {
+      await deleteInvoice(invoiceId, userInfo.id, userInfo.name, opportunity.clientName);
+      toast({ title: 'Factura eliminada'});
+      fetchInvoices();
+    } catch (error) {
+      console.error("Error deleting invoice", error);
+      toast({ title: 'Error al eliminar la factura', variant: 'destructive'});
+    }
+  }
   
   const canEditBonus = isEditing && (editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar');
   const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
@@ -503,35 +546,69 @@ export function OpportunityDetailsDialog({
           </TabsContent>
           
           <TabsContent value="invoicing" className="py-4">
-              <div className="flex justify-end mb-4">
-                 <Button onClick={() => onOpenChange(false)}>
-                    <a href="/invoices">Cargar Factura</a>
-                 </Button>
-              </div>
-              <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Nº Factura</TableHead>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead>Monto</TableHead>
-                        <TableHead>Estado</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {invoices.length > 0 ? invoices.map(invoice => (
-                        <TableRow key={invoice.id}>
-                            <TableCell>{invoice.invoiceNumber}</TableCell>
-                            <TableCell>{format(new Date(invoice.date), 'P', {locale: es})}</TableCell>
-                            <TableCell>${invoice.amount.toLocaleString('es-AR')}</TableCell>
-                            <TableCell>{invoice.status}</TableCell>
-                        </TableRow>
-                    )) : (
+            <div className="space-y-4">
+                <Table>
+                    <TableHeader>
                         <TableRow>
-                            <TableCell colSpan={4} className="h-24 text-center">No hay facturas para esta oportunidad.</TableCell>
+                            <TableHead>Nº Factura</TableHead>
+                            <TableHead>Fecha</TableHead>
+                            <TableHead>Monto</TableHead>
+                            <TableHead>Estado</TableHead>
+                            <TableHead className="w-12"></TableHead>
                         </TableRow>
-                    )}
-                </TableBody>
-              </Table>
+                    </TableHeader>
+                    <TableBody>
+                        {invoices.length > 0 ? invoices.map(invoice => (
+                            <TableRow key={invoice.id}>
+                                <TableCell>{invoice.invoiceNumber}</TableCell>
+                                <TableCell>{format(new Date(invoice.date), 'P', { locale: es })}</TableCell>
+                                <TableCell>${invoice.amount.toLocaleString('es-AR')}</TableCell>
+                                <TableCell>{invoice.status}</TableCell>
+                                <TableCell>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteInvoice(invoice.id)}>
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        )) : (
+                            <TableRow>
+                                <TableCell colSpan={5} className="h-24 text-center">No hay facturas para esta oportunidad.</TableCell>
+                            </TableRow>
+                        )}
+                        {/* New Invoice Row */}
+                         <TableRow>
+                            <TableCell>
+                                <Input 
+                                    placeholder="0001-00123456" 
+                                    value={newInvoice.number}
+                                    onChange={(e) => setNewInvoice(prev => ({...prev, number: e.target.value}))}
+                                />
+                            </TableCell>
+                             <TableCell>
+                                <Input 
+                                    type="date" 
+                                    value={newInvoice.date}
+                                    onChange={(e) => setNewInvoice(prev => ({...prev, date: e.target.value}))}
+                                />
+                            </TableCell>
+                             <TableCell>
+                                <Input 
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={newInvoice.amount || ''}
+                                    onChange={(e) => setNewInvoice(prev => ({...prev, amount: Number(e.target.value)}))}
+                                />
+                            </TableCell>
+                             <TableCell colSpan={2}>
+                                <Button onClick={handleSaveInvoice} size="sm">
+                                    <PlusCircle className="mr-2 h-4 w-4"/>
+                                    Guardar Factura
+                                </Button>
+                             </TableCell>
+                        </TableRow>
+                    </TableBody>
+                </Table>
+            </div>
           </TabsContent>
 
         </Tabs>
