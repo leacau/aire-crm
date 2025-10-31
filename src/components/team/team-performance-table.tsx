@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -14,6 +15,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +50,7 @@ export function TeamPerformanceTable() {
   const [loading, setLoading] = useState(true);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editedVacationDays, setEditedVacationDays] = useState<Record<string, number | string>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -89,6 +92,36 @@ export function TeamPerformanceTable() {
         toast({ title: 'Error al actualizar el rol', variant: 'destructive' });
     }
   }
+
+  const handleVacationDaysChange = (userId: string, value: string) => {
+    setEditedVacationDays(prev => ({ ...prev, [userId]: value }));
+  };
+
+  const handleSaveVacationDays = async (userId: string) => {
+    const days = editedVacationDays[userId];
+    if (days === undefined || days === '') return;
+
+    const numericValue = Number(days);
+    if (isNaN(numericValue) || numericValue < 0) {
+        toast({ title: 'Valor inválido', description: 'Por favor, introduce un número válido de días.', variant: 'destructive'});
+        return;
+    }
+    
+    try {
+        await updateUserProfile(userId, { vacationDays: numericValue });
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, vacationDays: numericValue } : u));
+        setEditedVacationDays(prev => {
+            const newEdited = {...prev};
+            delete newEdited[userId];
+            return newEdited;
+        });
+        toast({ title: 'Días de vacaciones actualizados' });
+    } catch (error) {
+        console.error("Error updating vacation days:", error);
+        toast({ title: 'Error al actualizar los días de vacaciones', variant: 'destructive'});
+    }
+  };
+
 
   const handleDeleteUser = async () => {
     if (!userToDelete || !userInfo) return;
@@ -177,6 +210,26 @@ export function TeamPerformanceTable() {
         }
     },
     {
+      accessorKey: 'vacationDays',
+      header: 'Días Vacaciones',
+      cell: ({ row }) => {
+        const { user } = row.original;
+        const isEdited = editedVacationDays[user.id] !== undefined;
+        return (
+          <div className="flex items-center gap-1 w-[120px]">
+            <Input 
+              type="number"
+              className="w-full h-8"
+              value={isEdited ? editedVacationDays[user.id] : (user.vacationDays || '')}
+              onChange={(e) => handleVacationDaysChange(user.id, e.target.value)}
+              disabled={!isBoss}
+            />
+            {isEdited && <Button size="sm" className="h-8" onClick={() => handleSaveVacationDays(user.id)}>G</Button>}
+          </div>
+        )
+      }
+    },
+    {
       accessorKey: 'prospectsCount',
       header: () => <div className="text-right">Prospectos Activos</div>,
       cell: ({ row }) => <div className="text-right">{row.original.user.role === 'Asesor' ? row.original.prospectsCount : '-'}</div>,
@@ -223,7 +276,7 @@ export function TeamPerformanceTable() {
             )
         }
     }
-  ], [isBoss, userInfo]);
+  ], [isBoss, userInfo, editedVacationDays]);
 
   if (loading) {
     return (

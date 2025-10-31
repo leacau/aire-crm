@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format } from 'date-fns';
@@ -19,6 +19,41 @@ const canjesCollection = collection(db, 'canjes');
 const programsCollection = collection(db, 'programs');
 const commercialItemsCollection = collection(db, 'commercial_items');
 const prospectsCollection = collection(db, 'prospects');
+const licensesCollection = collection(db, 'licencias');
+
+// --- Vacation Request Functions ---
+
+export const getVacationRequests = async (): Promise<VacationRequest[]> => {
+    const snapshot = await getDocs(query(licensesCollection, orderBy("requestDate", "desc")));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRequest));
+};
+
+export const createVacationRequest = async (requestData: Omit<VacationRequest, 'id'>): Promise<string> => {
+    const docRef = await addDoc(licensesCollection, {
+        ...requestData,
+        requestDate: serverTimestamp(),
+    });
+    return docRef.id;
+};
+
+export const updateVacationRequest = async (id: string, data: Partial<VacationRequest>, daysRequested: number): Promise<void> => {
+    const requestRef = doc(db, 'licencias', id);
+    const requestSnap = await getDoc(requestRef);
+    if (!requestSnap.exists()) throw new Error('Solicitud no encontrada');
+    
+    await updateDoc(requestRef, data);
+
+    if (data.status === 'Aprobado') {
+        const userRef = doc(db, 'users', requestSnap.data().userId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+            const currentDays = userSnap.data().vacationDays || 0;
+            await updateDoc(userRef, {
+                vacationDays: Math.max(0, currentDays - daysRequested)
+            });
+        }
+    }
+};
 
 
 // --- Prospect Functions ---

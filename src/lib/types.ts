@@ -1,6 +1,5 @@
 
 
-
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -271,7 +270,21 @@ export type User = {
   initials?: string;
   photoURL?: string;
   deletedAt?: string;
+  vacationDays?: number;
 };
+
+export type VacationRequest = {
+    id: string;
+    userId: string;
+    userName: string;
+    startDate: string;
+    endDate: string;
+    daysRequested: number;
+    returnDate: string;
+    status: 'Pendiente' | 'Aprobado' | 'Rechazado';
+    requestDate: string;
+};
+
 
 // This type is used for mapping columns during import.
 // It includes client fields and the ownerName for assignment.
