@@ -23,6 +23,7 @@ export default function LicensesPage() {
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<VacationRequest | null>(null);
+  const [requestOwner, setRequestOwner] = useState<User | null>(null);
   const [requestToDelete, setRequestToDelete] = useState<VacationRequest | null>(null);
 
   const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
@@ -54,13 +55,25 @@ export default function LicensesPage() {
   
   const handleOpenForm = (request: VacationRequest | null = null) => {
     setEditingRequest(request);
+    if (request) {
+      const owner = users.find(u => u.id === request.userId);
+      setRequestOwner(owner || null);
+    } else {
+      setRequestOwner(null);
+    }
     setIsFormOpen(true);
   };
   
   const handleSaveRequest = async (requestData: Omit<VacationRequest, 'id' | 'status'>, isEditing: boolean) => {
-    if (!userInfo || !userManager?.email) {
-      toast({ title: 'Falta información', description: 'No se pudo encontrar el email de tu jefe directo. Contacta a un administrador.', variant: 'destructive' });
-      return;
+    if (!userInfo) return false;
+    
+    // Find the manager to notify. If editing, it's the manager of the request owner. If creating, it's the current user's manager.
+    const ownerOfRequest = users.find(u => u.id === requestData.userId);
+    const managerToNotify = managers.find(m => m.id === ownerOfRequest?.managerId);
+
+    if (!managerToNotify?.email) {
+      toast({ title: 'Falta información', description: 'No se pudo encontrar el email del jefe directo para notificar. Contacta a un administrador.', variant: 'destructive' });
+      return false;
     }
 
     try {
@@ -68,10 +81,10 @@ export default function LicensesPage() {
       if (!accessToken) throw new Error("No se pudo obtener el token de acceso.");
       
       if (isEditing && editingRequest) {
-        await updateVacationRequest(editingRequest.id, requestData, userInfo.id, userManager.email, accessToken);
+        await updateVacationRequest(editingRequest.id, requestData, userInfo.id, managerToNotify.email, accessToken);
         toast({ title: 'Solicitud Actualizada' });
       } else {
-        await createVacationRequest(requestData, userInfo.id, userInfo.name, userManager.email, accessToken);
+        await createVacationRequest(requestData, userInfo.id, userInfo.name, managerToNotify.email, accessToken);
         toast({ title: 'Solicitud Enviada', description: 'Tu jefe directo ha sido notificado.' });
       }
       fetchData();
@@ -100,7 +113,7 @@ export default function LicensesPage() {
       
       if (newStatus === 'Aprobado') {
         const remainingDays = (applicant.vacationDays || 0) - request.daysRequested;
-        await updateVacationRequest(applicant.id, { vacationDays: remainingDays }, userInfo.id);
+        await updateUserProfile(applicant.id, { vacationDays: remainingDays });
       }
       
       toast({ title: `Solicitud ${newStatus}` });
@@ -114,7 +127,7 @@ export default function LicensesPage() {
   const handleDeleteRequest = async () => {
     if (!requestToDelete) return;
     try {
-      await deleteVacationRequest(requestToDelete.id);
+      await deleteVacationRequest(requestToDelete.id, userInfo!.id, userInfo!.name);
       toast({ title: 'Solicitud Eliminada' });
       fetchData();
     } catch(error) {
@@ -157,6 +170,7 @@ export default function LicensesPage() {
         onSave={handleSaveRequest}
         request={editingRequest}
         currentUser={userInfo}
+        requestOwner={requestOwner}
       />
       
       <AlertDialog open={!!requestToDelete} onOpenChange={(open) => !open && setRequestToDelete(null)}>

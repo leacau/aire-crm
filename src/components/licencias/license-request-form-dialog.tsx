@@ -29,6 +29,7 @@ interface LicenseRequestFormDialogProps {
   onSave: (requestData: Omit<VacationRequest, 'id' | 'status'>, isEditing: boolean) => Promise<boolean>;
   request?: VacationRequest | null;
   currentUser: User;
+  requestOwner?: User | null; // The user whose request is being edited
 }
 
 const getNextWorkday = (date: Date): Date => {
@@ -39,10 +40,14 @@ const getNextWorkday = (date: Date): Date => {
   return nextDay;
 };
 
-export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request, currentUser }: LicenseRequestFormDialogProps) {
+export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request, currentUser, requestOwner }: LicenseRequestFormDialogProps) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [isSaving, setIsSaving] = useState(false);
   const isEditing = !!request?.id;
+
+  // Determine whose vacation days to display and calculate against.
+  // If a manager is editing, use the requestOwner's data. Otherwise, use the currentUser's.
+  const userForCalculations = isEditing && requestOwner ? requestOwner : currentUser;
 
   useEffect(() => {
     if (isOpen) {
@@ -72,15 +77,15 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
     };
   }, [dateRange]);
 
-  const remainingDays = (currentUser.vacationDays || 0) - daysRequested;
+  const remainingDays = (userForCalculations.vacationDays || 0) - daysRequested;
 
   const handleSave = async () => {
     if (!dateRange?.from || !dateRange?.to) return;
 
     setIsSaving(true);
     const success = await onSave({
-      userId: currentUser.id,
-      userName: currentUser.name,
+      userId: userForCalculations.id,
+      userName: userForCalculations.name,
       startDate: format(dateRange.from, 'yyyy-MM-dd'),
       endDate: format(dateRange.to, 'yyyy-MM-dd'),
       daysRequested,
@@ -98,7 +103,7 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Solicitud de Licencia</DialogTitle>
+          <DialogTitle>{isEditing ? `Editar Solicitud de ${userForCalculations.name}` : 'Nueva Solicitud de Licencia'}</DialogTitle>
           <DialogDescription>
             Selecciona el período de tu licencia. Los días y la fecha de reincorporación se calcularán automáticamente.
           </DialogDescription>
@@ -106,7 +111,7 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
         <div className="grid gap-4 py-4">
           <div className="space-y-2">
             <Label>Días de vacaciones disponibles</Label>
-            <Input value={currentUser.vacationDays || 0} disabled />
+            <Input value={userForCalculations.vacationDays || 0} disabled />
           </div>
           <div className="space-y-2">
             <Label htmlFor="date-range">Fechas Solicitadas</Label>
