@@ -136,7 +136,7 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
   
   const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor' || userInfo?.role === 'Gerencia';
 
-  const displayValue = opportunity.value || 0;
+  const displayValue = Number(opportunity.value || 0);
 
   return (
     <>
@@ -277,7 +277,7 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
             acc.push({ id: opp.clientId, name: opp.clientName });
         }
         return acc;
-    }, [] as { id: string, name: string }[]).sort((a,b) => a.name.localeCompare(b.name));
+    }, [] as { id: string; name: string }[]).sort((a,b) => a.name.localeCompare(b.name));
     
     onClientListChange(uniqueClients);
 }, [filteredOpportunities, onClientListChange]);

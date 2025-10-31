@@ -235,7 +235,8 @@ export function OpportunityDetailsDialog({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
      if (type === 'number') {
-      setEditedOpportunity(prev => ({ ...prev, [name]: value === '' ? '' : Number(value) }));
+      const sanitizedValue = value.replace(/,/g, '.');
+      setEditedOpportunity(prev => ({ ...prev, [name]: sanitizedValue === '' ? '' : Number(sanitizedValue) }));
     } else {
       setEditedOpportunity(prev => ({ ...prev, [name]: value }));
     }
@@ -380,7 +381,7 @@ export function OpportunityDetailsDialog({
                 </div>
                  <div className="space-y-2">
                     <Label htmlFor="value">Valor Final Propuesta</Label>
-                    <Input id="value" name="value" type="number" value={editedOpportunity.value === 0 ? '' : editedOpportunity.value} onChange={handleChange} />
+                    <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange} />
                 </div>
               </div>
               <div className="space-y-2">

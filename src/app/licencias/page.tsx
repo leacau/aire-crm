@@ -8,7 +8,7 @@ import { PlusCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { VacationRequest, User } from '@/lib/types';
-import { getVacationRequests, createVacationRequest, updateVacationRequest, getAllUsers } from '@/lib/firebase-service';
+import { createVacationRequest, updateVacationRequest, getAllUsers } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { LicenseRequestFormDialog } from '@/components/licencias/license-request-form-dialog';
 import { LicensesTable } from '@/components/licencias/licenses-table';
@@ -18,8 +18,7 @@ export default function LicenciasPage() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
 
-  const [requests, setRequests] = useState<VacationRequest[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [usersWithRequests, setUsersWithRequests] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
@@ -27,15 +26,11 @@ export default function LicenciasPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      const [fetchedRequests, fetchedUsers] = await Promise.all([
-        getVacationRequests(),
-        getAllUsers(),
-      ]);
-      setRequests(fetchedRequests);
-      setUsers(fetchedUsers);
+      const fetchedUsers = await getAllUsers();
+      setUsersWithRequests(fetchedUsers);
     } catch (error) {
       console.error("Error fetching license data:", error);
-      toast({ title: "Error al cargar las solicitudes", variant: "destructive" });
+      toast({ title: "Error al cargar las solicitudes", description: (error as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -53,11 +48,12 @@ export default function LicenciasPage() {
     try {
       const fullRequestData = {
         ...requestData,
+        id: `vac_${Date.now()}`, // Generate a unique ID
         userId: userInfo.id,
         userName: userInfo.name,
         status: 'Pendiente' as const,
       };
-      await createVacationRequest(fullRequestData);
+      await createVacationRequest(userInfo.id, fullRequestData);
       toast({ title: "Solicitud de licencia enviada" });
 
       const accessToken = await getGoogleAccessToken();
@@ -78,30 +74,30 @@ export default function LicenciasPage() {
       fetchData();
     } catch (error) {
       console.error("Error creating license request:", error);
-      toast({ title: "Error al enviar la solicitud", variant: "destructive" });
+      toast({ title: "Error al enviar la solicitud", description: (error as Error).message, variant: "destructive" });
     }
   };
   
-  const handleUpdateRequest = async (requestId: string, newStatus: 'Aprobado' | 'Rechazado') => {
+  const handleUpdateRequest = async (userId: string, requestId: string, newStatus: 'Aprobado' | 'Rechazado') => {
     if (!userInfo || !isBoss) return;
     
-    const request = requests.find(r => r.id === requestId);
+    const userToUpdate = usersWithRequests.find(u => u.id === userId);
+    const request = userToUpdate?.vacationRequests?.find(r => r.id === requestId);
     if (!request) return;
 
     try {
-        await updateVacationRequest(requestId, { status: newStatus }, request.daysRequested);
+        await updateVacationRequest(userId, requestId, { status: newStatus });
         toast({ title: `Solicitud ${newStatus === 'Aprobado' ? 'aprobada' : 'rechazada'}` });
         
-        const advisor = users.find(u => u.id === request.userId);
-        if (newStatus === 'Aprobado' && advisor?.email) {
+        if (newStatus === 'Aprobado' && userToUpdate?.email) {
              const accessToken = await getGoogleAccessToken();
              if (accessToken) {
                  await sendEmail({
                     accessToken,
-                    to: advisor.email,
+                    to: userToUpdate.email,
                     subject: 'Tu solicitud de licencia ha sido aprobada',
                     body: `
-                        <p>Hola ${advisor.name},</p>
+                        <p>Hola ${userToUpdate.name},</p>
                         <p>Tu solicitud de licencia para el período del <strong>${request.startDate}</strong> al <strong>${request.endDate}</strong> ha sido aprobada.</p>
                         <p>¡Que las disfrutes!</p>
                     `,
@@ -112,16 +108,16 @@ export default function LicenciasPage() {
         fetchData();
     } catch (error) {
         console.error("Error updating license request:", error);
-        toast({ title: 'Error al actualizar la solicitud', variant: 'destructive'});
+        toast({ title: 'Error al actualizar la solicitud', description: (error as Error).message, variant: 'destructive'});
     }
   };
 
-
-  const userRequests = useMemo(() => {
-    if (!userInfo) return [];
-    if (isBoss) return requests;
-    return requests.filter(r => r.userId === userInfo.id);
-  }, [requests, userInfo, isBoss]);
+  const allRequests = useMemo(() => {
+    if (isBoss) {
+      return usersWithRequests.flatMap(user => user.vacationRequests || []);
+    }
+    return userInfo?.vacationRequests || [];
+  }, [usersWithRequests, userInfo, isBoss]);
 
 
   if (authLoading || loading) {
@@ -141,7 +137,7 @@ export default function LicenciasPage() {
         </Header>
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
             <LicensesTable 
-                requests={userRequests}
+                requests={allRequests}
                 isManagerView={isBoss}
                 onUpdateRequest={handleUpdateRequest}
             />
@@ -159,4 +155,3 @@ export default function LicenciasPage() {
     </>
   );
 }
-

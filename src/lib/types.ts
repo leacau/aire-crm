@@ -271,6 +271,7 @@ export type User = {
   photoURL?: string;
   deletedAt?: string;
   vacationDays?: number;
+  vacationRequests?: VacationRequest[];
 };
 
 export type VacationRequest = {
