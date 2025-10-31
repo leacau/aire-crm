@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
@@ -20,107 +20,6 @@ const canjesCollection = collection(db, 'canjes');
 const programsCollection = collection(db, 'programs');
 const commercialItemsCollection = collection(db, 'commercial_items');
 const prospectsCollection = collection(db, 'prospects');
-const licensesCollection = collection(db, 'licencias');
-
-// --- Vacation Request Functions ---
-
-export const getVacationRequests = async (currentUser: User): Promise<VacationRequest[]> => {
-    // New Strategy: Fetch all licenses and filter client-side to bypass query permission issues.
-    const snapshot = await getDocs(query(licensesCollection));
-    const allRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRequest));
-
-    const isManager = currentUser.role === 'Jefe' || currentUser.role === 'Gerencia' || currentUser.role === 'Administracion';
-
-    let filteredRequests;
-    if (isManager) {
-        filteredRequests = allRequests;
-    } else {
-        filteredRequests = allRequests.filter(req => req.userId === currentUser.id);
-    }
-    
-    // Sort client-side
-    filteredRequests.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
-    
-    return filteredRequests;
-};
-
-
-export const createVacationRequest = async (requestData: Omit<VacationRequest, 'id'>, managerEmail?: string): Promise<string> => {
-    const { userName, startDate, endDate, daysRequested, returnDate } = requestData;
-
-    const docRef = await addDoc(licensesCollection, {
-        ...requestData,
-        requestDate: new Date().toISOString()
-    });
-    
-    if (managerEmail) {
-        try {
-            const subject = `Nueva Solicitud de Licencia - ${userName}`;
-            const body = `
-                <p>El asesor <strong>${userName}</strong> ha solicitado una licencia.</p>
-                <ul>
-                    <li><strong>Período:</strong> ${format(parseISO(startDate), 'P', { locale: es })} - ${format(parseISO(endDate), 'P', { locale: es })}</li>
-                    <li><strong>Días solicitados:</strong> ${daysRequested}</li>
-                    <li><strong>Fecha de reincorporación:</strong> ${format(parseISO(returnDate), 'P', { locale: es })}</li>
-                </ul>
-                <p>Para gestionar esta solicitud, por favor ingresa a la sección "Licencias" en el CRM.</p>
-            `;
-            await sendEmail({ to: managerEmail, subject, body });
-        } catch (error) {
-            console.error("Failed to send notification email, but license request was created.", error);
-            // Non-critical error, so we don't throw. The request is still saved.
-        }
-    }
-    
-    return docRef.id;
-};
-
-export const updateVacationRequest = async (requestId: string, data: Partial<Omit<VacationRequest, 'id'>>, adminUserId: string, accessToken?: string | null): Promise<void> => {
-    const requestRef = doc(db, 'licencias', requestId);
-    const requestSnap = await getDoc(requestRef);
-    if (!requestSnap.exists()) throw new Error('Solicitud no encontrada');
-    
-    const originalRequest = requestSnap.data() as VacationRequest;
-    
-    const updateData: { [key: string]: any } = { ...data, updatedAt: serverTimestamp(), updatedBy: adminUserId };
-
-    if (data.status === 'Aprobado' && originalRequest.status !== 'Aprobado') {
-        const userRef = doc(db, 'users', originalRequest.userId);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-            const currentDays = userSnap.data().vacationDays || 0;
-            await updateDoc(userRef, {
-                vacationDays: Math.max(0, currentDays - originalRequest.daysRequested)
-            });
-        }
-        
-        // Send email to user
-        if (accessToken) {
-            try {
-                const userToNotify = await getUserProfile(originalRequest.userId);
-                if (userToNotify?.email) {
-                     const subject = `Tu solicitud de licencia ha sido Aprobada`;
-                     const body = `
-                        <p>Hola ${userToNotify.name},</p>
-                        <p>Tu solicitud de licencia para el período del ${format(parseISO(originalRequest.startDate), 'P', { locale: es })} al ${format(parseISO(originalRequest.endDate), 'P', { locale: es })} ha sido aprobada.</p>
-                        <p>¡Que las disfrutes!</p>
-                     `;
-                     await sendEmail({ accessToken, to: userToNotify.email, subject, body });
-                }
-            } catch (error) {
-                 console.error("Failed to send approval email, but license was approved.", error);
-            }
-        }
-    }
-    
-    await updateDoc(requestRef, updateData);
-};
-
-
-export const deleteVacationRequest = async (requestId: string, adminUserId: string): Promise<void> => {
-    const docRef = doc(db, 'licencias', requestId);
-    await deleteDoc(docRef);
-};
 
 
 // --- Prospect Functions ---

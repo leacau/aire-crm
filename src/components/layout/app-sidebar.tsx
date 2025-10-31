@@ -15,7 +15,7 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb, Plane } from 'lucide-react';
+import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
@@ -28,7 +28,6 @@ const menuItems = [
   { href: '/grilla', label: 'Grilla', icon: Grid3X3, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/pnts', label: 'PNTs', icon: Megaphone, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/canjes', label: 'Canjes', icon: Repeat, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/licencias', label: 'Licencias', icon: Plane, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/invoices', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/billing', label: 'Cobranzas', icon: Banknote, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
   { href: '/calendar', label: 'Calendario', icon: Calendar, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
