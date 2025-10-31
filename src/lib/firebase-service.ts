@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
@@ -20,6 +20,92 @@ const canjesCollection = collection(db, 'canjes');
 const programsCollection = collection(db, 'programs');
 const commercialItemsCollection = collection(db, 'commercial_items');
 const prospectsCollection = collection(db, 'prospects');
+const licensesCollection = collection(db, 'licencias');
+
+// --- Vacation Request (License) Functions ---
+
+export const getVacationRequests = async (): Promise<VacationRequest[]> => {
+    const snapshot = await getDocs(query(licensesCollection));
+    const requests = snapshot.docs.map(doc => {
+      const data = doc.data();
+      const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+      return { 
+          id: doc.id,
+          ...data,
+          requestDate: convertTimestamp(data.requestDate),
+          approvedAt: convertTimestamp(data.approvedAt),
+      } as VacationRequest;
+    });
+    // Sort client-side to avoid complex index requirements
+    return requests.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+};
+
+
+export const createVacationRequest = async (
+    requestData: Omit<VacationRequest, 'id' | 'status'>,
+    managerEmail: string,
+    accessToken: string | null
+): Promise<string> => {
+    const dataToSave = {
+        ...requestData,
+        status: 'Pendiente' as const,
+        requestDate: serverTimestamp(),
+    };
+    const docRef = await addDoc(licensesCollection, dataToSave);
+    
+    // Send notification email
+    await sendEmail({
+        accessToken,
+        to: managerEmail,
+        subject: `Nueva Solicitud de Licencia de ${requestData.userName}`,
+        body: `
+            <p>Hola,</p>
+            <p>Has recibido una nueva solicitud de licencia de <strong>${requestData.userName}</strong>.</p>
+            <p><strong>Período:</strong> ${format(new Date(requestData.startDate), 'P', { locale: es })} - ${format(new Date(requestData.endDate), 'P', { locale: es })}</p>
+            <p><strong>Días solicitados:</strong> ${requestData.daysRequested}</p>
+            <p>Para aprobar o rechazar esta solicitud, por favor ingresa a la sección "Licencias" del CRM.</p>
+        `,
+    });
+
+    return docRef.id;
+};
+
+export const updateVacationRequest = async (
+    requestId: string, 
+    data: Partial<Omit<VacationRequest, 'id'>>, 
+    approverId: string,
+    applicantEmail: string,
+    accessToken: string | null
+): Promise<void> => {
+    const docRef = doc(db, 'licencias', requestId);
+    const updateData: Partial<VacationRequest> = {
+        ...data,
+        approvedBy: approverId,
+        approvedAt: new Date().toISOString(),
+    };
+    await updateDoc(docRef, updateData);
+
+    const originalRequestSnap = await getDoc(docRef);
+    const originalRequest = originalRequestSnap.data() as VacationRequest;
+
+    if (data.status) {
+         await sendEmail({
+            accessToken,
+            to: applicantEmail,
+            subject: `Tu Solicitud de Licencia ha sido ${data.status}`,
+            body: `
+                <p>Hola ${originalRequest.userName},</p>
+                <p>Tu solicitud de licencia para el período del <strong>${format(new Date(originalRequest.startDate), 'P', { locale: es })}</strong> al <strong>${format(new Date(originalRequest.endDate), 'P', { locale: es })}</strong> ha sido <strong>${data.status}</strong>.</p>
+                <p>Puedes ver el estado de tus solicitudes en el CRM.</p>
+            `,
+        });
+    }
+};
+
+export const deleteVacationRequest = async (requestId: string): Promise<void> => {
+    const docRef = doc(db, 'licencias', requestId);
+    await deleteDoc(docRef);
+};
 
 
 // --- Prospect Functions ---
@@ -1642,5 +1728,3 @@ export const updateClientActivity = async (
 
     await updateDoc(docRef, updateData);
 };
-
-    

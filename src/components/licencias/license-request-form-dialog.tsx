@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import type { User, VacationRequest } from '@/lib/types';
 import { Spinner } from '../ui/spinner';
 import { Card } from '../ui/card';
+import { Input } from '../ui/input';
 
 interface LicenseRequestFormDialogProps {
   isOpen: boolean;
