@@ -153,10 +153,9 @@ export default function ProspectsPage() {
     if (!userInfo) return { active: [], notProsperous: [], converted: [] };
 
     let userProspects = prospects;
-
-    if (!isBoss) {
-      userProspects = prospects.filter(p => p.ownerId === userInfo.id);
-    } else if (selectedAdvisor !== 'all') {
+    
+    // Bosses can filter by advisor
+    if (isBoss && selectedAdvisor !== 'all') {
       userProspects = prospects.filter(p => p.ownerId === selectedAdvisor);
     }
     
@@ -217,7 +216,7 @@ export default function ProspectsPage() {
         if (!canEdit) return null;
 
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             {prospect.status !== 'Convertido' && (
                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleConvertProspect(prospect); }}>
                 <UserPlus className="mr-2 h-4 w-4" />
@@ -308,7 +307,7 @@ export default function ProspectsPage() {
                         data={filteredProspects.active}
                         sorting={sorting}
                         setSorting={setSorting}
-                        onRowClick={(prospect) => handleOpenForm(prospect)}
+                        onRowClick={(prospect) => (isBoss || userInfo?.id === prospect.ownerId) && handleOpenForm(prospect)}
                         getRowId={(row) => row.id}
                         enableRowResizing={false}
                         emptyStateMessage="No se encontraron prospectos activos."
@@ -318,7 +317,7 @@ export default function ProspectsPage() {
                      <ResizableDataTable
                         columns={columns}
                         data={filteredProspects.notProsperous}
-                        onRowClick={(prospect) => handleOpenForm(prospect)}
+                        onRowClick={(prospect) => (isBoss || userInfo?.id === prospect.ownerId) && handleOpenForm(prospect)}
                         getRowId={(row) => row.id}
                         enableRowResizing={false}
                         emptyStateMessage="No hay prospectos en esta categoría."
@@ -329,6 +328,7 @@ export default function ProspectsPage() {
                         columns={columns}
                         data={filteredProspects.converted}
                         getRowId={(row) => row.id}
+                        onRowClick={(prospect) => (isBoss || userInfo?.id === prospect.ownerId) && handleOpenForm(prospect)}
                         enableRowResizing={false}
                         emptyStateMessage="No hay prospectos convertidos."
                     />
