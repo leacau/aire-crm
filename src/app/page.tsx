@@ -388,7 +388,7 @@ export default function DashboardPage() {
 
 
   const wonOppsInPeriod = filteredOpportunities.filter(opp => opp.stage === 'Cerrado - Ganado');
-  const wonOppsValue = wonOppsInPeriod.reduce((acc, opp) => acc + opp.value, 0);
+  const wonOppsValue = wonOppsInPeriod.reduce((acc, opp) => acc + Number(opp.value || 0), 0);
   const wonOppIds = new Set(wonOppsInPeriod.map(opp => opp.id));
   const invoicesForWonOpps = invoices.filter(inv => wonOppIds.has(inv.opportunityId));
   const totalPaidInPeriod = invoicesForWonOpps.filter(inv => inv.status === 'Pagada').reduce((acc, inv) => acc + inv.amount, 0);
@@ -396,11 +396,11 @@ export default function DashboardPage() {
 
   const prospectingValue = filteredOpportunities
     .filter(o => o.stage === 'Nuevo')
-    .reduce((acc, o) => acc + o.value, 0);
+    .reduce((acc, o) => acc + Number(o.value || 0), 0);
     
   const forecastedValue = filteredOpportunities
     .filter(o => ['Propuesta', 'Negociación', 'Negociación a Aprobar'].includes(o.stage))
-    .reduce((acc, o) => acc + o.value, 0);
+    .reduce((acc, o) => acc + Number(o.value || 0), 0);
 
   const totalClients = userClients.length;
 
@@ -595,4 +595,3 @@ export default function DashboardPage() {
     </>
   );
 }
-

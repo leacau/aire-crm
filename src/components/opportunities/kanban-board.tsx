@@ -50,7 +50,7 @@ const KanbanColumn = ({
   opportunities: Opportunity[];
   onCardDrop: (e: React.DragEvent<HTMLDivElement>, stage: OpportunityStage) => void;
 }) => {
-  const columnTotal = opportunities.reduce((sum, opp) => sum + (opp.value || 0), 0);
+  const columnTotal = opportunities.reduce((sum, opp) => sum + Number(opp.value || 0), 0);
   const roundedTotal = Math.round(columnTotal * 100) / 100;
 
 
