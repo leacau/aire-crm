@@ -22,8 +22,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice } from '@/lib/types';
-import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem } from '@/lib/types';
+import { periodicidadOptions, formaDePagoOptions, invoiceStatusOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { Checkbox } from '../ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
@@ -36,7 +36,6 @@ import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { invoiceStatusOptions } from '@/lib/types';
 import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
 
 import {
@@ -56,7 +55,7 @@ interface OpportunityDetailsDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   onUpdate: (opportunity: Partial<Opportunity>, accessToken?: string | null) => void;
-  onCreate?: (opportunity: Omit<Opportunity, 'id'>) => void;
+  onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
   client?: {id: string, name: string}
 }
 
@@ -76,6 +75,8 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     fechaFacturacion: '',
     proposalFiles: [],
     ordenesPautado: [],
+    proposalItems: [],
+    valorTarifario: 0,
 });
 
 const NewAgencyDialog = ({ onAgencyCreated }: { onAgencyCreated: (newAgency: Agency) => void }) => {
@@ -150,16 +151,16 @@ export function OpportunityDetailsDialog({
   const { toast } = useToast();
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [pendingInvoices, setPendingInvoices] = useState<Omit<Invoice, 'id' | 'opportunityId'>[]>([]);
+  
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isOrdenPautadoFormOpen, setIsOrdenPautadoFormOpen] = useState(false);
   const [selectedOrden, setSelectedOrden] = useState<OrdenPautado | null>(null);
   const isEditing = !!opportunity;
 
-  const [newInvoice, setNewInvoice] = useState<{ number: string, date: string, amount: number }>({
-    number: '',
-    date: new Date().toISOString().split('T')[0],
-    amount: 0
-  });
+  const [newInvoiceRow, setNewInvoiceRow] = useState({ number: '', date: new Date().toISOString().split('T')[0], amount: 0 });
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
+  const [programs, setPrograms] = useState<Program[]>([]);
 
   const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>(() => 
     isEditing ? opportunity : getInitialOpportunityData(client)
@@ -177,7 +178,9 @@ export function OpportunityDetailsDialog({
     if (isOpen) {
         const initialData = isEditing ? { ...opportunity } : getInitialOpportunityData(client);
         if (!initialData.ordenesPautado) initialData.ordenesPautado = [];
+        if (!initialData.proposalItems) initialData.proposalItems = [];
         setEditedOpportunity(initialData);
+        setPendingInvoices([]);
         
         getAgencies()
             .then(setAgencies)
@@ -212,9 +215,16 @@ export function OpportunityDetailsDialog({
             const accessToken = await getGoogleAccessToken();
             onUpdate(changes, accessToken);
         }
+        
+        // Save pending invoices for existing opportunity
+        if (pendingInvoices.length > 0 && userInfo) {
+            for (const inv of pendingInvoices) {
+                await createInvoice({ ...inv, opportunityId: opportunity.id }, userInfo.id, userInfo.name, opportunity.clientName);
+            }
+        }
     } else if (!isEditing) {
         const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
-        onCreate(newOpp);
+        onCreate(newOpp, pendingInvoices);
     }
     onOpenChange(false);
 };
@@ -286,31 +296,22 @@ export function OpportunityDetailsDialog({
     }));
   };
 
-  const handleSaveInvoice = async () => {
-    if (!opportunity || !userInfo) return;
-    if (!newInvoice.number || newInvoice.amount <= 0) {
+  const handleAddPendingInvoice = () => {
+    if (!newInvoiceRow.number || newInvoiceRow.amount <= 0) {
       toast({ title: 'Datos de factura incompletos', variant: 'destructive'});
       return;
     }
-
-    try {
-      await createInvoice({
-        opportunityId: opportunity.id,
-        invoiceNumber: newInvoice.number,
-        amount: newInvoice.amount,
-        date: newInvoice.date,
+    const newPending: Omit<Invoice, 'id' | 'opportunityId'> = {
+        invoiceNumber: newInvoiceRow.number,
+        amount: newInvoiceRow.amount,
+        date: newInvoiceRow.date,
         status: 'Generada',
         dateGenerated: new Date().toISOString(),
-      }, userInfo.id, userInfo.name, opportunity.clientName);
-      toast({ title: 'Factura creada' });
-      setNewInvoice({ number: '', date: new Date().toISOString().split('T')[0], amount: 0 });
-      fetchInvoices();
-    } catch(error) {
-      console.error("Error creating invoice", error);
-      toast({ title: 'Error al crear la factura', variant: 'destructive'});
     }
-  }
-
+    setPendingInvoices(prev => [...prev, newPending]);
+    setNewInvoiceRow({ number: '', date: new Date().toISOString().split('T')[0], amount: 0 });
+  };
+  
   const handleDeleteInvoice = async (invoiceId: string) => {
     if (!opportunity || !userInfo) return;
     try {
@@ -322,6 +323,7 @@ export function OpportunityDetailsDialog({
       toast({ title: 'Error al eliminar la factura', variant: 'destructive'});
     }
   }
+
   
   const canEditBonus = isEditing && (editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar');
   const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
@@ -381,7 +383,7 @@ export function OpportunityDetailsDialog({
                     </Select>
                 </div>
                  <div className="space-y-2">
-                    <Label htmlFor="value">Valor</Label>
+                    <Label htmlFor="value">Valor Final Propuesta</Label>
                     <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange} />
                 </div>
               </div>
@@ -554,25 +556,41 @@ export function OpportunityDetailsDialog({
                             <TableHead>Fecha</TableHead>
                             <TableHead>Monto</TableHead>
                             <TableHead>Estado</TableHead>
-                            <TableHead className="w-12"></TableHead>
+                            {isEditing && <TableHead className="w-12"></TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {invoices.length > 0 ? invoices.map(invoice => (
+                        {invoices.map(invoice => (
                             <TableRow key={invoice.id}>
                                 <TableCell>{invoice.invoiceNumber}</TableCell>
                                 <TableCell>{format(new Date(invoice.date), 'P', { locale: es })}</TableCell>
                                 <TableCell>${invoice.amount.toLocaleString('es-AR')}</TableCell>
                                 <TableCell>{invoice.status}</TableCell>
+                                {isEditing && 
+                                  <TableCell>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteInvoice(invoice.id)}>
+                                          <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                  </TableCell>
+                                }
+                            </TableRow>
+                        ))}
+                        {pendingInvoices.map((invoice, index) => (
+                             <TableRow key={`pending-${index}`} className="bg-muted/30">
+                                <TableCell>{invoice.invoiceNumber}</TableCell>
+                                <TableCell>{format(new Date(invoice.date), 'P', { locale: es })}</TableCell>
+                                <TableCell>${invoice.amount.toLocaleString('es-AR')}</TableCell>
+                                <TableCell><span className="text-muted-foreground italic">Pendiente</span></TableCell>
                                 <TableCell>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteInvoice(invoice.id)}>
-                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPendingInvoices(p => p.filter((_, i) => i !== index))}>
+                                          <Trash2 className="h-4 w-4 text-destructive" />
                                     </Button>
                                 </TableCell>
                             </TableRow>
-                        )) : (
+                        ))}
+                        {invoices.length === 0 && pendingInvoices.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">No hay facturas para esta oportunidad.</TableCell>
+                                <TableCell colSpan={isEditing ? 5 : 4} className="h-24 text-center">No hay facturas para esta oportunidad.</TableCell>
                             </TableRow>
                         )}
                         {/* New Invoice Row */}
@@ -580,29 +598,29 @@ export function OpportunityDetailsDialog({
                             <TableCell>
                                 <Input 
                                     placeholder="0001-00123456" 
-                                    value={newInvoice.number}
-                                    onChange={(e) => setNewInvoice(prev => ({...prev, number: e.target.value}))}
+                                    value={newInvoiceRow.number}
+                                    onChange={(e) => setNewInvoiceRow(prev => ({...prev, number: e.target.value}))}
                                 />
                             </TableCell>
                              <TableCell>
                                 <Input 
                                     type="date" 
-                                    value={newInvoice.date}
-                                    onChange={(e) => setNewInvoice(prev => ({...prev, date: e.target.value}))}
+                                    value={newInvoiceRow.date}
+                                    onChange={(e) => setNewInvoiceRow(prev => ({...prev, date: e.target.value}))}
                                 />
                             </TableCell>
                              <TableCell>
                                 <Input 
                                     type="number"
                                     placeholder="0.00"
-                                    value={newInvoice.amount || ''}
-                                    onChange={(e) => setNewInvoice(prev => ({...prev, amount: Number(e.target.value)}))}
+                                    value={newInvoiceRow.amount || ''}
+                                    onChange={(e) => setNewInvoiceRow(prev => ({...prev, amount: Number(e.target.value)}))}
                                 />
                             </TableCell>
-                             <TableCell colSpan={2}>
-                                <Button onClick={handleSaveInvoice} size="sm">
+                             <TableCell colSpan={isEditing ? 2 : 1}>
+                                <Button onClick={handleAddPendingInvoice} size="sm">
                                     <PlusCircle className="mr-2 h-4 w-4"/>
-                                    Guardar Factura
+                                    Añadir Factura
                                 </Button>
                              </TableCell>
                         </TableRow>
