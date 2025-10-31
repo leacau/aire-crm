@@ -124,6 +124,14 @@ service cloud.firestore {
       allow update: if isUserAuthenticated() && (isCreator(resource.data) || isOwner(resource.data) || isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']));
       allow delete: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
     }
+
+    // LICENCIAS: Users create their own. Bosses manage all.
+    match /licencias/{licenciaId} {
+      allow read, list: if isUserAuthenticated();
+      allow create: if isUserAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isUserAuthenticated() && (isCreator(resource.data) || isOneOfRoles(['Jefe', 'Gerencia']));
+      allow delete: if isUserAuthenticated() && (isCreator(resource.data) || isOneOfRoles(['Jefe', 'Gerencia']));
+    }
     
     // PROGRAMS & COMMERCIAL ITEMS (Grilla): Managed by admins/bosses. Read by all.
     match /programs/{programId} {
