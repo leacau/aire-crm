@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { User, VacationRequest } from '@/lib/types';
-import { getAllUsers, getVacationRequests, createVacationRequest, updateVacationRequest, deleteVacationRequest } from '@/lib/firebase-service';
+import { getAllUsers, getVacationRequests, createVacationRequest, updateVacationRequest, deleteVacationRequest, updateUserProfile } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
 import { LicensesTable } from '@/components/licencias/licenses-table';
@@ -35,10 +35,16 @@ export default function LicensesPage() {
     try {
       const [fetchedUsers, fetchedRequests] = await Promise.all([
         getAllUsers(),
-        getVacationRequests(userInfo.id, userInfo.role),
+        getVacationRequests(),
       ]);
       setUsers(fetchedUsers);
-      setRequests(fetchedRequests);
+
+      // App-level filtering based on role
+      if (userInfo.role === 'Jefe' || userInfo.role === 'Gerencia' || userInfo.role === 'Admin') {
+          setRequests(fetchedRequests);
+      } else {
+          setRequests(fetchedRequests.filter(r => r.userId === userInfo.id));
+      }
     } catch (error) {
       console.error("Error fetching license data:", error);
       toast({ title: 'Error al cargar solicitudes', description: (error as Error).message, variant: 'destructive' });
