@@ -40,9 +40,10 @@ export default function LicenciasPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
+      // The getVacationRequests function now handles filtering by role
       const [fetchedRequests, allUsers] = await Promise.all([
-        getVacationRequests(userInfo),
-        getAllUsers(),
+        getVacationRequests(userInfo), 
+        getAllUsers()
       ]);
       setRequests(fetchedRequests);
       setUsers(allUsers);
@@ -64,22 +65,19 @@ export default function LicenciasPage() {
     if (!userInfo) return;
 
     try {
-      const accessToken = await getGoogleAccessToken();
-      const allUsers = await getAllUsers();
+      const allUsers = await getAllUsers(); // Ensure fresh user data
       const user = allUsers.find(u => u.id === requestData.userId);
       const manager = user?.managerId ? allUsers.find(u => u.id === user.managerId) : null;
       
       if (editingRequest) {
-        // Update logic
         await updateVacationRequest(editingRequest.id, requestData, userInfo.id);
         toast({ title: "Solicitud de licencia actualizada" });
       } else {
-        // Create logic
-        if (!accessToken) throw new Error('No se pudo obtener el token para enviar el correo.');
-        if (!manager?.email) throw new Error('El jefe asignado no tiene un email configurado.');
-
-        await createVacationRequest(requestData, accessToken, manager.email);
-        toast({ title: "Solicitud de licencia enviada", description: "Tu jefe ha sido notificado." });
+        if (!manager?.email) {
+          console.warn('El jefe asignado no tiene un email configurado. No se enviará notificación.');
+        }
+        await createVacationRequest(requestData, manager?.email);
+        toast({ title: "Solicitud de licencia enviada" });
       }
       
       fetchData();
@@ -100,8 +98,6 @@ export default function LicenciasPage() {
 
       try {
           const accessToken = await getGoogleAccessToken();
-          if (!accessToken) throw new Error("No se pudo obtener el token para enviar el correo de aprobación.");
-          
           await updateVacationRequest(requestId, { status: newStatus }, userInfo.id, accessToken);
 
           toast({ title: `Solicitud ${newStatus === 'Aprobado' ? 'aprobada' : 'rechazada'}` });
@@ -113,9 +109,9 @@ export default function LicenciasPage() {
   };
 
   const handleDeleteRequest = async () => {
-    if (!requestToDelete) return;
+    if (!requestToDelete || !userInfo) return;
     try {
-      await deleteVacationRequest(requestToDelete.id, userInfo!.id);
+      await deleteVacationRequest(requestToDelete.id, userInfo.id);
       toast({ title: 'Solicitud eliminada' });
       fetchData();
     } catch(error) {

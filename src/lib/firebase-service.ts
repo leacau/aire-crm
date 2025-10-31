@@ -5,7 +5,7 @@ import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, a
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 const usersCollection = collection(db, 'users');
@@ -25,25 +25,27 @@ const licensesCollection = collection(db, 'licencias');
 // --- Vacation Request Functions ---
 
 export const getVacationRequests = async (currentUser: User): Promise<VacationRequest[]> => {
-    let q;
+    // New Strategy: Fetch all licenses and filter client-side to bypass query permission issues.
+    const snapshot = await getDocs(query(licensesCollection));
+    const allRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRequest));
+
     const isManager = currentUser.role === 'Jefe' || currentUser.role === 'Gerencia' || currentUser.role === 'Administracion';
 
+    let filteredRequests;
     if (isManager) {
-        q = query(licensesCollection);
+        filteredRequests = allRequests;
     } else {
-        q = query(licensesCollection, where("userId", "==", currentUser.id));
+        filteredRequests = allRequests.filter(req => req.userId === currentUser.id);
     }
-    const snapshot = await getDocs(q);
-    const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRequest));
     
     // Sort client-side
-    requests.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+    filteredRequests.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
     
-    return requests;
+    return filteredRequests;
 };
 
 
-export const createVacationRequest = async (requestData: Omit<VacationRequest, 'id'>, accessToken: string, managerEmail: string): Promise<string> => {
+export const createVacationRequest = async (requestData: Omit<VacationRequest, 'id'>, managerEmail?: string): Promise<string> => {
     const { userName, startDate, endDate, daysRequested, returnDate } = requestData;
 
     const docRef = await addDoc(licensesCollection, {
@@ -51,28 +53,29 @@ export const createVacationRequest = async (requestData: Omit<VacationRequest, '
         requestDate: new Date().toISOString()
     });
     
-    const subject = `Nueva Solicitud de Licencia - ${userName}`;
-    const body = `
-        <p>El asesor <strong>${userName}</strong> ha solicitado una licencia.</p>
-        <ul>
-            <li><strong>Período:</strong> ${format(parseISO(startDate), 'P', { locale: es })} - ${format(parseISO(endDate), 'P', { locale: es })}</li>
-            <li><strong>Días solicitados:</strong> ${daysRequested}</li>
-            <li><strong>Fecha de reincorporación:</strong> ${format(parseISO(returnDate), 'P', { locale: es })}</li>
-        </ul>
-        <p>Para gestionar esta solicitud, por favor ingresa a la sección "Licencias" en el CRM.</p>
-    `;
-
-    await sendEmail({
-        accessToken,
-        to: managerEmail,
-        subject,
-        body,
-    });
+    if (managerEmail) {
+        try {
+            const subject = `Nueva Solicitud de Licencia - ${userName}`;
+            const body = `
+                <p>El asesor <strong>${userName}</strong> ha solicitado una licencia.</p>
+                <ul>
+                    <li><strong>Período:</strong> ${format(parseISO(startDate), 'P', { locale: es })} - ${format(parseISO(endDate), 'P', { locale: es })}</li>
+                    <li><strong>Días solicitados:</strong> ${daysRequested}</li>
+                    <li><strong>Fecha de reincorporación:</strong> ${format(parseISO(returnDate), 'P', { locale: es })}</li>
+                </ul>
+                <p>Para gestionar esta solicitud, por favor ingresa a la sección "Licencias" en el CRM.</p>
+            `;
+            await sendEmail({ to: managerEmail, subject, body });
+        } catch (error) {
+            console.error("Failed to send notification email, but license request was created.", error);
+            // Non-critical error, so we don't throw. The request is still saved.
+        }
+    }
     
     return docRef.id;
 };
 
-export const updateVacationRequest = async (requestId: string, data: Partial<Omit<VacationRequest, 'id'>>, adminUserId: string, accessToken?: string): Promise<void> => {
+export const updateVacationRequest = async (requestId: string, data: Partial<Omit<VacationRequest, 'id'>>, adminUserId: string, accessToken?: string | null): Promise<void> => {
     const requestRef = doc(db, 'licencias', requestId);
     const requestSnap = await getDoc(requestRef);
     if (!requestSnap.exists()) throw new Error('Solicitud no encontrada');
@@ -93,15 +96,19 @@ export const updateVacationRequest = async (requestId: string, data: Partial<Omi
         
         // Send email to user
         if (accessToken) {
-            const userToNotify = await getUserProfile(originalRequest.userId);
-            if (userToNotify?.email) {
-                 const subject = `Tu solicitud de licencia ha sido Aprobada`;
-                 const body = `
-                    <p>Hola ${userToNotify.name},</p>
-                    <p>Tu solicitud de licencia para el período del ${format(parseISO(originalRequest.startDate), 'P', { locale: es })} al ${format(parseISO(originalRequest.endDate), 'P', { locale: es })} ha sido aprobada.</p>
-                    <p>¡Que las disfrutes!</p>
-                 `;
-                 await sendEmail({ accessToken, to: userToNotify.email, subject, body });
+            try {
+                const userToNotify = await getUserProfile(originalRequest.userId);
+                if (userToNotify?.email) {
+                     const subject = `Tu solicitud de licencia ha sido Aprobada`;
+                     const body = `
+                        <p>Hola ${userToNotify.name},</p>
+                        <p>Tu solicitud de licencia para el período del ${format(parseISO(originalRequest.startDate), 'P', { locale: es })} al ${format(parseISO(originalRequest.endDate), 'P', { locale: es })} ha sido aprobada.</p>
+                        <p>¡Que las disfrutes!</p>
+                     `;
+                     await sendEmail({ accessToken, to: userToNotify.email, subject, body });
+                }
+            } catch (error) {
+                 console.error("Failed to send approval email, but license was approved.", error);
             }
         }
     }

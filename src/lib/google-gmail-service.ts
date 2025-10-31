@@ -9,13 +9,20 @@ const CALENDAR_API_URL = 'https://www.googleapis.com/calendar/v3/calendars/prima
 // --- Gmail Service ---
 
 interface EmailParams {
-    accessToken: string;
+    accessToken?: string | null;
     to: string;
     subject: string;
     body: string;
 }
 
 export async function sendEmail({ accessToken, to, subject, body }: EmailParams) {
+    if (!accessToken) {
+        console.warn("Skipping email send because accessToken is missing.");
+        // Instead of throwing, we just log a warning and return.
+        // This makes email sending non-critical.
+        return;
+    }
+
     // RFC 2822 formatted email
     const emailParts = [
         `To: ${to}`,
