@@ -25,21 +25,25 @@ const licensesCollection = collection(db, 'licencias');
 
 export const getVacationRequests = async (userId: string, userRole: UserRole): Promise<VacationRequest[]> => {
     let q;
-    if (userRole === 'Jefe' || userRole === 'Gerencia' || userRole === 'Admin') {
-        // Managers can see all requests
-        q = query(licensesCollection, orderBy("requestDate", "desc"));
+    if (userRole === 'Jefe' || userRole === 'Gerencia' || userRole === 'Administracion') {
+        // Managers can see all requests. Query without ordering to avoid composite index requirement.
+        q = query(licensesCollection);
     } else {
-        // Advisors can only see their own requests
-        q = query(licensesCollection, where("userId", "==", userId), orderBy("requestDate", "desc"));
+        // Advisors can only see their own requests.
+        q = query(licensesCollection, where("userId", "==", userId));
     }
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRequest));
+    const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRequest));
+
+    // Sort client-side after fetching
+    requests.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+    
+    return requests;
 };
 
 export const createVacationRequest = async (requestData: Omit<VacationRequest, 'id'>): Promise<string> => {
     const docRef = await addDoc(licensesCollection, {
         ...requestData,
-        requestDate: serverTimestamp(),
     });
     return docRef.id;
 };
