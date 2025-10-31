@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -30,7 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice } from '@/lib/firebase-service';
+import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity } from '@/lib/firebase-service';
 import { PlusCircle, Clock, Trash2, FileText, Save, Calculator } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
