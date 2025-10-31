@@ -1,3 +1,4 @@
+
 'use client'
 import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice } from '@/lib/types';
 import React, { useEffect, useState, useRef } from 'react';
@@ -137,11 +138,13 @@ const getDefaultIcon = () => <Activity className="h-5 w-5 text-muted-foreground"
 export function ClientDetails({
   client,
   onUpdate,
-  onValidateCuit
+  onValidateCuit,
+  onCreateOpportunity
 }: {
   client: Client;
   onUpdate: (data: Partial<Omit<Client, 'id'>>) => void;
   onValidateCuit: (cuit: string, clientId?: string) => Promise<string | false>;
+  onCreateOpportunity: (newOppData: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
 }) {
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
@@ -228,23 +231,6 @@ export function ClientDetails({
     } catch (error) {
         console.error("Error updating opportunity", error);
         toast({ title: "Error al actualizar la oportunidad", variant: 'destructive' });
-    }
-  };
-
-  const handleOpportunityCreate = async (newOppData: Omit<Opportunity, 'id'>) => {
-     if(!userInfo) return;
-     try {
-        const fullNewOpp = {
-            ...newOppData,
-            clientId: client.id,
-            clientName: client.denominacion,
-        }
-        await createOpportunity(fullNewOpp, userInfo.id, userInfo.name, client.ownerName);
-        fetchClientData();
-        toast({ title: 'Oportunidad Creada' });
-    } catch (error) {
-        console.error("Error creating opportunity", error);
-        toast({ title: "Error al crear la oportunidad", variant: 'destructive' });
     }
   };
 
@@ -379,7 +365,7 @@ export function ClientDetails({
         fetchClientData(); // Refresh activities
     } catch (error) {
         console.error("Error saving client activity:", error);
-        toast({ title: "Error al guardar la actividad", variant: 'destructive' });
+        toast({ title: "Error al guardar la actividad", variant: "destructive" });
     } finally {
         setIsSavingActivity(false);
     }
@@ -1068,8 +1054,8 @@ export function ClientDetails({
           isOpen={isOpportunityFormOpen}
           onOpenChange={setIsOpportunityFormOpen}
           onUpdate={handleOpportunityUpdate}
-          onCreate={handleOpportunityCreate}
-          client={{id: client.id, name: client.denominacion}}
+          onCreate={onCreateOpportunity}
+          client={{id: client.id, name: client.denominacion, ownerName: client.ownerName}}
         />
       )}
 
@@ -1077,7 +1063,7 @@ export function ClientDetails({
         <ClientFormDialog
             isOpen={isClientFormOpen}
             onOpenChange={setIsClientFormOpen}
-            onSave={handleSaveClient}
+            onSaveSuccess={handleSaveClient}
             client={client}
             onValidateCuit={onValidateCuit}
         />

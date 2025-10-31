@@ -619,6 +619,9 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
     
     const docRef = await addDoc(invoicesCollection, dataToSave);
     
+    const oppSnap = await getDoc(doc(db, 'opportunities', invoiceData.opportunityId));
+    const oppTitle = oppSnap.exists() ? oppSnap.data().title : `ID ${invoiceData.opportunityId}`;
+
     await logActivity({
         userId,
         userName,
@@ -626,7 +629,7 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
         entityType: 'invoice',
         entityId: docRef.id,
         entityName: `Factura #${invoiceData.invoiceNumber || docRef.id}`,
-        details: `creó una factura para la oportunidad ID ${invoiceData.opportunityId}`,
+        details: `creó la factura #${invoiceData.invoiceNumber} para la oportunidad "${oppTitle}"`,
         ownerName: ownerName
     });
 
@@ -1402,7 +1405,7 @@ export const updateOpportunity = async (
 
      // --- Generate Commercial Items on "Closed Won" ---
     if (data.stage === 'Cerrado - Ganado' && originalData.stage !== 'Cerrado - Ganado') {
-        const fullOpportunityData = { ...originalData, ...data };
+        const fullOpportunityData = { ...originalData, ...data, id };
         await createCommercialItemsFromOpportunity(fullOpportunityData, userId, userName);
     }
 

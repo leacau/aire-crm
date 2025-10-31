@@ -11,8 +11,8 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import type { Client } from '@/lib/types';
-import { getClient, updateClient, getClients } from '@/lib/firebase-service';
+import type { Client, Opportunity, Invoice } from '@/lib/types';
+import { getClient, updateClient, getClients, createOpportunity, createInvoice } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ClientPage() {
@@ -88,6 +88,34 @@ export default function ClientPage() {
     }
   };
 
+  const handleOpportunityCreate = async (newOppData: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[] = []) => {
+    if(!userInfo || !client) return;
+    try {
+        const fullNewOpp = {
+            ...newOppData,
+            clientId: client.id,
+            clientName: client.denominacion,
+        }
+        const newOppId = await createOpportunity(fullNewOpp, userInfo.id, userInfo.name, client.ownerName);
+        
+        if (newOppId && pendingInvoices.length > 0) {
+            for (const invoiceData of pendingInvoices) {
+                await createInvoice({
+                    ...invoiceData,
+                    opportunityId: newOppId,
+                }, userInfo.id, userInfo.name, client.ownerName);
+            }
+        }
+
+        fetchClientData();
+        toast({ title: 'Oportunidad Creada' });
+    } catch (error) {
+        console.error("Error creating opportunity", error);
+        toast({ title: "Error al crear la oportunidad", variant: "destructive" });
+    }
+  };
+
+
   const validateCuit = async (cuit: string, clientId?: string): Promise<string | false> => {
     if (!cuit) return false;
     // Ensure allClients is fresh
@@ -123,6 +151,7 @@ export default function ClientPage() {
           client={client}
           onUpdate={handleUpdateClient}
           onValidateCuit={validateCuit}
+          onCreateOpportunity={handleOpportunityCreate}
         />
       </main>
     </div>

@@ -57,7 +57,7 @@ interface OpportunityDetailsDialogProps {
   onOpenChange: (isOpen: boolean) => void;
   onUpdate: (opportunity: Partial<Opportunity>, accessToken?: string | null) => void;
   onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
-  client?: {id: string, name: string}
+  client?: {id: string, name: string, ownerName?: string}
 }
 
 const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
@@ -235,7 +235,6 @@ export function OpportunityDetailsDialog({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
      if (type === 'number') {
-      // Allow empty string to clear the input, otherwise convert to number
       setEditedOpportunity(prev => ({ ...prev, [name]: value === '' ? '' : Number(value) }));
     } else {
       setEditedOpportunity(prev => ({ ...prev, [name]: value }));
@@ -381,7 +380,7 @@ export function OpportunityDetailsDialog({
                 </div>
                  <div className="space-y-2">
                     <Label htmlFor="value">Valor Final Propuesta</Label>
-                    <Input id="value" name="value" type="number" value={editedOpportunity.value || ''} onChange={handleChange} />
+                    <Input id="value" name="value" type="number" value={editedOpportunity.value === 0 ? '' : editedOpportunity.value} onChange={handleChange} />
                 </div>
               </div>
               <div className="space-y-2">
