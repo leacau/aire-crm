@@ -1,8 +1,8 @@
 
 
 import { db } from './firebase';
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest } from './types';
+import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
@@ -72,35 +72,74 @@ export const createVacationRequest = async (
 
 export const updateVacationRequest = async (
     requestId: string, 
-    data: Partial<Omit<VacationRequest, 'id'>>, 
+    data: Partial<Omit<VacationRequest, 'id'>>
+): Promise<void> => {
+    const docRef = doc(db, 'licencias', requestId);
+    await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
+};
+
+export const approveVacationRequest = async (
+    requestId: string,
+    newStatus: VacationRequestStatus,
     approverId: string,
     applicantEmail: string,
     accessToken: string | null
 ): Promise<void> => {
-    const docRef = doc(db, 'licencias', requestId);
-    const updateData: Partial<VacationRequest> = {
-        ...data,
-        approvedBy: approverId,
-        approvedAt: new Date().toISOString(),
-    };
-    await updateDoc(docRef, updateData);
+    const requestRef = doc(db, 'licencias', requestId);
 
-    const originalRequestSnap = await getDoc(docRef);
-    const originalRequest = originalRequestSnap.data() as VacationRequest;
+    await runTransaction(db, async (transaction) => {
+        const requestDoc = await transaction.get(requestRef);
+        if (!requestDoc.exists()) {
+            throw "Solicitud no encontrada.";
+        }
+        const requestData = requestDoc.data() as VacationRequest;
+        const userRef = doc(db, 'users', requestData.userId);
+        const userDoc = await transaction.get(userRef);
 
-    if (data.status) {
-         await sendEmail({
-            accessToken,
-            to: applicantEmail,
-            subject: `Tu Solicitud de Licencia ha sido ${data.status}`,
-            body: `
-                <p>Hola ${originalRequest.userName},</p>
-                <p>Tu solicitud de licencia para el período del <strong>${format(new Date(originalRequest.startDate), 'P', { locale: es })}</strong> al <strong>${format(new Date(originalRequest.endDate), 'P', { locale: es })}</strong> ha sido <strong>${data.status}</strong>.</p>
-                <p>Puedes ver el estado de tus solicitudes en el CRM.</p>
-            `,
-        });
-    }
+        if (!userDoc.exists()) {
+            throw "Usuario solicitante no encontrado.";
+        }
+        const userData = userDoc.data() as User;
+        
+        const updatePayload: Partial<VacationRequest> = {
+            status: newStatus,
+            approvedBy: approverId,
+            approvedAt: new Date().toISOString(),
+        };
+
+        let newVacationDays = userData.vacationDays || 0;
+
+        // If moving TO approved from a different state
+        if (newStatus === 'Aprobado' && requestData.status !== 'Aprobado') {
+            newVacationDays -= requestData.daysRequested;
+        } 
+        // If moving FROM approved to a different state (e.g., rejecting an already approved request)
+        else if (newStatus !== 'Aprobado' && requestData.status === 'Aprobado') {
+            newVacationDays += requestData.daysRequested;
+        }
+
+        // Only update if there's a change
+        if (newVacationDays !== (userData.vacationDays || 0)) {
+            transaction.update(userRef, { vacationDays: newVacationDays });
+        }
+        
+        transaction.update(requestRef, updatePayload);
+    });
+
+    // Send notification email outside the transaction
+    const requestAfterUpdate = (await getDoc(requestRef)).data() as VacationRequest;
+    await sendEmail({
+        accessToken,
+        to: applicantEmail,
+        subject: `Tu Solicitud de Licencia ha sido ${newStatus}`,
+        body: `
+            <p>Hola ${requestAfterUpdate.userName},</p>
+            <p>Tu solicitud de licencia para el período del <strong>${format(new Date(requestAfterUpdate.startDate), 'P', { locale: es })}</strong> al <strong>${format(new Date(requestAfterUpdate.endDate), 'P', { locale: es })}</strong> ha sido <strong>${newStatus}</strong>.</p>
+            <p>Puedes ver el estado de tus solicitudes en el CRM.</p>
+        `,
+    });
 };
+
 
 export const deleteVacationRequest = async (requestId: string): Promise<void> => {
     const docRef = doc(db, 'licencias', requestId);

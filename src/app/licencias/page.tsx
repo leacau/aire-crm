@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { User, VacationRequest } from '@/lib/types';
-import { getAllUsers, getVacationRequests, createVacationRequest, updateVacationRequest, deleteVacationRequest, updateUserProfile } from '@/lib/firebase-service';
+import { getAllUsers, getVacationRequests, createVacationRequest, deleteVacationRequest, approveVacationRequest, updateVacationRequest } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
 import { LicensesTable } from '@/components/licencias/licenses-table';
@@ -38,9 +39,8 @@ export default function LicensesPage() {
         getVacationRequests(),
       ]);
       setUsers(fetchedUsers);
-
-      // App-level filtering based on role
-      if (userInfo.role === 'Jefe' || userInfo.role === 'Gerencia' || userInfo.role === 'Admin') {
+      
+      if (isBoss) {
           setRequests(fetchedRequests);
       } else {
           setRequests(fetchedRequests.filter(r => r.userId === userInfo.id));
@@ -51,7 +51,7 @@ export default function LicensesPage() {
     } finally {
       setLoading(false);
     }
-  }, [userInfo, toast]);
+  }, [userInfo, toast, isBoss]);
 
   useEffect(() => {
     if (userInfo) {
@@ -65,7 +65,8 @@ export default function LicensesPage() {
       const owner = users.find(u => u.id === request.userId);
       setRequestOwner(owner || null);
     } else {
-      setRequestOwner(null);
+      // When creating, the owner is the current user.
+      setRequestOwner(userInfo);
     }
     setIsFormOpen(true);
   };
@@ -87,10 +88,10 @@ export default function LicensesPage() {
       if (!accessToken) throw new Error("No se pudo obtener el token de acceso.");
       
       if (isEditing && editingRequest) {
-        await updateVacationRequest(editingRequest.id, requestData, userInfo.id, managerToNotify.email, accessToken);
+        await updateVacationRequest(editingRequest.id, requestData);
         toast({ title: 'Solicitud Actualizada' });
       } else {
-        await createVacationRequest(requestData, userInfo.id, userInfo.name, managerToNotify.email, accessToken);
+        await createVacationRequest(requestData, managerToNotify.email, accessToken);
         toast({ title: 'Solicitud Enviada', description: 'Tu jefe directo ha sido notificado.' });
       }
       fetchData();
@@ -115,12 +116,7 @@ export default function LicensesPage() {
       const accessToken = await getGoogleAccessToken();
       if (!accessToken) throw new Error("No se pudo obtener el token de acceso.");
 
-      await updateVacationRequest(request.id, { status: newStatus }, userInfo.id, applicant.email, accessToken);
-      
-      if (newStatus === 'Aprobado') {
-        const remainingDays = (applicant.vacationDays || 0) - request.daysRequested;
-        await updateUserProfile(applicant.id, { vacationDays: remainingDays });
-      }
+      await approveVacationRequest(request.id, newStatus, userInfo.id, applicant.email, accessToken);
       
       toast({ title: `Solicitud ${newStatus}` });
       fetchData();
@@ -133,7 +129,7 @@ export default function LicensesPage() {
   const handleDeleteRequest = async () => {
     if (!requestToDelete) return;
     try {
-      await deleteVacationRequest(requestToDelete.id, userInfo!.id, userInfo!.name);
+      await deleteVacationRequest(requestToDelete.id);
       toast({ title: 'Solicitud Eliminada' });
       fetchData();
     } catch(error) {
