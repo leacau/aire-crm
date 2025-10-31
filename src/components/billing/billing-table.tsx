@@ -75,7 +75,7 @@ export const BillingTable = ({
         cols.push({
             accessorKey: 'value',
             header: () => <div className="text-right">Monto Oportunidad</div>,
-            cell: ({ row }) => <div className="text-right">${row.original.value.toLocaleString('es-AR')}</div>,
+            cell: ({ row }) => <div className="text-right">${Number(row.original.value).toLocaleString('es-AR')}</div>,
         });
     }
 
@@ -91,7 +91,7 @@ export const BillingTable = ({
         cols.push({
             accessorKey: 'amount',
             header: () => <div className="text-right">Monto Factura</div>,
-            cell: ({ row }) => <div className="text-right">${row.original.amount.toLocaleString('es-AR')}</div>,
+            cell: ({ row }) => <div className="text-right">${Number(row.original.amount).toLocaleString('es-AR')}</div>,
         });
         cols.push({
             accessorKey: 'invoiceNumber',
@@ -124,8 +124,8 @@ export const BillingTable = ({
   }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid]);
 
   const total = items.reduce((acc, item) => {
-    if (type === 'invoices') return acc + (item as Invoice).amount;
-    if (type === 'opportunities') return acc + (item as Opportunity).value;
+    if (type === 'invoices') return acc + Number((item as Invoice).amount || 0);
+    if (type === 'opportunities') return acc + Number((item as Opportunity).value || 0);
     return acc;
   }, 0);
 
@@ -150,5 +150,3 @@ export const BillingTable = ({
       />
   );
 };
-
-    
