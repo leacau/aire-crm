@@ -17,7 +17,7 @@ import {
 } from '../ui/tooltip';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth } from '@/hooks/use-auth.tsx';
 import { Spinner } from '@/components/ui/spinner';
 import { getAllOpportunities, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
@@ -50,7 +50,8 @@ const KanbanColumn = ({
   opportunities: Opportunity[];
   onCardDrop: (e: React.DragEvent<HTMLDivElement>, stage: OpportunityStage) => void;
 }) => {
-  const columnTotal = opportunities.reduce((sum, opp) => sum + opp.value, 0);
+  const columnTotal = opportunities.reduce((sum, opp) => sum + (opp.value || 0), 0);
+  const roundedTotal = Math.round(columnTotal * 100) / 100;
 
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -78,7 +79,7 @@ const KanbanColumn = ({
           <Badge variant="secondary">{opportunities.length}</Badge>
         </div>
         <span className="text-sm font-medium text-muted-foreground">
-          ${columnTotal.toLocaleString('es-AR')}
+          ${roundedTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
       </div>
       <div
@@ -135,7 +136,7 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
   
   const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor' || userInfo?.role === 'Gerencia';
 
-  const displayValue = opportunity.value;
+  const displayValue = opportunity.value || 0;
 
   return (
     <>
