@@ -8,7 +8,7 @@ import { PlusCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { VacationRequest, User } from '@/lib/types';
-import { createVacationRequest, updateVacationRequest, getAllUsers, getVacationRequests } from '@/lib/firebase-service';
+import { createVacationRequest, getVacationRequests } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { LicenseRequestFormDialog } from '@/components/licencias/license-request-form-dialog';
 import { LicensesTable } from '@/components/licencias/licenses-table';
@@ -25,7 +25,6 @@ export default function LicenciasPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      // Pass user info to respect security rules
       const fetchedRequests = await getVacationRequests(userInfo.id, userInfo.role);
       setRequests(fetchedRequests);
     } catch (error) {
@@ -46,6 +45,12 @@ export default function LicenciasPage() {
     if (!userInfo) return;
 
     try {
+      const accessToken = await getGoogleAccessToken();
+      if (!accessToken) {
+        toast({ title: 'Error de autenticación', description: 'No se pudo obtener el token para enviar el correo. Por favor, inicia sesión de nuevo.', variant: 'destructive' });
+        return;
+      }
+      
       const fullRequestData: Omit<VacationRequest, 'id'> = {
         ...requestData,
         userId: userInfo.id,
@@ -53,33 +58,19 @@ export default function LicenciasPage() {
         status: 'Pendiente' as const,
         requestDate: new Date().toISOString(),
       };
-      await createVacationRequest(fullRequestData);
-      toast({ title: "Solicitud de licencia enviada" });
 
-      fetchData();
+      await createVacationRequest(fullRequestData, accessToken);
+      
+      toast({ title: "Solicitud de licencia enviada por correo", description: "Tu solicitud ha sido enviada para su gestión." });
+      
+      // We don't refetch because the user doesn't create the document directly
+      // onOpenChange(false);
+
     } catch (error) {
       console.error("Error creating license request:", error);
       toast({ title: "Error al enviar la solicitud", description: (error as Error).message, variant: "destructive" });
     }
   };
-  
-  const handleUpdateRequest = async (requestId: string, newStatus: 'Aprobado' | 'Rechazado') => {
-    if (!userInfo || !isBoss) return;
-    
-    const request = requests.find(r => r.id === requestId);
-    if (!request) return;
-
-    try {
-        await updateVacationRequest(requestId, { status: newStatus }, request.daysRequested);
-        toast({ title: `Solicitud ${newStatus === 'Aprobado' ? 'aprobada' : 'rechazada'}` });
-        
-        fetchData();
-    } catch (error) {
-        console.error("Error updating license request:", error);
-        toast({ title: 'Error al actualizar la solicitud', description: (error as Error).message, variant: 'destructive'});
-    }
-  };
-
 
   if (authLoading || loading) {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
@@ -100,7 +91,7 @@ export default function LicenciasPage() {
             <LicensesTable 
                 requests={requests}
                 isManagerView={isBoss}
-                onUpdateRequest={handleUpdateRequest}
+                onUpdateRequest={() => {}} // Management is now on Team page
             />
         </main>
       </div>

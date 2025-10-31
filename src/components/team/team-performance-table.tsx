@@ -152,10 +152,10 @@ export function TeamPerformanceTable() {
         const wonOpps = userOpps.filter(opp => opp.stage === 'Cerrado - Ganado');
         const wonOppIds = new Set(wonOpps.map(opp => opp.id));
 
-        const totalRevenue = invoices.filter(inv => wonOppIds.has(inv.opportunityId) && inv.status === 'Pagada').reduce((sum, inv) => sum + inv.amount, 0);
+        const totalRevenue = invoices.filter(inv => wonOppIds.has(inv.opportunityId) && inv.status === 'Pagada').reduce((sum, inv) => sum + Number(inv.amount), 0);
 
         const activeOpps = userOpps.filter(opp => !['Cerrado - Ganado', 'Cerrado - Perdido', 'Cerrado - No Definido'].includes(opp.stage));
-        const pipelineValue = activeOpps.reduce((sum, opp) => sum + opp.value, 0);
+        const pipelineValue = activeOpps.reduce((sum, opp) => sum + Number(opp.value), 0);
 
         return {
             user,

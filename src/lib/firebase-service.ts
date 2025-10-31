@@ -26,45 +26,86 @@ const licensesCollection = collection(db, 'licencias');
 export const getVacationRequests = async (userId: string, userRole: UserRole): Promise<VacationRequest[]> => {
     let q;
     if (userRole === 'Jefe' || userRole === 'Gerencia' || userRole === 'Administracion') {
-        // Managers can see all requests. Query without ordering to avoid composite index requirement.
         q = query(licensesCollection);
     } else {
-        // Advisors can only see their own requests.
         q = query(licensesCollection, where("userId", "==", userId));
     }
     const snapshot = await getDocs(q);
     const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRequest));
-
-    // Sort client-side after fetching
+    
     requests.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
     
     return requests;
 };
 
-export const createVacationRequest = async (requestData: Omit<VacationRequest, 'id'>): Promise<string> => {
-    const docRef = await addDoc(licensesCollection, {
-        ...requestData,
+
+export const createVacationRequest = async (requestData: Omit<VacationRequest, 'id'>, accessToken: string): Promise<void> => {
+    const { userName, startDate, endDate, daysRequested, returnDate } = requestData;
+
+    const subject = `Nueva Solicitud de Licencia - ${userName}`;
+    const body = `
+        <p>El asesor <strong>${userName}</strong> ha solicitado una licencia.</p>
+        <ul>
+            <li><strong>Período:</strong> ${format(new Date(startDate), 'P', { locale: 'es' })} - ${format(new Date(endDate), 'P', { locale: 'es' })}</li>
+            <li><strong>Días solicitados:</strong> ${daysRequested}</li>
+            <li><strong>Fecha de reincorporación:</strong> ${format(new Date(returnDate), 'P', { locale: 'es' })}</li>
+        </ul>
+        <p>Para gestionar esta solicitud, por favor ingresa a la sección "Equipo" en el CRM.</p>
+    `;
+
+    await sendEmail({
+        accessToken,
+        to: 'lchena@airedesantafe.com.ar',
+        subject,
+        body,
     });
-    return docRef.id;
 };
 
-export const updateVacationRequest = async (id: string, data: Partial<VacationRequest>, daysRequested: number): Promise<void> => {
-    const requestRef = doc(db, 'licencias', id);
+export const managerCreateOrUpdateVacationRequest = async (requestData: Partial<VacationRequest>, adminUserId: string): Promise<void> => {
+    if (requestData.id) {
+        // Update existing request
+        const docRef = doc(db, 'licencias', requestData.id);
+        await updateDoc(docRef, { ...requestData, updatedAt: serverTimestamp(), updatedBy: adminUserId });
+    } else {
+        // Create new request
+        await addDoc(licensesCollection, { ...requestData, requestDate: new Date().toISOString(), createdBy: adminUserId });
+    }
+};
+
+export const approveVacationRequest = async (requestId: string, adminUserId: string, accessToken: string): Promise<void> => {
+    const requestRef = doc(db, 'licencias', requestId);
     const requestSnap = await getDoc(requestRef);
     if (!requestSnap.exists()) throw new Error('Solicitud no encontrada');
-    
-    await updateDoc(requestRef, data);
+    const requestData = requestSnap.data() as VacationRequest;
 
-    if (data.status === 'Aprobado') {
-        const userRef = doc(db, 'users', requestSnap.data().userId);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-            const currentDays = userSnap.data().vacationDays || 0;
-            await updateDoc(userRef, {
-                vacationDays: Math.max(0, currentDays - daysRequested)
-            });
-        }
+    await updateDoc(requestRef, { status: 'Aprobado', approvedBy: adminUserId });
+
+    // Deduct vacation days from user
+    const userRef = doc(db, 'users', requestData.userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+        const currentDays = userSnap.data().vacationDays || 0;
+        await updateDoc(userRef, {
+            vacationDays: Math.max(0, currentDays - requestData.daysRequested)
+        });
     }
+    
+    // Send notification email to the user
+    const userToNotify = await getUserProfile(requestData.userId);
+    if (userToNotify?.email) {
+      const subject = `Tu solicitud de licencia ha sido Aprobada`;
+      const body = `
+        <p>Hola ${userToNotify.name},</p>
+        <p>Tu solicitud de licencia para el período del ${format(new Date(requestData.startDate), 'P', { locale: 'es' })} al ${format(new Date(requestData.endDate), 'P', { locale: 'es' })} ha sido aprobada.</p>
+        <p>¡Que las disfrutes!</p>
+      `;
+      await sendEmail({ accessToken, to: userToNotify.email, subject, body });
+    }
+};
+
+export const deleteVacationRequest = async (requestId: string): Promise<void> => {
+    const docRef = doc(db, 'licencias', requestId);
+    await deleteDoc(docRef);
 };
 
 
@@ -677,7 +718,7 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
         entityId: docRef.id,
         entityName: `Factura #${invoiceData.invoiceNumber || docRef.id}`,
         details: `creó la factura #${invoiceData.invoiceNumber} para la oportunidad "${oppTitle}"`,
-        ownerName: userName
+        ownerName: userName,
     });
 
     return docRef.id;
@@ -1421,32 +1462,6 @@ export const updateOpportunity = async (
         // If bonus is approved/rejected, move stage back to Negotiation
         if (originalData.stage === 'Negociación a Aprobar') {
             updateData.stage = 'Negociación';
-        }
-        
-        // Send email notification
-        if (accessToken) {
-            const clientSnap = await getDoc(doc(db, 'clients', originalData.clientId));
-            if (clientSnap.exists()) {
-                const clientData = clientSnap.data() as Client;
-                const advisor = await getUserProfile(clientData.ownerId);
-                if (advisor && advisor.email) {
-                    try {
-                        const subject = `Respuesta de bonificación para ${originalData.title}`;
-                        const body = `
-                            <p>Hola ${advisor.name},</p>
-                            <p>Se ha tomado una decisión sobre la solicitud de bonificación para la oportunidad <strong>"${originalData.title}"</strong> del cliente <strong>${originalData.clientName}</strong>.</p>
-                            <p><strong>Decisión:</strong> ${data.bonificacionEstado}</p>
-                            ${data.bonificacionObservaciones ? `<p><strong>Observaciones:</strong> ${data.bonificacionObservaciones}</p>` : ''}
-                            <p>La oportunidad ha vuelto a la etapa de "Negociación".</p>
-                            <p>Puedes ver los detalles en el <a href="https://aire-crm.vercel.app/clients/${originalData.clientId}">CRM</a>.</p>
-                        `;
-                        await sendEmail({ accessToken, to: advisor.email, subject, body });
-                    } catch (e) {
-                         console.error("Failed to send bonus notification email:", e);
-                         // Don't block the main operation if email fails.
-                    }
-                }
-            }
         }
     }
 
