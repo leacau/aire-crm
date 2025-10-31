@@ -14,7 +14,7 @@ import { Button } from '../ui/button';
 interface LicensesTableProps {
   requests: VacationRequest[];
   isManagerView: boolean;
-  onUpdateRequest: (userId: string, requestId: string, newStatus: 'Aprobado' | 'Rechazado') => void;
+  onUpdateRequest: (requestId: string, newStatus: 'Aprobado' | 'Rechazado') => void;
 }
 
 const getStatusBadge = (status: VacationRequest['status']) => {
@@ -75,8 +75,8 @@ export function LicensesTable({ requests, isManagerView, onUpdateRequest }: Lice
 
                 return (
                     <div className="flex gap-2 justify-end">
-                        <Button variant="outline" size="sm" onClick={() => onUpdateRequest(request.userId, request.id, 'Rechazado')}>Rechazar</Button>
-                        <Button size="sm" onClick={() => onUpdateRequest(request.userId, request.id, 'Aprobado')}>Aprobar</Button>
+                        <Button variant="outline" size="sm" onClick={() => onUpdateRequest(request.id, 'Rechazado')}>Rechazar</Button>
+                        <Button size="sm" onClick={() => onUpdateRequest(request.id, 'Aprobado')}>Aprobar</Button>
                     </div>
                 )
             }

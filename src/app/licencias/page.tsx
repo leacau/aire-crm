@@ -8,7 +8,7 @@ import { PlusCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { VacationRequest, User } from '@/lib/types';
-import { createVacationRequest, updateVacationRequest, getAllUsers } from '@/lib/firebase-service';
+import { createVacationRequest, updateVacationRequest, getAllUsers, getVacationRequests } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { LicenseRequestFormDialog } from '@/components/licencias/license-request-form-dialog';
 import { LicensesTable } from '@/components/licencias/licenses-table';
@@ -18,7 +18,7 @@ export default function LicenciasPage() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
 
-  const [usersWithRequests, setUsersWithRequests] = useState<User[]>([]);
+  const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
@@ -26,8 +26,8 @@ export default function LicenciasPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      const fetchedUsers = await getAllUsers();
-      setUsersWithRequests(fetchedUsers);
+      const fetchedRequests = await getVacationRequests();
+      setRequests(fetchedRequests);
     } catch (error) {
       console.error("Error fetching license data:", error);
       toast({ title: "Error al cargar las solicitudes", description: (error as Error).message, variant: "destructive" });
@@ -42,18 +42,18 @@ export default function LicenciasPage() {
     }
   }, [userInfo, fetchData]);
 
-  const handleCreateRequest = async (requestData: Omit<VacationRequest, 'id' | 'userId' | 'userName' | 'status'>) => {
+  const handleCreateRequest = async (requestData: Omit<VacationRequest, 'id' | 'userId' | 'userName' | 'status' | 'requestDate'>) => {
     if (!userInfo) return;
 
     try {
-      const fullRequestData = {
+      const fullRequestData: Omit<VacationRequest, 'id'> = {
         ...requestData,
-        id: `vac_${Date.now()}`, // Generate a unique ID
         userId: userInfo.id,
         userName: userInfo.name,
         status: 'Pendiente' as const,
+        requestDate: new Date().toISOString(),
       };
-      await createVacationRequest(userInfo.id, fullRequestData);
+      await createVacationRequest(fullRequestData);
       toast({ title: "Solicitud de licencia enviada" });
 
       const accessToken = await getGoogleAccessToken();
@@ -78,17 +78,18 @@ export default function LicenciasPage() {
     }
   };
   
-  const handleUpdateRequest = async (userId: string, requestId: string, newStatus: 'Aprobado' | 'Rechazado') => {
+  const handleUpdateRequest = async (requestId: string, newStatus: 'Aprobado' | 'Rechazado') => {
     if (!userInfo || !isBoss) return;
     
-    const userToUpdate = usersWithRequests.find(u => u.id === userId);
-    const request = userToUpdate?.vacationRequests?.find(r => r.id === requestId);
+    const request = requests.find(r => r.id === requestId);
     if (!request) return;
 
     try {
-        await updateVacationRequest(userId, requestId, { status: newStatus });
+        await updateVacationRequest(requestId, { status: newStatus }, request.daysRequested);
         toast({ title: `Solicitud ${newStatus === 'Aprobado' ? 'aprobada' : 'rechazada'}` });
         
+        const userToUpdate = await getAllUsers().then(users => users.find(u => u.id === request.userId));
+
         if (newStatus === 'Aprobado' && userToUpdate?.email) {
              const accessToken = await getGoogleAccessToken();
              if (accessToken) {
@@ -112,12 +113,12 @@ export default function LicenciasPage() {
     }
   };
 
-  const allRequests = useMemo(() => {
+  const filteredRequests = useMemo(() => {
     if (isBoss) {
-      return usersWithRequests.flatMap(user => user.vacationRequests || []);
+      return requests;
     }
-    return userInfo?.vacationRequests || [];
-  }, [usersWithRequests, userInfo, isBoss]);
+    return requests.filter(r => r.userId === userInfo?.id);
+  }, [requests, userInfo, isBoss]);
 
 
   if (authLoading || loading) {
@@ -137,7 +138,7 @@ export default function LicenciasPage() {
         </Header>
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
             <LicensesTable 
-                requests={allRequests}
+                requests={filteredRequests}
                 isManagerView={isBoss}
                 onUpdateRequest={handleUpdateRequest}
             />
