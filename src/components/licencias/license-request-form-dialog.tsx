@@ -8,19 +8,24 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
-import { addDays, eachDayOfInterval, isWeekend, format } from 'date-fns';
+import { addDays, eachDayOfInterval, isWeekend, format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { VacationRequest } from '@/lib/types';
+import type { VacationRequest, User } from '@/lib/types';
 import { Card } from '../ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Spinner } from '../ui/spinner';
 
 interface LicenseRequestFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSubmit: (data: Omit<VacationRequest, 'id' | 'userId' | 'userName' | 'status'>) => void;
-  vacationDaysAvailable: number;
+  onSubmit: (data: Omit<VacationRequest, 'id'>) => void;
+  request?: VacationRequest | null;
+  user?: User | null; // The user for whom the request is being made
+  allUsers: User[];
+  canChangeUser: boolean;
 }
 
 const getNextWorkday = (date: Date): Date => {
@@ -31,9 +36,32 @@ const getNextWorkday = (date: Date): Date => {
     return nextDay;
 };
 
-export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSubmit, vacationDaysAvailable }: LicenseRequestFormDialogProps) {
+export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSubmit, request, user, allUsers, canChangeUser }: LicenseRequestFormDialogProps) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [selectedUserId, setSelectedUserId] = useState<string | undefined>();
   const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
+  
+  const isEditing = !!request;
+  const selectedUser = useMemo(() => allUsers.find(u => u.id === selectedUserId), [allUsers, selectedUserId]);
+  const vacationDaysAvailable = selectedUser?.vacationDays || 0;
+
+  useEffect(() => {
+    if (isOpen) {
+        setIsSaving(false);
+        if (request) { // Editing
+            setSelectedUserId(request.userId);
+            setDateRange({ from: parseISO(request.startDate), to: parseISO(request.endDate) });
+        } else if (user) { // Creating for self or pre-selected user
+            setSelectedUserId(user.id);
+            setDateRange(undefined);
+        } else { // Creating for another user (manager)
+             setSelectedUserId(undefined);
+             setDateRange(undefined);
+        }
+    }
+  }, [isOpen, request, user]);
+
 
   const { daysRequested, returnDate, remainingDays } = useMemo(() => {
     if (!dateRange?.from || !dateRange?.to) {
@@ -51,6 +79,10 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSubmit, vacat
   }, [dateRange, vacationDaysAvailable]);
 
   const handleSubmit = () => {
+    if (!selectedUserId || !selectedUser) {
+        toast({ title: 'Usuario no seleccionado', description: 'Por favor, selecciona un asesor.', variant: 'destructive'});
+        return;
+    }
     if (!dateRange?.from || !dateRange?.to || daysRequested <= 0) {
       toast({ title: 'Datos incompletos', description: 'Por favor, selecciona un rango de fechas válido.', variant: 'destructive'});
       return;
@@ -59,37 +91,50 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSubmit, vacat
       toast({ title: 'Días insuficientes', description: 'No tienes suficientes días de vacaciones disponibles.', variant: 'destructive'});
       return;
     }
-
+    
+    setIsSaving(true);
     onSubmit({
+        userId: selectedUserId,
+        userName: selectedUser.name,
         startDate: format(dateRange.from, 'yyyy-MM-dd'),
         endDate: format(dateRange.to, 'yyyy-MM-dd'),
         daysRequested,
         returnDate: format(getNextWorkday(dateRange.to), 'yyyy-MM-dd'),
-        requestDate: new Date().toISOString(),
+        status: request?.status || 'Pendiente',
+        requestDate: request?.requestDate || new Date().toISOString(),
     });
-    onOpenChange(false);
   };
-  
-  useEffect(() => {
-    if (isOpen) {
-        setDateRange(undefined);
-    }
-  }, [isOpen])
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Solicitar Licencia</DialogTitle>
+          <DialogTitle>{isEditing ? 'Editar' : 'Solicitar'} Licencia</DialogTitle>
           <DialogDescription>
-            Selecciona el período de tu licencia. Los días se calcularán automáticamente de lunes a viernes.
+            {isEditing ? 'Modifica los detalles de la solicitud.' : 'Selecciona el período de tu licencia. Los días se calcularán automáticamente de lunes a viernes.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
-                <p className="text-sm text-blue-800">Días de vacaciones 2025 correspondientes:</p>
-                <p className="text-2xl font-bold text-blue-900">{vacationDaysAvailable}</p>
-            </div>
+            {canChangeUser && (
+                 <div className="space-y-2">
+                    <Label>Asesor</Label>
+                    <Select value={selectedUserId} onValueChange={setSelectedUserId} disabled={isEditing}>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar asesor..." /></SelectTrigger>
+                        <SelectContent>
+                            {allUsers.filter(u => u.role === 'Asesor').map(u => (
+                                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
+            
+            {selectedUser && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
+                    <p className="text-sm text-blue-800">Días de vacaciones correspondientes:</p>
+                    <p className="text-2xl font-bold text-blue-900">{vacationDaysAvailable}</p>
+                </div>
+            )}
           <div className="space-y-2">
             <Label htmlFor="date-range">Fecha Pedida de Licencia</Label>
             <Popover>
@@ -98,6 +143,7 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSubmit, vacat
                   id="date-range"
                   variant={"outline"}
                   className={cn("w-full justify-start text-left font-normal", !dateRange && "text-muted-foreground")}
+                  disabled={!selectedUserId}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {dateRange?.from ? (
@@ -145,7 +191,9 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSubmit, vacat
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSubmit}>Enviar Solicitud</Button>
+          <Button onClick={handleSubmit} disabled={isSaving}>
+            {isSaving ? <Spinner size="small"/> : 'Guardar Solicitud'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

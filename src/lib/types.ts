@@ -267,11 +267,11 @@ export type User = {
   name:string;
   email: string;
   role: UserRole;
+  managerId?: string;
   initials?: string;
   photoURL?: string;
   deletedAt?: string;
   vacationDays?: number;
-  vacationRequests?: VacationRequest[];
 };
 
 export type VacationRequest = {

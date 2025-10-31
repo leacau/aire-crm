@@ -6,6 +6,7 @@ import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, Client
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 const usersCollection = collection(db, 'users');
 const clientsCollection = collection(db, 'clients');
@@ -23,87 +24,93 @@ const licensesCollection = collection(db, 'licencias');
 
 // --- Vacation Request Functions ---
 
-export const getVacationRequests = async (userId: string, userRole: UserRole): Promise<VacationRequest[]> => {
+export const getVacationRequests = async (currentUser: User): Promise<VacationRequest[]> => {
     let q;
-    if (userRole === 'Jefe' || userRole === 'Gerencia' || userRole === 'Administracion') {
+    const isManager = currentUser.role === 'Jefe' || currentUser.role === 'Gerencia' || currentUser.role === 'Administracion';
+
+    if (isManager) {
         q = query(licensesCollection);
     } else {
-        q = query(licensesCollection, where("userId", "==", userId));
+        q = query(licensesCollection, where("userId", "==", currentUser.id));
     }
     const snapshot = await getDocs(q);
     const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRequest));
     
+    // Sort client-side
     requests.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
     
     return requests;
 };
 
 
-export const createVacationRequest = async (requestData: Omit<VacationRequest, 'id'>, accessToken: string): Promise<void> => {
+export const createVacationRequest = async (requestData: Omit<VacationRequest, 'id'>, accessToken: string, managerEmail: string): Promise<string> => {
     const { userName, startDate, endDate, daysRequested, returnDate } = requestData;
 
+    const docRef = await addDoc(licensesCollection, {
+        ...requestData,
+        requestDate: new Date().toISOString()
+    });
+    
     const subject = `Nueva Solicitud de Licencia - ${userName}`;
     const body = `
         <p>El asesor <strong>${userName}</strong> ha solicitado una licencia.</p>
         <ul>
-            <li><strong>Período:</strong> ${format(new Date(startDate), 'P', { locale: 'es' })} - ${format(new Date(endDate), 'P', { locale: 'es' })}</li>
+            <li><strong>Período:</strong> ${format(parseISO(startDate), 'P', { locale: es })} - ${format(parseISO(endDate), 'P', { locale: es })}</li>
             <li><strong>Días solicitados:</strong> ${daysRequested}</li>
-            <li><strong>Fecha de reincorporación:</strong> ${format(new Date(returnDate), 'P', { locale: 'es' })}</li>
+            <li><strong>Fecha de reincorporación:</strong> ${format(parseISO(returnDate), 'P', { locale: es })}</li>
         </ul>
-        <p>Para gestionar esta solicitud, por favor ingresa a la sección "Equipo" en el CRM.</p>
+        <p>Para gestionar esta solicitud, por favor ingresa a la sección "Licencias" en el CRM.</p>
     `;
 
     await sendEmail({
         accessToken,
-        to: 'lchena@airedesantafe.com.ar',
+        to: managerEmail,
         subject,
         body,
     });
+    
+    return docRef.id;
 };
 
-export const managerCreateOrUpdateVacationRequest = async (requestData: Partial<VacationRequest>, adminUserId: string): Promise<void> => {
-    if (requestData.id) {
-        // Update existing request
-        const docRef = doc(db, 'licencias', requestData.id);
-        await updateDoc(docRef, { ...requestData, updatedAt: serverTimestamp(), updatedBy: adminUserId });
-    } else {
-        // Create new request
-        await addDoc(licensesCollection, { ...requestData, requestDate: new Date().toISOString(), createdBy: adminUserId });
-    }
-};
-
-export const approveVacationRequest = async (requestId: string, adminUserId: string, accessToken: string): Promise<void> => {
+export const updateVacationRequest = async (requestId: string, data: Partial<Omit<VacationRequest, 'id'>>, adminUserId: string, accessToken?: string): Promise<void> => {
     const requestRef = doc(db, 'licencias', requestId);
     const requestSnap = await getDoc(requestRef);
     if (!requestSnap.exists()) throw new Error('Solicitud no encontrada');
-    const requestData = requestSnap.data() as VacationRequest;
+    
+    const originalRequest = requestSnap.data() as VacationRequest;
+    
+    const updateData: { [key: string]: any } = { ...data, updatedAt: serverTimestamp(), updatedBy: adminUserId };
 
-    await updateDoc(requestRef, { status: 'Aprobado', approvedBy: adminUserId });
-
-    // Deduct vacation days from user
-    const userRef = doc(db, 'users', requestData.userId);
-    const userSnap = await getDoc(userRef);
-    if (userSnap.exists()) {
-        const currentDays = userSnap.data().vacationDays || 0;
-        await updateDoc(userRef, {
-            vacationDays: Math.max(0, currentDays - requestData.daysRequested)
-        });
+    if (data.status === 'Aprobado' && originalRequest.status !== 'Aprobado') {
+        const userRef = doc(db, 'users', originalRequest.userId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+            const currentDays = userSnap.data().vacationDays || 0;
+            await updateDoc(userRef, {
+                vacationDays: Math.max(0, currentDays - originalRequest.daysRequested)
+            });
+        }
+        
+        // Send email to user
+        if (accessToken) {
+            const userToNotify = await getUserProfile(originalRequest.userId);
+            if (userToNotify?.email) {
+                 const subject = `Tu solicitud de licencia ha sido Aprobada`;
+                 const body = `
+                    <p>Hola ${userToNotify.name},</p>
+                    <p>Tu solicitud de licencia para el período del ${format(parseISO(originalRequest.startDate), 'P', { locale: es })} al ${format(parseISO(originalRequest.endDate), 'P', { locale: es })} ha sido aprobada.</p>
+                    <p>¡Que las disfrutes!</p>
+                 `;
+                 await sendEmail({ accessToken, to: userToNotify.email, subject, body });
+            }
+        }
     }
     
-    // Send notification email to the user
-    const userToNotify = await getUserProfile(requestData.userId);
-    if (userToNotify?.email) {
-      const subject = `Tu solicitud de licencia ha sido Aprobada`;
-      const body = `
-        <p>Hola ${userToNotify.name},</p>
-        <p>Tu solicitud de licencia para el período del ${format(new Date(requestData.startDate), 'P', { locale: 'es' })} al ${format(new Date(requestData.endDate), 'P', { locale: 'es' })} ha sido aprobada.</p>
-        <p>¡Que las disfrutes!</p>
-      `;
-      await sendEmail({ accessToken, to: userToNotify.email, subject, body });
-    }
+    await updateDoc(requestRef, updateData);
 };
 
-export const deleteVacationRequest = async (requestId: string): Promise<void> => {
+
+export const deleteVacationRequest = async (requestId: string, adminUserId: string): Promise<void> => {
     const docRef = doc(db, 'licencias', requestId);
     await deleteDoc(docRef);
 };
@@ -829,10 +836,16 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
 export const updateUserProfile = async (uid: string, data: Partial<User>): Promise<void> => {
     const userRef = doc(db, 'users', uid);
     const originalSnap = await getDoc(userRef);
+    if (!originalSnap.exists()) return;
     const originalData = originalSnap.data() as User;
     
+    const dataToUpdate: {[key: string]: any} = { ...data };
+    if (data.managerId === undefined) {
+      dataToUpdate.managerId = deleteField();
+    }
+    
     await updateDoc(userRef, {
-        ...data,
+        ...dataToUpdate,
         updatedAt: serverTimestamp()
     });
 
@@ -852,7 +865,12 @@ export const updateUserProfile = async (uid: string, data: Partial<User>): Promi
 
 
 export const getAllUsers = async (role?: User['role']): Promise<User[]> => {
-    const q = role ? query(usersCollection, where("role", "==", role)) : usersCollection;
+    let q;
+    if (role) {
+      q = query(usersCollection, where("role", "==", role));
+    } else {
+      q = query(usersCollection);
+    }
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
 };

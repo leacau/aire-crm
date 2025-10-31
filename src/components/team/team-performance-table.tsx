@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -12,7 +11,7 @@ import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/hooks/use-auth';
-import { MoreHorizontal, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Trash2, Save } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -37,7 +36,7 @@ interface UserStats {
   prospectsCount: number;
 }
 
-const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia'];
+const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Admin'];
 
 export function TeamPerformanceTable() {
   const { userInfo, isBoss } = useAuth();
@@ -51,6 +50,7 @@ export function TeamPerformanceTable() {
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [editedVacationDays, setEditedVacationDays] = useState<Record<string, number | string>>({});
+  const [editedManager, setEditedManager] = useState<Record<string, string | undefined>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -79,46 +79,14 @@ export function TeamPerformanceTable() {
     fetchData();
   }, [fetchData]);
 
-  const handleRoleChange = async (userId: string, newRole: UserRole) => {
-    const originalUsers = users;
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
-    
-    try {
-        await updateUserProfile(userId, { role: newRole });
-        toast({ title: 'Rol actualizado', description: `El rol del usuario ha sido cambiado a ${newRole}.` });
+  const handleUpdateUser = async (userId: string, data: Partial<User>) => {
+     try {
+        await updateUserProfile(userId, data);
+        toast({ title: 'Usuario actualizado'});
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...data } : u));
     } catch (error) {
-        setUsers(originalUsers); // Revert on error
-        console.error("Error updating user role:", error);
-        toast({ title: 'Error al actualizar el rol', variant: 'destructive' });
-    }
-  }
-
-  const handleVacationDaysChange = (userId: string, value: string) => {
-    setEditedVacationDays(prev => ({ ...prev, [userId]: value }));
-  };
-
-  const handleSaveVacationDays = async (userId: string) => {
-    const days = editedVacationDays[userId];
-    if (days === undefined || days === '') return;
-
-    const numericValue = Number(days);
-    if (isNaN(numericValue) || numericValue < 0) {
-        toast({ title: 'Valor inválido', description: 'Por favor, introduce un número válido de días.', variant: 'destructive'});
-        return;
-    }
-    
-    try {
-        await updateUserProfile(userId, { vacationDays: numericValue });
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, vacationDays: numericValue } : u));
-        setEditedVacationDays(prev => {
-            const newEdited = {...prev};
-            delete newEdited[userId];
-            return newEdited;
-        });
-        toast({ title: 'Días de vacaciones actualizados' });
-    } catch (error) {
-        console.error("Error updating vacation days:", error);
-        toast({ title: 'Error al actualizar los días de vacaciones', variant: 'destructive'});
+        console.error("Error updating user:", error);
+        toast({ title: 'Error al actualizar usuario', variant: 'destructive' });
     }
   };
 
@@ -168,6 +136,8 @@ export function TeamPerformanceTable() {
     }).sort((a,b) => b.totalRevenue - a.totalRevenue); // Sort by revenue
   }, [users, opportunities, clients, invoices, prospects]);
   
+  const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
+
   const columns = useMemo<ColumnDef<UserStats>[]>(() => [
     {
       accessorKey: 'user',
@@ -196,7 +166,7 @@ export function TeamPerformanceTable() {
         cell: ({ row }) => {
             const { user } = row.original;
             return (
-                <Select value={user.role} onValueChange={(newRole: UserRole) => handleRoleChange(user.id, newRole)} disabled={!isBoss}>
+                <Select value={user.role} onValueChange={(newRole: UserRole) => handleUpdateUser(user.id, { role: newRole })} disabled={!isBoss}>
                     <SelectTrigger className="w-[150px]">
                         <SelectValue placeholder="Seleccionar rol" />
                     </SelectTrigger>
@@ -209,6 +179,47 @@ export function TeamPerformanceTable() {
             );
         }
     },
+     {
+      accessorKey: 'managerId',
+      header: 'Jefe Directo',
+      cell: ({ row }) => {
+        const { user } = row.original;
+        const isManagerEdited = editedManager[user.id] !== undefined;
+
+        return (
+          <div className="flex items-center gap-1 w-[200px]">
+             <Select 
+                value={isManagerEdited ? editedManager[user.id] : user.managerId || 'none'} 
+                onValueChange={(value) => setEditedManager(p => ({...p, [user.id]: value}))}
+                disabled={!isBoss}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Asignar jefe..." />
+              </SelectTrigger>
+              <SelectContent>
+                 <SelectItem value="none">Ninguno</SelectItem>
+                {managers.filter(m => m.id !== user.id).map(manager => (
+                  <SelectItem key={manager.id} value={manager.id}>{manager.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {isManagerEdited && (
+              <Button size="icon" className="h-9 w-9" onClick={() => {
+                const managerIdToSave = editedManager[user.id] === 'none' ? undefined : editedManager[user.id];
+                handleUpdateUser(user.id, { managerId: managerIdToSave });
+                setEditedManager(p => {
+                    const newP = {...p};
+                    delete newP[user.id];
+                    return newP;
+                });
+              }}>
+                <Save className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        );
+      },
+    },
     {
       accessorKey: 'vacationDays',
       header: 'Días Vacaciones',
@@ -219,12 +230,12 @@ export function TeamPerformanceTable() {
           <div className="flex items-center gap-1 w-[120px]">
             <Input 
               type="number"
-              className="w-full h-8"
+              className="w-full h-9"
               value={isEdited ? editedVacationDays[user.id] : (user.vacationDays || '')}
-              onChange={(e) => handleVacationDaysChange(user.id, e.target.value)}
+              onChange={(e) => setEditedVacationDays(prev => ({...prev, [user.id]: e.target.value}))}
               disabled={!isBoss}
             />
-            {isEdited && <Button size="sm" className="h-8" onClick={() => handleSaveVacationDays(user.id)}>G</Button>}
+            {isEdited && <Button size="sm" className="h-9" onClick={() => handleUpdateUser(user.id, { vacationDays: Number(editedVacationDays[user.id]) || 0 })}><Save className="h-4 w-4"/></Button>}
           </div>
         )
       }
@@ -276,7 +287,7 @@ export function TeamPerformanceTable() {
             )
         }
     }
-  ], [isBoss, userInfo, editedVacationDays]);
+  ], [isBoss, userInfo, managers, editedVacationDays, editedManager]);
 
   if (loading) {
     return (

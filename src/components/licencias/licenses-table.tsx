@@ -5,16 +5,27 @@ import React, { useMemo } from 'react';
 import type { VacationRequest } from '@/lib/types';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '../ui/badge';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
+import { MoreHorizontal, Trash2, Edit, Check, X } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
 
 interface LicensesTableProps {
   requests: VacationRequest[];
-  isManagerView: boolean;
-  onUpdateRequest: (requestId: string, newStatus: 'Aprobado' | 'Rechazado') => void;
+  currentUserId: string;
+  canManage: boolean;
+  onUpdateRequestStatus: (requestId: string, newStatus: 'Aprobado' | 'Rechazado') => void;
+  onEditRequest: (request: VacationRequest) => void;
+  onDeleteRequest: (request: VacationRequest) => void;
 }
 
 const getStatusBadge = (status: VacationRequest['status']) => {
@@ -23,15 +34,15 @@ const getStatusBadge = (status: VacationRequest['status']) => {
     'Aprobado': 'bg-green-100 text-green-800',
     'Rechazado': 'bg-red-100 text-red-800',
   };
-  return <Badge className={cn('capitalize', styles[status])}>{status}</Badge>;
+  return <Badge variant="outline" className={cn('capitalize', styles[status])}>{status}</Badge>;
 };
 
-export function LicensesTable({ requests, isManagerView, onUpdateRequest }: LicensesTableProps) {
+export function LicensesTable({ requests, currentUserId, canManage, onUpdateRequestStatus, onEditRequest, onDeleteRequest }: LicensesTableProps) {
   
   const columns = useMemo<ColumnDef<VacationRequest>[]>(() => {
     let cols: ColumnDef<VacationRequest>[] = [];
 
-    if (isManagerView) {
+    if (canManage) {
       cols.push({
         accessorKey: 'userName',
         header: 'Asesor',
@@ -43,12 +54,12 @@ export function LicensesTable({ requests, isManagerView, onUpdateRequest }: Lice
       {
         accessorKey: 'startDate',
         header: 'Desde',
-        cell: ({ row }) => format(new Date(row.original.startDate), 'P', { locale: es })
+        cell: ({ row }) => format(parseISO(row.original.startDate), 'P', { locale: es })
       },
       {
         accessorKey: 'endDate',
         header: 'Hasta',
-        cell: ({ row }) => format(new Date(row.original.endDate), 'P', { locale: es })
+        cell: ({ row }) => format(parseISO(row.original.endDate), 'P', { locale: es })
       },
       {
         accessorKey: 'daysRequested',
@@ -57,35 +68,62 @@ export function LicensesTable({ requests, isManagerView, onUpdateRequest }: Lice
       {
         accessorKey: 'returnDate',
         header: 'Reincorporación',
-         cell: ({ row }) => format(new Date(row.original.returnDate), 'P', { locale: es })
+         cell: ({ row }) => format(parseISO(row.original.returnDate), 'P', { locale: es })
       },
       {
         accessorKey: 'status',
         header: 'Estado',
         cell: ({ row }) => getStatusBadge(row.original.status)
       },
+      {
+        id: 'actions',
+        cell: ({ row }) => {
+            const request = row.original;
+            const isOwner = request.userId === currentUserId;
+            const canEdit = isOwner || canManage;
+            const canDelete = isOwner || canManage;
+
+            if (!canEdit && !canManage) return null;
+
+            return (
+              <div className="flex items-center justify-end">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="h-8 w-8 p-0">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {canManage && request.status === 'Pendiente' && (
+                        <>
+                          <DropdownMenuItem onClick={() => onUpdateRequestStatus(request.id, 'Aprobado')}>
+                              <Check className="mr-2 h-4 w-4" /> Aprobar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => onUpdateRequestStatus(request.id, 'Rechazado')}>
+                              <X className="mr-2 h-4 w-4" /> Rechazar
+                          </DropdownMenuItem>
+                        </>
+                    )}
+                    {canEdit && (
+                       <DropdownMenuItem onClick={() => onEditRequest(request)}>
+                          <Edit className="mr-2 h-4 w-4" /> Editar
+                       </DropdownMenuItem>
+                    )}
+                     {canDelete && (
+                       <DropdownMenuItem className="text-destructive" onClick={() => onDeleteRequest(request)}>
+                          <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                       </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )
+        }
+      }
     ]);
-    
-    if (isManagerView) {
-        cols.push({
-            id: 'actions',
-            cell: ({ row }) => {
-                const request = row.original;
-                if (request.status !== 'Pendiente') return null;
-
-                return (
-                    <div className="flex gap-2 justify-end">
-                        <Button variant="outline" size="sm" onClick={() => onUpdateRequest(request.id, 'Rechazado')}>Rechazar</Button>
-                        <Button size="sm" onClick={() => onUpdateRequest(request.id, 'Aprobado')}>Aprobar</Button>
-                    </div>
-                )
-            }
-        })
-    }
-
 
     return cols;
-  }, [isManagerView, onUpdateRequest]);
+  }, [canManage, onUpdateRequestStatus, onEditRequest, onDeleteRequest, currentUserId]);
 
   return (
     <ResizableDataTable
