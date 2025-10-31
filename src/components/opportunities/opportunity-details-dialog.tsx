@@ -158,10 +158,8 @@ export function OpportunityDetailsDialog({
   const [selectedOrden, setSelectedOrden] = useState<OrdenPautado | null>(null);
   const isEditing = !!opportunity;
 
-  const [newInvoiceRow, setNewInvoiceRow] = useState({ number: '', date: new Date().toISOString().split('T')[0], amount: 0 });
-  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
-  const [programs, setPrograms] = useState<Program[]>([]);
-
+  const [newInvoiceRow, setNewInvoiceRow] = useState<{number: string, date: string, amount: string | number}>({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
+  
   const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>(() => 
     isEditing ? opportunity : getInitialOpportunityData(client)
   );
@@ -215,13 +213,6 @@ export function OpportunityDetailsDialog({
             const accessToken = await getGoogleAccessToken();
             onUpdate(changes, accessToken);
         }
-        
-        // Save pending invoices for existing opportunity
-        if (pendingInvoices.length > 0 && userInfo) {
-            for (const inv of pendingInvoices) {
-                await createInvoice({ ...inv, opportunityId: opportunity.id }, userInfo.id, userInfo.name, opportunity.clientName);
-            }
-        }
     } else if (!isEditing) {
         const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
         onCreate(newOpp, pendingInvoices);
@@ -241,8 +232,13 @@ export function OpportunityDetailsDialog({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setEditedOpportunity(prev => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target;
+     if (type === 'number') {
+      // Allow empty string to clear the input, otherwise convert to number
+      setEditedOpportunity(prev => ({ ...prev, [name]: value === '' ? '' : Number(value) }));
+    } else {
+      setEditedOpportunity(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleCheckboxChange = (name: keyof Opportunity, checked: boolean | "indeterminate") => {
@@ -297,19 +293,19 @@ export function OpportunityDetailsDialog({
   };
 
   const handleAddPendingInvoice = () => {
-    if (!newInvoiceRow.number || newInvoiceRow.amount <= 0) {
-      toast({ title: 'Datos de factura incompletos', variant: 'destructive'});
+    if (!newInvoiceRow.number || !newInvoiceRow.amount || Number(newInvoiceRow.amount) <= 0) {
+      toast({ title: 'Datos de factura incompletos', description: 'Número de factura y monto son requeridos.', variant: 'destructive'});
       return;
     }
     const newPending: Omit<Invoice, 'id' | 'opportunityId'> = {
         invoiceNumber: newInvoiceRow.number,
-        amount: newInvoiceRow.amount,
+        amount: Number(newInvoiceRow.amount),
         date: newInvoiceRow.date,
         status: 'Generada',
         dateGenerated: new Date().toISOString(),
     }
     setPendingInvoices(prev => [...prev, newPending]);
-    setNewInvoiceRow({ number: '', date: new Date().toISOString().split('T')[0], amount: 0 });
+    setNewInvoiceRow({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
   };
   
   const handleDeleteInvoice = async (invoiceId: string) => {
@@ -613,8 +609,8 @@ export function OpportunityDetailsDialog({
                                 <Input 
                                     type="number"
                                     placeholder="0.00"
-                                    value={newInvoiceRow.amount || ''}
-                                    onChange={(e) => setNewInvoiceRow(prev => ({...prev, amount: Number(e.target.value)}))}
+                                    value={newInvoiceRow.amount}
+                                    onChange={(e) => setNewInvoiceRow(prev => ({...prev, amount: e.target.value}))}
                                 />
                             </TableCell>
                              <TableCell colSpan={isEditing ? 2 : 1}>

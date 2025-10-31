@@ -1283,26 +1283,6 @@ export const createOpportunity = async (
     return docRef.id;
 };
 
-const createReminderEvent = async (accessToken: string, ownerEmail: string, clientName: string, opportunityTitle: string, dueDate: Date) => {
-    const event = {
-        summary: `Vencimiento Pauta: ${clientName}`,
-        description: `Recordatorio de vencimiento de pauta para la oportunidad "${opportunityTitle}".\nCliente: ${clientName}`,
-        start: { date: dueDate.toISOString().split('T')[0] },
-        end: { date: dueDate.toISOString().split('T')[0] },
-        attendees: [{ email: ownerEmail }, { email: 'lchena@airedesantafe.com.ar' }],
-        reminders: {
-            useDefault: false,
-            overrides: [
-                { method: 'popup', minutes: 30 * 24 * 60 }, // 30 days
-                { method: 'popup', minutes: 15 * 24 * 60 }, // 15 days
-                { method: 'popup', minutes: 7 * 24 * 60 },  // 7 days
-                { method: 'popup', minutes: 10 },
-            ],
-        },
-    };
-    await createCalendarEvent(accessToken, event);
-};
-
 const createCommercialItemsFromOpportunity = async (opportunity: Opportunity, userId: string, userName: string) => {
     if (!opportunity.ordenesPautado || opportunity.ordenesPautado.length === 0) {
         return;
