@@ -12,7 +12,6 @@ import { createVacationRequest, updateVacationRequest, getAllUsers, getVacationR
 import { useToast } from '@/hooks/use-toast';
 import { LicenseRequestFormDialog } from '@/components/licencias/license-request-form-dialog';
 import { LicensesTable } from '@/components/licencias/licenses-table';
-import { sendEmail } from '@/lib/google-gmail-service';
 
 export default function LicenciasPage() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
@@ -57,21 +56,6 @@ export default function LicenciasPage() {
       await createVacationRequest(fullRequestData);
       toast({ title: "Solicitud de licencia enviada" });
 
-      const accessToken = await getGoogleAccessToken();
-      if (accessToken) {
-         await sendEmail({
-            accessToken,
-            to: 'lchena@airedesantafe.com.ar',
-            subject: `Nueva Solicitud de Licencia: ${userInfo.name}`,
-            body: `
-                <p>El asesor <strong>${userInfo.name}</strong> ha solicitado una licencia.</p>
-                <p><strong>Período:</strong> ${requestData.startDate} al ${requestData.endDate}</p>
-                <p><strong>Días solicitados:</strong> ${requestData.daysRequested}</p>
-                <p>Puedes revisar la solicitud en el CRM.</p>
-            `,
-         });
-      }
-
       fetchData();
     } catch (error) {
       console.error("Error creating license request:", error);
@@ -88,24 +72,6 @@ export default function LicenciasPage() {
     try {
         await updateVacationRequest(requestId, { status: newStatus }, request.daysRequested);
         toast({ title: `Solicitud ${newStatus === 'Aprobado' ? 'aprobada' : 'rechazada'}` });
-        
-        const userToUpdate = await getAllUsers().then(users => users.find(u => u.id === request.userId));
-
-        if (newStatus === 'Aprobado' && userToUpdate?.email) {
-             const accessToken = await getGoogleAccessToken();
-             if (accessToken) {
-                 await sendEmail({
-                    accessToken,
-                    to: userToUpdate.email,
-                    subject: 'Tu solicitud de licencia ha sido aprobada',
-                    body: `
-                        <p>Hola ${userToUpdate.name},</p>
-                        <p>Tu solicitud de licencia para el período del <strong>${request.startDate}</strong> al <strong>${request.endDate}</strong> ha sido aprobada.</p>
-                        <p>¡Que las disfrutes!</p>
-                    `,
-                 });
-             }
-        }
         
         fetchData();
     } catch (error) {
