@@ -630,7 +630,7 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
         entityId: docRef.id,
         entityName: `Factura #${invoiceData.invoiceNumber || docRef.id}`,
         details: `creó la factura #${invoiceData.invoiceNumber} para la oportunidad "${oppTitle}"`,
-        ownerName: ownerName
+        ownerName: userName
     });
 
     return docRef.id;
