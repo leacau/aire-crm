@@ -11,7 +11,7 @@ import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/hooks/use-auth';
-import { MoreHorizontal, Trash2, Save } from 'lucide-react';
+import { MoreHorizontal, Trash2, Save, BarChartHorizontal } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -25,7 +25,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
+import { MonthlyClosureDialog } from './monthly-closure-dialog';
 
 interface UserStats {
   user: User;
@@ -34,6 +35,8 @@ interface UserStats {
   activeOpps: number;
   pipelineValue: number;
   prospectsCount: number;
+  currentMonthBilling: number;
+  previousMonthBilling: number | null;
 }
 
 const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Admin'];
@@ -43,7 +46,6 @@ export function TeamPerformanceTable() {
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [prospects, setProspects] = useState<Prospect[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,21 +53,20 @@ export function TeamPerformanceTable() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [editedVacationDays, setEditedVacationDays] = useState<Record<string, number | string>>({});
   const [editedManager, setEditedManager] = useState<Record<string, string | undefined>>({});
+  const [isClosureDialogOpen, setIsClosureDialogOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [allOpps, allUsers, allClients, allInvoices, allProspects] = await Promise.all([
+      const [allOpps, allUsers, allClients, allProspects] = await Promise.all([
           getAllOpportunities(),
           getAllUsers(),
           getClients(),
-          getInvoices(),
           getProspects(),
       ]);
       setOpportunities(allOpps);
       setUsers(allUsers);
       setClients(allClients);
-      setInvoices(allInvoices);
       setProspects(allProspects);
     } catch (error) {
       console.error("Error fetching team data:", error);
@@ -108,19 +109,29 @@ export function TeamPerformanceTable() {
     }
   };
 
-
   const userStats = useMemo<UserStats[]>(() => {
+    const today = new Date();
+    const currentMonthStart = startOfMonth(today);
+    const currentMonthEnd = endOfMonth(today);
+    const prevMonthDate = subMonths(today, 1);
+    const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+
     return users.map(user => {
         const isAdvisor = user.role === 'Asesor';
-        
         const advisorClientIds = isAdvisor ? new Set(clients.filter(c => c.ownerId === user.id).map(c => c.id)) : new Set();
         const userOpps = isAdvisor ? opportunities.filter(opp => advisorClientIds.has(opp.clientId)) : [];
         const userProspects = isAdvisor ? prospects.filter(p => p.ownerId === user.id && p.status !== 'Convertido') : [];
         
         const wonOpps = userOpps.filter(opp => opp.stage === 'Cerrado - Ganado');
-        const wonOppIds = new Set(wonOpps.map(opp => opp.id));
-
-        const totalRevenue = invoices.filter(inv => wonOppIds.has(inv.opportunityId) && inv.status === 'Pagada').reduce((sum, inv) => sum + Number(inv.amount), 0);
+        
+        const currentMonthOpps = wonOpps.filter(opp => {
+          const closeDate = parseISO(opp.closeDate);
+          return isWithinInterval(closeDate, { start: currentMonthStart, end: currentMonthEnd });
+        });
+        
+        const currentMonthBilling = currentMonthOpps.reduce((sum, opp) => sum + Number(opp.value), 0);
+        
+        const previousMonthBilling = user.monthlyClosures?.[prevMonthKey] ?? null;
 
         const activeOpps = userOpps.filter(opp => !['Cerrado - Ganado', 'Cerrado - Perdido', 'Cerrado - No Definido'].includes(opp.stage));
         const pipelineValue = activeOpps.reduce((sum, opp) => sum + Number(opp.value), 0);
@@ -128,15 +139,19 @@ export function TeamPerformanceTable() {
         return {
             user,
             wonOpps: wonOpps.length,
-            totalRevenue,
+            totalRevenue: 0, // This seems deprecated by monthly billing
             activeOpps: activeOpps.length,
             pipelineValue,
-            prospectsCount: userProspects.length
+            prospectsCount: userProspects.length,
+            currentMonthBilling,
+            previousMonthBilling
         };
-    }).sort((a,b) => b.totalRevenue - a.totalRevenue); // Sort by revenue
-  }, [users, opportunities, clients, invoices, prospects]);
+    }).sort((a,b) => (b.currentMonthBilling) - (a.currentMonthBilling));
+  }, [users, opportunities, clients, prospects]);
   
   const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
+  const advisors = useMemo(() => users.filter(u => u.role === 'Asesor'), [users]);
+
 
   const columns = useMemo<ColumnDef<UserStats>[]>(() => [
     {
@@ -221,44 +236,14 @@ export function TeamPerformanceTable() {
       },
     },
     {
-      accessorKey: 'vacationDays',
-      header: 'Días Vacaciones',
-      cell: ({ row }) => {
-        const { user } = row.original;
-        const isEdited = editedVacationDays[user.id] !== undefined;
-        return (
-          <div className="flex items-center gap-1 w-[120px]">
-            <Input 
-              type="number"
-              className="w-full h-9"
-              value={isEdited ? editedVacationDays[user.id] : (user.vacationDays || '')}
-              onChange={(e) => setEditedVacationDays(prev => ({...prev, [user.id]: e.target.value}))}
-              disabled={!isBoss}
-            />
-            {isEdited && <Button size="sm" className="h-9" onClick={() => handleUpdateUser(user.id, { vacationDays: Number(editedVacationDays[user.id]) || 0 })}><Save className="h-4 w-4"/></Button>}
-          </div>
-        )
-      }
+      accessorKey: 'previousMonthBilling',
+      header: () => <div className="text-right">Facturación Mes Anterior</div>,
+      cell: ({ row }) => <div className="text-right">{row.original.user.role === 'Asesor' ? (row.original.previousMonthBilling !== null ? `$${row.original.previousMonthBilling.toLocaleString('es-AR')}` : '-') : '-'}</div>,
     },
     {
-      accessorKey: 'prospectsCount',
-      header: () => <div className="text-right">Prospectos Activos</div>,
-      cell: ({ row }) => <div className="text-right">{row.original.user.role === 'Asesor' ? row.original.prospectsCount : '-'}</div>,
-    },
-    {
-      accessorKey: 'activeOpps',
-      header: () => <div className="text-right">Opps Activas</div>,
-      cell: ({ row }) => <div className="text-right">{row.original.user.role === 'Asesor' ? row.original.activeOpps : '-'}</div>,
-    },
-    {
-      accessorKey: 'pipelineValue',
-      header: () => <div className="text-right">Valor Pipeline</div>,
-      cell: ({ row }) => <div className="text-right">{row.original.user.role === 'Asesor' ? `$${row.original.pipelineValue.toLocaleString('es-AR')}` : '-'}</div>,
-    },
-    {
-      accessorKey: 'totalRevenue',
-      header: () => <div className="text-right">Ingresos (Pagados)</div>,
-      cell: ({ row }) => <div className="text-right font-semibold">{row.original.user.role === 'Asesor' ? `$${row.original.totalRevenue.toLocaleString('es-AR')}` : '-'}</div>,
+      accessorKey: 'currentMonthBilling',
+      header: () => <div className="text-right">Facturación Mes Actual</div>,
+      cell: ({ row }) => <div className="text-right font-semibold">{row.original.user.role === 'Asesor' ? `$${row.original.currentMonthBilling.toLocaleString('es-AR')}` : '-'}</div>,
     },
     {
         id: 'actions',
@@ -287,7 +272,7 @@ export function TeamPerformanceTable() {
             )
         }
     }
-  ], [isBoss, userInfo, managers, editedVacationDays, editedManager]);
+  ], [isBoss, userInfo, managers, editedManager]);
 
   if (loading) {
     return (
@@ -299,27 +284,42 @@ export function TeamPerformanceTable() {
 
   return (
     <>
-        <ResizableDataTable
+      <div className='flex justify-end mb-4'>
+        {isBoss && (
+          <Button onClick={() => setIsClosureDialogOpen(true)}>
+            <BarChartHorizontal className="mr-2 h-4 w-4"/>
+            Gestionar Cierres Mensuales
+          </Button>
+        )}
+      </div>
+      <ResizableDataTable
         columns={columns}
         data={userStats}
         emptyStateMessage="No se encontraron usuarios."
-        />
-        <AlertDialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>¿Estás seguro de eliminar a {userToDelete?.name}?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Esta acción es irreversible. Se eliminará permanentemente al usuario y todos sus clientes y prospectos quedarán sin asesor asignado.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDeleteUser} variant="destructive" disabled={isDeleting}>
-                        {isDeleting ? <Spinner size="small" /> : "Confirmar Eliminación"}
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
+      />
+      <AlertDialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
+          <AlertDialogContent>
+              <AlertDialogHeader>
+                  <AlertDialogTitle>¿Estás seguro de eliminar a {userToDelete?.name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                      Esta acción es irreversible. Se eliminará permanentemente al usuario y todos sus clientes y prospectos quedarán sin asesor asignado.
+                  </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteUser} variant="destructive" disabled={isDeleting}>
+                      {isDeleting ? <Spinner size="small" /> : "Confirmar Eliminación"}
+                  </AlertDialogAction>
+              </AlertDialogFooter>
+          </AlertDialogContent>
+      </AlertDialog>
+      <MonthlyClosureDialog
+        isOpen={isClosureDialogOpen}
+        onOpenChange={setIsClosureDialogOpen}
+        advisors={advisors}
+        onSaveSuccess={fetchData}
+      />
     </>
   );
 }
+

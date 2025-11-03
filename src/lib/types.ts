@@ -1,6 +1,5 @@
 
 
-
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -168,7 +167,7 @@ export type ActivityLog = {
   userName: string;
   ownerName: string;
   type: 'create' | 'update' | 'delete' | 'stage_change';
-  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user' | 'program' | 'commercial_item' | 'commercial_item_series' | 'licencia';
+  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user' | 'program' | 'commercial_item' | 'commercial_item_series' | 'licencia' | 'monthly_closure';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action
@@ -263,6 +262,11 @@ export type Canje = {
 
 export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Admin';
 
+export type MonthlyClosure = {
+  // Key is "YYYY-MM"
+  [key: string]: number;
+};
+
 export type User = {
   id: string;
   name:string;
@@ -273,6 +277,7 @@ export type User = {
   photoURL?: string;
   deletedAt?: string;
   vacationDays?: number;
+  monthlyClosures?: MonthlyClosure;
 };
 
 export type VacationRequestStatus = 'Pendiente' | 'Aprobado' | 'Rechazado';
@@ -359,4 +364,3 @@ export type CommercialItem = {
   updatedBy?: string;
   updatedAt?: string;
 };
-

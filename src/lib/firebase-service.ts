@@ -1,8 +1,7 @@
 
-
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
@@ -21,6 +20,33 @@ const programsCollection = collection(db, 'programs');
 const commercialItemsCollection = collection(db, 'commercial_items');
 const prospectsCollection = collection(db, 'prospects');
 const licensesCollection = collection(db, 'licencias');
+
+// --- Monthly Closure Functions ---
+export const saveMonthlyClosure = async (advisorId: string, month: string, value: number, managerId: string) => {
+    const userRef = doc(db, 'users', advisorId);
+    const fieldPath = `monthlyClosures.${month}`;
+
+    await updateDoc(userRef, {
+        [fieldPath]: value,
+    });
+    
+    const managerSnap = await getDoc(doc(db, 'users', managerId));
+    const advisorSnap = await getDoc(userRef);
+    const managerName = managerSnap.exists() ? managerSnap.data().name : 'Manager';
+    const advisorName = advisorSnap.exists() ? advisorSnap.data().name : 'Asesor';
+
+    await logActivity({
+        userId: managerId,
+        userName: managerName,
+        type: 'update',
+        entityType: 'monthly_closure',
+        entityId: advisorId,
+        entityName: advisorName,
+        details: `registró el cierre de <strong>${month}</strong> para <strong>${advisorName}</strong> con un valor de <strong>$${value.toLocaleString('es-AR')}</strong>`,
+        ownerName: advisorName,
+    });
+};
+
 
 // --- Vacation Request (License) Functions ---
 
