@@ -6,7 +6,7 @@ import { Header } from '@/components/layout/header';
 import { KanbanBoard } from '@/components/opportunities/kanban-board';
 import { useAuth } from '@/hooks/use-auth';
 import type { DateRange } from 'react-day-picker';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { MonthYearPicker } from '@/components/ui/month-year-picker';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getAllUsers, getClients } from '@/lib/firebase-service';
@@ -22,13 +22,14 @@ export default function OpportunitiesPage() {
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<string>('all');
   
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-    const today = new Date();
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  const dateRange: DateRange | undefined = useMemo(() => {
     return {
-      from: startOfMonth(today),
-      to: endOfMonth(today),
+      from: startOfMonth(selectedDate),
+      to: endOfMonth(selectedDate),
     };
-  });
+  }, [selectedDate]);
 
   useEffect(() => {
     if(isBoss) {
@@ -62,7 +63,7 @@ export default function OpportunitiesPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Oportunidades">
-        <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+        <MonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
           {isBoss && (
             <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
               <SelectTrigger className="w-full sm:w-[200px]">

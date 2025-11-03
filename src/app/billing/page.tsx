@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -12,7 +13,7 @@ import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity
 import { updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { MonthYearPicker } from '@/components/ui/month-year-picker';
 import { isWithinInterval, startOfMonth, endOfMonth, parseISO, addMonths, isSameMonth, getYear, getMonth, set } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -47,14 +48,14 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [newInvoiceData, setNewInvoiceData] = useState<Record<string, Partial<NewInvoiceData>>>({});
 
-  
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-    const today = new Date();
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  const dateRange: DateRange | undefined = useMemo(() => {
     return {
-      from: startOfMonth(today),
-      to: endOfMonth(today)
+      from: startOfMonth(selectedDate),
+      to: endOfMonth(selectedDate),
     };
-  });
+  }, [selectedDate]);
 
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
   
@@ -320,7 +321,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   return (
     <div className="flex flex-col h-full">
       <Header title="Estado de Cobranzas">
-         <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+         <MonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
           {isBoss && (
             <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
               <SelectTrigger className="w-full sm:w-[200px]">

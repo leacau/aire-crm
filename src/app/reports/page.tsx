@@ -2,12 +2,12 @@
 
 'use client';
 
-import React, { useState, Suspense, useEffect } from 'react';
+import React, { useState, Suspense, useEffect, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { MonthYearPicker } from '@/components/ui/month-year-picker';
 import type { DateRange } from 'react-day-picker';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import dynamic from 'next/dynamic';
@@ -31,13 +31,14 @@ export default function ReportsPage() {
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
 
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-    const today = new Date();
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  const dateRange: DateRange | undefined = useMemo(() => {
     return {
-      from: startOfMonth(today),
-      to: endOfMonth(today),
+      from: startOfMonth(selectedDate),
+      to: endOfMonth(selectedDate),
     };
-  });
+  }, [selectedDate]);
 
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export default function ReportsPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Reportes">
-        <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+        <MonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
          {isBoss && (
             <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
               <SelectTrigger className="w-full sm:w-[200px]">

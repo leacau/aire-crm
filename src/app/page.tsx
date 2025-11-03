@@ -40,7 +40,7 @@ import {
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { MonthYearPicker } from '@/components/ui/month-year-picker';
 import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -74,7 +74,7 @@ interface TaskSectionProps {
     usersMap: Record<string, User>;
 }
 
-const DynamicDateRangePicker = dynamic(() => import('@/components/ui/date-range-picker').then(mod => mod.DateRangePicker), {
+const DynamicMonthYearPicker = dynamic(() => import('@/components/ui/month-year-picker').then(mod => mod.MonthYearPicker), {
   ssr: false,
   loading: () => <Skeleton className="h-10 w-[260px]" />,
 });
@@ -168,13 +168,14 @@ export default function DashboardPage() {
   const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
   const tasksSectionRef = useRef<HTMLDivElement>(null);
 
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-    const today = new Date();
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  const dateRange: DateRange | undefined = useMemo(() => {
     return {
-      from: startOfMonth(today),
-      to: endOfMonth(today),
+      from: startOfMonth(selectedDate),
+      to: endOfMonth(selectedDate),
     };
-  });
+  }, [selectedDate]);
 
 
   useEffect(() => {
@@ -443,7 +444,7 @@ export default function DashboardPage() {
     )}
     <div className="flex flex-col h-full">
       <Header title="Panel">
-        <DynamicDateRangePicker date={dateRange} onDateChange={setDateRange} />
+        <DynamicMonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
         {isBoss && (
           <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
             <SelectTrigger className="w-full sm:w-[200px]">

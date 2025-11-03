@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { MonthYearPicker } from '@/components/ui/month-year-picker';
 import type { DateRange } from 'react-day-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +10,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/hooks/use-toast';
 import { getActivities, getAllClientActivities, getAllUsers } from '@/lib/firebase-service';
 import type { ActivityLog, ClientActivity, User } from '@/lib/types';
-import { isWithinInterval } from 'date-fns';
+import { isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { ActivityDetailRow, ActivitySummary } from './activity-summary';
 
 type CombinedActivity = (ActivityLog | ClientActivity) & { sortDate: Date };
@@ -22,7 +22,15 @@ export function ActivityFeed() {
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  const dateRange: DateRange | undefined = useMemo(() => {
+    return {
+      from: startOfMonth(selectedDate),
+      to: endOfMonth(selectedDate),
+    };
+  }, [selectedDate]);
+
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
   const [selectedActivityType, setSelectedActivityType] = useState<string | null>(null);
 
@@ -119,7 +127,7 @@ export function ActivityFeed() {
   return (
     <div className="space-y-6">
        <div className="flex flex-col sm:flex-row items-center gap-4">
-         <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+         <MonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
           <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
             <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Filtrar por asesor" />
