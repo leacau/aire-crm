@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -15,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
-import { format, eachDayOfInterval, isWeekend, addDays } from 'date-fns';
+import { format, eachDayOfInterval, isWeekend, addDays, isWithinInterval, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -31,7 +32,7 @@ interface LicenseRequestFormDialogProps {
   request?: VacationRequest | null;
   currentUser: User;
   allUserRequests: VacationRequest[];
-  requestOwner?: User | null; // The user whose request is being edited
+  requestOwner?: User | null;
 }
 
 const getNextWorkday = (date: Date): Date => {
@@ -44,11 +45,10 @@ const getNextWorkday = (date: Date): Date => {
 
 export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request, currentUser, allUserRequests, requestOwner }: LicenseRequestFormDialogProps) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [holidays, setHolidays] = useState<Date[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const isEditing = !!request?.id;
 
-  // Determine whose vacation days to display and calculate against.
-  // If a manager is editing, use the requestOwner's data. Otherwise, use the currentUser's.
   const userForCalculations = isEditing && requestOwner ? requestOwner : currentUser;
 
   useEffect(() => {
@@ -58,8 +58,10 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
           from: request.startDate ? new Date(request.startDate) : undefined,
           to: request.endDate ? new Date(request.endDate) : undefined,
         });
+        setHolidays(request.holidays?.map(h => new Date(h)) || []);
       } else {
         setDateRange(undefined);
+        setHolidays([]);
       }
       setIsSaving(false);
     }
@@ -70,19 +72,35 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
       return { daysRequested: 0, returnDate: '' };
     }
     const allDays = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
-    const workdays = allDays.filter(day => !isWeekend(day));
-    const nextWorkday = getNextWorkday(dateRange.to);
+    const holidayTimeStamps = new Set(holidays.map(h => h.getTime()));
+
+    const workdays = allDays.filter(day => {
+        const isWorkday = !isWeekend(day);
+        const isHoliday = holidayTimeStamps.has(day.getTime());
+        return isWorkday && !isHoliday;
+    });
+    
+    let nextDay = dateRange.to;
+    let isHolidayOrWeekend = true;
+    while(isHolidayOrWeekend) {
+        nextDay = addDays(nextDay, 1);
+        const isNextDayHoliday = holidayTimeStamps.has(nextDay.getTime());
+        const isNextDayWeekend = isWeekend(nextDay);
+        if(!isNextDayHoliday && !isNextDayWeekend) {
+            isHolidayOrWeekend = false;
+        }
+    }
+
 
     return {
       daysRequested: workdays.length,
-      returnDate: format(nextWorkday, 'PPPP', { locale: es }),
+      returnDate: format(nextDay, 'PPPP', { locale: es }),
     };
-  }, [dateRange]);
+  }, [dateRange, holidays]);
 
   const remainingDays = useMemo(() => {
     if (!userForCalculations) return 0;
     
-    // Sum up days from approved and pending requests, excluding the current one if editing
     const committedDays = allUserRequests
       .filter(r => (r.status === 'Aprobado' || r.status === 'Pendiente') && r.id !== request?.id)
       .reduce((acc, curr) => acc + curr.daysRequested, 0);
@@ -92,6 +110,17 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
     return availableDays - daysRequested;
   }, [userForCalculations, allUserRequests, daysRequested, request?.id]);
 
+  const handleHolidayToggle = (day: Date) => {
+    if (!dateRange?.from || !dateRange?.to) return;
+    if (isWeekend(day) || !isWithinInterval(day, { start: dateRange.from, end: dateRange.to })) return;
+
+    const dayTime = day.getTime();
+    setHolidays(prev => 
+        prev.some(h => h.getTime() === dayTime)
+            ? prev.filter(h => h.getTime() !== dayTime)
+            : [...prev, day]
+    );
+  };
 
   const handleSave = async () => {
     if (!dateRange?.from || !dateRange?.to) return;
@@ -103,8 +132,9 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
       startDate: format(dateRange.from, 'yyyy-MM-dd'),
       endDate: format(dateRange.to, 'yyyy-MM-dd'),
       daysRequested,
-      returnDate: format(getNextWorkday(dateRange.to), 'yyyy-MM-dd'),
+      returnDate: format(parseISO(returnDate), 'yyyy-MM-dd'),
       requestDate: request?.requestDate || new Date().toISOString(),
+      holidays: holidays.map(h => h.toISOString().split('T')[0]),
     }, isEditing);
 
     if (success) {
@@ -137,7 +167,19 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
-                <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} locale={es} />
+                <Calendar 
+                    initialFocus 
+                    mode="range" 
+                    defaultMonth={dateRange?.from} 
+                    selected={dateRange} 
+                    onSelect={setDateRange} 
+                    numberOfMonths={2} 
+                    locale={es}
+                    modifiers={{ holidays }}
+                    modifiersClassNames={{ holidays: 'bg-amber-200 text-amber-900 rounded-md' }}
+                    onDayClick={handleHolidayToggle}
+                    footer={dateRange?.from && <p className="text-xs text-center text-muted-foreground pt-2">Haz clic en un día para marcarlo como feriado.</p>}
+                 />
               </PopoverContent>
             </Popover>
           </div>
@@ -152,7 +194,7 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave} disabled={isSaving || daysRequested <= 0}>
+          <Button onClick={handleSave} disabled={isSaving || daysRequested < 0}>
             {isSaving ? <Spinner size="small" /> : 'Enviar Solicitud'}
           </Button>
         </DialogFooter>
@@ -160,3 +202,4 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
     </Dialog>
   );
 }
+

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React from 'react';
@@ -50,6 +51,9 @@ export function LicensesTable({ requests, isManagerView, currentUserId, onEdit, 
             requests.map(req => {
               const canModify = isManagerView || req.userId === currentUserId;
               const isOwner = req.userId === currentUserId;
+              
+              const canEditRequest = isManagerView || (isOwner && req.status === 'Pendiente');
+
               return (
                 <TableRow key={req.id}>
                   {isManagerView && <TableCell className="font-medium">{req.userName}</TableCell>}
@@ -71,7 +75,7 @@ export function LicensesTable({ requests, isManagerView, currentUserId, onEdit, 
                           <Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          {(isManagerView || req.status === 'Pendiente') && <DropdownMenuItem onClick={() => onEdit(req)}>Editar</DropdownMenuItem>}
+                          {canEditRequest && <DropdownMenuItem onClick={() => onEdit(req)}>Editar</DropdownMenuItem>}
                           {isManagerView && req.status === 'Pendiente' && (
                             <>
                               <DropdownMenuItem onClick={() => onUpdateRequest(req, 'Aprobado')}>Aprobar</DropdownMenuItem>

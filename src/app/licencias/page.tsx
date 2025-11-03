@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -7,12 +8,14 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { User, VacationRequest } from '@/lib/types';
-import { getAllUsers, getVacationRequests, createVacationRequest, deleteVacationRequest, approveVacationRequest, updateVacationRequest } from '@/lib/firebase-service';
+import { getAllUsers, getVacationRequests, createVacationRequest, deleteVacationRequest, approveVacationRequest, updateVacationRequest, updateUserProfile } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
 import { LicensesTable } from '@/components/licencias/licenses-table';
 import { LicenseRequestFormDialog } from '@/components/licencias/license-request-form-dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 export default function LicensesPage() {
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
@@ -28,7 +31,6 @@ export default function LicensesPage() {
   const [requestToDelete, setRequestToDelete] = useState<VacationRequest | null>(null);
 
   const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
-  const userManager = useMemo(() => managers.find(m => m.id === userInfo?.managerId), [managers, userInfo]);
 
   const fetchData = useCallback(async () => {
     if (!userInfo) return;
@@ -65,7 +67,6 @@ export default function LicensesPage() {
       const owner = users.find(u => u.id === request.userId);
       setRequestOwner(owner || null);
     } else {
-      // When creating, the owner is the current user.
       setRequestOwner(userInfo);
     }
     setIsFormOpen(true);
@@ -74,7 +75,6 @@ export default function LicensesPage() {
   const handleSaveRequest = async (requestData: Omit<VacationRequest, 'id' | 'status'>, isEditing: boolean) => {
     if (!userInfo) return false;
     
-    // Find the manager to notify. If editing, it's the manager of the request owner. If creating, it's the current user's manager.
     const ownerOfRequest = users.find(u => u.id === requestData.userId);
     const managerToNotify = managers.find(m => m.id === ownerOfRequest?.managerId);
 
@@ -84,11 +84,12 @@ export default function LicensesPage() {
     }
 
     try {
+      const accessToken = await getGoogleAccessToken();
+      
       if (isEditing && editingRequest) {
         await updateVacationRequest(editingRequest.id, requestData);
         toast({ title: 'Solicitud Actualizada' });
       } else {
-        const accessToken = await getGoogleAccessToken();
         await createVacationRequest(requestData, managerToNotify!.email, accessToken);
         toast({ title: 'Solicitud Enviada', description: 'Tu jefe directo ha sido notificado.' });
       }
@@ -105,8 +106,8 @@ export default function LicensesPage() {
     if (!userInfo || !isBoss) return;
     
     const applicant = users.find(u => u.id === request.userId);
-    if (!applicant?.email) {
-      toast({ title: 'Error', description: 'No se pudo encontrar el email del solicitante.', variant: 'destructive' });
+    if (!applicant) {
+      toast({ title: 'Error', description: 'No se pudo encontrar al solicitante.', variant: 'destructive' });
       return;
     }
     
@@ -114,7 +115,7 @@ export default function LicensesPage() {
       const accessToken = await getGoogleAccessToken();
       await approveVacationRequest(request.id, newStatus, userInfo.id, applicant.email, accessToken);
       
-      toast({ title: `Solicitud ${newStatus}` });
+      toast({ title: `Solicitud ${newStatus === 'Aprobado' ? 'aprobada' : 'rechazada'}` });
       fetchData();
     } catch (error) {
        console.error("Error updating request status:", error);

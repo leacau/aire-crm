@@ -1,5 +1,6 @@
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -288,6 +289,7 @@ export type VacationRequest = {
   requestDate: string;
   approvedBy?: string;
   approvedAt?: string;
+  holidays?: string[]; // Array of "YYYY-MM-DD" strings
 };
 
 
@@ -357,3 +359,4 @@ export type CommercialItem = {
   updatedBy?: string;
   updatedAt?: string;
 };
+
