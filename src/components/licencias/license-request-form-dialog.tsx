@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -29,6 +30,7 @@ interface LicenseRequestFormDialogProps {
   onSave: (requestData: Omit<VacationRequest, 'id' | 'status'>, isEditing: boolean) => Promise<boolean>;
   request?: VacationRequest | null;
   currentUser: User;
+  allUserRequests: VacationRequest[];
   requestOwner?: User | null; // The user whose request is being edited
 }
 
@@ -40,7 +42,7 @@ const getNextWorkday = (date: Date): Date => {
   return nextDay;
 };
 
-export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request, currentUser, requestOwner }: LicenseRequestFormDialogProps) {
+export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request, currentUser, allUserRequests, requestOwner }: LicenseRequestFormDialogProps) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [isSaving, setIsSaving] = useState(false);
   const isEditing = !!request?.id;
@@ -77,7 +79,19 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
     };
   }, [dateRange]);
 
-  const remainingDays = (userForCalculations.vacationDays || 0) - daysRequested;
+  const remainingDays = useMemo(() => {
+    if (!userForCalculations) return 0;
+    
+    // Sum up days from approved and pending requests, excluding the current one if editing
+    const committedDays = allUserRequests
+      .filter(r => (r.status === 'Aprobado' || r.status === 'Pendiente') && r.id !== request?.id)
+      .reduce((acc, curr) => acc + curr.daysRequested, 0);
+
+    const availableDays = (userForCalculations.vacationDays || 0) - committedDays;
+    
+    return availableDays - daysRequested;
+  }, [userForCalculations, allUserRequests, daysRequested, request?.id]);
+
 
   const handleSave = async () => {
     if (!dateRange?.from || !dateRange?.to) return;

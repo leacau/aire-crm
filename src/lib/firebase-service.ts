@@ -1,5 +1,4 @@
 
-
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus } from './types';
@@ -53,19 +52,24 @@ export const createVacationRequest = async (
     };
     const docRef = await addDoc(licensesCollection, dataToSave);
     
-    // Send notification email
-    await sendEmail({
-        accessToken,
-        to: managerEmail,
-        subject: `Nueva Solicitud de Licencia de ${requestData.userName}`,
-        body: `
-            <p>Hola,</p>
-            <p>Has recibido una nueva solicitud de licencia de <strong>${requestData.userName}</strong>.</p>
-            <p><strong>Período:</strong> ${format(new Date(requestData.startDate), 'P', { locale: es })} - ${format(new Date(requestData.endDate), 'P', { locale: es })}</p>
-            <p><strong>Días solicitados:</strong> ${requestData.daysRequested}</p>
-            <p>Para aprobar o rechazar esta solicitud, por favor ingresa a la sección "Licencias" del CRM.</p>
-        `,
-    });
+    // Send notification email asynchronously (fire and forget)
+    if (accessToken && managerEmail) {
+        sendEmail({
+            accessToken,
+            to: managerEmail,
+            subject: `Nueva Solicitud de Licencia de ${requestData.userName}`,
+            body: `
+                <p>Hola,</p>
+                <p>Has recibido una nueva solicitud de licencia de <strong>${requestData.userName}</strong>.</p>
+                <p><strong>Período:</strong> ${format(new Date(requestData.startDate), 'P', { locale: es })} - ${format(new Date(requestData.endDate), 'P', { locale: es })}</p>
+                <p><strong>Días solicitados:</strong> ${requestData.daysRequested}</p>
+                <p>Para aprobar o rechazar esta solicitud, por favor ingresa a la sección "Licencias" del CRM.</p>
+            `,
+        }).catch(error => {
+            // Log the error but don't block the user response
+            console.error("Failed to send license request email:", error);
+        });
+    }
 
     return docRef.id;
 };
@@ -128,16 +132,21 @@ export const approveVacationRequest = async (
 
     // Send notification email outside the transaction
     const requestAfterUpdate = (await getDoc(requestRef)).data() as VacationRequest;
-    await sendEmail({
-        accessToken,
-        to: applicantEmail,
-        subject: `Tu Solicitud de Licencia ha sido ${newStatus}`,
-        body: `
-            <p>Hola ${requestAfterUpdate.userName},</p>
-            <p>Tu solicitud de licencia para el período del <strong>${format(new Date(requestAfterUpdate.startDate), 'P', { locale: es })}</strong> al <strong>${format(new Date(requestAfterUpdate.endDate), 'P', { locale: es })}</strong> ha sido <strong>${newStatus}</strong>.</p>
-            <p>Puedes ver el estado de tus solicitudes en el CRM.</p>
-        `,
-    });
+    
+    if (accessToken && applicantEmail) {
+        sendEmail({
+            accessToken,
+            to: applicantEmail,
+            subject: `Tu Solicitud de Licencia ha sido ${newStatus}`,
+            body: `
+                <p>Hola ${requestAfterUpdate.userName},</p>
+                <p>Tu solicitud de licencia para el período del <strong>${format(new Date(requestAfterUpdate.startDate), 'P', { locale: es })}</strong> al <strong>${format(new Date(requestAfterUpdate.endDate), 'P', { locale: es })}</strong> ha sido <strong>${newStatus}</strong>.</p>
+                <p>Puedes ver el estado de tus solicitudes en el CRM.</p>
+            `,
+        }).catch(error => {
+            console.error("Failed to send license approval email:", error);
+        });
+    }
 };
 
 

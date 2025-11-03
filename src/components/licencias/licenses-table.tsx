@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -48,11 +49,18 @@ export function LicensesTable({ requests, isManagerView, currentUserId, onEdit, 
           {requests.length > 0 ? (
             requests.map(req => {
               const canModify = isManagerView || req.userId === currentUserId;
+              const isOwner = req.userId === currentUserId;
               return (
                 <TableRow key={req.id}>
                   {isManagerView && <TableCell className="font-medium">{req.userName}</TableCell>}
-                  <TableCell>{format(new Date(req.startDate), 'P', { locale: es })}</TableCell>
-                  <TableCell>{format(new Date(req.endDate), 'P', { locale: es })}</TableCell>
+                  <TableCell>
+                      <div>{format(new Date(req.startDate), 'P', { locale: es })}</div>
+                      {isManagerView && <div className="text-xs text-muted-foreground capitalize">{format(new Date(req.startDate), 'eeee', { locale: es })}</div>}
+                  </TableCell>
+                  <TableCell>
+                      <div>{format(new Date(req.endDate), 'P', { locale: es })}</div>
+                      {isManagerView && <div className="text-xs text-muted-foreground capitalize">{format(new Date(req.endDate), 'eeee', { locale: es })}</div>}
+                  </TableCell>
                   <TableCell>{req.daysRequested}</TableCell>
                   <TableCell>{format(new Date(req.returnDate), 'P', { locale: es })}</TableCell>
                   <TableCell>{getStatusBadge(req.status)}</TableCell>
@@ -70,9 +78,11 @@ export function LicensesTable({ requests, isManagerView, currentUserId, onEdit, 
                               <DropdownMenuItem onClick={() => onUpdateRequest(req, 'Rechazado')}>Rechazar</DropdownMenuItem>
                             </>
                           )}
-                          <DropdownMenuItem className="text-destructive" onClick={() => onDelete(req)}>
-                            <Trash2 className="mr-2 h-4 w-4" /> Eliminar
-                          </DropdownMenuItem>
+                          { (isManagerView || (isOwner && req.status === 'Pendiente')) && 
+                            <DropdownMenuItem className="text-destructive" onClick={() => onDelete(req)}>
+                                <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                            </DropdownMenuItem>
+                          }
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}

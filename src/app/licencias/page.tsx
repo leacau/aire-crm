@@ -78,20 +78,18 @@ export default function LicensesPage() {
     const ownerOfRequest = users.find(u => u.id === requestData.userId);
     const managerToNotify = managers.find(m => m.id === ownerOfRequest?.managerId);
 
-    if (!managerToNotify?.email) {
-      toast({ title: 'Falta información', description: 'No se pudo encontrar el email del jefe directo para notificar. Contacta a un administrador.', variant: 'destructive' });
+    if (!isEditing && !managerToNotify?.email) {
+      toast({ title: 'Falta información del Jefe Directo', description: 'No se pudo encontrar el email de tu jefe directo para notificar. Pide a un gerente que lo asigne en la sección "Equipo".', variant: 'destructive' });
       return false;
     }
 
     try {
-      const accessToken = await getGoogleAccessToken();
-      if (!accessToken) throw new Error("No se pudo obtener el token de acceso.");
-      
       if (isEditing && editingRequest) {
         await updateVacationRequest(editingRequest.id, requestData);
         toast({ title: 'Solicitud Actualizada' });
       } else {
-        await createVacationRequest(requestData, managerToNotify.email, accessToken);
+        const accessToken = await getGoogleAccessToken();
+        await createVacationRequest(requestData, managerToNotify!.email, accessToken);
         toast({ title: 'Solicitud Enviada', description: 'Tu jefe directo ha sido notificado.' });
       }
       fetchData();
@@ -114,8 +112,6 @@ export default function LicensesPage() {
     
     try {
       const accessToken = await getGoogleAccessToken();
-      if (!accessToken) throw new Error("No se pudo obtener el token de acceso.");
-
       await approveVacationRequest(request.id, newStatus, userInfo.id, applicant.email, accessToken);
       
       toast({ title: `Solicitud ${newStatus}` });
@@ -139,6 +135,11 @@ export default function LicensesPage() {
       setRequestToDelete(null);
     }
   };
+
+  const requestsForCurrentUser = useMemo(() => {
+    if (!requestOwner) return [];
+    return requests.filter(r => r.userId === requestOwner.id);
+  }, [requests, requestOwner]);
 
 
   if (loading || !userInfo) {
@@ -173,6 +174,7 @@ export default function LicensesPage() {
         request={editingRequest}
         currentUser={userInfo}
         requestOwner={requestOwner}
+        allUserRequests={requestsForCurrentUser}
       />
       
       <AlertDialog open={!!requestToDelete} onOpenChange={(open) => !open && setRequestToDelete(null)}>
