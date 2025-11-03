@@ -8,7 +8,6 @@ import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-
 const clientsCollection = collection(db, 'clients');
 const peopleCollection = collection(db, 'people');
 const opportunitiesCollection = collection(db, 'opportunities');
@@ -23,6 +22,12 @@ const commercialItemsCollection = collection(db, 'commercial_items');
 const prospectsCollection = collection(db, 'prospects');
 const licensesCollection = collection(db, 'licencias');
 
+const parseDateWithTimezone = (dateString: string) => {
+    // For "YYYY-MM-DD", this creates a date at midnight in the local timezone,
+    // avoiding the off-by-one error caused by UTC conversion.
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
+};
 
 // --- Monthly Closure Functions ---
 export const saveMonthlyClosure = async (advisorId: string, month: string, value: number, managerId: string) => {
@@ -372,13 +377,6 @@ export const deleteProgram = async (programId: string, userId: string): Promise<
         details: `eliminó el programa <strong>${programName}</strong>`,
         ownerName: userName,
     });
-};
-
-const parseDateWithTimezone = (dateString: string) => {
-    // For "YYYY-MM-DD", this creates a date at midnight in the local timezone,
-    // avoiding the off-by-one error caused by UTC conversion.
-    const [year, month, day] = dateString.split('-').map(Number);
-    return new Date(year, month - 1, day);
 };
 
 export const getCommercialItems = async (date: string): Promise<CommercialItem[]> => {
@@ -734,9 +732,11 @@ export const getInvoices = async (): Promise<Invoice[]> => {
     const snapshot = await getDocs(query(invoicesCollection, orderBy("dateGenerated", "desc")));
     return snapshot.docs.map(doc => {
       const data = doc.data();
+      const invoiceDate = data.date ? format(parseDateWithTimezone(data.date), 'yyyy-MM-dd') : 'N/A';
       return { 
           id: doc.id,
           ...data,
+          date: invoiceDate,
           dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
           datePaid: data.datePaid instanceof Timestamp ? data.datePaid.toDate().toISOString() : data.datePaid,
        } as Invoice
@@ -763,13 +763,7 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
 };
 
 export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: string, userName: string, ownerName: string): Promise<string> => {
-    const dataToSave = {
-        ...invoiceData,
-        dateGenerated: new Date().toISOString(),
-    };
-    
-    const docRef = await addDoc(invoicesCollection, dataToSave);
-    
+    const docRef = await addDoc(invoicesCollection, invoiceData);
     return docRef.id;
 };
 
@@ -1503,7 +1497,8 @@ export const updateOpportunity = async (
     data: Partial<Omit<Opportunity, 'id'>>,
     userId: string,
     userName: string,
-    ownerName: string
+    ownerName: string,
+    pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[]
 ): Promise<void> => {
     const docRef = doc(db, 'opportunities', id);
     const docSnap = await getDoc(docRef);
@@ -1547,6 +1542,15 @@ export const updateOpportunity = async (
 
 
     await updateDoc(docRef, updateData);
+
+     if (pendingInvoices && pendingInvoices.length > 0) {
+        for (const invoiceData of pendingInvoices) {
+            await createInvoice({
+                ...invoiceData,
+                opportunityId: id,
+            }, userId, userName, ownerName);
+        }
+    }
 
 
     const activityDetails = {
