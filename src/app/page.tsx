@@ -40,7 +40,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, startOfISOWeek, endOfISOWeek } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -412,48 +412,6 @@ export default function DashboardPage() {
 
   const totalBillingInPeriod = totalPaidInPeriod + totalToCollectInPeriod;
 
-  const previousMonthBilling = useMemo(() => {
-    const fromDate = dateRange?.from;
-    if (!fromDate) return 0;
-    
-    const prevMonthDate = subMonths(fromDate, 1);
-    const prevMonthStart = startOfMonth(prevMonthDate);
-    const prevMonthEnd = endOfMonth(prevMonthDate);
-    const prevMonthKey = format(prevMonthDate, 'yyyy-MM');
-
-    let usersToConsider: User[] = [];
-    if (isBoss) {
-        usersToConsider = selectedAdvisor === 'all'
-            ? users.filter(u => u.role === 'Asesor')
-            : users.filter(u => u.id === selectedAdvisor);
-    } else if (userInfo) {
-        usersToConsider = [userInfo];
-    }
-    
-    if (usersToConsider.length === 0) return 0;
-
-    let total = 0;
-    for (const user of usersToConsider) {
-        const closedValue = user.monthlyClosures?.[prevMonthKey];
-        if (closedValue !== undefined && closedValue !== null) {
-            total += closedValue;
-        } else {
-             // Calculate from invoices if no closure is found
-            const userClientIds = new Set(clients.filter(c => c.ownerId === user.id).map(c => c.id));
-            const userOppIds = new Set(opportunities.filter(o => userClientIds.has(o.clientId)).map(o => o.id));
-            const userInvoicesForMonth = invoices.filter(inv => {
-                if (!userOppIds.has(inv.opportunityId)) return false;
-                const invDate = inv.datePaid && inv.status === 'Pagada' ? parseISO(inv.datePaid) : parseISO(inv.date);
-                return isWithinInterval(invDate, { start: prevMonthStart, end: prevMonthEnd });
-            });
-            total += userInvoicesForMonth.reduce((sum, inv) => sum + inv.amount, 0);
-        }
-    }
-    return total;
-
-  }, [users, clients, opportunities, invoices, dateRange, selectedAdvisor, isBoss, userInfo]);
-
-
   const prospectingValue = filteredOpportunities
     .filter(o => o.stage === 'Nuevo')
     .reduce((acc, o) => acc + Number(o.value || 0), 0);
@@ -507,9 +465,6 @@ export default function DashboardPage() {
                 <p className="text-xs text-muted-foreground">
                   Pagado: ${totalPaidInPeriod.toLocaleString('es-AR')} / 
                   A cobrar: ${totalToCollectInPeriod.toLocaleString('es-AR')}
-                </p>
-                 <p className="text-xs text-muted-foreground mt-1">
-                  Mes anterior: ${previousMonthBilling.toLocaleString('es-AR')}
                 </p>
               </CardContent>
             </Card>
@@ -658,4 +613,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
 
