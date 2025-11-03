@@ -8,6 +8,22 @@ import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 
+
+const clientsCollection = collection(db, 'clients');
+const peopleCollection = collection(db, 'people');
+const opportunitiesCollection = collection(db, 'opportunities');
+const activitiesCollection = collection(db, 'activities');
+const clientActivitiesCollection = collection(db, 'client-activities');
+const usersCollection = collection(db, 'users');
+const agenciesCollection = collection(db, 'agencies');
+const invoicesCollection = collection(db, 'invoices');
+const canjesCollection = collection(db, 'canjes');
+const programsCollection = collection(db, 'programs');
+const commercialItemsCollection = collection(db, 'commercial_items');
+const prospectsCollection = collection(db, 'prospects');
+const licensesCollection = collection(db, 'licencias');
+
+
 // --- Monthly Closure Functions ---
 export const saveMonthlyClosure = async (advisorId: string, month: string, value: number, managerId: string) => {
     const userRef = doc(db, 'users', advisorId);
@@ -749,7 +765,7 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
 export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: string, userName: string, ownerName: string): Promise<string> => {
     const dataToSave = {
         ...invoiceData,
-        dateGenerated: invoiceData.dateGenerated,
+        dateGenerated: new Date().toISOString(),
     };
     
     const docRef = await addDoc(invoicesCollection, dataToSave);
