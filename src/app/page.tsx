@@ -40,7 +40,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -412,6 +412,20 @@ export default function DashboardPage() {
 
   const totalBillingInPeriod = totalPaidInPeriod + totalToCollectInPeriod;
 
+  const previousMonthDate = subMonths(dateRange?.from || new Date(), 1);
+  const previousMonthKey = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  
+  const previousMonthBilling = useMemo(() => {
+    const usersToConsider = selectedAdvisor === 'all'
+      ? users.filter(u => u.role === 'Asesor')
+      : users.filter(u => u.id === selectedAdvisor);
+
+    return usersToConsider.reduce((sum, user) => {
+        return sum + (user.monthlyClosures?.[previousMonthKey] || 0);
+    }, 0);
+  }, [users, selectedAdvisor, previousMonthKey]);
+
+
   const prospectingValue = filteredOpportunities
     .filter(o => o.stage === 'Nuevo')
     .reduce((acc, o) => acc + Number(o.value || 0), 0);
@@ -465,6 +479,9 @@ export default function DashboardPage() {
                 <p className="text-xs text-muted-foreground">
                   Pagado: ${totalPaidInPeriod.toLocaleString('es-AR')} / 
                   A cobrar: ${totalToCollectInPeriod.toLocaleString('es-AR')}
+                </p>
+                 <p className="text-xs text-muted-foreground mt-1">
+                  Mes anterior: ${previousMonthBilling.toLocaleString('es-AR')}
                 </p>
               </CardContent>
             </Card>
