@@ -40,7 +40,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -219,45 +219,75 @@ export default function DashboardPage() {
     userClients, 
     userActivities, 
     userTasks,
-    userInvoices
+    userInvoices,
+    previousMonthBilling,
   } = useMemo(() => {
-    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [], userInvoices: [] };
+    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [], userInvoices: [], previousMonthBilling: 0 };
     
+    const baseCalculations = (ownerId: string | 'all') => {
+        let advisorUser: User | undefined;
+        let opps, cls, acts, tsks, invs;
+
+        if (ownerId === 'all') {
+            opps = opportunities;
+            cls = clients;
+            acts = activities;
+            tsks = tasks.filter(t => t.isTask);
+            invs = invoices;
+        } else {
+            advisorUser = users.find(u => u.id === ownerId);
+            const clientIds = new Set(clients.filter(c => c.ownerId === ownerId).map(c => c.id));
+            opps = opportunities.filter(opp => clientIds.has(opp.clientId));
+            const oppIds = new Set(opps.map(o => o.id));
+            cls = clients.filter(c => c.ownerId === ownerId);
+            acts = activities.filter(act => {
+                const client = clients.find(c => c.id === act.entityId);
+                return client?.ownerId === ownerId;
+            });
+            tsks = tasks.filter(t => t.isTask && clientIds.has(t.clientId));
+            invs = invoices.filter(inv => oppIds.has(inv.opportunityId));
+        }
+
+        const dateFrom = dateRange?.from ? dateRange.from : new Date();
+        const prevMonthDate = subMonths(dateFrom, 1);
+        const prevMonthStart = startOfMonth(prevMonthDate);
+        const prevMonthEnd = endOfMonth(prevMonthDate);
+        
+        let prevMonthTotal = 0;
+        const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+        
+        if(ownerId !== 'all' && advisorUser?.monthlyClosures?.[prevMonthKey]) {
+            prevMonthTotal = advisorUser.monthlyClosures[prevMonthKey];
+        } else {
+             const prevMonthPaid = invs
+                .filter(inv => inv.status === 'Pagada' && inv.datePaid && isWithinInterval(parseISO(inv.datePaid), { start: prevMonthStart, end: prevMonthEnd }))
+                .reduce((sum, inv) => sum + inv.amount, 0);
+
+            const prevMonthToCollect = invs
+                .filter(inv => inv.status !== 'Pagada' && inv.date && isWithinInterval(parseISO(inv.date), { start: prevMonthStart, end: prevMonthEnd }))
+                .reduce((sum, inv) => sum + inv.amount, 0);
+            
+            prevMonthTotal = prevMonthPaid + prevMonthToCollect;
+        }
+
+
+        return {
+            userOpportunities: opps,
+            userClients: cls,
+            userActivities: acts,
+            userTasks: tsks,
+            userInvoices: invs,
+            previousMonthBilling: prevMonthTotal,
+        };
+    };
+
     if (isBoss) {
-      if (selectedAdvisor === 'all') {
-        return { userOpportunities: opportunities, userClients: clients, userActivities: activities, userTasks: tasks.filter(t => t.isTask), userInvoices: invoices };
-      }
-      const oppsForAdvisor = opportunities.filter(opp => advisorClientIds?.has(opp.clientId));
-      const oppIdsForAdvisor = new Set(oppsForAdvisor.map(o => o.id));
-
-      return {
-        userOpportunities: oppsForAdvisor,
-        userClients: clients.filter(c => c.ownerId === selectedAdvisor),
-        userActivities: activities.filter(act => {
-            const client = clients.find(c => c.id === act.entityId);
-            return client?.ownerId === selectedAdvisor;
-        }),
-        userTasks: tasks.filter(t => t.isTask && advisorClientIds?.has(t.clientId)),
-        userInvoices: invoices.filter(inv => oppIdsForAdvisor.has(inv.opportunityId))
-      }
+        return baseCalculations(selectedAdvisor);
+    } else {
+        return baseCalculations(userInfo.id);
     }
 
-    // For non-boss users
-    const ownClientIds = new Set(clients.filter(client => client.ownerId === userInfo.id).map(c => c.id));
-    const oppsForUser = opportunities.filter(opp => ownClientIds.has(opp.clientId));
-    const oppIdsForUser = new Set(oppsForUser.map(o => o.id));
-    return {
-        userOpportunities: oppsForUser,
-        userClients: clients.filter(client => client.ownerId === userInfo.id),
-        userActivities: activities.filter(act => {
-            const client = clients.find(c => c.id === act.entityId);
-            return client && client.ownerId === userInfo.id;
-        }),
-        userTasks: tasks.filter(t => t.isTask && ownClientIds.has(t.clientId)),
-        userInvoices: invoices.filter(inv => oppIdsForUser.has(inv.opportunityId)),
-    }
-
-  }, [userInfo, isBoss, opportunities, clients, activities, tasks, invoices, selectedAdvisor, advisorClientIds]);
+  }, [userInfo, isBoss, opportunities, clients, activities, tasks, invoices, users, selectedAdvisor, dateRange]);
 
 
   const today = startOfToday();
@@ -466,6 +496,9 @@ export default function DashboardPage() {
                   Pagado: ${totalPaidInPeriod.toLocaleString('es-AR')} / 
                   A cobrar: ${totalToCollectInPeriod.toLocaleString('es-AR')}
                 </p>
+                 <p className="text-xs text-muted-foreground mt-1">
+                    Mes Anterior: ${previousMonthBilling.toLocaleString('es-AR')}
+                </p>
               </CardContent>
             </Card>
           </Link>
@@ -613,5 +646,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-
