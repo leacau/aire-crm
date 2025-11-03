@@ -9,10 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { PlusCircle, Trash2, Save } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import type { Client, Opportunity } from '@/lib/types';
-import { getClients, getAllOpportunities, createInvoice } from '@/lib/firebase-service';
+import { getClients, getAllOpportunities, createInvoice, createOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { useRouter } from 'next/navigation';
+import { QuickOpportunityFormDialog } from '@/components/invoices/quick-opportunity-form-dialog';
 
 type InvoiceRow = {
   id: number;
@@ -33,6 +34,11 @@ export default function InvoiceUploadPage() {
   const [invoiceRows, setInvoiceRows] = useState<InvoiceRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  
+  const [isQuickOppOpen, setIsQuickOppOpen] = useState(false);
+  const [clientForNewOpp, setClientForNewOpp] = useState<{id: string, name: string, ownerName: string} | null>(null);
+  const [activeRowId, setActiveRowId] = useState<number | null>(null);
+
 
   const fetchData = useCallback(async () => {
     if (!userInfo) return;
@@ -101,6 +107,42 @@ export default function InvoiceUploadPage() {
     );
   };
   
+  const handleOpportunitySelection = (rowId: number, value: string) => {
+    if (value === 'create_new') {
+        const clientRow = invoiceRows.find(r => r.id === rowId);
+        if (clientRow?.clientId) {
+            const client = clients.find(c => c.id === clientRow.clientId);
+            if (client) {
+                setClientForNewOpp({ id: client.id, name: client.denominacion, ownerName: client.ownerName });
+                setActiveRowId(rowId);
+                setIsQuickOppOpen(true);
+            }
+        }
+    } else {
+        handleRowChange(rowId, 'opportunityId', value);
+    }
+  };
+
+  const handleOpportunityCreated = async (newOpp: Omit<Opportunity, 'id'>) => {
+    if (!userInfo || !clientForNewOpp || activeRowId === null) return;
+    try {
+        const newOppId = await createOpportunity(newOpp, userInfo.id, userInfo.name, clientForNewOpp.ownerName);
+        
+        // Add new opp to state to make it available immediately
+        const fullNewOpp: Opportunity = { ...newOpp, id: newOppId };
+        setOpportunities(prev => [...prev, fullNewOpp]);
+        
+        // Select the new opportunity in the active row
+        handleRowChange(activeRowId, 'opportunityId', newOppId);
+
+        toast({ title: 'Oportunidad creada y seleccionada.' });
+        setIsQuickOppOpen(false);
+    } catch (error) {
+        console.error("Error creating quick opportunity", error);
+        toast({ title: 'Error al crear la oportunidad', variant: 'destructive'});
+    }
+  };
+
   const handleSaveAll = async () => {
     if (!userInfo) return;
 
@@ -169,6 +211,7 @@ export default function InvoiceUploadPage() {
   }
 
   return (
+    <>
     <div className="flex flex-col h-full">
       <Header title="Carga de Facturas">
         <Button onClick={addRow} size="sm">
@@ -239,7 +282,7 @@ export default function InvoiceUploadPage() {
                       <TableCell>
                         <Select
                           value={row.opportunityId}
-                          onValueChange={value => handleRowChange(row.id, 'opportunityId', value)}
+                          onValueChange={(value) => handleOpportunitySelection(row.id, value)}
                           disabled={!row.clientId}
                         >
                           <SelectTrigger><SelectValue placeholder="Seleccionar oportunidad..." /></SelectTrigger>
@@ -247,6 +290,10 @@ export default function InvoiceUploadPage() {
                             {clientOpportunities.map(opp => (
                               <SelectItem key={opp.id} value={opp.id}>{opp.title}</SelectItem>
                             ))}
+                             <SelectItem value="create_new" className="font-bold text-primary">
+                                <PlusCircle className="inline h-4 w-4 mr-2"/>
+                                Crear nueva oportunidad...
+                             </SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
@@ -270,5 +317,14 @@ export default function InvoiceUploadPage() {
         </div>
       </main>
     </div>
+    {clientForNewOpp && (
+        <QuickOpportunityFormDialog
+            isOpen={isQuickOppOpen}
+            onOpenChange={setIsQuickOppOpen}
+            client={clientForNewOpp}
+            onSave={handleOpportunityCreated}
+        />
+    )}
+    </>
   );
 }
