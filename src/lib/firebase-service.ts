@@ -1,4 +1,5 @@
 
+
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure } from './types';
@@ -108,8 +109,7 @@ export const updateVacationRequest = async (
 export const approveVacationRequest = async (
     requestId: string,
     newStatus: VacationRequestStatus,
-    approverId: string,
-    applicantEmail: string
+    approverId: string
 ): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
     const requestRef = doc(db, 'licencias', requestId);
 
@@ -153,11 +153,12 @@ export const approveVacationRequest = async (
     });
 
     const requestAfterUpdate = (await getDoc(requestRef)).data() as VacationRequest;
+    const applicantUser = (await getDoc(doc(db, 'users', requestAfterUpdate.userId))).data() as User;
     
     let emailPayload: { to: string, subject: string, body: string } | null = null;
-    if (applicantEmail) {
+    if (applicantUser.email) {
         emailPayload = {
-            to: applicantEmail,
+            to: applicantUser.email,
             subject: `Tu Solicitud de Licencia ha sido ${newStatus}`,
             body: `
                 <p>Hola ${requestAfterUpdate.userName},</p>
@@ -1523,6 +1524,7 @@ export const updateOpportunity = async (
     userId: string,
     userName: string,
     ownerName: string,
+    pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[] = [],
     accessToken?: string | null
 ): Promise<void> => {
     const docRef = doc(db, 'opportunities', id);
@@ -1567,6 +1569,17 @@ export const updateOpportunity = async (
 
 
     await updateDoc(docRef, updateData);
+
+     // Create any pending invoices
+    if (pendingInvoices.length > 0) {
+        for (const invoiceData of pendingInvoices) {
+            await createInvoice({
+                ...invoiceData,
+                opportunityId: id,
+            }, userId, userName, ownerName);
+        }
+    }
+
 
     const activityDetails = {
         userId,
