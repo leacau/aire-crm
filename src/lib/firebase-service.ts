@@ -23,8 +23,6 @@ const prospectsCollection = collection(db, 'prospects');
 const licensesCollection = collection(db, 'licencias');
 
 const parseDateWithTimezone = (dateString: string) => {
-    // For "YYYY-MM-DD", this creates a date at midnight in the local timezone,
-    // avoiding the off-by-one error caused by UTC conversion.
     if (!dateString) return new Date();
     const [year, month, day] = dateString.split('-').map(Number);
     return new Date(year, month - 1, day);
@@ -60,29 +58,33 @@ export const saveMonthlyClosure = async (advisorId: string, month: string, value
 // --- Vacation Request (License) Functions ---
 
 export const getVacationRequests = async (): Promise<VacationRequest[]> => {
-    const snapshot = await getDocs(query(licensesCollection));
+    const snapshot = await getDocs(query(licensesCollection, orderBy("requestDate", "desc")));
     const requests = snapshot.docs.map(doc => {
-      const data = doc.data();
-      const convertTimestamp = (field: any): string | undefined => {
-          if (field instanceof Timestamp) {
-              return field.toDate().toISOString();
-          }
-          if (typeof field === 'string') {
-              // If it's already a string, just return it, assuming it's valid.
-              return field;
-          }
-          return undefined;
-      };
+        const data = doc.data();
+        const convertTimestamp = (field: any): string | undefined => {
+            if (!field) return undefined;
+            if (field instanceof Timestamp) {
+                return field.toDate().toISOString();
+            }
+            if (typeof field === 'string') {
+                try {
+                    // Try to parse to ensure it's a valid date string before returning
+                    return new Date(field).toISOString();
+                } catch (e) {
+                    return undefined; // Return undefined if string is not a valid date
+                }
+            }
+            return undefined;
+        };
 
-      return { 
-          id: doc.id,
-          ...data,
-          requestDate: convertTimestamp(data.requestDate)!, // requestDate should always exist
-          approvedAt: convertTimestamp(data.approvedAt),
-      } as VacationRequest;
+        return {
+            id: doc.id,
+            ...data,
+            requestDate: convertTimestamp(data.requestDate)!, // This should always exist and be valid
+            approvedAt: convertTimestamp(data.approvedAt),
+        } as VacationRequest;
     });
-    // Sort client-side to avoid complex index requirements
-    return requests.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+    return requests;
 };
 
 
@@ -90,11 +92,18 @@ export const createVacationRequest = async (
     requestData: Omit<VacationRequest, 'id' | 'status'>,
     managerEmail: string | null
 ): Promise<{ docId: string; emailPayload: { to: string, subject: string, body: string } | null }> => {
-    const dataToSave = {
+    const dataToSave: any = {
         ...requestData,
         status: 'Pendiente' as const,
         requestDate: serverTimestamp(),
     };
+    
+    // Ensure dates are strings for Firestore, not Date objects from the form
+    dataToSave.startDate = requestData.startDate;
+    dataToSave.endDate = requestData.endDate;
+    dataToSave.returnDate = requestData.returnDate;
+
+
     const docRef = await addDoc(licensesCollection, dataToSave);
     
     let emailPayload: { to: string, subject: string, body: string } | null = null;
@@ -145,16 +154,13 @@ export const approveVacationRequest = async (
 
         let newVacationDays = userData.vacationDays || 0;
 
-        // If moving TO approved from a different state
         if (newStatus === 'Aprobado' && requestData.status !== 'Aprobado') {
             newVacationDays -= requestData.daysRequested;
         } 
-        // If moving FROM approved to a different state (e.g., rejecting an already approved request)
         else if (newStatus !== 'Aprobado' && requestData.status === 'Aprobado') {
             newVacationDays += requestData.daysRequested;
         }
 
-        // Only update if there's a change
         if (newVacationDays !== (userData.vacationDays || 0)) {
             transaction.update(userRef, { vacationDays: newVacationDays });
         }
@@ -276,7 +282,6 @@ export const getPrograms = async (): Promise<Program[]> => {
     const snapshot = await getDocs(query(programsCollection, orderBy("name")));
     return snapshot.docs.map(doc => {
       const data = doc.data();
-      // On-the-fly migration for old data structure
       if (!data.schedules) {
         return {
           id: doc.id,
@@ -461,10 +466,8 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
     }
 
     if (isEditingSeries && item.seriesId) {
-        // If editing, find existing items in the series to update or delete
         const existingItems = await getCommercialItemsBySeries(item.seriesId);
 
-        // Delete items that are no longer in the selected dates
         for (const existingItem of existingItems) {
             if (!formattedDates.has(existingItem.date)) {
                 const docRef = doc(db, 'commercial_items', existingItem.id);
@@ -472,7 +475,6 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
             }
         }
 
-        // Update existing or create new for the selected dates
         for (const dateStr of formattedDates) {
             const existingItem = existingItems.find(i => i.date === dateStr);
             const dataToSave = { ...itemToSave, seriesId: newSeriesId, date: dateStr, updatedBy: userId, updatedAt: serverTimestamp() };
@@ -482,7 +484,6 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
         }
 
     } else {
-        // Creating a new series or single item
         for (const date of dates) {
             const docRef = doc(collection(db, 'commercial_items'));
             const formattedDate = date.toISOString().split('T')[0];
@@ -628,7 +629,6 @@ export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>
         }
     });
     
-    // Do not save this on creation, it's for monthly management
     if (dataToSave.historialMensual) {
       delete dataToSave.historialMensual;
     }
@@ -670,13 +670,11 @@ export const updateCanje = async (
         }
     });
 
-    // Handle canje 'Una vez' approval
     if (data.tipo === 'Una vez' && data.estado === 'Aprobado' && originalData.estado !== 'Aprobado') {
         updateData.culminadoPorId = userId;
         updateData.culminadoPorName = userName;
     }
     
-    // Handle 'Mensual' history items (convert dates back to strings for Firestore)
     if (data.historialMensual) {
         updateData.historialMensual = data.historialMensual.map(h => {
             const historyItem: Partial<HistorialMensualItem> = { ...h };
@@ -758,7 +756,6 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
     const q = query(invoicesCollection, where("opportunityId", "==", opportunityId));
     const snapshot = await getDocs(q);
     const invoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
-    // Sort manually to avoid composite index requirement
     invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
     return invoices;
 };
@@ -774,7 +771,11 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
 };
 
 export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: string, userName: string, ownerName: string): Promise<string> => {
-    const docRef = await addDoc(invoicesCollection, invoiceData);
+    const dataToSave = {
+      ...invoiceData,
+      dateGenerated: new Date().toISOString(),
+    };
+    const docRef = await addDoc(invoicesCollection, dataToSave);
     return docRef.id;
 };
 
@@ -782,7 +783,6 @@ export const updateInvoice = async (id: string, data: Partial<Omit<Invoice, 'id'
     const docRef = doc(db, 'invoices', id);
     const updateData: Partial<Invoice> & { [key: string]: any } = {...data};
 
-    // Ensure we don't try to update the ID
     delete updateData.id;
 
     if (updateData.status === 'Pagada' && !updateData.datePaid) {
@@ -790,17 +790,6 @@ export const updateInvoice = async (id: string, data: Partial<Omit<Invoice, 'id'
     }
     
     await updateDoc(docRef, updateData);
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'invoice',
-        entityId: id,
-        entityName: `Factura #${data.invoiceNumber || id}`,
-        details: `actualizó la factura #${data.invoiceNumber || id}`,
-        ownerName: ownerName
-    });
 };
 
 export const deleteInvoice = async (id: string, userId: string, userName: string, ownerName: string): Promise<void> => {
@@ -851,7 +840,7 @@ export const createAgency = async (
         entityId: docRef.id,
         entityName: agencyData.name,
         details: `creó la agencia <strong>${agencyData.name}</strong>`,
-        ownerName: userName // Or a more generic term if agencies don't have owners
+        ownerName: userName
     });
 
     return docRef.id;
@@ -865,7 +854,7 @@ export const createUserProfile = async (uid: string, name: string, email: string
     await setDoc(userRef, {
         name,
         email,
-        role: 'Asesor', // Default role for new users
+        role: 'Asesor',
         photoURL: photoURL || null,
         createdAt: serverTimestamp(),
     });
@@ -898,7 +887,7 @@ export const updateUserProfile = async (uid: string, data: Partial<User>): Promi
 
     if (data.role && data.role !== originalData.role) {
         await logActivity({
-            userId: uid, // This might need to be the admin user ID
+            userId: uid,
             userName: data.name || originalData.name,
             type: 'update',
             entityType: 'user',
@@ -940,7 +929,6 @@ export const deleteUserAndReassignEntities = async (
 
     const batch = writeBatch(db);
 
-    // 1. Find all clients owned by the user and unassign them
     const clientsQuery = query(clientsCollection, where('ownerId', '==', userIdToDelete));
     const clientsSnapshot = await getDocs(clientsQuery);
     clientsSnapshot.forEach(doc => {
@@ -950,7 +938,6 @@ export const deleteUserAndReassignEntities = async (
         });
     });
 
-    // 2. Find all prospects owned by the user and unassign them
     const prospectsQuery = query(prospectsCollection, where('ownerId', '==', userIdToDelete));
     const prospectsSnapshot = await getDocs(prospectsQuery);
     prospectsSnapshot.forEach(doc => {
@@ -960,13 +947,10 @@ export const deleteUserAndReassignEntities = async (
         });
     });
     
-    // 3. Delete the user document
     batch.delete(userRef);
 
-    // Commit all changes in a single batch
     await batch.commit();
 
-    // 4. Log the admin activity
     await logActivity({
         userId: adminUserId,
         userName: adminUserName,
@@ -975,10 +959,8 @@ export const deleteUserAndReassignEntities = async (
         entityId: userIdToDelete,
         entityName: userData.name,
         details: `eliminó al usuario <strong>${userData.name}</strong> y desasignó ${clientsSnapshot.size} cliente(s) y ${prospectsSnapshot.size} prospecto(s).`,
-        ownerName: adminUserName, // The action is owned by the admin
+        ownerName: adminUserName,
     });
-
-    // Note: Deleting from Firebase Auth is a separate, client-side or admin SDK action and is not handled here.
 };
 
 
@@ -1001,7 +983,6 @@ export const getClient = async (id: string): Promise<Client | null> => {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
         const data = docSnap.data();
-        // Convert Firestore Timestamps to serializable strings
         const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
         
         data.createdAt = convertTimestamp(data.createdAt);
@@ -1037,7 +1018,6 @@ export const createClient = async (
         newClientData.newClientDate = serverTimestamp();
     } else {
         newClientData.isNewClient = false;
-        // Do not add newClientDate if it's not a new client
     }
     
     if (newClientData.agencyId === undefined) {
@@ -1075,14 +1055,12 @@ export const updateClient = async (
 
     const updateData: {[key: string]: any} = { ...data };
     
-    // Clean up undefined fields before sending to Firestore
     Object.keys(updateData).forEach(key => {
         if (updateData[key] === undefined) {
             delete updateData[key];
         }
     });
 
-    // Handle deactivation logic
     if (data.isDeactivated === true && originalData.isDeactivated === false) {
         updateData.deactivationHistory = arrayUnion(serverTimestamp());
     }
@@ -1131,22 +1109,18 @@ export const deleteClient = async (
     const clientData = clientSnap.data() as Client;
     const batch = writeBatch(db);
 
-    // Delete opportunities associated with the client
     const oppsQuery = query(opportunitiesCollection, where('clientId', '==', id));
     const oppsSnap = await getDocs(oppsQuery);
     oppsSnap.forEach(doc => batch.delete(doc.ref));
 
-    // Delete people associated ONLY with this client
     const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', id));
     const peopleSnap = await getDocs(peopleQuery);
     peopleSnap.forEach(doc => batch.delete(doc.ref));
     
-    // Delete client activities
     const clientActivitiesQuery = query(clientActivitiesCollection, where('clientId', '==', id));
     const clientActivitiesSnap = await getDocs(clientActivitiesQuery);
     clientActivitiesSnap.forEach(doc => batch.delete(doc.ref));
 
-    // Delete invoices associated with the client's opportunities
     const clientOpps = oppsSnap.docs.map(d => d.id);
     if (clientOpps.length > 0) {
       const invoicesQuery = query(invoicesCollection, where('opportunityId', 'in', clientOpps));
@@ -1154,8 +1128,6 @@ export const deleteClient = async (
       invoicesSnap.forEach(doc => batch.delete(doc.ref));
     }
 
-
-    // Finally, delete the client itself
     batch.delete(clientRef);
 
     await batch.commit();
@@ -1193,7 +1165,6 @@ export const bulkDeleteClients = async (clientIds: string[], userId: string, use
       const peopleSnap = await getDocs(peopleQuery);
       peopleSnap.forEach(doc => batch.delete(doc.ref));
 
-      // Delete invoices
       const clientOpps = oppsSnap.docs.map(d => d.id);
       if (clientOpps.length > 0) {
         const invoicesQuery = query(invoicesCollection, where('opportunityId', 'in', clientOpps));
@@ -1268,7 +1239,6 @@ export const createPerson = async (
         createdAt: serverTimestamp()
     });
     
-    // Link this new person to their client(s)
     if (personData.clientIds) {
         for (const clientId of personData.clientIds) {
             const clientRef = doc(db, 'clients', clientId);
@@ -1341,8 +1311,6 @@ export const deletePerson = async (
 
     const personData = personSnap.data() as Person;
     
-    // Just delete the person. We don't remove them from the client's personIds array
-    // to avoid complex state management on the client. It's harmless to have a stale ID.
     await deleteDoc(personRef);
 
     if (personData.clientIds && personData.clientIds.length > 0) {
@@ -1371,14 +1339,11 @@ export const getAllOpportunities = async (): Promise<Opportunity[]> => {
     return snapshot.docs.map(doc => {
       const data = doc.data();
       const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
-      // Convert server timestamp to string if it exists
       if (data.updatedAt && data.updatedAt instanceof Timestamp) {
         // @ts-ignore
         opp.updatedAt = data.updatedAt.toDate().toISOString();
       }
        if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
-          // If it's a string, ensure it's in the right format for consistency.
-          // This handles old and new data.
           opp.closeDate = new Date(data.closeDate).toISOString().split('T')[0];
       } else if (data.closeDate instanceof Timestamp) {
           opp.closeDate = data.closeDate.toDate().toISOString().split('T')[0];
@@ -1416,7 +1381,6 @@ export const createOpportunity = async (
     if (dataToSave.agencyId === undefined) {
         delete dataToSave.agencyId;
     }
-    // Remove legacy fields on creation
     delete dataToSave.pautados;
 
 
@@ -1497,7 +1461,7 @@ const createCommercialItemsFromOpportunity = async (opportunity: Opportunity, us
             entityId: opportunity.id,
             entityName: opportunity.title,
             details: `generó <strong>${newItems.length}</strong> pautas comerciales desde la oportunidad <strong>${opportunity.title}</strong>`,
-            ownerName: userName, // Assuming the person closing the deal is the owner of this log
+            ownerName: userName,
         });
     }
 };
@@ -1521,16 +1485,13 @@ export const updateOpportunity = async (
         updatedAt: serverTimestamp()
     };
     
-    // --- Bonus Approval Logic ---
     const bonusStateChanged = data.bonificacionEstado && data.bonificacionEstado !== originalData.bonificacionEstado && originalData.bonificacionEstado === 'Pendiente';
     if (bonusStateChanged) {
-        // If bonus is approved/rejected, move stage back to Negotiation
         if (originalData.stage === 'Negociación a Aprobar') {
             updateData.stage = 'Negociación';
         }
     }
 
-     // --- Generate Commercial Items on "Closed Won" ---
     if (data.stage === 'Cerrado - Ganado' && originalData.stage !== 'Cerrado - Ganado') {
         const fullOpportunityData = { ...originalData, ...data, id };
         await createCommercialItemsFromOpportunity(fullOpportunityData, userId, userName);
@@ -1548,7 +1509,6 @@ export const updateOpportunity = async (
         updateData.agencyId = deleteField();
     }
     
-    // Remove legacy 'pautados' field if it exists
     updateData.pautados = deleteField();
 
 
@@ -1600,12 +1560,10 @@ export const deleteOpportunity = async (
 
     const batch = writeBatch(db);
 
-    // Delete invoices associated with the opportunity
     const invoicesQuery = query(invoicesCollection, where('opportunityId', '==', id));
     const invoicesSnap = await getDocs(invoicesQuery);
     invoicesSnap.forEach(doc => batch.delete(doc.ref));
     
-    // Delete opportunity
     batch.delete(docRef);
 
     await batch.commit();
@@ -1650,26 +1608,22 @@ export const getActivitiesForEntity = async (entityId: string): Promise<Activity
     
     const clientOwnerId = clientSnap.data().ownerId;
 
-    // Query for activities directly related to the client (entityId)
     const directClientActivitiesQuery = query(
         activitiesCollection, 
         where('entityId', '==', entityId),
         where('entityType', '==', 'client')
     );
 
-    // Query for activities related to opportunities of that client
     const oppsOfClientSnap = await getDocs(query(opportunitiesCollection, where('clientId', '==', entityId)));
     const oppIds = oppsOfClientSnap.docs.map(doc => doc.id);
 
     const activities: ActivityLog[] = [];
 
-    // Get direct activities
     const directClientActivitiesSnap = await getDocs(directClientActivitiesQuery);
     directClientActivitiesSnap.forEach(doc => {
         activities.push(convertActivityLogDoc(doc));
     });
     
-    // Get opportunity-related activities if any
     if (oppIds.length > 0) {
         const oppActivitiesQuery = query(
             activitiesCollection, 
@@ -1682,7 +1636,6 @@ export const getActivitiesForEntity = async (entityId: string): Promise<Activity
         });
     }
     
-    // Add person creation/update activities for this client
     const peopleSnap = await getDocs(query(peopleCollection, where('clientIds', 'array-contains', entityId)));
     const personIds = peopleSnap.docs.map(p => p.id);
     if (personIds.length > 0) {
@@ -1697,7 +1650,6 @@ export const getActivitiesForEntity = async (entityId: string): Promise<Activity
         });
     }
 
-    // Sort all combined activities by timestamp
     activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     return activities;
@@ -1777,7 +1729,6 @@ export const updateClientActivity = async (
         updateData.completedByUserId = data.completedByUserId;
         updateData.completedByUserName = data.completedByUserName;
     } else if (data.completed === false) {
-        // If un-checking, remove the completion fields
         updateData.completedAt = deleteField();
         updateData.completedByUserId = deleteField();
         updateData.completedByUserName = deleteField();

@@ -36,21 +36,6 @@ interface LicenseRequestFormDialogProps {
   requestOwner?: User | null;
 }
 
-const getNextWorkday = (date: Date): Date => {
-  let nextDay = addDays(date, 1);
-  let isHolidayOrWeekend = true;
-  // This logic is simple and doesn't account for holidays, but it's a good fallback.
-  while (isHolidayOrWeekend) {
-      if (!isWeekend(nextDay)) {
-        isHolidayOrWeekend = false;
-      } else {
-        nextDay = addDays(nextDay, 1);
-      }
-  }
-  return nextDay;
-};
-
-
 export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request, currentUser, allUserRequests, requestOwner }: LicenseRequestFormDialogProps) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [holidays, setHolidays] = useState<Date[]>([]);
@@ -77,7 +62,6 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
   }, [isOpen, request]);
   
   useEffect(() => {
-    // Reset holidays if the date range is cleared
     if (!dateRange) {
         setHolidays([]);
     }
@@ -86,7 +70,6 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
   const handleHolidayToggle = (day: Date | undefined) => {
     if (!day || !dateRange?.from || !dateRange?.to) return;
     
-    // Ensure the clicked day is within the selected range and not a weekend
     if (isWeekend(day) || !isWithinInterval(day, { start: startOfDay(dateRange.from), end: startOfDay(dateRange.to) })) {
       toast({ title: "Día no válido", description: "Solo puedes marcar días laborables dentro del rango seleccionado como feriados.", variant: "destructive" });
       return;
@@ -102,7 +85,7 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
 
   const { daysRequested, returnDate } = useMemo(() => {
     if (!dateRange?.from || !dateRange?.to) {
-      return { daysRequested: 0, returnDate: '' };
+      return { daysRequested: 0, returnDate: null };
     }
     const allDays = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
     const holidayTimeStamps = new Set(holidays.map(h => startOfDay(h).getTime()));
@@ -126,7 +109,7 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
 
     return {
       daysRequested: workdays.length,
-      returnDate: format(nextDay, 'PPPP', { locale: es }),
+      returnDate: nextDay,
     };
   }, [dateRange, holidays]);
 
@@ -153,7 +136,7 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
       startDate: format(dateRange.from, 'yyyy-MM-dd'),
       endDate: format(dateRange.to, 'yyyy-MM-dd'),
       daysRequested,
-      returnDate: format(parseISO(returnDate), 'yyyy-MM-dd'),
+      returnDate: format(returnDate, 'yyyy-MM-dd'),
       requestDate: request?.requestDate || new Date().toISOString(),
       holidays: holidays.map(h => h.toISOString().split('T')[0]),
     }, isEditing);
@@ -205,7 +188,7 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
                 </div>
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                     <Card className="p-3 text-center"><p className="text-sm text-muted-foreground">Días pedidos</p><p className="text-xl font-bold">{daysRequested}</p></Card>
-                    <Card className="p-3 text-center col-span-2 lg:col-span-1"><p className="text-sm text-muted-foreground">Retoma actividades</p><p className="text-base font-bold capitalize">{returnDate || '-'}</p></Card>
+                    <Card className="p-3 text-center col-span-2 lg:col-span-1"><p className="text-sm text-muted-foreground">Retoma actividades</p><p className="text-base font-bold capitalize">{returnDate ? format(returnDate, 'PPPP', {locale: es}) : '-'}</p></Card>
                     <Card className={cn("p-3 text-center", remainingDays < 0 && "bg-destructive/10 border-destructive text-destructive-foreground")}>
                     <p className="text-sm">Días restantes</p>
                     <p className="text-xl font-bold">{remainingDays}</p>
