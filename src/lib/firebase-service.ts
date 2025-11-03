@@ -8,20 +8,6 @@ import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-const usersCollection = collection(db, 'users');
-const clientsCollection = collection(db, 'clients');
-const peopleCollection = collection(db, 'people');
-const opportunitiesCollection = collection(db, 'opportunities');
-const activitiesCollection = collection(db, 'activities');
-const clientActivitiesCollection = collection(db, 'client-activities');
-const agenciesCollection = collection(db, 'agencies');
-const invoicesCollection = collection(db, 'invoices');
-const canjesCollection = collection(db, 'canjes');
-const programsCollection = collection(db, 'programs');
-const commercialItemsCollection = collection(db, 'commercial_items');
-const prospectsCollection = collection(db, 'prospects');
-const licensesCollection = collection(db, 'licencias');
-
 // --- Monthly Closure Functions ---
 export const saveMonthlyClosure = async (advisorId: string, month: string, value: number, managerId: string) => {
     const userRef = doc(db, 'users', advisorId);
@@ -96,14 +82,6 @@ export const createVacationRequest = async (
     }
 
     return { docId: docRef.id, emailPayload };
-};
-
-export const updateVacationRequest = async (
-    requestId: string, 
-    data: Partial<Omit<VacationRequest, 'id'>>
-): Promise<void> => {
-    const docRef = doc(db, 'licencias', requestId);
-    await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
 };
 
 export const approveVacationRequest = async (
@@ -771,7 +749,7 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
 export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: string, userName: string, ownerName: string): Promise<string> => {
     const dataToSave = {
         ...invoiceData,
-        dateGenerated: new Date(invoiceData.dateGenerated).toISOString(),
+        dateGenerated: invoiceData.dateGenerated,
     };
     
     const docRef = await addDoc(invoicesCollection, dataToSave);
@@ -1524,7 +1502,6 @@ export const updateOpportunity = async (
     userId: string,
     userName: string,
     ownerName: string,
-    pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[] = [],
     accessToken?: string | null
 ): Promise<void> => {
     const docRef = doc(db, 'opportunities', id);
@@ -1569,16 +1546,6 @@ export const updateOpportunity = async (
 
 
     await updateDoc(docRef, updateData);
-
-     // Create any pending invoices
-    if (pendingInvoices.length > 0) {
-        for (const invoiceData of pendingInvoices) {
-            await createInvoice({
-                ...invoiceData,
-                opportunityId: id,
-            }, userId, userName, ownerName);
-        }
-    }
 
 
     const activityDetails = {

@@ -55,7 +55,7 @@ interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onUpdate: (opportunity: Partial<Opportunity>, pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[], accessToken?: string | null) => void;
+  onUpdate: (opportunity: Partial<Opportunity>, pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
   onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
   client?: {id: string, name: string, ownerName?: string}
 }
@@ -211,8 +211,7 @@ export function OpportunityDetailsDialog({
         }, {} as Partial<Opportunity>);
 
         if (Object.keys(changes).length > 0 || pendingInvoices.length > 0) {
-            const accessToken = await getGoogleAccessToken();
-            onUpdate(changes, pendingInvoices, accessToken);
+            onUpdate(changes, pendingInvoices);
         }
     } else if (!isEditing) {
         const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
