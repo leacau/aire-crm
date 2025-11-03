@@ -104,7 +104,13 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
     // A Facturar
     const wonOppsInPeriod = opportunities.filter(opp => {
-        const isOwner = isBoss ? (advisorClientIds ? advisorClientIds.has(opp.clientId) : true) : clients.find(c => c.id === opp.clientId)?.ownerId === userInfo.id;
+        let isOwner = false;
+        if (isBoss) {
+            isOwner = advisorClientIds ? advisorClientIds.has(opp.clientId) : true;
+        } else {
+            const client = clients.find(c => c.id === opp.clientId);
+            isOwner = client?.ownerId === userInfo.id;
+        }
         if (!isOwner || opp.stage !== 'Cerrado - Ganado') return false;
         
         return opp.closeDate ? isDateInRange(opp.closeDate) : false;
@@ -261,6 +267,8 @@ export default function BillingPage() {
     </React.Suspense>
   );
 }
+
+    
 
     
 
