@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { User, VacationRequest } from '@/lib/types';
-import { getAllUsers, getVacationRequests, createVacationRequest, deleteVacationRequest, approveVacationRequest, updateVacationRequest, updateUserProfile } from '@/lib/firebase-service';
+import { getAllUsers, getVacationRequests, createVacationRequest, deleteVacationRequest, approveVacationRequest, updateUserProfile } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
 import { LicensesTable } from '@/components/licencias/licenses-table';
@@ -16,6 +16,7 @@ import { LicenseRequestFormDialog } from '@/components/licencias/license-request
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { sendEmail } from '@/lib/google-gmail-service';
 
 export default function LicensesPage() {
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
@@ -84,15 +85,20 @@ export default function LicensesPage() {
     }
 
     try {
-      const accessToken = await getGoogleAccessToken();
+      const { emailPayload } = await createVacationRequest(requestData, managerToNotify?.email || null);
       
-      if (isEditing && editingRequest) {
-        await updateVacationRequest(editingRequest.id, requestData);
-        toast({ title: 'Solicitud Actualizada' });
-      } else {
-        await createVacationRequest(requestData, managerToNotify!.email, accessToken);
-        toast({ title: 'Solicitud Enviada', description: 'Tu jefe directo ha sido notificado.' });
+      toast({ title: 'Solicitud Enviada', description: 'Tu jefe directo ha sido notificado.' });
+
+      if (emailPayload) {
+          getGoogleAccessToken().then(token => {
+              if (token) {
+                  sendEmail({ ...emailPayload, accessToken: token }).catch(err => {
+                      console.error("Failed to send creation email in background:", err);
+                  });
+              }
+          });
       }
+
       fetchData();
       return true;
     } catch (error) {
@@ -112,10 +118,20 @@ export default function LicensesPage() {
     }
     
     try {
-      const accessToken = await getGoogleAccessToken();
-      await approveVacationRequest(request.id, newStatus, userInfo.id, applicant.email, accessToken);
+      const { emailPayload } = await approveVacationRequest(request.id, newStatus, userInfo.id, applicant.email);
       
       toast({ title: `Solicitud ${newStatus === 'Aprobado' ? 'aprobada' : 'rechazada'}` });
+      
+      if (emailPayload) {
+          getGoogleAccessToken().then(token => {
+              if (token) {
+                  sendEmail({ ...emailPayload, accessToken: token }).catch(err => {
+                       console.error("Failed to send approval email in background:", err);
+                  });
+              }
+          });
+      }
+      
       fetchData();
     } catch (error) {
        console.error("Error updating request status:", error);
@@ -139,7 +155,7 @@ export default function LicensesPage() {
 
   const requestsForCurrentUser = useMemo(() => {
     if (!requestOwner) return [];
-    return requests.filter(r => r.userId === requestOwner.id);
+    return requests.filter(r => r.userId === requestOwner.id && (r.status === 'Aprobado' || r.status === 'Pendiente'));
   }, [requests, requestOwner]);
 
 

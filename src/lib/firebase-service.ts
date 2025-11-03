@@ -1,4 +1,5 @@
 
+
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus } from './types';
@@ -42,9 +43,8 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
 
 export const createVacationRequest = async (
     requestData: Omit<VacationRequest, 'id' | 'status'>,
-    managerEmail: string,
-    accessToken: string | null
-): Promise<string> => {
+    managerEmail: string | null
+): Promise<{ docId: string; emailPayload: { to: string, subject: string, body: string } | null }> => {
     const dataToSave = {
         ...requestData,
         status: 'Pendiente' as const,
@@ -52,10 +52,10 @@ export const createVacationRequest = async (
     };
     const docRef = await addDoc(licensesCollection, dataToSave);
     
-    // Send notification email asynchronously (fire and forget)
-    if (accessToken && managerEmail) {
-        sendEmail({
-            accessToken,
+    let emailPayload: { to: string, subject: string, body: string } | null = null;
+
+    if (managerEmail) {
+        emailPayload = {
             to: managerEmail,
             subject: `Nueva Solicitud de Licencia de ${requestData.userName}`,
             body: `
@@ -65,13 +65,10 @@ export const createVacationRequest = async (
                 <p><strong>Días solicitados:</strong> ${requestData.daysRequested}</p>
                 <p>Para aprobar o rechazar esta solicitud, por favor ingresa a la sección "Licencias" del CRM.</p>
             `,
-        }).catch(error => {
-            // Log the error but don't block the user response
-            console.error("Failed to send license request email:", error);
-        });
+        };
     }
 
-    return docRef.id;
+    return { docId: docRef.id, emailPayload };
 };
 
 export const updateVacationRequest = async (
@@ -86,9 +83,8 @@ export const approveVacationRequest = async (
     requestId: string,
     newStatus: VacationRequestStatus,
     approverId: string,
-    applicantEmail: string,
-    accessToken: string | null
-): Promise<void> => {
+    applicantEmail: string
+): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
     const requestRef = doc(db, 'licencias', requestId);
 
     await runTransaction(db, async (transaction) => {
@@ -130,12 +126,11 @@ export const approveVacationRequest = async (
         transaction.update(requestRef, updatePayload);
     });
 
-    // Send notification email outside the transaction
     const requestAfterUpdate = (await getDoc(requestRef)).data() as VacationRequest;
     
-    if (accessToken && applicantEmail) {
-        sendEmail({
-            accessToken,
+    let emailPayload: { to: string, subject: string, body: string } | null = null;
+    if (applicantEmail) {
+        emailPayload = {
             to: applicantEmail,
             subject: `Tu Solicitud de Licencia ha sido ${newStatus}`,
             body: `
@@ -143,10 +138,10 @@ export const approveVacationRequest = async (
                 <p>Tu solicitud de licencia para el período del <strong>${format(new Date(requestAfterUpdate.startDate), 'P', { locale: es })}</strong> al <strong>${format(new Date(requestAfterUpdate.endDate), 'P', { locale: es })}</strong> ha sido <strong>${newStatus}</strong>.</p>
                 <p>Puedes ver el estado de tus solicitudes en el CRM.</p>
             `,
-        }).catch(error => {
-            console.error("Failed to send license approval email:", error);
-        });
+        };
     }
+    
+    return { emailPayload };
 };
 
 

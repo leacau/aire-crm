@@ -17,9 +17,8 @@ interface EmailParams {
 
 export async function sendEmail({ accessToken, to, subject, body }: EmailParams) {
     if (!accessToken) {
+        // This won't throw an error, but allows the calling function to know it didn't run.
         console.warn("Skipping email send because accessToken is missing.");
-        // Instead of throwing, we just log a warning and return.
-        // This makes email sending non-critical.
         return;
     }
 
@@ -33,25 +32,26 @@ export async function sendEmail({ accessToken, to, subject, body }: EmailParams)
     ];
     const email = emailParts.join('\r\n');
 
-    const response = await fetch(GMAIL_API_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            // The raw email message has to be base64url encoded
-            raw: Buffer.from(email).toString('base64url'),
-        }),
-    });
+    try {
+        const response = await fetch(GMAIL_API_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                raw: Buffer.from(email).toString('base64url'),
+            }),
+        });
 
-    if (!response.ok) {
-        const error = await response.json();
-        console.error('Google Gmail API Error:', error);
-        throw new Error('Failed to send email: ' + (error.error?.message || 'Unknown error'));
+        if (!response.ok) {
+            const error = await response.json();
+            console.error('Google Gmail API Error:', error);
+            // We log the error but do not throw, to make it non-blocking
+        }
+    } catch (error) {
+        console.error("Network or other error during email send:", error);
     }
-
-    return await response.json();
 }
 
 
