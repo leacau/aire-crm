@@ -84,11 +84,12 @@ service cloud.firestore {
       allow create, update, delete: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
     }
     
-    // ACTIVITIES (System Logs): Read-only for most. Created by server-side logic.
+    // ACTIVITIES (System Logs): Read-only for most. Created by server-side logic, with an exception for invoice creation.
     match /activities/{activityId} {
       allow read: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
       allow list: if isUserAuthenticated(); // Required for dashboard feeds.
-      allow create, update, delete: if false; // Only server can write.
+      allow create: if request.resource.data.entityType == 'invoice'; // Allow creating log for invoices
+      allow update, delete: if false; // Only server can write.
     }
     
     // CLIENT-ACTIVITIES (User Logs): Users can create for their clients.
@@ -124,14 +125,6 @@ service cloud.firestore {
       allow update: if isUserAuthenticated() && (isCreator(resource.data) || isOwner(resource.data) || isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']));
       allow delete: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
     }
-
-    // LICENCIAS: Users create their own. Bosses manage all.
-    match /licencias/{licenciaId} {
-      allow read, list: if isUserAuthenticated();
-      allow create: if isUserAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isUserAuthenticated() && (isCreator(resource.data) || isOneOfRoles(['Jefe', 'Gerencia']));
-      allow delete: if isUserAuthenticated() && (isCreator(resource.data) || isOneOfRoles(['Jefe', 'Gerencia']));
-    }
     
     // PROGRAMS & COMMERCIAL ITEMS (Grilla): Managed by admins/bosses. Read by all.
     match /programs/{programId} {
@@ -143,6 +136,14 @@ service cloud.firestore {
       allow read: if isUserAuthenticated();
       allow create: if isUserAuthenticated();
       allow update, delete: if isUserAuthenticated(); // Simplified for now, complex logic in app. Let's trust the app logic for who can edit what (e.g. their own client's pauta)
+    }
+
+    // LICENCIAS: Users can create/read their own. Managers can read/update all.
+    match /licencias/{licenciaId} {
+      allow read, list: if isUserAuthenticated();
+      allow create: if isUserAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isUserAuthenticated() && (isCreator(resource.data) || isOneOfRoles(['Jefe', 'Gerencia']));
+      allow delete: if isOneOfRoles(['Jefe', 'Gerencia']);
     }
   }
 }
