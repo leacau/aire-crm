@@ -42,6 +42,7 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
   const [isSaving, setIsSaving] = useState(false);
   const isEditing = !!request?.id;
   const { toast } = useToast();
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const userForCalculations = isEditing && requestOwner ? requestOwner : currentUser;
 
@@ -165,7 +166,7 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor="date-range">Fechas Solicitadas</Label>
-                    <Popover>
+                    <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                     <PopoverTrigger asChild>
                         <Button id="date-range" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
                         <CalendarIcon className="mr-2 h-4 w-4" />
@@ -181,8 +182,10 @@ export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request
                             onSelect={setDateRange}
                             numberOfMonths={2} 
                             locale={es}
-                            footer={<p className="text-xs text-center text-muted-foreground pt-2">Marca los feriados en el calendario de la derecha.</p>}
                         />
+                         <div className="p-2 border-t flex justify-end">
+                            <Button onClick={() => setIsCalendarOpen(false)}>Aceptar</Button>
+                        </div>
                     </PopoverContent>
                     </Popover>
                 </div>
