@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice } from '@/lib/firebase-service';
+import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice } from '@/lib/firebase-service';
 import type { Opportunity, Client, User, Invoice } from '@/lib/types';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { updateOpportunity } from '@/lib/firebase-service';
@@ -28,6 +28,13 @@ const getPeriodDurationInMonths = (period: string): number => {
     }
 }
 
+type NewInvoiceData = {
+    invoiceNumber: string;
+    date: string;
+    amount: number | string;
+};
+
+
 function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
@@ -38,6 +45,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [loading, setLoading] = useState(true);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [newInvoiceData, setNewInvoiceData] = useState<Record<string, Partial<NewInvoiceData>>>({});
+
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const today = new Date();
@@ -206,6 +215,60 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   };
 
+  const handleCreateInvoice = async (virtualOppId: string) => {
+    if (!userInfo) return;
+    const invoiceDetails = newInvoiceData[virtualOppId];
+    if (!invoiceDetails || !invoiceDetails.invoiceNumber || !invoiceDetails.amount || !invoiceDetails.date) {
+        toast({ title: "Datos de factura incompletos", variant: "destructive" });
+        return;
+    }
+    
+    const realOppId = virtualOppId.split('_')[0];
+    const opp = opportunitiesMap[realOppId];
+    if (!opp) return;
+
+    const client = clientsMap[opp.clientId];
+    if (!client) return;
+
+    try {
+        const newInvoice: Omit<Invoice, 'id'> = {
+            opportunityId: realOppId,
+            invoiceNumber: invoiceDetails.invoiceNumber,
+            amount: Number(invoiceDetails.amount),
+            date: invoiceDetails.date,
+            status: 'Generada',
+            dateGenerated: new Date().toISOString(),
+        };
+
+        await createInvoice(newInvoice, userInfo.id, userInfo.name, client.ownerName);
+        toast({ title: 'Factura Creada' });
+        
+        // Optimistically update UI before refetch
+        setInvoices(prev => [...prev, { ...newInvoice, id: 'temp-' + Date.now() }]);
+        setNewInvoiceData(prev => {
+            const newState = { ...prev };
+            delete newState[virtualOppId];
+            return newState;
+        });
+
+        // Refetch to get the real data
+        fetchData();
+    } catch (error) {
+        console.error("Error creating invoice:", error);
+        toast({ title: "Error al crear la factura", variant: "destructive" });
+    }
+  };
+
+  const handleInvoiceDataChange = (virtualOppId: string, field: keyof NewInvoiceData, value: string) => {
+      setNewInvoiceData(prev => ({
+        ...prev,
+        [virtualOppId]: {
+            ...prev[virtualOppId],
+            [field]: field === 'amount' ? (value === '' ? '' : Number(value)) : value,
+        }
+    }));
+  };
+
   const handleMarkAsPaid = async (invoiceId: string) => {
     if (!userInfo) return;
 
@@ -280,7 +343,17 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             <TabsTrigger value="paid">Pagado</TabsTrigger>
           </TabsList>
           <TabsContent value="to-invoice">
-            <BillingTable items={toInvoiceOpps} type="opportunities" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} />
+            <BillingTable 
+                items={toInvoiceOpps} 
+                type="opportunities" 
+                onRowClick={handleRowClick} 
+                clientsMap={clientsMap} 
+                usersMap={usersMap} 
+                opportunitiesMap={opportunitiesMap}
+                newInvoiceData={newInvoiceData}
+                onInvoiceDataChange={handleInvoiceDataChange}
+                onCreateInvoice={handleCreateInvoice}
+            />
           </TabsContent>
           <TabsContent value="to-collect">
             <BillingTable items={toCollectInvoices} type="invoices" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} onMarkAsPaid={handleMarkAsPaid} />
