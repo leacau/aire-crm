@@ -24,6 +24,7 @@ import {
   CalendarClock,
   CheckCircle,
   Lightbulb,
+  TrendingDown,
 } from 'lucide-react';
 import type { Opportunity, Client, ActivityLog, ClientActivity, User, Invoice } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
@@ -40,7 +41,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -208,86 +209,48 @@ export default function DashboardPage() {
     fetchData();
   }, []);
   
-  const advisorClientIds = useMemo(() => {
-    if (selectedAdvisor === 'all' || !isBoss) return null;
-    return new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
-  }, [clients, selectedAdvisor, isBoss]);
-
-
   const { 
     userOpportunities, 
     userClients, 
     userActivities, 
     userTasks,
     userInvoices,
-    previousMonthBilling,
   } = useMemo(() => {
-    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [], userInvoices: [], previousMonthBilling: 0 };
+    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [], userInvoices: [] };
     
-    const baseCalculations = (ownerId: string | 'all') => {
-        let advisorUser: User | undefined;
-        let opps, cls, acts, tsks, invs;
+    let filteredOpps = opportunities;
+    let filteredClients = clients;
+    let filteredActivities = activities;
+    let filteredTasks = tasks.filter(t => t.isTask);
+    let filteredInvoices = invoices;
 
-        if (ownerId === 'all') {
-            opps = opportunities;
-            cls = clients;
-            acts = activities;
-            tsks = tasks.filter(t => t.isTask);
-            invs = invoices;
-        } else {
-            advisorUser = users.find(u => u.id === ownerId);
-            const clientIds = new Set(clients.filter(c => c.ownerId === ownerId).map(c => c.id));
-            opps = opportunities.filter(opp => clientIds.has(opp.clientId));
-            const oppIds = new Set(opps.map(o => o.id));
-            cls = clients.filter(c => c.ownerId === ownerId);
-            acts = activities.filter(act => {
-                const client = clients.find(c => c.id === act.entityId);
-                return client?.ownerId === ownerId;
-            });
-            tsks = tasks.filter(t => t.isTask && clientIds.has(t.clientId));
-            invs = invoices.filter(inv => oppIds.has(inv.opportunityId));
-        }
-
-        const dateFrom = dateRange?.from ? dateRange.from : new Date();
-        const prevMonthDate = subMonths(dateFrom, 1);
-        const prevMonthStart = startOfMonth(prevMonthDate);
-        const prevMonthEnd = endOfMonth(prevMonthDate);
-        
-        let prevMonthTotal = 0;
-        const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
-        
-        if(ownerId !== 'all' && advisorUser?.monthlyClosures?.[prevMonthKey]) {
-            prevMonthTotal = advisorUser.monthlyClosures[prevMonthKey];
-        } else {
-             const prevMonthPaid = invs
-                .filter(inv => inv.status === 'Pagada' && inv.datePaid && isWithinInterval(parseISO(inv.datePaid), { start: prevMonthStart, end: prevMonthEnd }))
-                .reduce((sum, inv) => sum + inv.amount, 0);
-
-            const prevMonthToCollect = invs
-                .filter(inv => inv.status !== 'Pagada' && inv.date && isWithinInterval(parseISO(inv.date), { start: prevMonthStart, end: prevMonthEnd }))
-                .reduce((sum, inv) => sum + inv.amount, 0);
-            
-            prevMonthTotal = prevMonthPaid + prevMonthToCollect;
-        }
-
-
-        return {
-            userOpportunities: opps,
-            userClients: cls,
-            userActivities: acts,
-            userTasks: tsks,
-            userInvoices: invs,
-            previousMonthBilling: prevMonthTotal,
-        };
-    };
-
-    if (isBoss) {
-        return baseCalculations(selectedAdvisor);
-    } else {
-        return baseCalculations(userInfo.id);
+    if (!isBoss) {
+      const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
+      filteredClients = clients.filter(c => userClientIds.has(c.id));
+      filteredOpps = opportunities.filter(opp => userClientIds.has(opp.clientId));
+      filteredTasks = tasks.filter(t => t.isTask && userClientIds.has(t.clientId));
+      const oppIds = new Set(filteredOpps.map(o => o.id));
+      filteredInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
+      // Note: Activities might be more complex to filter if not directly linked to a client
+    } else if (selectedAdvisor !== 'all') {
+      const advisorClientIds = new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
+      filteredClients = clients.filter(c => advisorClientIds.has(c.id));
+      filteredOpps = opportunities.filter(opp => advisorClientIds.has(opp.clientId));
+      filteredTasks = tasks.filter(t => t.isTask && advisorClientIds.has(t.clientId));
+       const oppIds = new Set(filteredOpps.map(o => o.id));
+      filteredInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
     }
 
-  }, [userInfo, isBoss, opportunities, clients, activities, tasks, invoices, users, selectedAdvisor, dateRange]);
+
+    return {
+        userOpportunities: filteredOpps,
+        userClients: filteredClients,
+        userActivities: filteredActivities,
+        userTasks: filteredTasks,
+        userInvoices: filteredInvoices
+    };
+
+  }, [userInfo, isBoss, selectedAdvisor, opportunities, clients, activities, tasks, invoices]);
 
 
   const today = startOfToday();
@@ -422,25 +385,42 @@ export default function DashboardPage() {
       return isWithinInterval(activityDate, { start: dateRange.from, end: dateRange.to });
   }).slice(0, 10);
   
-  const dateFilter = (dateStr: string | null | undefined) => {
-    if (!dateStr || !dateRange?.from || !dateRange?.to) return false;
+  const dateFilter = (dateStr: string | null | undefined, range: DateRange) => {
+    if (!dateStr || !range.from || !range.to) return false;
     try {
         const date = parseISO(dateStr);
-        return isWithinInterval(date, { start: dateRange.from, end: dateRange.to });
+        return isWithinInterval(date, { start: range.from, end: range.to });
     } catch (e) {
         return false;
     }
   };
   
   const totalPaidInPeriod = userInvoices
-    .filter(inv => inv.status === 'Pagada' && dateFilter(inv.datePaid))
+    .filter(inv => inv.status === 'Pagada' && dateRange && dateFilter(inv.datePaid, dateRange))
     .reduce((acc, inv) => acc + inv.amount, 0);
 
   const totalToCollectInPeriod = userInvoices
-    .filter(inv => inv.status !== 'Pagada' && dateFilter(inv.date))
+    .filter(inv => inv.status !== 'Pagada' && dateRange && dateFilter(inv.date, dateRange))
     .reduce((acc, inv) => acc + inv.amount, 0);
 
   const totalBillingInPeriod = totalPaidInPeriod + totalToCollectInPeriod;
+
+  const prevMonthStart = dateRange?.from ? startOfMonth(subMonths(dateRange.from, 1)) : null;
+  const prevMonthEnd = dateRange?.from ? endOfMonth(subMonths(dateRange.from, 1)) : null;
+  
+  let previousMonthBilling = 0;
+  if(prevMonthStart && prevMonthEnd) {
+      const prevMonthRange = { from: prevMonthStart, to: prevMonthEnd };
+      const prevPaid = userInvoices
+        .filter(inv => inv.status === 'Pagada' && dateFilter(inv.datePaid, prevMonthRange))
+        .reduce((acc, inv) => acc + inv.amount, 0);
+      const prevToCollect = userInvoices
+        .filter(inv => inv.status !== 'Pagada' && dateFilter(inv.date, prevMonthRange))
+        .reduce((acc, inv) => acc + inv.amount, 0);
+      previousMonthBilling = prevPaid + prevToCollect;
+  }
+  
+  const billingDifference = totalBillingInPeriod - previousMonthBilling;
 
   const prospectingValue = filteredOpportunities
     .filter(o => o.stage === 'Nuevo')
@@ -498,6 +478,13 @@ export default function DashboardPage() {
                 </p>
                  <p className="text-xs text-muted-foreground mt-1">
                     Mes Anterior: ${previousMonthBilling.toLocaleString('es-AR')}
+                </p>
+                 <p className={cn(
+                    "text-xs font-medium flex items-center mt-1",
+                    billingDifference >= 0 ? "text-green-600" : "text-red-600"
+                  )}>
+                  {billingDifference >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
+                  Dif: ${billingDifference.toLocaleString('es-AR')}
                 </p>
               </CardContent>
             </Card>
