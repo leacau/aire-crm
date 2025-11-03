@@ -63,7 +63,7 @@ export function LicensesTable({ requests, isManagerView, currentUserId, onEdit, 
                           <Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          {req.status === 'Pendiente' && <DropdownMenuItem onClick={() => onEdit(req)}>Editar</DropdownMenuItem>}
+                          {(isManagerView || req.status === 'Pendiente') && <DropdownMenuItem onClick={() => onEdit(req)}>Editar</DropdownMenuItem>}
                           {isManagerView && req.status === 'Pendiente' && (
                             <>
                               <DropdownMenuItem onClick={() => onUpdateRequest(req, 'Aprobado')}>Aprobar</DropdownMenuItem>
