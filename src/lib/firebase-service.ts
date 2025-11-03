@@ -770,20 +770,6 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
     
     const docRef = await addDoc(invoicesCollection, dataToSave);
     
-    const oppSnap = await getDoc(doc(db, 'opportunities', invoiceData.opportunityId));
-    const oppTitle = oppSnap.exists() ? oppSnap.data().title : `ID ${invoiceData.opportunityId}`;
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'invoice',
-        entityId: docRef.id,
-        entityName: `Factura #${invoiceData.invoiceNumber || docRef.id}`,
-        details: `creó la factura #${invoiceData.invoiceNumber} para la oportunidad "${oppTitle}"`,
-        ownerName: userName,
-    });
-
     return docRef.id;
 };
 
