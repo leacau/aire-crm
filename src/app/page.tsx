@@ -391,23 +391,26 @@ export default function DashboardPage() {
       const activityDate = new Date(activity.timestamp);
       return isWithinInterval(activityDate, { start: dateRange.from, end: dateRange.to });
   }).slice(0, 10);
-
-
-  const wonOppsInPeriod = filteredOpportunities.filter(opp => opp.stage === 'Cerrado - Ganado');
-  const wonOppsValue = wonOppsInPeriod.reduce((acc, opp) => acc + Number(opp.value || 0), 0);
   
-  const dateFilter = (dateStr: string) => {
-    if (!dateRange?.from || !dateRange?.to) return true;
-    return isWithinInterval(parseISO(dateStr), { start: dateRange.from, end: dateRange.to });
+  const dateFilter = (dateStr: string | null | undefined) => {
+    if (!dateStr || !dateRange?.from || !dateRange?.to) return false;
+    try {
+        const date = parseISO(dateStr);
+        return isWithinInterval(date, { start: dateRange.from, end: dateRange.to });
+    } catch (e) {
+        return false;
+    }
   };
   
   const totalPaidInPeriod = userInvoices
-    .filter(inv => inv.status === 'Pagada' && inv.datePaid && dateFilter(inv.datePaid))
+    .filter(inv => inv.status === 'Pagada' && dateFilter(inv.datePaid))
     .reduce((acc, inv) => acc + inv.amount, 0);
 
   const totalToCollectInPeriod = userInvoices
-    .filter(inv => inv.status !== 'Pagada' && inv.date && dateFilter(inv.date))
+    .filter(inv => inv.status !== 'Pagada' && dateFilter(inv.date))
     .reduce((acc, inv) => acc + inv.amount, 0);
+
+  const totalBillingInPeriod = totalPaidInPeriod + totalToCollectInPeriod;
 
   const prospectingValue = filteredOpportunities
     .filter(o => o.stage === 'Nuevo')
@@ -457,7 +460,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${wonOppsValue.toLocaleString('es-AR')}
+                  ${totalBillingInPeriod.toLocaleString('es-AR')}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Pagado: ${totalPaidInPeriod.toLocaleString('es-AR')} / 
