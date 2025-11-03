@@ -25,6 +25,7 @@ const licensesCollection = collection(db, 'licencias');
 const parseDateWithTimezone = (dateString: string) => {
     // For "YYYY-MM-DD", this creates a date at midnight in the local timezone,
     // avoiding the off-by-one error caused by UTC conversion.
+    if (!dateString) return new Date();
     const [year, month, day] = dateString.split('-').map(Number);
     return new Date(year, month - 1, day);
 };
@@ -62,11 +63,21 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
     const snapshot = await getDocs(query(licensesCollection));
     const requests = snapshot.docs.map(doc => {
       const data = doc.data();
-      const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+      const convertTimestamp = (field: any): string | undefined => {
+          if (field instanceof Timestamp) {
+              return field.toDate().toISOString();
+          }
+          if (typeof field === 'string') {
+              // If it's already a string, just return it, assuming it's valid.
+              return field;
+          }
+          return undefined;
+      };
+
       return { 
           id: doc.id,
           ...data,
-          requestDate: convertTimestamp(data.requestDate),
+          requestDate: convertTimestamp(data.requestDate)!, // requestDate should always exist
           approvedAt: convertTimestamp(data.approvedAt),
       } as VacationRequest;
     });

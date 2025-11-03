@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React from 'react';
@@ -53,17 +52,19 @@ export function LicensesTable({ requests, isManagerView, currentUserId, onEdit, 
               const isOwner = req.userId === currentUserId;
               
               const canEditRequest = isManagerView || (isOwner && req.status === 'Pendiente');
+              const startDate = new Date(req.startDate);
+              const endDate = new Date(req.endDate);
 
               return (
                 <TableRow key={req.id}>
                   {isManagerView && <TableCell className="font-medium">{req.userName}</TableCell>}
                   <TableCell>
-                      <div>{format(new Date(req.startDate), 'P', { locale: es })}</div>
-                      {isManagerView && <div className="text-xs text-muted-foreground capitalize">{format(new Date(req.startDate), 'eeee', { locale: es })}</div>}
+                      <div>{format(startDate, 'P', { locale: es })}</div>
+                      {isManagerView && <div className="text-xs text-muted-foreground capitalize">{format(startDate, 'eeee', { locale: es })}</div>}
                   </TableCell>
                   <TableCell>
-                      <div>{format(new Date(req.endDate), 'P', { locale: es })}</div>
-                      {isManagerView && <div className="text-xs text-muted-foreground capitalize">{format(new Date(req.endDate), 'eeee', { locale: es })}</div>}
+                      <div>{format(endDate, 'P', { locale: es })}</div>
+                      {isManagerView && <div className="text-xs text-muted-foreground capitalize">{format(endDate, 'eeee', { locale: es })}</div>}
                   </TableCell>
                   <TableCell>{req.daysRequested}</TableCell>
                   <TableCell>{format(new Date(req.returnDate), 'P', { locale: es })}</TableCell>

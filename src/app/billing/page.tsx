@@ -13,10 +13,20 @@ import { updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { isWithinInterval, startOfMonth, endOfMonth, parseISO, addMonths, isSameMonth, getYear, getMonth, set } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BillingTable } from '@/components/billing/billing-table';
+
+const getPeriodDurationInMonths = (period: string): number => {
+    switch (period) {
+        case 'Mensual': return 1;
+        case 'Trimestral': return 3;
+        case 'Semestral': return 6;
+        case 'Anual': return 12;
+        default: return 0;
+    }
+}
 
 function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
@@ -92,9 +102,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { toInvoiceOpps, toCollectInvoices, paidInvoices } = useMemo(() => {
     if (!userInfo) return { toInvoiceOpps: [], toCollectInvoices: [], paidInvoices: [] };
     
-    const isDateInRange = (dateStr: string) => {
+    const isDateInRange = (date: Date) => {
         if (!dateRange?.from || !dateRange?.to) return true;
-        const date = parseISO(dateStr);
         return isWithinInterval(date, { start: dateRange.from, end: dateRange.to });
     }
 
@@ -102,22 +111,60 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         ? new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id))
         : null;
 
-    // A Facturar
-    const wonOppsInPeriod = opportunities.filter(opp => {
-        let isOwner = false;
-        if (isBoss) {
-            isOwner = advisorClientIds ? advisorClientIds.has(opp.clientId) : true;
-        } else {
-            const client = clients.find(c => c.id === opp.clientId);
-            isOwner = client?.ownerId === userInfo.id;
-        }
-        if (!isOwner || opp.stage !== 'Cerrado - Ganado') return false;
-        
-        return opp.closeDate ? isDateInRange(opp.closeDate) : false;
+    let userWonOpps = opportunities.filter(opp => {
+      if (opp.stage !== 'Cerrado - Ganado') return false;
+
+      let isOwner = false;
+      if (isBoss) {
+        isOwner = advisorClientIds ? advisorClientIds.has(opp.clientId) : true;
+      } else {
+        const client = clients.find(c => c.id === opp.clientId);
+        isOwner = client?.ownerId === userInfo.id;
+      }
+      return isOwner;
     });
 
-    const oppsWithInvoices = new Set(invoices.map(inv => inv.opportunityId));
-    const toInvoiceOpps = wonOppsInPeriod.filter(opp => !oppsWithInvoices.has(opp.id));
+    const toInvoiceOpps: Opportunity[] = [];
+    const invoicesByOppId = invoices.reduce((acc, inv) => {
+        if (!acc[inv.opportunityId]) acc[inv.opportunityId] = [];
+        acc[inv.opportunityId].push(inv);
+        return acc;
+    }, {} as Record<string, Invoice[]>);
+
+    userWonOpps.forEach(opp => {
+        if (!opp.closeDate) return;
+
+        const maxPeriodicity = opp.periodicidad?.[0] || 'Ocasional';
+        const durationMonths = getPeriodDurationInMonths(maxPeriodicity);
+
+        if (durationMonths > 0) { // Handle periodic opportunities
+            const startDate = parseISO(opp.closeDate);
+            for (let i = 0; i < durationMonths; i++) {
+                const monthDate = addMonths(startDate, i);
+                
+                if (isDateInRange(monthDate)) {
+                    const hasInvoiceForMonth = (invoicesByOppId[opp.id] || []).some(inv => 
+                        isSameMonth(parseISO(inv.date), monthDate)
+                    );
+                    
+                    if (!hasInvoiceForMonth) {
+                        // Create a virtual opportunity for this month's billing
+                        const virtualOpp = { 
+                            ...opp, 
+                            // Add a unique ID for the table key and a reference date
+                            id: `${opp.id}_${getYear(monthDate)}-${getMonth(monthDate)}`, 
+                            closeDate: monthDate.toISOString(), 
+                        };
+                        toInvoiceOpps.push(virtualOpp);
+                    }
+                }
+            }
+        } else { // Handle one-time ("Ocasional") opportunities
+            if (isDateInRange(parseISO(opp.closeDate)) && !invoicesByOppId[opp.id]) {
+                toInvoiceOpps.push(opp);
+            }
+        }
+    });
 
     // A Cobrar y Pagado
     let userFilteredInvoices = invoices;
@@ -133,10 +180,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
     
     const toCollectInvoices = userFilteredInvoices.filter(inv => 
-        inv.date && isDateInRange(inv.date) && inv.status !== 'Pagada'
+        inv.date && isDateInRange(parseISO(inv.date)) && inv.status !== 'Pagada'
     );
     const paidInvoices = userFilteredInvoices.filter(inv => 
-        inv.datePaid && isDateInRange(inv.datePaid) && inv.status === 'Pagada'
+        inv.datePaid && isDateInRange(parseISO(inv.datePaid)) && inv.status === 'Pagada'
     );
 
     return { toInvoiceOpps, toCollectInvoices, paidInvoices };
@@ -188,9 +235,15 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   }
   
-  const handleRowClick = (opp: Opportunity) => {
-      setSelectedOpportunity(opp);
-      setIsFormOpen(true);
+  const handleRowClick = (item: Opportunity | Invoice) => {
+      const oppId = 'clientId' in item ? item.id.split('_')[0] : (opportunitiesMap[item.opportunityId] ? item.opportunityId : null);
+      if (!oppId) return;
+      const opportunity = opportunities.find(o => o.id === oppId);
+
+      if (opportunity) {
+        setSelectedOpportunity(opportunity);
+        setIsFormOpen(true);
+      }
   }
 
   if (authLoading || loading) {
@@ -267,9 +320,3 @@ export default function BillingPage() {
     </React.Suspense>
   );
 }
-
-    
-
-    
-
-    
