@@ -219,14 +219,17 @@ export default function DashboardPage() {
     userClients, 
     userActivities, 
     userTasks,
+    userInvoices
   } = useMemo(() => {
-    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [] };
+    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [], userInvoices: [] };
     
     if (isBoss) {
       if (selectedAdvisor === 'all') {
-        return { userOpportunities: opportunities, userClients: clients, userActivities: activities, userTasks: tasks.filter(t => t.isTask) };
+        return { userOpportunities: opportunities, userClients: clients, userActivities: activities, userTasks: tasks.filter(t => t.isTask), userInvoices: invoices };
       }
       const oppsForAdvisor = opportunities.filter(opp => advisorClientIds?.has(opp.clientId));
+      const oppIdsForAdvisor = new Set(oppsForAdvisor.map(o => o.id));
+
       return {
         userOpportunities: oppsForAdvisor,
         userClients: clients.filter(c => c.ownerId === selectedAdvisor),
@@ -235,12 +238,14 @@ export default function DashboardPage() {
             return client?.ownerId === selectedAdvisor;
         }),
         userTasks: tasks.filter(t => t.isTask && advisorClientIds?.has(t.clientId)),
+        userInvoices: invoices.filter(inv => oppIdsForAdvisor.has(inv.opportunityId))
       }
     }
 
     // For non-boss users
     const ownClientIds = new Set(clients.filter(client => client.ownerId === userInfo.id).map(c => c.id));
     const oppsForUser = opportunities.filter(opp => ownClientIds.has(opp.clientId));
+    const oppIdsForUser = new Set(oppsForUser.map(o => o.id));
     return {
         userOpportunities: oppsForUser,
         userClients: clients.filter(client => client.ownerId === userInfo.id),
@@ -249,9 +254,10 @@ export default function DashboardPage() {
             return client && client.ownerId === userInfo.id;
         }),
         userTasks: tasks.filter(t => t.isTask && ownClientIds.has(t.clientId)),
+        userInvoices: invoices.filter(inv => oppIdsForUser.has(inv.opportunityId)),
     }
 
-  }, [userInfo, isBoss, opportunities, clients, activities, tasks, selectedAdvisor, advisorClientIds]);
+  }, [userInfo, isBoss, opportunities, clients, activities, tasks, invoices, selectedAdvisor, advisorClientIds]);
 
 
   const today = startOfToday();
@@ -389,10 +395,19 @@ export default function DashboardPage() {
 
   const wonOppsInPeriod = filteredOpportunities.filter(opp => opp.stage === 'Cerrado - Ganado');
   const wonOppsValue = wonOppsInPeriod.reduce((acc, opp) => acc + Number(opp.value || 0), 0);
-  const wonOppIds = new Set(wonOppsInPeriod.map(opp => opp.id));
-  const invoicesForWonOpps = invoices.filter(inv => wonOppIds.has(inv.opportunityId));
-  const totalPaidInPeriod = invoicesForWonOpps.filter(inv => inv.status === 'Pagada').reduce((acc, inv) => acc + inv.amount, 0);
-  const totalToCollectInPeriod = invoicesForWonOpps.filter(inv => inv.status !== 'Pagada').reduce((acc, inv) => acc + inv.amount, 0);
+  
+  const dateFilter = (dateStr: string) => {
+    if (!dateRange?.from || !dateRange?.to) return true;
+    return isWithinInterval(parseISO(dateStr), { start: dateRange.from, end: dateRange.to });
+  };
+  
+  const totalPaidInPeriod = userInvoices
+    .filter(inv => inv.status === 'Pagada' && inv.datePaid && dateFilter(inv.datePaid))
+    .reduce((acc, inv) => acc + inv.amount, 0);
+
+  const totalToCollectInPeriod = userInvoices
+    .filter(inv => inv.status !== 'Pagada' && inv.date && dateFilter(inv.date))
+    .reduce((acc, inv) => acc + inv.amount, 0);
 
   const prospectingValue = filteredOpportunities
     .filter(o => o.stage === 'Nuevo')
