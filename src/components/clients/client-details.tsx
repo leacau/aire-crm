@@ -1,4 +1,5 @@
 
+
 'use client'
 import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice } from '@/lib/types';
 import React, { useEffect, useState, useRef } from 'react';

@@ -55,8 +55,8 @@ interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onUpdate: (opportunity: Partial<Opportunity>, pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
-  onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
+  onUpdate: (opportunity: Partial<Opportunity>) => void;
+  onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
   client?: {id: string, name: string, ownerName?: string}
 }
 
@@ -152,7 +152,6 @@ export function OpportunityDetailsDialog({
   const { toast } = useToast();
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [pendingInvoices, setPendingInvoices] = useState<Omit<Invoice, 'id' | 'opportunityId'>[]>([]);
   
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isOrdenPautadoFormOpen, setIsOrdenPautadoFormOpen] = useState(false);
@@ -160,6 +159,7 @@ export function OpportunityDetailsDialog({
   const isEditing = !!opportunity;
 
   const [newInvoiceRow, setNewInvoiceRow] = useState<{number: string, date: string, amount: string | number}>({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
+  const [isSavingInvoice, setIsSavingInvoice] = useState(false);
   
   const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>(() => 
     isEditing ? opportunity : getInitialOpportunityData(client)
@@ -179,7 +179,6 @@ export function OpportunityDetailsDialog({
         if (!initialData.ordenesPautado) initialData.ordenesPautado = [];
         if (!initialData.proposalItems) initialData.proposalItems = [];
         setEditedOpportunity(initialData);
-        setPendingInvoices([]);
         
         getAgencies()
             .then(setAgencies)
@@ -210,12 +209,12 @@ export function OpportunityDetailsDialog({
             return acc;
         }, {} as Partial<Opportunity>);
 
-        if (Object.keys(changes).length > 0 || pendingInvoices.length > 0) {
-            onUpdate(changes, pendingInvoices);
+        if (Object.keys(changes).length > 0) {
+            onUpdate(changes);
         }
     } else if (!isEditing) {
         const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
-        onCreate(newOpp, pendingInvoices);
+        onCreate(newOpp, []);
     }
     onOpenChange(false);
 };
@@ -292,20 +291,36 @@ export function OpportunityDetailsDialog({
     }));
   };
 
-  const handleAddPendingInvoice = () => {
+  const handleSaveNewInvoice = async () => {
+    if (!opportunity || !userInfo) return;
     if (!newInvoiceRow.number || !newInvoiceRow.amount || Number(newInvoiceRow.amount) <= 0) {
       toast({ title: 'Datos de factura incompletos', description: 'Número de factura y monto son requeridos.', variant: 'destructive'});
       return;
     }
-    const newPending: Omit<Invoice, 'id' | 'opportunityId'> = {
-        invoiceNumber: newInvoiceRow.number,
-        amount: Number(newInvoiceRow.amount),
-        date: newInvoiceRow.date,
-        status: 'Generada',
-        dateGenerated: new Date().toISOString(),
+
+    setIsSavingInvoice(true);
+    try {
+        const newInvoice: Omit<Invoice, 'id'> = {
+            opportunityId: opportunity.id,
+            invoiceNumber: newInvoiceRow.number,
+            amount: Number(newInvoiceRow.amount),
+            date: newInvoiceRow.date,
+            status: 'Generada',
+            dateGenerated: new Date().toISOString(),
+        };
+
+        await createInvoice(newInvoice, userInfo.id, userInfo.name, opportunity.clientName);
+        
+        toast({ title: "Factura Guardada" });
+        fetchInvoices();
+        setNewInvoiceRow({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
+
+    } catch (error) {
+        console.error("Error creating invoice", error);
+        toast({ title: "Error al guardar la factura", variant: "destructive" });
+    } finally {
+        setIsSavingInvoice(false);
     }
-    setPendingInvoices(prev => [...prev, newPending]);
-    setNewInvoiceRow({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
   };
   
   const handleDeleteInvoice = async (invoiceId: string) => {
@@ -544,7 +559,12 @@ export function OpportunityDetailsDialog({
           </TabsContent>
           
           <TabsContent value="invoicing" className="py-4">
-            <div className="space-y-4">
+            <fieldset disabled={!isEditing} className="space-y-4">
+                {!isEditing && (
+                    <div className="text-center text-sm text-muted-foreground p-4 border rounded-md bg-muted/50">
+                        Guarda primero la oportunidad para poder cargar facturas.
+                    </div>
+                )}
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -571,20 +591,7 @@ export function OpportunityDetailsDialog({
                                 }
                             </TableRow>
                         ))}
-                        {pendingInvoices.map((invoice, index) => (
-                             <TableRow key={`pending-${index}`} className="bg-muted/30">
-                                <TableCell>{invoice.invoiceNumber}</TableCell>
-                                <TableCell>{format(new Date(invoice.date), 'P', { locale: es })}</TableCell>
-                                <TableCell>${invoice.amount.toLocaleString('es-AR')}</TableCell>
-                                <TableCell><span className="text-muted-foreground italic">Pendiente</span></TableCell>
-                                <TableCell>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPendingInvoices(p => p.filter((_, i) => i !== index))}>
-                                          <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                        {invoices.length === 0 && pendingInvoices.length === 0 && (
+                        {invoices.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={isEditing ? 5 : 4} className="h-24 text-center">No hay facturas para esta oportunidad.</TableCell>
                             </TableRow>
@@ -614,15 +621,15 @@ export function OpportunityDetailsDialog({
                                 />
                             </TableCell>
                              <TableCell colSpan={isEditing ? 2 : 1}>
-                                <Button onClick={handleAddPendingInvoice} size="sm">
-                                    <PlusCircle className="mr-2 h-4 w-4"/>
-                                    Añadir Factura
+                                <Button onClick={handleSaveNewInvoice} size="sm" disabled={isSavingInvoice}>
+                                    {isSavingInvoice ? <Spinner size="small" /> : <Save className="mr-2 h-4 w-4"/>}
+                                    Guardar Factura
                                 </Button>
                              </TableCell>
                         </TableRow>
                     </TableBody>
                 </Table>
-            </div>
+            </fieldset>
           </TabsContent>
 
         </Tabs>

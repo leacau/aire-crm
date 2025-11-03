@@ -1503,8 +1503,7 @@ export const updateOpportunity = async (
     data: Partial<Omit<Opportunity, 'id'>>,
     userId: string,
     userName: string,
-    ownerName: string,
-    accessToken?: string | null
+    ownerName: string
 ): Promise<void> => {
     const docRef = doc(db, 'opportunities', id);
     const docSnap = await getDoc(docRef);
