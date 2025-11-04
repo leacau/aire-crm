@@ -262,6 +262,23 @@ export type Canje = {
 
 export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Admin';
 
+export const areaTypes = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'] as const;
+export type AreaType = typeof areaTypes[number];
+
+export type ScreenName = 'Dashboard' | 'Opportunities' | 'Prospects' | 'Clients' | 'Grilla' | 'PNTs' | 'Canjes' | 'Invoices' | 'Billing' | 'Calendar' | 'Licenses' | 'Approvals' | 'Activity' | 'Team' | 'Rates' | 'Reports' | 'Import';
+
+export type ScreenPermission = {
+    view: boolean;
+    edit: boolean;
+}
+
+export type Area = {
+    id: string;
+    name: AreaType;
+    managerIds: string[];
+    permissions: Partial<Record<ScreenName, ScreenPermission>>;
+}
+
 export type MonthlyClosure = {
   // Key is "YYYY-MM"
   [key: string]: number;
@@ -272,6 +289,7 @@ export type User = {
   name:string;
   email: string;
   role: UserRole;
+  area?: AreaType;
   managerId?: string;
   initials?: string;
   photoURL?: string;

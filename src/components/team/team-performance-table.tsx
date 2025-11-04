@@ -1,10 +1,11 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getInvoices, getProspects } from '@/lib/firebase-service';
-import type { Opportunity, User, Client, UserRole, Invoice, Prospect } from '@/lib/types';
+import type { Opportunity, User, Client, UserRole, Invoice, Prospect, AreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
 import { MonthlyClosureDialog } from './monthly-closure-dialog';
+import { userRoles, areaTypes } from '@/lib/types';
 
 interface UserStats {
   user: User;
@@ -38,8 +40,6 @@ interface UserStats {
   currentMonthBilling: number;
   previousMonthBilling: number | null;
 }
-
-const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Admin'];
 
 export function TeamPerformanceTable() {
   const { userInfo, isBoss } = useAuth();
@@ -193,6 +193,25 @@ export function TeamPerformanceTable() {
                 </Select>
             );
         }
+    },
+     {
+      accessorKey: 'area',
+      header: 'Área',
+      cell: ({ row }) => {
+        const { user } = row.original;
+        return (
+          <Select value={user.area} onValueChange={(newArea: AreaType) => handleUpdateUser(user.id, { area: newArea })} disabled={!isBoss}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Asignar área..." />
+            </SelectTrigger>
+            <SelectContent>
+              {areaTypes.map(area => (
+                <SelectItem key={area} value={area}>{area}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      },
     },
      {
       accessorKey: 'managerId',
