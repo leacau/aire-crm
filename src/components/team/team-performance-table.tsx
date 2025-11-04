@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getInvoices, getProspects } from '@/lib/firebase-service';
-import { type Opportunity, type User, type Client, type UserRole, type Invoice, type Prospect, type AreaType, areaTypes, userRoles } from '@/lib/types';
+import { type Opportunity, type User, type Client, type UserRole, type Invoice, type Prospect, type AreaType, userRoles, areaTypes } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';

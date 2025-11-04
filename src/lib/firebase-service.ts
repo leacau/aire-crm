@@ -23,10 +23,12 @@ const prospectsCollection = collection(db, 'prospects');
 const licensesCollection = collection(db, 'licencias');
 
 const parseDateWithTimezone = (dateString: string) => {
-    if (!dateString) return new Date();
+    if (!dateString || typeof dateString !== 'string') return null;
     // Handles "YYYY-MM-DD" by splitting and creating a date in the local timezone,
     // avoiding UTC interpretation that can shift the date back by one day.
-    const [year, month, day] = dateString.split('-').map(Number);
+    const parts = dateString.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    const [year, month, day] = parts;
     return new Date(year, month - 1, day);
 };
 
@@ -403,10 +405,11 @@ export const getCommercialItems = async (date: string): Promise<CommercialItem[]
     return snapshot.docs.map(doc => {
         const data = doc.data();
         const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+        const validDate = parseDateWithTimezone(data.date);
         return { 
             id: doc.id, 
             ...data,
-            date: format(parseDateWithTimezone(data.date), 'yyyy-MM-dd'),
+            date: validDate ? format(validDate, 'yyyy-MM-dd') : 'invalid-date',
             pntReadAt: convertTimestamp(data.pntReadAt),
         } as CommercialItem
     });
@@ -417,10 +420,11 @@ export const getCommercialItemsBySeries = async (seriesId: string): Promise<Comm
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
       const data = doc.data();
+      const validDate = parseDateWithTimezone(data.date);
       return { 
         id: doc.id, 
         ...data,
-        date: format(parseDateWithTimezone(data.date), 'yyyy-MM-dd')
+        date: validDate ? format(validDate, 'yyyy-MM-dd') : 'invalid-date'
       } as CommercialItem
     });
 };
@@ -608,15 +612,15 @@ export const getCanjes = async (): Promise<Canje[]> => {
           id: doc.id,
           ...data,
           fechaCreacion: convertTimestamp(data.fechaCreacion),
-          fechaResolucion: data.fechaResolucion ? format(parseDateWithTimezone(data.fechaResolucion), 'yyyy-MM-dd') : undefined,
-          fechaCulminacion: data.fechaCulminacion ? format(parseDateWithTimezone(data.fechaCulminacion), 'yyyy-MM-dd') : undefined,
+          fechaResolucion: data.fechaResolucion ? format(parseISO(data.fechaResolucion), 'yyyy-MM-dd') : undefined,
+          fechaCulminacion: data.fechaCulminacion ? format(parseISO(data.fechaCulminacion), 'yyyy-MM-dd') : undefined,
       } as Canje;
       
       if (canje.historialMensual) {
         canje.historialMensual = canje.historialMensual.map(h => ({
           ...h,
           fechaEstado: convertTimestamp(h.fechaEstado),
-          fechaCulminacion: h.fechaCulminacion ? format(parseDateWithTimezone(h.fechaCulminacion), 'yyyy-MM-dd') : undefined,
+          fechaCulminacion: h.fechaCulminacion ? format(parseISO(h.fechaCulminacion), 'yyyy-MM-dd') : undefined,
         })).sort((a,b) => b.mes.localeCompare(a.mes));
       }
 
@@ -750,15 +754,16 @@ export const getInvoices = async (): Promise<Invoice[]> => {
     const snapshot = await getDocs(query(invoicesCollection, orderBy("dateGenerated", "desc")));
     return snapshot.docs.map(doc => {
         const data = doc.data();
-        const invoiceDate = data.date ? format(parseDateWithTimezone(data.date), 'yyyy-MM-dd') : undefined;
-        const datePaid = data.datePaid ? format(parseDateWithTimezone(data.datePaid), 'yyyy-MM-dd') : undefined;
+        
+        const validDate = parseDateWithTimezone(data.date);
+        const validDatePaid = parseDateWithTimezone(data.datePaid);
 
         return {
             id: doc.id,
             ...data,
-            date: invoiceDate,
+            date: validDate ? format(validDate, 'yyyy-MM-dd') : undefined,
             dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
-            datePaid: datePaid,
+            datePaid: validDatePaid ? format(validDatePaid, 'yyyy-MM-dd') : undefined,
         } as Invoice;
     });
 };
@@ -1356,7 +1361,8 @@ export const getAllOpportunities = async (): Promise<Opportunity[]> => {
         opp.updatedAt = data.updatedAt.toDate().toISOString();
       }
        if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
-          opp.closeDate = new Date(data.closeDate).toISOString().split('T')[0];
+          const validDate = parseDateWithTimezone(data.closeDate);
+          opp.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
       } else if (data.closeDate instanceof Timestamp) {
           opp.closeDate = data.closeDate.toDate().toISOString().split('T')[0];
       }
@@ -1426,8 +1432,11 @@ const createCommercialItemsFromOpportunity = async (opportunity: Opportunity, us
     for (const orden of opportunity.ordenesPautado) {
         if (!orden.fechaInicio || !orden.fechaFin || !orden.programas || orden.programas.length === 0) continue;
 
-        let currentDate = parseDateWithTimezone(orden.fechaInicio);
+        const startDate = parseDateWithTimezone(orden.fechaInicio);
         const endDate = parseDateWithTimezone(orden.fechaFin);
+        if (!startDate || !endDate) continue;
+
+        let currentDate = startDate;
 
         while (currentDate <= endDate) {
             const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
