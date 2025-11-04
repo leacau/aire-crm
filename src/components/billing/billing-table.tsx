@@ -4,7 +4,7 @@
 import React, { useMemo } from 'react';
 import type { Opportunity, Client, User, Invoice } from '@/lib/types';
 import Link from 'next/link';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -36,7 +36,7 @@ export const BillingTable = ({
 }: { 
   items: (Opportunity | Invoice)[];
   type: 'opportunities' | 'invoices';
-  onRowClick: (opp: Opportunity) => void;
+  onRowClick: (item: Opportunity | Invoice) => void;
   clientsMap: Record<string, Client>;
   usersMap: Record<string, User>;
   opportunitiesMap: Record<string, Opportunity>;
@@ -58,7 +58,7 @@ export const BillingTable = ({
           return (
             <div 
               className="font-medium text-primary hover:underline cursor-pointer"
-              onClick={() => onRowClick(opp)}
+              onClick={() => onRowClick(row.original)}
             >
                 {opp.title}
             </div>
@@ -193,6 +193,7 @@ export const BillingTable = ({
       <ResizableDataTable
         columns={columns}
         data={items}
+        onRowClick={onRowClick}
         emptyStateMessage="No hay items en esta sección."
         footerContent={footerContent}
         enableRowResizing={false}
