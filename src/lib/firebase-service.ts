@@ -42,7 +42,6 @@ export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Rec
     if (docSnap.exists()) {
         return docSnap.data().permissions;
     } else {
-        // Seed the database with default permissions if it doesn't exist
         await setDoc(docRef, { permissions: defaultPermissions });
         return defaultPermissions;
     }
@@ -153,9 +152,9 @@ export const approveVacationRequest = async (
     requestId: string,
     newStatus: VacationRequestStatus,
     approverId: string,
+    applicantEmail: string | null,
 ): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
     const requestRef = doc(db, 'licencias', requestId);
-    const applicantEmail: string | null = (await getDoc(requestRef)).data()?.email;
 
     await runTransaction(db, async (transaction) => {
         const requestDoc = await transaction.get(requestRef);

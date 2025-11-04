@@ -104,14 +104,17 @@ export async function hasPermissionAsync(user: User, screen: ScreenName, permiss
         return false;
     }
 
-    if (user.role === 'Jefe' || user.role === 'Gerencia' || user.role === 'Admin') {
+    // Superusers have all permissions
+    if (user.role === 'Jefe' || user.role === 'Gerencia' || user.email === 'lchena@airedesantafe.com.ar') {
         return true;
     }
-
+    
+    // User-specific overrides
     if (user.permissions && user.permissions[screen]) {
         return user.permissions[screen]![permissionType] === true;
     }
 
+    // Area-based permissions
     const areaPerms = await getPermissions();
 
     if (user.area && areaPerms[user.area] && areaPerms[user.area][screen]) {
@@ -129,14 +132,17 @@ export function hasPermission(user: User, screen: ScreenName, permissionType: 'v
         return false;
     }
     
-    if (user.role === 'Jefe' || user.role === 'Gerencia' || user.role === 'Admin') {
+    // Superusers have all permissions
+    if (user.role === 'Jefe' || user.role === 'Gerencia' || user.email === 'lchena@airedesantafe.com.ar') {
         return true;
     }
 
+    // User-specific overrides
     if (user.permissions && user.permissions[screen]) {
         return user.permissions[screen]![permissionType] === true;
     }
 
+    // Area-based permissions from cache
     const areaPerms = permissionsCache || defaultPermissions;
 
     if (user.area && areaPerms[user.area] && areaPerms[user.area][screen]) {
