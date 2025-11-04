@@ -23,6 +23,8 @@ import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 
 export default function ProspectsPage() {
@@ -45,6 +47,13 @@ export default function ProspectsPage() {
 
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showOnlyMyProspects, setShowOnlyMyProspects] = useState(!isBoss);
+  
+  useEffect(() => {
+    if (userInfo) {
+      setShowOnlyMyProspects(!isBoss);
+    }
+  }, [isBoss, userInfo]);
 
   const fetchData = useCallback(async () => {
     if (!userInfo) return;
@@ -154,9 +163,10 @@ export default function ProspectsPage() {
 
     let userProspects = prospects;
     
-    // Bosses can filter by advisor
-    if (isBoss && selectedAdvisor !== 'all') {
-      userProspects = prospects.filter(p => p.ownerId === selectedAdvisor);
+    if (showOnlyMyProspects) {
+        userProspects = userProspects.filter(p => p.ownerId === userInfo.id);
+    } else if (isBoss && selectedAdvisor !== 'all') {
+        userProspects = userProspects.filter(p => p.ownerId === selectedAdvisor);
     }
     
     if (searchTerm.length >= 3) {
@@ -174,7 +184,7 @@ export default function ProspectsPage() {
       notProsperous: userProspects.filter(p => p.status === 'No Próspero'),
       converted: userProspects.filter(p => p.status === 'Convertido'),
     };
-  }, [prospects, userInfo, isBoss, selectedAdvisor, searchTerm]);
+  }, [prospects, userInfo, isBoss, selectedAdvisor, searchTerm, showOnlyMyProspects]);
 
 
   const columns = useMemo<ColumnDef<Prospect>[]>(() => [
@@ -277,7 +287,7 @@ export default function ProspectsPage() {
             />
           </div>
           {isBoss && (
-            <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
+            <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor} disabled={showOnlyMyProspects}>
               <SelectTrigger className="w-full sm:w-[200px]">
                 <SelectValue placeholder="Filtrar por asesor" />
               </SelectTrigger>
@@ -289,6 +299,10 @@ export default function ProspectsPage() {
               </SelectContent>
             </Select>
           )}
+           <div className="flex items-center space-x-2">
+            <Checkbox id="my-prospects" name="my-prospects" checked={showOnlyMyProspects} onCheckedChange={(checked) => setShowOnlyMyProspects(!!checked)} />
+            <Label htmlFor="my-prospects" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis prospectos</Label>
+          </div>
           <Button onClick={() => handleOpenForm()}>
             <PlusCircle className="mr-2" />
             Nuevo Prospecto
