@@ -262,8 +262,10 @@ export type Canje = {
 
 export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Admin';
 
-export const areaTypes = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'] as const;
-export type AreaType = typeof areaTypes[number];
+const areaTypeStrings = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'] as const;
+export type AreaType = typeof areaTypeStrings[number];
+export const areaTypes = [...areaTypeStrings];
+
 
 export type ScreenName = 'Dashboard' | 'Opportunities' | 'Prospects' | 'Clients' | 'Grilla' | 'PNTs' | 'Canjes' | 'Invoices' | 'Billing' | 'Calendar' | 'Licenses' | 'Approvals' | 'Activity' | 'Team' | 'Rates' | 'Reports' | 'Import';
 

@@ -6,6 +6,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getInvoices, getProspects } from '@/lib/firebase-service';
 import type { Opportunity, User, Client, UserRole, Invoice, Prospect, AreaType } from '@/lib/types';
+import { userRoles, areaTypes } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
@@ -28,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
 import { MonthlyClosureDialog } from './monthly-closure-dialog';
-import { userRoles, areaTypes } from '@/lib/types';
+
 
 interface UserStats {
   user: User;
@@ -201,7 +202,7 @@ export function TeamPerformanceTable() {
       cell: ({ row }) => {
         const { user } = row.original;
         return (
-          <Select value={user.area} onValueChange={(newArea: AreaType) => handleUpdateUser(user.id, { area: newArea })} disabled={!isBoss}>
+          <Select value={user.area} onValueChange={(newArea) => handleUpdateUser(user.id, { area: newArea as AreaType })} disabled={!isBoss}>
             <SelectTrigger className="w-[150px]">
               <SelectValue placeholder="Asignar área..." />
             </SelectTrigger>
