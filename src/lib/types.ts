@@ -30,7 +30,7 @@ export type Invoice = {
   opportunityId: string;
   invoiceNumber: string;
   amount: number;
-  date: string; 
+  date?: string; 
   status: InvoiceStatus;
   dateGenerated: string;
   datePaid?: string;
@@ -264,8 +264,7 @@ export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Impo
 
 const areaTypeStrings = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'] as const;
 export type AreaType = typeof areaTypeStrings[number];
-export const areaTypes = [...areaTypeStrings];
-
+export const areaTypes: AreaType[] = [...areaTypeStrings];
 
 export type ScreenName = 'Dashboard' | 'Opportunities' | 'Prospects' | 'Clients' | 'Grilla' | 'PNTs' | 'Canjes' | 'Invoices' | 'Billing' | 'Calendar' | 'Licenses' | 'Approvals' | 'Activity' | 'Team' | 'Rates' | 'Reports' | 'Import';
 
