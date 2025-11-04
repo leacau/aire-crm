@@ -24,6 +24,8 @@ const licensesCollection = collection(db, 'licencias');
 
 const parseDateWithTimezone = (dateString: string) => {
     if (!dateString) return new Date();
+    // Handles "YYYY-MM-DD" by splitting and creating a date in the local timezone,
+    // avoiding UTC interpretation that can shift the date back by one day.
     const [year, month, day] = dateString.split('-').map(Number);
     return new Date(year, month - 1, day);
 };
@@ -128,7 +130,8 @@ export const createVacationRequest = async (
 export const approveVacationRequest = async (
     requestId: string,
     newStatus: VacationRequestStatus,
-    approverId: string
+    approverId: string,
+    applicantEmail?: string | null
 ): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
     const requestRef = doc(db, 'licencias', requestId);
 
@@ -169,12 +172,11 @@ export const approveVacationRequest = async (
     });
 
     const requestAfterUpdate = (await getDoc(requestRef)).data() as VacationRequest;
-    const applicantUser = (await getDoc(doc(db, 'users', requestAfterUpdate.userId))).data() as User;
     
     let emailPayload: { to: string, subject: string, body: string } | null = null;
-    if (applicantUser.email) {
+    if (applicantEmail) {
         emailPayload = {
-            to: applicantUser.email,
+            to: applicantEmail,
             subject: `Tu Solicitud de Licencia ha sido ${newStatus}`,
             body: `
                 <p>Hola ${requestAfterUpdate.userName},</p>
@@ -465,6 +467,7 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
       delete itemToSave.opportunityTitle;
     }
 
+
     if (isEditingSeries && item.seriesId) {
         const existingItems = await getCommercialItemsBySeries(item.seriesId);
 
@@ -495,6 +498,11 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
             };
 
             const dataToSave = { ...itemData, createdBy: userId };
+            
+            if (!dataToSave.clientId) delete (dataToSave as any).clientId;
+            if (!dataToSave.clientName) delete (dataToSave as any).clientName;
+            if (!dataToSave.opportunityId) delete (dataToSave as any).opportunityId;
+            if (!dataToSave.opportunityTitle) delete (dataToSave as any).opportunityTitle;
 
             batch.set(docRef, dataToSave);
         }
@@ -599,15 +607,15 @@ export const getCanjes = async (): Promise<Canje[]> => {
           id: doc.id,
           ...data,
           fechaCreacion: convertTimestamp(data.fechaCreacion),
-          fechaResolucion: convertTimestamp(data.fechaResolucion),
-          fechaCulminacion: convertTimestamp(data.fechaCulminacion),
+          fechaResolucion: data.fechaResolucion ? format(parseDateWithTimezone(data.fechaResolucion), 'yyyy-MM-dd') : undefined,
+          fechaCulminacion: data.fechaCulminacion ? format(parseDateWithTimezone(data.fechaCulminacion), 'yyyy-MM-dd') : undefined,
       } as Canje;
       
       if (canje.historialMensual) {
         canje.historialMensual = canje.historialMensual.map(h => ({
           ...h,
           fechaEstado: convertTimestamp(h.fechaEstado),
-          fechaCulminacion: convertTimestamp(h.fechaCulminacion),
+          fechaCulminacion: h.fechaCulminacion ? format(parseDateWithTimezone(h.fechaCulminacion), 'yyyy-MM-dd') : undefined,
         })).sort((a,b) => b.mes.localeCompare(a.mes));
       }
 
@@ -747,7 +755,7 @@ export const getInvoices = async (): Promise<Invoice[]> => {
           ...data,
           date: invoiceDate,
           dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
-          datePaid: data.datePaid instanceof Timestamp ? data.datePaid.toDate().toISOString() : data.datePaid,
+          datePaid: data.datePaid ? format(parseDateWithTimezone(data.datePaid), 'yyyy-MM-dd') : undefined,
        } as Invoice
     });
 };
@@ -786,7 +794,7 @@ export const updateInvoice = async (id: string, data: Partial<Omit<Invoice, 'id'
     delete updateData.id;
 
     if (updateData.status === 'Pagada' && !updateData.datePaid) {
-        updateData.datePaid = new Date().toISOString();
+        updateData.datePaid = new Date().toISOString().split('T')[0];
     }
     
     await updateDoc(docRef, updateData);
