@@ -1,5 +1,57 @@
 
-import type { OpportunityStage, TipoEntidad, CondicionIVA } from './types';
+import type { OpportunityStage, TipoEntidad, CondicionIVA, AreaType, ScreenName, ScreenPermission } from './types';
+
+export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>> = {
+    'Comercial': {
+        Dashboard: { view: true, edit: true },
+        Opportunities: { view: true, edit: true },
+        Prospects: { view: true, edit: true },
+        Clients: { view: true, edit: true },
+        Grilla: { view: true, edit: true },
+        PNTs: { view: true, edit: true },
+        Canjes: { view: true, edit: true },
+        Invoices: { view: true, edit: true },
+        Billing: { view: true, edit: true },
+        Calendar: { view: true, edit: true },
+        Licenses: { view: true, edit: true },
+        Approvals: { view: true, edit: true },
+        Activity: { view: true, edit: true },
+        Team: { view: true, edit: true },
+        Rates: { view: true, edit: true },
+        Reports: { view: true, edit: true },
+        Import: { view: true, edit: true },
+    },
+    'Recursos Humanos': {
+        Licenses: { view: true, edit: true },
+        Canjes: { view: true, edit: true },
+        Team: { view: true, edit: true },
+    },
+    'Pautado': {
+        Clients: { view: true, edit: false },
+        Opportunities: { view: true, edit: false },
+        PNTs: { view: true, edit: true },
+        Grilla: { view: true, edit: true },
+    },
+    'Administración': {
+        Dashboard: { view: true, edit: true },
+        Opportunities: { view: true, edit: true },
+        Clients: { view: true, edit: true },
+        Canjes: { view: true, edit: true },
+        Invoices: { view: true, edit: true },
+        Billing: { view: true, edit: true },
+        Team: { view: true, edit: true },
+        Rates: { view: true, edit: true },
+        Reports: { view: true, edit: true },
+        Import: { view: true, edit: true },
+    },
+    'Programación': {
+        Grilla: { view: true, edit: false },
+        PNTs: { view: true, edit: false },
+    },
+    'Redacción': {
+         PNTs: { view: true, edit: false },
+    }
+};
 
 export const opportunityStages: OpportunityStage[] = [
   'Nuevo',
@@ -40,3 +92,4 @@ export const provinciasArgentina = [
   "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
   "Tucumán"
 ];
+

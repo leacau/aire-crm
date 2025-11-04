@@ -1,65 +1,15 @@
 
 
+
 import type { User, AreaType, ScreenName, ScreenPermission } from './types';
 import { getAreaPermissions } from './firebase-service';
+import { defaultPermissions } from './data';
 
 // In-memory cache for permissions
 let permissionsCache: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>> | null = null;
 let cacheTimestamp: number | null = null;
 const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
-// Default permissions for each area, used as a fallback or for seeding the database
-export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>> = {
-    'Comercial': {
-        Dashboard: { view: true, edit: true },
-        Opportunities: { view: true, edit: true },
-        Prospects: { view: true, edit: true },
-        Clients: { view: true, edit: true },
-        Grilla: { view: true, edit: true },
-        PNTs: { view: true, edit: true },
-        Canjes: { view: true, edit: true },
-        Invoices: { view: true, edit: true },
-        Billing: { view: true, edit: true },
-        Calendar: { view: true, edit: true },
-        Licenses: { view: true, edit: true },
-        Approvals: { view: true, edit: true },
-        Activity: { view: true, edit: true },
-        Team: { view: true, edit: true },
-        Rates: { view: true, edit: true },
-        Reports: { view: true, edit: true },
-        Import: { view: true, edit: true },
-    },
-    'Recursos Humanos': {
-        Licenses: { view: true, edit: true },
-        Canjes: { view: true, edit: true },
-        Team: { view: true, edit: true },
-    },
-    'Pautado': {
-        Clients: { view: true, edit: false },
-        Opportunities: { view: true, edit: false },
-        PNTs: { view: true, edit: true },
-        Grilla: { view: true, edit: true },
-    },
-    'Administración': {
-        Dashboard: { view: true, edit: true },
-        Opportunities: { view: true, edit: true },
-        Clients: { view: true, edit: true },
-        Canjes: { view: true, edit: true },
-        Invoices: { view: true, edit: true },
-        Billing: { view: true, edit: true },
-        Team: { view: true, edit: true },
-        Rates: { view: true, edit: true },
-        Reports: { view: true, edit: true },
-        Import: { view: true, edit: true },
-    },
-    'Programación': {
-        Grilla: { view: true, edit: false },
-        PNTs: { view: true, edit: false },
-    },
-    'Redacción': {
-         PNTs: { view: true, edit: false },
-    }
-};
 
 /**
  * Fetches permissions from Firestore or returns from cache.
@@ -154,3 +104,4 @@ export function hasPermission(user: User, screen: ScreenName, permissionType: 'v
 
 // Initial fetch to populate cache on app load.
 getPermissions();
+

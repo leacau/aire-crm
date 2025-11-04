@@ -1,5 +1,6 @@
 
 
+
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission } from './types';
@@ -7,7 +8,7 @@ import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { defaultPermissions } from './permissions';
+import { defaultPermissions } from './data';
 
 
 const clientsCollection = collection(db, 'clients');
@@ -1758,3 +1759,4 @@ export const updateClientActivity = async (
 
     await updateDoc(docRef, updateData);
 };
+
