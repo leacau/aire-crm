@@ -2,11 +2,13 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { defaultPermissions } from './permissions';
+
 
 const clientsCollection = collection(db, 'clients');
 const peopleCollection = collection(db, 'people');
@@ -21,16 +23,36 @@ const programsCollection = collection(db, 'programs');
 const commercialItemsCollection = collection(db, 'commercial_items');
 const prospectsCollection = collection(db, 'prospects');
 const licensesCollection = collection(db, 'licencias');
+const configCollection = collection(db, 'system_config');
+
 
 const parseDateWithTimezone = (dateString: string) => {
     if (!dateString || typeof dateString !== 'string') return null;
-    // Handles "YYYY-MM-DD" by splitting and creating a date in the local timezone,
-    // avoiding UTC interpretation that can shift the date back by one day.
     const parts = dateString.split('-').map(Number);
     if (parts.length !== 3 || parts.some(isNaN)) return null;
     const [year, month, day] = parts;
     return new Date(year, month - 1, day);
 };
+
+// --- Permissions ---
+export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
+    const docRef = doc(configCollection, 'area_permissions');
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+        return docSnap.data().permissions;
+    } else {
+        // Seed the database with default permissions if it doesn't exist
+        await setDoc(docRef, { permissions: defaultPermissions });
+        return defaultPermissions;
+    }
+};
+
+export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>): Promise<void> => {
+    const docRef = doc(configCollection, 'area_permissions');
+    await setDoc(docRef, { permissions });
+};
+
 
 // --- Monthly Closure Functions ---
 export const saveMonthlyClosure = async (advisorId: string, month: string, value: number, managerId: string) => {
@@ -72,10 +94,9 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
             }
             if (typeof field === 'string') {
                 try {
-                    // Try to parse to ensure it's a valid date string before returning
                     return new Date(field).toISOString();
                 } catch (e) {
-                    return undefined; // Return undefined if string is not a valid date
+                    return undefined; 
                 }
             }
             return undefined;
@@ -84,7 +105,7 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
         return {
             id: doc.id,
             ...data,
-            requestDate: convertTimestamp(data.requestDate)!, // This should always exist and be valid
+            requestDate: convertTimestamp(data.requestDate)!,
             approvedAt: convertTimestamp(data.approvedAt),
         } as VacationRequest;
     });
@@ -102,7 +123,6 @@ export const createVacationRequest = async (
         requestDate: serverTimestamp(),
     };
     
-    // Ensure dates are strings for Firestore, not Date objects from the form
     dataToSave.startDate = requestData.startDate;
     dataToSave.endDate = requestData.endDate;
     dataToSave.returnDate = requestData.returnDate;
@@ -133,9 +153,9 @@ export const approveVacationRequest = async (
     requestId: string,
     newStatus: VacationRequestStatus,
     approverId: string,
-    applicantEmail?: string | null
 ): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
     const requestRef = doc(db, 'licencias', requestId);
+    const applicantEmail: string | null = (await getDoc(requestRef)).data()?.email;
 
     await runTransaction(db, async (transaction) => {
         const requestDoc = await transaction.get(requestRef);
@@ -429,32 +449,6 @@ export const getCommercialItemsBySeries = async (seriesId: string): Promise<Comm
     });
 };
 
-export const createCommercialItem = async (item: Omit<CommercialItem, 'id'>, userId: string, userName: string): Promise<string> => {
-    const dataToSave: { [key: string]: any } = { ...item, createdAt: serverTimestamp(), createdBy: userId };
-
-    Object.keys(dataToSave).forEach(key => {
-        if (dataToSave[key] === undefined) {
-            delete dataToSave[key];
-        }
-    });
-
-    const docRef = await addDoc(commercialItemsCollection, dataToSave);
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'commercial_item',
-        entityId: docRef.id,
-        entityName: item.title || item.description,
-        details: `creó un elemento comercial <strong>${item.title || item.description}</strong>`,
-        ownerName: item.clientName || userName,
-    });
-
-    return docRef.id;
-};
-
-
 export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string, isEditingSeries?: boolean): Promise<string | void> => {
     const batch = writeBatch(db);
     const newSeriesId = item.seriesId || doc(collection(db, 'dummy')).id;
@@ -502,7 +496,7 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
                 seriesId: dates.length > 1 ? newSeriesId : undefined,
             };
 
-            const dataToSave: { [key: string]: any } = { ...itemData, createdBy: userId };
+            const dataToSave: { [key: string]: any } = { ...itemData, createdBy: userId, createdAt: serverTimestamp() };
             
             if (dataToSave.clientId === undefined) delete dataToSave.clientId;
             if (dataToSave.clientName === undefined) delete dataToSave.clientName;
@@ -755,8 +749,8 @@ export const getInvoices = async (): Promise<Invoice[]> => {
     return snapshot.docs.map(doc => {
         const data = doc.data();
         
-        const validDate = parseDateWithTimezone(data.date);
-        const validDatePaid = parseDateWithTimezone(data.datePaid);
+        const validDate = data.date && typeof data.date === 'string' ? parseDateWithTimezone(data.date) : null;
+        const validDatePaid = data.datePaid && typeof data.datePaid === 'string' ? parseDateWithTimezone(data.datePaid) : null;
 
         return {
             id: doc.id,

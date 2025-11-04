@@ -1,5 +1,6 @@
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -266,7 +267,13 @@ export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Geren
 export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción';
 export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'];
 
-export type ScreenName = 'Dashboard' | 'Opportunities' | 'Prospects' | 'Clients' | 'Grilla' | 'PNTs' | 'Canjes' | 'Invoices' | 'Billing' | 'Calendar' | 'Licenses' | 'Approvals' | 'Activity' | 'Team' | 'Rates' | 'Reports' | 'Import';
+export const screenNames = [
+    'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs', 
+    'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals', 
+    'Activity', 'Team', 'Rates', 'Reports', 'Import'
+] as const;
+export type ScreenName = typeof screenNames[number];
+
 
 export type ScreenPermission = {
     view: boolean;
