@@ -458,13 +458,14 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
     const formattedDates = new Set(dates.map(d => d.toISOString().split('T')[0]));
     
     const itemToSave: {[key: string]: any} = {...item};
+    
     if (!itemToSave.clientId) {
-      delete itemToSave.clientId;
-      delete itemToSave.clientName;
+      itemToSave.clientId = deleteField();
+      itemToSave.clientName = deleteField();
     }
     if (!itemToSave.opportunityId) {
-      delete itemToSave.opportunityId;
-      delete itemToSave.opportunityTitle;
+      itemToSave.opportunityId = deleteField();
+      itemToSave.opportunityTitle = deleteField();
     }
 
 
@@ -749,15 +750,17 @@ export const getInvoices = async (): Promise<Invoice[]> => {
     const snapshot = await getDocs(query(invoicesCollection, orderBy("dateGenerated", "desc")));
     return snapshot.docs.map(doc => {
       const data = doc.data();
-      const invoiceDate = data.date ? format(parseDateWithTimezone(data.date), 'yyyy-MM-dd') : undefined;
-      const datePaid = data.datePaid ? format(parseDateWithTimezone(data.datePaid), 'yyyy-MM-dd') : undefined;
+      // Safe date parsing
+      const invoiceDate = data.date ? format(parseISO(data.date), 'yyyy-MM-dd') : undefined;
+      const datePaid = data.datePaid ? format(parseISO(data.datePaid), 'yyyy-MM-dd') : undefined;
+
       return { 
           id: doc.id,
           ...data,
           date: invoiceDate,
           dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
           datePaid: datePaid,
-       } as Invoice
+       } as Invoice;
     });
 };
 
