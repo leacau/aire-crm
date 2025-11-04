@@ -497,12 +497,12 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
                 seriesId: dates.length > 1 ? newSeriesId : undefined,
             };
 
-            const dataToSave = { ...itemData, createdBy: userId };
+            const dataToSave: { [key: string]: any } = { ...itemData, createdBy: userId };
             
-            if (!dataToSave.clientId) delete (dataToSave as any).clientId;
-            if (!dataToSave.clientName) delete (dataToSave as any).clientName;
-            if (!dataToSave.opportunityId) delete (dataToSave as any).opportunityId;
-            if (!dataToSave.opportunityTitle) delete (dataToSave as any).opportunityTitle;
+            if (dataToSave.clientId === undefined) delete dataToSave.clientId;
+            if (dataToSave.clientName === undefined) delete dataToSave.clientName;
+            if (dataToSave.opportunityId === undefined) delete dataToSave.opportunityId;
+            if (dataToSave.opportunityTitle === undefined) delete dataToSave.opportunityTitle;
 
             batch.set(docRef, dataToSave);
         }
@@ -749,13 +749,14 @@ export const getInvoices = async (): Promise<Invoice[]> => {
     const snapshot = await getDocs(query(invoicesCollection, orderBy("dateGenerated", "desc")));
     return snapshot.docs.map(doc => {
       const data = doc.data();
-      const invoiceDate = data.date ? format(parseDateWithTimezone(data.date), 'yyyy-MM-dd') : 'N/A';
+      const invoiceDate = data.date ? format(parseDateWithTimezone(data.date), 'yyyy-MM-dd') : undefined;
+      const datePaid = data.datePaid ? format(parseDateWithTimezone(data.datePaid), 'yyyy-MM-dd') : undefined;
       return { 
           id: doc.id,
           ...data,
           date: invoiceDate,
           dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
-          datePaid: data.datePaid ? format(parseDateWithTimezone(data.datePaid), 'yyyy-MM-dd') : undefined,
+          datePaid: datePaid,
        } as Invoice
     });
 };
