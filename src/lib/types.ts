@@ -264,20 +264,21 @@ export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Impo
 export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Import', 'Admin'];
 
 export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción';
+export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'];
 
 export type ScreenName = 'Dashboard' | 'Opportunities' | 'Prospects' | 'Clients' | 'Grilla' | 'PNTs' | 'Canjes' | 'Invoices' | 'Billing' | 'Calendar' | 'Licenses' | 'Approvals' | 'Activity' | 'Team' | 'Rates' | 'Reports' | 'Import';
 
 export type ScreenPermission = {
     view: boolean;
     edit: boolean;
-}
+};
 
 export type Area = {
     id: string;
     name: AreaType;
     managerIds: string[];
     permissions: Partial<Record<ScreenName, ScreenPermission>>;
-}
+};
 
 export type MonthlyClosure = {
   // Key is "YYYY-MM"
@@ -296,6 +297,7 @@ export type User = {
   deletedAt?: string;
   vacationDays?: number;
   monthlyClosures?: MonthlyClosure;
+  permissions?: Partial<Record<ScreenName, ScreenPermission>>;
 };
 
 export type VacationRequestStatus = 'Pendiente' | 'Aprobado' | 'Rechazado';

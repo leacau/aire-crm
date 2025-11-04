@@ -19,25 +19,27 @@ import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList,
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
+import type { ScreenName } from '@/lib/types';
+import { hasPermission } from '@/lib/permissions';
 
-const menuItems = [
-  { href: '/', label: 'Panel', icon: Home, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/opportunities', label: 'Oportunidades', icon: CircleDollarSign, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/prospects', label: 'Prospectos', icon: Lightbulb, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/clients', label: 'Clientes', icon: Users, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/grilla', label: 'Grilla', icon: Grid3X3, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/pnts', label: 'PNTs', icon: Megaphone, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/canjes', label: 'Canjes', icon: Repeat, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/invoices', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/billing', label: 'Cobranzas', icon: Banknote, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/calendar', label: 'Calendario', icon: Calendar, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/licencias', label: 'Licencias', icon: ClipboardCheck, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, roles: ['Jefe', 'Gerencia'] },
-  { href: '/activity', label: 'Actividad', icon: LayoutList, roles: ['Jefe', 'Gerencia'] },
-  { href: '/team', label: 'Equipo', icon: Users, roles: ['Jefe', 'Gerencia', 'Administracion'] },
-  { href: '/rates', label: 'Tarifas', icon: Banknote, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion']},
-  { href: '/reports', label: 'Reportes', icon: BarChart, roles: ['Jefe', 'Gerencia'] },
-  { href: '/import', label: 'Importar', icon: Upload, roles: ['Jefe', 'Gerencia', 'Administracion'] },
+const menuItems: { href: string; label: string; icon: React.ElementType, screenName: ScreenName }[] = [
+  { href: '/', label: 'Panel', icon: Home, screenName: 'Dashboard' },
+  { href: '/opportunities', label: 'Oportunidades', icon: CircleDollarSign, screenName: 'Opportunities' },
+  { href: '/prospects', label: 'Prospectos', icon: Lightbulb, screenName: 'Prospects' },
+  { href: '/clients', label: 'Clientes', icon: Users, screenName: 'Clients' },
+  { href: '/grilla', label: 'Grilla', icon: Grid3X3, screenName: 'Grilla' },
+  { href: '/pnts', label: 'PNTs', icon: Megaphone, screenName: 'PNTs' },
+  { href: '/canjes', label: 'Canjes', icon: Repeat, screenName: 'Canjes' },
+  { href: '/invoices', label: 'Facturación', icon: Receipt, screenName: 'Invoices' },
+  { href: '/billing', label: 'Cobranzas', icon: Banknote, screenName: 'Billing' },
+  { href: '/calendar', label: 'Calendario', icon: Calendar, screenName: 'Calendar' },
+  { href: '/licencias', label: 'Licencias', icon: ClipboardCheck, screenName: 'Licenses' },
+  { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, screenName: 'Approvals' },
+  { href: '/activity', label: 'Actividad', icon: LayoutList, screenName: 'Activity' },
+  { href: '/team', label: 'Equipo', icon: Users, screenName: 'Team' },
+  { href: '/rates', label: 'Tarifas', icon: Banknote, screenName: 'Rates' },
+  { href: '/reports', label: 'Reportes', icon: BarChart, screenName: 'Reports' },
+  { href: '/import', label: 'Importar', icon: Upload, screenName: 'Import' },
 ];
 
 function MenuLink({ item }: { item: typeof menuItems[0] }) {
@@ -76,7 +78,9 @@ export function AppSidebar() {
   
   if (!userInfo) return null;
 
-  const accessibleItems = menuItems.filter(item => item.roles.includes(userInfo.role));
+  const accessibleItems = menuItems.filter(item => 
+    hasPermission(userInfo, item.screenName, 'view')
+  );
 
   return (
     <Sidebar collapsible="icon">
