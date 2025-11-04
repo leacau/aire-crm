@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -22,7 +23,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { getAllOpportunities, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
-import { isWithinInterval } from 'date-fns';
+import { isWithinInterval, addMonths, startOfMonth, parseISO, isSameMonth } from 'date-fns';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'border-blue-500',
@@ -33,6 +34,16 @@ const stageColors: Record<OpportunityStage, string> = {
   'Cerrado - Perdido': 'border-red-500',
   'Cerrado - No Definido': 'border-gray-500',
 };
+
+const getPeriodDurationInMonths = (period: string): number => {
+    switch (period) {
+        case 'Mensual': return 1;
+        case 'Trimestral': return 3;
+        case 'Semestral': return 6;
+        case 'Anual': return 12;
+        default: return 1;
+    }
+}
 
 interface KanbanBoardProps {
   dateRange?: DateRange;
@@ -256,11 +267,24 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
       opps = opps.filter(opp => userClientIds.has(opp.clientId));
     }
     
-    if (dateRange?.from && dateRange?.to) {
-      opps = opps.filter(opp => {
-        const closeDate = new Date(opp.closeDate);
-        return isWithinInterval(closeDate, { start: dateRange.from!, end: dateRange.to! });
-      });
+    if (dateRange?.from) {
+        const filterDate = startOfMonth(dateRange.from);
+
+        opps = opps.filter(opp => {
+            if (!opp.closeDate) return false;
+            
+            const closeDate = parseISO(opp.closeDate);
+            const maxPeriodicity = opp.periodicidad?.[0] || 'Ocasional';
+            const durationMonths = getPeriodDurationInMonths(maxPeriodicity);
+
+            if (durationMonths > 1) { // It's a periodic opportunity (more than 1 month)
+                const startDate = startOfMonth(closeDate);
+                const endDate = addMonths(startDate, durationMonths -1);
+                return filterDate >= startDate && filterDate <= endDate;
+            } else { // It's a one-time or monthly opportunity
+                return isSameMonth(filterDate, closeDate);
+            }
+        });
     }
 
     if (selectedClient !== 'all') {
