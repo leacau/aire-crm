@@ -125,6 +125,7 @@ export function TeamPerformanceTable() {
         const wonOpps = userOpps.filter(opp => opp.stage === 'Cerrado - Ganado');
         
         const currentMonthOpps = wonOpps.filter(opp => {
+          if (!opp.closeDate) return false;
           const closeDate = parseISO(opp.closeDate);
           return isWithinInterval(closeDate, { start: currentMonthStart, end: currentMonthEnd });
         });
@@ -341,4 +342,3 @@ export function TeamPerformanceTable() {
     </>
   );
 }
-
