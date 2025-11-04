@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Calendar } from '../ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { getPrograms } from '@/lib/firebase-service';
@@ -60,8 +60,8 @@ export function OrdenPautadoFormDialog({ isOpen, onOpenChange, onSave, orden }: 
       if (orden) {
         setFormData(orden);
         setDateRange({
-            from: orden.fechaInicio ? new Date(orden.fechaInicio) : undefined,
-            to: orden.fechaFin ? new Date(orden.fechaFin) : undefined,
+            from: orden.fechaInicio ? parseISO(orden.fechaInicio) : undefined,
+            to: orden.fechaFin ? parseISO(orden.fechaFin) : undefined,
         })
       } else {
         setFormData({

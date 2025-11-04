@@ -216,10 +216,10 @@ export function CanjeFormDialog({
                         <PopoverTrigger asChild>
                         <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !formData.fechaResolucion && "text-muted-foreground")}>
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {formData.fechaResolucion ? format(new Date(formData.fechaResolucion), "PPP", { locale: es }) : <span>Selecciona una fecha</span>}
+                            {formData.fechaResolucion ? format(parseISO(formData.fechaResolucion), "PPP", { locale: es }) : <span>Selecciona una fecha</span>}
                         </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={formData.fechaResolucion ? new Date(formData.fechaResolucion) : undefined} onSelect={(d) => handleDateChange('fechaResolucion', d)} initialFocus /></PopoverContent>
+                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={formData.fechaResolucion ? parseISO(formData.fechaResolucion) : undefined} onSelect={(d) => handleDateChange('fechaResolucion', d)} initialFocus /></PopoverContent>
                     </Popover>
                 </div>
                 <div className="space-y-2">
@@ -290,10 +290,10 @@ export function CanjeFormDialog({
                       <PopoverTrigger asChild>
                         <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !formData.fechaCulminacion && "text-muted-foreground")}>
                           <CalendarIcon className="mr-2 h-4 w-4" />
-                          {formData.fechaCulminacion ? format(new Date(formData.fechaCulminacion), "PPP", { locale: es }) : <span>Fecha final</span>}
+                          {formData.fechaCulminacion ? format(parseISO(formData.fechaCulminacion), "PPP", { locale: es }) : <span>Fecha final</span>}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={formData.fechaCulminacion ? new Date(formData.fechaCulminacion) : undefined} onSelect={(d) => handleDateChange('fechaCulminacion', d)} initialFocus /></PopoverContent>
+                      <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={formData.fechaCulminacion ? parseISO(formData.fechaCulminacion) : undefined} onSelect={(d) => handleDateChange('fechaCulminacion', d)} initialFocus /></PopoverContent>
                     </Popover>
                    </div>
                    <div className="space-y-2">
@@ -374,7 +374,7 @@ export function CanjeFormDialog({
                                                    ${(item.valorCanje || 0).toLocaleString('es-AR')}
                                                 </TableCell>
                                                 <TableCell className="text-xs">
-                                                    {item.fechaCulminacion ? format(new Date(item.fechaCulminacion), "P", { locale: es }) : '-'}
+                                                    {item.fechaCulminacion ? format(parseISO(item.fechaCulminacion), "P", { locale: es }) : '-'}
                                                     {item.culminadoPorName && <p className="text-muted-foreground">por {item.culminadoPorName}</p>}
                                                 </TableCell>
                                                 <TableCell>
@@ -402,7 +402,7 @@ export function CanjeFormDialog({
                                                                 <div className="grid grid-cols-2 gap-4">
                                                                     <div className="space-y-2">
                                                                         <Label>Fecha Culminación</Label>
-                                                                        <Input type="date" value={item.fechaCulminacion?.split('T')[0] || ''} onChange={(e) => handleHistoryChange(item.mes, 'fechaCulminacion', e.target.value)} disabled={!canManageAll} />
+                                                                        <Input type="date" value={item.fechaCulminacion ? item.fechaCulminacion.split('T')[0] : ''} onChange={(e) => handleHistoryChange(item.mes, 'fechaCulminacion', e.target.value)} disabled={!canManageAll} />
                                                                     </div>
                                                                     <div className="space-y-2">
                                                                         <Label>Estado Final</Label>

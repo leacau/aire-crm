@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
@@ -52,8 +52,8 @@ export function LicensesTable({ requests, isManagerView, currentUserId, onEdit, 
               const isOwner = req.userId === currentUserId;
               
               const canEditRequest = isManagerView || (isOwner && req.status === 'Pendiente');
-              const startDate = new Date(req.startDate);
-              const endDate = new Date(req.endDate);
+              const startDate = parseISO(req.startDate);
+              const endDate = parseISO(req.endDate);
 
               return (
                 <TableRow key={req.id}>
@@ -67,7 +67,7 @@ export function LicensesTable({ requests, isManagerView, currentUserId, onEdit, 
                       {isManagerView && <div className="text-xs text-muted-foreground capitalize">{format(endDate, 'eeee', { locale: es })}</div>}
                   </TableCell>
                   <TableCell>{req.daysRequested}</TableCell>
-                  <TableCell>{format(new Date(req.returnDate), 'P', { locale: es })}</TableCell>
+                  <TableCell>{format(parseISO(req.returnDate), 'P', { locale: es })}</TableCell>
                   <TableCell>{getStatusBadge(req.status)}</TableCell>
                   <TableCell className="text-right">
                     {canModify && (
