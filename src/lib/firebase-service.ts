@@ -459,13 +459,13 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
     
     const itemToSave: {[key: string]: any} = {...item};
     
-    if (!itemToSave.clientId) {
-      itemToSave.clientId = deleteField();
-      itemToSave.clientName = deleteField();
+    if (itemToSave.clientId === undefined || itemToSave.clientId === null || itemToSave.clientId === '') {
+      delete itemToSave.clientId;
+      delete itemToSave.clientName;
     }
-    if (!itemToSave.opportunityId) {
-      itemToSave.opportunityId = deleteField();
-      itemToSave.opportunityTitle = deleteField();
+    if (itemToSave.opportunityId === undefined || itemToSave.opportunityId === null || itemToSave.opportunityId === '') {
+      delete itemToSave.opportunityId;
+      delete itemToSave.opportunityTitle;
     }
 
 
@@ -749,20 +749,20 @@ export const deleteCanje = async (id: string, userId: string, userName: string):
 export const getInvoices = async (): Promise<Invoice[]> => {
     const snapshot = await getDocs(query(invoicesCollection, orderBy("dateGenerated", "desc")));
     return snapshot.docs.map(doc => {
-      const data = doc.data();
-      // Safe date parsing
-      const invoiceDate = data.date ? format(parseISO(data.date), 'yyyy-MM-dd') : undefined;
-      const datePaid = data.datePaid ? format(parseISO(data.datePaid), 'yyyy-MM-dd') : undefined;
+        const data = doc.data();
+        const invoiceDate = data.date ? format(parseDateWithTimezone(data.date), 'yyyy-MM-dd') : undefined;
+        const datePaid = data.datePaid ? format(parseDateWithTimezone(data.datePaid), 'yyyy-MM-dd') : undefined;
 
-      return { 
-          id: doc.id,
-          ...data,
-          date: invoiceDate,
-          dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
-          datePaid: datePaid,
-       } as Invoice;
+        return {
+            id: doc.id,
+            ...data,
+            date: invoiceDate,
+            dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
+            datePaid: datePaid,
+        } as Invoice;
     });
 };
+
 
 export const getInvoicesForOpportunity = async (opportunityId: string): Promise<Invoice[]> => {
     const q = query(invoicesCollection, where("opportunityId", "==", opportunityId));

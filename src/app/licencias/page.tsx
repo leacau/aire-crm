@@ -92,9 +92,10 @@ export default function LicensesPage() {
       if (emailPayload) {
           getGoogleAccessToken().then(token => {
               if (token) {
-                  sendEmail({ ...emailPayload, accessToken: token }).catch(err => {
-                      console.error("Failed to send creation email in background:", err);
-                  });
+                // Fire-and-forget email sending
+                sendEmail({ ...emailPayload, accessToken: token }).catch(err => {
+                    console.error("Failed to send creation email in background:", err);
+                });
               }
           });
       }
@@ -125,9 +126,10 @@ export default function LicensesPage() {
       if (emailPayload) {
           getGoogleAccessToken().then(token => {
               if (token) {
-                  sendEmail({ ...emailPayload, accessToken: token }).catch(err => {
-                       console.error("Failed to send approval email in background:", err);
-                  });
+                 // Fire-and-forget email sending. If it fails, don't block the UI.
+                 sendEmail({ ...emailPayload, accessToken: token }).catch(err => {
+                       console.error("Failed to send approval email in background (non-critical):", err);
+                 });
               }
           });
       }
