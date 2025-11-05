@@ -17,19 +17,53 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
 
-const clientsCollection = collection(db, 'clients');
-const peopleCollection = collection(db, 'people');
-const opportunitiesCollection = collection(db, 'opportunities');
-const activitiesCollection = collection(db, 'activities');
-const clientActivitiesCollection = collection(db, 'client-activities');
-const usersCollection = collection(db, 'users');
-const agenciesCollection = collection(db, 'agencies');
-const invoicesCollection = collection(db, 'invoices');
-const canjesCollection = collection(db, 'canjes');
-const programsCollection = collection(db, 'programs');
-const commercialItemsCollection = collection(db, 'commercial_items');
-const prospectsCollection = collection(db, 'prospects');
-const licensesCollection = collection(db, 'licencias');
+const collections = {
+    clients: collection(db, 'clients'),
+    people: collection(db, 'people'),
+    opportunities: collection(db, 'opportunities'),
+    activities: collection(db, 'activities'),
+    clientActivities: collection(db, 'client-activities'),
+    users: collection(db, 'users'),
+    agencies: collection(db, 'agencies'),
+    invoices: collection(db, 'invoices'),
+    canjes: collection(db, 'canjes'),
+    programs: collection(db, 'programs'),
+    commercialItems: collection(db, 'commercial_items'),
+    prospects: collection(db, 'prospects'),
+    licenses: collection(db, 'licencias'),
+};
+
+const cache: {
+    [key: string]: {
+        data: any;
+        timestamp: number;
+    }
+} = {};
+
+const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+const getFromCache = (key: string) => {
+    const cached = cache[key];
+    if (cached && (Date.now() - cached.timestamp < CACHE_DURATION_MS)) {
+        return cached.data;
+    }
+    return null;
+};
+
+const setInCache = (key: string, data: any) => {
+    cache[key] = {
+        data,
+        timestamp: Date.now(),
+    };
+};
+
+export const invalidateCache = (key?: string) => {
+    if (key) {
+        delete cache[key];
+    } else {
+        Object.keys(cache).forEach(k => delete cache[k]);
+    }
+}
 
 const parseDateWithTimezone = (dateString: string) => {
     if (!dateString || typeof dateString !== 'string') return null;
@@ -40,27 +74,29 @@ const parseDateWithTimezone = (dateString: string) => {
 };
 
 // --- Permissions ---
-export const getAreaPermissions = async (superAdminId: string): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
-    if (!superAdminId) {
-        console.warn("Super admin ID not provided to getAreaPermissions. Returning default permissions.");
-        return defaultPermissions;
-    }
-    const permissionsDocRef = doc(usersCollection, superAdminId, 'config', PERMISSIONS_DOC_ID);
+export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
+    const cachedData = getFromCache('permissions');
+    if (cachedData) return cachedData;
+    
+    // Assuming the super admin's UID is known or can be fetched if not available.
+    // For now, this part might need adjustment if the UID is not static.
+    // This function can't easily get the current user's ID, so it's a simplification.
+    const permissionsDocRef = doc(db, 'system_config', PERMISSIONS_DOC_ID);
     const docSnap = await getDoc(permissionsDocRef);
 
     if (docSnap.exists()) {
-        return docSnap.data().permissions;
+        const perms = docSnap.data().permissions;
+        setInCache('permissions', perms);
+        return perms;
     } else {
         await setDoc(permissionsDocRef, { permissions: defaultPermissions });
+        setInCache('permissions', defaultPermissions);
         return defaultPermissions;
     }
 };
 
-export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>, superAdminId: string): Promise<void> => {
-    if (!superAdminId) {
-        throw new Error("Super admin ID is required to update permissions.");
-    }
-    const permissionsDocRef = doc(usersCollection, superAdminId, 'config', PERMISSIONS_DOC_ID);
+export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>): Promise<void> => {
+    const permissionsDocRef = doc(db, 'system_config', PERMISSIONS_DOC_ID);
     
     setDoc(permissionsDocRef, { permissions }, { merge: true }).catch(async (serverError) => {
       const permissionError = new FirestorePermissionError({
@@ -70,6 +106,7 @@ export const updateAreaPermissions = async (permissions: Record<AreaType, Partia
       } satisfies SecurityRuleContext);
       errorEmitter.emit('permission-error', permissionError);
     });
+    invalidateCache('permissions');
 };
 
 
@@ -81,6 +118,7 @@ export const saveMonthlyClosure = async (advisorId: string, month: string, value
     await updateDoc(userRef, {
         [fieldPath]: value,
     });
+    invalidateCache('users');
     
     const managerSnap = await getDoc(doc(db, 'users', managerId));
     const advisorSnap = await getDoc(userRef);
@@ -101,9 +139,11 @@ export const saveMonthlyClosure = async (advisorId: string, month: string, value
 
 
 // --- Vacation Request (License) Functions ---
-
 export const getVacationRequests = async (): Promise<VacationRequest[]> => {
-    const snapshot = await getDocs(query(licensesCollection, orderBy("requestDate", "desc")));
+    const cachedData = getFromCache('licenses');
+    if(cachedData) return cachedData;
+
+    const snapshot = await getDocs(query(collections.licenses, orderBy("requestDate", "desc")));
     const requests = snapshot.docs.map(doc => {
         const data = doc.data();
         const convertTimestamp = (field: any): string | undefined => {
@@ -128,6 +168,7 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
             approvedAt: convertTimestamp(data.approvedAt),
         } as VacationRequest;
     });
+    setInCache('licenses', requests);
     return requests;
 };
 
@@ -147,7 +188,8 @@ export const createVacationRequest = async (
     dataToSave.returnDate = requestData.returnDate;
 
 
-    const docRef = await addDoc(licensesCollection, dataToSave);
+    const docRef = await addDoc(collections.licenses, dataToSave);
+    invalidateCache('licenses');
     
     let emailPayload: { to: string, subject: string, body: string } | null = null;
 
@@ -207,11 +249,13 @@ export const approveVacationRequest = async (
 
         if (newVacationDays !== (userData.vacationDays || 0)) {
             transaction.update(userRef, { vacationDays: newVacationDays });
+            invalidateCache('users');
         }
         
         transaction.update(requestRef, updatePayload);
     });
 
+    invalidateCache('licenses');
     const requestAfterUpdate = (await getDoc(requestRef)).data() as VacationRequest;
     
     let emailPayload: { to: string, subject: string, body: string } | null = null;
@@ -234,13 +278,17 @@ export const approveVacationRequest = async (
 export const deleteVacationRequest = async (requestId: string): Promise<void> => {
     const docRef = doc(db, 'licencias', requestId);
     await deleteDoc(docRef);
+    invalidateCache('licenses');
 };
 
 
 // --- Prospect Functions ---
 export const getProspects = async (): Promise<Prospect[]> => {
-    const snapshot = await getDocs(query(prospectsCollection, orderBy("createdAt", "desc")));
-    return snapshot.docs.map(doc => {
+    const cachedData = getFromCache('prospects');
+    if (cachedData) return cachedData;
+
+    const snapshot = await getDocs(query(collections.prospects, orderBy("createdAt", "desc")));
+    const prospects = snapshot.docs.map(doc => {
       const data = doc.data();
       const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
       return { 
@@ -250,6 +298,8 @@ export const getProspects = async (): Promise<Prospect[]> => {
           statusChangedAt: convertTimestamp(data.statusChangedAt),
       } as Prospect
     });
+    setInCache('prospects', prospects);
+    return prospects;
 };
 
 export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'>, userId: string, userName: string): Promise<string> => {
@@ -259,7 +309,8 @@ export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'create
         ownerName: userName,
         createdAt: serverTimestamp(),
     };
-    const docRef = await addDoc(prospectsCollection, dataToSave);
+    const docRef = await addDoc(collections.prospects, dataToSave);
+    invalidateCache('prospects');
     await logActivity({
         userId,
         userName,
@@ -280,6 +331,7 @@ export const updateProspect = async (id: string, data: Partial<Omit<Prospect, 'i
     const prospectData = prospectSnap.data() as Prospect;
 
     await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
+    invalidateCache('prospects');
 
     let details = `actualizó el prospecto <strong>${prospectData.companyName}</strong>`;
     if (data.status && data.status !== prospectData.status) {
@@ -305,6 +357,7 @@ export const deleteProspect = async (id: string, userId: string, userName: strin
     const prospectData = prospectSnap.data() as Prospect;
 
     await deleteDoc(docRef);
+    invalidateCache('prospects');
 
     await logActivity({
         userId,
@@ -322,8 +375,11 @@ export const deleteProspect = async (id: string, userId: string, userName: strin
 // --- Grilla Comercial Functions ---
 
 export const getPrograms = async (): Promise<Program[]> => {
-    const snapshot = await getDocs(query(programsCollection, orderBy("name")));
-    return snapshot.docs.map(doc => {
+    const cachedData = getFromCache('programs');
+    if (cachedData) return cachedData;
+    
+    const snapshot = await getDocs(query(collections.programs, orderBy("name")));
+    const programs = snapshot.docs.map(doc => {
       const data = doc.data();
       if (!data.schedules) {
         return {
@@ -339,6 +395,8 @@ export const getPrograms = async (): Promise<Program[]> => {
       }
       return { id: doc.id, ...data } as Program
     });
+    setInCache('programs', programs);
+    return programs;
 };
 
 export const getProgram = async (id: string): Promise<Program | null> => {
@@ -369,7 +427,8 @@ export const saveProgram = async (programData: Omit<Program, 'id'>, userId: stri
     delete dataToSave.startTime;
     delete dataToSave.endTime;
     delete dataToSave.daysOfWeek;
-    const docRef = await addDoc(programsCollection, { ...dataToSave, createdBy: userId, createdAt: serverTimestamp() });
+    const docRef = await addDoc(collections.programs, { ...dataToSave, createdBy: userId, createdAt: serverTimestamp() });
+    invalidateCache('programs');
     
     const userSnap = await getDoc(doc(db, 'users', userId));
     const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
@@ -399,6 +458,7 @@ export const updateProgram = async (programId: string, programData: Partial<Omit
     delete dataToUpdate.endTime;
     delete dataToUpdate.daysOfWeek;
     await updateDoc(docRef, { ...dataToUpdate, updatedBy: userId, updatedAt: serverTimestamp() });
+    invalidateCache('programs');
 
     const userSnap = await getDoc(doc(db, 'users', userId));
     const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
@@ -422,6 +482,8 @@ export const deleteProgram = async (programId: string, userId: string): Promise<
     const programName = originalSnap.data().name;
 
     await deleteDoc(docRef);
+    invalidateCache('programs');
+    invalidateCache(); // Invalidate all for commercial items
     
     const userSnap = await getDoc(doc(db, 'users', userId));
     const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
@@ -439,9 +501,13 @@ export const deleteProgram = async (programId: string, userId: string): Promise<
 };
 
 export const getCommercialItems = async (date: string): Promise<CommercialItem[]> => {
-    const q = query(commercialItemsCollection, where("date", "==", date));
+    const cacheKey = `commercial_items_${date}`;
+    const cachedData = getFromCache(cacheKey);
+    if (cachedData) return cachedData;
+
+    const q = query(collections.commercialItems, where("date", "==", date));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => {
+    const items = snapshot.docs.map(doc => {
         const data = doc.data();
         const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
         const validDate = parseDateWithTimezone(data.date);
@@ -452,10 +518,12 @@ export const getCommercialItems = async (date: string): Promise<CommercialItem[]
             pntReadAt: convertTimestamp(data.pntReadAt),
         } as CommercialItem
     });
+    setInCache(cacheKey, items);
+    return items;
 };
 
 export const getCommercialItemsBySeries = async (seriesId: string): Promise<CommercialItem[]> => {
-    const q = query(commercialItemsCollection, where("seriesId", "==", seriesId));
+    const q = query(collections.commercialItems, where("seriesId", "==", seriesId));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
       const data = doc.data();
@@ -527,6 +595,7 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
     }
     
     await batch.commit();
+    invalidateCache(); // Invalidate all caches for simplicity
 
     const userSnap = await getDoc(doc(db, 'users', userId));
     const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
@@ -570,6 +639,7 @@ export const updateCommercialItem = async (itemId: string, itemData: Partial<Omi
 
 
     await updateDoc(docRef, {...dataToUpdate, updatedBy: userId, updatedAt: serverTimestamp()});
+    invalidateCache(`commercial_items_${originalData.date}`);
 
     await logActivity({
         userId,
@@ -598,6 +668,7 @@ export const deleteCommercialItem = async (itemIds: string[], userId?: string, u
     }
     
     await batch.commit();
+    invalidateCache(); // Invalidate all caches
 
     if (userId && userName && firstItemData) {
         await logActivity({
@@ -616,8 +687,11 @@ export const deleteCommercialItem = async (itemIds: string[], userId?: string, u
 
 // --- Canje Functions ---
 export const getCanjes = async (): Promise<Canje[]> => {
-    const snapshot = await getDocs(query(canjesCollection, orderBy("fechaCreacion", "desc")));
-    return snapshot.docs.map(doc => {
+    const cachedData = getFromCache('canjes');
+    if (cachedData) return cachedData;
+
+    const snapshot = await getDocs(query(collections.canjes, orderBy("fechaCreacion", "desc")));
+    const canjes = snapshot.docs.map(doc => {
       const data = doc.data();
       const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
       
@@ -639,6 +713,8 @@ export const getCanjes = async (): Promise<Canje[]> => {
 
       return canje;
     });
+    setInCache('canjes', canjes);
+    return canjes;
 };
 
 export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>, userId: string, userName: string): Promise<string> => {
@@ -660,7 +736,8 @@ export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>
     }
 
 
-    const docRef = await addDoc(canjesCollection, dataToSave);
+    const docRef = await addDoc(collections.canjes, dataToSave);
+    invalidateCache('canjes');
     
     await logActivity({
         userId,
@@ -715,6 +792,7 @@ export const updateCanje = async (
     }
 
     await updateDoc(docRef, updateData);
+    invalidateCache('canjes');
 
     let details = `actualizó el canje <strong>${originalData.titulo}</strong>`;
     if (data.estado && data.estado !== originalData.estado) {
@@ -747,6 +825,7 @@ export const deleteCanje = async (id: string, userId: string, userName: string):
     const canjeData = canjeSnap.data() as Canje;
 
     await deleteDoc(docRef);
+    invalidateCache('canjes');
 
     await logActivity({
         userId,
@@ -764,8 +843,11 @@ export const deleteCanje = async (id: string, userId: string, userName: string):
 
 // --- Invoice Functions ---
 export const getInvoices = async (): Promise<Invoice[]> => {
-    const snapshot = await getDocs(query(invoicesCollection, orderBy("dateGenerated", "desc")));
-    return snapshot.docs.map(doc => {
+    const cachedData = getFromCache('invoices');
+    if (cachedData) return cachedData;
+
+    const snapshot = await getDocs(query(collections.invoices, orderBy("dateGenerated", "desc")));
+    const invoices = snapshot.docs.map(doc => {
         const data = doc.data();
         
         const validDate = data.date && typeof data.date === 'string' ? parseDateWithTimezone(data.date) : null;
@@ -779,11 +861,13 @@ export const getInvoices = async (): Promise<Invoice[]> => {
             datePaid: validDatePaid ? format(validDatePaid, 'yyyy-MM-dd') : undefined,
         } as Invoice;
     });
+    setInCache('invoices', invoices);
+    return invoices;
 };
 
 
 export const getInvoicesForOpportunity = async (opportunityId: string): Promise<Invoice[]> => {
-    const q = query(invoicesCollection, where("opportunityId", "==", opportunityId));
+    const q = query(collections.invoices, where("opportunityId", "==", opportunityId));
     const snapshot = await getDocs(q);
     const invoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
     invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
@@ -791,11 +875,11 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
 };
 
 export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]> => {
-    const oppsSnapshot = await getDocs(query(opportunitiesCollection, where("clientId", "==", clientId)));
+    const oppsSnapshot = await getDocs(query(collections.opportunities, where("clientId", "==", clientId)));
     const opportunityIds = oppsSnapshot.docs.map(doc => doc.id);
     if (opportunityIds.length === 0) return [];
     
-    const q = query(invoicesCollection, where("opportunityId", "in", opportunityIds));
+    const q = query(collections.invoices, where("opportunityId", "in", opportunityIds));
     const invoicesSnapshot = await getDocs(q);
     return invoicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
 };
@@ -805,7 +889,8 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
       ...invoiceData,
       dateGenerated: new Date().toISOString(),
     };
-    const docRef = await addDoc(invoicesCollection, dataToSave);
+    const docRef = await addDoc(collections.invoices, dataToSave);
+    invalidateCache('invoices');
     return docRef.id;
 };
 
@@ -820,6 +905,7 @@ export const updateInvoice = async (id: string, data: Partial<Omit<Invoice, 'id'
     }
     
     await updateDoc(docRef, updateData);
+    invalidateCache('invoices');
 };
 
 export const deleteInvoice = async (id: string, userId: string, userName: string, ownerName: string): Promise<void> => {
@@ -828,6 +914,7 @@ export const deleteInvoice = async (id: string, userId: string, userName: string
     const invoiceData = invoiceSnap.data();
 
     await deleteDoc(docRef);
+    invalidateCache('invoices');
 
     await logActivity({
         userId,
@@ -846,8 +933,13 @@ export const deleteInvoice = async (id: string, userId: string, userName: string
 // --- Agency Functions ---
 
 export const getAgencies = async (): Promise<Agency[]> => {
-    const snapshot = await getDocs(query(agenciesCollection, orderBy("name")));
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Agency));
+    const cachedData = getFromCache('agencies');
+    if (cachedData) return cachedData;
+    
+    const snapshot = await getDocs(query(collections.agencies, orderBy("name")));
+    const agencies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Agency));
+    setInCache('agencies', agencies);
+    return agencies;
 };
 
 export const createAgency = async (
@@ -860,7 +952,8 @@ export const createAgency = async (
         createdAt: serverTimestamp(),
         createdBy: userId,
     };
-    const docRef = await addDoc(agenciesCollection, newAgencyData);
+    const docRef = await addDoc(collections.agencies, newAgencyData);
+    invalidateCache('agencies');
     
     await logActivity({
         userId,
@@ -888,6 +981,7 @@ export const createUserProfile = async (uid: string, name: string, email: string
         photoURL: photoURL || null,
         createdAt: serverTimestamp(),
     });
+    invalidateCache('users');
 };
 
 export const getUserProfile = async (uid: string): Promise<User | null> => {
@@ -914,6 +1008,7 @@ export const updateUserProfile = async (uid: string, data: Partial<User>): Promi
         ...dataToUpdate,
         updatedAt: serverTimestamp()
     });
+    invalidateCache('users');
 
     if (data.role && data.role !== originalData.role) {
         await logActivity({
@@ -931,20 +1026,25 @@ export const updateUserProfile = async (uid: string, data: Partial<User>): Promi
 
 
 export const getAllUsers = async (role?: User['role']): Promise<User[]> => {
+    const cacheKey = role ? `users_${role}` : 'users';
+    const cachedData = getFromCache(cacheKey);
+    if (cachedData) return cachedData;
+
     let q;
     if (role) {
-      q = query(usersCollection, where("role", "==", role));
+      q = query(collections.users, where("role", "==", role));
     } else {
-      q = query(usersCollection);
+      q = query(collections.users);
     }
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    setInCache(cacheKey, users);
+    if (!role) setInCache('users', users);
+    return users;
 };
 
 export const getUsersByRole = async (role: UserRole): Promise<User[]> => {
-    const q = query(usersCollection, where("role", "==", role));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    return getAllUsers(role);
 };
 
 export const deleteUserAndReassignEntities = async (
@@ -959,7 +1059,7 @@ export const deleteUserAndReassignEntities = async (
 
     const batch = writeBatch(db);
 
-    const clientsQuery = query(clientsCollection, where('ownerId', '==', userIdToDelete));
+    const clientsQuery = query(collections.clients, where('ownerId', '==', userIdToDelete));
     const clientsSnapshot = await getDocs(clientsQuery);
     clientsSnapshot.forEach(doc => {
         batch.update(doc.ref, {
@@ -968,7 +1068,7 @@ export const deleteUserAndReassignEntities = async (
         });
     });
 
-    const prospectsQuery = query(prospectsCollection, where('ownerId', '==', userIdToDelete));
+    const prospectsQuery = query(collections.prospects, where('ownerId', '==', userIdToDelete));
     const prospectsSnapshot = await getDocs(prospectsQuery);
     prospectsSnapshot.forEach(doc => {
         batch.update(doc.ref, {
@@ -980,6 +1080,7 @@ export const deleteUserAndReassignEntities = async (
     batch.delete(userRef);
 
     await batch.commit();
+    invalidateCache();
 
     await logActivity({
         userId: adminUserId,
@@ -997,8 +1098,11 @@ export const deleteUserAndReassignEntities = async (
 // --- Client Functions ---
 
 export const getClients = async (): Promise<Client[]> => {
-    const snapshot = await getDocs(query(clientsCollection, orderBy("denominacion")));
-    return snapshot.docs.map(doc => {
+    const cachedData = getFromCache('clients');
+    if (cachedData) return cachedData;
+    
+    const snapshot = await getDocs(query(collections.clients, orderBy("denominacion")));
+    const clients = snapshot.docs.map(doc => {
       const data = doc.data();
       return { 
         id: doc.id, 
@@ -1006,6 +1110,8 @@ export const getClients = async (): Promise<Client[]> => {
         newClientDate: data.newClientDate instanceof Timestamp ? data.newClientDate.toDate().toISOString() : data.newClientDate,
       } as Client
     });
+    setInCache('clients', clients);
+    return clients;
 };
 
 export const getClient = async (id: string): Promise<Client | null> => {
@@ -1054,7 +1160,8 @@ export const createClient = async (
         delete newClientData.agencyId;
     }
 
-    const docRef = await addDoc(clientsCollection, newClientData);
+    const docRef = await addDoc(collections.clients, newClientData);
+    invalidateCache('clients');
     
     if (userId && userName) {
         await logActivity({
@@ -1099,6 +1206,7 @@ export const updateClient = async (
         ...updateData,
         updatedAt: serverTimestamp()
     });
+    invalidateCache('clients');
 
     const newOwnerName = (data.ownerName !== undefined) ? data.ownerName : originalData.ownerName;
     const clientName = data.denominacion || originalData.denominacion;
@@ -1139,21 +1247,21 @@ export const deleteClient = async (
     const clientData = clientSnap.data() as Client;
     const batch = writeBatch(db);
 
-    const oppsQuery = query(opportunitiesCollection, where('clientId', '==', id));
+    const oppsQuery = query(collections.opportunities, where('clientId', '==', id));
     const oppsSnap = await getDocs(oppsQuery);
     oppsSnap.forEach(doc => batch.delete(doc.ref));
 
-    const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', id));
+    const peopleQuery = query(collections.people, where('clientIds', 'array-contains', id));
     const peopleSnap = await getDocs(peopleQuery);
     peopleSnap.forEach(doc => batch.delete(doc.ref));
     
-    const clientActivitiesQuery = query(clientActivitiesCollection, where('clientId', '==', id));
+    const clientActivitiesQuery = query(collections.clientActivities, where('clientId', '==', id));
     const clientActivitiesSnap = await getDocs(clientActivitiesQuery);
     clientActivitiesSnap.forEach(doc => batch.delete(doc.ref));
 
     const clientOpps = oppsSnap.docs.map(d => d.id);
     if (clientOpps.length > 0) {
-      const invoicesQuery = query(invoicesCollection, where('opportunityId', 'in', clientOpps));
+      const invoicesQuery = query(collections.invoices, where('opportunityId', 'in', clientOpps));
       const invoicesSnap = await getDocs(invoicesQuery);
       invoicesSnap.forEach(doc => batch.delete(doc.ref));
     }
@@ -1161,6 +1269,7 @@ export const deleteClient = async (
     batch.delete(clientRef);
 
     await batch.commit();
+    invalidateCache();
 
     await logActivity({
         userId,
@@ -1183,27 +1292,28 @@ export const bulkDeleteClients = async (clientIds: string[], userId: string, use
       const clientRef = doc(db, 'clients', clientId);
       batch.delete(clientRef);
   
-      const oppsQuery = query(opportunitiesCollection, where('clientId', '==', clientId));
+      const oppsQuery = query(collections.opportunities, where('clientId', '==', clientId));
       const oppsSnap = await getDocs(oppsQuery);
       oppsSnap.forEach(doc => batch.delete(doc.ref));
   
-      const activitiesQuery = query(clientActivitiesCollection, where('clientId', '==', clientId));
+      const activitiesQuery = query(collections.clientActivities, where('clientId', '==', clientId));
       const activitiesSnap = await getDocs(activitiesQuery);
       activitiesSnap.forEach(doc => batch.delete(doc.ref));
   
-      const peopleQuery = query(peopleCollection, where('clientIds', 'array-contains', clientId));
+      const peopleQuery = query(collections.people, where('clientIds', 'array-contains', clientId));
       const peopleSnap = await getDocs(peopleQuery);
       peopleSnap.forEach(doc => batch.delete(doc.ref));
 
       const clientOpps = oppsSnap.docs.map(d => d.id);
       if (clientOpps.length > 0) {
-        const invoicesQuery = query(invoicesCollection, where('opportunityId', 'in', clientOpps));
+        const invoicesQuery = query(collections.invoices, where('opportunityId', 'in', clientOpps));
         const invoicesSnap = await getDocs(invoicesQuery);
         invoicesSnap.forEach(doc => batch.delete(doc.ref));
       }
     }
   
     await batch.commit();
+    invalidateCache();
   
     await logActivity({
       userId,
@@ -1231,6 +1341,7 @@ export const bulkUpdateClients = async (
     }
 
     await batch.commit();
+    invalidateCache('clients');
     
     const isReassign = updates.length > 0 && updates[0].data.ownerName;
 
@@ -1254,7 +1365,7 @@ export const bulkUpdateClients = async (
 // --- Person (Contact) Functions ---
 
 export const getPeopleByClientId = async (clientId: string): Promise<Person[]> => {
-    const q = query(peopleCollection, where("clientIds", "array-contains", clientId));
+    const q = query(collections.people, where("clientIds", "array-contains", clientId));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
 }
@@ -1264,10 +1375,11 @@ export const createPerson = async (
     userId: string,
     userName: string
 ): Promise<string> => {
-    const docRef = await addDoc(peopleCollection, {
+    const docRef = await addDoc(collections.people, {
         ...personData,
         createdAt: serverTimestamp()
     });
+    invalidateCache('people'); // A generic cache invalidation
     
     if (personData.clientIds) {
         for (const clientId of personData.clientIds) {
@@ -1278,6 +1390,7 @@ export const createPerson = async (
                 await updateDoc(clientRef, {
                     personIds: arrayUnion(docRef.id)
                 });
+                invalidateCache('clients');
 
                  await logActivity({
                     userId,
@@ -1310,10 +1423,10 @@ export const updatePerson = async (
         ...data,
         updatedAt: serverTimestamp()
     });
+    invalidateCache('people');
 
     if (originalData.clientIds && originalData.clientIds.length > 0) {
-        const clientRef = doc(db, 'clients', originalData.clientIds[0]);
-        const clientSnap = await getDoc(clientRef);
+        const clientSnap = await getDoc(doc(db, 'clients', originalData.clientIds[0]));
         if (clientSnap.exists()) {
             const clientData = clientSnap.data() as Client;
             await logActivity({
@@ -1342,6 +1455,7 @@ export const deletePerson = async (
     const personData = personSnap.data() as Person;
     
     await deleteDoc(personRef);
+    invalidateCache('people');
 
     if (personData.clientIds && personData.clientIds.length > 0) {
         const clientSnap = await getDoc(doc(db, 'clients', personData.clientIds[0]));
@@ -1365,8 +1479,11 @@ export const deletePerson = async (
 // --- Opportunity Functions ---
 
 export const getAllOpportunities = async (): Promise<Opportunity[]> => {
-    const snapshot = await getDocs(opportunitiesCollection);
-    return snapshot.docs.map(doc => {
+    const cachedData = getFromCache('opportunities');
+    if (cachedData) return cachedData;
+
+    const snapshot = await getDocs(collections.opportunities);
+    const opportunities = snapshot.docs.map(doc => {
       const data = doc.data();
       const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
       if (data.updatedAt && data.updatedAt instanceof Timestamp) {
@@ -1382,24 +1499,20 @@ export const getAllOpportunities = async (): Promise<Opportunity[]> => {
 
       return opp;
     });
+    setInCache('opportunities', opportunities);
+    return opportunities;
 };
 
 export const getOpportunitiesByClientId = async (clientId: string): Promise<Opportunity[]> => {
-    const q = query(opportunitiesCollection, where("clientId", "==", clientId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
+    const allOpps = await getAllOpportunities();
+    return allOpps.filter(opp => opp.clientId === clientId);
 };
 
 export const getOpportunitiesForUser = async (userId: string): Promise<Opportunity[]> => {
-    const clientsSnapshot = await getDocs(query(clientsCollection, where("ownerId", "==", userId)));
-    const clientIds = clientsSnapshot.docs.map(doc => doc.id);
-
-    if (clientIds.length === 0) {
-        return [];
-    }
-
-    const snapshot = await getDocs(query(opportunitiesCollection, where("clientId", "in", clientIds)));
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
+    const allOpps = await getAllOpportunities();
+    const allClients = await getClients();
+    const userClientIds = new Set(allClients.filter(c => c.ownerId === userId).map(c => c.id));
+    return allOpps.filter(opp => userClientIds.has(opp.clientId));
 }
 
 export const createOpportunity = async (
@@ -1415,10 +1528,11 @@ export const createOpportunity = async (
     delete dataToSave.pautados;
 
 
-    const docRef = await addDoc(opportunitiesCollection, {
+    const docRef = await addDoc(collections.opportunities, {
         ...dataToSave,
         createdAt: serverTimestamp()
     });
+    invalidateCache('opportunities');
 
     await logActivity({
         userId,
@@ -1486,6 +1600,7 @@ const createCommercialItemsFromOpportunity = async (opportunity: Opportunity, us
             batch.set(docRef, { ...itemData, createdAt: serverTimestamp() });
         }
         await batch.commit();
+        invalidateCache();
 
         await logActivity({
             userId,
@@ -1547,6 +1662,7 @@ export const updateOpportunity = async (
 
 
     await updateDoc(docRef, updateData);
+    invalidateCache('opportunities');
 
      if (pendingInvoices && pendingInvoices.length > 0) {
         for (const invoiceData of pendingInvoices) {
@@ -1594,13 +1710,15 @@ export const deleteOpportunity = async (
 
     const batch = writeBatch(db);
 
-    const invoicesQuery = query(invoicesCollection, where('opportunityId', '==', id));
+    const invoicesQuery = query(collections.invoices, where('opportunityId', '==', id));
     const invoicesSnap = await getDocs(invoicesQuery);
     invoicesSnap.forEach(doc => batch.delete(doc.ref));
     
     batch.delete(docRef);
 
     await batch.commit();
+    invalidateCache('opportunities');
+    invalidateCache('invoices');
 
     const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
     const clientOwnerName = clientSnap.exists() ? (clientSnap.data() as Client).ownerName : 'N/A';
@@ -1629,9 +1747,14 @@ const convertActivityLogDoc = (doc: any): ActivityLog => {
 };
 
 export const getActivities = async (activityLimit: number = 20): Promise<ActivityLog[]> => {
-    const q = query(activitiesCollection, orderBy('timestamp', 'desc'), limit(activityLimit));
+    const cachedData = getFromCache('activities_limit_100');
+    if(cachedData) return cachedData;
+    
+    const q = query(collections.activities, orderBy('timestamp', 'desc'), limit(activityLimit));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(convertActivityLogDoc);
+    const activities = snapshot.docs.map(convertActivityLogDoc);
+    setInCache('activities_limit_100', activities);
+    return activities;
 };
 
 
@@ -1643,12 +1766,12 @@ export const getActivitiesForEntity = async (entityId: string): Promise<Activity
     const clientOwnerId = clientSnap.data().ownerId;
 
     const directClientActivitiesQuery = query(
-        activitiesCollection, 
+        collections.activities, 
         where('entityId', '==', entityId),
         where('entityType', '==', 'client')
     );
 
-    const oppsOfClientSnap = await getDocs(query(opportunitiesCollection, where('clientId', '==', entityId)));
+    const oppsOfClientSnap = await getDocs(query(collections.opportunities, where('clientId', '==', entityId)));
     const oppIds = oppsOfClientSnap.docs.map(doc => doc.id);
 
     const activities: ActivityLog[] = [];
@@ -1660,7 +1783,7 @@ export const getActivitiesForEntity = async (entityId: string): Promise<Activity
     
     if (oppIds.length > 0) {
         const oppActivitiesQuery = query(
-            activitiesCollection, 
+            collections.activities, 
             where('entityType', '==', 'opportunity'), 
             where('entityId', 'in', oppIds)
         );
@@ -1670,11 +1793,11 @@ export const getActivitiesForEntity = async (entityId: string): Promise<Activity
         });
     }
     
-    const peopleSnap = await getDocs(query(peopleCollection, where('clientIds', 'array-contains', entityId)));
+    const peopleSnap = await getDocs(query(collections.people, where('clientIds', 'array-contains', entityId)));
     const personIds = peopleSnap.docs.map(p => p.id);
     if (personIds.length > 0) {
         const personActivitiesQuery = query(
-            activitiesCollection, 
+            collections.activities, 
             where('entityType', '==', 'person'), 
             where('entityId', 'in', personIds)
         );
@@ -1714,15 +1837,20 @@ const convertActivityDoc = (doc: any): ClientActivity => {
 
 
 export const getClientActivities = async (clientId: string): Promise<ClientActivity[]> => {
-    const q = query(clientActivitiesCollection, where('clientId', '==', clientId), orderBy('timestamp', 'desc'));
+    const q = query(collections.clientActivities, where('clientId', '==', clientId), orderBy('timestamp', 'desc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(convertActivityDoc);
 };
 
 export const getAllClientActivities = async (): Promise<ClientActivity[]> => {
-    const q = query(clientActivitiesCollection, orderBy('timestamp', 'desc'));
+    const cachedData = getFromCache('client_activities');
+    if (cachedData) return cachedData;
+
+    const q = query(collections.clientActivities, orderBy('timestamp', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(convertActivityDoc);
+    const activities = snapshot.docs.map(convertActivityDoc);
+    setInCache('client_activities', activities);
+    return activities;
 };
 
 
@@ -1747,7 +1875,8 @@ export const createClientActivity = async (
     }
 
 
-    const docRef = await addDoc(clientActivitiesCollection, dataToSave);
+    const docRef = await addDoc(collections.clientActivities, dataToSave);
+    invalidateCache('client_activities');
     return docRef.id;
 };
 
@@ -1777,4 +1906,5 @@ export const updateClientActivity = async (
     }
 
     await updateDoc(docRef, updateData);
+    invalidateCache('client_activities');
 };

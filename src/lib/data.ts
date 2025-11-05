@@ -1,4 +1,5 @@
 
+
 import type { OpportunityStage, TipoEntidad, CondicionIVA, AreaType, ScreenName, ScreenPermission } from './types';
 
 export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>> = {
@@ -92,4 +93,3 @@ export const provinciasArgentina = [
   "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
   "Tucumán"
 ];
-
