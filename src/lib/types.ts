@@ -102,6 +102,7 @@ export type Opportunity = {
   // New proposal fields
   proposalItems?: ProposalItem[];
   valorTarifario?: number; // Calculated value from rates
+  finalizationDate?: string;
 };
 
 export type Person = {
@@ -267,7 +268,6 @@ export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Impo
 export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Import', 'Admin'];
 
 export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción';
-export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'];
 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs', 

@@ -29,10 +29,10 @@ import { useAuth } from '@/hooks/use-auth.tsx';
 import { Checkbox } from '../ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity } from '@/lib/firebase-service';
-import { PlusCircle, Clock, Trash2, FileText, Save, Calculator } from 'lucide-react';
+import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -50,6 +50,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Calendar } from '../ui/calendar';
 
 interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
@@ -242,9 +244,12 @@ export function OpportunityDetailsDialog({
 
   const handleCheckboxChange = (name: keyof Opportunity, checked: boolean | "indeterminate") => {
     setEditedOpportunity(prev => {
-        const newState = {...prev, [name]: !!checked };
+        let newState = {...prev, [name]: !!checked };
         if (name === 'facturaPorAgencia' && !checked) {
             delete newState.agencyId;
+        }
+        if (name === 'finalizationDate' && !checked) {
+            delete newState.finalizationDate;
         }
         return newState;
     });
@@ -263,6 +268,10 @@ export function OpportunityDetailsDialog({
   const handleSelectChange = (name: keyof Opportunity, value: string) => {
     setEditedOpportunity(prev => ({...prev, [name]: value }));
   }
+
+  const handleDateChange = (name: keyof Opportunity, date: Date | undefined) => {
+    setEditedOpportunity(prev => ({ ...prev, [name]: date ? date.toISOString().split('T')[0] : undefined }));
+  };
 
   const handleSaveOrdenPautado = (orden: OrdenPautado) => {
     setEditedOpportunity(prev => {
@@ -406,6 +415,35 @@ export function OpportunityDetailsDialog({
                 <Label htmlFor="observaciones">Observaciones</Label>
                 <Textarea id="observaciones" name="observaciones" value={editedOpportunity.observaciones || ''} onChange={handleChange} />
             </div>
+             {isEditing && editedOpportunity.stage === 'Cerrado - Ganado' && (
+                <div className="space-y-4 p-4 border rounded-md bg-muted/30">
+                    <div className="flex items-center space-x-2">
+                        <Checkbox 
+                            id="finalize-opp"
+                            checked={!!editedOpportunity.finalizationDate} 
+                            onCheckedChange={(checked) => handleCheckboxChange('finalizationDate', checked)}
+                        />
+                        <Label htmlFor="finalize-opp">Finalizar propuesta anticipadamente</Label>
+                    </div>
+                    {editedOpportunity.finalizationDate !== undefined && (
+                        <div className="space-y-2">
+                            <Label htmlFor="finalizationDate">Fecha de Finalización</Label>
+                             <Popover>
+                                <PopoverTrigger asChild>
+                                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !editedOpportunity.finalizationDate && "text-muted-foreground")}>
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {editedOpportunity.finalizationDate ? format(parseISO(editedOpportunity.finalizationDate), "PPP", { locale: es }) : <span>Seleccionar fecha de fin</span>}
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={editedOpportunity.finalizationDate ? parseISO(editedOpportunity.finalizationDate) : undefined} onSelect={(d) => handleDateChange('finalizationDate', d)} initialFocus /></PopoverContent>
+                            </Popover>
+                             <p className="text-xs text-muted-foreground">
+                                Esta oportunidad se considerará finalizada en esta fecha, independientemente de su periodicidad.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
           </TabsContent>
 
           <TabsContent value="conditions" className="space-y-4 py-4">
@@ -579,7 +617,7 @@ export function OpportunityDetailsDialog({
                         {invoices.map(invoice => (
                             <TableRow key={invoice.id}>
                                 <TableCell>{invoice.invoiceNumber}</TableCell>
-                                <TableCell>{format(new Date(invoice.date), 'P', { locale: es })}</TableCell>
+                                <TableCell>{invoice.date ? format(parseISO(invoice.date), 'P', { locale: es }) : '-'}</TableCell>
                                 <TableCell>${invoice.amount.toLocaleString('es-AR')}</TableCell>
                                 <TableCell>{invoice.status}</TableCell>
                                 {isEditing && 

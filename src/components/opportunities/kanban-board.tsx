@@ -23,7 +23,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { getAllOpportunities, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
-import { isWithinInterval, addMonths, startOfMonth, parseISO, isSameMonth } from 'date-fns';
+import { isWithinInterval, addMonths, startOfMonth, parseISO, isSameMonth, endOfMonth } from 'date-fns';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'border-blue-500',
@@ -283,13 +283,21 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
             if (!opp.closeDate) return false;
             
             const closeDate = parseISO(opp.closeDate);
+
+            // If it has a finalizationDate, it overrides periodicity for end date
+            if (opp.finalizationDate) {
+                const startDate = startOfMonth(closeDate);
+                const endDate = endOfMonth(parseISO(opp.finalizationDate));
+                return isWithinInterval(filterDate, { start: startDate, end: endDate });
+            }
+            
             const maxPeriodicity = opp.periodicidad?.[0] || 'Ocasional';
             const durationMonths = getPeriodDurationInMonths(maxPeriodicity);
 
             if (durationMonths > 1) { // It's a periodic opportunity (more than 1 month)
                 const startDate = startOfMonth(closeDate);
                 const endDate = addMonths(startDate, durationMonths -1);
-                return filterDate >= startDate && filterDate <= endDate;
+                return isWithinInterval(filterDate, { start: startDate, end: endDate });
             } else { // It's a one-time or monthly opportunity
                 return isSameMonth(filterDate, closeDate);
             }
