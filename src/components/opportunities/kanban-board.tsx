@@ -178,29 +178,29 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
         className="hover:shadow-md transition-shadow duration-200 group"
       >
         <div className="p-4">
-            <CardHeader className="p-0 cursor-pointer" onClick={() => setIsDetailsOpen(true)}>
-                <div className="flex justify-between items-start">
+            <div className="flex justify-between items-start">
+                <div className="flex-1 cursor-pointer" onClick={() => setIsDetailsOpen(true)}>
                     <CardTitle className="text-base font-semibold leading-tight">
                     {opportunity.clientName}
                     </CardTitle>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 -mr-2 -mt-2 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}>
-                          <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        {opportunity.stage === 'Cerrado - Ganado' && (
-                          <DropdownMenuItem onSelect={() => setIsFinalizeOpen(true)}>
-                            <FileCheck2 className="mr-2 h-4 w-4" />
-                            Finalizar Propuesta
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <p className="text-sm text-muted-foreground pt-1">{opportunity.title}</p>
                 </div>
-                <p className="text-sm text-muted-foreground pt-1">{opportunity.title}</p>
-            </CardHeader>
+                 <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 -mr-2 -mt-2 opacity-0 group-hover:opacity-100 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                        <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
+                    </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent onClick={e => e.stopPropagation()}>
+                    {opportunity.stage === 'Cerrado - Ganado' && (
+                        <DropdownMenuItem onSelect={() => setIsFinalizeOpen(true)}>
+                        <FileCheck2 className="mr-2 h-4 w-4" />
+                        Finalizar Propuesta
+                        </DropdownMenuItem>
+                    )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
             <CardContent className="p-0 pt-2">
             <div className="flex justify-between items-center">
                 <span className="text-lg font-bold text-primary">
