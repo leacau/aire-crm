@@ -177,8 +177,8 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
         onDragStart={onDragStart}
         className="hover:shadow-md transition-shadow duration-200 group"
       >
-        <div className="p-4" onClick={() => setIsDetailsOpen(true)}>
-            <CardHeader className="p-0">
+        <div className="p-4">
+            <CardHeader className="p-0 cursor-pointer" onClick={() => setIsDetailsOpen(true)}>
                 <div className="flex justify-between items-start">
                     <CardTitle className="text-base font-semibold leading-tight">
                     {opportunity.clientName}
@@ -191,7 +191,7 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
                       </DropdownMenuTrigger>
                       <DropdownMenuContent>
                         {opportunity.stage === 'Cerrado - Ganado' && (
-                          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsFinalizeOpen(true); }}>
+                          <DropdownMenuItem onSelect={() => setIsFinalizeOpen(true)}>
                             <FileCheck2 className="mr-2 h-4 w-4" />
                             Finalizar Propuesta
                           </DropdownMenuItem>
