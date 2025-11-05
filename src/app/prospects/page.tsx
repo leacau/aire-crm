@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search } from 'lucide-react';
+import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search, Activity } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Prospect, User, Client } from '@/lib/types';
@@ -25,10 +25,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { ActivityFormDialog } from '@/components/clients/activity-form-dialog';
 
 
 export default function ProspectsPage() {
-  const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
 
   const [prospects, setProspects] = useState<Prospect[]>([]);
@@ -48,6 +49,9 @@ export default function ProspectsPage() {
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [showOnlyMyProspects, setShowOnlyMyProspects] = useState(!isBoss);
+  
+  const [isActivityFormOpen, setIsActivityFormOpen] = useState(false);
+  const [selectedProspectForActivity, setSelectedProspectForActivity] = useState<Prospect | null>(null);
   
   useEffect(() => {
     if (userInfo) {
@@ -151,6 +155,11 @@ export default function ProspectsPage() {
     }
   };
 
+   const handleOpenActivityForm = (prospect: Prospect) => {
+    setSelectedProspectForActivity(prospect);
+    setIsActivityFormOpen(true);
+  };
+
 
   const advisorsWithProspects = useMemo(() => {
     if (!isBoss) return [];
@@ -227,6 +236,9 @@ export default function ProspectsPage() {
 
         return (
           <div className="flex items-center justify-end gap-2">
+             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleOpenActivityForm(prospect); }}>
+                <Activity className="h-4 w-4" />
+            </Button>
             {prospect.status !== 'Convertido' && (
                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleConvertProspect(prospect); }}>
                 <UserPlus className="mr-2 h-4 w-4" />
@@ -373,6 +385,17 @@ export default function ProspectsPage() {
               ownerName: prospectToConvert.ownerName,
             } as Partial<Client>}
             onValidateCuit={async () => false} 
+        />
+      )}
+
+      {selectedProspectForActivity && userInfo && (
+        <ActivityFormDialog
+            isOpen={isActivityFormOpen}
+            onOpenChange={setIsActivityFormOpen}
+            entity={{ id: selectedProspectForActivity.id, name: selectedProspectForActivity.companyName, type: 'prospect' }}
+            userInfo={userInfo}
+            getGoogleAccessToken={getGoogleAccessToken}
+            onActivitySaved={() => fetchData()}
         />
       )}
 

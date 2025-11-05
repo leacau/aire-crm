@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -22,7 +23,7 @@ import { CalendarIcon, Clock, CircleDollarSign } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createClientActivity, getOpportunitiesByClientId } from '@/lib/firebase-service';
 import { createCalendarEvent } from '@/lib/google-gmail-service';
-import type { Opportunity, ClientActivity, User, ClientActivityType } from '@/lib/types';
+import type { Opportunity, ClientActivity, User, ClientActivityType, Prospect } from '@/lib/types';
 import { clientActivityTypes } from '@/lib/types';
 import { Spinner } from '../ui/spinner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -32,7 +33,7 @@ import { Input } from '../ui/input';
 interface ActivityFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  client: { id: string; denominacion: string };
+  entity: { id: string; name: string, type: 'client' | 'prospect' };
   userInfo: User;
   getGoogleAccessToken: () => Promise<string | null>;
   onActivitySaved?: () => void;
@@ -43,7 +44,7 @@ const combineDateAndTime = (date: Date, time: string): Date => {
   return set(date, { hours, minutes, seconds: 0, milliseconds: 0 });
 };
 
-export function ActivityFormDialog({ isOpen, onOpenChange, client, userInfo, getGoogleAccessToken, onActivitySaved }: ActivityFormDialogProps) {
+export function ActivityFormDialog({ isOpen, onOpenChange, entity, userInfo, getGoogleAccessToken, onActivitySaved }: ActivityFormDialogProps) {
   const { toast } = useToast();
   
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -56,10 +57,12 @@ export function ActivityFormDialog({ isOpen, onOpenChange, client, userInfo, get
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      getOpportunitiesByClientId(client.id).then(setOpportunities);
+    if (isOpen && entity.type === 'client') {
+      getOpportunitiesByClientId(entity.id).then(setOpportunities);
+    } else {
+        setOpportunities([]);
     }
-  }, [isOpen, client.id]);
+  }, [isOpen, entity]);
 
   const resetForm = () => {
     setNewActivityType('');
@@ -91,8 +94,8 @@ export function ActivityFormDialog({ isOpen, onOpenChange, client, userInfo, get
     const selectedOpp = opportunities.find(opp => opp.id === newActivityOpportunityId);
 
     const activityPayload: Omit<ClientActivity, 'id' | 'timestamp'> = {
-        clientId: client.id,
-        clientName: client.denominacion,
+        ...(entity.type === 'client' && { clientId: entity.id, clientName: entity.name }),
+        ...(entity.type === 'prospect' && { prospectId: entity.id, prospectName: entity.name }),
         opportunityId: newActivityOpportunityId === 'none' ? undefined : newActivityOpportunityId,
         opportunityTitle: selectedOpp?.title,
         type: newActivityType,
@@ -111,7 +114,7 @@ export function ActivityFormDialog({ isOpen, onOpenChange, client, userInfo, get
             try {
                 const calendarEvent = {
                     summary: `Tarea CRM: ${activityPayload.observation.substring(0, 100)}`,
-                    description: `Tarea registrada en el CRM para el cliente: ${client.denominacion}.\n\nObservación: ${activityPayload.observation}`,
+                    description: `Tarea registrada en el CRM para ${entity.type === 'client' ? 'el cliente' : 'el prospecto'}: ${entity.name}.\n\nObservación: ${activityPayload.observation}`,
                     start: { dateTime: activityPayload.dueDate },
                     end: { dateTime: activityPayload.dueDate },
                     reminders: {
@@ -152,9 +155,9 @@ export function ActivityFormDialog({ isOpen, onOpenChange, client, userInfo, get
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Registrar Actividad para {client.denominacion}</DialogTitle>
+          <DialogTitle>Registrar Actividad para {entity.name}</DialogTitle>
           <DialogDescription>
-            Añade una nueva interacción o crea una tarea de seguimiento para este cliente.
+            Añade una nueva interacción o crea una tarea de seguimiento para este {entity.type === 'client' ? 'cliente' : 'prospecto'}.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
@@ -179,18 +182,20 @@ export function ActivityFormDialog({ isOpen, onOpenChange, client, userInfo, get
               rows={4}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="activity-opp">Oportunidad (Opcional)</Label>
-            <Select value={newActivityOpportunityId} onValueChange={setNewActivityOpportunityId}>
-              <SelectTrigger id="activity-opp">
-                  <SelectValue placeholder="Asociar a una oportunidad..." />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="none">Ninguna</SelectItem>
-                  {opportunities.map(opp => <SelectItem key={opp.id} value={opp.id}>{opp.title}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          {entity.type === 'client' && (
+            <div className="space-y-2">
+                <Label htmlFor="activity-opp">Oportunidad (Opcional)</Label>
+                <Select value={newActivityOpportunityId} onValueChange={setNewActivityOpportunityId}>
+                <SelectTrigger id="activity-opp">
+                    <SelectValue placeholder="Asociar a una oportunidad..." />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="none">Ninguna</SelectItem>
+                    {opportunities.map(opp => <SelectItem key={opp.id} value={opp.id}>{opp.title}</SelectItem>)}
+                </SelectContent>
+                </Select>
+            </div>
+          )}
            <div className="flex items-center space-x-2 pt-2">
             <Checkbox id="is-task" checked={isTask} onCheckedChange={(checked) => setIsTask(!!checked)} />
             <Label htmlFor="is-task" className='font-normal'>Crear como Tarea/Recordatorio</Label>

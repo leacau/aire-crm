@@ -3,6 +3,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -183,8 +184,10 @@ export type ClientActivityType = typeof clientActivityTypes[number];
 
 export type ClientActivity = {
     id: string;
-    clientId: string;
-    clientName: string;
+    clientId?: string;
+    clientName?: string;
+    prospectId?: string;
+    prospectName?: string;
     opportunityId?: string;
     opportunityTitle?: string;
     userId: string;

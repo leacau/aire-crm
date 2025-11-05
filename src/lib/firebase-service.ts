@@ -1874,6 +1874,11 @@ export const createClientActivity = async (
         delete dataToSave.opportunityTitle;
     }
 
+    if (!activityData.clientId) delete dataToSave.clientId;
+    if (!activityData.clientName) delete dataToSave.clientName;
+    if (!activityData.prospectId) delete dataToSave.prospectId;
+    if (!activityData.prospectName) delete dataToSave.prospectName;
+
 
     const docRef = await addDoc(collections.clientActivities, dataToSave);
     invalidateCache('client_activities');
