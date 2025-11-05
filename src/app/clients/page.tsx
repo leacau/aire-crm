@@ -395,7 +395,6 @@ export default function ClientsPage() {
 
   const columns = useMemo<ColumnDef<Client>[]>(() => {
     const canViewDetails = (client: Client) => userInfo && client && (isBoss || client.ownerId === userInfo.id);
-    const canSeeOppData = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
 
     let cols: ColumnDef<Client>[] = [];
 
@@ -420,6 +419,7 @@ export default function ClientsPage() {
             ),
             enableSorting: false,
             enableHiding: false,
+            size: 40,
         });
     }
 
@@ -428,6 +428,7 @@ export default function ClientsPage() {
         accessorKey: 'denominacion',
         header: 'Denominación',
         enableSorting: true,
+        size: 250,
         cell: ({ row }) => {
           const client = row.original;
           return (
@@ -444,19 +445,19 @@ export default function ClientsPage() {
                   </Tooltip>
                 </TooltipProvider>
               )}
-              {canViewDetails(client) ? (
-                <Link href={`/clients/${client.id}`} className="font-medium text-primary hover:underline">
-                  {client.denominacion}
-                </Link>
-              ) : (
-                <span className="font-medium">{client.denominacion}</span>
-              )}
-               <div className="flex items-center gap-2 mt-1">
+              <div className="flex flex-col">
+                {canViewDetails(client) ? (
+                    <Link href={`/clients/${client.id}`} className="font-medium text-primary hover:underline truncate" title={client.denominacion}>
+                        {client.denominacion}
+                    </Link>
+                ) : (
+                    <span className="font-medium truncate" title={client.denominacion}>{client.denominacion}</span>
+                )}
                  {userInfo && client.ownerId !== userInfo.id && (
-                    <p className="text-xs text-muted-foreground">{client.ownerName}</p>
+                    <p className="text-xs text-muted-foreground truncate" title={client.ownerName}>{client.ownerName}</p>
                  )}
-                 {client.isDeactivated && <Badge variant="destructive">Baja</Badge>}
-               </div>
+                 {client.isDeactivated && <Badge variant="destructive" className="mt-1 w-fit">Baja</Badge>}
+              </div>
             </div>
           );
         }
@@ -465,28 +466,8 @@ export default function ClientsPage() {
         accessorKey: 'razonSocial',
         header: 'Razón Social',
         enableSorting: true,
-      },
-      {
-        id: 'openOpps',
-        accessorKey: 'openOpps',
-        header: 'Negocios Abiertos',
-        enableSorting: true,
-        cell: ({ row }) => {
-          if (!canSeeOppData) return '-';
-          const data = clientOpportunityData[row.original.id];
-          return data ? data.openOpps : 0;
-        },
-      },
-      {
-        id: 'totalValue',
-        accessorKey: 'totalValue',
-        header: 'Valor Total',
-        enableSorting: true,
-        cell: ({ row }) => {
-           if (!canSeeOppData) return '-';
-          const data = clientOpportunityData[row.original.id];
-          return data ? `$${data.totalValue.toLocaleString('es-AR')}` : '$0';
-        },
+        size: 250,
+        cell: ({ row }) => <div className="truncate" title={row.original.razonSocial}>{row.original.razonSocial}</div>,
       },
       {
         id: 'actions',
