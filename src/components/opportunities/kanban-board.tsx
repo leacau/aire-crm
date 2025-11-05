@@ -191,7 +191,7 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
                       </DropdownMenuTrigger>
                       <DropdownMenuContent>
                         {opportunity.stage === 'Cerrado - Ganado' && (
-                          <DropdownMenuItem onSelect={() => setIsFinalizeOpen(true)}>
+                          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsFinalizeOpen(true); }}>
                             <FileCheck2 className="mr-2 h-4 w-4" />
                             Finalizar Propuesta
                           </DropdownMenuItem>
