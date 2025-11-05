@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog, CopyCheck } from 'lucide-react';
+import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog, CopyCheck, Activity } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
@@ -33,6 +33,7 @@ import type { ColumnDef, SortingState, RowSelectionState } from '@tanstack/react
 import { useRouter } from 'next/navigation';
 import { findBestMatch } from 'string-similarity';
 import { Badge } from '@/components/ui/badge';
+import { ActivityFormDialog } from './activity-form-dialog';
 
 function ReassignClientDialog({ 
   clients, 
@@ -159,6 +160,9 @@ export default function ClientsPage() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
+  
+  const [isActivityFormOpen, setIsActivityFormOpen] = useState(false);
+  const [selectedClientForActivity, setSelectedClientForActivity] = useState<Client | null>(null);
 
 
   const fetchData = useCallback(async () => {
@@ -388,6 +392,11 @@ export default function ClientsPage() {
     }
   };
   
+  const handleOpenActivityForm = (client: Client) => {
+    setSelectedClientForActivity(client);
+    setIsActivityFormOpen(true);
+  };
+
   const columns = useMemo<ColumnDef<Client>[]>(() => {
     const canViewDetails = (client: Client) => userInfo && client && (isBoss || client.ownerId === userInfo.id);
     const canSeeOppData = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
@@ -594,6 +603,15 @@ export default function ClientsPage() {
         onSave={handleSaveClient}
         onValidateCuit={validateCuit}
       />
+       {selectedClientForActivity && userInfo && (
+        <ActivityFormDialog
+          isOpen={isActivityFormOpen}
+          onOpenChange={setIsActivityFormOpen}
+          client={selectedClientForActivity}
+          userInfo={userInfo}
+          onActivitySaved={() => fetchData()}
+        />
+       )}
     </div>
     <ReassignClientDialog 
       clients={clientsToReassign}

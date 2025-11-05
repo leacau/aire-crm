@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog, CopyCheck, Activity, TriangleAlert } from 'lucide-react';
+import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog, CopyCheck, Activity, TriangleAlert, Mail, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
@@ -470,6 +470,59 @@ export default function ClientsPage() {
         cell: ({ row }) => <div className="truncate" title={row.original.razonSocial}>{row.original.razonSocial}</div>,
       },
       {
+        id: 'quickActions',
+        header: 'Acciones Rápidas',
+        size: 150,
+        cell: ({ row }) => {
+          const client = row.original;
+          const isOwner = userInfo?.id === client.ownerId;
+          if (!isBoss && !isOwner) return null;
+
+          return (
+            <div className="flex items-center justify-start gap-1">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleOpenActivityForm(client); }}>
+                      <Activity className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Registrar Actividad</p></TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              {client.email && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <a href={`mailto:${client.email}`} onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Mail className="h-4 w-4" />
+                        </Button>
+                      </a>
+                    </TooltipTrigger>
+                    <TooltipContent><p>Enviar Correo</p></TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+               {client.phone && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                       <a href={`https://wa.me/${client.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MessageSquare className="h-4 w-4" />
+                        </Button>
+                       </a>
+                    </TooltipTrigger>
+                    <TooltipContent><p>Enviar WhatsApp</p></TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+          );
+        },
+      },
+      {
         id: 'actions',
         cell: ({ row }) => {
           const client = row.original;
@@ -477,20 +530,9 @@ export default function ClientsPage() {
           
           return (
             <div className="flex items-center justify-end">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 opacity-0 group-hover:opacity-100"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleOpenActivityForm(client);
-                }}
-              >
-                <Activity className="h-4 w-4" />
-              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
