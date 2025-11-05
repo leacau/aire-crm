@@ -154,7 +154,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 
                 if (isDateInRange(monthDate)) {
                     const hasInvoiceForMonth = (invoicesByOppId[opp.id] || []).some(inv => 
-                        isSameMonth(parseISO(inv.date), monthDate)
+                        inv.date && isSameMonth(parseISO(inv.date), monthDate)
                     );
                     
                     if (!hasInvoiceForMonth) {
