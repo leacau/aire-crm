@@ -244,9 +244,9 @@ export function OpportunityDetailsDialog({
 
   const handleCheckboxChange = (name: keyof Opportunity, checked: boolean | "indeterminate") => {
     setEditedOpportunity(prev => {
-        let newState = {...prev, [name]: !!checked };
+        let newState = {...prev};
         
-        if (name === 'finalizationDate') {
+        if (name === 'finalizationDate') { // Special handling for this checkbox which controls a date
             if (checked) {
                 // Set default date to today if not already set
                 newState.finalizationDate = newState.finalizationDate || new Date().toISOString().split('T')[0];
@@ -254,6 +254,8 @@ export function OpportunityDetailsDialog({
                 // Remove the date when unchecked
                 delete newState.finalizationDate;
             }
+        } else {
+            newState = {...newState, [name]: !!checked };
         }
         
         if (name === 'facturaPorAgencia' && !checked) {
@@ -262,7 +264,7 @@ export function OpportunityDetailsDialog({
 
         return newState;
     });
-  }
+}
 
   const handleMultiCheckboxChange = (field: 'periodicidad' | 'formaDePago', value: string, isChecked: boolean) => {
     setEditedOpportunity(prev => {
