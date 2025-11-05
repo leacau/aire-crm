@@ -246,12 +246,10 @@ export function OpportunityDetailsDialog({
     setEditedOpportunity(prev => {
         let newState = {...prev};
         
-        if (name === 'finalizationDate') { // Special handling for this checkbox which controls a date
+        if (name === 'finalizationDate') {
             if (checked) {
-                // Set default date to today if not already set
                 newState.finalizationDate = newState.finalizationDate || new Date().toISOString().split('T')[0];
             } else {
-                // Remove the date when unchecked
                 delete newState.finalizationDate;
             }
         } else {
@@ -369,6 +367,8 @@ export function OpportunityDetailsDialog({
       };
       return <span className={cn(baseClasses, statusMap[status])}>{status}</span>;
   }
+
+  const isInvoiceDateInvalid = editedOpportunity.finalizationDate && newInvoiceRow.date > editedOpportunity.finalizationDate;
   
   return (
     <>
@@ -426,35 +426,6 @@ export function OpportunityDetailsDialog({
                 <Label htmlFor="observaciones">Observaciones</Label>
                 <Textarea id="observaciones" name="observaciones" value={editedOpportunity.observaciones || ''} onChange={handleChange} />
             </div>
-             {isEditing && editedOpportunity.stage === 'Cerrado - Ganado' && (
-                <div className="space-y-4 p-4 border rounded-md bg-muted/30">
-                    <div className="flex items-center space-x-2">
-                        <Checkbox 
-                            id="finalize-opp"
-                            checked={!!editedOpportunity.finalizationDate} 
-                            onCheckedChange={(checked) => handleCheckboxChange('finalizationDate', checked)}
-                        />
-                        <Label htmlFor="finalize-opp">Finalizar propuesta anticipadamente</Label>
-                    </div>
-                    {editedOpportunity.finalizationDate !== undefined && (
-                        <div className="space-y-2">
-                            <Label htmlFor="finalizationDate">Fecha de Finalización</Label>
-                             <Popover>
-                                <PopoverTrigger asChild>
-                                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !editedOpportunity.finalizationDate && "text-muted-foreground")}>
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {editedOpportunity.finalizationDate ? format(parseISO(editedOpportunity.finalizationDate), "PPP", { locale: es }) : <span>Seleccionar fecha de fin</span>}
-                                </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={editedOpportunity.finalizationDate ? parseISO(editedOpportunity.finalizationDate) : undefined} onSelect={(d) => handleDateChange('finalizationDate', d)} initialFocus /></PopoverContent>
-                            </Popover>
-                             <p className="text-xs text-muted-foreground">
-                                Esta oportunidad se considerará finalizada en esta fecha, independientemente de su periodicidad.
-                            </p>
-                        </div>
-                    )}
-                </div>
-            )}
           </TabsContent>
 
           <TabsContent value="conditions" className="space-y-4 py-4">
@@ -607,7 +578,36 @@ export function OpportunityDetailsDialog({
             </div>
           </TabsContent>
           
-          <TabsContent value="invoicing" className="py-4">
+          <TabsContent value="invoicing" className="py-4 space-y-6">
+            {isEditing && editedOpportunity.stage === 'Cerrado - Ganado' && (
+                <div className="space-y-4 p-4 border rounded-md bg-muted/30">
+                    <div className="flex items-center space-x-2">
+                        <Checkbox 
+                            id="finalize-opp"
+                            checked={!!editedOpportunity.finalizationDate} 
+                            onCheckedChange={(checked) => handleCheckboxChange('finalizationDate', checked)}
+                        />
+                        <Label htmlFor="finalize-opp">Finalizar propuesta anticipadamente</Label>
+                    </div>
+                    {editedOpportunity.finalizationDate !== undefined && (
+                        <div className="space-y-2">
+                            <Label htmlFor="finalizationDate">Fecha de Finalización</Label>
+                             <Popover>
+                                <PopoverTrigger asChild>
+                                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !editedOpportunity.finalizationDate && "text-muted-foreground")}>
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {editedOpportunity.finalizationDate ? format(parseISO(editedOpportunity.finalizationDate), "PPP", { locale: es }) : <span>Seleccionar fecha de fin</span>}
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={editedOpportunity.finalizationDate ? parseISO(editedOpportunity.finalizationDate) : undefined} onSelect={(d) => handleDateChange('finalizationDate', d)} initialFocus /></PopoverContent>
+                            </Popover>
+                             <p className="text-xs text-muted-foreground">
+                                Esta oportunidad se considerará finalizada en esta fecha, independientemente de su periodicidad.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
             <fieldset disabled={!isEditing} className="space-y-4">
                 {!isEditing && (
                     <div className="text-center text-sm text-muted-foreground p-4 border rounded-md bg-muted/50">
@@ -670,7 +670,7 @@ export function OpportunityDetailsDialog({
                                 />
                             </TableCell>
                              <TableCell colSpan={isEditing ? 2 : 1}>
-                                <Button onClick={handleSaveNewInvoice} size="sm" disabled={isSavingInvoice}>
+                                <Button onClick={handleSaveNewInvoice} size="sm" disabled={isSavingInvoice || isInvoiceDateInvalid}>
                                     {isSavingInvoice ? <Spinner size="small" /> : <Save className="mr-2 h-4 w-4"/>}
                                     Guardar Factura
                                 </Button>
@@ -678,6 +678,9 @@ export function OpportunityDetailsDialog({
                         </TableRow>
                     </TableBody>
                 </Table>
+                 {isInvoiceDateInvalid && (
+                    <p className="text-xs text-destructive mt-1">La fecha de la factura no puede ser posterior a la fecha de finalización de la propuesta.</p>
+                )}
             </fieldset>
           </TabsContent>
 

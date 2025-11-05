@@ -6,7 +6,7 @@ import {
   opportunityStages,
 } from '@/lib/data';
 import type { Opportunity, OpportunityStage, Client, User } from '@/lib/types';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, FileCheck2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -23,7 +23,26 @@ import { Spinner } from '@/components/ui/spinner';
 import { getAllOpportunities, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
-import { isWithinInterval, addMonths, startOfMonth, parseISO, isSameMonth, endOfMonth } from 'date-fns';
+import { isWithinInterval, addMonths, startOfMonth, parseISO, isSameMonth, endOfMonth, format } from 'date-fns';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Button } from '../ui/button';
+import { CalendarIcon } from 'lucide-react';
+import { Calendar } from '../ui/calendar';
+import { cn } from '@/lib/utils';
+import { es } from 'date-fns/locale';
+import { Label } from '../ui/label';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'border-blue-500',
@@ -112,6 +131,7 @@ const KanbanColumn = ({
 const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, onDragStart: (e: React.DragEvent<HTMLDivElement>) => void; }) => {
   const { userInfo } = useAuth();
   const [isDetailsOpen, setIsDetailsOpen] = React.useState(false);
+  const [isFinalizeOpen, setIsFinalizeOpen] = React.useState(false);
   const { toast } = useToast();
   const [owner, setOwner] = useState<{name: string, avatarUrl: string, initials: string} | null>(null);
 
@@ -137,7 +157,8 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
      try {
        await updateOpportunity(opportunity.id, updatedOpp, userInfo.id, userInfo.name, owner.name);
        window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: {id: opportunity.id, ...updatedOpp} }));
-       setIsDetailsOpen(false);
+       if (isDetailsOpen) setIsDetailsOpen(false);
+       if (isFinalizeOpen) setIsFinalizeOpen(false);
        toast({ title: "Oportunidad Actualizada" });
      } catch (error) {
        console.error("Error updating opportunity", error);
@@ -154,44 +175,59 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
       <Card 
         draggable={canDrag}
         onDragStart={onDragStart}
-        className="hover:shadow-md transition-shadow duration-200 cursor-pointer"
-        onClick={() => setIsDetailsOpen(true)}
+        className="hover:shadow-md transition-shadow duration-200 group"
       >
-        <CardHeader className="p-4">
-          <div className="flex justify-between items-start">
-            <CardTitle className="text-base font-semibold leading-tight">
-              {opportunity.clientName}
-            </CardTitle>
-            <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <p className="text-sm text-muted-foreground pt-1">{opportunity.title}</p>
-        </CardHeader>
-        <CardContent className="p-4 pt-0">
-          <div className="flex justify-between items-center">
-            <span className="text-lg font-bold text-primary">
-                ${displayValue.toLocaleString('es-AR')}
-            </span>
-            {owner && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage
-                        src={owner.avatarUrl}
-                        alt={owner.name}
-                        data-ai-hint="person face"
-                      />
-                      <AvatarFallback>{owner.initials}</AvatarFallback>
-                    </Avatar>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{owner.name}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </div>
-        </CardContent>
+        <div className="p-4" onClick={() => setIsDetailsOpen(true)}>
+            <CardHeader className="p-0">
+                <div className="flex justify-between items-start">
+                    <CardTitle className="text-base font-semibold leading-tight">
+                    {opportunity.clientName}
+                    </CardTitle>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 -mr-2 -mt-2 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}>
+                          <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        {opportunity.stage === 'Cerrado - Ganado' && (
+                          <DropdownMenuItem onSelect={() => setIsFinalizeOpen(true)}>
+                            <FileCheck2 className="mr-2 h-4 w-4" />
+                            Finalizar Propuesta
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+                <p className="text-sm text-muted-foreground pt-1">{opportunity.title}</p>
+            </CardHeader>
+            <CardContent className="p-0 pt-2">
+            <div className="flex justify-between items-center">
+                <span className="text-lg font-bold text-primary">
+                    ${displayValue.toLocaleString('es-AR')}
+                </span>
+                {owner && (
+                <TooltipProvider>
+                    <Tooltip>
+                    <TooltipTrigger>
+                        <Avatar className="h-8 w-8">
+                        <AvatarImage
+                            src={owner.avatarUrl}
+                            alt={owner.name}
+                            data-ai-hint="person face"
+                        />
+                        <AvatarFallback>{owner.initials}</AvatarFallback>
+                        </Avatar>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{owner.name}</p>
+                    </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+                )}
+            </div>
+            </CardContent>
+        </div>
       </Card>
       {isDetailsOpen && (
          <OpportunityDetailsDialog
@@ -201,9 +237,56 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
           onUpdate={handleUpdate}
         />
       )}
+       <FinalizeOpportunityDialog
+          isOpen={isFinalizeOpen}
+          onOpenChange={setIsFinalizeOpen}
+          onFinalize={handleUpdate}
+        />
     </>
   );
 };
+
+
+function FinalizeOpportunityDialog({isOpen, onOpenChange, onFinalize}: {isOpen: boolean, onOpenChange: (open: boolean) => void, onFinalize: (update: Partial<Opportunity>) => void}) {
+  const [date, setDate] = useState<Date | undefined>(new Date());
+  
+  const handleConfirm = () => {
+    if (date) {
+      onFinalize({ finalizationDate: date.toISOString().split('T')[0] });
+    }
+  }
+
+  return (
+    <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Finalizar Propuesta Anticipadamente</AlertDialogTitle>
+          <AlertDialogDescription>
+            Selecciona la fecha de finalización efectiva de esta propuesta. La oportunidad dejará de aparecer en meses posteriores a esta fecha.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="py-4">
+          <Label>Fecha de Finalización</Label>
+          <Popover>
+              <PopoverTrigger asChild>
+              <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {date ? format(date, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+              </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus /></PopoverContent>
+          </Popover>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction onClick={handleConfirm} disabled={!date}>Confirmar</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+
 
 export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClientListChange }: KanbanBoardProps) {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
