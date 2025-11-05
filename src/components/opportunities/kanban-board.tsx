@@ -258,6 +258,7 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
     
     let opps = opportunities;
 
+    // 1. Filter by Advisor/User
     if(isBoss) {
       if(selectedAdvisor !== 'all' && advisorClientIds) {
         opps = opps.filter(opp => advisorClientIds.has(opp.clientId));
@@ -267,10 +268,18 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
       opps = opps.filter(opp => userClientIds.has(opp.clientId));
     }
     
+    // 2. Filter by Date
     if (dateRange?.from) {
         const filterDate = startOfMonth(dateRange.from);
+        const openStages: OpportunityStage[] = ['Nuevo', 'Propuesta', 'Negociación', 'Negociación a Aprobar'];
 
         opps = opps.filter(opp => {
+            // If the opportunity is in an open stage, always show it.
+            if (openStages.includes(opp.stage)) {
+                return true;
+            }
+
+            // If it's a closed opportunity, filter by date.
             if (!opp.closeDate) return false;
             
             const closeDate = parseISO(opp.closeDate);
@@ -286,7 +295,8 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
             }
         });
     }
-
+    
+    // 3. Filter by Client
     if (selectedClient !== 'all') {
       opps = opps.filter(opp => opp.clientId === selectedClient);
     }
