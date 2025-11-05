@@ -7,6 +7,7 @@ import { AuthProvider } from '@/hooks/use-auth.tsx';
 import { AuthLayout } from '@/components/layout/auth-layout';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from "@vercel/speed-insights/next"
+import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
 export const metadata: Metadata = {
   title: 'CRM Aire de Santa Fe',
@@ -32,6 +33,7 @@ export default function RootLayout({
             <AuthLayout>
                  {children}
             </AuthLayout>
+             <FirebaseErrorListener />
         </AuthProvider>
         <Toaster />
         <Analytics />

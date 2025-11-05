@@ -1,5 +1,6 @@
 
 
+'use client';
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
@@ -9,7 +10,12 @@ import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
+
+const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
+const PERMISSIONS_DOC_ID = 'area_permissions';
 
 const clientsCollection = collection(db, 'clients');
 const peopleCollection = collection(db, 'people');
@@ -24,8 +30,6 @@ const programsCollection = collection(db, 'programs');
 const commercialItemsCollection = collection(db, 'commercial_items');
 const prospectsCollection = collection(db, 'prospects');
 const licensesCollection = collection(db, 'licencias');
-const configCollection = collection(db, 'system_config');
-
 
 const parseDateWithTimezone = (dateString: string) => {
     if (!dateString || typeof dateString !== 'string') return null;
@@ -36,21 +40,36 @@ const parseDateWithTimezone = (dateString: string) => {
 };
 
 // --- Permissions ---
-export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
-    const docRef = doc(configCollection, 'area_permissions');
-    const docSnap = await getDoc(docRef);
+export const getAreaPermissions = async (superAdminId: string): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
+    if (!superAdminId) {
+        console.warn("Super admin ID not provided to getAreaPermissions. Returning default permissions.");
+        return defaultPermissions;
+    }
+    const permissionsDocRef = doc(usersCollection, superAdminId, 'config', PERMISSIONS_DOC_ID);
+    const docSnap = await getDoc(permissionsDocRef);
 
     if (docSnap.exists()) {
         return docSnap.data().permissions;
     } else {
-        await setDoc(docRef, { permissions: defaultPermissions });
+        await setDoc(permissionsDocRef, { permissions: defaultPermissions });
         return defaultPermissions;
     }
 };
 
-export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>): Promise<void> => {
-    const docRef = doc(configCollection, 'area_permissions');
-    await setDoc(docRef, { permissions });
+export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>, superAdminId: string): Promise<void> => {
+    if (!superAdminId) {
+        throw new Error("Super admin ID is required to update permissions.");
+    }
+    const permissionsDocRef = doc(usersCollection, superAdminId, 'config', PERMISSIONS_DOC_ID);
+    
+    setDoc(permissionsDocRef, { permissions }, { merge: true }).catch(async (serverError) => {
+      const permissionError = new FirestorePermissionError({
+        path: permissionsDocRef.path,
+        operation: 'update',
+        requestResourceData: { permissions },
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
+    });
 };
 
 
@@ -1759,4 +1778,3 @@ export const updateClientActivity = async (
 
     await updateDoc(docRef, updateData);
 };
-
