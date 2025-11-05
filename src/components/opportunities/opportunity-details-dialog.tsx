@@ -245,12 +245,21 @@ export function OpportunityDetailsDialog({
   const handleCheckboxChange = (name: keyof Opportunity, checked: boolean | "indeterminate") => {
     setEditedOpportunity(prev => {
         let newState = {...prev, [name]: !!checked };
+        
+        if (name === 'finalizationDate') {
+            if (checked) {
+                // Set default date to today if not already set
+                newState.finalizationDate = newState.finalizationDate || new Date().toISOString().split('T')[0];
+            } else {
+                // Remove the date when unchecked
+                delete newState.finalizationDate;
+            }
+        }
+        
         if (name === 'facturaPorAgencia' && !checked) {
             delete newState.agencyId;
         }
-        if (name === 'finalizationDate' && !checked) {
-            delete newState.finalizationDate;
-        }
+
         return newState;
     });
   }
