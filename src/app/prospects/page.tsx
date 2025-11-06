@@ -205,13 +205,21 @@ export default function ProspectsPage() {
     {
       accessorKey: 'contactName',
       header: 'Contacto',
-      cell: ({ row }) => (
-        <div>
-          <p>{row.original.contactName}</p>
-          <p className="text-xs text-muted-foreground">{row.original.contactPhone}</p>
-          <p className="text-xs text-muted-foreground">{row.original.contactEmail}</p>
-        </div>
-      )
+      cell: ({ row }) => {
+        const prospect = row.original;
+        const canViewContactInfo = isBoss || userInfo?.id === prospect.ownerId;
+        return (
+            <div>
+              <p>{prospect.contactName}</p>
+              <p className="text-xs text-muted-foreground">
+                {canViewContactInfo ? prospect.contactPhone : 'Información protegida'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {canViewContactInfo ? prospect.contactEmail : 'Información protegida'}
+              </p>
+            </div>
+        )
+      }
     },
     {
       accessorKey: 'ownerName',
