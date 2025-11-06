@@ -31,7 +31,7 @@ const collections = {
     programs: collection(db, 'programs'),
     commercialItems: collection(db, 'commercial_items'),
     prospects: collection(db, 'prospects'),
-    licenses: collection(db, 'licencias'),
+    licencias: collection(db, 'licencias'),
     systemConfig: collection(db, 'system_config'),
 };
 
@@ -75,6 +75,15 @@ const parseDateWithTimezone = (dateString: string) => {
     return new Date(year, month - 1, day);
 };
 
+// --- System Config General Function ---
+const updateSystemConfigDoc = async (docId: string, data: any) => {
+    const docRef = doc(collections.systemConfig, docId);
+    // This now runs on the server, so it should have admin privileges
+    await setDoc(docRef, data, { merge: true });
+    invalidateCache(docId);
+};
+
+
 // --- Opportunity Alert Config Functions ---
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
     const cachedData = getFromCache(ALERTS_CONFIG_DOC_ID);
@@ -92,9 +101,7 @@ export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsCon
 };
 
 export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsConfig, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(collections.systemConfig, ALERTS_CONFIG_DOC_ID);
-    await setDoc(docRef, config, { merge: true });
-    invalidateCache(ALERTS_CONFIG_DOC_ID);
+    await updateSystemConfigDoc(ALERTS_CONFIG_DOC_ID, config);
 
     await logActivity({
         userId,
@@ -132,16 +139,7 @@ export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Rec
 };
 
 export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>): Promise<void> => {
-    const permissionsDocRef = doc(db, 'system_config', PERMISSIONS_DOC_ID);
-    
-    setDoc(permissionsDocRef, { permissions }, { merge: true }).catch(async (serverError) => {
-      const permissionError = new FirestorePermissionError({
-        path: permissionsDocRef.path,
-        operation: 'update',
-        requestResourceData: { permissions },
-      } satisfies SecurityRuleContext);
-      errorEmitter.emit('permission-error', permissionError);
-    });
+    await updateSystemConfigDoc(PERMISSIONS_DOC_ID, { permissions });
     invalidateCache('permissions');
 };
 
