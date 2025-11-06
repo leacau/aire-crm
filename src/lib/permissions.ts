@@ -27,18 +27,12 @@ export function hasPermission(user: User, screen: ScreenName, permissionType: 'v
         return false;
     }
 
-    // If 'edit' permission is requested, it implicitly requires 'view' permission.
-    // If 'edit' is true, grant permission.
-    if (permissionType === 'edit') {
-        return screenPermissions.edit === true;
+    // If 'edit' is true, view is implicitly true.
+    if (permissionType === 'view' && screenPermissions.edit === true) {
+        return true;
     }
 
-    // If 'view' permission is requested, grant if 'view' is true OR if 'edit' is true (since edit implies view).
-    if (permissionType === 'view') {
-        return screenPermissions.view === true || screenPermissions.edit === true;
-    }
-
-    return false;
+    return screenPermissions[permissionType] === true;
 }
 
 /**
