@@ -2,11 +2,11 @@
 
 'use client';
 
-import { db } from './firebase';
+import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from './types';
-import { logActivity } from './activity-logger';
-import { sendEmail, createCalendarEvent } from './google-gmail-service';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from '@/lib/types';
+import { logActivity } from '@/lib/activity-logger';
+import { sendEmail, createCalendarEvent } from '@/lib/google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from '@/lib/data';
@@ -118,23 +118,16 @@ export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsCon
 
 // --- Permissions ---
 export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
-    try {
-        const docRef = doc(collections.systemConfig, PERMISSIONS_DOC_ID);
-        const docSnap = await getDoc(docRef);
+    const docRef = doc(collections.systemConfig, PERMISSIONS_DOC_ID);
+    const docSnap = await getDoc(docRef);
 
-        if (docSnap.exists() && docSnap.data().permissions) {
-            return docSnap.data().permissions;
-        } else {
-            // This will only run once if the document doesn't exist
-            await setDoc(docRef, { permissions: defaultPermissions }, { merge: true });
-            return defaultPermissions;
-        }
-    } catch (e: any) {
-        console.error("Permission denied to access permissions document. Falling back to defaults. This is expected for non-superadmin users.", e.message);
-        return defaultPermissions; // Return defaults if any error occurs (like permission denied)
+    if (docSnap.exists() && docSnap.data().permissions) {
+        return docSnap.data().permissions;
+    } else {
+        await setDoc(docRef, { permissions: defaultPermissions }, { merge: true });
+        return defaultPermissions;
     }
 };
-
 
 export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>): Promise<void> => {
     const docRef = doc(collections.systemConfig, PERMISSIONS_DOC_ID);

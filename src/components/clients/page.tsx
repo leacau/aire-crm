@@ -142,7 +142,7 @@ function BulkDeleteDialog({
 
 
 export default function ClientsPage() {
-  const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
@@ -236,6 +236,12 @@ export default function ClientsPage() {
     return data;
   }, [opportunities, clients]);
 
+  const advisorsWithClients = useMemo(() => {
+    if (!canManage) return [];
+    const ownerIdsWithClients = new Set(clients.map(client => client.ownerId));
+    return advisors.filter(advisor => ownerIdsWithClients.has(advisor.id));
+  }, [clients, advisors, canManage]);
+
 
   const displayedClients = useMemo(() => {
     let clientsToShow = clients;
@@ -296,35 +302,6 @@ export default function ClientsPage() {
       );
     });
   }, [clients, searchTerm, showOnlyMyClients, userInfo, showDuplicates, canManage, selectedAdvisor]);
-
-
-  const handleSaveClient = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>) => {
-    if (!userInfo) {
-        toast({
-            title: "Error",
-            description: "Debes iniciar sesión para crear un cliente.",
-            variant: "destructive",
-        });
-        return;
-    }
-
-    try {
-      await createClient(clientData, userInfo.id, userInfo.name);
-      toast({
-        title: "Cliente Creado",
-        description: `${clientData.denominacion} ha sido añadido a la lista.`,
-      });
-      fetchData(); // Refresh the list
-      setIsFormOpen(false); // Close dialog on successful creation
-    } catch (error) {
-        console.error("Error creating client:", error);
-        toast({
-            title: "Error al crear cliente",
-            description: "No se pudo guardar el cliente.",
-            variant: "destructive",
-        });
-    }
-  };
   
   const handleBulkDelete = async () => {
     const idsToDelete = Object.keys(rowSelection);
@@ -561,7 +538,7 @@ export default function ClientsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los asesores</SelectItem>
-              {advisors.map(advisor => (
+              {advisorsWithClients.map(advisor => (
                 <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
               ))}
             </SelectContent>
@@ -600,15 +577,19 @@ export default function ClientsPage() {
       <ClientFormDialog
         isOpen={isFormOpen}
         onOpenChange={setIsFormOpen}
-        onSave={handleSaveClient}
+        onSaveSuccess={() => {
+          fetchData();
+          setIsFormOpen(false);
+        }}
         onValidateCuit={validateCuit}
       />
        {selectedClientForActivity && userInfo && (
         <ActivityFormDialog
           isOpen={isActivityFormOpen}
           onOpenChange={setIsActivityFormOpen}
-          client={selectedClientForActivity}
+          entity={{id: selectedClientForActivity.id, name: selectedClientForActivity.denominacion, type: 'client'}}
           userInfo={userInfo}
+          getGoogleAccessToken={getGoogleAccessToken}
           onActivitySaved={() => fetchData()}
         />
        )}
