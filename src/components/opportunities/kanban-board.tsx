@@ -20,7 +20,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, updateOpportunity, getClients, getUserProfile, getOpportunityAlertsConfig, getSystemConfigDoc } from '@/lib/firebase-service';
+import { getAllOpportunities, updateOpportunity, getClients, getUserProfile, getOpportunityAlertsConfig } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval, addMonths, startOfMonth, parseISO, isSameMonth, endOfMonth, format, differenceInDays } from 'date-fns';
@@ -184,29 +184,59 @@ const KanbanCard = ({ opportunity, onDragStart, alertConfig }: { opportunity: Op
         onDragStart={onDragStart}
         className="hover:shadow-md transition-shadow duration-200 group"
       >
-        <div className="p-4">
-            <div className="flex justify-between items-start cursor-pointer" onClick={() => setIsDetailsOpen(true)}>
-                <div className="flex-1">
-                    <CardTitle className="text-base font-semibold leading-tight flex items-center gap-2">
-                       {shouldAlert && (
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger>
-                                        <AlertTriangle className="h-4 w-4 text-amber-500" />
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>Esta oportunidad lleva {daysInStage} día(s) en esta etapa.</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
-                        {opportunity.clientName}
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground pt-1">{opportunity.title}</p>
+        <div className="p-4" >
+            <CardHeader className="p-0 cursor-pointer" onClick={() => setIsDetailsOpen(true)}>
+                <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                        <CardTitle className="text-base font-semibold leading-tight flex items-center gap-2">
+                        {shouldAlert && (
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger>
+                                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Esta oportunidad lleva {daysInStage} día(s) en esta etapa.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            )}
+                            {opportunity.clientName}
+                        </CardTitle>
+                        <p className="text-sm text-muted-foreground pt-1">{opportunity.title}</p>
+                    </div>
                 </div>
-                 <DropdownMenu>
+            </CardHeader>
+            <div className="flex justify-between items-end">
+                <CardContent className="p-0 pt-2 cursor-pointer flex-1" onClick={() => setIsDetailsOpen(true)}>
+                <div className="flex justify-between items-center">
+                    <span className="text-lg font-bold text-primary">
+                        ${displayValue.toLocaleString('es-AR')}
+                    </span>
+                    {owner && (
+                    <TooltipProvider>
+                        <Tooltip>
+                        <TooltipTrigger>
+                            <Avatar className="h-8 w-8">
+                            <AvatarImage
+                                src={owner.avatarUrl}
+                                alt={owner.name}
+                                data-ai-hint="person face"
+                            />
+                            <AvatarFallback>{owner.initials}</AvatarFallback>
+                            </Avatar>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>{owner.name}</p>
+                        </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    )}
+                </div>
+                </CardContent>
+                <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 -mr-2 -mt-2 opacity-0 group-hover:opacity-100 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 flex-shrink-0" onClick={e => e.stopPropagation()}>
                         <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
                     </Button>
                     </DropdownMenuTrigger>
@@ -220,32 +250,6 @@ const KanbanCard = ({ opportunity, onDragStart, alertConfig }: { opportunity: Op
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
-            <CardContent className="p-0 pt-2 cursor-pointer" onClick={() => setIsDetailsOpen(true)}>
-            <div className="flex justify-between items-center">
-                <span className="text-lg font-bold text-primary">
-                    ${displayValue.toLocaleString('es-AR')}
-                </span>
-                {owner && (
-                <TooltipProvider>
-                    <Tooltip>
-                    <TooltipTrigger>
-                        <Avatar className="h-8 w-8">
-                        <AvatarImage
-                            src={owner.avatarUrl}
-                            alt={owner.name}
-                            data-ai-hint="person face"
-                        />
-                        <AvatarFallback>{owner.initials}</AvatarFallback>
-                        </Avatar>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>{owner.name}</p>
-                    </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-                )}
-            </div>
-            </CardContent>
         </div>
       </Card>
       {isDetailsOpen && (
@@ -322,7 +326,7 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
       const [allOpps, allClients, alerts] = await Promise.all([
         getAllOpportunities(),
         getClients(),
-        getSystemConfigDoc('opportunity_alerts'),
+        getOpportunityAlertsConfig(),
       ]);
       setOpportunities(allOpps);
       setClients(allClients);

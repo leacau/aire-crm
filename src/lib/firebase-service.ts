@@ -101,11 +101,15 @@ export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsCon
     const cachedData = getFromCache(ALERTS_CONFIG_DOC_ID);
     if (cachedData) return cachedData;
 
-    const configData = await getSystemConfigDoc(ALERTS_CONFIG_DOC_ID);
-
-    if (configData) {
-        setInCache(ALERTS_CONFIG_DOC_ID, configData);
-        return configData;
+    try {
+        const configData = await getSystemConfigDoc(ALERTS_CONFIG_DOC_ID);
+        if (configData) {
+            setInCache(ALERTS_CONFIG_DOC_ID, configData);
+            return configData;
+        }
+    } catch(e) {
+        console.error("Permission error fetching alerts config, returning empty. This is expected for non-admins.", e);
+        // Return empty config for non-admins to avoid breaking UI
     }
     return {};
 };
