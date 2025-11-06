@@ -1,6 +1,6 @@
 
 import type { User, ScreenName } from './types';
-import { defaultPermissions } from './data';
+import { defaultPermissions } from '@/lib/data';
 
 export function hasPermission(user: User, screen: ScreenName, permissionType: 'view' | 'edit'): boolean {
     if (!user) {
