@@ -1,16 +1,7 @@
 
 import type { User, ScreenName } from './types';
-import { defaultPermissions } from '@/lib/data';
+import { defaultPermissions } from './data';
 
-/**
- * Checks if a user has a specific permission for a screen.
- * This is a synchronous function that relies on the permissions being pre-loaded into the user object.
- * 
- * @param user The user object, which should contain the resolved permissions.
- * @param screen The screen to check permission for.
- * @param permissionType The type of permission ('view' or 'edit').
- * @returns true if the user has the permission, false otherwise.
- */
 export function hasPermission(user: User, screen: ScreenName, permissionType: 'view' | 'edit'): boolean {
     if (!user) {
         return false;
