@@ -25,6 +25,7 @@ import {
   CheckCircle,
   Lightbulb,
   TrendingDown,
+  BadgeCheck,
 } from 'lucide-react';
 import type { Opportunity, Client, ActivityLog, ClientActivity, User, Invoice } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
@@ -404,8 +405,6 @@ export default function DashboardPage() {
     .filter(inv => inv.status !== 'Pagada' && dateRange && dateFilter(inv.date, dateRange))
     .reduce((acc, inv) => acc + inv.amount, 0);
 
-  const totalBillingInPeriod = totalPaidInPeriod + totalToCollectInPeriod;
-
   const prevMonthStart = dateRange?.from ? startOfMonth(subMonths(dateRange.from, 1)) : null;
   const prevMonthEnd = dateRange?.from ? endOfMonth(subMonths(dateRange.from, 1)) : null;
   
@@ -421,16 +420,12 @@ export default function DashboardPage() {
       previousMonthBilling = prevPaid + prevToCollect;
   }
   
-  const billingDifference = totalBillingInPeriod - previousMonthBilling;
+  const toCollectDifference = totalToCollectInPeriod - previousMonthBilling;
 
   const prospectingValue = filteredOpportunities
     .filter(o => o.stage === 'Nuevo')
     .reduce((acc, o) => acc + Number(o.value || 0), 0);
     
-  const forecastedValue = filteredOpportunities
-    .filter(o => ['Propuesta', 'Negociación', 'Negociación a Aprobar'].includes(o.stage))
-    .reduce((acc, o) => acc + Number(o.value || 0), 0);
-
   const totalClients = userClients.length;
 
   return (
@@ -465,45 +460,41 @@ export default function DashboardPage() {
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Facturación del Período
+                  Facturación a Cobrar
                 </CardTitle>
                 <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${totalBillingInPeriod.toLocaleString('es-AR')}
+                  ${totalToCollectInPeriod.toLocaleString('es-AR')}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Pagado: ${totalPaidInPeriod.toLocaleString('es-AR')} / 
-                  A cobrar: ${totalToCollectInPeriod.toLocaleString('es-AR')}
-                </p>
                  <p className="text-xs text-muted-foreground mt-1">
-                    Mes Anterior: ${previousMonthBilling.toLocaleString('es-AR')}
+                    Mes Anterior (a cobrar): ${previousMonthBilling.toLocaleString('es-AR')}
                 </p>
                  <p className={cn(
                     "text-xs font-medium flex items-center mt-1",
-                    billingDifference >= 0 ? "text-green-600" : "text-red-600"
+                    toCollectDifference >= 0 ? "text-green-600" : "text-red-600"
                   )}>
-                  {billingDifference >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
-                  Dif: ${billingDifference.toLocaleString('es-AR')}
+                  {toCollectDifference >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
+                  Dif: ${toCollectDifference.toLocaleString('es-AR')}
                 </p>
               </CardContent>
             </Card>
           </Link>
-           <Link href="/opportunities">
+           <Link href="/billing?tab=paid">
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Ingresos Previstos
+                  Pagos del Mes
                 </CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                <BadgeCheck className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${forecastedValue.toLocaleString('es-AR')}
+                  ${totalPaidInPeriod.toLocaleString('es-AR')}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Propuesta, Negociación y Aprobación.
+                  Total de facturas pagadas en el período.
                 </p>
               </CardContent>
             </Card>
