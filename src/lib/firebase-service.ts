@@ -79,10 +79,16 @@ const parseDateWithTimezone = (dateString: string) => {
     return new Date(year, month - 1, day);
 };
 
-// --- System Config General Function ---
 // This function acts as a secure gateway for all system config operations.
 // It should be the ONLY way components interact with the system_config collection.
 async function handleSystemConfig(operation: 'get' | 'update', docId: string, data?: any) {
+  const context: SecurityRuleContext = {
+    path: `system_config/${docId}`,
+    operation,
+    requestResourceData: data,
+  };
+
+  try {
     const docRef = doc(collections.systemConfig, docId);
     
     if (operation === 'get') {
@@ -95,9 +101,20 @@ async function handleSystemConfig(operation: 'get' | 'update', docId: string, da
         invalidateCache(docId);
         return null;
     }
-
-    throw new Error('Invalid operation for handleSystemConfig');
+  } catch (error: any) {
+    if (error.code === 'permission-denied') {
+      const permissionError = new FirestorePermissionError(context);
+      errorEmitter.emit('permission-error', permissionError);
+      // Re-throw the original error after emitting our custom one
+      // to let the calling function know it failed.
+      throw error;
+    }
+    // For other types of errors, just re-throw them
+    throw error;
+  }
+  throw new Error('Invalid operation for handleSystemConfig');
 }
+
 
 
 // --- Opportunity Alert Config Functions ---
@@ -105,14 +122,10 @@ export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsCon
     const cachedData = getFromCache(ALERTS_CONFIG_DOC_ID);
     if (cachedData) return cachedData;
 
-    try {
-        const configData = await handleSystemConfig('get', ALERTS_CONFIG_DOC_ID);
-        if (configData) {
-            setInCache(ALERTS_CONFIG_DOC_ID, configData);
-            return configData;
-        }
-    } catch(e) {
-        console.error("Permission error fetching alerts config, returning empty. This is expected for non-admins.", e);
+    const configData = await handleSystemConfig('get', ALERTS_CONFIG_DOC_ID);
+    if (configData) {
+        setInCache(ALERTS_CONFIG_DOC_ID, configData);
+        return configData;
     }
     return {};
 };

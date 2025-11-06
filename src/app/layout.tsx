@@ -30,10 +30,10 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <AuthProvider>
+            <FirebaseErrorListener />
             <AuthLayout>
                  {children}
             </AuthLayout>
-             <FirebaseErrorListener />
         </AuthProvider>
         <Toaster />
         <Analytics />
@@ -41,4 +41,3 @@ export default function RootLayout({
       </body>
     </html>
   );
-}

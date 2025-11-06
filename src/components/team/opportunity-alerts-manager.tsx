@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -24,8 +23,14 @@ export function OpportunityAlertsManager() {
     useEffect(() => {
         setIsLoading(true);
         getOpportunityAlertsConfig()
-            .then(setConfig)
-            .catch(() => toast({ title: "Error al cargar la configuración de alertas", variant: "destructive" }))
+            .then((data) => {
+                if(data) setConfig(data);
+            })
+            .catch(() => {
+                // The error is handled globally by the error emitter, so we just prevent the app from crashing.
+                // We can show a toast for a better UX if needed.
+                console.error("Permission denied to load alert configs. This is expected for some roles.");
+            })
             .finally(() => setIsLoading(false));
     }, [toast]);
 
