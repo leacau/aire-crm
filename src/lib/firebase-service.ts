@@ -79,21 +79,25 @@ const parseDateWithTimezone = (dateString: string) => {
     return new Date(year, month - 1, day);
 };
 
-// --- System Config General Function (SERVER-SIDE) ---
-export async function getSystemConfigDoc(docId: string): Promise<any> {
+// --- System Config General Function ---
+// This function acts as a secure gateway for all system config operations.
+// It should be the ONLY way components interact with the system_config collection.
+async function handleSystemConfig(operation: 'get' | 'update', docId: string, data?: any) {
     const docRef = doc(collections.systemConfig, docId);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-        return docSnap.data();
+    
+    if (operation === 'get') {
+        const docSnap = await getDoc(docRef);
+        return docSnap.exists() ? docSnap.data() : null;
     }
-    return null;
-}
 
-async function updateSystemConfigDoc(docId: string, data: any) {
-    const docRef = doc(collections.systemConfig, docId);
-    await setDoc(docRef, data, { merge: true });
-    invalidateCache(docId);
-};
+    if (operation === 'update') {
+        await setDoc(docRef, data, { merge: true });
+        invalidateCache(docId);
+        return null;
+    }
+
+    throw new Error('Invalid operation for handleSystemConfig');
+}
 
 
 // --- Opportunity Alert Config Functions ---
@@ -102,21 +106,20 @@ export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsCon
     if (cachedData) return cachedData;
 
     try {
-        const configData = await getSystemConfigDoc(ALERTS_CONFIG_DOC_ID);
+        const configData = await handleSystemConfig('get', ALERTS_CONFIG_DOC_ID);
         if (configData) {
             setInCache(ALERTS_CONFIG_DOC_ID, configData);
             return configData;
         }
     } catch(e) {
         console.error("Permission error fetching alerts config, returning empty. This is expected for non-admins.", e);
-        // Return empty config for non-admins to avoid breaking UI
     }
     return {};
 };
 
 export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsConfig, userId: string, userName: string): Promise<void> => {
-    await updateSystemConfigDoc(ALERTS_CONFIG_DOC_ID, config);
-
+    await handleSystemConfig('update', ALERTS_CONFIG_DOC_ID, config);
+    
     await logActivity({
         userId,
         userName,
@@ -135,20 +138,20 @@ export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Rec
     const cachedData = getFromCache(PERMISSIONS_DOC_ID);
     if (cachedData) return cachedData;
 
-    const permissionsData = await getSystemConfigDoc(PERMISSIONS_DOC_ID);
+    const permissionsData = await handleSystemConfig('get', PERMISSIONS_DOC_ID);
 
     if (permissionsData && permissionsData.permissions) {
         setInCache(PERMISSIONS_DOC_ID, permissionsData.permissions);
         return permissionsData.permissions;
     } else {
-        await updateSystemConfigDoc(PERMISSIONS_DOC_ID, { permissions: defaultPermissions });
+        await handleSystemConfig('update', PERMISSIONS_DOC_ID, { permissions: defaultPermissions });
         setInCache(PERMISSIONS_DOC_ID, defaultPermissions);
         return defaultPermissions;
     }
 };
 
 export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>): Promise<void> => {
-    await updateSystemConfigDoc(PERMISSIONS_DOC_ID, { permissions });
+    await handleSystemConfig('update', PERMISSIONS_DOC_ID, { permissions });
     invalidateCache(PERMISSIONS_DOC_ID);
 };
 
