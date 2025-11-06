@@ -20,7 +20,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, updateOpportunity, getClients, getUserProfile, getOpportunityAlertsConfig } from '@/lib/firebase-service';
+import { getAllOpportunities, updateOpportunity, getClients, getUserProfile, getOpportunityAlertsConfig, getSystemConfigDoc } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval, addMonths, startOfMonth, parseISO, isSameMonth, endOfMonth, format, differenceInDays } from 'date-fns';
@@ -185,8 +185,8 @@ const KanbanCard = ({ opportunity, onDragStart, alertConfig }: { opportunity: Op
         className="hover:shadow-md transition-shadow duration-200 group"
       >
         <div className="p-4">
-            <div className="flex justify-between items-start">
-                <div className="flex-1 cursor-pointer" onClick={() => setIsDetailsOpen(true)}>
+            <div className="flex justify-between items-start cursor-pointer" onClick={() => setIsDetailsOpen(true)}>
+                <div className="flex-1">
                     <CardTitle className="text-base font-semibold leading-tight flex items-center gap-2">
                        {shouldAlert && (
                             <TooltipProvider>
@@ -220,7 +220,7 @@ const KanbanCard = ({ opportunity, onDragStart, alertConfig }: { opportunity: Op
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
-            <CardContent className="p-0 pt-2">
+            <CardContent className="p-0 pt-2 cursor-pointer" onClick={() => setIsDetailsOpen(true)}>
             <div className="flex justify-between items-center">
                 <span className="text-lg font-bold text-primary">
                     ${displayValue.toLocaleString('es-AR')}
@@ -322,11 +322,11 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
       const [allOpps, allClients, alerts] = await Promise.all([
         getAllOpportunities(),
         getClients(),
-        getOpportunityAlertsConfig(),
+        getSystemConfigDoc('opportunity_alerts'),
       ]);
       setOpportunities(allOpps);
       setClients(allClients);
-      setAlertConfig(alerts);
+      setAlertConfig(alerts || {});
 
     } catch (error) {
       console.error("Error fetching opportunities:", error);
