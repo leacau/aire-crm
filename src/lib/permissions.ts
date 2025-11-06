@@ -1,6 +1,6 @@
 
-
 import type { User, ScreenName } from './types';
+import { defaultPermissions } from '@/lib/data';
 
 /**
  * Checks if a user has a specific permission for a screen.
@@ -39,4 +39,11 @@ export function hasPermission(user: User, screen: ScreenName, permissionType: 'v
     }
 
     return false;
+}
+
+/**
+ * This function is deprecated and should not be used. It's a placeholder to avoid breaking changes.
+ */
+export function invalidateCache() {
+    // No-op
 }
