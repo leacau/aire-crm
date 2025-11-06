@@ -1,9 +1,8 @@
 
 
-
 import type { User, AreaType, ScreenName, ScreenPermission } from './types';
 import { getAreaPermissions } from './firebase-service';
-import { defaultPermissions } from './data';
+import { defaultPermissions } from '@/lib/data';
 
 // In-memory cache for permissions
 let permissionsCache: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>> | null = null;
@@ -20,8 +19,13 @@ async function getPermissions() {
         return permissionsCache;
     }
     
-    permissionsCache = await getAreaPermissions();
-    cacheTimestamp = now;
+    try {
+        permissionsCache = await getAreaPermissions();
+        cacheTimestamp = now;
+    } catch (error) {
+        console.error("Failed to fetch permissions, using default. Error:", error);
+        permissionsCache = defaultPermissions; // Fallback to defaults
+    }
     return permissionsCache;
 }
 
@@ -67,7 +71,7 @@ export async function hasPermissionAsync(user: User, screen: ScreenName, permiss
     // Area-based permissions
     const areaPerms = await getPermissions();
 
-    if (user.area && areaPerms[user.area] && areaPerms[user.area][screen]) {
+    if (user.area && areaPerms && areaPerms[user.area] && areaPerms[user.area][screen]) {
         return areaPerms[user.area][screen]![permissionType] === true;
     }
 
@@ -104,4 +108,3 @@ export function hasPermission(user: User, screen: ScreenName, permissionType: 'v
 
 // Initial fetch to populate cache on app load.
 getPermissions();
-
