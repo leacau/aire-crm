@@ -80,7 +80,7 @@ const parseDateWithTimezone = (dateString: string) => {
 };
 
 // --- System Config General Function (SERVER-SIDE) ---
-async function getSystemConfigDoc(docId: string): Promise<any> {
+export async function getSystemConfigDoc(docId: string): Promise<any> {
     const docRef = doc(collections.systemConfig, docId);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
