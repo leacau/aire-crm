@@ -69,16 +69,28 @@ export const invalidateCache = (key?: string) => {
 
 const parseDateWithTimezone = (dateString: string) => {
     if (!dateString || typeof dateString !== 'string') return null;
+    // The issue might be that a timestamp is passed as a string
+    if (dateString.includes('T')) {
+        return parseISO(dateString);
+    }
     const parts = dateString.split('-').map(Number);
     if (parts.length !== 3 || parts.some(isNaN)) return null;
     const [year, month, day] = parts;
     return new Date(year, month - 1, day);
 };
 
-// --- System Config General Function ---
-const updateSystemConfigDoc = async (docId: string, data: any) => {
+// --- System Config General Function (SERVER-SIDE) ---
+async function getSystemConfigDoc(docId: string): Promise<any> {
     const docRef = doc(collections.systemConfig, docId);
-    // This now runs on the server, so it should have admin privileges
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        return docSnap.data();
+    }
+    return null;
+}
+
+async function updateSystemConfigDoc(docId: string, data: any) {
+    const docRef = doc(collections.systemConfig, docId);
     await setDoc(docRef, data, { merge: true });
     invalidateCache(docId);
 };
@@ -89,13 +101,11 @@ export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsCon
     const cachedData = getFromCache(ALERTS_CONFIG_DOC_ID);
     if (cachedData) return cachedData;
 
-    const docRef = doc(collections.systemConfig, ALERTS_CONFIG_DOC_ID);
-    const docSnap = await getDoc(docRef);
+    const configData = await getSystemConfigDoc(ALERTS_CONFIG_DOC_ID);
 
-    if (docSnap.exists()) {
-        const config = docSnap.data() as OpportunityAlertsConfig;
-        setInCache(ALERTS_CONFIG_DOC_ID, config);
-        return config;
+    if (configData) {
+        setInCache(ALERTS_CONFIG_DOC_ID, configData);
+        return configData;
     }
     return {};
 };
@@ -118,29 +128,24 @@ export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsCon
 
 // --- Permissions ---
 export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
-    const cachedData = getFromCache('permissions');
+    const cachedData = getFromCache(PERMISSIONS_DOC_ID);
     if (cachedData) return cachedData;
-    
-    // Assuming the super admin's UID is known or can be fetched if not available.
-    // For now, this part might need adjustment if the UID is not static.
-    // This function can't easily get the current user's ID, so it's a simplification.
-    const permissionsDocRef = doc(db, 'system_config', PERMISSIONS_DOC_ID);
-    const docSnap = await getDoc(permissionsDocRef);
 
-    if (docSnap.exists()) {
-        const perms = docSnap.data().permissions;
-        setInCache('permissions', perms);
-        return perms;
+    const permissionsData = await getSystemConfigDoc(PERMISSIONS_DOC_ID);
+
+    if (permissionsData && permissionsData.permissions) {
+        setInCache(PERMISSIONS_DOC_ID, permissionsData.permissions);
+        return permissionsData.permissions;
     } else {
-        await setDoc(permissionsDocRef, { permissions: defaultPermissions });
-        setInCache('permissions', defaultPermissions);
+        await updateSystemConfigDoc(PERMISSIONS_DOC_ID, { permissions: defaultPermissions });
+        setInCache(PERMISSIONS_DOC_ID, defaultPermissions);
         return defaultPermissions;
     }
 };
 
 export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>): Promise<void> => {
     await updateSystemConfigDoc(PERMISSIONS_DOC_ID, { permissions });
-    invalidateCache('permissions');
+    invalidateCache(PERMISSIONS_DOC_ID);
 };
 
 
