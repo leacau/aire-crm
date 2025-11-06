@@ -1,0 +1,93 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { getOpportunityAlertsConfig, updateOpportunityAlertsConfig } from '@/lib/firebase-service';
+import type { OpportunityStage, OpportunityAlertsConfig } from '@/lib/types';
+import { Spinner } from '../ui/spinner';
+import { useAuth } from '@/hooks/use-auth';
+
+const alertableStages: OpportunityStage[] = ['Nuevo', 'Propuesta', 'Negociación', 'Negociación a Aprobar'];
+
+export function OpportunityAlertsManager() {
+    const { userInfo } = useAuth();
+    const [config, setConfig] = useState<OpportunityAlertsConfig>({});
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const { toast } = useToast();
+
+    useEffect(() => {
+        setIsLoading(true);
+        getOpportunityAlertsConfig()
+            .then((data) => {
+                setConfig(data || {});
+            })
+            .catch((error) => {
+                console.error("Failed to load alert configuration:", error);
+                // Non-blocking, the component will just show empty fields.
+                // The global error handler will catch permission errors.
+            })
+            .finally(() => setIsLoading(false));
+    }, []);
+
+    const handleDaysChange = (stage: OpportunityStage, value: string) => {
+        const days = Number(value);
+        setConfig(prev => ({
+            ...prev,
+            [stage]: isNaN(days) || days < 0 ? 0 : days,
+        }));
+    };
+
+    const handleSave = async () => {
+        if (!userInfo) return;
+        setIsSaving(true);
+        try {
+            await updateOpportunityAlertsConfig(config, userInfo.id, userInfo.name);
+            toast({ title: "Configuración de alertas guardada" });
+        } catch (error) {
+            toast({ title: "Error al guardar la configuración", variant: "destructive" });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+    
+    if (isLoading) {
+        return <div className="flex justify-center items-center h-48"><Spinner /></div>;
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Configuración de Alertas de Oportunidades</CardTitle>
+                <CardDescription>
+                    Define la cantidad máxima de días que una oportunidad puede permanecer en una etapa antes de que se muestre una alerta.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {alertableStages.map(stage => (
+                        <div key={stage} className="space-y-2">
+                            <Label htmlFor={`alert-${stage}`}>{stage}</Label>
+                            <Input
+                                id={`alert-${stage}`}
+                                type="number"
+                                placeholder="Días"
+                                value={config[stage] || ''}
+                                onChange={(e) => handleDaysChange(stage, e.target.value)}
+                            />
+                        </div>
+                    ))}
+                </div>
+                <div className="flex justify-end mt-6">
+                    <Button onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? <Spinner size="small" /> : 'Guardar Alertas'}
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
