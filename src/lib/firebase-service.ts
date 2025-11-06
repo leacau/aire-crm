@@ -10,9 +10,6 @@ import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from '@/lib/data';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
@@ -79,59 +76,32 @@ const parseDateWithTimezone = (dateString: string) => {
     return new Date(year, month - 1, day);
 };
 
-// This function acts as a secure gateway for all system config operations.
-// It should be the ONLY way components interact with the system_config collection.
-async function handleSystemConfig(operation: 'get' | 'update', docId: string, data?: any) {
-  const context: SecurityRuleContext = {
-    path: `system_config/${docId}`,
-    operation,
-    requestResourceData: data,
-  };
-
-  try {
-    const docRef = doc(collections.systemConfig, docId);
-    
-    if (operation === 'get') {
-        const docSnap = await getDoc(docRef);
-        return docSnap.exists() ? docSnap.data() : null;
-    }
-
-    if (operation === 'update') {
-        await setDoc(docRef, data, { merge: true });
-        invalidateCache(docId);
-        return null;
-    }
-  } catch (error: any) {
-    if (error.code === 'permission-denied') {
-      const permissionError = new FirestorePermissionError(context);
-      errorEmitter.emit('permission-error', permissionError);
-      // Re-throw the original error after emitting our custom one
-      // to let the calling function know it failed.
-      throw error;
-    }
-    // For other types of errors, just re-throw them
-    throw error;
-  }
-  throw new Error('Invalid operation for handleSystemConfig');
-}
-
-
 
 // --- Opportunity Alert Config Functions ---
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
-    const cachedData = getFromCache(ALERTS_CONFIG_DOC_ID);
-    if (cachedData) return cachedData;
-
-    const configData = await handleSystemConfig('get', ALERTS_CONFIG_DOC_ID);
-    if (configData) {
-        setInCache(ALERTS_CONFIG_DOC_ID, configData);
-        return configData;
+    const cacheKey = ALERTS_CONFIG_DOC_ID;
+    const cached = getFromCache(cacheKey);
+    if (cached) return cached;
+    
+    try {
+        const docRef = doc(collections.systemConfig, ALERTS_CONFIG_DOC_ID);
+        const docSnap = await getDoc(docRef);
+        const data = docSnap.exists() ? (docSnap.data() as OpportunityAlertsConfig) : {};
+        setInCache(cacheKey, data);
+        return data;
+    } catch(e: any) {
+        if (e.code === 'permission-denied') {
+            console.error("Permission error fetching alerts config. This is expected for non-admins.");
+            return {};
+        }
+        throw e;
     }
-    return {};
 };
 
 export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsConfig, userId: string, userName: string): Promise<void> => {
-    await handleSystemConfig('update', ALERTS_CONFIG_DOC_ID, config);
+    const docRef = doc(collections.systemConfig, ALERTS_CONFIG_DOC_ID);
+    await setDoc(docRef, config);
+    invalidateCache(ALERTS_CONFIG_DOC_ID);
     
     await logActivity({
         userId,
@@ -148,23 +118,27 @@ export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsCon
 
 // --- Permissions ---
 export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
-    const cachedData = getFromCache(PERMISSIONS_DOC_ID);
-    if (cachedData) return cachedData;
+    try {
+        const docRef = doc(collections.systemConfig, PERMISSIONS_DOC_ID);
+        const docSnap = await getDoc(docRef);
 
-    const permissionsData = await handleSystemConfig('get', PERMISSIONS_DOC_ID);
-
-    if (permissionsData && permissionsData.permissions) {
-        setInCache(PERMISSIONS_DOC_ID, permissionsData.permissions);
-        return permissionsData.permissions;
-    } else {
-        await handleSystemConfig('update', PERMISSIONS_DOC_ID, { permissions: defaultPermissions });
-        setInCache(PERMISSIONS_DOC_ID, defaultPermissions);
-        return defaultPermissions;
+        if (docSnap.exists() && docSnap.data().permissions) {
+            return docSnap.data().permissions;
+        } else {
+            // This will only run once if the document doesn't exist
+            await setDoc(docRef, { permissions: defaultPermissions }, { merge: true });
+            return defaultPermissions;
+        }
+    } catch (e: any) {
+        console.error("Permission denied to access permissions document. Falling back to defaults. This is expected for non-superadmin users.", e.message);
+        return defaultPermissions; // Return defaults if any error occurs (like permission denied)
     }
 };
 
+
 export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>): Promise<void> => {
-    await handleSystemConfig('update', PERMISSIONS_DOC_ID, { permissions });
+    const docRef = doc(collections.systemConfig, PERMISSIONS_DOC_ID);
+    await setDoc(docRef, { permissions });
     invalidateCache(PERMISSIONS_DOC_ID);
 };
 

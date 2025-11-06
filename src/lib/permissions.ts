@@ -1,110 +1,42 @@
 
 
-import type { User, AreaType, ScreenName, ScreenPermission } from './types';
-import { getAreaPermissions } from './firebase-service';
-import { defaultPermissions } from '@/lib/data';
-
-// In-memory cache for permissions
-let permissionsCache: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>> | null = null;
-let cacheTimestamp: number | null = null;
-const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
-
-
-/**
- * Fetches permissions from Firestore or returns from cache.
- */
-async function getPermissions() {
-    const now = Date.now();
-    if (permissionsCache && cacheTimestamp && (now - cacheTimestamp < CACHE_DURATION_MS)) {
-        return permissionsCache;
-    }
-    
-    try {
-        permissionsCache = await getAreaPermissions();
-        cacheTimestamp = now;
-    } catch (error) {
-        console.error("Failed to fetch permissions, using default. Error:", error);
-        permissionsCache = defaultPermissions; // Fallback to defaults
-    }
-    return permissionsCache;
-}
-
-
-/**
- * Invalidates the in-memory cache for permissions.
- * Should be called after updating permissions in the database.
- */
-export function invalidatePermissionsCache() {
-    permissionsCache = null;
-    cacheTimestamp = null;
-}
+import type { User, ScreenName } from './types';
 
 /**
  * Checks if a user has a specific permission for a screen.
+ * This is a synchronous function that relies on the permissions being pre-loaded into the user object.
  * 
- * Hierarchy of checks:
- * 1. User is 'Jefe', 'Gerencia', or 'Admin' -> always true (superuser).
- * 2. User has specific permission defined on their own profile -> use that.
- * 3. User's area has a specific permission defined -> use that.
- * 4. Default to false if no permission is found.
- * 
- * @param user The user object.
+ * @param user The user object, which should contain the resolved permissions.
  * @param screen The screen to check permission for.
  * @param permissionType The type of permission ('view' or 'edit').
- * @returns A promise that resolves to true if the user has the permission, false otherwise.
+ * @returns true if the user has the permission, false otherwise.
  */
-export async function hasPermissionAsync(user: User, screen: ScreenName, permissionType: 'view' | 'edit'): Promise<boolean> {
+export function hasPermission(user: User, screen: ScreenName, permissionType: 'view' | 'edit'): boolean {
     if (!user) {
         return false;
     }
-
-    // Superusers have all permissions
+    
+    // Superusers have all permissions. Use a specific, non-public email for the super admin.
     if (user.role === 'Jefe' || user.role === 'Gerencia' || user.email === 'lchena@airedesantafe.com.ar') {
         return true;
     }
-    
-    // User-specific overrides
-    if (user.permissions && user.permissions[screen]) {
-        return user.permissions[screen]![permissionType] === true;
-    }
 
-    // Area-based permissions
-    const areaPerms = await getPermissions();
+    const screenPermissions = user.permissions?.[screen];
 
-    if (user.area && areaPerms && areaPerms[user.area] && areaPerms[user.area][screen]) {
-        return areaPerms[user.area][screen]![permissionType] === true;
-    }
-
-    return false;
-}
-
-
-// A synchronous version for client components that rely on the cache.
-// This might show stale data for up to CACHE_DURATION_MS but avoids async logic in components.
-export function hasPermission(user: User, screen: ScreenName, permissionType: 'view' | 'edit'): boolean {
-     if (!user) {
+    if (!screenPermissions) {
         return false;
     }
-    
-    // Superusers have all permissions
-    if (user.role === 'Jefe' || user.role === 'Gerencia' || user.email === 'lchena@airedesantafe.com.ar') {
-        return true;
+
+    // If 'edit' permission is requested, it implicitly requires 'view' permission.
+    // If 'edit' is true, grant permission.
+    if (permissionType === 'edit') {
+        return screenPermissions.edit === true;
     }
 
-    // User-specific overrides
-    if (user.permissions && user.permissions[screen]) {
-        return user.permissions[screen]![permissionType] === true;
-    }
-
-    // Area-based permissions from cache
-    const areaPerms = permissionsCache || defaultPermissions;
-
-    if (user.area && areaPerms[user.area] && areaPerms[user.area][screen]) {
-        return areaPerms[user.area][screen]![permissionType] === true;
+    // If 'view' permission is requested, grant if 'view' is true OR if 'edit' is true (since edit implies view).
+    if (permissionType === 'view') {
+        return screenPermissions.view === true || screenPermissions.edit === true;
     }
 
     return false;
 }
-
-// Initial fetch to populate cache on app load.
-getPermissions();

@@ -13,11 +13,13 @@ import type { AreaType, ScreenName, ScreenPermission } from '@/lib/types';
 import { areaTypes } from '@/lib/types';
 import { screenNames } from '@/lib/types';
 import { Spinner } from '../ui/spinner';
-import { invalidatePermissionsCache } from '@/lib/permissions';
+import { invalidateCache } from '@/lib/permissions';
+import { useAuth } from '@/hooks/use-auth';
 
 type PermissionsState = Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>;
 
 export function PermissionsManager() {
+    const { userInfo } = useAuth();
     const [permissions, setPermissions] = useState<PermissionsState | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -25,11 +27,15 @@ export function PermissionsManager() {
 
     useEffect(() => {
         setIsLoading(true);
-        getAreaPermissions()
-            .then(setPermissions)
-            .catch(() => toast({ title: "Error al cargar permisos", variant: "destructive" }))
-            .finally(() => setIsLoading(false));
-    }, [toast]);
+        if (userInfo?.email === 'lchena@airedesantafe.com.ar') {
+            getAreaPermissions()
+                .then(setPermissions)
+                .catch(() => toast({ title: "Error al cargar permisos", variant: "destructive" }))
+                .finally(() => setIsLoading(false));
+        } else {
+            setIsLoading(false);
+        }
+    }, [toast, userInfo]);
 
     const handlePermissionChange = (area: AreaType, screen: ScreenName, type: 'view' | 'edit', checked: boolean) => {
         setPermissions(prev => {
@@ -59,7 +65,7 @@ export function PermissionsManager() {
         setIsSaving(true);
         try {
             await updateAreaPermissions(permissions);
-            invalidatePermissionsCache(); // Invalidate the cache to force a refetch on next permission check
+            invalidateCache(); // Invalidate the cache to force a refetch on next permission check
             toast({ title: "Permisos guardados", description: "Los cambios se aplicarán en el próximo refresco de página de los usuarios." });
         } catch (error) {
             toast({ title: "Error al guardar los permisos", variant: "destructive" });
@@ -73,7 +79,7 @@ export function PermissionsManager() {
     }
 
     if (!permissions) {
-        return <p>No se pudieron cargar los permisos.</p>;
+        return null;
     }
 
     return (
