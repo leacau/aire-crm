@@ -4,6 +4,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -83,6 +84,7 @@ export type Opportunity = {
   closeDate: string;
   details?: string;
   observaciones?: string;
+  stageLastUpdatedAt?: string;
   
   bonificacionDetalle?: string;
   bonificacionEstado?: BonificacionEstado;
@@ -172,7 +174,7 @@ export type ActivityLog = {
   userName: string;
   ownerName: string;
   type: 'create' | 'update' | 'delete' | 'stage_change';
-  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user' | 'program' | 'commercial_item' | 'commercial_item_series' | 'licencia' | 'monthly_closure';
+  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user' | 'program' | 'commercial_item' | 'commercial_item_series' | 'licencia' | 'monthly_closure' | 'opportunity_alert';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action
@@ -396,3 +398,5 @@ export type CommercialItem = {
   updatedBy?: string;
   updatedAt?: string;
 };
+
+export type OpportunityAlertsConfig = Partial<Record<OpportunityStage, number>>;

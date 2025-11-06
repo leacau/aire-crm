@@ -9,9 +9,10 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import { PermissionsManager } from '@/components/team/permissions-manager';
+import { OpportunityAlertsManager } from '@/components/team/opportunity-alerts-manager';
 
 export default function TeamPage() {
-  const { userInfo, loading } = useAuth();
+  const { userInfo, loading, isBoss } = useAuth();
   const router = useRouter();
 
   const canAccess = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
@@ -37,6 +38,7 @@ export default function TeamPage() {
         <Header title="Rendimiento y Gestión de Equipo" />
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-8">
           <TeamPerformanceTable />
+          {isBoss && <OpportunityAlertsManager />}
           {isSuperAdmin && <PermissionsManager />}
         </main>
       </div>

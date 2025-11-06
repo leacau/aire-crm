@@ -4,7 +4,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
@@ -16,6 +16,7 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
+const ALERTS_CONFIG_DOC_ID = 'opportunity_alerts';
 
 const collections = {
     clients: collection(db, 'clients'),
@@ -31,6 +32,7 @@ const collections = {
     commercialItems: collection(db, 'commercial_items'),
     prospects: collection(db, 'prospects'),
     licenses: collection(db, 'licencias'),
+    systemConfig: collection(db, 'system_config'),
 };
 
 const cache: {
@@ -72,6 +74,40 @@ const parseDateWithTimezone = (dateString: string) => {
     const [year, month, day] = parts;
     return new Date(year, month - 1, day);
 };
+
+// --- Opportunity Alert Config Functions ---
+export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
+    const cachedData = getFromCache(ALERTS_CONFIG_DOC_ID);
+    if (cachedData) return cachedData;
+
+    const docRef = doc(collections.systemConfig, ALERTS_CONFIG_DOC_ID);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+        const config = docSnap.data() as OpportunityAlertsConfig;
+        setInCache(ALERTS_CONFIG_DOC_ID, config);
+        return config;
+    }
+    return {};
+};
+
+export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsConfig, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(collections.systemConfig, ALERTS_CONFIG_DOC_ID);
+    await setDoc(docRef, config, { merge: true });
+    invalidateCache(ALERTS_CONFIG_DOC_ID);
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'opportunity_alert',
+        entityId: 'config',
+        entityName: 'Configuración de Alertas',
+        details: `actualizó la configuración de alertas de oportunidades.`,
+        ownerName: userName,
+    });
+};
+
 
 // --- Permissions ---
 export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
@@ -367,7 +403,7 @@ export const deleteProspect = async (id: string, userId: string, userName: strin
         entityId: id,
         entityName: prospectData.companyName,
         details: `eliminó el prospecto <strong>${prospectData.companyName}</strong>`,
-        ownerName: prospectData.ownerName,
+        ownerName: prospectData.ownerName || userName,
     });
 };
 
@@ -1496,6 +1532,10 @@ export const getAllOpportunities = async (): Promise<Opportunity[]> => {
       } else if (data.closeDate instanceof Timestamp) {
           opp.closeDate = data.closeDate.toDate().toISOString().split('T')[0];
       }
+       if (data.stageLastUpdatedAt && data.stageLastUpdatedAt instanceof Timestamp) {
+          opp.stageLastUpdatedAt = data.stageLastUpdatedAt.toDate().toISOString();
+      }
+
 
       return opp;
     });
@@ -1530,7 +1570,8 @@ export const createOpportunity = async (
 
     const docRef = await addDoc(collections.opportunities, {
         ...dataToSave,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        stageLastUpdatedAt: serverTimestamp(),
     });
     invalidateCache('opportunities');
 
@@ -1644,6 +1685,10 @@ export const updateOpportunity = async (
     if (data.stage === 'Cerrado - Ganado' && originalData.stage !== 'Cerrado - Ganado') {
         const fullOpportunityData = { ...originalData, ...data, id };
         await createCommercialItemsFromOpportunity(fullOpportunityData, userId, userName);
+    }
+
+    if (data.stage && data.stage !== originalData.stage) {
+        updateData.stageLastUpdatedAt = serverTimestamp();
     }
 
 
