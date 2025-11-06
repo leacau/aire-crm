@@ -1,6 +1,9 @@
 
 import type { User, ScreenName } from './types';
+import { defaultPermissions } from '@/lib/data';
 
+// This is now just a placeholder for the logic inside useAuth.
+// The actual permissions are attached to the user object.
 export function hasPermission(user: User, screen: ScreenName, permissionType: 'view' | 'edit'): boolean {
     if (!user) {
         return false;
