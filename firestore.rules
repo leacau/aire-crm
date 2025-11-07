@@ -2,7 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // --- Helper Functions ---
     function isUserAuthenticated() {
       return request.auth != null && request.auth.uid != null;
@@ -24,81 +24,53 @@ service cloud.firestore {
       return getUserData().permissions;
     }
 
-    function normalizeRole(role) {
-      return role.lower()
-        .replace('á', 'a')
-        .replace('é', 'e')
-        .replace('í', 'i')
-        .replace('ó', 'o')
-        .replace('ú', 'u')
-        .replace('ü', 'u');
+    function isSuperAdminEmail() {
+      return request.auth.token.email is string && request.auth.token.email.lower() == 'lchena@airedesantafe.com.ar';
     }
 
     function userHasManagementScreenOverride() {
-      if (!isUserAuthenticated()) {
-        return false;
-      }
-
       let permissions = getUserPermissions();
-
-      if (permissions == null || !(permissions is map)) {
-        return false;
-      }
-
-      return (
-        (('Team' in permissions) && permissions.Team.edit == true) ||
-        (('Approvals' in permissions) && permissions.Approvals.edit == true) ||
-        (('Import' in permissions) && permissions.Import.edit == true) ||
-        (('Rates' in permissions) && permissions.Rates.edit == true)
+      return permissions is map && (
+        (('Team' in permissions) && permissions.Team is map && permissions.Team.edit == true) ||
+        (('Approvals' in permissions) && permissions.Approvals is map && permissions.Approvals.edit == true) ||
+        (('Import' in permissions) && permissions.Import is map && permissions.Import.edit == true) ||
+        (('Rates' in permissions) && permissions.Rates is map && permissions.Rates.edit == true)
       );
     }
 
-    function isRole(role) {
-      return isUserAuthenticated() && getUserRole() == role;
-    }
-
-    function isOneOfRoles(roles) {
-      return isUserAuthenticated() && getUserRole() in roles;
+    function userRoleMatchesManagementPatterns() {
+      let role = getUserRole();
+      let roleLower = role is string ? role.lower() : '';
+      return roleLower.matches('.*jef.*') ||
+        roleLower.matches('.*gerenc.*') ||
+        roleLower.matches('.*gerent.*') ||
+        roleLower.matches('.*administrac.*') ||
+        roleLower.matches('.*administrador.*') ||
+        roleLower.matches('.*admin\\b.*') ||
+        roleLower.matches('.*coordinac.*') ||
+        roleLower.matches('.*coordinador.*') ||
+        roleLower.matches('.*direcc.*') ||
+        roleLower.matches('.*director.*') ||
+        roleLower.matches('.*líder.*') ||
+        roleLower.matches('.*lider.*') ||
+        roleLower.matches('.*leader.*') ||
+        roleLower.matches('.*supervis.*') ||
+        roleLower.matches('.*responsabl.*') ||
+        roleLower.matches('.*encargad.*');
     }
 
     function isManagementRole() {
-      if (!isUserAuthenticated()) {
-        return false;
-      }
-
-      let userData = getUserData();
-      let role = userData.role;
-
-      if (role == null || !(role is string)) {
-        return userHasManagementScreenOverride();
-      }
-
-      let normalizedRole = normalizeRole(role);
-
-      return normalizedRole.matches('.*jef.*') ||
-        normalizedRole.matches('.*gerenc.*') ||
-        normalizedRole.matches('.*gerent.*') ||
-        normalizedRole.matches('.*administrac.*') ||
-        normalizedRole.matches('.*administrador.*') ||
-        normalizedRole.matches('.*admin\\b.*') ||
-        normalizedRole.matches('.*coordinac.*') ||
-        normalizedRole.matches('.*coordinador.*') ||
-        normalizedRole.matches('.*direcc.*') ||
-        normalizedRole.matches('.*director.*') ||
-        normalizedRole.matches('.*líder.*') ||
-        normalizedRole.matches('.*lider.*') ||
-        normalizedRole.matches('.*leader.*') ||
-        normalizedRole.matches('.*supervis.*') ||
-        normalizedRole.matches('.*responsabl.*') ||
-        normalizedRole.matches('.*encargad.*') ||
+      return isUserAuthenticated() && (
+        userRoleMatchesManagementPatterns() ||
         userHasManagementScreenOverride() ||
-        (request.auth.token.email is string && request.auth.token.email.lower() == 'lchena@airedesantafe.com.ar');
+        isSuperAdminEmail()
+      );
     }
 
     function isOwner(docData) {
       return docData.ownerId == request.auth.uid;
     }
-    
+
     function isCreator(docData) {
       return docData.creadoPorId == request.auth.uid || docData.userId == request.auth.uid;
     }
@@ -110,24 +82,24 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isUserAuthenticated();
       allow create: if request.auth.uid == userId;
-      allow update: if request.auth.uid == userId && !('role' in request.resource.data) // Allow user to update their own profile, but not their role
-                      || isManagementRole(); // Admins can update anything
+      allow update: if (request.auth.uid == userId && !('role' in request.resource.data))
+                      || isManagementRole();
       allow delete: if isManagementRole();
     }
 
     // CLIENTS: Asesores can manage their own clients. Bosses can manage all.
     match /clients/{clientId} {
       allow get: if isUserAuthenticated() && (isOwner(resource.data) || isManagementRole());
-      allow list: if isUserAuthenticated(); // Allow listing for dashboard counts, app filters by owner.
+      allow list: if isUserAuthenticated();
       allow create: if isUserAuthenticated();
       allow update: if isUserAuthenticated() && (isOwner(resource.data) || isManagementRole());
       allow delete: if isManagementRole();
     }
-    
+
     // PROSPECTS: Asesores can manage their own prospects. Bosses can manage all.
     match /prospects/{prospectId} {
       allow get: if isUserAuthenticated() && (isOwner(resource.data) || isManagementRole());
-      allow list: if isUserAuthenticated(); // Allow listing for dashboard counts.
+      allow list: if isUserAuthenticated();
       allow create: if isUserAuthenticated();
       allow update: if isUserAuthenticated() && (isOwner(resource.data) || isManagementRole());
       allow delete: if isManagementRole();
@@ -139,34 +111,34 @@ service cloud.firestore {
         let client = get(/databases/$(database)/documents/clients/$(request.resource.data.clientId));
         return client.data.ownerId == request.auth.uid;
       }
-      
-      allow get: if isUserAuthenticated(); // More complex ownership, handled by list + app logic.
+
+      allow get: if isUserAuthenticated();
       allow list: if isUserAuthenticated();
       allow create: if isUserAuthenticated() && isOpportunityOwner();
       allow update: if isUserAuthenticated() && (isOpportunityOwner() || isManagementRole());
       allow delete: if isManagementRole();
     }
-    
+
     // PEOPLE: Contacts related to clients. Similar rules to clients.
     match /people/{personId} {
-      allow read, create, update: if isUserAuthenticated(); // Permissions are implicitly handled by client access.
+      allow read, create, update: if isUserAuthenticated();
       allow delete: if isManagementRole();
     }
-    
+
     // AGENCIES: Managed by admins. Read by all.
     match /agencies/{agencyId} {
       allow read: if isUserAuthenticated();
       allow create, update, delete: if isManagementRole();
     }
-    
+
     // ACTIVITIES (System Logs): Read-only for most. Created by server-side logic, with an exception for invoice creation.
     match /activities/{activityId} {
       allow read: if isManagementRole();
-      allow list: if isUserAuthenticated(); // Required for dashboard feeds.
-      allow create: if request.resource.data.entityType == 'invoice'; // Allow creating log for invoices
-      allow update, delete: if false; // Only server can write.
+      allow list: if isUserAuthenticated();
+      allow create: if request.resource.data.entityType == 'invoice';
+      allow update, delete: if false;
     }
-    
+
     // CLIENT-ACTIVITIES (User Logs): Users can create for their clients.
     match /client-activities/{activityId} {
       function isActivityOwner() {
@@ -174,12 +146,12 @@ service cloud.firestore {
         return client.data.ownerId == request.auth.uid;
       }
 
-      allow read: if isUserAuthenticated(); // Assumes app-level filtering.
+      allow read: if isUserAuthenticated();
       allow create: if isUserAuthenticated() && isActivityOwner();
       allow update: if isUserAuthenticated() && (isCreator(resource.data) || isActivityOwner() || isManagementRole());
       allow delete: if isManagementRole();
     }
-    
+
     // INVOICES: Linked to opportunities.
     match /invoices/{invoiceId} {
       function isInvoiceOwner() {
@@ -192,7 +164,7 @@ service cloud.firestore {
       allow get, create, update: if isUserAuthenticated() && (isInvoiceOwner() || isManagementRole());
       allow delete: if isManagementRole();
     }
-    
+
     // CANJES: Complex logic, handled by roles.
     match /canjes/{canjeId} {
       allow read: if isUserAuthenticated();
@@ -200,17 +172,17 @@ service cloud.firestore {
       allow update: if isUserAuthenticated() && (isCreator(resource.data) || isOwner(resource.data) || isManagementRole());
       allow delete: if isManagementRole();
     }
-    
+
     // PROGRAMS & COMMERCIAL ITEMS (Grilla): Managed by admins/bosses. Read by all.
     match /programs/{programId} {
       allow read: if isUserAuthenticated();
       allow create, update, delete: if isManagementRole();
     }
-    
+
     match /commercial_items/{itemId} {
       allow read: if isUserAuthenticated();
       allow create: if isUserAuthenticated();
-      allow update, delete: if isUserAuthenticated(); // Simplified for now, complex logic in app. Let's trust the app logic for who can edit what (e.g. their own client's pauta)
+      allow update, delete: if isUserAuthenticated();
     }
 
     // LICENCIAS: Users can create/read their own. Managers can read/update all.
