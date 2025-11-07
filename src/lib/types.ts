@@ -274,8 +274,17 @@ export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Geren
 
 export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción';
 
+export const areaTypes: AreaType[] = [
+    'Comercial',
+    'Administración',
+    'Recursos Humanos',
+    'Pautado',
+    'Programación',
+    'Redacción',
+];
+
 export const screenNames = [
-    'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs', 
+    'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals', 
     'Activity', 'Team', 'Rates', 'Reports', 'Import'
 ] as const;
