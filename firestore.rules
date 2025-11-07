@@ -8,14 +8,55 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid != null;
     }
 
+    function getUserDocument() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserData() {
+      return getUserDocument().data;
+    }
+
     function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return getUserData().role;
+    }
+
+    function getUserPermissions() {
+      return getUserData().permissions;
+    }
+
+    function normalizeRole(role) {
+      return role.lower()
+        .replace('á', 'a')
+        .replace('é', 'e')
+        .replace('í', 'i')
+        .replace('ó', 'o')
+        .replace('ú', 'u')
+        .replace('ü', 'u');
+    }
+
+    function userHasManagementScreenOverride() {
+      if (!isUserAuthenticated()) {
+        return false;
+      }
+
+      let permissions = getUserPermissions();
+
+      if (permissions == null || !(permissions is map)) {
+        return false;
+      }
+
+      return (
+        (('Team' in permissions) && permissions.Team.edit == true) ||
+        (('Approvals' in permissions) && permissions.Approvals.edit == true) ||
+        (('Import' in permissions) && permissions.Import.edit == true) ||
+        (('Rates' in permissions) && permissions.Rates.edit == true)
+      );
     }
 
     function isRole(role) {
       return isUserAuthenticated() && getUserRole() == role;
     }
-    
+
     function isOneOfRoles(roles) {
       return isUserAuthenticated() && getUserRole() in roles;
     }
@@ -25,13 +66,14 @@ service cloud.firestore {
         return false;
       }
 
-      let role = getUserRole();
+      let userData = getUserData();
+      let role = userData.role;
 
-      if (role == null) {
-        return false;
+      if (role == null || !(role is string)) {
+        return userHasManagementScreenOverride();
       }
 
-      let normalizedRole = role.lower();
+      let normalizedRole = normalizeRole(role);
 
       return normalizedRole.matches('.*jef.*') ||
         normalizedRole.matches('.*gerenc.*') ||
@@ -48,7 +90,9 @@ service cloud.firestore {
         normalizedRole.matches('.*leader.*') ||
         normalizedRole.matches('.*supervis.*') ||
         normalizedRole.matches('.*responsabl.*') ||
-        normalizedRole.matches('.*encargad.*');
+        normalizedRole.matches('.*encargad.*') ||
+        userHasManagementScreenOverride() ||
+        (request.auth.token.email is string && request.auth.token.email.lower() == 'lchena@airedesantafe.com.ar');
     }
 
     function isOwner(docData) {
