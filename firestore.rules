@@ -28,9 +28,10 @@ service cloud.firestore {
       let role = getUserRole();
 
       return role != null && (
-        role in ['Jefe', 'Gerencia', 'Administracion', 'Admin'] ||
-        role.matches('^Jefe(\\s.*)?$') ||
-        role.matches('^Gerencia(\\s.*)?$')
+        role in ['Jefe', 'Gerencia', 'Administracion', 'Admin', 'Jefa'] ||
+        role.matches('^[Jj]ef.*$') ||
+        role.matches('^[Gg]erenc.*$') ||
+        role.matches('^[Aa]dmin.*$')
       );
     }
 
