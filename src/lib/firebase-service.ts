@@ -10,8 +10,6 @@ import { sendEmail, createCalendarEvent } from '@/lib/google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from '@/lib/data';
-
-const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
 const ALERTS_CONFIG_DOC_ID = 'opportunity_alerts';
 

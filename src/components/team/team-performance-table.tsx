@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
 import { MonthlyClosureDialog } from './monthly-closure-dialog';
+import { isManagementRoleName } from '@/lib/role-utils';
 
 
 interface UserStats {
@@ -151,7 +152,7 @@ export function TeamPerformanceTable() {
     }).sort((a,b) => (b.currentMonthBilling) - (a.currentMonthBilling));
   }, [users, opportunities, clients, prospects]);
   
-  const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
+  const managers = useMemo(() => users.filter(u => isManagementRoleName(u.role)), [users]);
   const advisors = useMemo(() => users.filter(u => u.role === 'Asesor'), [users]);
 
 

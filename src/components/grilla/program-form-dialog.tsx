@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, Trash2 } from 'lucide-react';
 import { Textarea } from '../ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 interface ProgramFormDialogProps {
   isOpen: boolean;
@@ -59,7 +60,7 @@ export function ProgramFormDialog({ isOpen, onOpenChange, onSave, program }: Pro
   const { toast } = useToast();
 
   const isEditing = !!program;
-  const canEditRates = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia';
+  const canEditRates = !!userInfo && hasManagementPrivileges(userInfo);
 
   useEffect(() => {
     if (isOpen) {

@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Save } from 'lucide-react';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const rateFields: { key: keyof ProgramRates; label: string }[] = [
@@ -35,7 +36,7 @@ export default function RatesPage() {
   const [editedRates, setEditedRates] = useState<Record<string, Partial<ProgramRates>>>({});
   const [selectedElement, setSelectedElement] = useState<keyof ProgramRates>('spotRadio');
 
-  const canManage = isBoss || userInfo?.role === 'Gerencia';
+  const canManage = hasManagementPrivileges(userInfo);
 
   const fetchData = useCallback(async () => {
     setLoading(true);

@@ -27,6 +27,7 @@ import { format, getYear, getMonth, set, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 type CanjeFormData = Omit<Canje, 'id' | 'fechaCreacion'>;
 
@@ -95,7 +96,7 @@ export function CanjeFormDialog({
   const { toast } = useToast();
 
   const isEditing = canje !== null;
-  const canManageAll = currentUser.role === 'Jefe' || currentUser.role === 'Gerencia' || currentUser.role === 'Administracion';
+  const canManageAll = hasManagementPrivileges(currentUser);
 
   useEffect(() => {
     if (isOpen) {

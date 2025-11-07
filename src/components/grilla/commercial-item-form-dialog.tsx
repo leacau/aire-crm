@@ -25,6 +25,7 @@ import { es } from 'date-fns/locale';
 import { useAuth } from '@/hooks/use-auth';
 import { Trash2 } from 'lucide-react';
 import { Input } from '../ui/input';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 interface CommercialItemFormDialogProps {
   isOpen: boolean;
@@ -60,7 +61,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
   
   const { toast } = useToast();
   const isEditing = !!item;
-  const canManage = isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Gerencia';
+  const canManage = hasManagementPrivileges(userInfo);
 
   useEffect(() => {
     if (isOpen) {

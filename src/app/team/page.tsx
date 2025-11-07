@@ -10,12 +10,13 @@ import { useEffect } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import { PermissionsManager } from '@/components/team/permissions-manager';
 import { OpportunityAlertsManager } from '@/components/team/opportunity-alerts-manager';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 export default function TeamPage() {
   const { userInfo, loading, isBoss } = useAuth();
   const router = useRouter();
 
-  const canAccess = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
+  const canAccess = hasManagementPrivileges(userInfo);
   const isSuperAdmin = userInfo?.email === 'lchena@airedesantafe.com.ar';
 
   useEffect(() => {

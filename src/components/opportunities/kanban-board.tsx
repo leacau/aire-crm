@@ -42,6 +42,7 @@ import { cn } from '@/lib/utils';
 import { es } from 'date-fns/locale';
 import { Label } from '../ui/label';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { hasManagementPrivileges, isAdministrationRoleName } from '@/lib/role-utils';
 
 
 const stageColors: Record<OpportunityStage, string> = {
@@ -168,7 +169,7 @@ const KanbanCard = ({ opportunity, onDragStart, alertConfig }: { opportunity: Op
      }
   }
   
-  const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor' || userInfo?.role === 'Gerencia';
+  const canDrag = !!userInfo && (userInfo.role === 'Asesor' || hasManagementPrivileges(userInfo));
 
   const displayValue = Number(opportunity.value || 0);
 
@@ -436,7 +437,7 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
     const oppToMove = opportunities.find(opp => opp.id === opportunityId);
 
     if (oppToMove && oppToMove.stage !== newStage) {
-      if (userInfo?.role === 'Administracion') {
+      if (isAdministrationRoleName(userInfo?.role)) {
         toast({ title: "Acción no permitida", description: "Los administradores no pueden modificar las etapas.", variant: "destructive" });
         return;
       }

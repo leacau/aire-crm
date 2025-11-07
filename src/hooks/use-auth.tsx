@@ -9,6 +9,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
 import { getUserProfile, getAreaPermissions } from '@/lib/firebase-service';
 import type { User, ScreenName, ScreenPermission } from '@/lib/types';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -57,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             initials: profile.name?.substring(0, 2).toUpperCase() || 'U'
           };
           setUserInfo(finalProfile);
-          setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
+          setIsBoss(hasManagementPrivileges(finalProfile));
         } else {
             const name = firebaseUser.displayName || 'Usuario';
             const defaultProfile: User = {

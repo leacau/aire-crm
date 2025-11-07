@@ -10,6 +10,7 @@ import { getOpportunityAlertsConfig, updateOpportunityAlertsConfig } from '@/lib
 import type { OpportunityStage, OpportunityAlertsConfig } from '@/lib/types';
 import { Spinner } from '../ui/spinner';
 import { useAuth } from '@/hooks/use-auth';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 const alertableStages: OpportunityStage[] = ['Nuevo', 'Propuesta', 'Negociación', 'Negociación a Aprobar'];
 
@@ -19,6 +20,8 @@ export function OpportunityAlertsManager() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const { toast } = useToast();
+
+    const canManageAlerts = hasManagementPrivileges(userInfo);
 
     useEffect(() => {
         setIsLoading(true);
@@ -44,6 +47,10 @@ export function OpportunityAlertsManager() {
 
     const handleSave = async () => {
         if (!userInfo) return;
+        if (!canManageAlerts) {
+            toast({ title: 'No tenés permisos para actualizar las alertas. Contactá a un administrador.', variant: 'destructive' });
+            return;
+        }
         setIsSaving(true);
         try {
             await updateOpportunityAlertsConfig(config, userInfo.id, userInfo.name);
@@ -73,6 +80,11 @@ export function OpportunityAlertsManager() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
+                {!canManageAlerts && (
+                    <p className="text-sm text-muted-foreground mb-4">
+                        No contás con permisos de edición para esta configuración. Podés revisar los valores actuales, pero cualquier cambio debe realizarlo un administrador o un perfil de gestión.
+                    </p>
+                )}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {alertableStages.map(stage => (
                         <div key={stage} className="space-y-2">
@@ -83,12 +95,13 @@ export function OpportunityAlertsManager() {
                                 placeholder="Días"
                                 value={config[stage] || ''}
                                 onChange={(e) => handleDaysChange(stage, e.target.value)}
+                                disabled={!canManageAlerts}
                             />
                         </div>
                     ))}
                 </div>
                 <div className="flex justify-end mt-6">
-                    <Button onClick={handleSave} disabled={isSaving}>
+                    <Button onClick={handleSave} disabled={isSaving || !canManageAlerts}>
                         {isSaving ? <Spinner size="small" /> : 'Guardar Alertas'}
                     </Button>
                 </div>

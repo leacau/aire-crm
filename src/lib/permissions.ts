@@ -2,6 +2,7 @@
 import type { User, ScreenName, AreaType, ScreenPermission } from './types';
 import { defaultPermissions } from '@/lib/data';
 import { getAreaPermissions } from '@/lib/firebase-service';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 type PermissionsMap = Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>;
 
@@ -34,8 +35,8 @@ export function hasPermission(user: User, screen: ScreenName, permissionType: 'v
         return false;
     }
 
-    // Superusers have all permissions. Use a specific, non-public email for the super admin.
-    if (user.role === 'Jefe' || user.role === 'Gerencia' || user.email === 'lchena@airedesantafe.com.ar') {
+    // Superusers have all permissions. Includes specific admin email and extended management role names.
+    if (hasManagementPrivileges(user)) {
         return true;
     }
 

@@ -36,6 +36,7 @@ import { Badge } from '@/components/ui/badge';
 import { ActivityFormDialog } from '@/components/clients/activity-form-dialog';
 import { cn } from '@/lib/utils';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { hasManagementPrivileges, isManagementRoleName } from '@/lib/role-utils';
 
 
 function ReassignClientDialog({ 
@@ -156,7 +157,7 @@ export default function ClientsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [clientsToReassign, setClientsToReassign] = useState<Client[]>([]);
   const [showOnlyMyClients, setShowOnlyMyClients] = useState(!isBoss);
-  const canManage = isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Gerencia';
+  const canManage = hasManagementPrivileges(userInfo);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [showDuplicates, setShowDuplicates] = useState(false);
@@ -172,10 +173,9 @@ export default function ClientsPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      const allowedOwnerRoles = ['Asesor', 'Jefe', 'Gerencia', 'Administracion'];
       const promises: [Promise<Client[]>, Promise<User[]>, Promise<Opportunity[]>?] = [getClients(), getAllUsers()];
       
-      const shouldFetchAllData = userInfo.role === 'Jefe' || userInfo.role === 'Gerencia' || userInfo.role === 'Administracion';
+      const shouldFetchAllData = hasManagementPrivileges(userInfo);
 
       if (shouldFetchAllData) {
         promises.push(getAllOpportunities());
@@ -185,7 +185,7 @@ export default function ClientsPage() {
 
       setClients(fetchedClients);
       if(fetchedUsers) {
-        setAdvisors(fetchedUsers.filter(u => allowedOwnerRoles.includes(u.role)));
+        setAdvisors(fetchedUsers.filter(u => u.role === 'Asesor' || isManagementRoleName(u.role)));
       }
       if (fetchedOpportunities) {
         setOpportunities(fetchedOpportunities);

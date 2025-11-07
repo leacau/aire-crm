@@ -6,6 +6,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { ClientDetails } from '@/components/clients/client-details';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
@@ -60,9 +61,7 @@ export default function ClientPage() {
   const userHasAccess = useMemo(() => {
     if (!client || !userInfo) return false;
     return (
-      userInfo.role === 'Jefe' ||
-      userInfo.role === 'Gerencia' ||
-      userInfo.role === 'Administracion' ||
+      hasManagementPrivileges(userInfo) ||
       (userInfo.role === 'Asesor' && client.ownerId === userInfo.id)
     );
   }, [client, userInfo]);
