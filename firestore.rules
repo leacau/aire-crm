@@ -31,20 +31,24 @@ service cloud.firestore {
         return false;
       }
 
-      return role.matches('(?i).*j[eé]f(?:e|a|atura|es|as)?.*') ||
-        role.matches('(?i).*gerenc(?:ia|ial|i[ae]s)?.*') ||
-        role.matches('(?i).*gerent(?:e|a|es|as)?.*') ||
-        role.matches('(?i).*administraci[oó]n.*') ||
-        role.matches('(?i).*administrativ(?:o|a|os|as)?.*') ||
-        role.matches('(?i).*administrador(?:a|es|as)?.*') ||
-        role.matches('(?i).*admin\\b.*') ||
-        role.matches('(?i).*coordinaci[oó]n.*') ||
-        role.matches('(?i).*coordinador(?:a|es|as)?.*') ||
-        role.matches('(?i).*direcci[oó]n.*') ||
-        role.matches('(?i).*director(?:a|es|as)?.*') ||
-        role.matches('(?i).*l[ií]der(?:azgo|es|as|a)?.*') ||
-        role.matches('(?i).*supervis(?:or|ora|ores|oras)?.*') ||
-        role.matches('(?i).*responsabl[ea]s?.*');
+      let normalizedRole = role.lower();
+
+      return normalizedRole.matches('.*jef.*') ||
+        normalizedRole.matches('.*gerenc.*') ||
+        normalizedRole.matches('.*gerent.*') ||
+        normalizedRole.matches('.*administrac.*') ||
+        normalizedRole.matches('.*administrador.*') ||
+        normalizedRole.matches('.*admin\\b.*') ||
+        normalizedRole.matches('.*coordinac.*') ||
+        normalizedRole.matches('.*coordinador.*') ||
+        normalizedRole.matches('.*direcc.*') ||
+        normalizedRole.matches('.*director.*') ||
+        normalizedRole.matches('.*líder.*') ||
+        normalizedRole.matches('.*lider.*') ||
+        normalizedRole.matches('.*leader.*') ||
+        normalizedRole.matches('.*supervis.*') ||
+        normalizedRole.matches('.*responsabl.*') ||
+        normalizedRole.matches('.*encargad.*');
     }
 
     function isOwner(docData) {

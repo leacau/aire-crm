@@ -1,6 +1,6 @@
 export const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 
-const MANAGEMENT_ROLE_PATTERN = /(jef(e|a|atura)|gerenc|gerent|administrac|administrador|admin\b|coordinac|coordinador|direcc|director|lider|supervis|responsabl)/;
+const MANAGEMENT_ROLE_PATTERN = /(jef(e|a|atura)|gerenc|gerent|administrac|administrador|admin\b|coordinac|coordinador|direcc|director|lider|líder|leader|supervis|responsabl|encargad)/;
 
 function normalizeRoleName(role: string): string {
     return role
@@ -38,5 +38,22 @@ export function hasManagementPrivileges(user?: { email?: string | null; role?: s
         return true;
     }
 
-    return isManagementRoleName(user.role);
+    if (isManagementRoleName(user.role)) {
+        return true;
+    }
+
+    const permissions = (user as { permissions?: Partial<Record<string, { view?: boolean; edit?: boolean }>> }).permissions;
+
+    if (permissions) {
+        const managementScreens = ['Team', 'Approvals', 'Import', 'Rates'];
+        for (let i = 0; i < managementScreens.length; i++) {
+            const screen = managementScreens[i];
+            const screenPermissions = permissions[screen];
+            if (screenPermissions && screenPermissions.edit === true) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
