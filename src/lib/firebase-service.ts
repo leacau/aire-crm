@@ -100,9 +100,21 @@ export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsCon
 
 export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsConfig, userId: string, userName: string): Promise<void> => {
     const docRef = doc(collections.systemConfig, ALERTS_CONFIG_DOC_ID);
-    await setDoc(docRef, config);
+
+    try {
+        await setDoc(docRef, config);
+    } catch (error: any) {
+        if (error?.code === 'permission-denied') {
+            const permissionError = new Error('permission-denied');
+            permissionError.name = 'FirebasePermissionError';
+            throw permissionError;
+        }
+
+        throw error;
+    }
+
     invalidateCache(ALERTS_CONFIG_DOC_ID);
-    
+
     await logActivity({
         userId,
         userName,

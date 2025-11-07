@@ -49,7 +49,11 @@ export function OpportunityAlertsManager() {
             await updateOpportunityAlertsConfig(config, userInfo.id, userInfo.name);
             toast({ title: "Configuración de alertas guardada" });
         } catch (error) {
-            toast({ title: "Error al guardar la configuración", variant: "destructive" });
+            const message = error instanceof Error && error.message === 'permission-denied'
+                ? 'No tenés permisos para actualizar las alertas. Contactá a un administrador.'
+                : 'Error al guardar la configuración';
+
+            toast({ title: message, variant: 'destructive' });
         } finally {
             setIsSaving(false);
         }

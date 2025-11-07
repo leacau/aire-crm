@@ -145,5 +145,11 @@ service cloud.firestore {
       allow update: if isUserAuthenticated() && (isCreator(resource.data) || isOneOfRoles(['Jefe', 'Gerencia']));
       allow delete: if isOneOfRoles(['Jefe', 'Gerencia']);
     }
+
+    // SYSTEM CONFIG: Restricted shared settings like permissions and alerts configuration.
+    match /system_config/{configId} {
+      allow read: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
+      allow create, update, delete: if isOneOfRoles(['Jefe', 'Gerencia']);
+    }
   }
 }
