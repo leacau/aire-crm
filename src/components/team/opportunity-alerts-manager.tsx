@@ -29,7 +29,7 @@ export function OpportunityAlertsManager() {
             .catch(() => {
                 // The error is handled globally by the error emitter, so we just prevent the app from crashing.
                 // We can show a toast for a better UX if needed.
-                console.error("Permission denied to load alert configs. This is expected for some roles.");
+                console.error('Permission denied to load alert configs. Showing defaults instead.');
             })
             .finally(() => setIsLoading(false));
     }, [toast]);
@@ -49,7 +49,8 @@ export function OpportunityAlertsManager() {
             await updateOpportunityAlertsConfig(config, userInfo.id, userInfo.name);
             toast({ title: "Configuración de alertas guardada" });
         } catch (error) {
-            const message = error instanceof Error && error.message === 'permission-denied'
+            const isPermissionError = error instanceof Error && (error.message === 'permission-denied' || error.name === 'FirebasePermissionError');
+            const message = isPermissionError
                 ? 'No tenés permisos para actualizar las alertas. Contactá a un administrador.'
                 : 'Error al guardar la configuración';
 

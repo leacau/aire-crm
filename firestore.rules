@@ -20,6 +20,20 @@ service cloud.firestore {
       return isUserAuthenticated() && getUserRole() in roles;
     }
 
+    function isManagementRole() {
+      if (!isUserAuthenticated()) {
+        return false;
+      }
+
+      let role = getUserRole();
+
+      return role != null && (
+        role in ['Jefe', 'Gerencia', 'Administracion', 'Admin'] ||
+        role.matches('^Jefe(\\s.*)?$') ||
+        role.matches('^Gerencia(\\s.*)?$')
+      );
+    }
+
     function isOwner(docData) {
       return docData.ownerId == request.auth.uid;
     }
@@ -148,8 +162,8 @@ service cloud.firestore {
 
     // SYSTEM CONFIG: Restricted shared settings like permissions and alerts configuration.
     match /system_config/{configId} {
-      allow read: if isOneOfRoles(['Jefe', 'Gerencia', 'Administracion']);
-      allow create, update, delete: if isOneOfRoles(['Jefe', 'Gerencia']);
+      allow read: if isManagementRole();
+      allow create, update, delete: if isManagementRole();
     }
   }
 }

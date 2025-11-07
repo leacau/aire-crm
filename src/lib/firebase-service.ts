@@ -91,7 +91,7 @@ export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsCon
         return data;
     } catch(e: any) {
         if (e.code === 'permission-denied') {
-            console.error("Permission error fetching alerts config. This is expected for non-admins.");
+            console.error('Permission error fetching alerts config. Returning defaults for unauthorized users.');
             return {};
         }
         throw e;
