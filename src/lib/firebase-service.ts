@@ -119,14 +119,37 @@ export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsCon
 // --- Permissions ---
 export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
     const docRef = doc(collections.systemConfig, PERMISSIONS_DOC_ID);
-    const docSnap = await getDoc(docRef);
+    let docSnap;
 
-    if (docSnap.exists() && docSnap.data().permissions) {
-        return docSnap.data().permissions;
-    } else {
-        await setDoc(docRef, { permissions: defaultPermissions }, { merge: true });
-        return defaultPermissions;
+    try {
+        docSnap = await getDoc(docRef);
+    } catch (error: any) {
+        if (error?.code === 'permission-denied') {
+            console.warn('Permission denied when reading area permissions. Using defaults.');
+            return defaultPermissions;
+        }
+
+        throw error;
     }
+
+    const data = docSnap.exists() ? docSnap.data() : null;
+    const permissions = data?.permissions as Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>> | undefined;
+
+    if (permissions) {
+        return permissions;
+    }
+
+    try {
+        await setDoc(docRef, { permissions: defaultPermissions }, { merge: true });
+    } catch (error: any) {
+        if (error?.code !== 'permission-denied') {
+            throw error;
+        }
+
+        console.warn('Permission denied when seeding area permissions. Continuing with defaults.');
+    }
+
+    return defaultPermissions;
 };
 
 export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>): Promise<void> => {
