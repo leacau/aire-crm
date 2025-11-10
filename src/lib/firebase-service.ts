@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -596,7 +595,30 @@ export const getCommercialItemsBySeries = async (seriesId: string): Promise<Comm
     });
 };
 
-export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string, isEditingSeries?: boolean): Promise<string | void> => {
+export const createCommercialItem = async (item: Omit<CommercialItem, 'id'>, userId: string, userName: string): Promise<string> => {
+    const docRef = await addDoc(collections.commercialItems, {
+        ...item,
+        createdBy: userId,
+        createdAt: serverTimestamp(),
+    });
+
+    invalidateCache(`commercial_items_${item.date}`);
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'commercial_item',
+        entityId: docRef.id,
+        entityName: item.title || item.description,
+        details: `creó el elemento comercial <strong>${item.title || item.description}</strong>`,
+        ownerName: item.clientName || userName,
+    });
+
+    return docRef.id;
+};
+
+export const saveCommercialItemSeries = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string, isEditingSeries?: boolean): Promise<string | void> => {
     const batch = writeBatch(db);
     const newSeriesId = item.seriesId || doc(collection(db, 'dummy')).id;
 
@@ -1539,22 +1561,22 @@ export const deletePerson = async (
 // --- Opportunity Functions ---
 
 export const getAllOpportunities = async (user?: User): Promise<Opportunity[]> => {
-    const cacheKey = user ? `opportunities_${user.id}` : 'opportunities_all';
+    const cacheKey = user && !hasManagementPrivileges(user) ? `opportunities_${user.id}` : 'opportunities_all';
+    
     const cached = getFromCache(cacheKey);
     if (cached) {
       return cached;
     }
 
-    let q;
+    let oppsQuery;
+    
     if (user && !hasManagementPrivileges(user)) {
-      // For advisors, query directly for opportunities they own
-      q = query(collections.opportunities, where('ownerId', '==', user.id));
+        oppsQuery = query(collections.opportunities, where('ownerId', '==', user.id));
     } else {
-      // For management, get all opportunities
-      q = query(collections.opportunities);
+        oppsQuery = query(collections.opportunities);
     }
   
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(oppsQuery);
     const opportunities = snapshot.docs.map(doc => {
       const data = doc.data();
       const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
