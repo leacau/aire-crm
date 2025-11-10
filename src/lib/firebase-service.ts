@@ -4,13 +4,12 @@
 
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from '@/lib/types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from '@/lib/types';
 import { logActivity } from '@/lib/activity-logger';
 import { sendEmail, createCalendarEvent } from '@/lib/google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from '@/lib/data';
-import { getUserProfile } from '@/lib/firebase-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 const PERMISSIONS_DOC_ID = 'area_permissions';
 const ALERTS_CONFIG_DOC_ID = 'opportunity_alerts';
@@ -1045,8 +1044,14 @@ export const createUserProfile = async (uid: string, name: string, email: string
     invalidateCache('users');
 };
 
-// This function is defined in hooks/use-auth.tsx to avoid circular dependencies
-// export const getUserProfile = ...
+export const getUserProfile = async (uid: string): Promise<User | null> => {
+    const docRef = doc(db, 'users', uid);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() } as User;
+    }
+    return null;
+};
 
 export const updateUserProfile = async (uid: string, data: Partial<User>): Promise<void> => {
     const userRef = doc(db, 'users', uid);
@@ -1563,29 +1568,26 @@ export const getAllOpportunities = async (user?: User): Promise<Opportunity[]> =
       const allOpps: Opportunity[] = [];
       snapshots.forEach(snapshot => {
         snapshot.docs.forEach(doc => {
-            allOpps.push(doc.data() as Opportunity);
+            allOpps.push({id: doc.id, ...doc.data()} as Opportunity);
         });
       });
       
-      const opportunities = allOpps.map(data => ({ id: 'temp-id', ...data } as Opportunity)); // id isn't correct here but we'll fix
-      
-      const finalOpps = opportunities.map(opp => {
-        const doc = snapshot.docs.find(d => d.data().clientId === opp.clientId && d.data().title === opp.title);
-        const data = doc?.data() || opp;
-         if (data.updatedAt && data.updatedAt instanceof Timestamp) {
-            data.updatedAt = data.updatedAt.toDate().toISOString();
+      const finalOpps = allOpps.map(opp => {
+         if (opp.updatedAt && opp.updatedAt instanceof Timestamp) {
+            // @ts-ignore
+            opp.updatedAt = opp.updatedAt.toDate().toISOString();
           }
-           if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
-              const validDate = parseDateWithTimezone(data.closeDate);
-              data.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
-          } else if (data.closeDate instanceof Timestamp) {
-              data.closeDate = data.closeDate.toDate().toISOString().split('T')[0];
+           if (opp.closeDate && !(opp.closeDate instanceof Timestamp)) {
+              const validDate = parseDateWithTimezone(opp.closeDate);
+              opp.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
+          } else if (opp.closeDate instanceof Timestamp) {
+              opp.closeDate = opp.closeDate.toDate().toISOString().split('T')[0];
           }
-           if (data.stageLastUpdatedAt && data.stageLastUpdatedAt instanceof Timestamp) {
-              data.stageLastUpdatedAt = data.stageLastUpdatedAt.toDate().toISOString();
+           if (opp.stageLastUpdatedAt && opp.stageLastUpdatedAt instanceof Timestamp) {
+              opp.stageLastUpdatedAt = opp.stageLastUpdatedAt.toDate().toISOString();
           }
 
-        return {id: doc?.id || opp.id, ...data} as Opportunity
+        return opp;
       });
 
 
