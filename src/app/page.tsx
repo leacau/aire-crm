@@ -31,7 +31,6 @@ import type { Opportunity, Client, ActivityLog, ClientActivity, User, Invoice } 
 import { useAuth } from '@/hooks/use-auth';
 import {
   getAllOpportunities,
-  getOpportunitiesForUser,
   getClients,
   getActivities,
   getAllClientActivities,
@@ -180,11 +179,12 @@ export default function DashboardPage() {
 
 
   useEffect(() => {
+    if (!userInfo) return;
     const fetchData = async () => {
       setLoadingData(true);
       try {
         const [allOpps, allClients, allActivities, allTasks, allInvoices, allUsers, allAdvisors] = await Promise.all([
-            getAllOpportunities(),
+            getAllOpportunities(userInfo),
             getClients(),
             getActivities(100),
             getAllClientActivities(),
@@ -209,7 +209,7 @@ export default function DashboardPage() {
     };
 
     fetchData();
-  }, []);
+  }, [userInfo]);
   
   const { 
     userOpportunities, 

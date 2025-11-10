@@ -322,10 +322,11 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
 
 
   const fetchOpportunities = useCallback(async () => {
+    if (!userInfo) return;
     setLoading(true);
     try {
       const [allOpps, allClients, alerts] = await Promise.all([
-        getAllOpportunities(),
+        getAllOpportunities(userInfo),
         getClients(),
         getOpportunityAlertsConfig(),
       ]);
@@ -339,7 +340,7 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, userInfo]);
 
   useEffect(() => {
     fetchOpportunities();

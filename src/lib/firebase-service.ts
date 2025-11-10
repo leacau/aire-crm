@@ -10,6 +10,8 @@ import { sendEmail, createCalendarEvent } from '@/lib/google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from '@/lib/data';
+import { getUserProfile } from '@/lib/firebase-service';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 const PERMISSIONS_DOC_ID = 'area_permissions';
 const ALERTS_CONFIG_DOC_ID = 'opportunity_alerts';
 
@@ -1043,14 +1045,8 @@ export const createUserProfile = async (uid: string, name: string, email: string
     invalidateCache('users');
 };
 
-export const getUserProfile = async (uid: string): Promise<User | null> => {
-    const userRef = doc(db, 'users', uid);
-    const docSnap = await getDoc(userRef);
-    if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as User;
-    }
-    return null;
-}
+// This function is defined in hooks/use-auth.tsx to avoid circular dependencies
+// export const getUserProfile = ...
 
 export const updateUserProfile = async (uid: string, data: Partial<User>): Promise<void> => {
     const userRef = doc(db, 'users', uid);
@@ -1537,11 +1533,70 @@ export const deletePerson = async (
 
 // --- Opportunity Functions ---
 
-export const getAllOpportunities = async (): Promise<Opportunity[]> => {
-    const cachedData = getFromCache('opportunities');
-    if (cachedData) return cachedData;
+export const getAllOpportunities = async (user?: User): Promise<Opportunity[]> => {
+    const cacheKey = 'opportunities';
+    const cached = getFromCache(cacheKey);
+    if (cached) {
+      return cached;
+    }
+  
+    let q;
+    if (user && !hasManagementPrivileges(user)) {
+      const clientsSnapshot = await getDocs(query(collections.clients, where('ownerId', '==', user.id)));
+      const clientIds = clientsSnapshot.docs.map(doc => doc.id);
+      
+      if (clientIds.length === 0) {
+        return [];
+      }
+      
+      // Firestore 'in' query is limited to 30 items. If more, we need to do multiple queries.
+      const clientChunks: string[][] = [];
+      for (let i = 0; i < clientIds.length; i += 30) {
+        clientChunks.push(clientIds.slice(i, i + 30));
+      }
 
-    const snapshot = await getDocs(collections.opportunities);
+      const promises = clientChunks.map(chunk => 
+        getDocs(query(collections.opportunities, where('clientId', 'in', chunk)))
+      );
+      
+      const snapshots = await Promise.all(promises);
+      const allOpps: Opportunity[] = [];
+      snapshots.forEach(snapshot => {
+        snapshot.docs.forEach(doc => {
+            allOpps.push(doc.data() as Opportunity);
+        });
+      });
+      
+      const opportunities = allOpps.map(data => ({ id: 'temp-id', ...data } as Opportunity)); // id isn't correct here but we'll fix
+      
+      const finalOpps = opportunities.map(opp => {
+        const doc = snapshot.docs.find(d => d.data().clientId === opp.clientId && d.data().title === opp.title);
+        const data = doc?.data() || opp;
+         if (data.updatedAt && data.updatedAt instanceof Timestamp) {
+            data.updatedAt = data.updatedAt.toDate().toISOString();
+          }
+           if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
+              const validDate = parseDateWithTimezone(data.closeDate);
+              data.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
+          } else if (data.closeDate instanceof Timestamp) {
+              data.closeDate = data.closeDate.toDate().toISOString().split('T')[0];
+          }
+           if (data.stageLastUpdatedAt && data.stageLastUpdatedAt instanceof Timestamp) {
+              data.stageLastUpdatedAt = data.stageLastUpdatedAt.toDate().toISOString();
+          }
+
+        return {id: doc?.id || opp.id, ...data} as Opportunity
+      });
+
+
+      setInCache(cacheKey, finalOpps);
+      return finalOpps;
+
+    } else {
+      q = query(collections.opportunities);
+    }
+  
+    const snapshot = await getDocs(q);
     const opportunities = snapshot.docs.map(doc => {
       const data = doc.data();
       const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
@@ -1558,17 +1613,17 @@ export const getAllOpportunities = async (): Promise<Opportunity[]> => {
        if (data.stageLastUpdatedAt && data.stageLastUpdatedAt instanceof Timestamp) {
           opp.stageLastUpdatedAt = data.stageLastUpdatedAt.toDate().toISOString();
       }
-
-
       return opp;
     });
-    setInCache('opportunities', opportunities);
+  
+    setInCache(cacheKey, opportunities);
     return opportunities;
 };
 
 export const getOpportunitiesByClientId = async (clientId: string): Promise<Opportunity[]> => {
-    const allOpps = await getAllOpportunities();
-    return allOpps.filter(opp => opp.clientId === clientId);
+    const q = query(collections.opportunities, where('clientId', '==', clientId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
 };
 
 export const getOpportunitiesForUser = async (userId: string): Promise<Opportunity[]> => {
@@ -1686,7 +1741,7 @@ export const updateOpportunity = async (
     userId: string,
     userName: string,
     ownerName: string,
-    pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[]
+    accessToken?: string | null
 ): Promise<void> => {
     const docRef = doc(db, 'opportunities', id);
     const docSnap = await getDoc(docRef);
@@ -1702,6 +1757,22 @@ export const updateOpportunity = async (
     if (bonusStateChanged) {
         if (originalData.stage === 'Negociación a Aprobar') {
             updateData.stage = 'Negociación';
+        }
+        
+        // Send email notification on bonus decision
+        if (accessToken) {
+            const client = await getClient(originalData.clientId);
+            if (client) {
+                const owner = await getUserProfile(client.ownerId);
+                if (owner && owner.email) {
+                    const subject = `Decisión sobre bonificación para "${originalData.title}"`;
+                    const body = `<p>Hola ${owner.name},</p>
+                                  <p>La solicitud de bonificación para la oportunidad <strong>"${originalData.title}"</strong> del cliente <strong>${originalData.clientName}</strong> ha sido <strong>${data.bonificacionEstado}</strong>.</p>
+                                  ${data.bonificacionObservaciones ? `<p><strong>Observaciones:</strong> ${data.bonificacionObservaciones}</p>` : ''}
+                                  <p>Atentamente,<br/>${userName}</p>`;
+                    sendEmail({ accessToken, to: owner.email, subject, body });
+                }
+            }
         }
     }
 
@@ -1731,15 +1802,6 @@ export const updateOpportunity = async (
 
     await updateDoc(docRef, updateData);
     invalidateCache('opportunities');
-
-     if (pendingInvoices && pendingInvoices.length > 0) {
-        for (const invoiceData of pendingInvoices) {
-            await createInvoice({
-                ...invoiceData,
-                opportunityId: id,
-            }, userId, userName, ownerName);
-        }
-    }
 
 
     const activityDetails = {
