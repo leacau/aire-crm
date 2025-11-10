@@ -5,6 +5,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -79,6 +80,8 @@ export type Opportunity = {
   title: string;
   clientName: string;
   clientId: string;
+  ownerId: string;
+  ownerName: string;
   value: number; // Valor final de la propuesta
   stage: OpportunityStage;
   closeDate: string;
@@ -106,6 +109,7 @@ export type Opportunity = {
   proposalItems?: ProposalItem[];
   valorTarifario?: number; // Calculated value from rates
   finalizationDate?: string;
+  updatedAt?: string;
 };
 
 export type Person = {

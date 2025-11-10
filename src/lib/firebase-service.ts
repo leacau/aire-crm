@@ -4,7 +4,7 @@
 
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from '@/lib/types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from '@/lib/types';
 import { logActivity } from '@/lib/activity-logger';
 import { sendEmail, createCalendarEvent } from '@/lib/google-gmail-service';
 import { format, parseISO } from 'date-fns';
@@ -1539,62 +1539,18 @@ export const deletePerson = async (
 // --- Opportunity Functions ---
 
 export const getAllOpportunities = async (user?: User): Promise<Opportunity[]> => {
-    const cacheKey = 'opportunities';
+    const cacheKey = user ? `opportunities_${user.id}` : 'opportunities_all';
     const cached = getFromCache(cacheKey);
     if (cached) {
       return cached;
     }
-  
+
     let q;
     if (user && !hasManagementPrivileges(user)) {
-      const clientsSnapshot = await getDocs(query(collections.clients, where('ownerId', '==', user.id)));
-      const clientIds = clientsSnapshot.docs.map(doc => doc.id);
-      
-      if (clientIds.length === 0) {
-        return [];
-      }
-      
-      // Firestore 'in' query is limited to 30 items. If more, we need to do multiple queries.
-      const clientChunks: string[][] = [];
-      for (let i = 0; i < clientIds.length; i += 30) {
-        clientChunks.push(clientIds.slice(i, i + 30));
-      }
-
-      const promises = clientChunks.map(chunk => 
-        getDocs(query(collections.opportunities, where('clientId', 'in', chunk)))
-      );
-      
-      const snapshots = await Promise.all(promises);
-      const allOpps: Opportunity[] = [];
-      snapshots.forEach(snapshot => {
-        snapshot.docs.forEach(doc => {
-            allOpps.push({id: doc.id, ...doc.data()} as Opportunity);
-        });
-      });
-      
-      const finalOpps = allOpps.map(opp => {
-         if (opp.updatedAt && opp.updatedAt instanceof Timestamp) {
-            // @ts-ignore
-            opp.updatedAt = opp.updatedAt.toDate().toISOString();
-          }
-           if (opp.closeDate && !(opp.closeDate instanceof Timestamp)) {
-              const validDate = parseDateWithTimezone(opp.closeDate);
-              opp.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
-          } else if (opp.closeDate instanceof Timestamp) {
-              opp.closeDate = opp.closeDate.toDate().toISOString().split('T')[0];
-          }
-           if (opp.stageLastUpdatedAt && opp.stageLastUpdatedAt instanceof Timestamp) {
-              opp.stageLastUpdatedAt = opp.stageLastUpdatedAt.toDate().toISOString();
-          }
-
-        return opp;
-      });
-
-
-      setInCache(cacheKey, finalOpps);
-      return finalOpps;
-
+      // For advisors, query directly for opportunities they own
+      q = query(collections.opportunities, where('ownerId', '==', user.id));
     } else {
+      // For management, get all opportunities
       q = query(collections.opportunities);
     }
   
@@ -1602,25 +1558,23 @@ export const getAllOpportunities = async (user?: User): Promise<Opportunity[]> =
     const opportunities = snapshot.docs.map(doc => {
       const data = doc.data();
       const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
-      if (data.updatedAt && data.updatedAt instanceof Timestamp) {
-        // @ts-ignore
-        opp.updatedAt = data.updatedAt.toDate().toISOString();
+      
+      const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+      
+      opp.updatedAt = convertTimestamp(opp.updatedAt);
+      opp.stageLastUpdatedAt = convertTimestamp(opp.stageLastUpdatedAt);
+
+      if (opp.closeDate && typeof opp.closeDate !== 'string') {
+          opp.closeDate = (opp.closeDate as any).toDate().toISOString().split('T')[0];
       }
-       if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
-          const validDate = parseDateWithTimezone(data.closeDate);
-          opp.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
-      } else if (data.closeDate instanceof Timestamp) {
-          opp.closeDate = data.closeDate.toDate().toISOString().split('T')[0];
-      }
-       if (data.stageLastUpdatedAt && data.stageLastUpdatedAt instanceof Timestamp) {
-          opp.stageLastUpdatedAt = data.stageLastUpdatedAt.toDate().toISOString();
-      }
+
       return opp;
     });
   
     setInCache(cacheKey, opportunities);
     return opportunities;
 };
+
 
 export const getOpportunitiesByClientId = async (clientId: string): Promise<Opportunity[]> => {
     const q = query(collections.opportunities, where('clientId', '==', clientId));
@@ -1641,7 +1595,15 @@ export const createOpportunity = async (
     userName: string,
     ownerName: string
 ): Promise<string> => {
-    const dataToSave: any = { ...opportunityData };
+    const client = await getClient(opportunityData.clientId);
+    if (!client) throw new Error("Client not found for new opportunity");
+    
+    const dataToSave: any = { 
+        ...opportunityData,
+        ownerId: client.ownerId,
+        ownerName: client.ownerName
+    };
+
     if (dataToSave.agencyId === undefined) {
         delete dataToSave.agencyId;
     }
@@ -1755,6 +1717,15 @@ export const updateOpportunity = async (
         updatedAt: serverTimestamp()
     };
     
+    // Add ownerId and ownerName on update if they don't exist
+    if (!originalData.ownerId) {
+        const client = await getClient(originalData.clientId);
+        if (client) {
+            updateData.ownerId = client.ownerId;
+            updateData.ownerName = client.ownerName;
+        }
+    }
+
     const bonusStateChanged = data.bonificacionEstado && data.bonificacionEstado !== originalData.bonificacionEstado && originalData.bonificacionEstado === 'Pendiente';
     if (bonusStateChanged) {
         if (originalData.stage === 'Negociación a Aprobar') {
