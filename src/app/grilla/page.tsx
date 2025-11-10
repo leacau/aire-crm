@@ -11,7 +11,7 @@ import { GrillaSemanal } from '@/components/grilla/grilla-semanal';
 import { GrillaDiaria } from '@/components/grilla/grilla-diaria';
 import { ProgramFormDialog } from '@/components/grilla/program-form-dialog';
 import type { Program, CommercialItem } from '@/lib/types';
-import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialItem, updateCommercialItem, deleteCommercialItem, getCommercialItemsBySeries } from '@/lib/firebase-service';
+import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialItemSeries, updateCommercialItem, deleteCommercialItem, getCommercialItemsBySeries } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { CommercialItemFormDialog } from '@/components/grilla/commercial-item-form-dialog';
@@ -159,10 +159,10 @@ export default function GrillaPage() {
         if (selectedItem) { // Editing existing item
              if (selectedItem.seriesId) {
                 // If it's part of a series, update the whole series
-                await saveCommercialItem({ ...item, seriesId: selectedItem.seriesId }, dates, userInfo.id, true);
+                await saveCommercialItemSeries({ ...item, seriesId: selectedItem.seriesId }, dates, userInfo.id, true);
             } else if (dates.length > 1) {
                 // If it wasn't a series but now is, create a new series
-                const newSeriesId = await saveCommercialItem(item, dates, userInfo.id);
+                const newSeriesId = await saveCommercialItemSeries(item, dates, userInfo.id);
                 // Assign the new seriesId to the original item being edited
                 await updateCommercialItem(selectedItem.id, { seriesId: newSeriesId });
             } else {
@@ -171,7 +171,7 @@ export default function GrillaPage() {
             }
             toast({ title: 'Elemento comercial actualizado' });
         } else { // Creating new items
-            await saveCommercialItem(item, dates, userInfo.id);
+            await saveCommercialItemSeries(item, dates, userInfo.id);
             toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
         }
         // Instead of fetching all programs, we can just invalidate the specific days' data if we had a cache.
