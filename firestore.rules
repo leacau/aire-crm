@@ -70,7 +70,7 @@ service cloud.firestore {
       }
       
       allow get: if isUserAuthenticated() && (isOpportunityOwner() || isManagement());
-      allow list: if isUserAuthenticated(); // Allow advisors to list their own opps via queries. Management can list all.
+      allow list: if isUserAuthenticated() && (isManagement() || request.query.where.ownerId == request.auth.uid);
       allow create: if isUserAuthenticated();
       allow update: if isUserAuthenticated() && (isOpportunityOwner() || isManagement());
       allow delete: if isManagement();
