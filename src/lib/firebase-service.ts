@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -11,8 +10,31 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from '@/lib/data';
 import { hasManagementPrivileges } from '@/lib/role-utils';
+
 const PERMISSIONS_DOC_ID = 'area_permissions';
 const ALERTS_CONFIG_DOC_ID = 'opportunity_alerts';
+
+const createCollections = <T>(collectionName: string) => {
+  return collection(db, collectionName) as T;
+};
+
+const collections = {
+    users: createCollections<User>('users'),
+    clients: createCollections<Client>('clients'),
+    people: createCollections<Person>('people'),
+    opportunities: createCollections<Opportunity>('opportunities'),
+    activities: createCollections<ActivityLog>('activities'),
+    agencies: createCollections<Agency>('agencies'),
+    clientActivities: createCollections<ClientActivity>('client-activities'),
+    invoices: createCollections<Invoice>('invoices'),
+    canjes: createCollections<Canje>('canjes'),
+    programs: createCollections<Program>('programs'),
+    commercialItems: createCollections<CommercialItem>('commercial_items'),
+    prospects: createCollections<Prospect>('prospects'),
+    licenses: createCollections<VacationRequest>('licencias'),
+    systemConfig: createCollections<any>('system_config'),
+};
+
 
 const cache: {
     [key: string]: {
@@ -1543,8 +1565,8 @@ export const deletePerson = async (
 
 
 // --- Opportunity Functions ---
-export const getAllOpportunities = async (user: User, isBoss: boolean): Promise<Opportunity[]> => {
-    const cacheKey = isBoss ? 'opportunities_all' : `opportunities_${user.id}`;
+export const getAllOpportunities = async (user?: User, isBoss?: boolean): Promise<Opportunity[]> => {
+    const cacheKey = isBoss ? 'opportunities_all' : `opportunities_${user?.id}`;
     
     const cached = getFromCache(cacheKey);
     if (cached) {
@@ -1555,8 +1577,10 @@ export const getAllOpportunities = async (user: User, isBoss: boolean): Promise<
     
     if (isBoss) {
         oppsQuery = query(collections.opportunities);
-    } else {
+    } else if (user) {
         oppsQuery = query(collections.opportunities, where('ownerId', '==', user.id));
+    } else {
+        return [];
     }
   
     const snapshot = await getDocs(oppsQuery);
