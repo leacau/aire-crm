@@ -4,6 +4,7 @@
 
 
 
+
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -83,6 +84,8 @@ export type Opportunity = {
   closeDate: string;
   details?: string;
   observaciones?: string;
+  ownerId?: string;
+  ownerName?: string;
   
   bonificacionDetalle?: string;
   bonificacionEstado?: BonificacionEstado;
@@ -271,6 +274,7 @@ export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Impo
 export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Import', 'Admin'];
 
 export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción';
+export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'];
 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs', 

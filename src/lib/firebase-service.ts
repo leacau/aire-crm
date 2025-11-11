@@ -6,7 +6,7 @@ import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission } from './types';
 import { logActivity } from './activity-logger';
-import { sendEmail, createCalendarEvent } from './google-gmail-service';
+import { sendEmail, createCalendarEvent as apiCreateCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
@@ -536,7 +536,7 @@ export const getCommercialItemsBySeries = async (seriesId: string): Promise<Comm
     });
 };
 
-export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string, isEditingSeries?: boolean): Promise<string | void> => {
+export const saveCommercialItemSeries = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string, isEditingSeries?: boolean): Promise<string | void> => {
     const batch = writeBatch(db);
     const newSeriesId = item.seriesId || doc(collection(db, 'dummy')).id;
 
@@ -613,6 +613,14 @@ export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date
 
     return newSeriesId;
 };
+
+export const createCommercialItem = async (itemData: Omit<CommercialItem, 'id'>, userId: string, userName: string): Promise<string> => {
+    const dataToSave = { ...itemData, createdBy: userId, createdAt: serverTimestamp() };
+    const docRef = await addDoc(collections.commercialItems, dataToSave);
+    invalidateCache(); // Invalidate all for simplicity
+    return docRef.id;
+};
+
 
 export const updateCommercialItem = async (itemId: string, itemData: Partial<Omit<CommercialItem, 'id'>>, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'commercial_items', itemId);
@@ -1478,12 +1486,16 @@ export const deletePerson = async (
 
 // --- Opportunity Functions ---
 
-export const getAllOpportunities = async (): Promise<Opportunity[]> => {
-    const cachedData = getFromCache('opportunities');
-    if (cachedData) return cachedData;
+export const getAllOpportunities = async (user: User, isBoss: boolean): Promise<Opportunity[]> => {
+    let q;
+    if (isBoss) {
+        q = query(collections.opportunities);
+    } else {
+        q = query(collections.opportunities, where('ownerId', '==', user.id));
+    }
 
-    const snapshot = await getDocs(collections.opportunities);
-    const opportunities = snapshot.docs.map(doc => {
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => {
       const data = doc.data();
       const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
       if (data.updatedAt && data.updatedAt instanceof Timestamp) {
@@ -1499,21 +1511,26 @@ export const getAllOpportunities = async (): Promise<Opportunity[]> => {
 
       return opp;
     });
-    setInCache('opportunities', opportunities);
-    return opportunities;
 };
 
+
 export const getOpportunitiesByClientId = async (clientId: string): Promise<Opportunity[]> => {
-    const allOpps = await getAllOpportunities();
-    return allOpps.filter(opp => opp.clientId === clientId);
+    const q = query(collections.opportunities, where('clientId', '==', clientId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
 };
 
 export const getOpportunitiesForUser = async (userId: string): Promise<Opportunity[]> => {
-    const allOpps = await getAllOpportunities();
     const allClients = await getClients();
     const userClientIds = new Set(allClients.filter(c => c.ownerId === userId).map(c => c.id));
-    return allOpps.filter(opp => userClientIds.has(opp.clientId));
+    
+    if (userClientIds.size === 0) return [];
+    
+    const q = query(collections.opportunities, where('clientId', 'in', Array.from(userClientIds)));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
 }
+
 
 export const createOpportunity = async (
     opportunityData: Omit<Opportunity, 'id'>,
@@ -1521,17 +1538,25 @@ export const createOpportunity = async (
     userName: string,
     ownerName: string
 ): Promise<string> => {
-    const dataToSave: any = { ...opportunityData };
+    const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
+    if (!clientSnap.exists()) throw new Error("Client not found for opportunity creation");
+    const clientData = clientSnap.data() as Client;
+
+
+    const dataToSave: any = { 
+        ...opportunityData,
+        ownerId: clientData.ownerId,
+        ownerName: clientData.ownerName,
+        createdAt: serverTimestamp() 
+    };
+
     if (dataToSave.agencyId === undefined) {
         delete dataToSave.agencyId;
     }
     delete dataToSave.pautados;
 
 
-    const docRef = await addDoc(collections.opportunities, {
-        ...dataToSave,
-        createdAt: serverTimestamp()
-    });
+    const docRef = await addDoc(collections.opportunities, dataToSave);
     invalidateCache('opportunities');
 
     await logActivity({
@@ -1629,8 +1654,14 @@ export const updateOpportunity = async (
     if (!docSnap.exists()) throw new Error("Opportunity not found");
     const originalData = docSnap.data() as Opportunity;
 
+    const clientSnap = await getDoc(doc(db, 'clients', originalData.clientId));
+    if (!clientSnap.exists()) throw new Error("Client not found for opportunity update");
+    const clientData = clientSnap.data() as Client;
+
     const updateData: {[key: string]: any} = {
         ...data,
+        ownerId: clientData.ownerId,
+        ownerName: clientData.ownerName,
         updatedAt: serverTimestamp()
     };
     
