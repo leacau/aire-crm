@@ -668,7 +668,7 @@ export default function ClientsPage() {
         <ActivityFormDialog
           isOpen={isActivityFormOpen}
           onOpenChange={setIsActivityFormOpen}
-          client={selectedClientForActivity}
+          entity={{ id: selectedClientForActivity.id, name: selectedClientForActivity.denominacion, type: 'client' }}
           userInfo={userInfo}
           getGoogleAccessToken={getGoogleAccessToken}
           onActivitySaved={() => fetchData()}
@@ -694,3 +694,4 @@ export default function ClientsPage() {
 }
 
     
+
