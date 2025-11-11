@@ -110,7 +110,9 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   }, [userInfo, fetchData]);
 
   const { toInvoiceOpps, toCollectInvoices, paidInvoices } = useMemo(() => {
-    if (!userInfo) return { toInvoiceOpps: [], toCollectInvoices: [], paidInvoices: [] };
+    if (!userInfo) {
+      return { toInvoiceOpps: [], toCollectInvoices: [], paidInvoices: [] };
+    }
     
     const isDateInRange = (date: Date) => {
         if (!dateRange?.from || !dateRange?.to) return true;

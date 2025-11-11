@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
@@ -205,7 +206,7 @@ function CanjesPageComponent() {
         );
       },
     },
-  ], [handleOpenForm, canManageAll, userInfo]);
+  ], [handleOpenForm, canManageAll, userInfo?.id]);
 
   if (authLoading || loading) {
     return (
