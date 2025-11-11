@@ -70,7 +70,7 @@ service cloud.firestore {
       }
       
       allow get: if isUserAuthenticated() && (isOpportunityOwner() || isManagement());
-      allow list: if isUserAuthenticated() && (isManagement() || request.query.where.ownerId == request.auth.uid);
+      allow list: if isUserAuthenticated();
       allow create: if isUserAuthenticated();
       allow update: if isUserAuthenticated() && (isOpportunityOwner() || isManagement());
       allow delete: if isManagement();
@@ -150,9 +150,9 @@ service cloud.firestore {
       allow delete: if isManagement();
     }
 
-    // SYSTEM CONFIG: Only readable by management to prevent errors, write only by super admin.
+    // SYSTEM CONFIG: Readable by all authenticated users, writable only by super admin.
     match /system_config/{configId} {
-      allow read: if isUserAuthenticated() && isManagement();
+      allow read: if isUserAuthenticated();
       allow write: if isUserAuthenticated() && request.auth.token.email == 'lchena@airedesantafe.com.ar';
     }
   }
