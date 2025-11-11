@@ -4,8 +4,6 @@
 
 
 
-
-
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -80,14 +78,11 @@ export type Opportunity = {
   title: string;
   clientName: string;
   clientId: string;
-  ownerId: string;
-  ownerName: string;
   value: number; // Valor final de la propuesta
   stage: OpportunityStage;
   closeDate: string;
   details?: string;
   observaciones?: string;
-  stageLastUpdatedAt?: string;
   
   bonificacionDetalle?: string;
   bonificacionEstado?: BonificacionEstado;
@@ -109,7 +104,6 @@ export type Opportunity = {
   proposalItems?: ProposalItem[];
   valorTarifario?: number; // Calculated value from rates
   finalizationDate?: string;
-  updatedAt?: string;
 };
 
 export type Person = {
@@ -178,7 +172,7 @@ export type ActivityLog = {
   userName: string;
   ownerName: string;
   type: 'create' | 'update' | 'delete' | 'stage_change';
-  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user' | 'program' | 'commercial_item' | 'commercial_item_series' | 'licencia' | 'monthly_closure' | 'opportunity_alert';
+  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user' | 'program' | 'commercial_item' | 'commercial_item_series' | 'licencia' | 'monthly_closure';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action
@@ -278,17 +272,8 @@ export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Geren
 
 export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción';
 
-export const areaTypes: AreaType[] = [
-    'Comercial',
-    'Administración',
-    'Recursos Humanos',
-    'Pautado',
-    'Programación',
-    'Redacción',
-];
-
 export const screenNames = [
-    'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
+    'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs', 
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals', 
     'Activity', 'Team', 'Rates', 'Reports', 'Import'
 ] as const;
@@ -411,5 +396,3 @@ export type CommercialItem = {
   updatedBy?: string;
   updatedAt?: string;
 };
-
-export type OpportunityAlertsConfig = Partial<Record<OpportunityStage, number>>;

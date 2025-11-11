@@ -34,7 +34,6 @@ import { useRouter } from 'next/navigation';
 import { findBestMatch } from 'string-similarity';
 import { Badge } from '@/components/ui/badge';
 import { ActivityFormDialog } from './activity-form-dialog';
-import { hasManagementPrivileges, isManagementRoleName } from '@/lib/role-utils';
 
 function ReassignClientDialog({ 
   clients, 
@@ -143,7 +142,7 @@ function BulkDeleteDialog({
 
 
 export default function ClientsPage() {
-  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
+  const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
@@ -154,7 +153,7 @@ export default function ClientsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [clientsToReassign, setClientsToReassign] = useState<Client[]>([]);
   const [showOnlyMyClients, setShowOnlyMyClients] = useState(!isBoss);
-  const canManage = hasManagementPrivileges(userInfo);
+  const canManage = isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Gerencia';
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [showDuplicates, setShowDuplicates] = useState(false);
@@ -170,9 +169,10 @@ export default function ClientsPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
+      const allowedOwnerRoles = ['Asesor', 'Jefe', 'Gerencia', 'Administracion'];
       const promises: [Promise<Client[]>, Promise<User[]>, Promise<Opportunity[]>?] = [getClients(), getAllUsers()];
       
-      const shouldFetchAllData = hasManagementPrivileges(userInfo);
+      const shouldFetchAllData = userInfo.role === 'Jefe' || userInfo.role === 'Gerencia' || userInfo.role === 'Administracion';
 
       if (shouldFetchAllData) {
         promises.push(getAllOpportunities());
@@ -182,7 +182,7 @@ export default function ClientsPage() {
 
       setClients(fetchedClients);
       if(fetchedUsers) {
-        setAdvisors(fetchedUsers.filter(u => u.role === 'Asesor' || isManagementRoleName(u.role)));
+        setAdvisors(fetchedUsers.filter(u => allowedOwnerRoles.includes(u.role)));
       }
       if (fetchedOpportunities) {
         setOpportunities(fetchedOpportunities);
@@ -235,12 +235,6 @@ export default function ClientsPage() {
 
     return data;
   }, [opportunities, clients]);
-
-  const advisorsWithClients = useMemo(() => {
-    if (!canManage) return [];
-    const ownerIdsWithClients = new Set(clients.map(client => client.ownerId));
-    return advisors.filter(advisor => ownerIdsWithClients.has(advisor.id));
-  }, [clients, advisors, canManage]);
 
 
   const displayedClients = useMemo(() => {
@@ -302,6 +296,35 @@ export default function ClientsPage() {
       );
     });
   }, [clients, searchTerm, showOnlyMyClients, userInfo, showDuplicates, canManage, selectedAdvisor]);
+
+
+  const handleSaveClient = async (clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>) => {
+    if (!userInfo) {
+        toast({
+            title: "Error",
+            description: "Debes iniciar sesión para crear un cliente.",
+            variant: "destructive",
+        });
+        return;
+    }
+
+    try {
+      await createClient(clientData, userInfo.id, userInfo.name);
+      toast({
+        title: "Cliente Creado",
+        description: `${clientData.denominacion} ha sido añadido a la lista.`,
+      });
+      fetchData(); // Refresh the list
+      setIsFormOpen(false); // Close dialog on successful creation
+    } catch (error) {
+        console.error("Error creating client:", error);
+        toast({
+            title: "Error al crear cliente",
+            description: "No se pudo guardar el cliente.",
+            variant: "destructive",
+        });
+    }
+  };
   
   const handleBulkDelete = async () => {
     const idsToDelete = Object.keys(rowSelection);
@@ -376,7 +399,7 @@ export default function ClientsPage() {
 
   const columns = useMemo<ColumnDef<Client>[]>(() => {
     const canViewDetails = (client: Client) => userInfo && client && (isBoss || client.ownerId === userInfo.id);
-    const canSeeOppData = hasManagementPrivileges(userInfo);
+    const canSeeOppData = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
 
 
     let cols: ColumnDef<Client>[] = [];
@@ -538,7 +561,7 @@ export default function ClientsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los asesores</SelectItem>
-              {advisorsWithClients.map(advisor => (
+              {advisors.map(advisor => (
                 <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
               ))}
             </SelectContent>
@@ -577,19 +600,15 @@ export default function ClientsPage() {
       <ClientFormDialog
         isOpen={isFormOpen}
         onOpenChange={setIsFormOpen}
-        onSaveSuccess={() => {
-          fetchData();
-          setIsFormOpen(false);
-        }}
+        onSave={handleSaveClient}
         onValidateCuit={validateCuit}
       />
        {selectedClientForActivity && userInfo && (
         <ActivityFormDialog
           isOpen={isActivityFormOpen}
           onOpenChange={setIsActivityFormOpen}
-          entity={{id: selectedClientForActivity.id, name: selectedClientForActivity.denominacion, type: 'client'}}
+          client={selectedClientForActivity}
           userInfo={userInfo}
-          getGoogleAccessToken={getGoogleAccessToken}
           onActivitySaved={() => fetchData()}
         />
        )}

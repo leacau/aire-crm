@@ -17,7 +17,6 @@ import { Progress } from '@/components/ui/progress';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import type { ValidationResult } from '@/components/import/validation-step';
 import { findBestMatch } from 'string-similarity';
-import { hasManagementPrivileges } from '@/lib/role-utils';
 
 type ColumnMapping = Record<string, keyof ClientImportMapping | 'ignore'>;
 type ImportStep = 'upload' | 'map' | 'validate' | 'importing' | 'done';
@@ -38,7 +37,7 @@ export default function ImportPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
 
-  const canAccess = hasManagementPrivileges(userInfo);
+  const canAccess = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
 
   useEffect(() => {
     if (!loading && !canAccess) {

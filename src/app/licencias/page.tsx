@@ -17,7 +17,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { sendEmail } from '@/lib/google-gmail-service';
-import { isManagementRoleName } from '@/lib/role-utils';
 
 export default function LicensesPage() {
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
@@ -32,7 +31,7 @@ export default function LicensesPage() {
   const [requestOwner, setRequestOwner] = useState<User | null>(null);
   const [requestToDelete, setRequestToDelete] = useState<VacationRequest | null>(null);
 
-  const managers = useMemo(() => users.filter(u => isManagementRoleName(u.role)), [users]);
+  const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
 
   const fetchData = useCallback(async () => {
     if (!userInfo) return;

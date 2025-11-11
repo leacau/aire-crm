@@ -4,39 +4,34 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, OrdenPautado, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
-import { hasManagementPrivileges } from './role-utils';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
+
+const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
-const ALERTS_CONFIG_DOC_ID = 'opportunity_alerts';
-
-
-const createCollections = <T>(collectionName: string) => {
-  return collection(db, collectionName) as T;
-};
 
 const collections = {
-    users: createCollections<User>('users'),
-    clients: createCollections<Client>('clients'),
-    people: createCollections<Person>('people'),
-    opportunities: createCollections<Opportunity>('opportunities'),
-    activities: createCollections<ActivityLog>('activities'),
-    agencies: createCollections<Agency>('agencies'),
-    clientActivities: createCollections<ClientActivity>('client-activities'),
-    invoices: createCollections<Invoice>('invoices'),
-    canjes: createCollections<Canje>('canjes'),
-    programs: createCollections<Program>('programs'),
-    commercialItems: createCollections<CommercialItem>('commercial_items'),
-    prospects: createCollections<Prospect>('prospects'),
-    licenses: createCollections<VacationRequest>('licencias'),
-    systemConfig: createCollections<any>('system_config'),
+    clients: collection(db, 'clients'),
+    people: collection(db, 'people'),
+    opportunities: collection(db, 'opportunities'),
+    activities: collection(db, 'activities'),
+    clientActivities: collection(db, 'client-activities'),
+    users: collection(db, 'users'),
+    agencies: collection(db, 'agencies'),
+    invoices: collection(db, 'invoices'),
+    canjes: collection(db, 'canjes'),
+    programs: collection(db, 'programs'),
+    commercialItems: collection(db, 'commercial_items'),
+    prospects: collection(db, 'prospects'),
+    licenses: collection(db, 'licencias'),
 };
-
 
 const cache: {
     [key: string]: {
@@ -72,108 +67,46 @@ export const invalidateCache = (key?: string) => {
 
 const parseDateWithTimezone = (dateString: string) => {
     if (!dateString || typeof dateString !== 'string') return null;
-    // The issue might be that a timestamp is passed as a string
-    if (dateString.includes('T')) {
-        return parseISO(dateString);
-    }
     const parts = dateString.split('-').map(Number);
     if (parts.length !== 3 || parts.some(isNaN)) return null;
     const [year, month, day] = parts;
     return new Date(year, month - 1, day);
 };
 
-
-// --- Opportunity Alert Config Functions ---
-export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
-    const cacheKey = ALERTS_CONFIG_DOC_ID;
-    const cached = getFromCache(cacheKey);
-    if (cached) return cached;
-    
-    try {
-        const docRef = doc(collections.systemConfig, ALERTS_CONFIG_DOC_ID);
-        const docSnap = await getDoc(docRef);
-        const data = docSnap.exists() ? (docSnap.data() as OpportunityAlertsConfig) : {};
-        setInCache(cacheKey, data);
-        return data;
-    } catch(e: any) {
-        if (e.code === 'permission-denied') {
-            console.error('Permission error fetching alerts config. Returning defaults for unauthorized users.');
-            return {};
-        }
-        throw e;
-    }
-};
-
-export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsConfig, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(collections.systemConfig, ALERTS_CONFIG_DOC_ID);
-
-    try {
-        await setDoc(docRef, config);
-    } catch (error: any) {
-        if (error?.code === 'permission-denied') {
-            const permissionError = new Error('permission-denied');
-            permissionError.name = 'FirebasePermissionError';
-            throw permissionError;
-        }
-
-        throw error;
-    }
-
-    invalidateCache(ALERTS_CONFIG_DOC_ID);
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'opportunity_alert',
-        entityId: 'config',
-        entityName: 'Configuración de Alertas',
-        details: `actualizó la configuración de alertas de oportunidades.`,
-        ownerName: userName,
-    });
-};
-
-
 // --- Permissions ---
 export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
-    const docRef = doc(collections.systemConfig, PERMISSIONS_DOC_ID);
-    let docSnap;
+    const cachedData = getFromCache('permissions');
+    if (cachedData) return cachedData;
+    
+    // Assuming the super admin's UID is known or can be fetched if not available.
+    // For now, this part might need adjustment if the UID is not static.
+    // This function can't easily get the current user's ID, so it's a simplification.
+    const permissionsDocRef = doc(db, 'system_config', PERMISSIONS_DOC_ID);
+    const docSnap = await getDoc(permissionsDocRef);
 
-    try {
-        docSnap = await getDoc(docRef);
-    } catch (error: any) {
-        if (error?.code === 'permission-denied') {
-            console.warn('Permission denied when reading area permissions. Using defaults.');
-            return defaultPermissions;
-        }
-
-        throw error;
+    if (docSnap.exists()) {
+        const perms = docSnap.data().permissions;
+        setInCache('permissions', perms);
+        return perms;
+    } else {
+        await setDoc(permissionsDocRef, { permissions: defaultPermissions });
+        setInCache('permissions', defaultPermissions);
+        return defaultPermissions;
     }
-
-    const data = docSnap.exists() ? docSnap.data() : null;
-    const permissions = data?.permissions as Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>> | undefined;
-
-    if (permissions) {
-        return permissions;
-    }
-
-    try {
-        await setDoc(docRef, { permissions: defaultPermissions }, { merge: true });
-    } catch (error: any) {
-        if (error?.code !== 'permission-denied') {
-            throw error;
-        }
-
-        console.warn('Permission denied when seeding area permissions. Continuing with defaults.');
-    }
-
-    return defaultPermissions;
 };
 
 export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>): Promise<void> => {
-    const docRef = doc(collections.systemConfig, PERMISSIONS_DOC_ID);
-    await setDoc(docRef, { permissions });
-    invalidateCache(PERMISSIONS_DOC_ID);
+    const permissionsDocRef = doc(db, 'system_config', PERMISSIONS_DOC_ID);
+    
+    setDoc(permissionsDocRef, { permissions }, { merge: true }).catch(async (serverError) => {
+      const permissionError = new FirestorePermissionError({
+        path: permissionsDocRef.path,
+        operation: 'update',
+        requestResourceData: { permissions },
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
+    });
+    invalidateCache('permissions');
 };
 
 
@@ -434,7 +367,7 @@ export const deleteProspect = async (id: string, userId: string, userName: strin
         entityId: id,
         entityName: prospectData.companyName,
         details: `eliminó el prospecto <strong>${prospectData.companyName}</strong>`,
-        ownerName: prospectData.ownerName || userName,
+        ownerName: prospectData.ownerName,
     });
 };
 
@@ -603,30 +536,7 @@ export const getCommercialItemsBySeries = async (seriesId: string): Promise<Comm
     });
 };
 
-export const createCommercialItem = async (item: Omit<CommercialItem, 'id'>, userId: string, userName: string): Promise<string> => {
-    const docRef = await addDoc(collections.commercialItems, {
-        ...item,
-        createdBy: userId,
-        createdAt: serverTimestamp(),
-    });
-
-    invalidateCache(`commercial_items_${item.date}`);
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'commercial_item',
-        entityId: docRef.id,
-        entityName: item.title || item.description,
-        details: `creó el elemento comercial <strong>${item.title || item.description}</strong>`,
-        ownerName: item.clientName || userName,
-    });
-
-    return docRef.id;
-};
-
-export const saveCommercialItemSeries = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string, isEditingSeries?: boolean): Promise<string | void> => {
+export const saveCommercialItem = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string, isEditingSeries?: boolean): Promise<string | void> => {
     const batch = writeBatch(db);
     const newSeriesId = item.seriesId || doc(collection(db, 'dummy')).id;
 
@@ -1075,13 +985,13 @@ export const createUserProfile = async (uid: string, name: string, email: string
 };
 
 export const getUserProfile = async (uid: string): Promise<User | null> => {
-    const docRef = doc(db, 'users', uid);
-    const docSnap = await getDoc(docRef);
+    const userRef = doc(db, 'users', uid);
+    const docSnap = await getDoc(userRef);
     if (docSnap.exists()) {
         return { id: docSnap.id, ...docSnap.data() } as User;
     }
     return null;
-};
+}
 
 export const updateUserProfile = async (uid: string, data: Partial<User>): Promise<void> => {
     const userRef = doc(db, 'users', uid);
@@ -1567,60 +1477,42 @@ export const deletePerson = async (
 
 
 // --- Opportunity Functions ---
-export const getAllOpportunities = async (user?: User | null, isBoss?: boolean): Promise<Opportunity[]> => {
-    const cacheKey = isBoss ? 'opportunities_all' : `opportunities_${user?.id}`;
-    
-    const cached = getFromCache(cacheKey);
-    if (cached) {
-      return cached;
-    }
 
-    let oppsQuery;
-    
-    if (isBoss) {
-        oppsQuery = query(collections.opportunities);
-    } else if (user) {
-        oppsQuery = query(collections.opportunities, where('ownerId', '==', user.id));
-    } else {
-        return [];
-    }
-  
-    const snapshot = await getDocs(oppsQuery);
+export const getAllOpportunities = async (): Promise<Opportunity[]> => {
+    const cachedData = getFromCache('opportunities');
+    if (cachedData) return cachedData;
+
+    const snapshot = await getDocs(collections.opportunities);
     const opportunities = snapshot.docs.map(doc => {
       const data = doc.data();
       const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
-      
-      const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
-      
-      opp.updatedAt = convertTimestamp(opp.updatedAt);
-      opp.stageLastUpdatedAt = convertTimestamp(opp.stageLastUpdatedAt);
-
-      if (opp.closeDate && typeof opp.closeDate !== 'string') {
-          opp.closeDate = (opp.closeDate as any).toDate().toISOString().split('T')[0];
+      if (data.updatedAt && data.updatedAt instanceof Timestamp) {
+        // @ts-ignore
+        opp.updatedAt = data.updatedAt.toDate().toISOString();
+      }
+       if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
+          const validDate = parseDateWithTimezone(data.closeDate);
+          opp.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
+      } else if (data.closeDate instanceof Timestamp) {
+          opp.closeDate = data.closeDate.toDate().toISOString().split('T')[0];
       }
 
       return opp;
     });
-  
-    setInCache(cacheKey, opportunities);
+    setInCache('opportunities', opportunities);
     return opportunities;
 };
 
-
 export const getOpportunitiesByClientId = async (clientId: string): Promise<Opportunity[]> => {
-    const q = query(collections.opportunities, where('clientId', '==', clientId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
+    const allOpps = await getAllOpportunities();
+    return allOpps.filter(opp => opp.clientId === clientId);
 };
 
 export const getOpportunitiesForUser = async (userId: string): Promise<Opportunity[]> => {
+    const allOpps = await getAllOpportunities();
     const allClients = await getClients();
     const userClientIds = new Set(allClients.filter(c => c.ownerId === userId).map(c => c.id));
-    if (userClientIds.size === 0) return [];
-    
-    const q = query(collections.opportunities, where('clientId', 'in', Array.from(userClientIds)));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data() as Opportunity);
+    return allOpps.filter(opp => userClientIds.has(opp.clientId));
 }
 
 export const createOpportunity = async (
@@ -1629,15 +1521,7 @@ export const createOpportunity = async (
     userName: string,
     ownerName: string
 ): Promise<string> => {
-    const client = await getClient(opportunityData.clientId);
-    if (!client) throw new Error("Client not found for new opportunity");
-    
-    const dataToSave: any = { 
-        ...opportunityData,
-        ownerId: client.ownerId,
-        ownerName: client.ownerName
-    };
-
+    const dataToSave: any = { ...opportunityData };
     if (dataToSave.agencyId === undefined) {
         delete dataToSave.agencyId;
     }
@@ -1646,10 +1530,9 @@ export const createOpportunity = async (
 
     const docRef = await addDoc(collections.opportunities, {
         ...dataToSave,
-        createdAt: serverTimestamp(),
-        stageLastUpdatedAt: serverTimestamp(),
+        createdAt: serverTimestamp()
     });
-    invalidateCache();
+    invalidateCache('opportunities');
 
     await logActivity({
         userId,
@@ -1739,7 +1622,7 @@ export const updateOpportunity = async (
     userId: string,
     userName: string,
     ownerName: string,
-    accessToken?: string | null
+    pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[]
 ): Promise<void> => {
     const docRef = doc(db, 'opportunities', id);
     const docSnap = await getDoc(docRef);
@@ -1751,45 +1634,16 @@ export const updateOpportunity = async (
         updatedAt: serverTimestamp()
     };
     
-    // Add ownerId and ownerName on update if they don't exist
-    if (!originalData.ownerId) {
-        const client = await getClient(originalData.clientId);
-        if (client) {
-            updateData.ownerId = client.ownerId;
-            updateData.ownerName = client.ownerName;
-        }
-    }
-
     const bonusStateChanged = data.bonificacionEstado && data.bonificacionEstado !== originalData.bonificacionEstado && originalData.bonificacionEstado === 'Pendiente';
     if (bonusStateChanged) {
         if (originalData.stage === 'Negociación a Aprobar') {
             updateData.stage = 'Negociación';
-        }
-        
-        // Send email notification on bonus decision
-        if (accessToken) {
-            const client = await getClient(originalData.clientId);
-            if (client) {
-                const owner = await getUserProfile(client.ownerId);
-                if (owner && owner.email) {
-                    const subject = `Decisión sobre bonificación para "${originalData.title}"`;
-                    const body = `<p>Hola ${owner.name},</p>
-                                  <p>La solicitud de bonificación para la oportunidad <strong>"${originalData.title}"</strong> del cliente <strong>${originalData.clientName}</strong> ha sido <strong>${data.bonificacionEstado}</strong>.</p>
-                                  ${data.bonificacionObservaciones ? `<p><strong>Observaciones:</strong> ${data.bonificacionObservaciones}</p>` : ''}
-                                  <p>Atentamente,<br/>${userName}</p>`;
-                    sendEmail({ accessToken, to: owner.email, subject, body });
-                }
-            }
         }
     }
 
     if (data.stage === 'Cerrado - Ganado' && originalData.stage !== 'Cerrado - Ganado') {
         const fullOpportunityData = { ...originalData, ...data, id };
         await createCommercialItemsFromOpportunity(fullOpportunityData, userId, userName);
-    }
-
-    if (data.stage && data.stage !== originalData.stage) {
-        updateData.stageLastUpdatedAt = serverTimestamp();
     }
 
 
@@ -1809,6 +1663,15 @@ export const updateOpportunity = async (
 
     await updateDoc(docRef, updateData);
     invalidateCache('opportunities');
+
+     if (pendingInvoices && pendingInvoices.length > 0) {
+        for (const invoiceData of pendingInvoices) {
+            await createInvoice({
+                ...invoiceData,
+                opportunityId: id,
+            }, userId, userName, ownerName);
+        }
+    }
 
 
     const activityDetails = {

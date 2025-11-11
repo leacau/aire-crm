@@ -19,7 +19,6 @@ class Emitter {
   }
 
   emit(type: string, detail: any) {
-    if (typeof CustomEvent === 'undefined') return;
     const event = new CustomEvent(type, { detail });
     this.target.dispatchEvent(event);
   }

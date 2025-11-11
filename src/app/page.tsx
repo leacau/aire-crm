@@ -25,12 +25,12 @@ import {
   CheckCircle,
   Lightbulb,
   TrendingDown,
-  BadgeCheck,
 } from 'lucide-react';
 import type { Opportunity, Client, ActivityLog, ClientActivity, User, Invoice } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
   getAllOpportunities,
+  getOpportunitiesForUser,
   getClients,
   getActivities,
   getAllClientActivities,
@@ -179,12 +179,11 @@ export default function DashboardPage() {
 
 
   useEffect(() => {
-    if (!userInfo) return;
     const fetchData = async () => {
       setLoadingData(true);
       try {
         const [allOpps, allClients, allActivities, allTasks, allInvoices, allUsers, allAdvisors] = await Promise.all([
-            getAllOpportunities(userInfo, isBoss),
+            getAllOpportunities(),
             getClients(),
             getActivities(100),
             getAllClientActivities(),
@@ -209,7 +208,7 @@ export default function DashboardPage() {
     };
 
     fetchData();
-  }, [userInfo, isBoss]);
+  }, []);
   
   const { 
     userOpportunities, 
@@ -405,6 +404,8 @@ export default function DashboardPage() {
     .filter(inv => inv.status !== 'Pagada' && dateRange && dateFilter(inv.date, dateRange))
     .reduce((acc, inv) => acc + inv.amount, 0);
 
+  const totalBillingInPeriod = totalPaidInPeriod + totalToCollectInPeriod;
+
   const prevMonthStart = dateRange?.from ? startOfMonth(subMonths(dateRange.from, 1)) : null;
   const prevMonthEnd = dateRange?.from ? endOfMonth(subMonths(dateRange.from, 1)) : null;
   
@@ -420,12 +421,16 @@ export default function DashboardPage() {
       previousMonthBilling = prevPaid + prevToCollect;
   }
   
-  const toCollectDifference = totalToCollectInPeriod - previousMonthBilling;
+  const billingDifference = totalBillingInPeriod - previousMonthBilling;
 
   const prospectingValue = filteredOpportunities
     .filter(o => o.stage === 'Nuevo')
     .reduce((acc, o) => acc + Number(o.value || 0), 0);
     
+  const forecastedValue = filteredOpportunities
+    .filter(o => ['Propuesta', 'Negociación', 'Negociación a Aprobar'].includes(o.stage))
+    .reduce((acc, o) => acc + Number(o.value || 0), 0);
+
   const totalClients = userClients.length;
 
   return (
@@ -460,41 +465,45 @@ export default function DashboardPage() {
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Facturación a Cobrar
+                  Facturación del Período
                 </CardTitle>
                 <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${totalToCollectInPeriod.toLocaleString('es-AR')}
+                  ${totalBillingInPeriod.toLocaleString('es-AR')}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Pagado: ${totalPaidInPeriod.toLocaleString('es-AR')} / 
+                  A cobrar: ${totalToCollectInPeriod.toLocaleString('es-AR')}
+                </p>
                  <p className="text-xs text-muted-foreground mt-1">
-                    Mes Anterior (a cobrar): ${previousMonthBilling.toLocaleString('es-AR')}
+                    Mes Anterior: ${previousMonthBilling.toLocaleString('es-AR')}
                 </p>
                  <p className={cn(
                     "text-xs font-medium flex items-center mt-1",
-                    toCollectDifference >= 0 ? "text-green-600" : "text-red-600"
+                    billingDifference >= 0 ? "text-green-600" : "text-red-600"
                   )}>
-                  {toCollectDifference >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
-                  Dif: ${toCollectDifference.toLocaleString('es-AR')}
+                  {billingDifference >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
+                  Dif: ${billingDifference.toLocaleString('es-AR')}
                 </p>
               </CardContent>
             </Card>
           </Link>
-           <Link href="/billing?tab=paid">
+           <Link href="/opportunities">
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Pagos del Mes
+                  Ingresos Previstos
                 </CardTitle>
-                <BadgeCheck className="h-4 w-4 text-muted-foreground" />
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${totalPaidInPeriod.toLocaleString('es-AR')}
+                  ${forecastedValue.toLocaleString('es-AR')}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Total de facturas pagadas en el período.
+                  Propuesta, Negociación y Aprobación.
                 </p>
               </CardContent>
             </Card>

@@ -19,7 +19,7 @@ import { Logo } from '@/components/logo';
 import { createUserProfile, getUserProfile } from '@/lib/firebase-service';
 import Link from 'next/link';
 
-const ALLOWED_DOMAINS = ['airedesantafe.com.ar', 'airedigital.com', ];
+const ALLOWED_DOMAINS = ['airedesantafe.com.ar', 'airedigital.com'];
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -38,7 +38,7 @@ export default function LoginPage() {
         const user = result.user;
         const emailDomain = user.email?.split('@')[1];
 
-        if (!emailDomain /**  || !ALLOWED_DOMAINS.includes(emailDomain)*/) {
+        if (!emailDomain || !ALLOWED_DOMAINS.includes(emailDomain)) {
             await auth.signOut(); // Sign out the user immediately
             toast({
                 title: 'Acceso Denegado',

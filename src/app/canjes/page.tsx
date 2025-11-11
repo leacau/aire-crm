@@ -20,7 +20,6 @@ import { es } from 'date-fns/locale';
 import { CanjeFormDialog } from '@/components/canjes/canje-form-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { hasManagementPrivileges } from '@/lib/role-utils';
 
 
 const getStatusPill = (status?: string) => {
@@ -51,7 +50,7 @@ function CanjesPageComponent() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [canjeToDelete, setCanjeToDelete] = useState<Canje | null>(null);
   
-  const canManageAll = hasManagementPrivileges(userInfo);
+  const canManageAll = isBoss || userInfo?.role === 'Administracion';
 
   const handleOpenForm = useCallback((canje: Canje | null = null) => {
     setSelectedCanje(canje);

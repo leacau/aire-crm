@@ -20,7 +20,6 @@ import { DeleteItemDialog } from '@/components/grilla/delete-item-dialog';
 import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PntViewByProgram } from '@/components/pnts/pnt-view-by-program';
-import { hasManagementPrivileges } from '@/lib/role-utils';
 
 
 interface PntItemRowProps {
@@ -82,7 +81,7 @@ export default function PntsPage() {
   const [itemToDelete, setItemToDelete] = useState<CommercialItem | null>(null);
 
   const dayOfWeek = useMemo(() => currentDate.getDay() === 0 ? 7 : currentDate.getDay(), [currentDate]);
-  const canManage = hasManagementPrivileges(userInfo);
+  const canManage = isBoss || userInfo?.role === 'Gerencia';
 
   const fetchData = useCallback(async () => {
     setLoading(true);

@@ -26,7 +26,6 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ActivityFormDialog } from '@/components/clients/activity-form-dialog';
-import { isManagementRoleName } from '@/lib/role-utils';
 
 
 export default function ProspectsPage() {
@@ -64,12 +63,13 @@ export default function ProspectsPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
+      const allowedOwnerRoles = ['Asesor', 'Jefe', 'Gerencia', 'Administracion'];
       const [fetchedProspects, fetchedUsers] = await Promise.all([
         getProspects(),
         getAllUsers(),
       ]);
       setProspects(fetchedProspects);
-      setUsers(fetchedUsers.filter(u => u.role === 'Asesor' || isManagementRoleName(u.role)));
+      setUsers(fetchedUsers.filter(u => allowedOwnerRoles.includes(u.role)));
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: "Error al cargar los prospectos", variant: "destructive" });

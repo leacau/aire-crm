@@ -7,9 +7,8 @@ import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWit
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
-import { getUserProfile, getAreaPermissions } from '@/lib/firebase-service';
-import type { User, ScreenName, ScreenPermission } from '@/lib/types';
-import { hasManagementPrivileges } from '@/lib/role-utils';
+import { getUserProfile, updateUserProfile } from '@/lib/firebase-service';
+import type { User } from '@/lib/types';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -44,24 +43,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const profile = await getUserProfile(firebaseUser.uid);
         
         if (profile) {
-          const areaPermissions = await getAreaPermissions();
-          const finalPermissions: Partial<Record<ScreenName, ScreenPermission>> = 
-            (profile.area && areaPermissions[profile.area]) 
-            ? { ...areaPermissions[profile.area], ...profile.permissions } 
-            : { ...profile.permissions };
-            
-          const finalProfile: User = { 
+          const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';
+          const finalProfile = { 
             id: firebaseUser.uid, 
             ...profile,
-            permissions: finalPermissions,
             photoURL: firebaseUser.photoURL || profile.photoURL,
-            initials: profile.name?.substring(0, 2).toUpperCase() || 'U'
+            initials
           };
           setUserInfo(finalProfile);
-          setIsBoss(hasManagementPrivileges(finalProfile));
+          setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
         } else {
             const name = firebaseUser.displayName || 'Usuario';
-            const defaultProfile: User = {
+            const defaultProfile = {
                 id: firebaseUser.uid,
                 name: name,
                 email: firebaseUser.email || '',

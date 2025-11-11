@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getInvoices, getProspects } from '@/lib/firebase-service';
 import type { Opportunity, User, Client, UserRole, Invoice, Prospect, AreaType } from '@/lib/types';
-import { userRoles, areaTypes } from '@/lib/types';
+import { userRoles } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
 import { MonthlyClosureDialog } from './monthly-closure-dialog';
-import { isManagementRoleName } from '@/lib/role-utils';
 
 
 interface UserStats {
@@ -42,6 +41,8 @@ interface UserStats {
   currentMonthBilling: number;
   previousMonthBilling: number | null;
 }
+
+const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'];
 
 export function TeamPerformanceTable() {
   const { userInfo, isBoss } = useAuth();
@@ -152,7 +153,7 @@ export function TeamPerformanceTable() {
     }).sort((a,b) => (b.currentMonthBilling) - (a.currentMonthBilling));
   }, [users, opportunities, clients, prospects]);
   
-  const managers = useMemo(() => users.filter(u => isManagementRoleName(u.role)), [users]);
+  const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
   const advisors = useMemo(() => users.filter(u => u.role === 'Asesor'), [users]);
 
 
