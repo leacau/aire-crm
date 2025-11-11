@@ -140,20 +140,19 @@ const KanbanCard = ({ opportunity, onDragStart, alertConfig }: { opportunity: Op
 
   useEffect(() => {
     const fetchOwner = async () => {
-      const client = (await getClients()).find(c => c.id === opportunity.clientId);
-        if(client?.ownerId) {
-            const ownerProfile = await getUserProfile(client.ownerId);
+      if(opportunity.ownerId) {
+            const ownerProfile = await getUserProfile(opportunity.ownerId);
             if(ownerProfile) {
                 setOwner({
                     name: ownerProfile.name,
-                    avatarUrl: `https://picsum.photos/seed/${client.ownerId}/40/40`,
+                    avatarUrl: `https://picsum.photos/seed/${opportunity.ownerId}/40/40`,
                     initials: ownerProfile.name.substring(0, 2).toUpperCase()
                 });
             }
         }
     }
     fetchOwner();
-  }, [opportunity.clientId]);
+  }, [opportunity.ownerId]);
 
   const handleUpdate = async (updatedOpp: Partial<Opportunity>) => {
      if (!userInfo || !owner) return;

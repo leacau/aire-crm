@@ -1,18 +1,20 @@
 
+
 'use client';
 
-import { db } from '@/lib/firebase';
+import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from '@/lib/types';
-import { logActivity } from '@/lib/activity-logger';
-import { sendEmail, createCalendarEvent } from '@/lib/google-gmail-service';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from './types';
+import { logActivity } from './activity-logger';
+import { sendEmail, createCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { defaultPermissions } from '@/lib/data';
-import { hasManagementPrivileges } from '@/lib/role-utils';
+import { defaultPermissions } from './data';
+import { hasManagementPrivileges } from './role-utils';
 
 const PERMISSIONS_DOC_ID = 'area_permissions';
 const ALERTS_CONFIG_DOC_ID = 'opportunity_alerts';
+
 
 const createCollections = <T>(collectionName: string) => {
   return collection(db, collectionName) as T;
@@ -1565,7 +1567,7 @@ export const deletePerson = async (
 
 
 // --- Opportunity Functions ---
-export const getAllOpportunities = async (user?: User, isBoss?: boolean): Promise<Opportunity[]> => {
+export const getAllOpportunities = async (user?: User | null, isBoss?: boolean): Promise<Opportunity[]> => {
     const cacheKey = isBoss ? 'opportunities_all' : `opportunities_${user?.id}`;
     
     const cached = getFromCache(cacheKey);
