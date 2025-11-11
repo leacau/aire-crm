@@ -14,23 +14,6 @@ import { hasManagementPrivileges } from '@/lib/role-utils';
 const PERMISSIONS_DOC_ID = 'area_permissions';
 const ALERTS_CONFIG_DOC_ID = 'opportunity_alerts';
 
-const collections = {
-    clients: collection(db, 'clients'),
-    people: collection(db, 'people'),
-    opportunities: collection(db, 'opportunities'),
-    activities: collection(db, 'activities'),
-    clientActivities: collection(db, 'client-activities'),
-    users: collection(db, 'users'),
-    agencies: collection(db, 'agencies'),
-    invoices: collection(db, 'invoices'),
-    canjes: collection(db, 'canjes'),
-    programs: collection(db, 'programs'),
-    commercialItems: collection(db, 'commercial_items'),
-    prospects: collection(db, 'prospects'),
-    licencias: collection(db, 'licencias'),
-    systemConfig: collection(db, 'system_config'),
-};
-
 const cache: {
     [key: string]: {
         data: any;
@@ -1560,9 +1543,8 @@ export const deletePerson = async (
 
 
 // --- Opportunity Functions ---
-
-export const getAllOpportunities = async (user?: User): Promise<Opportunity[]> => {
-    const cacheKey = user && !hasManagementPrivileges(user) ? `opportunities_${user.id}` : 'opportunities_all';
+export const getAllOpportunities = async (user: User, isBoss: boolean): Promise<Opportunity[]> => {
+    const cacheKey = isBoss ? 'opportunities_all' : `opportunities_${user.id}`;
     
     const cached = getFromCache(cacheKey);
     if (cached) {
@@ -1571,10 +1553,10 @@ export const getAllOpportunities = async (user?: User): Promise<Opportunity[]> =
 
     let oppsQuery;
     
-    if (user && !hasManagementPrivileges(user)) {
-        oppsQuery = query(collections.opportunities, where('ownerId', '==', user.id));
-    } else {
+    if (isBoss) {
         oppsQuery = query(collections.opportunities);
+    } else {
+        oppsQuery = query(collections.opportunities, where('ownerId', '==', user.id));
     }
   
     const snapshot = await getDocs(oppsQuery);
@@ -1606,10 +1588,13 @@ export const getOpportunitiesByClientId = async (clientId: string): Promise<Oppo
 };
 
 export const getOpportunitiesForUser = async (userId: string): Promise<Opportunity[]> => {
-    const allOpps = await getAllOpportunities();
     const allClients = await getClients();
     const userClientIds = new Set(allClients.filter(c => c.ownerId === userId).map(c => c.id));
-    return allOpps.filter(opp => userClientIds.has(opp.clientId));
+    if (userClientIds.size === 0) return [];
+    
+    const q = query(collections.opportunities, where('clientId', 'in', Array.from(userClientIds)));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data() as Opportunity);
 }
 
 export const createOpportunity = async (
@@ -1638,7 +1623,7 @@ export const createOpportunity = async (
         createdAt: serverTimestamp(),
         stageLastUpdatedAt: serverTimestamp(),
     });
-    invalidateCache('opportunities');
+    invalidateCache();
 
     await logActivity({
         userId,

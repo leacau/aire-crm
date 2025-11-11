@@ -184,7 +184,7 @@ export default function DashboardPage() {
       setLoadingData(true);
       try {
         const [allOpps, allClients, allActivities, allTasks, allInvoices, allUsers, allAdvisors] = await Promise.all([
-            getAllOpportunities(userInfo),
+            getAllOpportunities(userInfo, isBoss),
             getClients(),
             getActivities(100),
             getAllClientActivities(),
@@ -209,7 +209,7 @@ export default function DashboardPage() {
     };
 
     fetchData();
-  }, [userInfo]);
+  }, [userInfo, isBoss]);
   
   const { 
     userOpportunities, 

@@ -326,7 +326,7 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
     setLoading(true);
     try {
       const [allOpps, allClients, alerts] = await Promise.all([
-        getAllOpportunities(userInfo),
+        getAllOpportunities(userInfo, isBoss),
         getClients(),
         getOpportunityAlertsConfig(),
       ]);
@@ -340,7 +340,7 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
     } finally {
       setLoading(false);
     }
-  }, [toast, userInfo]);
+  }, [toast, userInfo, isBoss]);
 
   useEffect(() => {
     fetchOpportunities();
@@ -370,14 +370,9 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
     
     let opps = opportunities;
 
-    // 1. Filter by Advisor/User
-    if(isBoss) {
-      if(selectedAdvisor !== 'all' && advisorClientIds) {
-        opps = opps.filter(opp => advisorClientIds.has(opp.clientId));
-      }
-    } else {
-      const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
-      opps = opps.filter(opp => userClientIds.has(opp.clientId));
+    // 1. Filter by Advisor if boss is using the filter
+    if(isBoss && selectedAdvisor !== 'all' && advisorClientIds) {
+      opps = opps.filter(opp => advisorClientIds.has(opp.clientId));
     }
     
     // 2. Filter by Date
@@ -418,7 +413,7 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
     }
 
     return opps;
-  }, [opportunities, clients, userInfo, isBoss, selectedAdvisor, dateRange, advisorClientIds, selectedClient]);
+  }, [opportunities, userInfo, isBoss, selectedAdvisor, dateRange, advisorClientIds, selectedClient]);
 
 
   useEffect(() => {
