@@ -162,7 +162,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                         const virtualOpp = { 
                             ...opp, 
                             // Add a unique ID for the table key and a reference date
-                            id: `${opp.id}_${getYear(monthDate)}-${getMonth(monthDate)}`, 
+                            id: `${opp.id}_${i}`, 
                             closeDate: monthDate.toISOString(), 
                         };
                         toInvoiceOpps.push(virtualOpp);
