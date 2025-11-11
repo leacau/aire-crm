@@ -30,7 +30,6 @@ import type { Opportunity, Client, ActivityLog, ClientActivity, User, Invoice } 
 import { useAuth } from '@/hooks/use-auth';
 import {
   getAllOpportunities,
-  getOpportunitiesForUser,
   getClients,
   getActivities,
   getAllClientActivities,
@@ -164,7 +163,7 @@ export default function DashboardPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [notified, setNotified] = useState(false);
   const [selectedTaskStatus, setSelectedTaskStatus] = useState<TaskStatus | null>(null);
-  const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
+  const [selectedAdvisor, setSelectedAdvisor] = useState('all');
   const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
   const tasksSectionRef = useRef<HTMLDivElement>(null);
 
@@ -180,10 +179,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!userInfo) return;
       setLoadingData(true);
       try {
         const [allOpps, allClients, allActivities, allTasks, allInvoices, allUsers, allAdvisors] = await Promise.all([
-            getAllOpportunities(),
+            getAllOpportunities(userInfo, isBoss),
             getClients(),
             getActivities(100),
             getAllClientActivities(),
@@ -206,9 +206,9 @@ export default function DashboardPage() {
         setLoadingData(false);
       }
     };
-
+    
     fetchData();
-  }, []);
+  }, [userInfo, isBoss]);
   
   const { 
     userOpportunities, 
@@ -217,7 +217,7 @@ export default function DashboardPage() {
     userTasks,
     userInvoices,
   } = useMemo(() => {
-    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [], userInvoices: [] };
+    if (!userInfo || !userInfo.id) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [], userInvoices: [] };
     
     let filteredOpps = opportunities;
     let filteredClients = clients;
@@ -229,15 +229,15 @@ export default function DashboardPage() {
       const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
       filteredClients = clients.filter(c => userClientIds.has(c.id));
       filteredOpps = opportunities.filter(opp => userClientIds.has(opp.clientId));
-      filteredTasks = tasks.filter(t => t.isTask && userClientIds.has(t.clientId));
+      filteredTasks = tasks.filter(t => t.isTask && (t.userId === userInfo.id || (t.clientId && userClientIds.has(t.clientId))));
       const oppIds = new Set(filteredOpps.map(o => o.id));
       filteredInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
-      // Note: Activities might be more complex to filter if not directly linked to a client
+      
     } else if (selectedAdvisor !== 'all') {
       const advisorClientIds = new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
       filteredClients = clients.filter(c => advisorClientIds.has(c.id));
       filteredOpps = opportunities.filter(opp => advisorClientIds.has(opp.clientId));
-      filteredTasks = tasks.filter(t => t.isTask && advisorClientIds.has(t.clientId));
+      filteredTasks = tasks.filter(t => t.isTask && (t.userId === selectedAdvisor || (t.clientId && advisorClientIds.has(t.clientId))));
        const oppIds = new Set(filteredOpps.map(o => o.id));
       filteredInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
     }
