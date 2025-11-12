@@ -44,12 +44,13 @@ import { Label } from '../ui/label';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 
 
-const stageColors: Record<OpportunityStage, string> = {
+const stageColors: Record<OpportunityStage | 'Ganado (Recurrente)', string> = {
   'Nuevo': 'border-blue-500',
   'Propuesta': 'border-yellow-500',
   'Negociación': 'border-orange-500',
   'Negociación a Aprobar': 'border-purple-500',
   'Cerrado - Ganado': 'border-green-500',
+  'Ganado (Recurrente)': 'border-teal-500',
   'Cerrado - Perdido': 'border-red-500',
   'Cerrado - No Definido': 'border-gray-500',
 };
@@ -75,12 +76,14 @@ const KanbanColumn = ({
   stage,
   opportunities,
   onCardDrop,
+  total,
 }: {
-  stage: OpportunityStage;
+  stage: OpportunityStage | 'Ganado (Recurrente)';
   opportunities: Opportunity[];
   onCardDrop: (e: React.DragEvent<HTMLDivElement>, stage: OpportunityStage) => void;
+  total?: number;
 }) => {
-  const columnTotal = opportunities.reduce((sum, opp) => sum + Number(opp.value || 0), 0);
+  const columnTotal = total ?? opportunities.reduce((sum, opp) => sum + Number(opp.value || 0), 0);
   const roundedTotal = Math.round(columnTotal * 100) / 100;
 
 
@@ -90,7 +93,9 @@ const KanbanColumn = ({
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    onCardDrop(e, stage);
+    if(stage !== 'Ganado (Recurrente)') {
+        onCardDrop(e, stage as OpportunityStage);
+    }
   };
   
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, oppId: string) => {
@@ -357,33 +362,37 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
         const openStages: OpportunityStage[] = ['Nuevo', 'Propuesta', 'Negociación', 'Negociación a Aprobar'];
 
         opps = opps.filter(opp => {
-            // If the opportunity is in an open stage, always show it.
             if (openStages.includes(opp.stage)) {
                 return true;
             }
 
-            // If it's a closed opportunity, filter by date.
-            if (!opp.closeDate) return false;
-            
-            const closeDate = parseISO(opp.closeDate);
+            if (opp.stage === 'Cerrado - Ganado') {
+                if (!opp.closeDate) return false;
+                const closeDate = parseISO(opp.closeDate);
 
-            // If it has a finalizationDate, it overrides periodicity for end date
-            if (opp.finalizationDate) {
-                const startDate = startOfMonth(closeDate);
-                const endDate = endOfMonth(parseISO(opp.finalizationDate));
-                return isWithinInterval(filterDate, { start: startDate, end: endDate });
+                if (opp.finalizationDate) {
+                    const startDate = startOfMonth(closeDate);
+                    const endDate = endOfMonth(parseISO(opp.finalizationDate));
+                    return isWithinInterval(filterDate, { start: startDate, end: endDate });
+                }
+                
+                const maxPeriodicity = opp.periodicidad?.[0] || 'Ocasional';
+                const durationMonths = getPeriodDurationInMonths(maxPeriodicity);
+
+                if (durationMonths > 1) {
+                    const startDate = startOfMonth(closeDate);
+                    const endDate = addMonths(startDate, durationMonths -1);
+                    return isWithinInterval(filterDate, { start: startDate, end: endDate });
+                } else {
+                    return isSameMonth(filterDate, closeDate);
+                }
             }
             
-            const maxPeriodicity = opp.periodicidad?.[0] || 'Ocasional';
-            const durationMonths = getPeriodDurationInMonths(maxPeriodicity);
-
-            if (durationMonths > 1) { // It's a periodic opportunity (more than 1 month)
-                const startDate = startOfMonth(closeDate);
-                const endDate = addMonths(startDate, durationMonths -1);
-                return isWithinInterval(filterDate, { start: startDate, end: endDate });
-            } else { // It's a one-time or monthly opportunity
-                return isSameMonth(filterDate, closeDate);
+            // For other closed stages, only show if closeDate is in the current month
+            if (opp.closeDate) {
+                return isSameMonth(filterDate, parseISO(opp.closeDate));
             }
+            return false;
         });
     }
     
@@ -394,6 +403,37 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
 
     return opps;
   }, [opportunities, clients, userInfo, isBoss, selectedAdvisor, dateRange, advisorClientIds, selectedClient]);
+
+
+  const groupedOpportunities = useMemo(() => {
+    const groups: Record<OpportunityStage | 'Ganado (Recurrente)', Opportunity[]> = {
+      'Nuevo': [],
+      'Propuesta': [],
+      'Negociación': [],
+      'Negociación a Aprobar': [],
+      'Cerrado - Ganado': [],
+      'Ganado (Recurrente)': [],
+      'Cerrado - No Definido': [],
+      'Cerrado - Perdido': [],
+    };
+
+    filteredOpportunities.forEach(opp => {
+      if (opp.stage === 'Cerrado - Ganado' && dateRange?.from) {
+        if (isSameMonth(parseISO(opp.closeDate), dateRange.from)) {
+          groups['Cerrado - Ganado'].push(opp);
+        } else {
+          groups['Ganado (Recurrente)'].push(opp);
+        }
+      } else if (groups[opp.stage]) {
+        groups[opp.stage].push(opp);
+      }
+    });
+
+    const recurringTotal = groups['Ganado (Recurrente)'].reduce((sum, opp) => sum + Number(opp.value || 0), 0);
+    const newWinsTotal = groups['Cerrado - Ganado'].reduce((sum, opp) => sum + Number(opp.value || 0), 0);
+    
+    return { groups, recurringTotal, newWinsTotal };
+  }, [filteredOpportunities, dateRange]);
 
 
   useEffect(() => {
@@ -451,14 +491,34 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
 
   return (
     <div className="p-4 md:p-6 lg:p-8 h-full flex gap-6 overflow-x-auto">
-      {opportunityStages.map((stage) => (
-        <KanbanColumn
-          key={stage}
-          stage={stage}
-          opportunities={filteredOpportunities.filter((opp) => opp.stage === stage)}
-          onCardDrop={handleCardDrop}
-        />
-      ))}
+      {opportunityStages.map((stage) => {
+          if (stage === 'Ganado (Recurrente)') {
+             return <KanbanColumn
+              key={stage}
+              stage={stage}
+              opportunities={groupedOpportunities.groups[stage]}
+              onCardDrop={handleCardDrop}
+              total={groupedOpportunities.recurringTotal}
+            />
+          }
+          if (stage === 'Cerrado - Ganado') {
+             return <KanbanColumn
+              key={stage}
+              stage={stage}
+              opportunities={groupedOpportunities.groups[stage]}
+              onCardDrop={handleCardDrop}
+              total={groupedOpportunities.newWinsTotal}
+            />
+          }
+          return (
+            <KanbanColumn
+              key={stage}
+              stage={stage}
+              opportunities={groupedOpportunities.groups[stage]}
+              onCardDrop={handleCardDrop}
+            />
+          )
+        })}
     </div>
   );
 }

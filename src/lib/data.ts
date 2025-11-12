@@ -54,12 +54,13 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
     }
 };
 
-export const opportunityStages: OpportunityStage[] = [
+export const opportunityStages: (OpportunityStage | 'Ganado (Recurrente)')[] = [
   'Nuevo',
   'Propuesta',
   'Negociación',
   'Negociación a Aprobar',
   'Cerrado - Ganado',
+  'Ganado (Recurrente)',
   'Cerrado - No Definido',
   'Cerrado - Perdido',
 ];
