@@ -69,7 +69,7 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     stage: 'Nuevo',
     observaciones: '',
     closeDate: new Date().toISOString().split('T')[0],
-    createdAt: new Date().toISOString().split('T')[0],
+    createdAt: new Date().toISOString(), // This will be overwritten by serverTimestamp
     clientName: client?.name || '',
     clientId: client?.id || '',
     bonificacionDetalle: '',
