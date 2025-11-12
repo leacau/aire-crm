@@ -163,7 +163,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                         // Create a virtual opportunity for this month's billing
                         const virtualOpp = { 
                             ...opp, 
-                            // Add a unique ID for the table key and a reference date
+                            // Add a stable unique ID for the table key and a reference date
                             id: `${opp.id}_${i}`, 
                             closeDate: monthDate.toISOString(), 
                         };
