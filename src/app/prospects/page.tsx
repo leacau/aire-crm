@@ -168,7 +168,7 @@ export default function ProspectsPage() {
   }, [prospects, users, isBoss]);
 
   const filteredProspects = useMemo(() => {
-    if (!userInfo || !userInfo.id) {
+    if (!userInfo) {
       return { active: [], notProsperous: [], converted: [] };
     }
 

@@ -129,7 +129,7 @@ function CanjesPageComponent() {
   };
   
   const filteredCanjes = useMemo(() => {
-    if (!userInfo || !userInfo.id) return [];
+    if (!userInfo) return [];
     if (canManageAll) {
       return canjes;
     }
