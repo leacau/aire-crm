@@ -1,6 +1,5 @@
 
 
-
 import type { User, AreaType, ScreenName, ScreenPermission } from './types';
 import { getAreaPermissions } from './firebase-service';
 import { defaultPermissions } from './data';
@@ -104,4 +103,3 @@ export function hasPermission(user: User, screen: ScreenName, permissionType: 'v
 
 // Initial fetch to populate cache on app load.
 getPermissions();
-
