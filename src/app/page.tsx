@@ -207,7 +207,9 @@ export default function DashboardPage() {
       }
     };
     
-    fetchData();
+    if (userInfo) {
+      fetchData();
+    }
   }, [userInfo, isBoss]);
   
   const { 
@@ -478,7 +480,7 @@ export default function DashboardPage() {
                   A cobrar: ${totalToCollectInPeriod.toLocaleString('es-AR')}
                 </p>
                  <p className="text-xs text-muted-foreground mt-1">
-                    Mes Anterior: ${previousMonthBilling.toLocaleString('es-AR')}
+                    Mes Anterior: ${previousMonthBilling ? previousMonthBilling.toLocaleString('es-AR') : '0'}
                 </p>
                  <p className={cn(
                     "text-xs font-medium flex items-center mt-1",
