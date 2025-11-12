@@ -69,6 +69,7 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     stage: 'Nuevo',
     observaciones: '',
     closeDate: new Date().toISOString().split('T')[0],
+    createdAt: new Date().toISOString().split('T')[0],
     clientName: client?.name || '',
     clientId: client?.id || '',
     bonificacionDetalle: '',
@@ -180,6 +181,7 @@ export function OpportunityDetailsDialog({
         const initialData = isEditing ? { ...opportunity } : getInitialOpportunityData(client);
         if (!initialData.ordenesPautado) initialData.ordenesPautado = [];
         if (!initialData.proposalItems) initialData.proposalItems = [];
+        if (!initialData.createdAt && isEditing) initialData.createdAt = opportunity?.createdAt;
         setEditedOpportunity(initialData);
         
         getAgencies()
@@ -356,6 +358,7 @@ export function OpportunityDetailsDialog({
   
   const canEditBonus = isEditing && (editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar');
   const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
+  const canEditCreationDate = isBoss;
 
   const getBonusStatusPill = (status?: BonificacionEstado) => {
       if (!status) return null;
@@ -401,6 +404,20 @@ export function OpportunityDetailsDialog({
           </TabsList>
           
           <TabsContent value="details" className="space-y-4 py-4">
+            <div className="space-y-2">
+                <Label htmlFor="createdAt">Fecha de Creación</Label>
+                 <Popover>
+                    <PopoverTrigger asChild>
+                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !editedOpportunity.createdAt && "text-muted-foreground")} disabled={!canEditCreationDate}>
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {editedOpportunity.createdAt ? format(parseISO(editedOpportunity.createdAt), "PPP", { locale: es }) : <span>Selecciona una fecha</span>}
+                    </Button>
+                    </PopoverTrigger>
+                    {canEditCreationDate && (
+                      <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={editedOpportunity.createdAt ? parseISO(editedOpportunity.createdAt) : undefined} onSelect={(d) => handleDateChange('createdAt', d)} initialFocus /></PopoverContent>
+                    )}
+                </Popover>
+            </div>
             <div className="space-y-2">
                 <Label htmlFor="title">Título</Label>
                 <Input id="title" name="title" value={editedOpportunity.title || ''} onChange={handleChange}/>

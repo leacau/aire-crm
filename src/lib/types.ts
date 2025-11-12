@@ -1,11 +1,5 @@
 
 
-
-
-
-
-
-
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -87,6 +81,7 @@ export type Opportunity = {
   observaciones?: string;
   ownerId?: string;
   ownerName?: string;
+  createdAt: string;
   
   bonificacionDetalle?: string;
   bonificacionEstado?: BonificacionEstado;

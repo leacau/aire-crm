@@ -1491,11 +1491,17 @@ export const getAllOpportunities = async (): Promise<Opportunity[]> => {
     return snapshot.docs.map(doc => {
       const data = doc.data();
       const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
-      if (data.updatedAt && data.updatedAt instanceof Timestamp) {
+
+      const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+
+      opp.createdAt = convertTimestamp(data.createdAt);
+
+      if (data.updatedAt) {
         // @ts-ignore
-        opp.updatedAt = data.updatedAt.toDate().toISOString();
+        opp.updatedAt = convertTimestamp(data.updatedAt);
       }
-       if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
+      
+      if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
           const validDate = parseDateWithTimezone(data.closeDate);
           opp.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
       } else if (data.closeDate instanceof Timestamp) {
@@ -1683,6 +1689,10 @@ export const updateOpportunity = async (
     }
     
     updateData.pautados = deleteField();
+
+    if ('createdAt' in updateData && typeof updateData.createdAt === 'string') {
+        updateData.createdAt = Timestamp.fromDate(new Date(updateData.createdAt));
+    }
 
 
     await updateDoc(docRef, updateData);
