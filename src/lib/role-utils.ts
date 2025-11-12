@@ -37,22 +37,17 @@ export function hasManagementPrivileges(user?: { email?: string | null; role?: s
     if (user.email && user.email.toLowerCase() === SUPER_ADMIN_EMAIL) {
         return true;
     }
+    
+    if (!user.role) return false;
 
-    if (isManagementRoleName(user.role)) {
+    // Check for specific high-level roles first
+    if (user.role === 'Jefe' || user.role === 'Gerencia' || user.role === 'Admin' || user.role === 'Administracion') {
         return true;
     }
 
-    const permissions = (user as { permissions?: Partial<Record<string, { view?: boolean; edit?: boolean }>> }).permissions;
-
-    if (permissions) {
-        const managementScreens = ['Team', 'Approvals', 'Import', 'Rates'];
-        for (let i = 0; i < managementScreens.length; i++) {
-            const screen = managementScreens[i];
-            const screenPermissions = permissions[screen];
-            if (screenPermissions && screenPermissions.edit === true) {
-                return true;
-            }
-        }
+    // Then check for other management-like roles by pattern
+    if (isManagementRoleName(user.role)) {
+        return true;
     }
 
     return false;

@@ -3,6 +3,7 @@
 import type { User, AreaType, ScreenName, ScreenPermission } from './types';
 import { getAreaPermissions } from './firebase-service';
 import { defaultPermissions } from './data';
+import { hasManagementPrivileges } from './role-utils';
 
 // In-memory cache for permissions
 let permissionsCache: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>> | null = null;
@@ -19,9 +20,16 @@ async function getPermissions() {
         return permissionsCache;
     }
     
-    permissionsCache = await getAreaPermissions();
-    cacheTimestamp = now;
-    return permissionsCache;
+    try {
+        permissionsCache = await getAreaPermissions();
+        cacheTimestamp = now;
+        return permissionsCache;
+    } catch (error) {
+        console.error("Failed to initialize permissions cache, falling back to defaults:", error);
+        permissionsCache = defaultPermissions; // Fallback to default permissions on error
+        cacheTimestamp = now;
+        return permissionsCache;
+    }
 }
 
 
@@ -36,68 +44,37 @@ export function invalidatePermissionsCache() {
 
 /**
  * Checks if a user has a specific permission for a screen.
- * 
- * Hierarchy of checks:
- * 1. User is 'Jefe', 'Gerencia', or 'Admin' -> always true (superuser).
- * 2. User has specific permission defined on their own profile -> use that.
- * 3. User's area has a specific permission defined -> use that.
- * 4. Default to false if no permission is found.
+ * This is the synchronous version for client components that relies on the cache.
+ * It might show stale data for up to CACHE_DURATION_MS but avoids async logic in components.
  * 
  * @param user The user object.
  * @param screen The screen to check permission for.
  * @param permissionType The type of permission ('view' or 'edit').
- * @returns A promise that resolves to true if the user has the permission, false otherwise.
+ * @returns true if the user has the permission, false otherwise.
  */
-export async function hasPermissionAsync(user: User, screen: ScreenName, permissionType: 'view' | 'edit'): Promise<boolean> {
-    if (!user) {
-        return false;
-    }
-
-    // Superusers have all permissions
-    if (user.role === 'Jefe' || user.role === 'Gerencia' || user.email === 'lchena@airedesantafe.com.ar') {
-        return true;
-    }
-    
-    // User-specific overrides
-    if (user.permissions && user.permissions[screen]) {
-        return user.permissions[screen]![permissionType] === true;
-    }
-
-    // Area-based permissions
-    const areaPerms = await getPermissions();
-
-    if (user.area && areaPerms[user.area] && areaPerms[user.area][screen]) {
-        return areaPerms[user.area][screen]![permissionType] === true;
-    }
-
-    return false;
-}
-
-
-// A synchronous version for client components that rely on the cache.
-// This might show stale data for up to CACHE_DURATION_MS but avoids async logic in components.
 export function hasPermission(user: User, screen: ScreenName, permissionType: 'view' | 'edit'): boolean {
      if (!user) {
         return false;
     }
     
-    // Superusers have all permissions
-    if (user.role === 'Jefe' || user.role === 'Gerencia' || user.email === 'lchena@airedesantafe.com.ar') {
+    // Superusers and management roles have all permissions.
+    if (hasManagementPrivileges(user)) {
         return true;
     }
 
-    // User-specific overrides
+    // User-specific overrides (if they exist) take precedence.
     if (user.permissions && user.permissions[screen]) {
         return user.permissions[screen]![permissionType] === true;
     }
 
-    // Area-based permissions from cache
+    // Fallback to area-based permissions from the cache.
     const areaPerms = permissionsCache || defaultPermissions;
 
     if (user.area && areaPerms[user.area] && areaPerms[user.area][screen]) {
         return areaPerms[user.area][screen]![permissionType] === true;
     }
 
+    // Default to no permission if none of the above match.
     return false;
 }
 
