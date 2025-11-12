@@ -11,16 +11,6 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { TableFooter, TableRow, TableCell } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '../ui/label';
-import { Input } from '../ui/input';
-import { Button } from '../ui/button';
-import { Save } from 'lucide-react';
-
-
-type NewInvoiceData = {
-    invoiceNumber: string;
-    date: string;
-    amount: number | string;
-};
 
 export const BillingTable = ({ 
   items, 
@@ -30,9 +20,6 @@ export const BillingTable = ({
   usersMap,
   opportunitiesMap,
   onMarkAsPaid,
-  newInvoiceData,
-  onInvoiceDataChange,
-  onCreateInvoice,
 }: { 
   items: (Opportunity | Invoice)[];
   type: 'opportunities' | 'invoices';
@@ -41,9 +28,6 @@ export const BillingTable = ({
   usersMap: Record<string, User>;
   opportunitiesMap: Record<string, Opportunity>;
   onMarkAsPaid?: (invoiceId: string) => void;
-  newInvoiceData?: Record<string, Partial<NewInvoiceData>>;
-  onInvoiceDataChange?: (virtualOppId: string, field: keyof NewInvoiceData, value: string) => void;
-  onCreateInvoice?: (virtualOppId: string) => void;
 }) => {
 
   const columns = useMemo<ColumnDef<Opportunity | Invoice>[]>(() => {
@@ -86,45 +70,6 @@ export const BillingTable = ({
         },
       },
     ];
-
-    if (type === 'opportunities' && onInvoiceDataChange && onCreateInvoice) {
-        cols.push({
-            accessorKey: 'value',
-            header: () => <div className="text-right">Monto Oportunidad</div>,
-            cell: ({ row }) => {
-                const opp = row.original as Opportunity;
-                const value = opp.periodicidad?.[0] ? opp.value : opp.value;
-                return <div className="text-right">${Number(value).toLocaleString('es-AR')}</div>;
-            }
-        });
-        cols.push({
-            id: 'invoiceNumber',
-            header: 'Nº Factura',
-            cell: ({ row }) => <Input placeholder="Ej: 0001-00123456" className="min-w-[150px]" value={newInvoiceData?.[row.original.id]?.invoiceNumber || ''} onChange={(e) => onInvoiceDataChange(row.original.id, 'invoiceNumber', e.target.value)} onClick={e => e.stopPropagation()} />,
-        });
-        cols.push({
-            id: 'invoiceDate',
-            header: 'Fecha Factura',
-            cell: ({ row }) => <Input type="date" className="min-w-[140px]" value={newInvoiceData?.[row.original.id]?.date || new Date().toISOString().split('T')[0]} onChange={(e) => onInvoiceDataChange(row.original.id, 'date', e.target.value)} onClick={e => e.stopPropagation()} />,
-        });
-        cols.push({
-            id: 'invoiceAmount',
-            header: 'Monto Factura',
-            cell: ({ row }) => <Input type="number" placeholder="0.00" className="min-w-[120px]" value={newInvoiceData?.[row.original.id]?.amount || ''} onChange={(e) => onInvoiceDataChange(row.original.id, 'amount', e.target.value)} onClick={e => e.stopPropagation()} />,
-        });
-        cols.push({
-            id: 'actions',
-            cell: ({ row }) => {
-                const data = newInvoiceData?.[row.original.id];
-                const canSave = data?.invoiceNumber && data?.amount;
-                return (
-                    <Button size="sm" disabled={!canSave} onClick={(e) => { e.stopPropagation(); onCreateInvoice(row.original.id); }}>
-                        <Save className="h-4 w-4" />
-                    </Button>
-                )
-            }
-        });
-    }
 
     if (type === 'invoices') {
         cols.push({
@@ -169,7 +114,7 @@ export const BillingTable = ({
 
     return cols;
 
-  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, newInvoiceData, onInvoiceDataChange, onCreateInvoice]);
+  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, usersMap]);
 
   const total = items.reduce((acc, item) => {
     if (type === 'invoices') return acc + Number((item as Invoice).amount || 0);
@@ -183,7 +128,6 @@ export const BillingTable = ({
       <TableRow>
         <TableCell colSpan={2} className="font-bold">Total</TableCell>
         <TableCell className="text-right font-bold">${total.toLocaleString('es-AR')}</TableCell>
-        {type === 'opportunities' && <TableCell colSpan={4}></TableCell>}
         {type === 'invoices' && <TableCell colSpan={onMarkAsPaid ? 3 : 2}></TableCell>}
       </TableRow>
     </TableFooter>
