@@ -110,7 +110,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   }, [userInfo, fetchData]);
 
   const { toInvoiceOpps, toCollectInvoices, paidInvoices } = useMemo(() => {
-    if (!userInfo) {
+    if (!userInfo || !userInfo.id) {
       return { toInvoiceOpps: [], toCollectInvoices: [], paidInvoices: [] };
     }
     
