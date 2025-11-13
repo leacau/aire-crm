@@ -2,19 +2,19 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search, Activity } from 'lucide-react';
+import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search, Activity, Clock } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import type { Prospect, User, Client } from '@/lib/types';
-import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers } from '@/lib/firebase-service';
+import type { Prospect, User, Client, ClientActivity } from '@/lib/types';
+import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers, getActivitiesForEntity, getAllClientActivities } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -34,6 +34,7 @@ export default function ProspectsPage() {
 
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [activities, setActivities] = useState<ClientActivity[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -44,7 +45,8 @@ export default function ProspectsPage() {
   
   const [prospectToDelete, setProspectToDelete] = useState<Prospect | null>(null);
   const [prospectToArchive, setProspectToArchive] = useState<Prospect | null>(null);
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [sorting, setSorting] = useState<SortingState>([ { id: 'lastActivity', desc: true } ]);
+  const [activitySectionRef, setActivitySectionRef] = useState<React.RefObject<HTMLDivElement> | null>(null);
 
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,12 +66,14 @@ export default function ProspectsPage() {
     setLoading(true);
     try {
       const allowedOwnerRoles = ['Asesor', 'Jefe', 'Gerencia', 'Administracion'];
-      const [fetchedProspects, fetchedUsers] = await Promise.all([
+      const [fetchedProspects, fetchedUsers, allActivities] = await Promise.all([
         getProspects(),
         getAllUsers(),
+        getAllClientActivities()
       ]);
       setProspects(fetchedProspects);
       setUsers(fetchedUsers.filter(u => allowedOwnerRoles.includes(u.role)));
+      setActivities(allActivities.filter(a => a.prospectId));
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: "Error al cargar los prospectos", variant: "destructive" });
@@ -84,8 +88,14 @@ export default function ProspectsPage() {
     }
   }, [authLoading, userInfo, fetchData]);
 
-  const handleOpenForm = (prospect: Prospect | null = null) => {
+  const handleOpenForm = (prospect: Prospect | null = null, scrollToActivities = false) => {
     setSelectedProspect(prospect);
+    if(scrollToActivities) {
+        const ref = React.createRef<HTMLDivElement>();
+        setActivitySectionRef(ref);
+    } else {
+        setActivitySectionRef(null);
+    }
     setIsFormOpen(true);
   };
 
@@ -166,6 +176,19 @@ export default function ProspectsPage() {
     const advisorIdsWithProspects = new Set(prospects.map(p => p.ownerId));
     return users.filter(user => advisorIdsWithProspects.has(user.id));
   }, [prospects, users, isBoss]);
+  
+   const activitiesByProspectId = useMemo(() => {
+    return activities.reduce((acc, activity) => {
+      if (activity.prospectId) {
+        if (!acc[activity.prospectId]) {
+          acc[activity.prospectId] = [];
+        }
+        acc[activity.prospectId].push(activity);
+      }
+      return acc;
+    }, {} as Record<string, ClientActivity[]>);
+  }, [activities]);
+
 
   const filteredProspects = useMemo(() => {
     if (!userInfo || !userInfo.id) {
@@ -232,6 +255,28 @@ export default function ProspectsPage() {
       header: 'Estado',
       cell: ({ row }) => <Badge variant="secondary">{row.original.status}</Badge>,
     },
+     {
+      id: 'lastActivity',
+      header: 'Última Actividad',
+      sortingFn: 'datetime',
+      cell: ({ row }) => {
+        const prospectActivities = activitiesByProspectId[row.original.id] || [];
+        if (prospectActivities.length === 0) {
+          return <span className="text-xs text-muted-foreground">Sin actividad</span>;
+        }
+        const lastActivityDate = parseISO(prospectActivities[0].timestamp);
+        const daysAgo = differenceInDays(new Date(), lastActivityDate);
+        return (
+          <div 
+            className="flex items-center gap-1 cursor-pointer text-primary hover:underline"
+            onClick={(e) => { e.stopPropagation(); handleOpenForm(row.original, true);}}
+          >
+            <Clock className="h-3 w-3" />
+            <span className="text-sm font-medium">{daysAgo} día(s)</span>
+          </div>
+        );
+      },
+    },
     {
       accessorKey: 'createdAt',
       header: 'Fecha de Creación',
@@ -252,7 +297,7 @@ export default function ProspectsPage() {
             {prospect.status !== 'Convertido' && (
                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleConvertProspect(prospect); }}>
                 <UserPlus className="mr-2 h-4 w-4" />
-                Convertir a Cliente
+                Convertir
               </Button>
             )}
             <DropdownMenu>
@@ -271,7 +316,7 @@ export default function ProspectsPage() {
                 {prospect.status !== 'No Próspero' && prospect.status !== 'Convertido' &&
                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setProspectToArchive(prospect); }}>
                         <FolderX className="mr-2 h-4 w-4" />
-                        Marcar como No Próspero
+                        No Próspero
                     </DropdownMenuItem>
                 }
                 <DropdownMenuSeparator />
@@ -288,11 +333,13 @@ export default function ProspectsPage() {
         );
       },
     },
-  ], [handleOpenForm, isBoss, userInfo]);
+  ], [handleOpenForm, isBoss, userInfo, activitiesByProspectId]);
 
   if (authLoading || loading) {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
   }
+
+  const selectedProspectActivities = selectedProspect ? activitiesByProspectId[selectedProspect.id] || [] : [];
 
   return (
     <>
@@ -323,7 +370,7 @@ export default function ProspectsPage() {
           )}
            <div className="flex items-center space-x-2">
             <Checkbox id="my-prospects" name="my-prospects" checked={showOnlyMyProspects} onCheckedChange={(checked) => setShowOnlyMyProspects(!!checked)} />
-            <Label htmlFor="my-prospects" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis prospectos</Label>
+            <Label htmlFor="my-prospects" className="whitespace-nowrap text-sm font-medium">Solo mis prospectos</Label>
           </div>
           <Button onClick={() => handleOpenForm()}>
             <PlusCircle className="mr-2" />
@@ -378,6 +425,8 @@ export default function ProspectsPage() {
         onOpenChange={setIsFormOpen}
         onSave={handleSaveProspect}
         prospect={selectedProspect}
+        activities={selectedProspectActivities}
+        activitySectionRef={activitySectionRef || undefined}
       />
       
       {prospectToConvert && (

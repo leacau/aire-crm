@@ -1,6 +1,5 @@
 
 
-
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -80,8 +79,6 @@ export type Opportunity = {
   closeDate: string;
   details?: string;
   observaciones?: string;
-  ownerId?: string;
-  ownerName?: string;
   createdAt: string;
   
   bonificacionDetalle?: string;
@@ -153,6 +150,7 @@ export type Prospect = {
   contactName?: string;
   contactPhone?: string;
   contactEmail?: string;
+  sector?: string;
   notes?: string;
   status: ProspectStatus;
   ownerId: string;
