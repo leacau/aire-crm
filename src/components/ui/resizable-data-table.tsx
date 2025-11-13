@@ -193,10 +193,10 @@ export function ResizableDataTable<TData, TValue>({
                       style={{ 
                         width: canResize ? header.getSize() : (header.column.columnDef.size ? header.column.columnDef.size : 'auto'),
                       }}
-                      className="relative"
+                      className={cn("relative", canSort && "cursor-pointer select-none")}
                       onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                     >
-                      <div className={cn("flex items-center gap-2", canSort && "cursor-pointer select-none")}>
+                      <div className="flex items-center gap-2">
                           {header.isPlaceholder
                             ? null
                             : flexRender(

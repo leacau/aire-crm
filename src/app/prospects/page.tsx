@@ -225,6 +225,7 @@ export default function ProspectsPage() {
     {
       accessorKey: 'companyName',
       header: 'Empresa',
+      enableSorting: true,
       cell: ({ row }) => (
         <div>
           <div className="font-medium">{row.original.companyName}</div>
@@ -235,12 +236,14 @@ export default function ProspectsPage() {
     {
       accessorKey: 'status',
       header: 'Estado',
+      enableSorting: true,
       cell: ({ row }) => <Badge variant="secondary">{row.original.status}</Badge>,
     },
      {
       id: 'lastActivity',
       header: 'Última Actividad',
       sortingFn: 'datetime',
+      enableSorting: true,
       cell: ({ row }) => {
         const prospectActivities = activitiesByProspectId[row.original.id] || [];
         if (prospectActivities.length === 0) {
@@ -374,7 +377,7 @@ export default function ProspectsPage() {
                         setSorting={setSorting}
                         onRowClick={(prospect) => (isBoss || userInfo?.id === prospect.ownerId) && handleOpenForm(prospect)}
                         getRowId={(row) => row.id}
-                        enableRowResizing={false}
+                        enableRowResizing={true}
                         emptyStateMessage="No se encontraron prospectos activos."
                     />
                 </TabsContent>
@@ -384,7 +387,7 @@ export default function ProspectsPage() {
                         data={filteredProspects.notProsperous}
                         onRowClick={(prospect) => (isBoss || userInfo?.id === prospect.ownerId) && handleOpenForm(prospect)}
                         getRowId={(row) => row.id}
-                        enableRowResizing={false}
+                        enableRowResizing={true}
                         emptyStateMessage="No hay prospectos en esta categoría."
                     />
                 </TabsContent>
@@ -394,7 +397,7 @@ export default function ProspectsPage() {
                         data={filteredProspects.converted}
                         getRowId={(row) => row.id}
                         onRowClick={(prospect) => (isBoss || userInfo?.id === prospect.ownerId) && handleOpenForm(prospect)}
-                        enableRowResizing={false}
+                        enableRowResizing={true}
                         emptyStateMessage="No hay prospectos convertidos."
                     />
                 </TabsContent>
