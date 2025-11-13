@@ -9,21 +9,23 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import { PermissionsManager } from '@/components/team/permissions-manager';
+import { hasManagementPrivileges } from '@/lib/role-utils';
+import { OpportunityAlertsManager } from '@/components/team/opportunity-alerts-manager';
 
 export default function TeamPage() {
   const { userInfo, loading } = useAuth();
   const router = useRouter();
 
-  const canAccess = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
+  const canManage = hasManagementPrivileges(userInfo);
   const isSuperAdmin = userInfo?.email === 'lchena@airedesantafe.com.ar';
 
   useEffect(() => {
-    if (!loading && !canAccess) {
+    if (!loading && !canManage) {
       router.push('/');
     }
-  }, [userInfo, loading, router, canAccess]);
+  }, [userInfo, loading, router, canManage]);
   
-  if (loading || !canAccess) {
+  if (loading || !canManage) {
     return (
        <div className="flex h-full w-full items-center justify-center">
           <Spinner size="large" />
@@ -37,6 +39,7 @@ export default function TeamPage() {
         <Header title="Rendimiento y Gestión de Equipo" />
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-8">
           <TeamPerformanceTable />
+          <OpportunityAlertsManager />
           {isSuperAdmin && <PermissionsManager />}
         </main>
       </div>

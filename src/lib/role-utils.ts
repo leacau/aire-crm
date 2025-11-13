@@ -1,3 +1,4 @@
+
 export const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 
 const MANAGEMENT_ROLE_PATTERN = /(jef(e|a|atura)|gerenc|gerent|administrac|administrador|admin\b|coordinac|coordinador|direcc|director|lider|líder|leader|supervis|responsabl|encargad)/;

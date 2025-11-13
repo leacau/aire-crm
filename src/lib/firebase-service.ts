@@ -4,7 +4,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent as apiCreateCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
@@ -31,6 +31,7 @@ const collections = {
     commercialItems: collection(db, 'commercial_items'),
     prospects: collection(db, 'prospects'),
     licenses: collection(db, 'licencias'),
+    systemConfig: collection(db, 'system_config'),
 };
 
 const cache: {
@@ -72,6 +73,33 @@ const parseDateWithTimezone = (dateString: string) => {
     const [year, month, day] = parts;
     return new Date(year, month - 1, day);
 };
+
+// --- Config Functions ---
+
+export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
+    const docRef = doc(collections.systemConfig, 'opportunity_alerts');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        return docSnap.data();
+    }
+    return {};
+};
+
+export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsConfig, userId: string, userName: string) => {
+    const docRef = doc(collections.systemConfig, 'opportunity_alerts');
+    await setDoc(docRef, config, { merge: true });
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'opportunity_alerts_config',
+        entityId: 'opportunity_alerts',
+        entityName: 'Configuración de Alertas de Oportunidades',
+        details: 'actualizó la configuración de alertas de oportunidades.',
+        ownerName: userName,
+    });
+};
+
 
 // --- Permissions ---
 export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
@@ -1544,8 +1572,6 @@ export const createOpportunity = async (
 
     const dataToSave: any = { 
         ...opportunityData,
-        ownerId: clientData.ownerId,
-        ownerName: clientData.ownerName,
         createdAt: serverTimestamp() 
     };
 
