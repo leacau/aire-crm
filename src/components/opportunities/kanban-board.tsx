@@ -419,7 +419,8 @@ export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClie
 
     filteredOpportunities.forEach(opp => {
       if (opp.stage === 'Cerrado - Ganado' && dateRange?.from) {
-        if (isSameMonth(parseISO(opp.closeDate), dateRange.from)) {
+        // Use createdAt to determine if it's a new win for the month or recurrent
+        if (isSameMonth(parseISO(opp.createdAt), dateRange.from)) {
           groups['Cerrado - Ganado'].push(opp);
         } else {
           groups['Ganado (Recurrente)'].push(opp);
