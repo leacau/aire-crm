@@ -239,11 +239,18 @@ export default function ProspectsPage() {
       enableSorting: true,
       cell: ({ row }) => <Badge variant="secondary">{row.original.status}</Badge>,
     },
+    {
+      accessorKey: 'sector',
+      header: 'Sector / Rubro',
+      enableSorting: true,
+      cell: ({ row }) => row.original.sector || '-',
+    },
      {
       id: 'lastActivity',
       header: 'Última Actividad',
       sortingFn: 'datetime',
       enableSorting: true,
+      size: 150,
       cell: ({ row }) => {
         const prospectActivities = activitiesByProspectId[row.original.id] || [];
         if (prospectActivities.length === 0) {
