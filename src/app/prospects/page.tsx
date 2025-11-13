@@ -225,11 +225,12 @@ export default function ProspectsPage() {
     {
       accessorKey: 'companyName',
       header: 'Empresa',
-      cell: ({ row }) => <div className="font-medium">{row.original.companyName}</div>
-    },
-    {
-      accessorKey: 'ownerName',
-      header: 'Asesor',
+      cell: ({ row }) => (
+        <div>
+          <div className="font-medium">{row.original.companyName}</div>
+          <div className="text-xs text-muted-foreground">{row.original.ownerName}</div>
+        </div>
+      )
     },
     {
       accessorKey: 'status',
