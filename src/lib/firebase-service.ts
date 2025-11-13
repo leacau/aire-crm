@@ -1514,37 +1514,39 @@ export const deletePerson = async (
 
 // --- Opportunity Functions ---
 
-export const getAllOpportunities = async (): Promise<Opportunity[]> => {
-    const snapshot = await getDocs(collections.opportunities);
-    return snapshot.docs.map(doc => {
-      const data = doc.data();
-      const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
+const mapOpportunityDoc = (doc: any): Opportunity => {
+    const data = doc.data();
+    const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
 
-      const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+    const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
 
-      opp.createdAt = convertTimestamp(data.createdAt);
+    opp.createdAt = convertTimestamp(data.createdAt);
 
-      if (data.updatedAt) {
+    if (data.updatedAt) {
         // @ts-ignore
         opp.updatedAt = convertTimestamp(data.updatedAt);
-      }
-      
-      if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
-          const validDate = parseDateWithTimezone(data.closeDate);
-          opp.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
-      } else if (data.closeDate instanceof Timestamp) {
-          opp.closeDate = data.closeDate.toDate().toISOString().split('T')[0];
-      }
+    }
+    
+    if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
+        const validDate = parseDateWithTimezone(data.closeDate);
+        opp.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
+    } else if (data.closeDate instanceof Timestamp) {
+        opp.closeDate = data.closeDate.toDate().toISOString().split('T')[0];
+    }
+    
+    return opp;
+};
 
-      return opp;
-    });
+export const getAllOpportunities = async (): Promise<Opportunity[]> => {
+    const snapshot = await getDocs(collections.opportunities);
+    return snapshot.docs.map(mapOpportunityDoc);
 };
 
 
 export const getOpportunitiesByClientId = async (clientId: string): Promise<Opportunity[]> => {
     const q = query(collections.opportunities, where('clientId', '==', clientId));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
+    return snapshot.docs.map(mapOpportunityDoc);
 };
 
 export const getOpportunitiesForUser = async (userId: string): Promise<Opportunity[]> => {
@@ -1555,7 +1557,7 @@ export const getOpportunitiesForUser = async (userId: string): Promise<Opportuni
     
     const q = query(collections.opportunities, where('clientId', 'in', Array.from(userClientIds)));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
+    return snapshot.docs.map(mapOpportunityDoc);
 }
 
 
@@ -1567,8 +1569,6 @@ export const createOpportunity = async (
 ): Promise<string> => {
     const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
     if (!clientSnap.exists()) throw new Error("Client not found for opportunity creation");
-    const clientData = clientSnap.data() as Client;
-
 
     const dataToSave: any = { 
         ...opportunityData,
@@ -1685,8 +1685,6 @@ export const updateOpportunity = async (
 
     const updateData: {[key: string]: any} = {
         ...data,
-        ownerId: clientData.ownerId,
-        ownerName: clientData.ownerName,
         updatedAt: serverTimestamp()
     };
     
