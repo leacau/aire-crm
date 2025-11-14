@@ -1,6 +1,7 @@
 
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { UserNav } from './user-nav';
+import { CommandDialog } from '../command/command-dialog';
 
 type HeaderProps = {
   title: string;
@@ -21,6 +22,7 @@ export function Header({ title, children }: HeaderProps) {
       </div>
       <div className="flex items-center gap-2 flex-1 justify-end flex-wrap">
         {children}
+        <CommandDialog />
         <UserNav />
       </div>
     </header>
