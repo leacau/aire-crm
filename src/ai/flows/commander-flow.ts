@@ -181,7 +181,21 @@ const commanderFlow = ai.defineFlow(
 );
 
 
+const isCommandAssistantConfigured = Boolean(process.env.GOOGLE_GENAI_API_KEY);
+const MISSING_ASSISTANT_MESSAGE = 'El asistente de comandos no está configurado. Por favor, contactá a un administrador para habilitarlo.';
+const GENERIC_ASSISTANT_ERROR = 'No pude procesar tu orden en este momento. Intentalo nuevamente en unos minutos.';
+
 // Export a server action to be called from the client
 export async function executeCommanderFlow(command: string, currentUser: User): Promise<string> {
-    return await commanderFlow({ command, currentUser });
+    if (!isCommandAssistantConfigured) {
+        console.warn('Commander flow attempted to run without GOOGLE_GENAI_API_KEY configured.');
+        return MISSING_ASSISTANT_MESSAGE;
+    }
+
+    try {
+        return await commanderFlow({ command, currentUser });
+    } catch (error) {
+        console.error('Commander flow execution failed:', error);
+        return GENERIC_ASSISTANT_ERROR;
+    }
 }
