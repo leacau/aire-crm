@@ -1537,6 +1537,16 @@ const mapOpportunityDoc = (doc: any): Opportunity => {
     return opp;
 };
 
+export const getOpportunities = async (): Promise<Opportunity[]> => {
+    const cachedData = getFromCache('opportunities');
+    if (cachedData) return cachedData;
+
+    const snapshot = await getDocs(collections.opportunities);
+    const opportunities = snapshot.docs.map(mapOpportunityDoc);
+    setInCache('opportunities', opportunities);
+    return opportunities;
+};
+
 export const getAllOpportunities = async (): Promise<Opportunity[]> => {
     const snapshot = await getDocs(collections.opportunities);
     return snapshot.docs.map(mapOpportunityDoc);
