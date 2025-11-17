@@ -1,10 +1,9 @@
-
-
 import type { OpportunityStage, TipoEntidad, CondicionIVA, AreaType, ScreenName, ScreenPermission } from './types';
 
 export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>> = {
     'Comercial': {
         Dashboard: { view: true, edit: true },
+        Objectives: { view: true, edit: true },
         Opportunities: { view: true, edit: true },
         Prospects: { view: true, edit: true },
         Clients: { view: true, edit: true },
@@ -35,6 +34,7 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
     },
     'Administración': {
         Dashboard: { view: true, edit: true },
+        Objectives: { view: true, edit: true },
         Opportunities: { view: true, edit: true },
         Clients: { view: true, edit: true },
         Canjes: { view: true, edit: true },

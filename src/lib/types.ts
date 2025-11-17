@@ -1,5 +1,3 @@
-
-
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -274,7 +272,7 @@ export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs', 
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals', 
-    'Activity', 'Team', 'Rates', 'Reports', 'Import'
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives'
 ] as const;
 export type ScreenName = typeof screenNames[number];
 
@@ -308,6 +306,7 @@ export type User = {
   deletedAt?: string;
   vacationDays?: number;
   monthlyClosures?: MonthlyClosure;
+  monthlyObjective?: number;
   permissions?: Partial<Record<ScreenName, ScreenPermission>>;
 };
 

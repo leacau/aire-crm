@@ -1,5 +1,3 @@
-
-
 'use client';
 import { Logo } from '@/components/logo';
 import {
@@ -15,7 +13,7 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb, ClipboardCheck } from 'lucide-react';
+import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb, ClipboardCheck, Target } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
@@ -24,6 +22,7 @@ import { hasPermission } from '@/lib/permissions';
 
 const menuItems: { href: string; label: string; icon: React.ElementType, screenName: ScreenName }[] = [
   { href: '/', label: 'Panel', icon: Home, screenName: 'Dashboard' },
+  { href: '/objectives', label: 'Objetivos', icon: Target, screenName: 'Objectives' },
   { href: '/opportunities', label: 'Oportunidades', icon: CircleDollarSign, screenName: 'Opportunities' },
   { href: '/prospects', label: 'Prospectos', icon: Lightbulb, screenName: 'Prospects' },
   { href: '/clients', label: 'Clientes', icon: Users, screenName: 'Clients' },
@@ -48,11 +47,10 @@ function MenuLink({ item }: { item: typeof menuItems[0] }) {
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
-    // Exact match for /billing, otherwise prefix match
-    if (href === '/billing') return pathname === '/billing';
-    if (href === '/invoices') return pathname === '/invoices';
-    if (href === '/rates') return pathname === '/rates';
-    if (href === '/licencias') return pathname === '/licencias';
+    // Exact match for specific routes, otherwise prefix match
+    const exactMatchRoutes = ['/billing', '/invoices', '/rates', '/licencias', '/objectives'];
+    if (exactMatchRoutes.includes(href)) return pathname === href;
+    
     return pathname.startsWith(href) && href !== '/';
   };
 

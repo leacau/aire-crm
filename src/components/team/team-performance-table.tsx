@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -54,8 +52,7 @@ export function TeamPerformanceTable() {
   const [loading, setLoading] = useState(true);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [editedVacationDays, setEditedVacationDays] = useState<Record<string, number | string>>({});
-  const [editedManager, setEditedManager] = useState<Record<string, string | undefined>>({});
+  const [editedValues, setEditedValues] = useState<Record<string, { monthlyObjective?: number | string; managerId?: string }>>({});
   const [isClosureDialogOpen, setIsClosureDialogOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -88,6 +85,11 @@ export function TeamPerformanceTable() {
         await updateUserProfile(userId, data);
         toast({ title: 'Usuario actualizado'});
         setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...data } : u));
+        setEditedValues(prev => {
+            const newEdited = { ...prev };
+            delete newEdited[userId];
+            return newEdited;
+        });
     } catch (error) {
         console.error("Error updating user:", error);
         toast({ title: 'Error al actualizar usuario', variant: 'destructive' });
@@ -218,39 +220,27 @@ export function TeamPerformanceTable() {
       },
     },
      {
-      accessorKey: 'managerId',
-      header: 'Jefe Directo',
+      id: 'monthlyObjective',
+      header: () => <div className="text-right">Objetivo Mensual</div>,
       cell: ({ row }) => {
         const { user } = row.original;
-        const isManagerEdited = editedManager[user.id] !== undefined;
+        if (user.role !== 'Asesor') return <div className="text-right">-</div>;
+
+        const isEdited = editedValues[user.id]?.monthlyObjective !== undefined;
+        const currentValue = isEdited ? editedValues[user.id]?.monthlyObjective : user.monthlyObjective;
 
         return (
-          <div className="flex items-center gap-1 w-[200px]">
-             <Select 
-                value={isManagerEdited ? editedManager[user.id] : user.managerId || 'none'} 
-                onValueChange={(value) => setEditedManager(p => ({...p, [user.id]: value}))}
-                disabled={!isBoss}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Asignar jefe..." />
-              </SelectTrigger>
-              <SelectContent>
-                 <SelectItem value="none">Ninguno</SelectItem>
-                {managers.filter(m => m.id !== user.id).map(manager => (
-                  <SelectItem key={manager.id} value={manager.id}>{manager.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {isManagerEdited && (
-              <Button size="icon" className="h-9 w-9" onClick={() => {
-                const managerIdToSave = editedManager[user.id] === 'none' ? undefined : editedManager[user.id];
-                handleUpdateUser(user.id, { managerId: managerIdToSave });
-                setEditedManager(p => {
-                    const newP = {...p};
-                    delete newP[user.id];
-                    return newP;
-                });
-              }}>
+          <div className="flex items-center gap-1 justify-end">
+            <Input
+              type="number"
+              className="w-28 text-right"
+              placeholder="0"
+              value={currentValue ?? ''}
+              onChange={(e) => setEditedValues(p => ({...p, [user.id]: { ...p[user.id], monthlyObjective: e.target.value }}))}
+              disabled={!isBoss}
+            />
+            {isEdited && (
+              <Button size="icon" className="h-9 w-9" onClick={() => handleUpdateUser(user.id, { monthlyObjective: Number(editedValues[user.id]?.monthlyObjective) })}>
                 <Save className="h-4 w-4" />
               </Button>
             )}
@@ -295,7 +285,7 @@ export function TeamPerformanceTable() {
             )
         }
     }
-  ], [isBoss, userInfo, managers, editedManager]);
+  ], [isBoss, userInfo, managers, editedValues]);
 
   if (loading) {
     return (

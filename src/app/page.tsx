@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -54,6 +52,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TasksModal } from '@/components/dashboard/tasks-modal';
 import { TaskNotification } from '@/components/dashboard/task-notification';
+import { useRouter } from 'next/navigation';
 
 const activityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
@@ -151,6 +150,7 @@ const TaskSummaryCard = ({ title, count, icon, onClick, isSelected }: { title: s
 
 export default function DashboardPage() {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
   const { notificationPermission, requestNotificationPermission, showNotification } = useNotifications();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -175,6 +175,12 @@ export default function DashboardPage() {
       to: endOfMonth(selectedDate),
     };
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (userInfo && userInfo.role === 'Asesor') {
+      router.replace('/objectives');
+    }
+  }, [userInfo, router]);
 
 
   useEffect(() => {
@@ -362,7 +368,7 @@ export default function DashboardPage() {
   };
 
 
-  if (authLoading || loadingData) {
+  if (authLoading || loadingData || userInfo?.role === 'Asesor') {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
