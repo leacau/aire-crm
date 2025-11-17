@@ -7,38 +7,43 @@ import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Target, CheckCircle, TrendingUp, TrendingDown } from 'lucide-react';
-import { getOpportunities, getInvoices, getClients } from '@/lib/firebase-service';
-import type { Opportunity, Invoice, Client } from '@/lib/types';
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
+import { getOpportunities, getInvoices, getClients, getAllUsers } from '@/lib/firebase-service';
+import type { Opportunity, Invoice, Client, User } from '@/lib/types';
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths, format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import Confetti from 'react-dom-confetti';
 
 export default function ObjectivesPage() {
-  const { userInfo, loading: authLoading } = useAuth();
+  const { userInfo, loading: authLoading, isBoss } = useAuth();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [advisors, setAdvisors] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
     if (userInfo) {
       setLoadingData(true);
+      const advisorsPromise = isBoss ? getAllUsers('Asesor') : Promise.resolve([] as User[]);
       Promise.all([
         getOpportunities(),
         getInvoices(),
-        getClients()
-      ]).then(([opps, invs, cls]) => {
+        getClients(),
+        advisorsPromise
+      ]).then(([opps, invs, cls, advs]) => {
         setOpportunities(opps);
         setInvoices(invs);
         setClients(cls);
+        setAdvisors(advs);
         setLoadingData(false);
       }).catch(err => {
         console.error("Error fetching objectives data", err);
         setLoadingData(false);
       });
     }
-  }, [userInfo]);
+  }, [userInfo, isBoss]);
 
   const {
     previousMonthBilling,
@@ -79,7 +84,81 @@ export default function ObjectivesPage() {
       billingDifference,
     };
   }, [userInfo, opportunities, invoices, clients]);
-  
+
+  const teamObjectives = useMemo(() => {
+    if (!isBoss || advisors.length === 0) return [];
+
+    const today = new Date();
+    const currentMonthStart = startOfMonth(today);
+    const currentMonthEnd = endOfMonth(today);
+    const prevMonthDate = subMonths(today, 1);
+    const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+
+    const clientOwnerMap = new Map<string, string>();
+    clients.forEach(client => {
+      if (client.ownerId) {
+        clientOwnerMap.set(client.id, client.ownerId);
+      }
+    });
+
+    const opportunityOwnerMap = new Map<string, string>();
+    opportunities.forEach(opp => {
+      const ownerId = clientOwnerMap.get(opp.clientId);
+      if (ownerId) {
+        opportunityOwnerMap.set(opp.id, ownerId);
+      }
+    });
+
+    const invoicesByAdvisor = new Map<string, Invoice[]>();
+    invoices.forEach(inv => {
+      const advisorId = opportunityOwnerMap.get(inv.opportunityId);
+      if (!advisorId) return;
+      if (!invoicesByAdvisor.has(advisorId)) {
+        invoicesByAdvisor.set(advisorId, []);
+      }
+      invoicesByAdvisor.get(advisorId)!.push(inv);
+    });
+
+    const parseMonthKey = (month: string) => {
+      const [year, monthString] = month.split('-').map(part => Number(part));
+      if (!year || !monthString) return null;
+      return new Date(year, monthString - 1, 1);
+    };
+
+    return advisors.map(advisor => {
+      const advisorInvoices = invoicesByAdvisor.get(advisor.id) ?? [];
+      const currentMonthPaidInvoices = advisorInvoices
+        .filter(inv => inv.status === 'Pagada' && inv.datePaid && isWithinInterval(parseISO(inv.datePaid), { start: currentMonthStart, end: currentMonthEnd }))
+        .reduce((sum, inv) => sum + inv.amount, 0);
+
+      const prevMonthBilling = advisor.monthlyClosures?.[prevMonthKey] ?? 0;
+      const monthlyObjective = advisor.monthlyObjective ?? 0;
+      const progressPercentage = monthlyObjective > 0 ? (currentMonthPaidInvoices / monthlyObjective) * 100 : 0;
+      const billingDifference = currentMonthPaidInvoices - prevMonthBilling;
+
+      const recentClosures = Object.entries(advisor.monthlyClosures ?? {})
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .slice(0, 3)
+        .map(([month, value]) => {
+          const parsedDate = parseMonthKey(month);
+          return {
+            label: parsedDate ? format(parsedDate, 'MMM yyyy', { locale: es }) : month,
+            value,
+          };
+        });
+
+      return {
+        advisorId: advisor.id,
+        advisorName: advisor.name,
+        monthlyObjective,
+        currentMonthBilling: currentMonthPaidInvoices,
+        progressPercentage,
+        billingDifference,
+        recentClosures,
+      };
+    }).sort((a, b) => b.currentMonthBilling - a.currentMonthBilling);
+  }, [isBoss, advisors, clients, opportunities, invoices]);
+
     useEffect(() => {
         if (progressPercentage >= 100) {
             setShowConfetti(true);
@@ -172,6 +251,77 @@ export default function ObjectivesPage() {
             </div>
           </CardContent>
         </Card>
+
+        {isBoss && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Objetivos del Equipo</CardTitle>
+              <CardDescription>
+                Visibilidad de los objetivos mensuales y la evolución reciente de cada asesor.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {teamObjectives.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aún no hay datos de asesores disponibles.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left min-w-[720px]">
+                    <thead>
+                      <tr className="text-xs uppercase text-muted-foreground">
+                        <th className="pb-2 pr-4 font-medium">Asesor</th>
+                        <th className="pb-2 pr-4 font-medium">Objetivo Mensual</th>
+                        <th className="pb-2 pr-4 font-medium">Facturación Actual</th>
+                        <th className="pb-2 pr-4 font-medium">Vs. Mes Anterior</th>
+                        <th className="pb-2 pr-4 font-medium">Progreso</th>
+                        <th className="pb-2 font-medium">Evolución Reciente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teamObjectives.map(metric => (
+                        <tr key={metric.advisorId} className="border-t border-border">
+                          <td className="py-3 pr-4">
+                            <div className="font-medium">{metric.advisorName}</div>
+                          </td>
+                          <td className="py-3 pr-4">
+                            ${metric.monthlyObjective.toLocaleString('es-AR')}
+                          </td>
+                          <td className="py-3 pr-4 font-semibold">
+                            ${metric.currentMonthBilling.toLocaleString('es-AR')}
+                          </td>
+                          <td className="py-3 pr-4">
+                            <span className={cn('font-semibold', metric.billingDifference >= 0 ? 'text-green-600' : 'text-red-600')}>
+                              ${metric.billingDifference.toLocaleString('es-AR')}
+                            </span>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <div className="space-y-1">
+                              <Progress value={Math.min(metric.progressPercentage, 100)} className="h-2" />
+                              <p className="text-xs text-muted-foreground">{metric.progressPercentage.toFixed(1)}%</p>
+                            </div>
+                          </td>
+                          <td className="py-3">
+                            {metric.recentClosures.length > 0 ? (
+                              <div className="space-y-1">
+                                {metric.recentClosures.map(entry => (
+                                  <div key={`${metric.advisorId}-${entry.label}`} className="flex items-center justify-between text-xs">
+                                    <span className="text-muted-foreground">{entry.label}</span>
+                                    <span className="font-medium">${entry.value.toLocaleString('es-AR')}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">Sin registros</p>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </main>
     </div>
   );
