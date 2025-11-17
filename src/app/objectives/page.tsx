@@ -165,7 +165,7 @@ export default function ObjectivesPage() {
             <div className="flex justify-between items-center text-sm font-medium">
                 <span>{progressPercentage.toFixed(2)}% Completado</span>
                  {progressPercentage < 100 ? (
-                    <span>Te faltan ${(monthlyObjective - currentMonthBilling).toLocaleString('es-AR')}</span>
+                    <span>Te faltan ${(monthlyObjective - currentMonthBilling > 0 ? monthlyObjective - currentMonthBilling : 0).toLocaleString('es-AR')}</span>
                  ) : (
                     <span className="text-green-600">¡Objetivo superado por ${(currentMonthBilling - monthlyObjective).toLocaleString('es-AR')}!</span>
                  )}
