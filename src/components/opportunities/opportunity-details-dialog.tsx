@@ -642,13 +642,16 @@ export function OpportunityDetailsDialog({
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {invoices.map(invoice => (
+                        {invoices.map(invoice => {
+                            const amountValue = Number(invoice.amount ?? 0);
+                            const safeAmount = Number.isFinite(amountValue) ? amountValue : 0;
+                            return (
                             <TableRow key={invoice.id}>
                                 <TableCell>{invoice.invoiceNumber}</TableCell>
                                 <TableCell>{invoice.date ? format(parseISO(invoice.date), 'P', { locale: es }) : '-'}</TableCell>
-                                <TableCell>${invoice.amount.toLocaleString('es-AR')}</TableCell>
+                                <TableCell>${safeAmount.toLocaleString('es-AR')}</TableCell>
                                 <TableCell>{invoice.status}</TableCell>
-                                {isEditing && 
+                                {isEditing &&
                                   <TableCell>
                                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteInvoice(invoice.id)}>
                                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -656,7 +659,7 @@ export function OpportunityDetailsDialog({
                                   </TableCell>
                                 }
                             </TableRow>
-                        ))}
+                        )})}
                         {invoices.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={isEditing ? 5 : 4} className="h-24 text-center">No hay facturas para esta oportunidad.</TableCell>

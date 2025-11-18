@@ -878,6 +878,21 @@ export const deleteCanje = async (id: string, userId: string, userName: string):
 
 
 // --- Invoice Functions ---
+const normalizeInvoiceAmount = (rawAmount: unknown): number => {
+    if (typeof rawAmount === 'number' && Number.isFinite(rawAmount)) {
+        return rawAmount;
+    }
+
+    if (typeof rawAmount === 'string') {
+        const sanitized = rawAmount.replace(/\s+/g, '').replace(',', '.');
+        const parsed = Number(sanitized);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    const fallback = Number(rawAmount ?? 0);
+    return Number.isFinite(fallback) ? fallback : 0;
+};
+
 export const getInvoices = async (): Promise<Invoice[]> => {
     const cachedData = getFromCache('invoices');
     if (cachedData) return cachedData;
@@ -892,6 +907,7 @@ export const getInvoices = async (): Promise<Invoice[]> => {
         return {
             id: doc.id,
             ...data,
+            amount: normalizeInvoiceAmount(data.amount),
             date: validDate ? format(validDate, 'yyyy-MM-dd') : undefined,
             dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
             datePaid: validDatePaid ? format(validDatePaid, 'yyyy-MM-dd') : undefined,
@@ -905,7 +921,10 @@ export const getInvoices = async (): Promise<Invoice[]> => {
 export const getInvoicesForOpportunity = async (opportunityId: string): Promise<Invoice[]> => {
     const q = query(collections.invoices, where("opportunityId", "==", opportunityId));
     const snapshot = await getDocs(q);
-    const invoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+    const invoices = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { id: doc.id, ...data, amount: normalizeInvoiceAmount(data.amount) } as Invoice;
+    });
     invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
     return invoices;
 };
@@ -917,7 +936,10 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
     
     const q = query(collections.invoices, where("opportunityId", "in", opportunityIds));
     const invoicesSnapshot = await getDocs(q);
-    return invoicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+    return invoicesSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return { id: doc.id, ...data, amount: normalizeInvoiceAmount(data.amount) } as Invoice;
+    });
 };
 
 export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: string, userName: string, ownerName: string): Promise<string> => {
