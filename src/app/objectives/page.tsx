@@ -23,6 +23,17 @@ export default function ObjectivesPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [showConfetti, setShowConfetti] = useState(false);
 
+  const getInvoiceDate = (invoice: Invoice) => {
+    if (!invoice.date) return null;
+    try {
+      const parsed = parseISO(invoice.date);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    } catch (error) {
+      console.warn('Factura con fecha inválida encontrada', invoice.id, error);
+      return null;
+    }
+  };
+
   useEffect(() => {
     if (userInfo) {
       setLoadingData(true);
@@ -58,7 +69,8 @@ export default function ObjectivesPage() {
     const currentMonthStart = startOfMonth(today);
     const currentMonthEnd = endOfMonth(today);
     const prevMonthDate = subMonths(today, 1);
-    const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+    const prevMonthStart = startOfMonth(prevMonthDate);
+    const prevMonthEnd = endOfMonth(prevMonthDate);
     
     const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
     const userOppIds = new Set(opportunities.filter(opp => userClientIds.has(opp.clientId)).map(opp => opp.id));
@@ -69,7 +81,12 @@ export default function ObjectivesPage() {
       .filter(inv => inv.status === 'Pagada' && inv.datePaid && isWithinInterval(parseISO(inv.datePaid), { start: currentMonthStart, end: currentMonthEnd }))
       .reduce((sum, inv) => sum + inv.amount, 0);
 
-    const prevMonthBilling = userInfo.monthlyClosures?.[prevMonthKey] ?? 0;
+    const prevMonthBilling = userInvoices
+      .filter(inv => {
+        const invoiceDate = getInvoiceDate(inv);
+        return invoiceDate ? isWithinInterval(invoiceDate, { start: prevMonthStart, end: prevMonthEnd }) : false;
+      })
+      .reduce((sum, inv) => sum + inv.amount, 0);
     const monthlyObjective = userInfo.monthlyObjective ?? 0;
     
     const progressPercentage = monthlyObjective > 0 ? (currentMonthPaidInvoices / monthlyObjective) * 100 : 0;
@@ -92,7 +109,8 @@ export default function ObjectivesPage() {
     const currentMonthStart = startOfMonth(today);
     const currentMonthEnd = endOfMonth(today);
     const prevMonthDate = subMonths(today, 1);
-    const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+    const prevMonthStart = startOfMonth(prevMonthDate);
+    const prevMonthEnd = endOfMonth(prevMonthDate);
 
     const clientOwnerMap = new Map<string, string>();
     clients.forEach(client => {
@@ -131,7 +149,12 @@ export default function ObjectivesPage() {
         .filter(inv => inv.status === 'Pagada' && inv.datePaid && isWithinInterval(parseISO(inv.datePaid), { start: currentMonthStart, end: currentMonthEnd }))
         .reduce((sum, inv) => sum + inv.amount, 0);
 
-      const prevMonthBilling = advisor.monthlyClosures?.[prevMonthKey] ?? 0;
+      const prevMonthBilling = advisorInvoices
+        .filter(inv => {
+          const invoiceDate = getInvoiceDate(inv);
+          return invoiceDate ? isWithinInterval(invoiceDate, { start: prevMonthStart, end: prevMonthEnd }) : false;
+        })
+        .reduce((sum, inv) => sum + inv.amount, 0);
       const monthlyObjective = advisor.monthlyObjective ?? 0;
       const progressPercentage = monthlyObjective > 0 ? (currentMonthPaidInvoices / monthlyObjective) * 100 : 0;
       const billingDifference = currentMonthPaidInvoices - prevMonthBilling;
