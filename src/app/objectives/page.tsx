@@ -13,6 +13,7 @@ import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths, format
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import Confetti from 'react-dom-confetti';
+import { getManualInvoiceDate } from '@/lib/invoice-utils';
 
 export default function ObjectivesPage() {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
@@ -22,17 +23,6 @@ export default function ObjectivesPage() {
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [showConfetti, setShowConfetti] = useState(false);
-
-  const getInvoiceDate = (invoice: Invoice) => {
-    if (!invoice.date) return null;
-    try {
-      const parsed = parseISO(invoice.date);
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
-    } catch (error) {
-      console.warn('Factura con fecha inválida encontrada', invoice.id, error);
-      return null;
-    }
-  };
 
   useEffect(() => {
     if (userInfo) {
@@ -83,7 +73,7 @@ export default function ObjectivesPage() {
 
     const prevMonthBilling = userInvoices
       .filter(inv => {
-        const invoiceDate = getInvoiceDate(inv);
+        const invoiceDate = getManualInvoiceDate(inv);
         return invoiceDate ? isWithinInterval(invoiceDate, { start: prevMonthStart, end: prevMonthEnd }) : false;
       })
       .reduce((sum, inv) => sum + inv.amount, 0);
@@ -151,7 +141,7 @@ export default function ObjectivesPage() {
 
       const prevMonthBilling = advisorInvoices
         .filter(inv => {
-          const invoiceDate = getInvoiceDate(inv);
+          const invoiceDate = getManualInvoiceDate(inv);
           return invoiceDate ? isWithinInterval(invoiceDate, { start: prevMonthStart, end: prevMonthEnd }) : false;
         })
         .reduce((sum, inv) => sum + inv.amount, 0);
