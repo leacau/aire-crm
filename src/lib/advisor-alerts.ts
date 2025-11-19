@@ -148,7 +148,7 @@ export const buildAdvisorAlerts = ({
       ].filter((item): item is { label: string; value: string } => !!item),
       shouldEmail,
       emailSummary: `Factura ${invoice.invoiceNumber || invoice.id} (${client?.denominacion || 'Cliente sin nombre'}) acumula ${daysSince} días sin registrarse como pagada.`,
-      entityHref: opportunity ? `/clients/${opportunity.clientId}` : undefined,
+      entityHref: '/billing?tab=to-collect',
     });
   });
 
@@ -173,6 +173,7 @@ export const buildAdvisorAlerts = ({
       ],
       shouldEmail,
       emailSummary: `Prospecto ${prospect.companyName} sigue en "${prospect.status}" hace ${daysSince} días.`,
+      entityHref: `/prospects?prospectId=${prospect.id}`,
     });
   });
 
@@ -180,21 +181,24 @@ export const buildAdvisorAlerts = ({
   const clientsWithoutOpportunities = userClients.filter(client => !userOpportunities.some(opportunity => opportunity.clientId === client.id));
   if (clientsWithoutOpportunities.length > 0) {
     const isStartOfMonth = actionableDate.getDate() <= 3;
-    const clientNames = clientsWithoutOpportunities.map(client => client.denominacion).join(', ');
-    alerts.push({
-      id: 'clients-without-opportunities',
-      type: 'client',
-      title: 'Clientes sin propuestas activas',
-      description: `${clientsWithoutOpportunities.length} cliente(s) aún no tienen oportunidades cargadas: ${clientNames}.`,
-      severity: 'info',
-      meta: [{ label: 'Clientes', value: clientNames }],
-      shouldEmail: isStartOfMonth,
-      emailSummary: `${clientsWithoutOpportunities.length} cliente(s) sin propuestas activas: ${clientNames}.`,
+    clientsWithoutOpportunities.forEach(clientWithoutOpportunity => {
+      alerts.push({
+        id: `client-without-opportunities-${clientWithoutOpportunity.id}`,
+        type: 'client',
+        title: 'Cliente sin propuestas activas',
+        description: `${clientWithoutOpportunity.denominacion} todavía no tiene oportunidades cargadas.`,
+        severity: 'info',
+        meta: [{ label: 'Cliente', value: clientWithoutOpportunity.denominacion }],
+        shouldEmail: isStartOfMonth,
+        emailSummary: `${clientWithoutOpportunity.denominacion} sin oportunidades activas.`,
+        entityHref: `/clients/${clientWithoutOpportunity.id}`,
+      });
     });
   }
 
   // Finalization alerts
   userOpportunities.forEach(opportunity => {
+    if (opportunity.finalizationDate) return;
     const endDate = getOpportunityProjectedEndDate(opportunity);
     if (!endDate) return;
 
@@ -214,7 +218,7 @@ export const buildAdvisorAlerts = ({
       ].filter((item): item is { label: string; value: string } => !!item),
       shouldEmail: daysUntilEnd === 20,
       emailSummary: `La propuesta ${opportunity.title} finalizará el ${formatDate(endDate)} (${daysUntilEnd} días).`,
-      entityHref: `/clients/${opportunity.clientId}`,
+      entityHref: `/opportunities?opportunityId=${opportunity.id}`,
     });
   });
 
@@ -242,7 +246,7 @@ export const buildAdvisorAlerts = ({
       ].filter((item): item is { label: string; value: string } => !!item),
       shouldEmail: true,
       emailSummary: `${opportunity.title} permanece ${daysInStage} días en ${opportunity.stage}.`,
-      entityHref: `/clients/${opportunity.clientId}`,
+      entityHref: `/opportunities?opportunityId=${opportunity.id}`,
     });
   });
 

@@ -3,7 +3,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { ClientDetails } from '@/components/clients/client-details';
 import { Spinner } from '@/components/ui/spinner';
@@ -18,10 +18,12 @@ import { useToast } from '@/hooks/use-toast';
 export default function ClientPage() {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const params = useParams();
-  
+
   const id = params.id as string;
+  const focusedOpportunityId = searchParams.get('opportunityId');
   
   const [client, setClient] = useState<Client | null>(null);
   const [allClients, setAllClients] = useState<Client[]>([]);
@@ -152,6 +154,7 @@ export default function ClientPage() {
           onUpdate={handleUpdateClient}
           onValidateCuit={validateCuit}
           onCreateOpportunity={handleOpportunityCreate}
+          initialOpportunityId={focusedOpportunityId || undefined}
         />
       </main>
     </div>

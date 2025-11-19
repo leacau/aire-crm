@@ -70,6 +70,8 @@ interface KanbanBoardProps {
   selectedAdvisor: string;
   selectedClient: string;
   onClientListChange: (clients: { id: string; name: string }[]) => void;
+  focusedOpportunityId?: string;
+  onFocusedOpportunityHandled?: () => void;
 }
 
 const KanbanColumn = ({
@@ -121,7 +123,13 @@ const KanbanColumn = ({
         className={`flex-1 space-y-3 p-2 rounded-lg bg-secondary/50 border-t-4 ${stageColors[stage]}`}
       >
         {opportunities.map((opp) => (
-          <KanbanCard key={opp.id} opportunity={opp} onDragStart={(e) => handleDragStart(e, opp.id)} />
+          <KanbanCard
+            key={opp.id}
+            opportunity={opp}
+            onDragStart={(e) => handleDragStart(e, opp.id)}
+            focusedOpportunityId={focusedOpportunityId}
+            onFocusedOpportunityHandled={onFocusedOpportunityHandled}
+          />
         ))}
         {opportunities.length === 0 && (
             <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
@@ -133,7 +141,17 @@ const KanbanColumn = ({
   );
 };
 
-const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, onDragStart: (e: React.DragEvent<HTMLDivElement>) => void; }) => {
+const KanbanCard = ({
+  opportunity,
+  onDragStart,
+  focusedOpportunityId,
+  onFocusedOpportunityHandled,
+}: {
+  opportunity: Opportunity;
+  onDragStart: (e: React.DragEvent<HTMLDivElement>) => void;
+  focusedOpportunityId?: string;
+  onFocusedOpportunityHandled?: () => void;
+}) => {
   const { userInfo } = useAuth();
   const [isDetailsOpen, setIsDetailsOpen] = React.useState(false);
   const [isFinalizeOpen, setIsFinalizeOpen] = React.useState(false);
@@ -174,6 +192,14 @@ const KanbanCard = ({ opportunity, onDragStart }: { opportunity: Opportunity, on
   const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor' || userInfo?.role === 'Gerencia';
 
   const displayValue = Number(opportunity.value || 0);
+
+  useEffect(() => {
+    if (!focusedOpportunityId) return;
+    if (focusedOpportunityId !== opportunity.id) return;
+    if (isDetailsOpen) return;
+    setIsDetailsOpen(true);
+    onFocusedOpportunityHandled?.();
+  }, [focusedOpportunityId, opportunity.id, isDetailsOpen, onFocusedOpportunityHandled]);
 
   return (
     <>
@@ -293,7 +319,14 @@ function FinalizeOpportunityDialog({isOpen, onOpenChange, onFinalize}: {isOpen: 
 
 
 
-export function KanbanBoard({ dateRange, selectedAdvisor, selectedClient, onClientListChange }: KanbanBoardProps) {
+export function KanbanBoard({
+  dateRange,
+  selectedAdvisor,
+  selectedClient,
+  onClientListChange,
+  focusedOpportunityId,
+  onFocusedOpportunityHandled,
+}: KanbanBoardProps) {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);

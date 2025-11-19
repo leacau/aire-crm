@@ -26,11 +26,14 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ActivityFormDialog } from '@/components/clients/activity-form-dialog';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 
 export default function ProspectsPage() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -54,6 +57,7 @@ export default function ProspectsPage() {
   
   const [isActivityFormOpen, setIsActivityFormOpen] = useState(false);
   const [selectedProspectForActivity, setSelectedProspectForActivity] = useState<Prospect | null>(null);
+  const hasConsumedProspectQuery = useRef(false);
   
   useEffect(() => {
     if (userInfo) {
@@ -88,7 +92,7 @@ export default function ProspectsPage() {
     }
   }, [authLoading, userInfo, fetchData]);
 
-  const handleOpenForm = (prospect: Prospect | null = null, scrollToActivities = false) => {
+  const handleOpenForm = useCallback((prospect: Prospect | null = null, scrollToActivities = false) => {
     setSelectedProspect(prospect);
     if(scrollToActivities) {
         const ref = React.createRef<HTMLDivElement>();
@@ -97,7 +101,22 @@ export default function ProspectsPage() {
         setActivitySectionRef(null);
     }
     setIsFormOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (hasConsumedProspectQuery.current) return;
+    const prospectId = searchParams.get('prospectId');
+    if (!prospectId) return;
+    if (prospects.length === 0) return;
+    const targetProspect = prospects.find(prospect => prospect.id === prospectId);
+    if (!targetProspect) return;
+    handleOpenForm(targetProspect);
+    hasConsumedProspectQuery.current = true;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('prospectId');
+    const query = params.toString();
+    router.replace(query ? `/prospects?${query}` : '/prospects', { scroll: false });
+  }, [prospects, searchParams, router, handleOpenForm]);
 
   const handleSaveProspect = async (prospectData: Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'>) => {
     if (!userInfo) return;

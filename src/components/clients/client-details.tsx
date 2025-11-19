@@ -140,16 +140,19 @@ export function ClientDetails({
   client,
   onUpdate,
   onValidateCuit,
-  onCreateOpportunity
+  onCreateOpportunity,
+  initialOpportunityId,
 }: {
   client: Client;
   onUpdate: (data: Partial<Omit<Client, 'id'>>) => void;
   onValidateCuit: (cuit: string, clientId?: string) => Promise<string | false>;
   onCreateOpportunity: (newOppData: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
+  initialOpportunityId?: string;
 }) {
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const pdfRef = useRef<HTMLDivElement>(null);
+  const hasOpenedInitialOpportunityRef = useRef(false);
   
   const [people, setPeople] = useState<Person[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -254,6 +257,17 @@ export function ClientDetails({
     setSelectedOpportunity(opp);
     setIsOpportunityFormOpen(true);
   };
+
+  useEffect(() => {
+    if (!initialOpportunityId) return;
+    if (hasOpenedInitialOpportunityRef.current) return;
+    if (opportunities.length === 0) return;
+    const targetOpportunity = opportunities.find(opportunity => opportunity.id === initialOpportunityId);
+    if (!targetOpportunity) return;
+    setSelectedOpportunity(targetOpportunity);
+    setIsOpportunityFormOpen(true);
+    hasOpenedInitialOpportunityRef.current = true;
+  }, [initialOpportunityId, opportunities]);
   
   const handleOpenPersonForm = (person: Person | null = null) => {
     setSelectedPerson(person);
