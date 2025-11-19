@@ -160,6 +160,15 @@ export function OpportunityDetailsDialog({
   const [isOrdenPautadoFormOpen, setIsOrdenPautadoFormOpen] = useState(false);
   const [selectedOrden, setSelectedOrden] = useState<OrdenPautado | null>(null);
 
+  const isEditing = !!opportunity;
+
+  const [newInvoiceRow, setNewInvoiceRow] = useState<{number: string, date: string, amount: string | number}>({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
+  const [isSavingInvoice, setIsSavingInvoice] = useState(false);
+
+  const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>(() =>
+    isEditing ? opportunity : getInitialOpportunityData(client)
+  );
+
   const manualUpdateHistory = useMemo(() => {
     if (!opportunity?.manualUpdateHistory || opportunity.manualUpdateHistory.length === 0) {
       return [] as string[];
@@ -197,14 +206,6 @@ export function OpportunityDetailsDialog({
   }
 
   const selectedManualDate = editedOpportunity.manualUpdateDate ? safeParseManualDate(editedOpportunity.manualUpdateDate) : null;
-  const isEditing = !!opportunity;
-
-  const [newInvoiceRow, setNewInvoiceRow] = useState<{number: string, date: string, amount: string | number}>({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
-  const [isSavingInvoice, setIsSavingInvoice] = useState(false);
-  
-  const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>(() => 
-    isEditing ? opportunity : getInitialOpportunityData(client)
-  );
   
   const fetchInvoices = useCallback(async () => {
     if (opportunity) {
