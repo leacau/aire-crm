@@ -409,7 +409,7 @@ export default function DashboardPage() {
     .reduce((acc, inv) => acc + inv.amount, 0);
 
   const totalToCollectInPeriod = userInvoices
-    .filter(inv => inv.status !== 'Pagada' && dateRange && dateFilter(inv.date, dateRange))
+    .filter(inv => inv.status !== 'Pagada' && !inv.isCreditNote && dateRange && dateFilter(inv.date, dateRange))
     .reduce((acc, inv) => acc + inv.amount, 0);
 
   const totalBillingInPeriod = totalPaidInPeriod + totalToCollectInPeriod;
@@ -424,7 +424,7 @@ export default function DashboardPage() {
         .filter(inv => inv.status === 'Pagada' && dateFilter(inv.datePaid, prevMonthRange))
         .reduce((acc, inv) => acc + inv.amount, 0);
       const prevToCollect = userInvoices
-        .filter(inv => inv.status !== 'Pagada' && dateFilter(inv.date, prevMonthRange))
+        .filter(inv => inv.status !== 'Pagada' && !inv.isCreditNote && dateFilter(inv.date, prevMonthRange))
         .reduce((acc, inv) => acc + inv.amount, 0);
       previousMonthBilling = prevPaid + prevToCollect;
   }

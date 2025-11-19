@@ -28,10 +28,12 @@ export type Invoice = {
   opportunityId: string;
   invoiceNumber: string;
   amount: number;
-  date?: string; 
+  date?: string;
   status: InvoiceStatus;
   dateGenerated: string;
   datePaid?: string;
+  isCreditNote?: boolean;
+  creditNoteMarkedAt?: string | null;
 };
 
 export type PautaType = 'Spot' | 'PNT' | 'Sorteo' | 'Nota';

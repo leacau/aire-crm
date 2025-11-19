@@ -12,15 +12,17 @@ import { TableFooter, TableRow, TableCell } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '../ui/label';
 
-export const BillingTable = ({ 
-  items, 
+export const BillingTable = ({
+  items,
   type,
-  onRowClick, 
-  clientsMap, 
+  onRowClick,
+  clientsMap,
   usersMap,
   opportunitiesMap,
   onMarkAsPaid,
-}: { 
+  onToggleCreditNote,
+  showCreditNoteDate,
+}: {
   items: (Opportunity | Invoice)[];
   type: 'opportunities' | 'invoices';
   onRowClick: (item: Opportunity | Invoice) => void;
@@ -28,6 +30,8 @@ export const BillingTable = ({
   usersMap: Record<string, User>;
   opportunitiesMap: Record<string, Opportunity>;
   onMarkAsPaid?: (invoiceId: string) => void;
+  onToggleCreditNote?: (invoiceId: string, nextValue: boolean) => void;
+  showCreditNoteDate?: boolean;
 }) => {
 
   const columns = useMemo<ColumnDef<Opportunity | Invoice>[]>(() => {
@@ -80,6 +84,21 @@ export const BillingTable = ({
               return invoice.date ? format(parseISO(invoice.date), 'P', { locale: es }) : '-';
             },
         });
+        if (showCreditNoteDate) {
+          cols.push({
+            accessorKey: 'creditNoteMarkedAt',
+            header: 'Fecha NC',
+            cell: ({ row }) => {
+              const invoice = row.original as Invoice;
+              if (!invoice.creditNoteMarkedAt) return '-';
+              try {
+                return format(parseISO(invoice.creditNoteMarkedAt), 'P', { locale: es });
+              } catch (error) {
+                return '-';
+              }
+            }
+          });
+        }
         cols.push({
             accessorKey: 'amount',
             header: () => <div className="text-right">Monto Factura</div>,
@@ -110,11 +129,34 @@ export const BillingTable = ({
             }
           })
         }
+        if (onToggleCreditNote) {
+          cols.push({
+            id: 'mark-credit-note',
+            header: 'NC',
+            cell: ({ row }) => {
+              const invoice = row.original as Invoice;
+              return (
+                <div className="flex items-center justify-center space-x-2">
+                  <Checkbox
+                    id={`credit-note-${invoice.id}`}
+                    checked={!!invoice.isCreditNote}
+                    onCheckedChange={(value) => {
+                      const nextValue = value === true;
+                      onToggleCreditNote(invoice.id, nextValue);
+                    }}
+                    onClick={e => e.stopPropagation()}
+                  />
+                  <Label htmlFor={`credit-note-${invoice.id}`}>NC</Label>
+                </div>
+              );
+            }
+          })
+        }
     }
 
     return cols;
 
-  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, usersMap]);
+  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, usersMap, onToggleCreditNote, showCreditNoteDate]);
 
   const total = items.reduce((acc, item) => {
     if (type === 'invoices') return acc + Number((item as Invoice).amount || 0);
@@ -126,9 +168,9 @@ export const BillingTable = ({
   const footerContent = (
     <TableFooter>
       <TableRow>
-        <TableCell colSpan={2} className="font-bold">Total</TableCell>
-        <TableCell className="text-right font-bold">${total.toLocaleString('es-AR')}</TableCell>
-        {type === 'invoices' && <TableCell colSpan={onMarkAsPaid ? 3 : 2}></TableCell>}
+        <TableCell colSpan={columns.length} className="text-right font-bold">
+          Total: ${total.toLocaleString('es-AR')}
+        </TableCell>
       </TableRow>
     </TableFooter>
   );

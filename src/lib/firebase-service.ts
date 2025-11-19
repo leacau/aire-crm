@@ -904,6 +904,13 @@ export const getInvoices = async (): Promise<Invoice[]> => {
         const validDate = data.date && typeof data.date === 'string' ? parseDateWithTimezone(data.date) : null;
         const validDatePaid = data.datePaid && typeof data.datePaid === 'string' ? parseDateWithTimezone(data.datePaid) : null;
 
+        const rawCreditNoteDate = data.creditNoteMarkedAt;
+        const normalizedCreditNoteDate = rawCreditNoteDate instanceof Timestamp
+            ? rawCreditNoteDate.toDate().toISOString()
+            : typeof rawCreditNoteDate === 'string'
+                ? rawCreditNoteDate
+                : null;
+
         return {
             id: doc.id,
             ...data,
@@ -911,6 +918,8 @@ export const getInvoices = async (): Promise<Invoice[]> => {
             date: validDate ? format(validDate, 'yyyy-MM-dd') : undefined,
             dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
             datePaid: validDatePaid ? format(validDatePaid, 'yyyy-MM-dd') : undefined,
+            isCreditNote: Boolean(data.isCreditNote),
+            creditNoteMarkedAt: normalizedCreditNoteDate,
         } as Invoice;
     });
     setInCache('invoices', invoices);
@@ -923,7 +932,20 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
     const snapshot = await getDocs(q);
     const invoices = snapshot.docs.map(doc => {
         const data = doc.data();
-        return { id: doc.id, ...data, amount: normalizeInvoiceAmount(data.amount) } as Invoice;
+        const rawCreditNoteDate = data.creditNoteMarkedAt;
+        const normalizedCreditNoteDate = rawCreditNoteDate instanceof Timestamp
+            ? rawCreditNoteDate.toDate().toISOString()
+            : typeof rawCreditNoteDate === 'string'
+                ? rawCreditNoteDate
+                : null;
+
+        return {
+            id: doc.id,
+            ...data,
+            amount: normalizeInvoiceAmount(data.amount),
+            isCreditNote: Boolean(data.isCreditNote),
+            creditNoteMarkedAt: normalizedCreditNoteDate,
+        } as Invoice;
     });
     invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
     return invoices;
@@ -938,7 +960,20 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
     const invoicesSnapshot = await getDocs(q);
     return invoicesSnapshot.docs.map(doc => {
         const data = doc.data();
-        return { id: doc.id, ...data, amount: normalizeInvoiceAmount(data.amount) } as Invoice;
+        const rawCreditNoteDate = data.creditNoteMarkedAt;
+        const normalizedCreditNoteDate = rawCreditNoteDate instanceof Timestamp
+            ? rawCreditNoteDate.toDate().toISOString()
+            : typeof rawCreditNoteDate === 'string'
+                ? rawCreditNoteDate
+                : null;
+
+        return {
+            id: doc.id,
+            ...data,
+            amount: normalizeInvoiceAmount(data.amount),
+            isCreditNote: Boolean(data.isCreditNote),
+            creditNoteMarkedAt: normalizedCreditNoteDate,
+        } as Invoice;
     });
 };
 
@@ -946,6 +981,8 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
     const dataToSave = {
       ...invoiceData,
       dateGenerated: new Date().toISOString(),
+      isCreditNote: invoiceData.isCreditNote ?? false,
+      creditNoteMarkedAt: invoiceData.creditNoteMarkedAt ?? null,
     };
     const docRef = await addDoc(collections.invoices, dataToSave);
     invalidateCache('invoices');

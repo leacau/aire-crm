@@ -109,11 +109,11 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   }, [userInfo, fetchData]);
 
-  const { toInvoiceOpps, toCollectInvoices, paidInvoices } = useMemo(() => {
+  const { toInvoiceOpps, toCollectInvoices, paidInvoices, creditNoteInvoices } = useMemo(() => {
     if (!userInfo || !userInfo.id) {
-      return { toInvoiceOpps: [], toCollectInvoices: [], paidInvoices: [] };
+      return { toInvoiceOpps: [], toCollectInvoices: [], paidInvoices: [], creditNoteInvoices: [] };
     }
-    
+
     const isDateInRange = (date: Date) => {
         if (!dateRange?.from || !dateRange?.to) return true;
         return isWithinInterval(date, { start: dateRange.from, end: dateRange.to });
@@ -191,14 +191,24 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       userFilteredInvoices = invoices.filter(inv => userOppIds.has(inv.opportunityId));
     }
     
-    const toCollectInvoices = userFilteredInvoices.filter(inv => 
-        inv.date && isDateInRange(parseISO(inv.date)) && inv.status !== 'Pagada'
+    const toCollectInvoices = userFilteredInvoices.filter(inv =>
+        inv.date && isDateInRange(parseISO(inv.date)) && inv.status !== 'Pagada' && !inv.isCreditNote
     );
-    const paidInvoices = userFilteredInvoices.filter(inv => 
+    const paidInvoices = userFilteredInvoices.filter(inv =>
         inv.datePaid && isDateInRange(parseISO(inv.datePaid)) && inv.status === 'Pagada'
     );
 
-    return { toInvoiceOpps, toCollectInvoices, paidInvoices };
+    const creditNoteInvoices = userFilteredInvoices.filter(inv => {
+        if (!inv.isCreditNote) return false;
+        if (!inv.creditNoteMarkedAt) return false;
+        try {
+            return isDateInRange(parseISO(inv.creditNoteMarkedAt));
+        } catch (error) {
+            return false;
+        }
+    });
+
+    return { toInvoiceOpps, toCollectInvoices, paidInvoices, creditNoteInvoices };
 
   }, [opportunities, invoices, clients, selectedAdvisor, isBoss, userInfo, dateRange]);
 
@@ -281,6 +291,36 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         fetchData(); // Revert optimistic update
     }
   }
+
+  const handleToggleCreditNote = async (invoiceId: string, nextValue: boolean) => {
+    if (!userInfo) return;
+
+    const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
+    if (!invoiceToUpdate) return;
+
+    const opp = opportunities.find(o => o.id === invoiceToUpdate.opportunityId);
+    if (!opp) return;
+
+    const client = clients.find(c => c.id === opp.clientId);
+    if (!client) return;
+
+    const updatePayload: Partial<Invoice> = {
+      isCreditNote: nextValue,
+      creditNoteMarkedAt: nextValue ? new Date().toISOString() : null,
+    };
+
+    setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, ...updatePayload } : inv));
+
+    try {
+      await updateInvoice(invoiceId, updatePayload, userInfo.id, userInfo.name, client.ownerName);
+      toast({ title: `Factura #${invoiceToUpdate.invoiceNumber} ${nextValue ? 'marcada como NC' : 'sin NC'}` });
+      setTimeout(fetchData, 300);
+    } catch (error) {
+      console.error('Error updating credit note state:', error);
+      toast({ title: 'Error al actualizar la factura', variant: 'destructive' });
+      fetchData();
+    }
+  };
   
   const handleRowClick = (item: Opportunity | Invoice) => {
       const oppId = 'clientId' in item ? item.id.split('_')[0] : (opportunitiesMap[item.opportunityId] ? item.opportunityId : null);
@@ -321,10 +361,11 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <Tabs defaultValue={initialTab}>
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="to-invoice">A Facturar</TabsTrigger>
             <TabsTrigger value="to-collect">A Cobrar</TabsTrigger>
             <TabsTrigger value="paid">Pagado</TabsTrigger>
+            <TabsTrigger value="credit-notes">NC</TabsTrigger>
           </TabsList>
           <TabsContent value="to-invoice">
             <ToInvoiceTable 
@@ -335,10 +376,31 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             />
           </TabsContent>
           <TabsContent value="to-collect">
-            <BillingTable items={toCollectInvoices} type="invoices" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} onMarkAsPaid={handleMarkAsPaid} />
+            <BillingTable
+              items={toCollectInvoices}
+              type="invoices"
+              onRowClick={handleRowClick}
+              clientsMap={clientsMap}
+              usersMap={usersMap}
+              opportunitiesMap={opportunitiesMap}
+              onMarkAsPaid={handleMarkAsPaid}
+              onToggleCreditNote={handleToggleCreditNote}
+            />
           </TabsContent>
            <TabsContent value="paid">
             <BillingTable items={paidInvoices} type="invoices" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} />
+          </TabsContent>
+          <TabsContent value="credit-notes">
+            <BillingTable
+              items={creditNoteInvoices}
+              type="invoices"
+              onRowClick={handleRowClick}
+              clientsMap={clientsMap}
+              usersMap={usersMap}
+              opportunitiesMap={opportunitiesMap}
+              onToggleCreditNote={handleToggleCreditNote}
+              showCreditNoteDate
+            />
           </TabsContent>
         </Tabs>
       </main>

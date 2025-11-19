@@ -142,7 +142,7 @@ export const buildAdvisorAlerts = ({
 
   // Invoice alerts
   userInvoices.forEach(invoice => {
-    if (invoice.status === 'Pagada') return;
+    if (invoice.status === 'Pagada' || invoice.isCreditNote) return;
     const invoiceDate = getManualInvoiceDate(invoice) || safeParseDate(invoice.dateGenerated);
     if (!invoiceDate) return;
 
