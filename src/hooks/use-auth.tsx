@@ -15,7 +15,7 @@ interface AuthContextType {
   userInfo: User | null;
   loading: boolean;
   isBoss: boolean;
-  getGoogleAccessToken: () => Promise<string | null>;
+  getGoogleAccessToken: (options?: { silent?: boolean }) => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -88,12 +88,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
-    const getGoogleAccessToken = async (): Promise<string | null> => {
-        let storedToken = sessionStorage.getItem('google-access-token');
-        
+    const getGoogleAccessToken = async (options?: { silent?: boolean }): Promise<string | null> => {
+        if (typeof window === 'undefined') return null;
+
+        let storedToken = null;
+        try {
+            storedToken = sessionStorage.getItem('google-access-token');
+        } catch (error) {
+            console.warn('Unable to access sessionStorage for Google token', error);
+        }
+
         // This is a simple check. A robust solution would check expiration.
         // For this app's use case, re-authenticating on failure is acceptable.
         if (storedToken) return storedToken;
+
+        if (options?.silent) {
+            return null;
+        }
 
         if (auth.currentUser) {
             const provider = new GoogleAuthProvider();
@@ -108,7 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 const token = credential?.accessToken;
                 if (token) {
-                    sessionStorage.setItem('google-access-token', token);
+                    try {
+                        sessionStorage.setItem('google-access-token', token);
+                    } catch (error) {
+                        console.warn('Unable to persist Google token in sessionStorage', error);
+                    }
                     return token;
                 }
             } catch (error) {

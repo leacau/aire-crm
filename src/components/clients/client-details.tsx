@@ -1055,7 +1055,7 @@ export function ClientDetails({
           onOpenChange={setIsOpportunityFormOpen}
           onUpdate={handleOpportunityUpdate}
           onCreate={onCreateOpportunity}
-          client={{id: client.id, name: client.denominacion, ownerName: client.ownerName}}
+          client={{id: client.id, name: client.denominacion, ownerName: client.ownerName, ownerId: client.ownerId}}
         />
       )}
 

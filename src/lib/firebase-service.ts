@@ -1548,7 +1548,22 @@ const mapOpportunityDoc = (doc: any): Opportunity => {
         // @ts-ignore
         opp.updatedAt = convertTimestamp(data.updatedAt);
     }
-    
+
+    if (data.stageChangedAt) {
+        // @ts-ignore
+        opp.stageChangedAt = convertTimestamp(data.stageChangedAt);
+    }
+
+    if (data.manualUpdateDate) {
+        // @ts-ignore
+        opp.manualUpdateDate = convertTimestamp(data.manualUpdateDate);
+    }
+
+    if (Array.isArray(data.manualUpdateHistory)) {
+        // @ts-ignore
+        opp.manualUpdateHistory = data.manualUpdateHistory.map((entry: any) => convertTimestamp(entry));
+    }
+
     if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
         const validDate = parseDateWithTimezone(data.closeDate);
         opp.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
@@ -1602,9 +1617,10 @@ export const createOpportunity = async (
     const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
     if (!clientSnap.exists()) throw new Error("Client not found for opportunity creation");
 
-    const dataToSave: any = { 
+    const dataToSave: any = {
         ...opportunityData,
-        createdAt: serverTimestamp() 
+        createdAt: serverTimestamp(),
+        stageChangedAt: serverTimestamp()
     };
 
     if (dataToSave.agencyId === undefined) {
@@ -1719,6 +1735,26 @@ export const updateOpportunity = async (
         ...data,
         updatedAt: serverTimestamp()
     };
+
+    if ('manualUpdateHistory' in updateData) {
+        delete updateData.manualUpdateHistory;
+    }
+
+    const stageChanged = data.stage && data.stage !== originalData.stage;
+    if (stageChanged) {
+        updateData.stageChangedAt = serverTimestamp();
+    }
+
+    if (typeof data.manualUpdateDate !== 'undefined') {
+        if (!data.manualUpdateDate) {
+            updateData.manualUpdateDate = deleteField();
+        } else if (data.manualUpdateDate !== originalData.manualUpdateDate) {
+            updateData.manualUpdateDate = data.manualUpdateDate;
+            updateData.manualUpdateHistory = arrayUnion(data.manualUpdateDate);
+        } else {
+            delete updateData.manualUpdateDate;
+        }
+    }
     
     const bonusStateChanged = data.bonificacionEstado && data.bonificacionEstado !== originalData.bonificacionEstado && originalData.bonificacionEstado === 'Pendiente';
     if (bonusStateChanged) {
@@ -1773,7 +1809,7 @@ export const updateOpportunity = async (
         ownerName: ownerName
     };
 
-    if (data.stage && data.stage !== originalData.stage) {
+    if (stageChanged) {
         await logActivity({
             ...activityDetails,
             type: 'stage_change',

@@ -78,7 +78,11 @@ export type Opportunity = {
   details?: string;
   observaciones?: string;
   createdAt: string;
-  
+  updatedAt?: string;
+  manualUpdateDate?: string;
+  manualUpdateHistory?: string[];
+  stageChangedAt?: string;
+
   bonificacionDetalle?: string;
   bonificacionEstado?: BonificacionEstado;
   bonificacionAutorizadoPorId?: string;

@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -59,7 +59,7 @@ interface OpportunityDetailsDialogProps {
   onOpenChange: (isOpen: boolean) => void;
   onUpdate: (opportunity: Partial<Opportunity>) => void;
   onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
-  client?: {id: string, name: string, ownerName?: string}
+  client?: {id: string, name: string, ownerName?: string, ownerId?: string}
 }
 
 const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
@@ -159,6 +159,44 @@ export function OpportunityDetailsDialog({
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isOrdenPautadoFormOpen, setIsOrdenPautadoFormOpen] = useState(false);
   const [selectedOrden, setSelectedOrden] = useState<OrdenPautado | null>(null);
+
+  const manualUpdateHistory = useMemo(() => {
+    if (!opportunity?.manualUpdateHistory || opportunity.manualUpdateHistory.length === 0) {
+      return [] as string[];
+    }
+
+    return [...opportunity.manualUpdateHistory]
+      .filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+      .sort((a, b) => {
+        const dateA = safeParseManualDate(a);
+        const dateB = safeParseManualDate(b);
+        if (dateA && dateB) return dateB.getTime() - dateA.getTime();
+        if (dateA) return -1;
+        if (dateB) return 1;
+        return 0;
+      });
+  }, [opportunity]);
+
+  const isClientOwner = client?.ownerId && userInfo ? client.ownerId === userInfo.id : true;
+  const canEditManualUpdateDate = isBoss || !client?.ownerId || isClientOwner;
+
+  function safeParseManualDate(value: string) {
+    try {
+      const parsed = parseISO(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function formatDateForHistory(date: Date | null, fallback: string) {
+    if (date) {
+      return format(date, 'PPP', { locale: es });
+    }
+    return fallback;
+  }
+
+  const selectedManualDate = editedOpportunity.manualUpdateDate ? safeParseManualDate(editedOpportunity.manualUpdateDate) : null;
   const isEditing = !!opportunity;
 
   const [newInvoiceRow, setNewInvoiceRow] = useState<{number: string, date: string, amount: string | number}>({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
@@ -442,6 +480,68 @@ export function OpportunityDetailsDialog({
             <div className="space-y-2">
                 <Label htmlFor="observaciones">Observaciones</Label>
                 <Textarea id="observaciones" name="observaciones" value={editedOpportunity.observaciones || ''} onChange={handleChange} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label>Fecha de actualización del asesor</Label>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                variant="outline"
+                                className={cn(
+                                    'w-full justify-start text-left font-normal',
+                                    !editedOpportunity.manualUpdateDate && 'text-muted-foreground'
+                                )}
+                                disabled={!canEditManualUpdateDate}
+                            >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {selectedManualDate
+                                    ? format(selectedManualDate, 'PPP', { locale: es })
+                                    : <span>Seleccionar fecha</span>
+                                }
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                            <Calendar
+                                mode="single"
+                                selected={selectedManualDate ?? undefined}
+                                onSelect={(date) => handleDateChange('manualUpdateDate', date || undefined)}
+                                initialFocus
+                            />
+                        </PopoverContent>
+                    </Popover>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        className="w-full"
+                        onClick={() => handleDateChange('manualUpdateDate', new Date())}
+                        disabled={!canEditManualUpdateDate}
+                    >
+                        Registrar hoy
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                        {canEditManualUpdateDate
+                            ? 'Esta fecha se guardará en el historial cada vez que registres una actualización manual.'
+                            : 'Solo el asesor asignado o un perfil de gestión puede modificar esta fecha.'}
+                    </p>
+                </div>
+                <div className="space-y-2">
+                    <Label>Historial de actualizaciones</Label>
+                    <div className="min-h-[90px] border rounded-md bg-muted/40 p-3 text-sm space-y-1">
+                        {manualUpdateHistory.length > 0 ? (
+                            manualUpdateHistory.map((dateValue, index) => {
+                                const parsed = safeParseManualDate(dateValue);
+                                return (
+                                    <p key={`${dateValue}-${index}`} className="flex items-center justify-between">
+                                        <span>{formatDateForHistory(parsed, dateValue)}</span>
+                                    </p>
+                                );
+                            })
+                        ) : (
+                            <p className="text-xs text-muted-foreground">Aún no registraste actualizaciones manuales.</p>
+                        )}
+                    </div>
+                </div>
             </div>
           </TabsContent>
 

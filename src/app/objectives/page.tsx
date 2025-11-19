@@ -1,28 +1,36 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Target, CheckCircle, TrendingUp, TrendingDown } from 'lucide-react';
-import { getOpportunities, getInvoices, getClients, getAllUsers } from '@/lib/firebase-service';
-import type { Opportunity, Invoice, Client, User } from '@/lib/types';
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths, format } from 'date-fns';
+import { getOpportunities, getInvoices, getClients, getAllUsers, getProspects } from '@/lib/firebase-service';
+import type { Opportunity, Invoice, Client, User, Prospect } from '@/lib/types';
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths, format, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import Confetti from 'react-dom-confetti';
 import { getManualInvoiceDate } from '@/lib/invoice-utils';
+import { AdvisorAlertsPanel } from '@/components/objectives/advisor-alerts-panel';
+import { buildAdvisorAlerts, type AdvisorAlert } from '@/lib/advisor-alerts';
+import { sendEmail } from '@/lib/google-gmail-service';
 
 export default function ObjectivesPage() {
-  const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [prospects, setProspects] = useState<Prospect[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [isSendingAlertsEmail, setIsSendingAlertsEmail] = useState(false);
+  const [alertsEmailError, setAlertsEmailError] = useState<string | null>(null);
+  const [needsAlertsEmailAuth, setNeedsAlertsEmailAuth] = useState(false);
+  const [lastAlertsEmailDate, setLastAlertsEmailDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (userInfo) {
@@ -32,12 +40,14 @@ export default function ObjectivesPage() {
         getOpportunities(),
         getInvoices(),
         getClients(),
-        advisorsPromise
-      ]).then(([opps, invs, cls, advs]) => {
+        advisorsPromise,
+        getProspects()
+      ]).then(([opps, invs, cls, advs, prs]) => {
         setOpportunities(opps);
         setInvoices(invs);
         setClients(cls);
         setAdvisors(advs);
+        setProspects(prs);
         setLoadingData(false);
       }).catch(err => {
         console.error("Error fetching objectives data", err);
@@ -172,6 +182,93 @@ export default function ObjectivesPage() {
     }).sort((a, b) => b.currentMonthBilling - a.currentMonthBilling);
   }, [isBoss, advisors, clients, opportunities, invoices]);
 
+  const advisorAlerts = useMemo(() => {
+    if (!userInfo || userInfo.role !== 'Asesor') return [] as AdvisorAlert[];
+    return buildAdvisorAlerts({ user: userInfo, opportunities, clients, invoices, prospects });
+  }, [userInfo, opportunities, clients, invoices, prospects]);
+
+  const alertsNeedingEmail = useMemo(() => advisorAlerts.filter(alert => alert.shouldEmail), [advisorAlerts]);
+  const emailStorageKey = userInfo?.role === 'Asesor' ? `advisor-alerts:last-email:${userInfo.id}` : null;
+
+  useEffect(() => {
+    if (!emailStorageKey || typeof window === 'undefined') return;
+    const stored = localStorage.getItem(emailStorageKey);
+    if (stored) {
+      setLastAlertsEmailDate(stored);
+    }
+  }, [emailStorageKey]);
+
+  useEffect(() => {
+    if (alertsNeedingEmail.length === 0) {
+      setNeedsAlertsEmailAuth(false);
+      setAlertsEmailError(null);
+    }
+  }, [alertsNeedingEmail.length]);
+
+  const sendAlertsEmailInternal = useCallback(async (accessToken: string) => {
+    if (!userInfo?.email || alertsNeedingEmail.length === 0) return;
+    setIsSendingAlertsEmail(true);
+    setAlertsEmailError(null);
+    try {
+      const today = new Date();
+      const subject = `Alertas pendientes - ${format(today, 'dd/MM/yyyy')}`;
+      const listItems = alertsNeedingEmail.map(alert => `<li>${alert.emailSummary}</li>`).join('');
+      const body = `
+        <p>Hola ${userInfo.name || 'asesor'},</p>
+        <p>Estas alertas necesitan tu seguimiento:</p>
+        <ul>${listItems}</ul>
+        <p>Ingresá al <a href="https://aire-crm.vercel.app/objectives">CRM</a> para actualizarlas.</p>
+      `;
+      await sendEmail({ accessToken, to: userInfo.email, subject, body });
+      const nowIso = new Date().toISOString();
+      setLastAlertsEmailDate(nowIso);
+      if (emailStorageKey && typeof window !== 'undefined') {
+        localStorage.setItem(emailStorageKey, nowIso);
+      }
+      setNeedsAlertsEmailAuth(false);
+    } catch (error) {
+      console.error('Error sending advisor alerts email', error);
+      setAlertsEmailError('No pudimos enviar el correo con alertas. Intentalo nuevamente.');
+    } finally {
+      setIsSendingAlertsEmail(false);
+    }
+  }, [alertsNeedingEmail, userInfo, emailStorageKey]);
+
+  const handleAlertsEmailRequest = useCallback(async () => {
+    if (alertsNeedingEmail.length === 0) return;
+    const token = await getGoogleAccessToken();
+    if (!token) {
+      setNeedsAlertsEmailAuth(true);
+      setAlertsEmailError('Necesitamos tu autorización de Gmail para enviar estas alertas.');
+      return;
+    }
+    await sendAlertsEmailInternal(token);
+  }, [alertsNeedingEmail, getGoogleAccessToken, sendAlertsEmailInternal]);
+
+  useEffect(() => {
+    if (!userInfo || userInfo.role !== 'Asesor') return;
+    if (alertsNeedingEmail.length === 0) return;
+    if (!emailStorageKey) return;
+    const alreadySentToday = lastAlertsEmailDate ? isSameDay(new Date(lastAlertsEmailDate), new Date()) : false;
+    if (alreadySentToday) return;
+
+    let cancelled = false;
+    (async () => {
+      const token = await getGoogleAccessToken({ silent: true });
+      if (!token) {
+        setNeedsAlertsEmailAuth(true);
+        return;
+      }
+      if (!cancelled) {
+        await sendAlertsEmailInternal(token);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [alertsNeedingEmail, userInfo, emailStorageKey, lastAlertsEmailDate, getGoogleAccessToken, sendAlertsEmailInternal]);
+
     useEffect(() => {
         if (progressPercentage >= 100) {
             setShowConfetti(true);
@@ -193,6 +290,17 @@ export default function ObjectivesPage() {
     <div className="flex flex-col h-full">
       <Header title="Mis Objetivos" />
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
+        {userInfo?.role === 'Asesor' && (
+          <AdvisorAlertsPanel
+            alerts={advisorAlerts}
+            pendingEmailCount={alertsNeedingEmail.length}
+            isSendingEmail={isSendingAlertsEmail}
+            lastEmailSentAt={lastAlertsEmailDate}
+            onSendEmail={alertsNeedingEmail.length ? handleAlertsEmailRequest : undefined}
+            emailError={alertsEmailError}
+            needsEmailAuth={needsAlertsEmailAuth}
+          />
+        )}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
