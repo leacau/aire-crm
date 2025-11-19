@@ -1,6 +1,6 @@
 import { addMonths, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { Client, Invoice, Opportunity, OpportunityStage, Prospect, ProspectStatus, User } from './types';
+import type { Client, Invoice, Opportunity, OpportunityStage, Prospect, User } from './types';
 import { getManualInvoiceDate } from './invoice-utils';
 
 export type AdvisorAlertSeverity = 'info' | 'warning' | 'critical';
@@ -65,6 +65,22 @@ const safeParseDate = (value?: string | null): Date | null => {
   }
 };
 
+const normalizeStatus = (status?: string | null) => {
+  if (!status) return '';
+  return status
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+};
+
+const shouldExcludeProspect = (status?: string | null) => {
+  const normalized = normalizeStatus(status);
+  return normalized === 'convertido' ||
+    normalized === 'cliente' ||
+    normalized === 'no prospero' ||
+    normalized === 'no prosperos';
+};
+
 const getOpportunityReferenceDate = (opportunity: Opportunity): Date | null => {
   const manualDate = safeParseDate(opportunity.manualUpdateDate);
   if (manualDate) return manualDate;
@@ -117,9 +133,8 @@ export const buildAdvisorAlerts = ({
   const clientMap = new Map(userClients.map(client => [client.id, client]));
 
   const userInvoices = invoices.filter(invoice => opportunityMap.has(invoice.opportunityId));
-  const excludedProspectStatuses: ProspectStatus[] = ['Convertido', 'No Próspero'];
   const userProspects = prospects.filter(
-    prospect => prospect.ownerId === user.id && !excludedProspectStatuses.includes(prospect.status)
+    prospect => prospect.ownerId === user.id && !shouldExcludeProspect(prospect.status)
   );
 
   const alerts: AdvisorAlert[] = [];

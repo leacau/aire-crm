@@ -24,7 +24,7 @@ export default function OpportunitiesPage() {
   const [clientList, setClientList] = useState<{ id: string; name: string }[]>([]);
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<string>('all');
-  const [focusedOpportunityId, setFocusedOpportunityId] = useState<string | null>(null);
+  const [pendingFocusOpportunityId, setPendingFocusOpportunityId] = useState<string | undefined>(undefined);
   
   const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -54,18 +54,19 @@ export default function OpportunitiesPage() {
 
   useEffect(() => {
     const opportunityId = searchParams.get('opportunityId');
-    setFocusedOpportunityId(opportunityId);
+    setPendingFocusOpportunityId(opportunityId ?? undefined);
   }, [searchParams]);
 
   const handleOpportunityFocusConsumed = useCallback(() => {
-    setFocusedOpportunityId(null);
+    if (!pendingFocusOpportunityId) return;
+    setPendingFocusOpportunityId(undefined);
     const params = new URLSearchParams(searchParams.toString());
     if (params.has('opportunityId')) {
       params.delete('opportunityId');
       const query = params.toString();
       router.replace(query ? `/opportunities?${query}` : '/opportunities', { scroll: false });
     }
-  }, [router, searchParams]);
+  }, [pendingFocusOpportunityId, router, searchParams]);
 
   const advisorsInList = useMemo(() => {
     if (!isBoss) return [];
@@ -114,7 +115,7 @@ export default function OpportunitiesPage() {
           selectedAdvisor={selectedAdvisor}
           selectedClient={selectedClient}
           onClientListChange={setClientList}
-          focusedOpportunityId={focusedOpportunityId || undefined}
+          focusedOpportunityId={pendingFocusOpportunityId}
           onFocusedOpportunityHandled={handleOpportunityFocusConsumed}
         />
       </main>
