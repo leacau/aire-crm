@@ -1,6 +1,6 @@
 import { addMonths, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { Client, Invoice, Opportunity, OpportunityStage, Prospect, User } from './types';
+import type { Client, Invoice, Opportunity, OpportunityStage, Prospect, ProspectStatus, User } from './types';
 import { getManualInvoiceDate } from './invoice-utils';
 
 export type AdvisorAlertSeverity = 'info' | 'warning' | 'critical';
@@ -117,7 +117,10 @@ export const buildAdvisorAlerts = ({
   const clientMap = new Map(userClients.map(client => [client.id, client]));
 
   const userInvoices = invoices.filter(invoice => opportunityMap.has(invoice.opportunityId));
-  const userProspects = prospects.filter(prospect => prospect.ownerId === user.id);
+  const excludedProspectStatuses: ProspectStatus[] = ['Convertido', 'No Próspero'];
+  const userProspects = prospects.filter(
+    prospect => prospect.ownerId === user.id && !excludedProspectStatuses.includes(prospect.status)
+  );
 
   const alerts: AdvisorAlert[] = [];
   const actionableDate = today;

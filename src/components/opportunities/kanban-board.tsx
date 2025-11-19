@@ -79,11 +79,15 @@ const KanbanColumn = ({
   opportunities,
   onCardDrop,
   total,
+  focusedOpportunityId,
+  onFocusedOpportunityHandled,
 }: {
   stage: OpportunityStage | 'Ganado (Recurrente)';
   opportunities: Opportunity[];
   onCardDrop: (e: React.DragEvent<HTMLDivElement>, stage: OpportunityStage) => void;
   total?: number;
+  focusedOpportunityId?: string;
+  onFocusedOpportunityHandled?: () => void;
 }) => {
   const columnTotal = total ?? opportunities.reduce((sum, opp) => sum + Number(opp.value || 0), 0);
   const roundedTotal = Math.round(columnTotal * 100) / 100;
@@ -533,6 +537,8 @@ export function KanbanBoard({
               opportunities={groupedOpportunities.groups[stage]}
               onCardDrop={handleCardDrop}
               total={groupedOpportunities.recurringTotal}
+              focusedOpportunityId={focusedOpportunityId}
+              onFocusedOpportunityHandled={onFocusedOpportunityHandled}
             />
           }
           if (stage === 'Cerrado - Ganado') {
@@ -542,6 +548,8 @@ export function KanbanBoard({
               opportunities={groupedOpportunities.groups[stage]}
               onCardDrop={handleCardDrop}
               total={groupedOpportunities.newWinsTotal}
+              focusedOpportunityId={focusedOpportunityId}
+              onFocusedOpportunityHandled={onFocusedOpportunityHandled}
             />
           }
           return (
@@ -550,6 +558,8 @@ export function KanbanBoard({
               stage={stage}
               opportunities={groupedOpportunities.groups[stage]}
               onCardDrop={handleCardDrop}
+              focusedOpportunityId={focusedOpportunityId}
+              onFocusedOpportunityHandled={onFocusedOpportunityHandled}
             />
           )
         })}
