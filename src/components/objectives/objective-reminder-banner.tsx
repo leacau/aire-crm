@@ -4,15 +4,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { getClients, getInvoices, getOpportunities } from '@/lib/firebase-service';
-import { getPaidInvoiceDate } from '@/lib/invoice-utils';
-import { Progress } from '@/components/ui/progress';
+import { getManualInvoiceDate } from '@/lib/invoice-utils';
 import { Trophy } from 'lucide-react';
 
 const HIDDEN_ROLES = new Set(['Jefe', 'Gerencia', 'Administracion', 'Admin']);
 
 interface ObjectiveMetrics {
   monthlyObjective: number;
-  currentMonthBilling: number;
+  currentMonthPaidBilling: number;
+  currentMonthPendingBilling: number;
 }
 
 export function ObjectiveReminderBanner() {
@@ -44,25 +44,40 @@ export function ObjectiveReminderBanner() {
         const currentMonthStart = startOfMonth(today);
         const currentMonthEnd = endOfMonth(today);
 
-        const currentMonthPaidInvoices = userInvoices
-          .map(inv => ({ invoice: inv, paidDate: getPaidInvoiceDate(inv) }))
-          .filter(({ invoice, paidDate }) => invoice.status === 'Pagada' && paidDate &&
-            isWithinInterval(paidDate, { start: currentMonthStart, end: currentMonthEnd }))
+        const currentMonthInvoices = userInvoices
+          .map(invoice => ({ invoice, invoiceDate: getManualInvoiceDate(invoice) }))
+          .filter(({ invoice, invoiceDate }) =>
+            invoiceDate &&
+            !invoice.isCreditNote &&
+            isWithinInterval(invoiceDate, { start: currentMonthStart, end: currentMonthEnd })
+          );
+
+        const currentMonthPaidInvoices = currentMonthInvoices
+          .filter(({ invoice }) => invoice.status === 'Pagada')
+          .reduce((sum, { invoice }) => sum + invoice.amount, 0);
+
+        const currentMonthPendingInvoices = currentMonthInvoices
+          .filter(({ invoice }) => invoice.status !== 'Pagada')
           .reduce((sum, { invoice }) => sum + invoice.amount, 0);
 
         setMetrics({
           monthlyObjective: userInfo.monthlyObjective ?? 0,
-          currentMonthBilling: currentMonthPaidInvoices,
+          currentMonthPaidBilling: currentMonthPaidInvoices,
+          currentMonthPendingBilling: currentMonthPendingInvoices,
         });
         setLoading(false);
       })
-      .catch(error => {
-        console.error('Error cargando el objetivo global', error);
-        if (isMounted) {
-          setMetrics({ monthlyObjective: userInfo.monthlyObjective ?? 0, currentMonthBilling: 0 });
-          setLoading(false);
-        }
-      });
+        .catch(error => {
+          console.error('Error cargando el objetivo global', error);
+          if (isMounted) {
+            setMetrics({
+              monthlyObjective: userInfo.monthlyObjective ?? 0,
+              currentMonthPaidBilling: 0,
+              currentMonthPendingBilling: 0,
+            });
+            setLoading(false);
+          }
+        });
 
     return () => {
       isMounted = false;
@@ -71,14 +86,17 @@ export function ObjectiveReminderBanner() {
 
   const progressData = useMemo(() => {
     if (!metrics) {
-      return { progress: 0, remaining: 0 };
+      return { progress: 0, paidProgress: 0, pendingProgress: 0, remaining: 0 };
     }
 
-    const { monthlyObjective, currentMonthBilling } = metrics;
-    const progress = monthlyObjective > 0 ? Math.min((currentMonthBilling / monthlyObjective) * 100, 999) : 0;
-    const remaining = monthlyObjective > 0 ? Math.max(monthlyObjective - currentMonthBilling, 0) : 0;
+    const { monthlyObjective, currentMonthPaidBilling, currentMonthPendingBilling } = metrics;
+    const totalBilling = currentMonthPaidBilling + currentMonthPendingBilling;
+    const totalProgress = monthlyObjective > 0 ? Math.min((totalBilling / monthlyObjective) * 100, 999) : 0;
+    const paidProgress = monthlyObjective > 0 ? Math.min((currentMonthPaidBilling / monthlyObjective) * 100, totalProgress) : 0;
+    const pendingProgress = monthlyObjective > 0 ? Math.min((currentMonthPendingBilling / monthlyObjective) * 100, Math.max(totalProgress - paidProgress, 0)) : 0;
+    const remaining = monthlyObjective > 0 ? Math.max(monthlyObjective - totalBilling, 0) : 0;
 
-    return { progress, remaining };
+    return { progress: totalProgress, paidProgress, pendingProgress, remaining };
   }, [metrics]);
 
   if (shouldHide || (!metrics && !loading)) {
@@ -86,7 +104,9 @@ export function ObjectiveReminderBanner() {
   }
 
   const monthlyObjective = metrics?.monthlyObjective ?? 0;
-  const currentMonthBilling = metrics?.currentMonthBilling ?? 0;
+  const currentMonthPaidBilling = metrics?.currentMonthPaidBilling ?? 0;
+  const currentMonthPendingBilling = metrics?.currentMonthPendingBilling ?? 0;
+  const totalBilling = currentMonthPaidBilling + currentMonthPendingBilling;
   const showObjectiveInfo = monthlyObjective > 0;
 
   return (
@@ -99,7 +119,7 @@ export function ObjectiveReminderBanner() {
           </div>
           {showObjectiveInfo ? (
             <div className="text-xs font-medium text-muted-foreground sm:text-sm">
-              Llevás ${currentMonthBilling.toLocaleString('es-AR')} facturados de ${monthlyObjective.toLocaleString('es-AR')}.
+              Llevás ${totalBilling.toLocaleString('es-AR')} facturados de ${monthlyObjective.toLocaleString('es-AR')}.
             </div>
           ) : (
             <div className="text-xs font-medium text-muted-foreground sm:text-sm">
@@ -109,7 +129,25 @@ export function ObjectiveReminderBanner() {
         </div>
         {showObjectiveInfo ? (
           <>
-            <Progress value={Math.min(progressData.progress, 100)} className="h-2" />
+            <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-primary"
+                style={{ width: `${Math.min(progressData.paidProgress, 100)}%` }}
+              />
+              <div
+                className="h-full bg-amber-400"
+                style={{
+                  width: `${Math.max(
+                    Math.min(progressData.paidProgress + progressData.pendingProgress, 100) - Math.min(progressData.paidProgress, 100),
+                    0
+                  )}%`,
+                }}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground sm:text-xs">
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary" />Pagadas ${currentMonthPaidBilling.toLocaleString('es-AR')}</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" />A pagar ${currentMonthPendingBilling.toLocaleString('es-AR')}</span>
+            </div>
             <p className="text-xs text-muted-foreground">
               {progressData.progress >= 100
                 ? '¡Increíble! Superaste tu objetivo este mes.'
