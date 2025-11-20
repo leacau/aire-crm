@@ -144,36 +144,42 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }, {} as Record<string, Invoice[]>);
 
     userWonOpps.forEach(opp => {
-        if (!opp.closeDate) return;
+        if (!opp.createdAt) return;
 
+        const creationDate = parseISO(opp.createdAt);
         const maxPeriodicity = opp.periodicidad?.[0] || 'Ocasional';
         const durationMonths = getPeriodDurationInMonths(maxPeriodicity);
 
         if (durationMonths > 0) { // Handle periodic opportunities
-            const startDate = parseISO(opp.closeDate);
             for (let i = 0; i < durationMonths; i++) {
-                const monthDate = addMonths(startDate, i);
-                
+                const monthDate = addMonths(creationDate, i);
+
                 if (isDateInRange(monthDate)) {
-                    const hasInvoiceForMonth = (invoicesByOppId[opp.id] || []).some(inv => 
-                        inv.date && isSameMonth(parseISO(inv.date), monthDate)
+                    const hasPaidInvoiceForMonth = (invoicesByOppId[opp.id] || []).some(inv =>
+                        inv.status === 'Pagada' && inv.date && isSameMonth(parseISO(inv.date), monthDate)
                     );
-                    
-                    if (!hasInvoiceForMonth) {
+
+                    if (!hasPaidInvoiceForMonth) {
                         // Create a virtual opportunity for this month's billing
-                        const virtualOpp = { 
-                            ...opp, 
+                        const virtualOpp = {
+                            ...opp,
                             // Add a stable unique ID for the table key and a reference date
-                            id: `${opp.id}_${i}`,
-                            closeDate: monthDate.toISOString(), 
+                            id: `${opp.id}_${monthDate.toISOString()}`,
+                            closeDate: monthDate.toISOString(),
                         };
                         toInvoiceOpps.push(virtualOpp);
                     }
                 }
             }
         } else { // Handle one-time ("Ocasional") opportunities
-            if (isDateInRange(parseISO(opp.closeDate)) && !invoicesByOppId[opp.id]) {
-                toInvoiceOpps.push(opp);
+            if (isDateInRange(creationDate)) {
+                const hasPaidInvoiceInMonth = (invoicesByOppId[opp.id] || []).some(inv =>
+                    inv.status === 'Pagada' && inv.date && isSameMonth(parseISO(inv.date), creationDate)
+                );
+
+                if (!hasPaidInvoiceInMonth) {
+                    toInvoiceOpps.push({ ...opp, closeDate: creationDate.toISOString() });
+                }
             }
         }
     });
