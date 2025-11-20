@@ -37,6 +37,7 @@ export default function ObjectivesPage() {
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [pendingOpportunityId, setPendingOpportunityId] = useState<string | null>(null);
 
   useEffect(() => {
     if (userInfo) {
@@ -220,12 +221,23 @@ export default function ObjectivesPage() {
         setSelectedOpportunity(target);
         return;
       }
+      setPendingOpportunityId(alert.entityId);
+      return;
     }
 
     if (alert.entityHref) {
       window.location.href = alert.entityHref;
     }
   }, [prospects, clients, opportunities]);
+
+  useEffect(() => {
+    if (!pendingOpportunityId) return;
+    const pending = opportunities.find(opportunity => opportunity.id === pendingOpportunityId);
+    if (pending) {
+      setSelectedOpportunity(pending);
+      setPendingOpportunityId(null);
+    }
+  }, [pendingOpportunityId, opportunities]);
 
   const formatDisplayDate = useCallback((value?: string | null) => {
     if (!value) return 'Sin fecha';
