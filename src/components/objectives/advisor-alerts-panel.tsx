@@ -26,6 +26,7 @@ interface AdvisorAlertsPanelProps {
   onSendEmail?: () => void;
   emailError?: string | null;
   needsEmailAuth?: boolean;
+  onAlertSelect?: (alert: AdvisorAlert) => void;
 }
 
 export function AdvisorAlertsPanel({
@@ -36,6 +37,7 @@ export function AdvisorAlertsPanel({
   onSendEmail,
   emailError,
   needsEmailAuth,
+  onAlertSelect,
 }: AdvisorAlertsPanelProps) {
   const hasAlerts = alerts.length > 0;
   const variantForAlert = (alert: AdvisorAlert) => (alert.severity === 'critical' ? 'destructive' : 'default');
@@ -77,9 +79,19 @@ export function AdvisorAlertsPanel({
                       </dl>
                     )}
                     {alert.entityHref && (
-                      <Link href={alert.entityHref} className="mt-2 inline-flex text-xs font-semibold text-primary hover:underline">
-                        Ver detalle
-                      </Link>
+                      onAlertSelect ? (
+                        <Button
+                          variant="link"
+                          className="mt-2 h-auto px-0 text-xs font-semibold"
+                          onClick={() => onAlertSelect(alert)}
+                        >
+                          Ver detalle
+                        </Button>
+                      ) : (
+                        <Link href={alert.entityHref} className="mt-2 inline-flex text-xs font-semibold text-primary hover:underline">
+                          Ver detalle
+                        </Link>
+                      )
                     )}
                   </AlertDescription>
                 </div>

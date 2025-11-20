@@ -15,6 +15,7 @@ export type AdvisorAlert = {
   meta?: { label: string; value: string }[];
   shouldEmail: boolean;
   emailSummary: string;
+  entityId?: string;
   entityHref?: string;
 };
 
@@ -166,6 +167,7 @@ export const buildAdvisorAlerts = ({
       ].filter((item): item is { label: string; value: string } => !!item),
       shouldEmail,
       emailSummary: `Factura ${invoice.invoiceNumber || invoice.id} (${client?.denominacion || 'Cliente sin nombre'}) acumula ${daysSince} días sin registrarse como pagada.`,
+      entityId: invoice.id,
       entityHref: '/billing?tab=to-collect',
     });
   });
@@ -191,6 +193,7 @@ export const buildAdvisorAlerts = ({
       ],
       shouldEmail,
       emailSummary: `Prospecto ${prospect.companyName} sigue en "${prospect.status}" hace ${daysSince} días.`,
+      entityId: prospect.id,
       entityHref: `/prospects?prospectId=${prospect.id}`,
     });
   });
@@ -209,6 +212,7 @@ export const buildAdvisorAlerts = ({
         meta: [{ label: 'Cliente', value: clientWithoutOpportunity.denominacion }],
         shouldEmail: isStartOfMonth,
         emailSummary: `${clientWithoutOpportunity.denominacion} sin oportunidades activas.`,
+        entityId: clientWithoutOpportunity.id,
         entityHref: `/clients/${clientWithoutOpportunity.id}`,
       });
     });
@@ -236,6 +240,7 @@ export const buildAdvisorAlerts = ({
       ].filter((item): item is { label: string; value: string } => !!item),
       shouldEmail: daysUntilEnd === 20,
       emailSummary: `La propuesta ${opportunity.title} finalizará el ${formatDate(endDate)} (${daysUntilEnd} días).`,
+      entityId: opportunity.id,
       entityHref: `/opportunities?opportunityId=${opportunity.id}`,
     });
   });
@@ -264,6 +269,7 @@ export const buildAdvisorAlerts = ({
       ].filter((item): item is { label: string; value: string } => !!item),
       shouldEmail: true,
       emailSummary: `${opportunity.title} permanece ${daysInStage} días en ${opportunity.stage}.`,
+      entityId: opportunity.id,
       entityHref: `/opportunities?opportunityId=${opportunity.id}`,
     });
   });

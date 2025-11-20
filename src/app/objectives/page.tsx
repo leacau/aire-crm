@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Target, CheckCircle, TrendingUp, TrendingDown } from 'lucide-react';
 import { getOpportunities, getInvoices, getClients, getAllUsers, getProspects } from '@/lib/firebase-service';
@@ -17,6 +18,8 @@ import { getManualInvoiceDate } from '@/lib/invoice-utils';
 import { AdvisorAlertsPanel } from '@/components/objectives/advisor-alerts-panel';
 import { buildAdvisorAlerts, type AdvisorAlert } from '@/lib/advisor-alerts';
 import { sendEmail } from '@/lib/google-gmail-service';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 export default function ObjectivesPage() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
@@ -31,6 +34,9 @@ export default function ObjectivesPage() {
   const [alertsEmailError, setAlertsEmailError] = useState<string | null>(null);
   const [needsAlertsEmailAuth, setNeedsAlertsEmailAuth] = useState(false);
   const [lastAlertsEmailDate, setLastAlertsEmailDate] = useState<string | null>(null);
+  const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
 
   useEffect(() => {
     if (userInfo) {
@@ -187,6 +193,50 @@ export default function ObjectivesPage() {
     return buildAdvisorAlerts({ user: userInfo, opportunities, clients, invoices, prospects });
   }, [userInfo, opportunities, clients, invoices, prospects]);
 
+  const handleAlertSelect = useCallback((alert: AdvisorAlert) => {
+    setSelectedProspect(null);
+    setSelectedClient(null);
+    setSelectedOpportunity(null);
+
+    if (alert.type === 'prospect' && alert.entityId) {
+      const target = prospects.find(prospect => prospect.id === alert.entityId);
+      if (target) {
+        setSelectedProspect(target);
+        return;
+      }
+    }
+
+    if (alert.type === 'client' && alert.entityId) {
+      const target = clients.find(client => client.id === alert.entityId);
+      if (target) {
+        setSelectedClient(target);
+        return;
+      }
+    }
+
+    if ((alert.type === 'opportunity' || alert.type === 'stage') && alert.entityId) {
+      const target = opportunities.find(opportunity => opportunity.id === alert.entityId);
+      if (target) {
+        setSelectedOpportunity(target);
+        return;
+      }
+    }
+
+    if (alert.entityHref) {
+      window.location.href = alert.entityHref;
+    }
+  }, [prospects, clients, opportunities]);
+
+  const formatDisplayDate = useCallback((value?: string | null) => {
+    if (!value) return 'Sin fecha';
+    try {
+      const parsed = parseISO(value);
+      return Number.isNaN(parsed.getTime()) ? 'Sin fecha' : format(parsed, 'PPP', { locale: es });
+    } catch (error) {
+      return 'Sin fecha';
+    }
+  }, []);
+
   const alertsNeedingEmail = useMemo(() => advisorAlerts.filter(alert => alert.shouldEmail), [advisorAlerts]);
   const emailStorageKey = userInfo?.role === 'Asesor' ? `advisor-alerts:last-email:${userInfo.id}` : null;
 
@@ -299,6 +349,7 @@ export default function ObjectivesPage() {
             onSendEmail={alertsNeedingEmail.length ? handleAlertsEmailRequest : undefined}
             emailError={alertsEmailError}
             needsEmailAuth={needsAlertsEmailAuth}
+            onAlertSelect={handleAlertSelect}
           />
         )}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -444,6 +495,74 @@ export default function ObjectivesPage() {
           </Card>
         )}
       </main>
+
+      {selectedProspect && (
+        <Dialog open={!!selectedProspect} onOpenChange={open => !open && setSelectedProspect(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Prospecto: {selectedProspect.companyName}</DialogTitle>
+              <DialogDescription>Revisa el prospecto sin salir de tus alertas.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 text-sm">
+              <p><span className="font-semibold">Estado:</span> {selectedProspect.status}</p>
+              <p><span className="font-semibold">Contacto:</span> {selectedProspect.contactName || 'Sin datos'}</p>
+              <p><span className="font-semibold">Email:</span> {selectedProspect.contactEmail || 'Sin datos'}</p>
+              <p><span className="font-semibold">Último cambio:</span> {formatDisplayDate(selectedProspect.statusChangedAt || selectedProspect.createdAt)}</p>
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              <Link href={`/prospects?prospectId=${selectedProspect.id}`} className="text-sm font-semibold text-primary hover:underline">
+                Abrir en Prospectos
+              </Link>
+              <Button variant="secondary" onClick={() => setSelectedProspect(null)}>Cerrar</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {selectedClient && (
+        <Dialog open={!!selectedClient} onOpenChange={open => !open && setSelectedClient(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Cliente: {selectedClient.denominacion}</DialogTitle>
+              <DialogDescription>Resumen rápido del cliente.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 text-sm">
+              <p><span className="font-semibold">Email:</span> {selectedClient.email || 'Sin datos'}</p>
+              <p><span className="font-semibold">Teléfono:</span> {selectedClient.phone || 'Sin datos'}</p>
+              <p><span className="font-semibold">Creado:</span> {formatDisplayDate(selectedClient.createdAt)}</p>
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              <Link href={`/clients/${selectedClient.id}`} className="text-sm font-semibold text-primary hover:underline">
+                Abrir en Clientes
+              </Link>
+              <Button variant="secondary" onClick={() => setSelectedClient(null)}>Cerrar</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {selectedOpportunity && (
+        <Dialog open={!!selectedOpportunity} onOpenChange={open => !open && setSelectedOpportunity(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Propuesta: {selectedOpportunity.title}</DialogTitle>
+              <DialogDescription>Consulta los datos clave de la oportunidad.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-2 text-sm sm:grid-cols-2">
+              <p><span className="font-semibold">Etapa:</span> {selectedOpportunity.stage}</p>
+              <p><span className="font-semibold">Cliente:</span> {clients.find(client => client.id === selectedOpportunity.clientId)?.denominacion || 'Sin datos'}</p>
+              <p><span className="font-semibold">Valor estimado:</span> ${Number(selectedOpportunity.value ?? 0).toLocaleString('es-AR')}</p>
+              <p><span className="font-semibold">Última actualización:</span> {formatDisplayDate(selectedOpportunity.updatedAt || selectedOpportunity.manualUpdateDate || selectedOpportunity.createdAt)}</p>
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              <Link href={`/opportunities?opportunityId=${selectedOpportunity.id}`} className="text-sm font-semibold text-primary hover:underline">
+                Abrir en Oportunidades
+              </Link>
+              <Button variant="secondary" onClick={() => setSelectedOpportunity(null)}>Cerrar</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
