@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BillingTable } from '@/components/billing/billing-table';
 import { ToInvoiceTable } from '@/components/billing/to-invoice-table';
+import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 
 const getPeriodDurationInMonths = (period: string): number => {
     switch (period) {
@@ -236,7 +237,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
   const handleCreateInvoice = async (virtualOppId: string, invoiceDetails: NewInvoiceData) => {
     if (!userInfo) return;
-    
+
     const realOppId = virtualOppId.split('_')[0];
     const opp = opportunitiesMap[realOppId];
     if (!opp) return;
@@ -244,10 +245,22 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     const client = clientsMap[opp.clientId];
     if (!client) return;
 
+    const sanitizedNumber = sanitizeInvoiceNumber(String(invoiceDetails.invoiceNumber));
+    if (!sanitizedNumber) {
+      toast({ title: 'Número de factura inválido', description: 'Solo se permiten dígitos en el número de factura.', variant: 'destructive' });
+      return;
+    }
+
+    const existingNumbers = new Set(invoices.map(inv => getNormalizedInvoiceNumber(inv)));
+    if (existingNumbers.has(sanitizedNumber)) {
+      toast({ title: `Factura duplicada #${invoiceDetails.invoiceNumber}`, description: 'Ya existe una factura con ese número.', variant: 'destructive' });
+      return;
+    }
+
     try {
         const newInvoice: Omit<Invoice, 'id'> = {
             opportunityId: realOppId,
-            invoiceNumber: invoiceDetails.invoiceNumber,
+            invoiceNumber: sanitizedNumber,
             amount: Number(invoiceDetails.amount),
             date: invoiceDetails.date,
             status: 'Generada',

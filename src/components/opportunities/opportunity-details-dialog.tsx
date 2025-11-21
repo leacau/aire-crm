@@ -38,6 +38,7 @@ import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
+import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 
 import {
   AlertDialog,
@@ -352,8 +353,16 @@ export function OpportunityDetailsDialog({
 
   const handleSaveNewInvoice = async () => {
     if (!opportunity || !userInfo) return;
-    if (!newInvoiceRow.number || !newInvoiceRow.amount || Number(newInvoiceRow.amount) <= 0) {
+    const sanitizedNumber = sanitizeInvoiceNumber(newInvoiceRow.number);
+
+    if (!sanitizedNumber || !newInvoiceRow.amount || Number(newInvoiceRow.amount) <= 0) {
       toast({ title: 'Datos de factura incompletos', description: 'Número de factura y monto son requeridos.', variant: 'destructive'});
+      return;
+    }
+
+    const existingNumbers = new Set(invoices.map(inv => getNormalizedInvoiceNumber(inv)));
+    if (existingNumbers.has(sanitizedNumber)) {
+      toast({ title: `Factura duplicada #${newInvoiceRow.number}`, description: 'Ya existe una factura con ese número.', variant: 'destructive' });
       return;
     }
 
@@ -361,7 +370,7 @@ export function OpportunityDetailsDialog({
     try {
         const newInvoice: Omit<Invoice, 'id'> = {
             opportunityId: opportunity.id,
-            invoiceNumber: newInvoiceRow.number,
+            invoiceNumber: sanitizedNumber,
             amount: Number(newInvoiceRow.amount),
             date: newInvoiceRow.date,
             status: 'Generada',
@@ -369,7 +378,7 @@ export function OpportunityDetailsDialog({
         };
 
         await createInvoice(newInvoice, userInfo.id, userInfo.name, opportunity.clientName);
-        
+
         toast({ title: "Factura Guardada" });
         fetchInvoices();
         setNewInvoiceRow({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
@@ -768,13 +777,13 @@ export function OpportunityDetailsDialog({
                         )}
                         {/* New Invoice Row */}
                          <TableRow>
-                            <TableCell>
-                                <Input 
-                                    placeholder="0001-00123456" 
-                                    value={newInvoiceRow.number}
-                                    onChange={(e) => setNewInvoiceRow(prev => ({...prev, number: e.target.value}))}
-                                />
-                            </TableCell>
+                              <TableCell>
+                                  <Input
+                                      placeholder="0001-00123456"
+                                      value={newInvoiceRow.number}
+                                      onChange={(e) => setNewInvoiceRow(prev => ({...prev, number: sanitizeInvoiceNumber(e.target.value)}))}
+                                  />
+                              </TableCell>
                              <TableCell>
                                 <Input 
                                     type="date" 

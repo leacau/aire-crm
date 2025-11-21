@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Target, CheckCircle, TrendingUp, TrendingDown } from 'lucide-react';
 import { getOpportunities, getInvoices, getClients, getAllUsers, getProspects } from '@/lib/firebase-service';
 import type { Opportunity, Invoice, Client, User, Prospect } from '@/lib/types';
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths, format, isSameDay } from 'date-fns';
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import Confetti from 'react-dom-confetti';
@@ -67,45 +67,86 @@ export default function ObjectivesPage() {
     previousMonthBilling,
     monthlyObjective,
     currentMonthBilling,
+    currentMonthPaidBilling,
+    currentMonthPendingBilling,
     progressPercentage,
     billingDifference,
+    forecastedIncome,
+    prospectingIncome,
   } = useMemo(() => {
-    if (!userInfo) return { previousMonthBilling: 0, monthlyObjective: 0, currentMonthBilling: 0, progressPercentage: 0, billingDifference: 0 };
+    if (!userInfo) {
+      return {
+        previousMonthBilling: 0,
+        monthlyObjective: 0,
+        currentMonthBilling: 0,
+        currentMonthPaidBilling: 0,
+        currentMonthPendingBilling: 0,
+        progressPercentage: 0,
+        billingDifference: 0,
+        forecastedIncome: 0,
+        prospectingIncome: 0,
+      };
+    }
 
     const today = new Date();
     const currentMonthStart = startOfMonth(today);
     const currentMonthEnd = endOfMonth(today);
-    const prevMonthDate = subMonths(today, 1);
-    const prevMonthStart = startOfMonth(prevMonthDate);
-    const prevMonthEnd = endOfMonth(prevMonthDate);
-    
+
     const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
-    const userOppIds = new Set(opportunities.filter(opp => userClientIds.has(opp.clientId)).map(opp => opp.id));
+    const userOpportunities = opportunities.filter(opp => userClientIds.has(opp.clientId));
+    const userOppIds = new Set(userOpportunities.map(opp => opp.id));
 
-    const userInvoices = invoices.filter(inv => userOppIds.has(inv.opportunityId));
+    const userInvoices = invoices.filter(inv => userOppIds.has(inv.opportunityId) && !inv.isCreditNote);
 
-    const currentMonthPaidInvoices = userInvoices
-      .filter(inv => inv.status === 'Pagada' && inv.datePaid && isWithinInterval(parseISO(inv.datePaid), { start: currentMonthStart, end: currentMonthEnd }))
-      .reduce((sum, inv) => sum + inv.amount, 0);
+    const invoicesWithDates = userInvoices
+      .map(invoice => ({ invoice, invoiceDate: getManualInvoiceDate(invoice) }))
+      .filter(({ invoiceDate }) => invoiceDate !== null) as { invoice: Invoice; invoiceDate: Date }[];
 
-    const prevMonthBilling = userInvoices
-      .filter(inv => {
-        const invoiceDate = getManualInvoiceDate(inv);
-        return invoiceDate ? isWithinInterval(invoiceDate, { start: prevMonthStart, end: prevMonthEnd }) : false;
-      })
-      .reduce((sum, inv) => sum + inv.amount, 0);
+    const currentMonthInvoices = invoicesWithDates.filter(({ invoiceDate }) =>
+      isWithinInterval(invoiceDate, { start: currentMonthStart, end: currentMonthEnd })
+    );
+
+    const currentMonthTotal = currentMonthInvoices.reduce((sum, { invoice }) => sum + invoice.amount, 0);
+    const currentMonthPaid = currentMonthInvoices
+      .filter(({ invoice }) => invoice.status === 'Pagada')
+      .reduce((sum, { invoice }) => sum + invoice.amount, 0);
+    const currentMonthPending = currentMonthTotal - currentMonthPaid;
+
+    const prevMonthBilling = invoicesWithDates
+      .filter(({ invoiceDate }) => invoiceDate < currentMonthStart)
+      .reduce((sum, { invoice }) => sum + invoice.amount, 0);
+
+    const currentMonthOpportunities = userOpportunities.filter(opp => {
+      try {
+        const createdAt = parseISO(opp.createdAt);
+        return isWithinInterval(createdAt, { start: currentMonthStart, end: currentMonthEnd });
+      } catch (error) {
+        return false;
+      }
+    });
+
+    const forecastedIncome = currentMonthOpportunities
+      .filter(opp => ['Propuesta', 'Negociación', 'Negociación a Aprobar'].includes(opp.stage))
+      .reduce((sum, opp) => sum + Number(opp.value || 0), 0);
+
+    const prospectingIncome = currentMonthOpportunities
+      .filter(opp => opp.stage === 'Nuevo')
+      .reduce((sum, opp) => sum + Number(opp.value || 0), 0);
+
     const monthlyObjective = userInfo.monthlyObjective ?? 0;
-    
-    const progressPercentage = monthlyObjective > 0 ? (currentMonthPaidInvoices / monthlyObjective) * 100 : 0;
-    
-    const billingDifference = currentMonthPaidInvoices - prevMonthBilling;
+    const progressPercentage = monthlyObjective > 0 ? (currentMonthTotal / monthlyObjective) * 100 : 0;
+    const billingDifference = currentMonthTotal - prevMonthBilling;
 
     return {
       previousMonthBilling: prevMonthBilling,
       monthlyObjective,
-      currentMonthBilling: currentMonthPaidInvoices,
+      currentMonthBilling: currentMonthTotal,
+      currentMonthPaidBilling: currentMonthPaid,
+      currentMonthPendingBilling: currentMonthPending,
       progressPercentage,
       billingDifference,
+      forecastedIncome,
+      prospectingIncome,
     };
   }, [userInfo, opportunities, invoices, clients]);
 
@@ -115,9 +156,6 @@ export default function ObjectivesPage() {
     const today = new Date();
     const currentMonthStart = startOfMonth(today);
     const currentMonthEnd = endOfMonth(today);
-    const prevMonthDate = subMonths(today, 1);
-    const prevMonthStart = startOfMonth(prevMonthDate);
-    const prevMonthEnd = endOfMonth(prevMonthDate);
 
     const clientOwnerMap = new Map<string, string>();
     clients.forEach(client => {
@@ -151,20 +189,24 @@ export default function ObjectivesPage() {
     };
 
     return advisors.map(advisor => {
-      const advisorInvoices = invoicesByAdvisor.get(advisor.id) ?? [];
-      const currentMonthPaidInvoices = advisorInvoices
-        .filter(inv => inv.status === 'Pagada' && inv.datePaid && isWithinInterval(parseISO(inv.datePaid), { start: currentMonthStart, end: currentMonthEnd }))
-        .reduce((sum, inv) => sum + inv.amount, 0);
+      const advisorInvoices = (invoicesByAdvisor.get(advisor.id) ?? []).filter(inv => !inv.isCreditNote);
 
-      const prevMonthBilling = advisorInvoices
-        .filter(inv => {
-          const invoiceDate = getManualInvoiceDate(inv);
-          return invoiceDate ? isWithinInterval(invoiceDate, { start: prevMonthStart, end: prevMonthEnd }) : false;
-        })
-        .reduce((sum, inv) => sum + inv.amount, 0);
+      const invoicesWithDate = advisorInvoices
+        .map(invoice => ({ invoice, invoiceDate: getManualInvoiceDate(invoice) }))
+        .filter(({ invoiceDate }) => invoiceDate !== null) as { invoice: Invoice; invoiceDate: Date }[];
+
+      const currentMonthInvoices = invoicesWithDate.filter(({ invoiceDate }) =>
+        isWithinInterval(invoiceDate, { start: currentMonthStart, end: currentMonthEnd })
+      );
+
+      const currentMonthBilling = currentMonthInvoices.reduce((sum, { invoice }) => sum + invoice.amount, 0);
+
+      const prevMonthBilling = invoicesWithDate
+        .filter(({ invoiceDate }) => invoiceDate < currentMonthStart)
+        .reduce((sum, { invoice }) => sum + invoice.amount, 0);
       const monthlyObjective = advisor.monthlyObjective ?? 0;
-      const progressPercentage = monthlyObjective > 0 ? (currentMonthPaidInvoices / monthlyObjective) * 100 : 0;
-      const billingDifference = currentMonthPaidInvoices - prevMonthBilling;
+      const progressPercentage = monthlyObjective > 0 ? (currentMonthBilling / monthlyObjective) * 100 : 0;
+      const billingDifference = currentMonthBilling - prevMonthBilling;
 
       const recentClosures = Object.entries(advisor.monthlyClosures ?? {})
         .sort((a, b) => b[0].localeCompare(a[0]))
@@ -177,15 +219,15 @@ export default function ObjectivesPage() {
           };
         });
 
-      return {
-        advisorId: advisor.id,
-        advisorName: advisor.name,
-        monthlyObjective,
-        currentMonthBilling: currentMonthPaidInvoices,
-        progressPercentage,
-        billingDifference,
-        recentClosures,
-      };
+        return {
+          advisorId: advisor.id,
+          advisorName: advisor.name,
+          monthlyObjective,
+          currentMonthBilling,
+          progressPercentage,
+          billingDifference,
+          recentClosures,
+        };
     }).sort((a, b) => b.currentMonthBilling - a.currentMonthBilling);
   }, [isBoss, advisors, clients, opportunities, invoices]);
 
@@ -348,93 +390,107 @@ export default function ObjectivesPage() {
     );
   }
 
-  return (
-    <div className="flex flex-col h-full">
-      <Header title="Mis Objetivos" />
-      <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
-        {userInfo?.role === 'Asesor' && (
-          <AdvisorAlertsPanel
-            alerts={advisorAlerts}
-            pendingEmailCount={alertsNeedingEmail.length}
-            isSendingEmail={isSendingAlertsEmail}
-            lastEmailSentAt={lastAlertsEmailDate}
-            onSendEmail={alertsNeedingEmail.length ? handleAlertsEmailRequest : undefined}
-            emailError={alertsEmailError}
-            needsEmailAuth={needsAlertsEmailAuth}
-            onAlertSelect={handleAlertSelect}
-          />
-        )}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Facturación Mes Anterior</CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${previousMonthBilling.toLocaleString('es-AR')}</div>
-              <p className="text-xs text-muted-foreground">Valor de cierre final del mes pasado.</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Objetivo de este Mes</CardTitle>
-              <Target className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${monthlyObjective.toLocaleString('es-AR')}</div>
-              <p className="text-xs text-muted-foreground">Meta de facturación pagada para el mes actual.</p>
-            </CardContent>
-          </Card>
-           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Facturación vs Mes Anterior</CardTitle>
-               {billingDifference >= 0 ? <TrendingUp className="h-4 w-4 text-muted-foreground" /> : <TrendingDown className="h-4 w-4 text-muted-foreground" />}
-            </CardHeader>
-            <CardContent>
-              <div className={cn("text-2xl font-bold", billingDifference >= 0 ? "text-green-600" : "text-red-600")}>
-                ${billingDifference.toLocaleString('es-AR')}
-              </div>
-              <p className="text-xs text-muted-foreground">Diferencia con la facturación del mes anterior.</p>
-            </CardContent>
-          </Card>
-        </div>
+    return (
+      <div className="flex flex-col h-full">
+        <Header title="Mis Objetivos" />
+        <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
+          {userInfo?.role === "Asesor" && (
+            <AdvisorAlertsPanel
+              alerts={advisorAlerts}
+              pendingEmailCount={alertsNeedingEmail.length}
+              isSendingEmail={isSendingAlertsEmail}
+              lastEmailSentAt={lastAlertsEmailDate}
+              onSendEmail={alertsNeedingEmail.length ? handleAlertsEmailRequest : undefined}
+              emailError={alertsEmailError}
+              needsEmailAuth={needsAlertsEmailAuth}
+              onAlertSelect={handleAlertSelect}
+            />
+          )}
 
-        <Card className="relative overflow-hidden">
-           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                <Confetti active={showConfetti} config={{
-                    angle: 90,
-                    spread: 360,
-                    startVelocity: 40,
-                    elementCount: 100,
-                    dragFriction: 0.12,
-                    duration: 3000,
-                    stagger: 3,
-                    width: "10px",
-                    height: "10px",
-                }} />
-           </div>
-          <CardHeader>
-            <CardTitle>Progreso del Objetivo Mensual</CardTitle>
-            <CardDescription>
-              Seguimiento de tu facturación pagada en comparación con tu objetivo para este mes.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-baseline">
-                <p className="text-4xl font-bold text-primary">${currentMonthBilling.toLocaleString('es-AR')}</p>
-                <p className="text-lg text-muted-foreground">de ${monthlyObjective.toLocaleString('es-AR')}</p>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Facturación del Período</CardTitle>
+                <CheckCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${currentMonthBilling.toLocaleString('es-AR')}</div>
+                <p className="text-xs text-muted-foreground">Facturas (pagadas o a pagar) con fecha en el mes actual.</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Facturación Mes Anterior</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${previousMonthBilling.toLocaleString('es-AR')}</div>
+                <p className="text-xs text-muted-foreground">Suma de facturas previas al mes en curso.</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Ingresos Previstos</CardTitle>
+                <Target className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${forecastedIncome.toLocaleString('es-AR')}</div>
+                <p className="text-xs text-muted-foreground">Propuestas creadas este mes en Propuesta/Negociación.</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">En Prospección</CardTitle>
+                <TrendingDown className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${prospectingIncome.toLocaleString('es-AR')}</div>
+                <p className="text-xs text-muted-foreground">Valor de propuestas nuevas creadas este mes.</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="relative overflow-hidden">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                 <Confetti active={showConfetti} config={{
+                     angle: 90,
+                     spread: 360,
+                     startVelocity: 40,
+                     elementCount: 100,
+                     dragFriction: 0.12,
+                     duration: 3000,
+                     stagger: 3,
+                     width: "10px",
+                     height: "10px",
+                 }} />
             </div>
-            <Progress value={Math.min(progressPercentage, 100)} className="h-4" />
-            <div className="flex justify-between items-center text-sm font-medium">
-                <span>{progressPercentage.toFixed(2)}% Completado</span>
-                 {progressPercentage < 100 ? (
-                    <span>Te faltan ${(monthlyObjective - currentMonthBilling > 0 ? monthlyObjective - currentMonthBilling : 0).toLocaleString('es-AR')}</span>
-                 ) : (
-                    <span className="text-green-600">¡Objetivo superado por ${(currentMonthBilling - monthlyObjective).toLocaleString('es-AR')}!</span>
-                 )}
-            </div>
-          </CardContent>
-        </Card>
+           <CardHeader>
+             <CardTitle>Progreso del Objetivo Mensual</CardTitle>
+             <CardDescription>
+               Seguimiento de tu facturación pagada y a pagar en comparación con tu objetivo para este mes.
+             </CardDescription>
+           </CardHeader>
+           <CardContent className="space-y-4">
+             <div className="flex justify-between items-baseline">
+                 <p className="text-4xl font-bold text-primary">${currentMonthBilling.toLocaleString('es-AR')}</p>
+                 <p className="text-lg text-muted-foreground">de ${monthlyObjective.toLocaleString('es-AR')}</p>
+             </div>
+             <Progress value={Math.min(progressPercentage, 100)} className="h-4" />
+             <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+               <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary" />Pagadas ${currentMonthPaidBilling.toLocaleString('es-AR')}</span>
+               <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" />A pagar ${currentMonthPendingBilling.toLocaleString('es-AR')}</span>
+             </div>
+             <div className="flex justify-between items-center text-sm font-medium">
+                 <span>{progressPercentage.toFixed(2)}% Completado</span>
+                  {progressPercentage < 100 ? (
+                     <span>Te faltan ${(monthlyObjective - currentMonthBilling > 0 ? monthlyObjective - currentMonthBilling : 0).toLocaleString('es-AR')}</span>
+                  ) : (
+                     <span className="text-green-600">¡Objetivo superado por ${(currentMonthBilling - monthlyObjective).toLocaleString('es-AR')}!</span>
+                  )}
+             </div>
+           </CardContent>
+         </Card>
+
 
         {isBoss && (
           <Card>

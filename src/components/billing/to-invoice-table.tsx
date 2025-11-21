@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Save } from 'lucide-react';
 import type { NewInvoiceData } from '@/app/billing/page';
+import { sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 
 interface ToInvoiceTableProps {
   items: Opportunity[];
@@ -36,9 +37,10 @@ const ToInvoiceTableRow = ({
     const [isSaving, setIsSaving] = useState(false);
 
     const handleDataChange = (field: keyof NewInvoiceData, value: string) => {
+        const normalizedValue = field === 'invoiceNumber' ? sanitizeInvoiceNumber(value) : value;
         setInvoiceData(prev => ({
             ...prev,
-            [field]: field === 'amount' ? (value === '' ? '' : Number(value)) : value,
+            [field]: field === 'amount' ? (normalizedValue === '' ? '' : Number(normalizedValue)) : normalizedValue,
         }));
     };
 

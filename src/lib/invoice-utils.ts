@@ -1,6 +1,10 @@
 import { parseISO } from 'date-fns';
 import type { Invoice } from './types';
 
+export const sanitizeInvoiceNumber = (value: string): string => {
+  return (value || '').replace(/\D+/g, '');
+};
+
 const safeParseDate = (value?: string | null): Date | null => {
   if (!value) return null;
   try {
@@ -20,4 +24,8 @@ export const getManualInvoiceDate = (invoice: Invoice): Date | null => {
 
 export const getPaidInvoiceDate = (invoice: Invoice): Date | null => {
   return safeParseDate(invoice.datePaid);
+};
+
+export const getNormalizedInvoiceNumber = (invoice: Pick<Invoice, 'invoiceNumber'>): string => {
+  return sanitizeInvoiceNumber(invoice.invoiceNumber);
 };

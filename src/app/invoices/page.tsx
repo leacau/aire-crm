@@ -8,12 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { PlusCircle, Trash2, Save } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import type { Client, Opportunity } from '@/lib/types';
-import { getClients, getAllOpportunities, createInvoice, createOpportunity } from '@/lib/firebase-service';
+import type { Client, Opportunity, Invoice } from '@/lib/types';
+import { getClients, getAllOpportunities, createInvoice, createOpportunity, getInvoices } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { useRouter } from 'next/navigation';
 import { QuickOpportunityFormDialog } from '@/components/invoices/quick-opportunity-form-dialog';
+import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 
 type InvoiceRow = {
   id: number;
@@ -31,6 +32,7 @@ export default function InvoiceUploadPage() {
 
   const [clients, setClients] = useState<Client[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [existingInvoices, setExistingInvoices] = useState<Invoice[]>([]);
   const [invoiceRows, setInvoiceRows] = useState<InvoiceRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -44,9 +46,10 @@ export default function InvoiceUploadPage() {
     if (!userInfo) return;
     setLoadingData(true);
     try {
-      const [allClients, allOpportunities] = await Promise.all([
+      const [allClients, allOpportunities, allInvoices] = await Promise.all([
         getClients(),
-        getAllOpportunities()
+        getAllOpportunities(),
+        getInvoices()
       ]);
 
       if (isBoss) {
@@ -59,6 +62,8 @@ export default function InvoiceUploadPage() {
         setClients(userClients);
         setOpportunities(userOpportunities);
       }
+
+      setExistingInvoices(allInvoices);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: "Error al cargar datos", variant: "destructive" });
@@ -95,7 +100,10 @@ export default function InvoiceUploadPage() {
     setInvoiceRows(prev =>
       prev.map(row => {
         if (row.id === id) {
-          const updatedRow = { ...row, [field]: value };
+          const normalizedValue = field === 'invoiceNumber' && typeof value === 'string'
+            ? sanitizeInvoiceNumber(value)
+            : value;
+          const updatedRow = { ...row, [field]: normalizedValue };
           // Reset opportunity if client changes
           if (field === 'clientId') {
             updatedRow.opportunityId = '';
@@ -162,15 +170,39 @@ export default function InvoiceUploadPage() {
     setIsSaving(true);
     let successCount = 0;
     
+    const existingNumbers = new Set(existingInvoices.map(inv => getNormalizedInvoiceNumber(inv)));
+    const newNumbers = new Set<string>();
+
     for (const row of validRows) {
         try {
             const client = clients.find(c => c.id === row.clientId);
             if (!client) throw new Error(`Cliente no encontrado para la fila con factura ${row.invoiceNumber}`);
 
+            const sanitizedNumber = sanitizeInvoiceNumber(row.invoiceNumber);
+            if (!sanitizedNumber) {
+                toast({
+                    title: 'Número de factura inválido',
+                    description: 'Solo se permiten dígitos en el número de factura.',
+                    variant: 'destructive'
+                });
+                continue;
+            }
+
+            if (existingNumbers.has(sanitizedNumber) || newNumbers.has(sanitizedNumber)) {
+                toast({
+                    title: `Factura duplicada #${row.invoiceNumber}`,
+                    description: 'Ya existe una factura con ese número. Usa un número único.',
+                    variant: 'destructive'
+                });
+                continue;
+            }
+
+            newNumbers.add(sanitizedNumber);
+
             await createInvoice(
                 {
                     opportunityId: row.opportunityId,
-                    invoiceNumber: row.invoiceNumber,
+                    invoiceNumber: sanitizedNumber,
                     amount: row.amount,
                     date: row.date,
                     status: 'Generada',
@@ -180,6 +212,19 @@ export default function InvoiceUploadPage() {
                 userInfo.name,
                 client.ownerName
             );
+            setExistingInvoices(prev => [
+              ...prev,
+              {
+                id: `temp-${Date.now()}`,
+                opportunityId: row.opportunityId,
+                invoiceNumber: sanitizedNumber,
+                amount: row.amount,
+                date: row.date,
+                status: 'Generada',
+                dateGenerated: new Date().toISOString(),
+                isCreditNote: false,
+              }
+            ]);
             successCount++;
         } catch (error) {
             console.error(`Error guardando factura ${row.invoiceNumber}:`, error);
