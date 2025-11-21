@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Target, CheckCircle, TrendingUp, TrendingDown } from 'lucide-react';
 import { getOpportunities, getInvoices, getClients, getAllUsers, getProspects } from '@/lib/firebase-service';
 import type { Opportunity, Invoice, Client, User, Prospect } from '@/lib/types';
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format, isSameDay } from 'date-fns';
+import { addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO, format, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import Confetti from 'react-dom-confetti';
@@ -91,6 +91,8 @@ export default function ObjectivesPage() {
     const today = new Date();
     const currentMonthStart = startOfMonth(today);
     const currentMonthEnd = endOfMonth(today);
+    const previousMonthStart = startOfMonth(addMonths(today, -1));
+    const previousMonthEnd = endOfMonth(previousMonthStart);
 
     const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
     const userOpportunities = opportunities.filter(opp => userClientIds.has(opp.clientId));
@@ -113,7 +115,7 @@ export default function ObjectivesPage() {
     const currentMonthPending = currentMonthTotal - currentMonthPaid;
 
     const prevMonthBilling = invoicesWithDates
-      .filter(({ invoiceDate }) => invoiceDate < currentMonthStart)
+      .filter(({ invoiceDate }) => isWithinInterval(invoiceDate, { start: previousMonthStart, end: previousMonthEnd }))
       .reduce((sum, { invoice }) => sum + invoice.amount, 0);
 
     const currentMonthOpportunities = userOpportunities.filter(opp => {
@@ -156,6 +158,8 @@ export default function ObjectivesPage() {
     const today = new Date();
     const currentMonthStart = startOfMonth(today);
     const currentMonthEnd = endOfMonth(today);
+    const previousMonthStart = startOfMonth(addMonths(today, -1));
+    const previousMonthEnd = endOfMonth(previousMonthStart);
 
     const clientOwnerMap = new Map<string, string>();
     clients.forEach(client => {
@@ -202,7 +206,7 @@ export default function ObjectivesPage() {
       const currentMonthBilling = currentMonthInvoices.reduce((sum, { invoice }) => sum + invoice.amount, 0);
 
       const prevMonthBilling = invoicesWithDate
-        .filter(({ invoiceDate }) => invoiceDate < currentMonthStart)
+        .filter(({ invoiceDate }) => isWithinInterval(invoiceDate, { start: previousMonthStart, end: previousMonthEnd }))
         .reduce((sum, { invoice }) => sum + invoice.amount, 0);
       const monthlyObjective = advisor.monthlyObjective ?? 0;
       const progressPercentage = monthlyObjective > 0 ? (currentMonthBilling / monthlyObjective) * 100 : 0;
@@ -394,19 +398,6 @@ export default function ObjectivesPage() {
       <div className="flex flex-col h-full">
         <Header title="Mis Objetivos" />
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
-          {userInfo?.role === "Asesor" && (
-            <AdvisorAlertsPanel
-              alerts={advisorAlerts}
-              pendingEmailCount={alertsNeedingEmail.length}
-              isSendingEmail={isSendingAlertsEmail}
-              lastEmailSentAt={lastAlertsEmailDate}
-              onSendEmail={alertsNeedingEmail.length ? handleAlertsEmailRequest : undefined}
-              emailError={alertsEmailError}
-              needsEmailAuth={needsAlertsEmailAuth}
-              onAlertSelect={handleAlertSelect}
-            />
-          )}
-
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -425,7 +416,7 @@ export default function ObjectivesPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">${previousMonthBilling.toLocaleString('es-AR')}</div>
-                <p className="text-xs text-muted-foreground">Suma de facturas previas al mes en curso.</p>
+                <p className="text-xs text-muted-foreground">Facturas con fecha en el mes anterior.</p>
               </CardContent>
             </Card>
             <Card>
@@ -487,9 +478,22 @@ export default function ObjectivesPage() {
                   ) : (
                      <span className="text-green-600">¡Objetivo superado por ${(currentMonthBilling - monthlyObjective).toLocaleString('es-AR')}!</span>
                   )}
-             </div>
-           </CardContent>
-         </Card>
+            </div>
+          </CardContent>
+        </Card>
+
+          {userInfo?.role === "Asesor" && (
+            <AdvisorAlertsPanel
+              alerts={advisorAlerts}
+              pendingEmailCount={alertsNeedingEmail.length}
+              isSendingEmail={isSendingAlertsEmail}
+              lastEmailSentAt={lastAlertsEmailDate}
+              onSendEmail={alertsNeedingEmail.length ? handleAlertsEmailRequest : undefined}
+              emailError={alertsEmailError}
+              needsEmailAuth={needsAlertsEmailAuth}
+              onAlertSelect={handleAlertSelect}
+            />
+          )}
 
 
         {isBoss && (

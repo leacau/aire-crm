@@ -76,9 +76,14 @@ export function AppSidebar() {
   
   if (!userInfo) return null;
 
-  const accessibleItems = menuItems.filter(item => 
-    hasPermission(userInfo, item.screenName, 'view')
-  );
+  const accessibleItems = menuItems
+    .filter(item => hasPermission(userInfo, item.screenName, 'view'))
+    .filter(item => {
+      if (userInfo.role === 'Asesor' && item.href === '/objectives') {
+        return false;
+      }
+      return true;
+    });
 
   return (
     <Sidebar collapsible="icon">

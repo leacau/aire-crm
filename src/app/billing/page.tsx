@@ -156,11 +156,11 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 const monthDate = addMonths(creationDate, i);
 
                 if (isDateInRange(monthDate)) {
-                    const hasPaidInvoiceForMonth = (invoicesByOppId[opp.id] || []).some(inv =>
-                        inv.status === 'Pagada' && inv.date && isSameMonth(parseISO(inv.date), monthDate)
+                    const hasInvoiceForMonth = (invoicesByOppId[opp.id] || []).some(inv =>
+                        inv.date && !inv.isCreditNote && isSameMonth(parseISO(inv.date), monthDate)
                     );
 
-                    if (!hasPaidInvoiceForMonth) {
+                    if (!hasInvoiceForMonth) {
                         // Create a virtual opportunity for this month's billing
                         const virtualOpp = {
                             ...opp,
@@ -174,11 +174,11 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             }
         } else { // Handle one-time ("Ocasional") opportunities
             if (isDateInRange(creationDate)) {
-                const hasPaidInvoiceInMonth = (invoicesByOppId[opp.id] || []).some(inv =>
-                    inv.status === 'Pagada' && inv.date && isSameMonth(parseISO(inv.date), creationDate)
+                const hasInvoiceInMonth = (invoicesByOppId[opp.id] || []).some(inv =>
+                    inv.date && !inv.isCreditNote && isSameMonth(parseISO(inv.date), creationDate)
                 );
 
-                if (!hasPaidInvoiceInMonth) {
+                if (!hasInvoiceInMonth) {
                     toInvoiceOpps.push({ ...opp, closeDate: creationDate.toISOString() });
                 }
             }
