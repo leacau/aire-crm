@@ -1636,13 +1636,24 @@ export const getOpportunitiesByClientId = async (clientId: string): Promise<Oppo
 export const getOpportunitiesForUser = async (userId: string): Promise<Opportunity[]> => {
     const allClients = await getClients();
     const userClientIds = new Set(allClients.filter(c => c.ownerId === userId).map(c => c.id));
-    
+
     if (userClientIds.size === 0) return [];
-    
-    const q = query(collections.opportunities, where('clientId', 'in', Array.from(userClientIds)));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(mapOpportunityDoc);
-}
+
+    // Firestore limits the `in` operator to 30 values, so chunk the client ids
+    // and merge the results to avoid query failures for advisors with many clients.
+    const clientIds = Array.from(userClientIds);
+    const chunks: string[][] = [];
+
+    for (let i = 0; i < clientIds.length; i += 30) {
+        chunks.push(clientIds.slice(i, i + 30));
+    }
+
+    const results = await Promise.all(
+        chunks.map(ids => getDocs(query(collections.opportunities, where('clientId', 'in', ids))))
+    );
+
+    return results.flatMap(snapshot => snapshot.docs.map(mapOpportunityDoc));
+};
 
 
 export const createOpportunity = async (
