@@ -164,6 +164,7 @@ export default function ClientsPage() {
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
   const [showOnlyActiveOpportunities, setShowOnlyActiveOpportunities] = useState(false);
+  const [selectedOpportunityStage, setSelectedOpportunityStage] = useState('all');
   
   const [isActivityFormOpen, setIsActivityFormOpen] = useState(false);
   const [selectedClientForActivity, setSelectedClientForActivity] = useState<Client | null>(null);
@@ -217,7 +218,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     setRowSelection({});
-  }, [searchTerm, showOnlyMyClients, showDuplicates, selectedAdvisor, showOnlyActiveOpportunities]);
+  }, [searchTerm, showOnlyMyClients, showDuplicates, selectedAdvisor, showOnlyActiveOpportunities, selectedOpportunityStage]);
   
    const clientOpportunityData = useMemo(() => {
     if (opportunities.length === 0) return {};
@@ -245,6 +246,16 @@ export default function ClientsPage() {
     const ownerIdsWithClients = new Set(clients.map(client => client.ownerId));
     return advisors.filter(advisor => ownerIdsWithClients.has(advisor.id));
   }, [clients, advisors, canManage]);
+
+  const availableOpportunityStages = useMemo(() => {
+    const stages = new Set<string>();
+    opportunities.forEach(opp => {
+      if (opp.stage) {
+        stages.add(opp.stage);
+      }
+    });
+    return Array.from(stages);
+  }, [opportunities]);
 
 
   const displayedClients = useMemo(() => {
@@ -294,6 +305,12 @@ export default function ClientsPage() {
       clientsToShow = clientsToShow.filter(client => (clientOpportunityData[client.id]?.openOpps || 0) > 0);
     }
 
+    if (selectedOpportunityStage !== 'all') {
+      clientsToShow = clientsToShow.filter(client =>
+        opportunities.some(opp => opp.clientId === client.id && opp.stage === selectedOpportunityStage)
+      );
+    }
+
 
     if (searchTerm.length < 3) {
       return clientsToShow;
@@ -318,6 +335,8 @@ export default function ClientsPage() {
     canManage,
     selectedAdvisor,
     showOnlyActiveOpportunities,
+    selectedOpportunityStage,
+    opportunities,
     clientOpportunityData,
   ]);
   
@@ -639,11 +658,22 @@ export default function ClientsPage() {
             </SelectContent>
           </Select>
         )}
-         <div className="flex items-center space-x-2">
-            <Checkbox
-              id="active-opportunities"
-              name="active-opportunities"
-              checked={showOnlyActiveOpportunities}
+        <Select value={selectedOpportunityStage} onValueChange={setSelectedOpportunityStage}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="Filtrar por estado de propuesta" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los estados</SelectItem>
+            {availableOpportunityStages.map(stage => (
+              <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center space-x-2">
+           <Checkbox
+             id="active-opportunities"
+             name="active-opportunities"
+             checked={showOnlyActiveOpportunities}
               onCheckedChange={(checked) => setShowOnlyActiveOpportunities(!!checked)}
             />
             <Label htmlFor="active-opportunities" className="whitespace-nowrap text-sm font-medium">
