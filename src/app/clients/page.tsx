@@ -309,7 +309,17 @@ export default function ClientsPage() {
         cuit.includes(lowercasedFilter)
       );
     });
-  }, [clients, searchTerm, showOnlyMyClients, userInfo, showDuplicates, canManage, selectedAdvisor]);
+  }, [
+    clients,
+    searchTerm,
+    showOnlyMyClients,
+    userInfo,
+    showDuplicates,
+    canManage,
+    selectedAdvisor,
+    showOnlyActiveOpportunities,
+    clientOpportunityData,
+  ]);
   
   const handleBulkDelete = async () => {
     const idsToDelete = Object.keys(rowSelection);
