@@ -9,7 +9,7 @@ import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search, Activity
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Prospect, User, Client, ClientActivity } from '@/lib/types';
-import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers, getActivitiesForEntity, getAllClientActivities } from '@/lib/firebase-service';
+import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers, getActivitiesForEntity, getAllClientActivities, getOpportunityAlertsConfig } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
@@ -39,6 +39,7 @@ export default function ProspectsPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [activities, setActivities] = useState<ClientActivity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [prospectVisibilityDays, setProspectVisibilityDays] = useState<number>(0);
   
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
@@ -70,14 +71,16 @@ export default function ProspectsPage() {
     setLoading(true);
     try {
       const allowedOwnerRoles = ['Asesor', 'Jefe', 'Gerencia', 'Administracion'];
-      const [fetchedProspects, fetchedUsers, allActivities] = await Promise.all([
+      const [fetchedProspects, fetchedUsers, allActivities, alertsConfig] = await Promise.all([
         getProspects(),
         getAllUsers(),
-        getAllClientActivities()
+        getAllClientActivities(),
+        getOpportunityAlertsConfig()
       ]);
       setProspects(fetchedProspects);
       setUsers(fetchedUsers.filter(u => allowedOwnerRoles.includes(u.role)));
       setActivities(allActivities.filter(a => a.prospectId));
+      setProspectVisibilityDays(alertsConfig.prospectVisibilityDays ?? 0);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: "Error al cargar los prospectos", variant: "destructive" });
@@ -196,8 +199,8 @@ export default function ProspectsPage() {
     return users.filter(user => advisorIdsWithProspects.has(user.id));
   }, [prospects, users, isBoss]);
   
-   const activitiesByProspectId = useMemo(() => {
-    return activities.reduce((acc, activity) => {
+  const activitiesByProspectId = useMemo(() => {
+    const grouped = activities.reduce((acc, activity) => {
       if (activity.prospectId) {
         if (!acc[activity.prospectId]) {
           acc[activity.prospectId] = [];
@@ -206,25 +209,56 @@ export default function ProspectsPage() {
       }
       return acc;
     }, {} as Record<string, ClientActivity[]>);
+
+    Object.keys(grouped).forEach(prospectId => {
+      grouped[prospectId].sort((a, b) => parseISO(b.timestamp).getTime() - parseISO(a.timestamp).getTime());
+    });
+
+    return grouped;
   }, [activities]);
+
+  const lastActivityByProspectId = useMemo(() => {
+    const result: Record<string, Date> = {};
+    prospects.forEach(prospect => {
+      const prospectActivities = activitiesByProspectId[prospect.id] || [];
+      if (prospectActivities.length > 0) {
+        result[prospect.id] = parseISO(prospectActivities[0].timestamp);
+      } else {
+        try {
+          result[prospect.id] = parseISO(prospect.createdAt);
+        } catch (error) {
+          // ignore invalid dates
+        }
+      }
+    });
+    return result;
+  }, [prospects, activitiesByProspectId]);
+
+  const isProspectHidden = useCallback((prospect: Prospect) => {
+    if (!prospectVisibilityDays || prospectVisibilityDays <= 0) return false;
+    if (prospect.status === 'Convertido' || prospect.status === 'No Próspero') return false;
+    const lastActivityDate = lastActivityByProspectId[prospect.id];
+    if (!lastActivityDate) return false;
+    return differenceInDays(new Date(), lastActivityDate) >= prospectVisibilityDays;
+  }, [lastActivityByProspectId, prospectVisibilityDays]);
 
 
   const filteredProspects = useMemo(() => {
     if (!userInfo || !userInfo.id) {
-      return { active: [], notProsperous: [], converted: [] };
+      return { active: [], notProsperous: [], converted: [], hidden: [] };
     }
 
     let userProspects = prospects;
-    
+
     if (showOnlyMyProspects) {
         userProspects = userProspects.filter(p => p.ownerId === userInfo.id);
     } else if (isBoss && selectedAdvisor !== 'all') {
         userProspects = userProspects.filter(p => p.ownerId === selectedAdvisor);
     }
-    
+
     if (searchTerm.length >= 3) {
       const lowercasedFilter = searchTerm.toLowerCase();
-      userProspects = userProspects.filter(p => 
+      userProspects = userProspects.filter(p =>
         p.companyName.toLowerCase().includes(lowercasedFilter) ||
         p.contactName?.toLowerCase().includes(lowercasedFilter) ||
         p.contactPhone?.toLowerCase().includes(lowercasedFilter) ||
@@ -232,12 +266,16 @@ export default function ProspectsPage() {
       );
     }
 
+    const isActive = (p: Prospect) => p.status !== 'Convertido' && p.status !== 'No Próspero';
+    const hidden = userProspects.filter(p => isActive(p) && isProspectHidden(p));
+
     return {
-      active: userProspects.filter(p => p.status !== 'Convertido' && p.status !== 'No Próspero'),
+      active: userProspects.filter(p => isActive(p) && !isProspectHidden(p)),
       notProsperous: userProspects.filter(p => p.status === 'No Próspero'),
       converted: userProspects.filter(p => p.status === 'Convertido'),
+      hidden,
     };
-  }, [prospects, userInfo, isBoss, selectedAdvisor, searchTerm, showOnlyMyProspects]);
+  }, [prospects, userInfo, isBoss, selectedAdvisor, searchTerm, showOnlyMyProspects, isProspectHidden]);
 
 
   const columns = useMemo<ColumnDef<Prospect>[]>(() => [
@@ -390,10 +428,13 @@ export default function ProspectsPage() {
         </Header>
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
             <Tabs defaultValue="active">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className={`grid w-full ${isBoss ? 'grid-cols-4' : 'grid-cols-3'}`}>
                     <TabsTrigger value="active">Activos ({filteredProspects.active.length})</TabsTrigger>
                     <TabsTrigger value="not-prosperous">No Prósperos ({filteredProspects.notProsperous.length})</TabsTrigger>
                     <TabsTrigger value="converted">Convertidos ({filteredProspects.converted.length})</TabsTrigger>
+                    {isBoss && (
+                      <TabsTrigger value="hidden">Invisibles ({filteredProspects.hidden.length})</TabsTrigger>
+                    )}
                 </TabsList>
                 <TabsContent value="active">
                     <ResizableDataTable
@@ -427,6 +468,20 @@ export default function ProspectsPage() {
                         emptyStateMessage="No hay prospectos convertidos."
                     />
                 </TabsContent>
+                {isBoss && (
+                  <TabsContent value="hidden">
+                    <ResizableDataTable
+                        columns={columns}
+                        data={filteredProspects.hidden}
+                        sorting={sorting}
+                        setSorting={setSorting}
+                        onRowClick={handleOpenForm}
+                        getRowId={(row) => row.id}
+                        enableRowResizing={true}
+                        emptyStateMessage="Sin prospectos invisibles." 
+                    />
+                  </TabsContent>
+                )}
             </Tabs>
         </main>
       </div>

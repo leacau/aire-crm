@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import type { Client, Opportunity, User } from '@/lib/types';
-import { getClients, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients, getAllOpportunities } from '@/lib/firebase-service';
+import { getClients, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients, getAllOpportunities, getOpportunitiesForUser } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -163,6 +163,7 @@ export default function ClientsPage() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
+  const [showOnlyActiveOpportunities, setShowOnlyActiveOpportunities] = useState(false);
   
   const [isActivityFormOpen, setIsActivityFormOpen] = useState(false);
   const [selectedClientForActivity, setSelectedClientForActivity] = useState<Client | null>(null);
@@ -173,14 +174,14 @@ export default function ClientsPage() {
     setLoading(true);
     try {
       const allowedOwnerRoles = ['Asesor', 'Jefe', 'Gerencia', 'Administracion'];
-      const promises: [Promise<Client[]>, Promise<User[]>, Promise<Opportunity[]>?] = [getClients(), getAllUsers()];
-      
-      const shouldFetchAllData = userInfo.role === 'Jefe' || userInfo.role === 'Gerencia' || userInfo.role === 'Administracion';
+      const promises: [Promise<Client[]>, Promise<User[]>, Promise<Opportunity[]>] = [
+        getClients(),
+        getAllUsers(),
+        userInfo.role === 'Jefe' || userInfo.role === 'Gerencia' || userInfo.role === 'Administracion'
+          ? getAllOpportunities()
+          : getOpportunitiesForUser(userInfo.id),
+      ];
 
-      if (shouldFetchAllData) {
-        promises.push(getAllOpportunities());
-      }
-      
       const [fetchedClients, fetchedUsers, fetchedOpportunities] = await Promise.all(promises);
 
       setClients(fetchedClients);
@@ -216,7 +217,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     setRowSelection({});
-  }, [searchTerm, showOnlyMyClients, showDuplicates, selectedAdvisor]);
+  }, [searchTerm, showOnlyMyClients, showDuplicates, selectedAdvisor, showOnlyActiveOpportunities]);
   
    const clientOpportunityData = useMemo(() => {
     if (opportunities.length === 0) return {};
@@ -287,6 +288,10 @@ export default function ClientsPage() {
         });
         
         clientsToShow = clientsToShow.filter(c => potentialDuplicates.has(c.id));
+    }
+
+    if (showOnlyActiveOpportunities) {
+      clientsToShow = clientsToShow.filter(client => (clientOpportunityData[client.id]?.openOpps || 0) > 0);
     }
 
 
@@ -624,6 +629,17 @@ export default function ClientsPage() {
             </SelectContent>
           </Select>
         )}
+         <div className="flex items-center space-x-2">
+            <Checkbox
+              id="active-opportunities"
+              name="active-opportunities"
+              checked={showOnlyActiveOpportunities}
+              onCheckedChange={(checked) => setShowOnlyActiveOpportunities(!!checked)}
+            />
+            <Label htmlFor="active-opportunities" className="whitespace-nowrap text-sm font-medium">
+              Solo con oportunidades activas
+            </Label>
+        </div>
          <div className="flex items-center space-x-2">
             <Checkbox id="my-clients" name="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
             <Label htmlFor="my-clients" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis clientes</Label>

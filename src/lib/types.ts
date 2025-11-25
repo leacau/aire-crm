@@ -402,4 +402,6 @@ export type CommercialItem = {
 };
 
 // --- System Config Types ---
-export type OpportunityAlertsConfig = Partial<Record<OpportunityStage, number>>;
+export type OpportunityAlertsConfig = Partial<Record<OpportunityStage, number>> & {
+  prospectVisibilityDays?: number;
+};

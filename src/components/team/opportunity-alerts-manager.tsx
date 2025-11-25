@@ -46,6 +46,14 @@ export function OpportunityAlertsManager() {
         }));
     };
 
+    const handleProspectVisibilityChange = (value: string) => {
+        const days = Number(value);
+        setConfig(prev => ({
+            ...prev,
+            prospectVisibilityDays: isNaN(days) || days < 0 ? 0 : days,
+        }));
+    };
+
     const handleSave = async () => {
         if (!userInfo) return;
         if (!canManageAlerts) {
@@ -100,6 +108,22 @@ export function OpportunityAlertsManager() {
                             />
                         </div>
                     ))}
+                </div>
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="prospect-visibility">Días de visibilidad de prospectos</Label>
+                        <Input
+                            id="prospect-visibility"
+                            type="number"
+                            placeholder="Días sin actividad"
+                            value={config.prospectVisibilityDays ?? ''}
+                            onChange={(e) => handleProspectVisibilityChange(e.target.value)}
+                            disabled={!canManageAlerts}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Los prospectos sin actividad durante este período se ocultarán a sus dueños.
+                        </p>
+                    </div>
                 </div>
                 <div className="flex justify-end mt-6">
                     <Button onClick={handleSave} disabled={isSaving || !canManageAlerts}>

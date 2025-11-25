@@ -38,6 +38,7 @@ export default function ObjectivesPage() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [pendingOpportunityId, setPendingOpportunityId] = useState<string | null>(null);
+  const isAdvisor = userInfo?.role === 'Asesor';
 
   useEffect(() => {
     if (userInfo) {
@@ -235,6 +236,18 @@ export default function ObjectivesPage() {
     }).sort((a, b) => b.currentMonthBilling - a.currentMonthBilling);
   }, [isBoss, advisors, clients, opportunities, invoices]);
 
+  const teamAggregateProgress = useMemo(() => {
+    if (!isBoss || teamObjectives.length === 0) {
+      return { totalObjective: 0, totalBilling: 0, progressPercentage: 0 };
+    }
+
+    const totalObjective = teamObjectives.reduce((sum, item) => sum + (item.monthlyObjective || 0), 0);
+    const totalBilling = teamObjectives.reduce((sum, item) => sum + item.currentMonthBilling, 0);
+    const progressPercentage = totalObjective > 0 ? (totalBilling / totalObjective) * 100 : 0;
+
+    return { totalObjective, totalBilling, progressPercentage };
+  }, [isBoss, teamObjectives]);
+
   const advisorAlerts = useMemo(() => {
     if (!userInfo || userInfo.role !== 'Asesor') return [] as AdvisorAlert[];
     return buildAdvisorAlerts({ user: userInfo, opportunities, clients, invoices, prospects });
@@ -398,173 +411,193 @@ export default function ObjectivesPage() {
       <div className="flex flex-col h-full">
         <Header title="Mis Objetivos" />
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Facturación del Período</CardTitle>
-                <CheckCircle className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">${currentMonthBilling.toLocaleString('es-AR')}</div>
-                <p className="text-xs text-muted-foreground">Facturas (pagadas o a pagar) con fecha en el mes actual.</p>
+          {isAdvisor && (
+            <>
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Facturación del Período</CardTitle>
+                    <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">${currentMonthBilling.toLocaleString('es-AR')}</div>
+                    <p className="text-xs text-muted-foreground">Facturas (pagadas o a pagar) con fecha en el mes actual.</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Facturación Mes Anterior</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">${previousMonthBilling.toLocaleString('es-AR')}</div>
+                    <p className="text-xs text-muted-foreground">Facturas con fecha en el mes anterior.</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Ingresos Previstos</CardTitle>
+                    <Target className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">${forecastedIncome.toLocaleString('es-AR')}</div>
+                    <p className="text-xs text-muted-foreground">Propuestas creadas este mes en Propuesta/Negociación.</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">En Prospección</CardTitle>
+                    <TrendingDown className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">${prospectingIncome.toLocaleString('es-AR')}</div>
+                    <p className="text-xs text-muted-foreground">Valor de propuestas nuevas creadas este mes.</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="relative overflow-hidden">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                     <Confetti active={showConfetti} config={{
+                         angle: 90,
+                         spread: 360,
+                         startVelocity: 40,
+                         elementCount: 100,
+                         dragFriction: 0.12,
+                         duration: 3000,
+                         stagger: 3,
+                         width: "10px",
+                         height: "10px",
+                     }} />
+                </div>
+               <CardHeader>
+                 <CardTitle>Progreso del Objetivo Mensual</CardTitle>
+                 <CardDescription>
+                   Seguimiento de tu facturación pagada y a pagar en comparación con tu objetivo para este mes.
+                 </CardDescription>
+               </CardHeader>
+               <CardContent className="space-y-4">
+                 <div className="flex justify-between items-baseline">
+                     <p className="text-4xl font-bold text-primary">${currentMonthBilling.toLocaleString('es-AR')}</p>
+                     <p className="text-lg text-muted-foreground">de ${monthlyObjective.toLocaleString('es-AR')}</p>
+                 </div>
+                 <Progress value={Math.min(progressPercentage, 100)} className="h-4" />
+                 <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary" />Pagadas ${currentMonthPaidBilling.toLocaleString('es-AR')}</span>
+                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" />A pagar ${currentMonthPendingBilling.toLocaleString('es-AR')}</span>
+                 </div>
+                 <div className="flex justify-between items-center text-sm font-medium">
+                     <span>{progressPercentage.toFixed(2)}% Completado</span>
+                      {progressPercentage < 100 ? (
+                         <span>Te faltan ${(monthlyObjective - currentMonthBilling > 0 ? monthlyObjective - currentMonthBilling : 0).toLocaleString('es-AR')}</span>
+                      ) : (
+                         <span className="text-green-600">¡Objetivo superado por ${(currentMonthBilling - monthlyObjective).toLocaleString('es-AR')}!</span>
+                      )}
+                </div>
               </CardContent>
             </Card>
+
+              <AdvisorAlertsPanel
+                alerts={advisorAlerts}
+                pendingEmailCount={alertsNeedingEmail.length}
+                isSendingEmail={isSendingAlertsEmail}
+                lastEmailSentAt={lastAlertsEmailDate}
+                onSendEmail={alertsNeedingEmail.length ? handleAlertsEmailRequest : undefined}
+                emailError={alertsEmailError}
+                needsEmailAuth={needsAlertsEmailAuth}
+                onAlertSelect={handleAlertSelect}
+              />
+            </>
+          )}
+
+        {isBoss && (
+          <div className="space-y-4">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Facturación Mes Anterior</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <CardHeader>
+                <CardTitle>Objetivos del Equipo</CardTitle>
+                <CardDescription>
+                  Visibilidad de los objetivos mensuales y la evolución reciente de cada asesor.
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">${previousMonthBilling.toLocaleString('es-AR')}</div>
-                <p className="text-xs text-muted-foreground">Facturas con fecha en el mes anterior.</p>
+                {teamObjectives.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Aún no hay datos de asesores disponibles.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left min-w-[720px]">
+                      <thead>
+                        <tr className="text-xs uppercase text-muted-foreground">
+                          <th className="pb-2 pr-4 font-medium">Asesor</th>
+                          <th className="pb-2 pr-4 font-medium">Objetivo Mensual</th>
+                          <th className="pb-2 pr-4 font-medium">Facturación Actual</th>
+                          <th className="pb-2 pr-4 font-medium">Vs. Mes Anterior</th>
+                          <th className="pb-2 pr-4 font-medium">Progreso</th>
+                          <th className="pb-2 font-medium">Evolución Reciente</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {teamObjectives.map(metric => (
+                          <tr key={metric.advisorId} className="border-t border-border">
+                            <td className="py-3 pr-4">
+                              <div className="font-medium">{metric.advisorName}</div>
+                            </td>
+                            <td className="py-3 pr-4">
+                              ${metric.monthlyObjective.toLocaleString('es-AR')}
+                            </td>
+                            <td className="py-3 pr-4 font-semibold">
+                              ${metric.currentMonthBilling.toLocaleString('es-AR')}
+                            </td>
+                            <td className="py-3 pr-4">
+                              <span className={cn('font-semibold', metric.billingDifference >= 0 ? 'text-green-600' : 'text-red-600')}>
+                                ${metric.billingDifference.toLocaleString('es-AR')}
+                              </span>
+                            </td>
+                            <td className="py-3 pr-4">
+                              <div className="space-y-1">
+                                <Progress value={Math.min(metric.progressPercentage, 100)} className="h-2" />
+                                <p className="text-xs text-muted-foreground">{metric.progressPercentage.toFixed(1)}%</p>
+                              </div>
+                            </td>
+                            <td className="py-3">
+                              {metric.recentClosures.length > 0 ? (
+                                <div className="space-y-1">
+                                  {metric.recentClosures.map(entry => (
+                                    <div key={`${metric.advisorId}-${entry.label}`} className="flex items-center justify-between text-xs">
+                                      <span className="text-muted-foreground">{entry.label}</span>
+                                      <span className="font-medium">${entry.value.toLocaleString('es-AR')}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">Sin registros</p>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </CardContent>
             </Card>
+
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Ingresos Previstos</CardTitle>
-                <Target className="h-4 w-4 text-muted-foreground" />
+              <CardHeader>
+                <CardTitle>Alcance del Objetivo del Equipo</CardTitle>
+                <CardDescription>
+                  Progreso combinado de los asesores respecto a sus objetivos mensuales.
+                </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">${forecastedIncome.toLocaleString('es-AR')}</div>
-                <p className="text-xs text-muted-foreground">Propuestas creadas este mes en Propuesta/Negociación.</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">En Prospección</CardTitle>
-                <TrendingDown className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">${prospectingIncome.toLocaleString('es-AR')}</div>
-                <p className="text-xs text-muted-foreground">Valor de propuestas nuevas creadas este mes.</p>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between items-baseline">
+                  <p className="text-3xl font-bold text-primary">${teamAggregateProgress.totalBilling.toLocaleString('es-AR')}</p>
+                  <p className="text-sm text-muted-foreground">de ${teamAggregateProgress.totalObjective.toLocaleString('es-AR')}</p>
+                </div>
+                <Progress value={Math.min(teamAggregateProgress.progressPercentage, 100)} className="h-3" />
+                <p className="text-xs text-muted-foreground">{teamAggregateProgress.progressPercentage.toFixed(2)}% del objetivo grupal alcanzado.</p>
               </CardContent>
             </Card>
           </div>
-
-          <Card className="relative overflow-hidden">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                 <Confetti active={showConfetti} config={{
-                     angle: 90,
-                     spread: 360,
-                     startVelocity: 40,
-                     elementCount: 100,
-                     dragFriction: 0.12,
-                     duration: 3000,
-                     stagger: 3,
-                     width: "10px",
-                     height: "10px",
-                 }} />
-            </div>
-           <CardHeader>
-             <CardTitle>Progreso del Objetivo Mensual</CardTitle>
-             <CardDescription>
-               Seguimiento de tu facturación pagada y a pagar en comparación con tu objetivo para este mes.
-             </CardDescription>
-           </CardHeader>
-           <CardContent className="space-y-4">
-             <div className="flex justify-between items-baseline">
-                 <p className="text-4xl font-bold text-primary">${currentMonthBilling.toLocaleString('es-AR')}</p>
-                 <p className="text-lg text-muted-foreground">de ${monthlyObjective.toLocaleString('es-AR')}</p>
-             </div>
-             <Progress value={Math.min(progressPercentage, 100)} className="h-4" />
-             <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-               <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary" />Pagadas ${currentMonthPaidBilling.toLocaleString('es-AR')}</span>
-               <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" />A pagar ${currentMonthPendingBilling.toLocaleString('es-AR')}</span>
-             </div>
-             <div className="flex justify-between items-center text-sm font-medium">
-                 <span>{progressPercentage.toFixed(2)}% Completado</span>
-                  {progressPercentage < 100 ? (
-                     <span>Te faltan ${(monthlyObjective - currentMonthBilling > 0 ? monthlyObjective - currentMonthBilling : 0).toLocaleString('es-AR')}</span>
-                  ) : (
-                     <span className="text-green-600">¡Objetivo superado por ${(currentMonthBilling - monthlyObjective).toLocaleString('es-AR')}!</span>
-                  )}
-            </div>
-          </CardContent>
-        </Card>
-
-          {userInfo?.role === "Asesor" && (
-            <AdvisorAlertsPanel
-              alerts={advisorAlerts}
-              pendingEmailCount={alertsNeedingEmail.length}
-              isSendingEmail={isSendingAlertsEmail}
-              lastEmailSentAt={lastAlertsEmailDate}
-              onSendEmail={alertsNeedingEmail.length ? handleAlertsEmailRequest : undefined}
-              emailError={alertsEmailError}
-              needsEmailAuth={needsAlertsEmailAuth}
-              onAlertSelect={handleAlertSelect}
-            />
-          )}
-
-
-        {isBoss && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Objetivos del Equipo</CardTitle>
-              <CardDescription>
-                Visibilidad de los objetivos mensuales y la evolución reciente de cada asesor.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {teamObjectives.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Aún no hay datos de asesores disponibles.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left min-w-[720px]">
-                    <thead>
-                      <tr className="text-xs uppercase text-muted-foreground">
-                        <th className="pb-2 pr-4 font-medium">Asesor</th>
-                        <th className="pb-2 pr-4 font-medium">Objetivo Mensual</th>
-                        <th className="pb-2 pr-4 font-medium">Facturación Actual</th>
-                        <th className="pb-2 pr-4 font-medium">Vs. Mes Anterior</th>
-                        <th className="pb-2 pr-4 font-medium">Progreso</th>
-                        <th className="pb-2 font-medium">Evolución Reciente</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {teamObjectives.map(metric => (
-                        <tr key={metric.advisorId} className="border-t border-border">
-                          <td className="py-3 pr-4">
-                            <div className="font-medium">{metric.advisorName}</div>
-                          </td>
-                          <td className="py-3 pr-4">
-                            ${metric.monthlyObjective.toLocaleString('es-AR')}
-                          </td>
-                          <td className="py-3 pr-4 font-semibold">
-                            ${metric.currentMonthBilling.toLocaleString('es-AR')}
-                          </td>
-                          <td className="py-3 pr-4">
-                            <span className={cn('font-semibold', metric.billingDifference >= 0 ? 'text-green-600' : 'text-red-600')}>
-                              ${metric.billingDifference.toLocaleString('es-AR')}
-                            </span>
-                          </td>
-                          <td className="py-3 pr-4">
-                            <div className="space-y-1">
-                              <Progress value={Math.min(metric.progressPercentage, 100)} className="h-2" />
-                              <p className="text-xs text-muted-foreground">{metric.progressPercentage.toFixed(1)}%</p>
-                            </div>
-                          </td>
-                          <td className="py-3">
-                            {metric.recentClosures.length > 0 ? (
-                              <div className="space-y-1">
-                                {metric.recentClosures.map(entry => (
-                                  <div key={`${metric.advisorId}-${entry.label}`} className="flex items-center justify-between text-xs">
-                                    <span className="text-muted-foreground">{entry.label}</span>
-                                    <span className="font-medium">${entry.value.toLocaleString('es-AR')}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-muted-foreground">Sin registros</p>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         )}
       </main>
 
