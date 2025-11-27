@@ -45,25 +45,37 @@ export default function ObjectivesPage() {
     if (userInfo) {
       setLoadingData(true);
       const advisorsPromise = isBoss ? getAllUsers('Asesor') : Promise.resolve([] as User[]);
-      Promise.all([
-        getOpportunities(),
-        getInvoices(),
-        getClients(),
-        advisorsPromise,
-        getProspects(),
-        getSupervisorCommentThreadsForUser(userInfo.id)
-      ]).then(([opps, invs, cls, advs, prs, threads]) => {
-        setOpportunities(opps);
-        setInvoices(invs);
-        setClients(cls);
-        setAdvisors(advs);
-        setProspects(prs);
-        setCommentThreads(threads);
-        setLoadingData(false);
-      }).catch(err => {
-        console.error("Error fetching objectives data", err);
-        setLoadingData(false);
-      });
+      const loadData = async () => {
+        try {
+          const [opps, invs, cls, advs, prs] = await Promise.all([
+            getOpportunities(),
+            getInvoices(),
+            getClients(),
+            advisorsPromise,
+            getProspects(),
+          ]);
+
+          setOpportunities(opps);
+          setInvoices(invs);
+          setClients(cls);
+          setAdvisors(advs);
+          setProspects(prs);
+
+          try {
+            const threads = await getSupervisorCommentThreadsForUser(userInfo.id);
+            setCommentThreads(threads);
+          } catch (commentsError) {
+            console.error('Error fetching comment threads', commentsError);
+            setCommentThreads([]);
+          }
+        } catch (err) {
+          console.error("Error fetching objectives data", err);
+        } finally {
+          setLoadingData(false);
+        }
+      };
+
+      loadData();
     }
   }, [userInfo, isBoss]);
 

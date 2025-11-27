@@ -198,21 +198,29 @@ export const getSupervisorCommentsForEntity = async (entityType: 'client' | 'opp
     const q = query(
         collections.supervisorComments,
         where('entityType', '==', entityType),
-        where('entityId', '==', entityId),
-        orderBy('createdAt', 'desc')
+        where('entityId', '==', entityId)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(mapCommentDoc);
+    return snapshot.docs
+        .map(mapCommentDoc)
+        .sort((a, b) => {
+            if (!a.createdAt || !b.createdAt) return 0;
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
 };
 
 export const getSupervisorCommentThreadsForUser = async (userId: string): Promise<SupervisorComment[]> => {
     const q = query(
         collections.supervisorComments,
-        where('lastMessageRecipientId', '==', userId),
-        orderBy('lastMessageAt', 'desc')
+        where('lastMessageRecipientId', '==', userId)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(mapCommentDoc);
+    return snapshot.docs
+        .map(mapCommentDoc)
+        .sort((a, b) => {
+            if (!a.lastMessageAt || !b.lastMessageAt) return 0;
+            return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+        });
 };
 
 interface CreateSupervisorCommentInput {
