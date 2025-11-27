@@ -32,7 +32,7 @@ import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity } from '@/lib/firebase-service';
-import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon } from 'lucide-react';
+import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -161,6 +161,8 @@ export function OpportunityDetailsDialog({
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isOrdenPautadoFormOpen, setIsOrdenPautadoFormOpen] = useState(false);
   const [selectedOrden, setSelectedOrden] = useState<OrdenPautado | null>(null);
+
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
 
   const isEditing = !!opportunity;
 
@@ -421,6 +423,7 @@ export function OpportunityDetailsDialog({
   }
 
   const isInvoiceDateInvalid = editedOpportunity.finalizationDate && newInvoiceRow.date > editedOpportunity.finalizationDate;
+  const canShowComments = Boolean(isEditing && opportunity && userInfo && client?.ownerId);
   
   return (
     <>
@@ -435,10 +438,18 @@ export function OpportunityDetailsDialog({
               </DialogDescription>
             </div>
             {isEditing && opportunity && userInfo && (
-              <Button variant="ghost" size="icon" onClick={() => setIsTaskFormOpen(true)}>
-                <Clock className="h-5 w-5" />
-                <span className="sr-only">Crear Tarea/Recordatorio</span>
-              </Button>
+              <div className="flex items-center gap-2">
+                {canShowComments && (
+                  <Button variant="ghost" size="icon" onClick={() => setIsCommentsOpen(true)}>
+                    <Mail className="h-5 w-5" />
+                    <span className="sr-only">Abrir conversación</span>
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" onClick={() => setIsTaskFormOpen(true)}>
+                  <Clock className="h-5 w-5" />
+                  <span className="sr-only">Crear Tarea/Recordatorio</span>
+                </Button>
+              </div>
             )}
           </div>
         </DialogHeader>
@@ -817,17 +828,6 @@ export function OpportunityDetailsDialog({
 
         </Tabs>
 
-        {opportunity && userInfo && client?.ownerId && (
-          <CommentThread
-            entityType="opportunity"
-            entityId={opportunity.id}
-            entityName={opportunity.title}
-            ownerId={client.ownerId}
-            ownerName={client.ownerName || client.name}
-            currentUser={userInfo}
-            getAccessToken={getGoogleAccessToken}
-          />
-        )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
@@ -845,7 +845,7 @@ export function OpportunityDetailsDialog({
             getGoogleAccessToken={getGoogleAccessToken}
         />
      )}
-     {isOrdenPautadoFormOpen && (
+    {isOrdenPautadoFormOpen && (
         <OrdenPautadoFormDialog
             isOpen={isOrdenPautadoFormOpen}
             onOpenChange={setIsOrdenPautadoFormOpen}
@@ -853,6 +853,29 @@ export function OpportunityDetailsDialog({
             orden={selectedOrden}
         />
      )}
+     {canShowComments && opportunity && client && (
+        <Dialog open={isCommentsOpen} onOpenChange={setIsCommentsOpen}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Conversación sobre la propuesta</DialogTitle>
+              <DialogDescription>
+                Intercambiá comentarios sobre "{opportunity.title}" sin salir de esta pantalla.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[60vh] overflow-y-auto">
+              <CommentThread
+                entityType="opportunity"
+                entityId={opportunity.id}
+                entityName={opportunity.title}
+                ownerId={client.ownerId}
+                ownerName={client.ownerName || client.name}
+                currentUser={userInfo as NonNullable<typeof userInfo>}
+                getAccessToken={getGoogleAccessToken}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
      </>
   );
 }
