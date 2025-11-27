@@ -272,7 +272,7 @@ export const replyToSupervisorComment = async ({ commentId, authorId, authorName
         message,
         recipientId,
         recipientName,
-        createdAt: serverTimestamp() as unknown as string,
+        createdAt: new Date().toISOString(),
     };
 
     await updateDoc(commentRef, {
