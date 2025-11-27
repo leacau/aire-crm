@@ -42,30 +42,45 @@ export function ActiveClientsReport({ selectedAdvisor }: ActiveClientsReportProp
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const clientsWithActivePautas = new Set<string>();
+    const relevantClients = selectedAdvisor === 'all'
+      ? clients
+      : clients.filter(c => c.ownerId === selectedAdvisor);
 
-    const relevantClients = selectedAdvisor === 'all' 
-        ? clients 
-        : clients.filter(c => c.ownerId === selectedAdvisor);
-    
     const relevantClientIds = new Set(relevantClients.map(c => c.id));
-    
-    const relevantOpps = opportunities.filter(opp => relevantClientIds.has(opp.clientId));
 
-    relevantOpps.forEach(opp => {
-      if (opp.pautados && opp.pautados.length > 0) {
-        const hasActivePauta = opp.pautados.some(pauta => {
-          if (!pauta.fechaFin) return false;
-          const endDate = new Date(pauta.fechaFin);
-          return endDate >= today;
-        });
-        if (hasActivePauta) {
-          clientsWithActivePautas.add(opp.clientId);
-        }
+    const getOpportunityEndDate = (opp: Opportunity): Date | null => {
+      if (opp.finalizationDate) {
+        const parsed = new Date(opp.finalizationDate);
+        if (!Number.isNaN(parsed.getTime())) return parsed;
       }
-    });
 
-    return clientsWithActivePautas.size;
+      const endDates = (opp.ordenesPautado || [])
+        .map(pauta => (pauta.fechaFin ? new Date(pauta.fechaFin) : null))
+        .filter((date): date is Date => !!date && !Number.isNaN(date.getTime()));
+
+      if (endDates.length === 0) return null;
+
+      return endDates.reduce(
+        (latest, current) => (current.getTime() > latest.getTime() ? current : latest),
+        endDates[0]
+      );
+    };
+
+    const clientsWithActiveOpportunities = new Set<string>();
+
+    opportunities
+      .filter(opp => relevantClientIds.has(opp.clientId))
+      .forEach(opp => {
+        const isClosedWon = opp.stage === 'Cerrado - Ganado' || opp.stage === 'Ganado (Recurrente)';
+        if (!isClosedWon) return;
+
+        const endDate = getOpportunityEndDate(opp);
+        if (endDate && endDate >= today) {
+          clientsWithActiveOpportunities.add(opp.clientId);
+        }
+      });
+
+    return clientsWithActiveOpportunities.size;
   }, [clients, opportunities, selectedAdvisor]);
 
   return (
@@ -73,7 +88,7 @@ export function ActiveClientsReport({ selectedAdvisor }: ActiveClientsReportProp
       <CardHeader>
         <CardTitle>Clientes Activos</CardTitle>
         <CardDescription>
-          Número de clientes con al menos una pauta publicitaria activa (fecha de fin futura).
+          Número de clientes con al menos una oportunidad cerrada vigente (ganada o recurrente).
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -88,7 +103,7 @@ export function ActiveClientsReport({ selectedAdvisor }: ActiveClientsReportProp
             </div>
             <div>
                 <p className="text-3xl font-bold">{activeClientsCount}</p>
-                <p className="text-sm text-muted-foreground">clientes con pautas activas</p>
+                <p className="text-sm text-muted-foreground">clientes con oportunidades activas</p>
             </div>
           </div>
         )}
