@@ -66,6 +66,7 @@ export type SupervisorComment = {
   lastMessageRecipientName?: string;
   lastMessageText?: string;
   lastMessageAt?: string;
+  lastSeenAtBy?: Record<string, string>;
 };
 
 export type PautaType = 'Spot' | 'PNT' | 'Sorteo' | 'Nota';

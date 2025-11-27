@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, SupervisorComment } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions, invoiceStatusOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth.tsx';
 import { Checkbox } from '../ui/checkbox';
@@ -31,7 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity } from '@/lib/firebase-service';
+import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity } from '@/lib/firebase-service';
 import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
@@ -163,6 +163,7 @@ export function OpportunityDetailsDialog({
   const [selectedOrden, setSelectedOrden] = useState<OrdenPautado | null>(null);
 
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const [unreadCommentsCount, setUnreadCommentsCount] = useState(0);
 
   const isEditing = !!opportunity;
 
@@ -189,6 +190,53 @@ export function OpportunityDetailsDialog({
         return 0;
       });
   }, [opportunity]);
+
+  const canShowComments = Boolean(isEditing && opportunity && userInfo && client?.ownerId);
+
+  const countUnreadMessages = useCallback(
+    (threads: SupervisorComment[], userId: string) => {
+      return threads.reduce((total, thread) => {
+        const lastSeen = thread.lastSeenAtBy?.[userId];
+        const lastSeenMs = lastSeen ? new Date(lastSeen).getTime() : 0;
+        let threadUnread = 0;
+
+        const initialCreatedAt = thread.createdAt ? new Date(thread.createdAt).getTime() : 0;
+        if (thread.recipientId === userId && initialCreatedAt > lastSeenMs) {
+          threadUnread += 1;
+        }
+
+        (thread.replies || []).forEach(reply => {
+          const replyCreatedAt = reply.createdAt ? new Date(reply.createdAt).getTime() : 0;
+          if (reply.recipientId === userId && replyCreatedAt > lastSeenMs) {
+            threadUnread += 1;
+          }
+        });
+
+        return total + threadUnread;
+      }, 0);
+    },
+    []
+  );
+
+  useEffect(() => {
+    const loadUnread = async () => {
+      if (!canShowComments || !opportunity?.id || !userInfo?.id) {
+        setUnreadCommentsCount(0);
+        return;
+      }
+
+      try {
+        const threads = await getSupervisorCommentsForEntity('opportunity', opportunity.id);
+        const count = countUnreadMessages(threads, userInfo.id);
+        setUnreadCommentsCount(count);
+      } catch (error) {
+        console.error('Error loading unread comments', error);
+        setUnreadCommentsCount(0);
+      }
+    };
+
+    loadUnread();
+  }, [canShowComments, opportunity?.id, userInfo?.id, countUnreadMessages]);
 
   const isClientOwner = client?.ownerId && userInfo ? client.ownerId === userInfo.id : true;
   const canEditManualUpdateDate = isBoss || !client?.ownerId || isClientOwner;
@@ -423,8 +471,7 @@ export function OpportunityDetailsDialog({
   }
 
   const isInvoiceDateInvalid = editedOpportunity.finalizationDate && newInvoiceRow.date > editedOpportunity.finalizationDate;
-  const canShowComments = Boolean(isEditing && opportunity && userInfo && client?.ownerId);
-  
+
   return (
     <>
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -440,8 +487,21 @@ export function OpportunityDetailsDialog({
             {isEditing && opportunity && userInfo && (
               <div className="flex items-center gap-2">
                 {canShowComments && (
-                  <Button variant="ghost" size="icon" onClick={() => setIsCommentsOpen(true)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative"
+                    onClick={() => {
+                      setUnreadCommentsCount(0);
+                      setIsCommentsOpen(true);
+                    }}
+                  >
                     <Mail className="h-5 w-5" />
+                    {unreadCommentsCount > 0 && (
+                      <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-destructive px-1 text-xs font-semibold text-destructive-foreground">
+                        {unreadCommentsCount}
+                      </span>
+                    )}
                     <span className="sr-only">Abrir conversación</span>
                   </Button>
                 )}
@@ -871,6 +931,7 @@ export function OpportunityDetailsDialog({
                 ownerName={client.ownerName || client.name}
                 currentUser={userInfo as NonNullable<typeof userInfo>}
                 getAccessToken={getGoogleAccessToken}
+                onMarkedSeen={() => setUnreadCommentsCount(0)}
               />
             </div>
           </DialogContent>

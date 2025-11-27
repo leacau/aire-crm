@@ -185,12 +185,21 @@ const mapCommentDoc = (snapshot: any): SupervisorComment => {
         createdAt: timestampToISO((reply as any).createdAt) || new Date().toISOString(),
     })) : [];
 
+    const lastSeenAtBy: Record<string, string> | undefined = data.lastSeenAtBy
+        ? Object.entries(data.lastSeenAtBy).reduce((acc, [userId, value]) => {
+            const parsed = timestampToISO(value) || (typeof value === 'string' ? value : undefined);
+            if (parsed) acc[userId] = parsed;
+            return acc;
+        }, {} as Record<string, string>)
+        : undefined;
+
     return {
         id: snapshot.id,
         ...data,
         createdAt: timestampToISO(data.createdAt) || new Date().toISOString(),
         replies,
         lastMessageAt: timestampToISO(data.lastMessageAt),
+        lastSeenAtBy,
     } as SupervisorComment;
 };
 
@@ -247,6 +256,9 @@ export const createSupervisorComment = async (input: CreateSupervisorCommentInpu
         lastMessageRecipientName: input.recipientName || input.ownerName,
         lastMessageText: input.message,
         lastMessageAt: serverTimestamp(),
+        lastSeenAtBy: {
+            [input.authorId]: serverTimestamp(),
+        },
     });
     invalidateCache(`comments_${input.entityType}_${input.entityId}`);
     invalidateCache(`commentThreads_${input.recipientId || input.ownerId}`);
@@ -283,6 +295,14 @@ export const replyToSupervisorComment = async ({ commentId, authorId, authorName
         lastMessageRecipientName: recipientName,
         lastMessageText: message,
         lastMessageAt: serverTimestamp(),
+        [`lastSeenAtBy.${authorId}`]: serverTimestamp(),
+    });
+};
+
+export const markSupervisorCommentThreadSeen = async (commentId: string, userId: string): Promise<void> => {
+    const commentRef = doc(collections.supervisorComments, commentId);
+    await updateDoc(commentRef, {
+        [`lastSeenAtBy.${userId}`]: serverTimestamp(),
     });
 };
 

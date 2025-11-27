@@ -15,6 +15,7 @@ import {
   getSupervisorCommentsForEntity,
   replyToSupervisorComment,
   getUserById,
+  markSupervisorCommentThreadSeen,
 } from '@/lib/firebase-service';
 import { sendEmail } from '@/lib/google-gmail-service';
 import type { SupervisorComment, User } from '@/lib/types';
@@ -27,6 +28,7 @@ interface CommentThreadProps {
   ownerName: string;
   currentUser: User;
   getAccessToken: () => Promise<string | null | undefined>;
+  onMarkedSeen?: () => void;
 }
 
 const allowedStarterRoles: User['role'][] = ['Jefe', 'Gerencia', 'Administracion', 'Admin'];
@@ -39,6 +41,7 @@ export function CommentThread({
   ownerName,
   currentUser,
   getAccessToken,
+  onMarkedSeen,
 }: CommentThreadProps) {
   const [comments, setComments] = useState<SupervisorComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +70,12 @@ export function CommentThread({
     try {
       const results = await getSupervisorCommentsForEntity(entityType, entityId);
       setComments(results);
+      if (currentUser?.id) {
+        await Promise.all(
+          results.map(comment => markSupervisorCommentThreadSeen(comment.id, currentUser.id))
+        );
+        onMarkedSeen?.();
+      }
     } catch (error) {
       console.error('Error loading comments', error);
     } finally {
