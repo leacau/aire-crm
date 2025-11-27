@@ -305,7 +305,11 @@ export default function ClientsPage() {
       clientsToShow = clientsToShow.filter(client => (clientOpportunityData[client.id]?.openOpps || 0) > 0);
     }
 
-    if (selectedOpportunityStage !== 'all') {
+    if (selectedOpportunityStage === 'none') {
+      clientsToShow = clientsToShow.filter(
+        client => !opportunities.some(opp => opp.clientId === client.id)
+      );
+    } else if (selectedOpportunityStage !== 'all') {
       clientsToShow = clientsToShow.filter(client =>
         opportunities.some(opp => opp.clientId === client.id && opp.stage === selectedOpportunityStage)
       );
@@ -664,6 +668,7 @@ export default function ClientsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
+            <SelectItem value="none">Sin oportunidad</SelectItem>
             {availableOpportunityStages.map(stage => (
               <SelectItem key={stage} value={stage}>{stage}</SelectItem>
             ))}
