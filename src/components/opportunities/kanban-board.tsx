@@ -161,23 +161,35 @@ const KanbanCard = ({
   const [isFinalizeOpen, setIsFinalizeOpen] = React.useState(false);
   const { toast } = useToast();
   const [owner, setOwner] = useState<{name: string, avatarUrl: string, initials: string} | null>(null);
+  const [clientInfo, setClientInfo] = useState<{id: string; name: string; ownerId?: string; ownerName?: string} | null>(null);
 
   useEffect(() => {
     const fetchOwner = async () => {
       const client = (await getClients()).find(c => c.id === opportunity.clientId);
-        if(client?.ownerId) {
-            const ownerProfile = await getUserProfile(client.ownerId);
-            if(ownerProfile) {
-                setOwner({
-                    name: ownerProfile.name,
-                    avatarUrl: `https://picsum.photos/seed/${client.ownerId}/40/40`,
-                    initials: ownerProfile.name.substring(0, 2).toUpperCase()
-                });
-            }
+
+      if (client) {
+        setClientInfo({
+          id: client.id,
+          name: client.denominacion || opportunity.clientName,
+          ownerId: client.ownerId,
+          ownerName: client.ownerName,
+        });
+      }
+
+      if (client?.ownerId) {
+        const ownerProfile = await getUserProfile(client.ownerId);
+        if (ownerProfile) {
+          setOwner({
+            name: ownerProfile.name,
+            avatarUrl: `https://picsum.photos/seed/${client.ownerId}/40/40`,
+            initials: ownerProfile.name.substring(0, 2).toUpperCase(),
+          });
         }
-    }
+      }
+    };
+
     fetchOwner();
-  }, [opportunity.clientId]);
+  }, [opportunity.clientId, opportunity.clientName]);
 
   const handleUpdate = async (updatedOpp: Partial<Opportunity>) => {
      if (!userInfo || !owner) return;
@@ -265,11 +277,12 @@ const KanbanCard = ({
         </div>
       </Card>
       {isDetailsOpen && (
-         <OpportunityDetailsDialog
+        <OpportunityDetailsDialog
           opportunity={opportunity}
           isOpen={isDetailsOpen}
           onOpenChange={setIsDetailsOpen}
           onUpdate={handleUpdate}
+          client={clientInfo ?? { id: opportunity.clientId, name: opportunity.clientName }}
         />
       )}
        <FinalizeOpportunityDialog
