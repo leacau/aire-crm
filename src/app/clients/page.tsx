@@ -163,7 +163,6 @@ export default function ClientsPage() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
-  const [showOnlyActiveOpportunities, setShowOnlyActiveOpportunities] = useState(false);
   const [selectedOpportunityStage, setSelectedOpportunityStage] = useState('all');
   
   const [isActivityFormOpen, setIsActivityFormOpen] = useState(false);
@@ -218,7 +217,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     setRowSelection({});
-  }, [searchTerm, showOnlyMyClients, showDuplicates, selectedAdvisor, showOnlyActiveOpportunities, selectedOpportunityStage]);
+  }, [searchTerm, showOnlyMyClients, showDuplicates, selectedAdvisor, selectedOpportunityStage]);
   
    const clientOpportunityData = useMemo(() => {
     if (opportunities.length === 0) return {};
@@ -301,10 +300,6 @@ export default function ClientsPage() {
         clientsToShow = clientsToShow.filter(c => potentialDuplicates.has(c.id));
     }
 
-    if (showOnlyActiveOpportunities) {
-      clientsToShow = clientsToShow.filter(client => (clientOpportunityData[client.id]?.openOpps || 0) > 0);
-    }
-
     if (selectedOpportunityStage === 'none') {
       clientsToShow = clientsToShow.filter(
         client => !opportunities.some(opp => opp.clientId === client.id)
@@ -338,7 +333,6 @@ export default function ClientsPage() {
     showDuplicates,
     canManage,
     selectedAdvisor,
-    showOnlyActiveOpportunities,
     selectedOpportunityStage,
     opportunities,
     clientOpportunityData,
@@ -674,17 +668,6 @@ export default function ClientsPage() {
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center space-x-2">
-           <Checkbox
-             id="active-opportunities"
-             name="active-opportunities"
-             checked={showOnlyActiveOpportunities}
-              onCheckedChange={(checked) => setShowOnlyActiveOpportunities(!!checked)}
-            />
-            <Label htmlFor="active-opportunities" className="whitespace-nowrap text-sm font-medium">
-              Solo con oportunidades activas
-            </Label>
-        </div>
          <div className="flex items-center space-x-2">
             <Checkbox id="my-clients" name="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
             <Label htmlFor="my-clients" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis clientes</Label>
