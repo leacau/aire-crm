@@ -193,7 +193,7 @@ export const buildAdvisorAlerts = ({
       shouldEmail,
       emailSummary: `Factura ${invoice.invoiceNumber || invoice.id} (${client?.denominacion || 'Cliente sin nombre'}) acumula ${daysSince} días sin registrarse como pagada.`,
       entityId: invoice.id,
-      entityHref: '/billing?tab=to-collect',
+      entityHref: opportunity ? `/opportunities?opportunityId=${opportunity.id}` : '/billing?tab=to-collect',
     });
   });
 

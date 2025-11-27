@@ -6,6 +6,11 @@ import { useToast } from './use-toast';
 
 type NotificationPermission = 'default' | 'granted' | 'denied';
 
+type ExtendedNotificationOptions = NotificationOptions & {
+    onClickUrl?: string;
+    onClick?: () => void;
+};
+
 export function useNotifications() {
     const [permission, setPermission] = useState<NotificationPermission>('default');
     const { toast } = useToast();
@@ -43,14 +48,19 @@ export function useNotifications() {
         }
     }, [toast]);
 
-    const showNotification = useCallback((title: string, options?: NotificationOptions) => {
+    const showNotification = useCallback((title: string, options?: ExtendedNotificationOptions) => {
         if (permission === 'granted') {
             const notification = new Notification(title, {
                 ...options,
                 icon: '/aire-logo.png', // Optional: add your app icon
             });
-            
+
             notification.onclick = () => {
+                if (options?.onClick) {
+                    options.onClick();
+                } else if (options?.onClickUrl) {
+                    window.open(options.onClickUrl, '_blank');
+                }
                 window.focus();
             };
 

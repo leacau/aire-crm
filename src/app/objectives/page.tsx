@@ -20,6 +20,7 @@ import { buildAdvisorAlerts, type AdvisorAlert } from '@/lib/advisor-alerts';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { useNotifications } from '@/hooks/use-notifications';
 
 export default function ObjectivesPage() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
@@ -39,7 +40,9 @@ export default function ObjectivesPage() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [pendingOpportunityId, setPendingOpportunityId] = useState<string | null>(null);
+  const [lastAlertsWebDate, setLastAlertsWebDate] = useState<string | null>(null);
   const isAdvisor = userInfo?.role === 'Asesor';
+  const { notificationPermission, requestNotificationPermission, showNotification } = useNotifications();
 
   useEffect(() => {
     if (userInfo) {
@@ -342,6 +345,7 @@ export default function ObjectivesPage() {
 
   const alertsNeedingEmail = useMemo(() => advisorAlerts.filter(alert => alert.shouldEmail), [advisorAlerts]);
   const emailStorageKey = userInfo?.role === 'Asesor' ? `advisor-alerts:last-email:${userInfo.id}` : null;
+  const webNotificationStorageKey = userInfo?.role === 'Asesor' ? `advisor-alerts:last-web:${userInfo.id}` : null;
 
   useEffect(() => {
     if (!emailStorageKey || typeof window === 'undefined') return;
@@ -350,6 +354,14 @@ export default function ObjectivesPage() {
       setLastAlertsEmailDate(stored);
     }
   }, [emailStorageKey]);
+
+  useEffect(() => {
+    if (!webNotificationStorageKey || typeof window === 'undefined') return;
+    const stored = localStorage.getItem(webNotificationStorageKey);
+    if (stored) {
+      setLastAlertsWebDate(stored);
+    }
+  }, [webNotificationStorageKey]);
 
   useEffect(() => {
     if (alertsNeedingEmail.length === 0) {
@@ -365,12 +377,19 @@ export default function ObjectivesPage() {
     try {
       const today = new Date();
       const subject = `Alertas pendientes - ${format(today, 'dd/MM/yyyy')}`;
-      const listItems = alertsNeedingEmail.map(alert => `<li>${alert.emailSummary}</li>`).join('');
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://aire-crm.vercel.app';
+      const listItems = alertsNeedingEmail
+        .map(alert => {
+          const targetUrl = alert.entityHref ? new URL(alert.entityHref, baseUrl).toString() : `${baseUrl}/objectives`;
+          return `<li><a href="${targetUrl}" target="_blank" rel="noopener noreferrer">${alert.emailSummary}</a></li>`;
+        })
+        .join('');
+      const objectivesUrl = `${baseUrl}/objectives`;
       const body = `
         <p>Hola ${userInfo.name || 'asesor'},</p>
         <p>Estas alertas necesitan tu seguimiento:</p>
         <ul>${listItems}</ul>
-        <p>Ingresá al <a href="https://aire-crm.vercel.app/objectives">CRM</a> para actualizarlas.</p>
+        <p>Ingresá al <a href="${objectivesUrl}">CRM</a> para actualizarlas.</p>
       `;
       await sendEmail({ accessToken, to: userInfo.email, subject, body });
       const nowIso = new Date().toISOString();
@@ -421,6 +440,31 @@ export default function ObjectivesPage() {
       cancelled = true;
     };
   }, [alertsNeedingEmail, userInfo, emailStorageKey, lastAlertsEmailDate, getGoogleAccessToken, sendAlertsEmailInternal]);
+
+  useEffect(() => {
+    if (!userInfo || userInfo.role !== 'Asesor') return;
+    if (alertsNeedingEmail.length === 0) return;
+
+    if (notificationPermission === 'default') {
+      requestNotificationPermission();
+    }
+
+    if (!webNotificationStorageKey) return;
+    const alreadyShownToday = lastAlertsWebDate ? isSameDay(new Date(lastAlertsWebDate), new Date()) : false;
+    if (alreadyShownToday) return;
+
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://aire-crm.vercel.app';
+    alertsNeedingEmail.forEach(alert => {
+      const targetUrl = alert.entityHref ? new URL(alert.entityHref, baseUrl).toString() : `${baseUrl}/objectives`;
+      showNotification(alert.title, { body: alert.emailSummary, onClickUrl: targetUrl });
+    });
+
+    const nowIso = new Date().toISOString();
+    setLastAlertsWebDate(nowIso);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(webNotificationStorageKey, nowIso);
+    }
+  }, [userInfo, alertsNeedingEmail, notificationPermission, requestNotificationPermission, webNotificationStorageKey, lastAlertsWebDate, showNotification]);
 
     useEffect(() => {
         if (progressPercentage >= 100) {
