@@ -286,6 +286,19 @@ export const replyToSupervisorComment = async ({ commentId, authorId, authorName
     });
 };
 
+export const deleteSupervisorCommentThread = async (
+    commentId: string,
+    entityType: 'client' | 'opportunity',
+    entityId: string,
+    ownerId: string,
+    recipientId?: string
+): Promise<void> => {
+    const commentRef = doc(collections.supervisorComments, commentId);
+    await deleteDoc(commentRef);
+    invalidateCache(`comments_${entityType}_${entityId}`);
+    invalidateCache(`commentThreads_${recipientId || ownerId}`);
+};
+
 
 // --- Vacation Request (License) Functions ---
 export const getVacationRequests = async (): Promise<VacationRequest[]> => {

@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   createSupervisorComment,
+  deleteSupervisorCommentThread,
   getSupervisorCommentsForEntity,
   replyToSupervisorComment,
   getUserById,
@@ -44,6 +45,7 @@ export function CommentThread({
   const [newMessage, setNewMessage] = useState('');
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const baseUrl = useMemo(
     () => (typeof window !== 'undefined' ? window.location.origin : 'https://aire-crm.vercel.app'),
@@ -155,6 +157,23 @@ export function CommentThread({
     return participants.has(currentUser.id) || canStartThread;
   }, [comments, currentUser.id, ownerId, canStartThread]);
 
+  const canDeleteThread = allowedStarterRoles.includes(currentUser.role);
+
+  const handleDeleteThread = async (comment: SupervisorComment) => {
+    if (!canDeleteThread) return;
+    const confirmed = window.confirm('¿Eliminar todo el historial de este comentario? Esta acción no se puede deshacer.');
+    if (!confirmed) return;
+    setDeletingId(comment.id);
+    try {
+      await deleteSupervisorCommentThread(comment.id, entityType, entityId, ownerId, comment.recipientId);
+      setComments(prev => prev.filter(c => c.id !== comment.id));
+    } catch (error) {
+      console.error('Error deleting comment thread', error);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <Card className="mt-4">
       <CardHeader className="space-y-1">
@@ -184,7 +203,19 @@ export function CommentThread({
                       </p>
                     </div>
                   </div>
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Comentario inicial</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Comentario inicial</span>
+                    {canDeleteThread && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDeleteThread(comment)}
+                        disabled={deletingId === comment.id}
+                      >
+                        {deletingId === comment.id ? <Spinner size="small" /> : 'Eliminar historial'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{comment.message}</p>
