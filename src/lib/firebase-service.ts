@@ -264,32 +264,25 @@ interface ReplySupervisorCommentInput {
 
 export const replyToSupervisorComment = async ({ commentId, authorId, authorName, message, recipientId, recipientName }: ReplySupervisorCommentInput): Promise<void> => {
     const commentRef = doc(collections.supervisorComments, commentId);
-    await runTransaction(db, async (transaction) => {
-        const commentSnap = await transaction.get(commentRef);
-        if (!commentSnap.exists()) {
-            throw new Error('Comentario no encontrado');
-        }
-        const data = commentSnap.data();
-        const replies = Array.isArray(data.replies) ? data.replies : [];
-        const replyId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-        const reply: SupervisorCommentReply = {
-            id: replyId,
-            authorId,
-            authorName,
-            message,
-            recipientId,
-            recipientName,
-            createdAt: new Date().toISOString(),
-        };
-        transaction.update(commentRef, {
-            replies: [...replies, reply],
-            lastMessageAuthorId: authorId,
-            lastMessageAuthorName: authorName,
-            lastMessageRecipientId: recipientId,
-            lastMessageRecipientName: recipientName,
-            lastMessageText: message,
-            lastMessageAt: serverTimestamp(),
-        });
+    const replyId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+    const reply: SupervisorCommentReply = {
+        id: replyId,
+        authorId,
+        authorName,
+        message,
+        recipientId,
+        recipientName,
+        createdAt: serverTimestamp() as unknown as string,
+    };
+
+    await updateDoc(commentRef, {
+        replies: arrayUnion(reply),
+        lastMessageAuthorId: authorId,
+        lastMessageAuthorName: authorName,
+        lastMessageRecipientId: recipientId,
+        lastMessageRecipientName: recipientName,
+        lastMessageText: message,
+        lastMessageAt: serverTimestamp(),
     });
 };
 
