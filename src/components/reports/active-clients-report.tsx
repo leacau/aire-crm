@@ -7,6 +7,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { getClients, getAllOpportunities } from '@/lib/firebase-service';
 import type { Client, Opportunity } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { addMonths, parseISO, startOfDay } from 'date-fns';
 
 interface ActiveClientsReportProps {
   selectedAdvisor: string;
@@ -39,8 +40,7 @@ export function ActiveClientsReport({ selectedAdvisor }: ActiveClientsReportProp
   }, [toast]);
 
   const activeClientsCount = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = startOfDay(new Date());
 
     const relevantClients = selectedAdvisor === 'all'
       ? clients
@@ -48,22 +48,33 @@ export function ActiveClientsReport({ selectedAdvisor }: ActiveClientsReportProp
 
     const relevantClientIds = new Set(relevantClients.map(c => c.id));
 
-    const getOpportunityEndDate = (opp: Opportunity): Date | null => {
-      if (opp.finalizationDate) {
-        const parsed = new Date(opp.finalizationDate);
-        if (!Number.isNaN(parsed.getTime())) return parsed;
+    const getPeriodDurationInMonths = (period: string): number => {
+      switch (period) {
+        case 'Mensual':
+          return 1;
+        case 'Trimestral':
+          return 3;
+        case 'Semestral':
+          return 6;
+        case 'Anual':
+          return 12;
+        default:
+          return 1;
       }
+    };
 
-      const endDates = (opp.ordenesPautado || [])
-        .map(pauta => (pauta.fechaFin ? new Date(pauta.fechaFin) : null))
-        .filter((date): date is Date => !!date && !Number.isNaN(date.getTime()));
+    const isOpportunityActive = (opp: Opportunity): boolean => {
+      const isClosedWon = opp.stage === 'Cerrado - Ganado' || opp.stage === 'Ganado (Recurrente)';
+      if (!isClosedWon || !opp.createdAt) return false;
 
-      if (endDates.length === 0) return null;
+      const creationDate = parseISO(opp.createdAt);
+      if (Number.isNaN(creationDate.getTime())) return false;
 
-      return endDates.reduce(
-        (latest, current) => (current.getTime() > latest.getTime() ? current : latest),
-        endDates[0]
-      );
+      const startDate = startOfDay(creationDate);
+      const durationMonths = getPeriodDurationInMonths(opp.periodicidad?.[0] || 'Mensual');
+      const endDate = addMonths(startDate, durationMonths);
+
+      return today >= startDate && today < endDate;
     };
 
     const clientsWithActiveOpportunities = new Set<string>();
@@ -71,11 +82,7 @@ export function ActiveClientsReport({ selectedAdvisor }: ActiveClientsReportProp
     opportunities
       .filter(opp => relevantClientIds.has(opp.clientId))
       .forEach(opp => {
-        const isClosedWon = opp.stage === 'Cerrado - Ganado' || opp.stage === 'Ganado (Recurrente)';
-        if (!isClosedWon) return;
-
-        const endDate = getOpportunityEndDate(opp);
-        if (endDate && endDate >= today) {
+        if (isOpportunityActive(opp)) {
           clientsWithActiveOpportunities.add(opp.clientId);
         }
       });
@@ -88,7 +95,7 @@ export function ActiveClientsReport({ selectedAdvisor }: ActiveClientsReportProp
       <CardHeader>
         <CardTitle>Clientes Activos</CardTitle>
         <CardDescription>
-          Número de clientes con al menos una oportunidad cerrada vigente (ganada o recurrente).
+          Número de clientes con oportunidades cerradas vigentes según su periodicidad.
         </CardDescription>
       </CardHeader>
       <CardContent>
