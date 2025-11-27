@@ -39,6 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
+import { CommentThread } from '@/components/comments/comment-thread';
 
 import {
   AlertDialog,
@@ -815,6 +816,18 @@ export function OpportunityDetailsDialog({
           </TabsContent>
 
         </Tabs>
+
+        {opportunity && userInfo && client?.ownerId && (
+          <CommentThread
+            entityType="opportunity"
+            entityId={opportunity.id}
+            entityName={opportunity.title}
+            ownerId={client.ownerId}
+            ownerName={client.ownerName || client.name}
+            currentUser={userInfo}
+            getAccessToken={getGoogleAccessToken}
+          />
+        )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

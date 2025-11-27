@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Target, CheckCircle, TrendingUp, TrendingDown } from 'lucide-react';
-import { getOpportunities, getInvoices, getClients, getAllUsers, getProspects } from '@/lib/firebase-service';
-import type { Opportunity, Invoice, Client, User, Prospect } from '@/lib/types';
+import { getOpportunities, getInvoices, getClients, getAllUsers, getProspects, getSupervisorCommentThreadsForUser } from '@/lib/firebase-service';
+import type { Opportunity, Invoice, Client, User, Prospect, SupervisorComment } from '@/lib/types';
 import { addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO, format, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -28,6 +28,7 @@ export default function ObjectivesPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
+  const [commentThreads, setCommentThreads] = useState<SupervisorComment[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [showConfetti, setShowConfetti] = useState(false);
   const [isSendingAlertsEmail, setIsSendingAlertsEmail] = useState(false);
@@ -49,13 +50,15 @@ export default function ObjectivesPage() {
         getInvoices(),
         getClients(),
         advisorsPromise,
-        getProspects()
-      ]).then(([opps, invs, cls, advs, prs]) => {
+        getProspects(),
+        getSupervisorCommentThreadsForUser(userInfo.id)
+      ]).then(([opps, invs, cls, advs, prs, threads]) => {
         setOpportunities(opps);
         setInvoices(invs);
         setClients(cls);
         setAdvisors(advs);
         setProspects(prs);
+        setCommentThreads(threads);
         setLoadingData(false);
       }).catch(err => {
         console.error("Error fetching objectives data", err);
@@ -249,9 +252,18 @@ export default function ObjectivesPage() {
   }, [isBoss, teamObjectives]);
 
   const advisorAlerts = useMemo(() => {
-    if (!userInfo || userInfo.role !== 'Asesor') return [] as AdvisorAlert[];
-    return buildAdvisorAlerts({ user: userInfo, opportunities, clients, invoices, prospects });
-  }, [userInfo, opportunities, clients, invoices, prospects]);
+    if (!userInfo) return [] as AdvisorAlert[];
+
+    const includeOperational = userInfo.role === 'Asesor';
+    return buildAdvisorAlerts({
+      user: userInfo,
+      opportunities: includeOperational ? opportunities : [],
+      clients,
+      invoices: includeOperational ? invoices : [],
+      prospects: includeOperational ? prospects : [],
+      commentThreads,
+    });
+  }, [userInfo, opportunities, clients, invoices, prospects, commentThreads]);
 
   const handleAlertSelect = useCallback((alert: AdvisorAlert) => {
     setSelectedProspect(null);
@@ -274,7 +286,7 @@ export default function ObjectivesPage() {
       }
     }
 
-    if ((alert.type === 'opportunity' || alert.type === 'stage') && alert.entityId) {
+    if ((alert.type === 'opportunity' || alert.type === 'stage' || (alert.type === 'comment' && alert.entityType === 'opportunity')) && alert.entityId) {
       const target = opportunities.find(opportunity => opportunity.id === alert.entityId);
       if (target) {
         setSelectedOpportunity(target);
@@ -282,6 +294,14 @@ export default function ObjectivesPage() {
       }
       setPendingOpportunityId(alert.entityId);
       return;
+    }
+
+    if (alert.type === 'comment' && alert.entityType === 'client' && alert.entityId) {
+      const target = clients.find(client => client.id === alert.entityId);
+      if (target) {
+        setSelectedClient(target);
+        return;
+      }
     }
 
     if (alert.entityHref) {

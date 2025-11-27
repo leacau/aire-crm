@@ -4,7 +4,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent as apiCreateCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
@@ -32,6 +32,7 @@ const collections = {
     prospects: collection(db, 'prospects'),
     licenses: collection(db, 'licencias'),
     systemConfig: collection(db, 'system_config'),
+    supervisorComments: collection(db, 'supervisor_comments'),
 };
 
 const cache: {
@@ -56,6 +57,17 @@ const setInCache = (key: string, data: any) => {
         data,
         timestamp: Date.now(),
     };
+};
+
+const timestampToISO = (value: any): string | undefined => {
+    if (!value) return undefined;
+    if (typeof value === 'string') {
+        return value;
+    }
+    if (value instanceof Timestamp) {
+        return value.toDate().toISOString();
+    }
+    return undefined;
 };
 
 export const invalidateCache = (key?: string) => {
@@ -162,6 +174,114 @@ export const saveMonthlyClosure = async (advisorId: string, month: string, value
         entityName: advisorName,
         details: `registró el cierre de <strong>${month}</strong> para <strong>${advisorName}</strong> con un valor de <strong>$${value.toLocaleString('es-AR')}</strong>`,
         ownerName: advisorName,
+    });
+};
+
+// --- Supervisor Comments ---
+const mapCommentDoc = (snapshot: any): SupervisorComment => {
+    const data = snapshot.data();
+    const replies = Array.isArray(data.replies) ? data.replies.map((reply: SupervisorCommentReply) => ({
+        ...reply,
+        createdAt: timestampToISO((reply as any).createdAt) || new Date().toISOString(),
+    })) : [];
+
+    return {
+        id: snapshot.id,
+        ...data,
+        createdAt: timestampToISO(data.createdAt) || new Date().toISOString(),
+        replies,
+        lastMessageAt: timestampToISO(data.lastMessageAt),
+    } as SupervisorComment;
+};
+
+export const getSupervisorCommentsForEntity = async (entityType: 'client' | 'opportunity', entityId: string): Promise<SupervisorComment[]> => {
+    const q = query(
+        collections.supervisorComments,
+        where('entityType', '==', entityType),
+        where('entityId', '==', entityId),
+        orderBy('createdAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(mapCommentDoc);
+};
+
+export const getSupervisorCommentThreadsForUser = async (userId: string): Promise<SupervisorComment[]> => {
+    const q = query(
+        collections.supervisorComments,
+        where('lastMessageRecipientId', '==', userId),
+        orderBy('lastMessageAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(mapCommentDoc);
+};
+
+interface CreateSupervisorCommentInput {
+    entityType: 'client' | 'opportunity';
+    entityId: string;
+    entityName: string;
+    ownerId: string;
+    ownerName: string;
+    authorId: string;
+    authorName: string;
+    message: string;
+    recipientId?: string;
+    recipientName?: string;
+}
+
+export const createSupervisorComment = async (input: CreateSupervisorCommentInput): Promise<string> => {
+    const docRef = await addDoc(collections.supervisorComments, {
+        ...input,
+        createdAt: serverTimestamp(),
+        replies: [],
+        lastMessageAuthorId: input.authorId,
+        lastMessageAuthorName: input.authorName,
+        lastMessageRecipientId: input.recipientId || input.ownerId,
+        lastMessageRecipientName: input.recipientName || input.ownerName,
+        lastMessageText: input.message,
+        lastMessageAt: serverTimestamp(),
+    });
+    invalidateCache(`comments_${input.entityType}_${input.entityId}`);
+    invalidateCache(`commentThreads_${input.recipientId || input.ownerId}`);
+    return docRef.id;
+};
+
+interface ReplySupervisorCommentInput {
+    commentId: string;
+    authorId: string;
+    authorName: string;
+    message: string;
+    recipientId?: string;
+    recipientName?: string;
+}
+
+export const replyToSupervisorComment = async ({ commentId, authorId, authorName, message, recipientId, recipientName }: ReplySupervisorCommentInput): Promise<void> => {
+    const commentRef = doc(collections.supervisorComments, commentId);
+    await runTransaction(db, async (transaction) => {
+        const commentSnap = await transaction.get(commentRef);
+        if (!commentSnap.exists()) {
+            throw new Error('Comentario no encontrado');
+        }
+        const data = commentSnap.data();
+        const replies = Array.isArray(data.replies) ? data.replies : [];
+        const replyId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+        const reply: SupervisorCommentReply = {
+            id: replyId,
+            authorId,
+            authorName,
+            message,
+            recipientId,
+            recipientName,
+            createdAt: new Date().toISOString(),
+        };
+        transaction.update(commentRef, {
+            replies: [...replies, reply],
+            lastMessageAuthorId: authorId,
+            lastMessageAuthorName: authorName,
+            lastMessageRecipientId: recipientId,
+            lastMessageRecipientName: recipientName,
+            lastMessageText: message,
+            lastMessageAt: serverTimestamp(),
+        });
     });
 };
 
@@ -1136,6 +1256,19 @@ export const getAllUsers = async (role?: User['role']): Promise<User[]> => {
     setInCache(cacheKey, users);
     if (!role) setInCache('users', users);
     return users;
+};
+
+export const getUserById = async (userId: string): Promise<User | null> => {
+    const cacheKey = `user_${userId}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) return cached as User;
+
+    const userRef = doc(collections.users, userId);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) return null;
+    const user = { id: snap.id, ...snap.data() } as User;
+    setInCache(cacheKey, user);
+    return user;
 };
 
 export const getUsersByRole = async (role: UserRole): Promise<User[]> => {

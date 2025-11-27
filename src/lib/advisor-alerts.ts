@@ -1,10 +1,10 @@
 import { addMonths, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { Client, Invoice, Opportunity, OpportunityStage, Prospect, User } from './types';
+import type { Client, Invoice, Opportunity, OpportunityStage, Prospect, SupervisorComment, User } from './types';
 import { getManualInvoiceDate } from './invoice-utils';
 
 export type AdvisorAlertSeverity = 'info' | 'warning' | 'critical';
-export type AdvisorAlertType = 'invoice' | 'prospect' | 'client' | 'opportunity' | 'stage';
+export type AdvisorAlertType = 'invoice' | 'prospect' | 'client' | 'opportunity' | 'stage' | 'comment';
 
 export type AdvisorAlert = {
   id: string;
@@ -17,6 +17,7 @@ export type AdvisorAlert = {
   emailSummary: string;
   entityId?: string;
   entityHref?: string;
+  entityType?: 'client' | 'opportunity' | 'prospect';
 };
 
 interface BuildAdvisorAlertsInput {
@@ -26,6 +27,7 @@ interface BuildAdvisorAlertsInput {
   invoices: Invoice[];
   prospects: Prospect[];
   today?: Date;
+  commentThreads?: SupervisorComment[];
 }
 
 const stageThresholds: Partial<Record<OpportunityStage, number>> = {
@@ -124,9 +126,33 @@ export const buildAdvisorAlerts = ({
   invoices,
   prospects,
   today = new Date(),
+  commentThreads = [],
 }: BuildAdvisorAlertsInput): AdvisorAlert[] => {
+  const alerts: AdvisorAlert[] = [];
+
+  commentThreads.forEach(thread => {
+    alerts.push({
+      id: `comment-${thread.id}`,
+      type: 'comment',
+      title: thread.entityType === 'client' ? 'Comentario sobre cliente' : 'Comentario sobre oportunidad',
+      description: `${thread.lastMessageAuthorName || thread.authorName} escribió: ${thread.lastMessageText || thread.message}`,
+      severity: 'info',
+      shouldEmail: false,
+      emailSummary: '',
+      entityId: thread.entityId,
+      entityHref: thread.entityType === 'client'
+        ? `/clients/${thread.entityId}`
+        : `/opportunities?opportunityId=${thread.entityId}`,
+      entityType: thread.entityType,
+      meta: [
+        { label: 'Entidad', value: thread.entityName },
+        thread.lastMessageAt ? { label: 'Última actividad', value: formatDate(thread.lastMessageAt ? safeParseDate(thread.lastMessageAt) : null) } : undefined,
+      ].filter((item): item is { label: string; value: string } => !!item),
+    });
+  });
+
   const userClientIds = new Set(clients.filter(client => client.ownerId === user.id).map(client => client.id));
-  if (userClientIds.size === 0) return [];
+  if (userClientIds.size === 0) return alerts;
 
   const userClients = clients.filter(client => userClientIds.has(client.id));
   const userOpportunities = opportunities.filter(opportunity => userClientIds.has(opportunity.clientId));
@@ -138,7 +164,6 @@ export const buildAdvisorAlerts = ({
     prospect => prospect.ownerId === user.id && !shouldExcludeProspect(prospect.status)
   );
 
-  const alerts: AdvisorAlert[] = [];
   const actionableDate = today;
 
   // Invoice alerts

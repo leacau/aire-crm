@@ -102,6 +102,7 @@ import { Badge } from '../ui/badge';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ClientPdf } from './client-pdf';
+import { CommentThread } from '@/components/comments/comment-thread';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'bg-blue-500',
@@ -724,6 +725,18 @@ export function ClientDetails({
             </CardContent>
         </Card>
       </div>
+
+      {userInfo && (
+        <CommentThread
+          entityType="client"
+          entityId={client.id}
+          entityName={client.denominacion}
+          ownerId={client.ownerId}
+          ownerName={client.ownerName}
+          currentUser={userInfo}
+          getAccessToken={getGoogleAccessToken}
+        />
+      )}
 
       <Tabs defaultValue="opportunities" className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">

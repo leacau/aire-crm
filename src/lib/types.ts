@@ -36,6 +36,38 @@ export type Invoice = {
   creditNoteMarkedAt?: string | null;
 };
 
+export type SupervisorCommentReply = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  recipientId?: string;
+  recipientName?: string;
+  message: string;
+  createdAt: string;
+};
+
+export type SupervisorComment = {
+  id: string;
+  entityType: 'client' | 'opportunity';
+  entityId: string;
+  entityName: string;
+  ownerId: string;
+  ownerName: string;
+  authorId: string;
+  authorName: string;
+  recipientId?: string;
+  recipientName?: string;
+  message: string;
+  createdAt: string;
+  replies?: SupervisorCommentReply[];
+  lastMessageAuthorId?: string;
+  lastMessageAuthorName?: string;
+  lastMessageRecipientId?: string;
+  lastMessageRecipientName?: string;
+  lastMessageText?: string;
+  lastMessageAt?: string;
+};
+
 export type PautaType = 'Spot' | 'PNT' | 'Sorteo' | 'Nota';
 export const pautaTypes: PautaType[] = ['Spot', 'PNT', 'Sorteo', 'Nota'];
 
