@@ -25,8 +25,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
+import { addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
 import { MonthlyClosureDialog } from './monthly-closure-dialog';
+import { getObjectiveForDate, monthKey } from '@/lib/objective-utils';
 
 
 interface UserStats {
@@ -227,7 +228,8 @@ export function TeamPerformanceTable() {
         if (user.role !== 'Asesor') return <div className="text-right">-</div>;
 
         const isEdited = editedValues[user.id]?.monthlyObjective !== undefined;
-        const currentValue = isEdited ? editedValues[user.id]?.monthlyObjective : user.monthlyObjective;
+        const { value: activeObjective } = getObjectiveForDate(user, new Date());
+        const currentValue = isEdited ? editedValues[user.id]?.monthlyObjective : activeObjective;
 
         return (
           <div className="flex items-center gap-1 justify-end">
@@ -240,7 +242,29 @@ export function TeamPerformanceTable() {
               disabled={!isBoss}
             />
             {isEdited && (
-              <Button size="icon" className="h-9 w-9" onClick={() => handleUpdateUser(user.id, { monthlyObjective: Number(editedValues[user.id]?.monthlyObjective) })}>
+              <Button
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => {
+                  const today = new Date();
+                  const month = monthKey(today);
+                  const newObjective = Number(editedValues[user.id]?.monthlyObjective);
+                  const updatedHistory = { ...(user.monthlyObjectives ?? {}) };
+
+                  const { value: activeObjective, sourceMonth } = getObjectiveForDate(user, today);
+                  const previousMonthKey = monthKey(addMonths(today, -1));
+
+                  if (!sourceMonth && activeObjective && !updatedHistory[previousMonthKey]) {
+                    updatedHistory[previousMonthKey] = activeObjective;
+                  }
+
+                  updatedHistory[month] = newObjective;
+                  handleUpdateUser(user.id, {
+                    monthlyObjective: newObjective,
+                    monthlyObjectives: updatedHistory,
+                  });
+                }}
+              >
                 <Save className="h-4 w-4" />
               </Button>
             )}

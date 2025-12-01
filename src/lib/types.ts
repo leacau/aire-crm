@@ -345,6 +345,7 @@ export type User = {
   deletedAt?: string;
   vacationDays?: number;
   monthlyClosures?: MonthlyClosure;
+  monthlyObjectives?: Record<string, number>;
   monthlyObjective?: number;
   permissions?: Partial<Record<ScreenName, ScreenPermission>>;
 };

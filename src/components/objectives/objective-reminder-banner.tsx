@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { getClients, getInvoices, getOpportunities } from '@/lib/firebase-service';
 import { getManualInvoiceDate } from '@/lib/invoice-utils';
 import { Trophy } from 'lucide-react';
+import { getObjectiveForDate } from '@/lib/objective-utils';
 
 const HIDDEN_ROLES = new Set(['Jefe', 'Gerencia', 'Administracion', 'Admin']);
 
@@ -60,8 +61,10 @@ export function ObjectiveReminderBanner() {
           .filter(({ invoice }) => invoice.status !== 'Pagada')
           .reduce((sum, { invoice }) => sum + invoice.amount, 0);
 
+        const { value: monthlyObjective } = getObjectiveForDate(userInfo, today);
+
         setMetrics({
-          monthlyObjective: userInfo.monthlyObjective ?? 0,
+          monthlyObjective,
           currentMonthPaidBilling: currentMonthPaidInvoices,
           currentMonthPendingBilling: currentMonthPendingInvoices,
         });
@@ -70,8 +73,10 @@ export function ObjectiveReminderBanner() {
         .catch(error => {
           console.error('Error cargando el objetivo global', error);
           if (isMounted) {
+            const { value: monthlyObjective } = getObjectiveForDate(userInfo, new Date());
+
             setMetrics({
-              monthlyObjective: userInfo.monthlyObjective ?? 0,
+              monthlyObjective,
               currentMonthPaidBilling: 0,
               currentMonthPendingBilling: 0,
             });
@@ -82,7 +87,7 @@ export function ObjectiveReminderBanner() {
     return () => {
       isMounted = false;
     };
-  }, [shouldHide, userInfo?.id, userInfo?.monthlyObjective]);
+  }, [shouldHide, userInfo?.id, userInfo?.monthlyObjective, userInfo?.monthlyObjectives]);
 
   const progressData = useMemo(() => {
     if (!metrics) {

@@ -21,6 +21,7 @@ import { sendEmail } from '@/lib/google-gmail-service';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useNotifications } from '@/hooks/use-notifications';
+import { getObjectiveForDate } from '@/lib/objective-utils';
 
 export default function ObjectivesPage() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
@@ -108,6 +109,7 @@ export default function ObjectivesPage() {
     }
 
     const today = new Date();
+    const { value: monthlyObjective } = getObjectiveForDate(userInfo, today);
     const currentMonthStart = startOfMonth(today);
     const currentMonthEnd = endOfMonth(today);
     const previousMonthStart = startOfMonth(addMonths(today, -1));
@@ -154,7 +156,6 @@ export default function ObjectivesPage() {
       .filter(opp => opp.stage === 'Nuevo')
       .reduce((sum, opp) => sum + Number(opp.value || 0), 0);
 
-    const monthlyObjective = userInfo.monthlyObjective ?? 0;
     const progressPercentage = monthlyObjective > 0 ? (currentMonthTotal / monthlyObjective) * 100 : 0;
     const billingDifference = currentMonthTotal - prevMonthBilling;
 
@@ -212,6 +213,7 @@ export default function ObjectivesPage() {
     };
 
     return advisors.map(advisor => {
+      const { value: monthlyObjective } = getObjectiveForDate(advisor, today);
       const advisorInvoices = (invoicesByAdvisor.get(advisor.id) ?? []).filter(inv => !inv.isCreditNote);
 
       const invoicesWithDate = advisorInvoices
@@ -227,7 +229,6 @@ export default function ObjectivesPage() {
       const prevMonthBilling = invoicesWithDate
         .filter(({ invoiceDate }) => isWithinInterval(invoiceDate, { start: previousMonthStart, end: previousMonthEnd }))
         .reduce((sum, { invoice }) => sum + invoice.amount, 0);
-      const monthlyObjective = advisor.monthlyObjective ?? 0;
       const progressPercentage = monthlyObjective > 0 ? (currentMonthBilling / monthlyObjective) * 100 : 0;
       const billingDifference = currentMonthBilling - prevMonthBilling;
 
