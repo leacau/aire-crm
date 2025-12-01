@@ -1,5 +1,5 @@
-import { format } from 'date-fns';
-import { User } from './types';
+import { endOfDay, format, parseISO } from 'date-fns';
+import { ObjectiveVisibilityConfig, User } from './types';
 
 export function monthKey(date: Date): string {
   return format(date, 'yyyy-MM');
@@ -28,4 +28,27 @@ export function getObjectiveForDate(
   }
 
   return { value: user.monthlyObjective ?? 0, sourceMonth: null };
+}
+
+export function resolveObjectiveAnchorDate(
+  today: Date,
+  visibilityConfig?: ObjectiveVisibilityConfig | null
+): Date {
+  if (!visibilityConfig?.activeMonthKey || !visibilityConfig.visibleUntil) {
+    return today;
+  }
+
+  const visibleUntil = parseISO(visibilityConfig.visibleUntil);
+  if (Number.isNaN(visibleUntil.getTime())) {
+    return today;
+  }
+
+  if (today <= endOfDay(visibleUntil)) {
+    const [year, month] = visibilityConfig.activeMonthKey.split('-').map(part => Number(part));
+    if (!Number.isNaN(year) && !Number.isNaN(month)) {
+      return new Date(year, month - 1, 1);
+    }
+  }
+
+  return today;
 }

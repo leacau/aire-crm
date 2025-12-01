@@ -8,12 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Target, CheckCircle, TrendingUp, TrendingDown } from 'lucide-react';
-import { getOpportunities, getInvoices, getClients, getAllUsers, getProspects, getSupervisorCommentThreadsForUser } from '@/lib/firebase-service';
+import { getOpportunities, getInvoices, getClients, getAllUsers, getProspects, getSupervisorCommentThreadsForUser, getObjectiveVisibilityConfig } from '@/lib/firebase-service';
 import type { Opportunity, Invoice, Client, User, Prospect, SupervisorComment } from '@/lib/types';
 import { addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO, format, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import Confetti from 'react-dom-confetti';
+import dynamic from 'next/dynamic';
 import { getManualInvoiceDate } from '@/lib/invoice-utils';
 import { AdvisorAlertsPanel } from '@/components/objectives/advisor-alerts-panel';
 import { buildAdvisorAlerts, type AdvisorAlert } from '@/lib/advisor-alerts';
@@ -21,7 +21,9 @@ import { sendEmail } from '@/lib/google-gmail-service';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useNotifications } from '@/hooks/use-notifications';
-import { getObjectiveForDate } from '@/lib/objective-utils';
+import { getObjectiveForDate, resolveObjectiveAnchorDate } from '@/lib/objective-utils';
+
+const Confetti = dynamic(() => import('react-dom-confetti'), { ssr: false });
 
 export default function ObjectivesPage() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
@@ -42,6 +44,7 @@ export default function ObjectivesPage() {
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [pendingOpportunityId, setPendingOpportunityId] = useState<string | null>(null);
   const [lastAlertsWebDate, setLastAlertsWebDate] = useState<string | null>(null);
+  const [objectiveVisibility, setObjectiveVisibility] = useState<Date | null>(null);
   const isAdvisor = userInfo?.role === 'Asesor';
   const { notificationPermission, requestNotificationPermission, showNotification } = useNotifications();
 
@@ -51,12 +54,13 @@ export default function ObjectivesPage() {
       const advisorsPromise = isBoss ? getAllUsers('Asesor') : Promise.resolve([] as User[]);
       const loadData = async () => {
         try {
-          const [opps, invs, cls, advs, prs] = await Promise.all([
+          const [opps, invs, cls, advs, prs, visibility] = await Promise.all([
             getOpportunities(),
             getInvoices(),
             getClients(),
             advisorsPromise,
             getProspects(),
+            getObjectiveVisibilityConfig(),
           ]);
 
           setOpportunities(opps);
@@ -64,6 +68,10 @@ export default function ObjectivesPage() {
           setClients(cls);
           setAdvisors(advs);
           setProspects(prs);
+
+          const today = new Date();
+          const anchor = resolveObjectiveAnchorDate(today, visibility);
+          setObjectiveVisibility(anchor);
 
           try {
             const threads = await getSupervisorCommentThreadsForUser(userInfo.id);
@@ -82,6 +90,8 @@ export default function ObjectivesPage() {
       loadData();
     }
   }, [userInfo, isBoss]);
+
+  const anchorDate = useMemo(() => objectiveVisibility ?? new Date(), [objectiveVisibility]);
 
   const {
     previousMonthBilling,
@@ -108,7 +118,7 @@ export default function ObjectivesPage() {
       };
     }
 
-    const today = new Date();
+    const today = anchorDate;
     const { value: monthlyObjective } = getObjectiveForDate(userInfo, today);
     const currentMonthStart = startOfMonth(today);
     const currentMonthEnd = endOfMonth(today);
@@ -170,12 +180,12 @@ export default function ObjectivesPage() {
       forecastedIncome,
       prospectingIncome,
     };
-  }, [userInfo, opportunities, invoices, clients]);
+  }, [userInfo, opportunities, invoices, clients, anchorDate]);
 
   const teamObjectives = useMemo(() => {
     if (!isBoss || advisors.length === 0) return [];
 
-    const today = new Date();
+    const today = anchorDate;
     const currentMonthStart = startOfMonth(today);
     const currentMonthEnd = endOfMonth(today);
     const previousMonthStart = startOfMonth(addMonths(today, -1));
@@ -253,7 +263,7 @@ export default function ObjectivesPage() {
           recentClosures,
         };
     }).sort((a, b) => b.currentMonthBilling - a.currentMonthBilling);
-  }, [isBoss, advisors, clients, opportunities, invoices]);
+  }, [isBoss, advisors, clients, opportunities, invoices, anchorDate]);
 
   const teamAggregateProgress = useMemo(() => {
     if (!isBoss || teamObjectives.length === 0) {

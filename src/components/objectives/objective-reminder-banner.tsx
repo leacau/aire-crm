@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
-import { getClients, getInvoices, getOpportunities } from '@/lib/firebase-service';
+import { getClients, getInvoices, getOpportunities, getObjectiveVisibilityConfig } from '@/lib/firebase-service';
 import { getManualInvoiceDate } from '@/lib/invoice-utils';
 import { Trophy } from 'lucide-react';
-import { getObjectiveForDate } from '@/lib/objective-utils';
+import { getObjectiveForDate, resolveObjectiveAnchorDate } from '@/lib/objective-utils';
 
 const HIDDEN_ROLES = new Set(['Jefe', 'Gerencia', 'Administracion', 'Admin']);
 
@@ -20,6 +20,7 @@ export function ObjectiveReminderBanner() {
   const { userInfo } = useAuth();
   const [metrics, setMetrics] = useState<ObjectiveMetrics | null>(null);
   const [loading, setLoading] = useState(false);
+  const [anchorDate, setAnchorDate] = useState<Date | null>(null);
 
   const shouldHide = !userInfo || HIDDEN_ROLES.has(userInfo.role);
 
@@ -33,8 +34,8 @@ export function ObjectiveReminderBanner() {
     let isMounted = true;
     setLoading(true);
 
-    Promise.all([getClients(), getOpportunities(), getInvoices()])
-      .then(([clients, opportunities, invoices]) => {
+    Promise.all([getClients(), getOpportunities(), getInvoices(), getObjectiveVisibilityConfig()])
+      .then(([clients, opportunities, invoices, visibility]) => {
         if (!isMounted) return;
 
         const clientIds = new Set(clients.filter(client => client.ownerId === userInfo.id).map(client => client.id));
@@ -42,8 +43,10 @@ export function ObjectiveReminderBanner() {
         const userInvoices = invoices.filter(inv => opportunityIds.has(inv.opportunityId));
 
         const today = new Date();
-        const currentMonthStart = startOfMonth(today);
-        const currentMonthEnd = endOfMonth(today);
+        const anchor = resolveObjectiveAnchorDate(today, visibility);
+        setAnchorDate(anchor);
+        const currentMonthStart = startOfMonth(anchor);
+        const currentMonthEnd = endOfMonth(anchor);
 
         const currentMonthInvoices = userInvoices
           .map(invoice => ({ invoice, invoiceDate: getManualInvoiceDate(invoice) }))
@@ -61,7 +64,7 @@ export function ObjectiveReminderBanner() {
           .filter(({ invoice }) => invoice.status !== 'Pagada')
           .reduce((sum, { invoice }) => sum + invoice.amount, 0);
 
-        const { value: monthlyObjective } = getObjectiveForDate(userInfo, today);
+        const { value: monthlyObjective } = getObjectiveForDate(userInfo, anchor);
 
         setMetrics({
           monthlyObjective,
@@ -73,7 +76,9 @@ export function ObjectiveReminderBanner() {
         .catch(error => {
           console.error('Error cargando el objetivo global', error);
           if (isMounted) {
-            const { value: monthlyObjective } = getObjectiveForDate(userInfo, new Date());
+            const fallbackDate = new Date();
+            setAnchorDate(fallbackDate);
+            const { value: monthlyObjective } = getObjectiveForDate(userInfo, fallbackDate);
 
             setMetrics({
               monthlyObjective,

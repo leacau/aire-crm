@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
-import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getInvoices, getProspects } from '@/lib/firebase-service';
-import type { Opportunity, User, Client, UserRole, Invoice, Prospect, AreaType } from '@/lib/types';
+import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getInvoices, getProspects, getObjectiveVisibilityConfig, updateObjectiveVisibilityConfig } from '@/lib/firebase-service';
+import type { Opportunity, User, Client, UserRole, Invoice, Prospect, AreaType, ObjectiveVisibilityConfig } from '@/lib/types';
 import { userRoles } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -28,6 +28,7 @@ import {
 import { addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
 import { MonthlyClosureDialog } from './monthly-closure-dialog';
 import { getObjectiveForDate, monthKey } from '@/lib/objective-utils';
+import { format } from 'date-fns';
 
 
 interface UserStats {
@@ -55,20 +56,26 @@ export function TeamPerformanceTable() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [editedValues, setEditedValues] = useState<Record<string, { monthlyObjective?: number | string; managerId?: string }>>({});
   const [isClosureDialogOpen, setIsClosureDialogOpen] = useState(false);
+  const [objectiveVisibility, setObjectiveVisibility] = useState<ObjectiveVisibilityConfig | null>(null);
+  const [savingVisibility, setSavingVisibility] = useState(false);
+  const [visibilityMonth, setVisibilityMonth] = useState('');
+  const [visibilityDeadline, setVisibilityDeadline] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [allOpps, allUsers, allClients, allProspects] = await Promise.all([
+      const [allOpps, allUsers, allClients, allProspects, visibilityConfig] = await Promise.all([
           getAllOpportunities(),
           getAllUsers(),
           getClients(),
           getProspects(),
+          getObjectiveVisibilityConfig(),
       ]);
       setOpportunities(allOpps);
       setUsers(allUsers);
       setClients(allClients);
       setProspects(allProspects);
+      setObjectiveVisibility(visibilityConfig);
     } catch (error) {
       console.error("Error fetching team data:", error);
       toast({ title: 'Error al cargar los datos del equipo', variant: 'destructive' });
@@ -80,6 +87,12 @@ export function TeamPerformanceTable() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!objectiveVisibility) return;
+    setVisibilityMonth(objectiveVisibility.activeMonthKey ?? '');
+    setVisibilityDeadline(objectiveVisibility.visibleUntil ?? '');
+  }, [objectiveVisibility]);
 
   const handleUpdateUser = async (userId: string, data: Partial<User>) => {
      try {
@@ -94,6 +107,26 @@ export function TeamPerformanceTable() {
     } catch (error) {
         console.error("Error updating user:", error);
         toast({ title: 'Error al actualizar usuario', variant: 'destructive' });
+    }
+  };
+
+  const handleSaveObjectiveVisibility = async () => {
+    if (!userInfo || (!visibilityMonth && !visibilityDeadline)) return;
+
+    setSavingVisibility(true);
+    try {
+      const payload: ObjectiveVisibilityConfig = {
+        activeMonthKey: visibilityMonth || undefined,
+        visibleUntil: visibilityDeadline || undefined,
+      };
+      await updateObjectiveVisibilityConfig(payload, userInfo.id, userInfo.name);
+      setObjectiveVisibility(payload);
+      toast({ title: 'Visibilidad de objetivos actualizada' });
+    } catch (error) {
+      console.error('Error saving visibility config', error);
+      toast({ title: 'No se pudo guardar la visibilidad', variant: 'destructive' });
+    } finally {
+      setSavingVisibility(false);
     }
   };
 
@@ -321,6 +354,49 @@ export function TeamPerformanceTable() {
 
   return (
     <>
+      {isBoss && (
+        <div className="mb-4 rounded-lg border bg-card p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-1">
+              <h3 className="text-base font-semibold">Extender visibilidad de objetivos</h3>
+              <p className="text-sm text-muted-foreground">
+                Permití que los objetivos del mes sigan visibles hasta que cierre definitivamente la facturación.
+              </p>
+              {objectiveVisibility?.updatedAt && (
+                <p className="text-xs text-muted-foreground">
+                  Última actualización: {format(parseISO(objectiveVisibility.updatedAt), 'dd/MM/yyyy HH:mm')}
+                  {objectiveVisibility.updatedByName ? ` por ${objectiveVisibility.updatedByName}` : ''}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="visibility-month">Mes a mostrar</label>
+                <Input
+                  id="visibility-month"
+                  type="month"
+                  value={visibilityMonth}
+                  onChange={(e) => setVisibilityMonth(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="visibility-deadline">Mostrar hasta</label>
+                <Input
+                  id="visibility-deadline"
+                  type="date"
+                  value={visibilityDeadline}
+                  onChange={(e) => setVisibilityDeadline(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <Button onClick={handleSaveObjectiveVisibility} disabled={savingVisibility}>
+                {savingVisibility ? <Spinner size="small" /> : 'Guardar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className='flex justify-end mb-4'>
         {isBoss && (
           <Button onClick={() => setIsClosureDialogOpen(true)}>

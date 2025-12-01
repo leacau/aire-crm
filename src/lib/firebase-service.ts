@@ -4,7 +4,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent as apiCreateCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
@@ -16,6 +16,7 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
+const OBJECTIVE_VISIBILITY_DOC_ID = 'objective_visibility';
 
 const collections = {
     clients: collection(db, 'clients'),
@@ -97,6 +98,27 @@ export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsCon
     return {};
 };
 
+export const getObjectiveVisibilityConfig = async (): Promise<ObjectiveVisibilityConfig> => {
+    const cached = getFromCache(OBJECTIVE_VISIBILITY_DOC_ID);
+    if (cached) return cached;
+
+    const docRef = doc(collections.systemConfig, OBJECTIVE_VISIBILITY_DOC_ID);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+        const data = snap.data() as ObjectiveVisibilityConfig;
+        const parsed: ObjectiveVisibilityConfig = {
+            activeMonthKey: data.activeMonthKey,
+            visibleUntil: typeof data.visibleUntil === 'string' ? data.visibleUntil : undefined,
+            updatedByName: data.updatedByName,
+            updatedAt: timestampToISO((data as any).updatedAt) || data.updatedAt,
+        };
+        setInCache(OBJECTIVE_VISIBILITY_DOC_ID, parsed);
+        return parsed;
+    }
+
+    return {};
+};
+
 export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsConfig, userId: string, userName: string) => {
     const docRef = doc(collections.systemConfig, 'opportunity_alerts');
     await setDoc(docRef, config, { merge: true });
@@ -108,6 +130,31 @@ export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsCon
         entityId: 'opportunity_alerts',
         entityName: 'Configuración de Alertas de Oportunidades',
         details: 'actualizó la configuración de alertas de oportunidades.',
+        ownerName: userName,
+    });
+};
+
+export const updateObjectiveVisibilityConfig = async (
+    config: ObjectiveVisibilityConfig,
+    userId: string,
+    userName: string
+) => {
+    const docRef = doc(collections.systemConfig, OBJECTIVE_VISIBILITY_DOC_ID);
+    await setDoc(
+        docRef,
+        { ...config, updatedAt: serverTimestamp(), updatedByName: userName },
+        { merge: true }
+    );
+    invalidateCache(OBJECTIVE_VISIBILITY_DOC_ID);
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'objective_visibility',
+        entityId: OBJECTIVE_VISIBILITY_DOC_ID,
+        entityName: 'Visibilidad de objetivos',
+        details: 'actualizó la fecha de visibilidad de objetivos.',
         ownerName: userName,
     });
 };

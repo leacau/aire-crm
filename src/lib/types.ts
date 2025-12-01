@@ -333,6 +333,15 @@ export type MonthlyClosure = {
   [key: string]: number;
 };
 
+export type ObjectiveVisibilityConfig = {
+  /** Month key in format YYYY-MM representing the objective period to keep visible. */
+  activeMonthKey?: string;
+  /** ISO date string (YYYY-MM-DD) until which the active month should stay visible. */
+  visibleUntil?: string;
+  updatedByName?: string;
+  updatedAt?: string;
+};
+
 export type User = {
   id: string;
   name:string;
