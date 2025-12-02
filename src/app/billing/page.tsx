@@ -550,7 +550,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             <TabsTrigger value="to-collect">A Cobrar</TabsTrigger>
             <TabsTrigger value="paid">Pagado</TabsTrigger>
             <TabsTrigger value="credit-notes">NC</TabsTrigger>
-            <TabsTrigger value="payments">Pagos</TabsTrigger>
+            <TabsTrigger value="payments">Mora</TabsTrigger>
           </TabsList>
           <TabsContent value="to-invoice">
             <ToInvoiceTable 
