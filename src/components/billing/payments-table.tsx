@@ -64,6 +64,16 @@ const formatCurrency = (value?: number) => {
   return `$${value.toLocaleString('es-AR')}`;
 };
 
+const resolveRowColor = (daysLate: number | null | undefined) => {
+  if (typeof daysLate !== 'number') return undefined;
+  if (daysLate > 90) return '#ff7878';
+  if (daysLate >= 60) return '#ffd966';
+  if (daysLate >= 30) return '#92d14f';
+  if (daysLate >= 15) return '#c5e0b4';
+  if (daysLate >= 1) return '#e3f0da';
+  return '#bbd5ed';
+};
+
 const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, allowDelete }: {
   entry: PaymentEntry;
   onUpdate: Props['onUpdate'];
@@ -75,6 +85,7 @@ const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, all
   const [reminderDate, setReminderDate] = useState(entry.nextContactAt?.substring(0, 10) || '');
   const daysLate = useMemo(() => entry.daysLate ?? getDaysLate(entry), [entry]);
   const [localNotes, setLocalNotes] = useState(entry.notes || '');
+  const rowColor = useMemo(() => resolveRowColor(daysLate), [daysLate]);
 
   useEffect(() => {
     setLocalNotes(entry.notes || '');
@@ -82,7 +93,7 @@ const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, all
   }, [entry.notes, entry.nextContactAt]);
 
   return (
-    <TableRow key={entry.id}>
+    <TableRow key={entry.id} style={rowColor ? { backgroundColor: rowColor } : undefined}>
       <TableCell>
         {allowDelete && (
           <Checkbox
