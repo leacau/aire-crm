@@ -261,9 +261,9 @@ export function TeamPerformanceTable() {
 
         return (
           <Select
-            value={user.managerId ?? ''}
+            value={user.managerId ?? 'none'}
             onValueChange={(newManagerId) =>
-              handleUpdateUser(user.id, { managerId: newManagerId || undefined })
+              handleUpdateUser(user.id, { managerId: newManagerId === 'none' ? undefined : newManagerId })
             }
             disabled={!isBoss}
           >
@@ -271,7 +271,7 @@ export function TeamPerformanceTable() {
               <SelectValue placeholder="Asignar jefe..." />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Sin jefe asignado</SelectItem>
+              <SelectItem value="none">Sin jefe asignado</SelectItem>
               {managers.map(manager => (
                 <SelectItem key={manager.id} value={manager.id}>
                   {manager.name}

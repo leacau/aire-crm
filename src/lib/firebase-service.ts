@@ -7,7 +7,7 @@ import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, a
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent as apiCreateCalendarEvent } from './google-gmail-service';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, differenceInCalendarDays, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -1230,6 +1230,28 @@ export const deleteInvoice = async (id: string, userId: string, userName: string
 
 const PAYMENT_CACHE_KEY = 'paymentEntries';
 
+const computeDaysLate = (dueDate?: string | null) => {
+    if (!dueDate) return null;
+
+    const parseDate = () => {
+        try {
+            return parseISO(dueDate);
+        } catch (error) {
+            try {
+                return parse(dueDate, 'dd/MM/yyyy', new Date());
+            } catch (err) {
+                return null;
+            }
+        }
+    };
+
+    const parsed = parseDate();
+    if (!parsed || Number.isNaN(parsed.getTime())) return null;
+
+    const diff = differenceInCalendarDays(new Date(), parsed);
+    return diff > 0 ? diff : 0;
+};
+
 export const getPaymentEntries = async (): Promise<PaymentEntry[]> => {
     const cached = getFromCache(PAYMENT_CACHE_KEY);
     if (cached) return cached;
@@ -1242,12 +1264,14 @@ export const getPaymentEntries = async (): Promise<PaymentEntry[]> => {
             advisorId: data.advisorId,
             advisorName: data.advisorName,
             company: data.company,
+            tipo: data.tipo,
             comprobanteNumber: data.comprobanteNumber,
             razonSocial: data.razonSocial,
             amount: typeof data.amount === 'number' ? data.amount : Number(data.amount) || undefined,
+            pendingAmount: typeof data.pendingAmount === 'number' ? data.pendingAmount : Number(data.pendingAmount) || undefined,
             issueDate: timestampToISO((data as any).issueDate) || data.issueDate,
             dueDate: timestampToISO((data as any).dueDate) || data.dueDate,
-            daysLate: typeof data.daysLate === 'number' ? data.daysLate : Number(data.daysLate) || undefined,
+            daysLate: computeDaysLate(timestampToISO((data as any).dueDate) || data.dueDate),
             status: (data.status as PaymentStatus) || 'Pendiente',
             notes: data.notes,
             nextContactAt: timestampToISO((data as any).nextContactAt) || data.nextContactAt || null,
@@ -1280,12 +1304,14 @@ export const replacePaymentEntriesForAdvisor = async (
             advisorId,
             advisorName,
             company: row.company,
+            tipo: row.tipo || null,
             comprobanteNumber: row.comprobanteNumber,
             razonSocial: row.razonSocial,
             amount: row.amount ?? null,
+            pendingAmount: row.pendingAmount ?? null,
             issueDate: row.issueDate || null,
             dueDate: row.dueDate || null,
-            daysLate: row.daysLate ?? null,
+            daysLate: computeDaysLate(row.dueDate),
             status: 'Pendiente' as PaymentStatus,
             notes: row.notes || '',
             nextContactAt: row.nextContactAt || null,

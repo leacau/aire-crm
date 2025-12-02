@@ -14,7 +14,7 @@ import { updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { MonthYearPicker } from '@/components/ui/month-year-picker';
-import { isWithinInterval, startOfMonth, endOfMonth, parseISO, addMonths, isSameMonth, getYear, getMonth, set } from 'date-fns';
+import { isWithinInterval, startOfMonth, endOfMonth, parseISO, addMonths, isSameMonth, getYear, getMonth, set, parse, differenceInCalendarDays } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -31,32 +31,72 @@ const getPeriodDurationInMonths = (period: string): number => {
         case 'Anual': return 12;
         default: return 0;
     }
-}
+};
 
-const parsePastedPayments = (raw: string): Omit<PaymentEntry, 'id' | 'advisorId' | 'advisorName' | 'status' | 'createdAt'>[] => {
-    return raw
-        .split(/\n+/)
-        .map(line => line.trim())
-        .filter(Boolean)
-        .map(line => line.split(/\t|;/).map(cell => cell.trim()))
-        .filter(cols => cols.length >= 7)
-        .map(cols => {
-            const [company, tipo, comprobante, razonSocial, amountRaw, issueDate, dueDate, daysLateRaw] = cols;
-            const numericAmount = Number(String(amountRaw).replace(/[^0-9.,-]/g, '').replace(',', '.'));
-            const daysLate = Number(daysLateRaw);
+const normalizeDate = (raw?: string) => {
+  if (!raw) return undefined;
+  const value = raw.trim();
+  const tryParse = (parser: () => Date) => {
+    try {
+      const parsed = parser();
+      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+    } catch (error) {
+      return undefined;
+    }
+    return undefined;
+  };
 
-            return {
-                company: company || tipo || '—',
-                comprobanteNumber: comprobante || undefined,
-                razonSocial: razonSocial || undefined,
-                amount: Number.isFinite(numericAmount) ? numericAmount : undefined,
-                issueDate: issueDate || undefined,
-                dueDate: dueDate || undefined,
-                daysLate: Number.isFinite(daysLate) ? daysLate : undefined,
-                notes: '',
-                nextContactAt: null,
-            };
-        });
+  return (
+    tryParse(() => parseISO(value)) ??
+    tryParse(() => parse(value, 'dd/MM/yyyy', new Date())) ??
+    value
+  );
+};
+
+const computeDaysLate = (dueDate?: string) => {
+  if (!dueDate) return null;
+  const parsedISO = normalizeDate(dueDate);
+  if (!parsedISO) return null;
+  try {
+    const parsedDate = parseISO(parsedISO);
+    if (Number.isNaN(parsedDate.getTime())) return null;
+    const diff = differenceInCalendarDays(new Date(), parsedDate);
+    return diff > 0 ? diff : 0;
+  } catch (error) {
+    return null;
+  }
+};
+
+const parsePastedPayments = (
+  raw: string,
+): Omit<PaymentEntry, 'id' | 'advisorId' | 'advisorName' | 'status' | 'createdAt'>[] => {
+  return raw
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split(/\t|;/).map((cell) => cell.trim()))
+    .filter((cols) => cols.length >= 8)
+    .map((cols) => {
+      const [company, tipo, comprobante, razonSocial, amountRaw, pendingRaw, issueDateRaw, dueDateRaw] = cols;
+      const numericAmount = Number(String(amountRaw).replace(/[^0-9.,-]/g, '').replace(',', '.'));
+      const pendingAmount = Number(String(pendingRaw).replace(/[^0-9.,-]/g, '').replace(',', '.'));
+      const issueDate = normalizeDate(issueDateRaw);
+      const dueDate = normalizeDate(dueDateRaw);
+
+      return {
+        company: company || tipo || '—',
+        tipo: tipo || undefined,
+        comprobanteNumber: comprobante || undefined,
+        razonSocial: razonSocial || undefined,
+        amount: Number.isFinite(numericAmount) ? numericAmount : undefined,
+        pendingAmount: Number.isFinite(pendingAmount) ? pendingAmount : undefined,
+        issueDate,
+        dueDate,
+        daysLate: computeDaysLate(dueDate || undefined) ?? undefined,
+        notes: '',
+        nextContactAt: null,
+      };
+    });
 };
 
 export type NewInvoiceData = {
@@ -255,12 +295,15 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const filteredPayments = useMemo(() => {
     if (!userInfo) return [] as PaymentEntry[];
 
-    if (isBoss) {
-      if (selectedAdvisor === 'all') return payments;
-      return payments.filter((p) => p.advisorId === selectedAdvisor);
-    }
+    const baseList = isBoss
+      ? selectedAdvisor === 'all'
+        ? payments
+        : payments.filter((p) => p.advisorId === selectedAdvisor)
+      : payments.filter((p) => p.advisorId === userInfo.id);
 
-    return payments.filter((p) => p.advisorId === userInfo.id);
+    return [...baseList]
+      .map((entry) => ({ ...entry, daysLate: computeDaysLate(entry.dueDate || undefined) ?? entry.daysLate }))
+      .sort((a, b) => (b.daysLate ?? -Infinity) - (a.daysLate ?? -Infinity));
   }, [isBoss, payments, selectedAdvisor, userInfo]);
 
 
@@ -521,7 +564,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                     className="min-h-[120px] w-full rounded-md border bg-background p-3 text-sm"
                     value={pastedPayments}
                     onChange={(e) => setPastedPayments(e.target.value)}
-                    placeholder="Empresa\tTipo\tNro comprobante\tRazón social\tImporte\tFecha emisión\tFecha vencimiento\tDías de atraso"
+                    placeholder="Empresa\tTipo\tNro comprobante\tRazón social\tImporte\tPendiente\tFecha emisión\tFecha vencimiento\tDías de atraso"
                   />
                   <div className="flex justify-end gap-2">
                     <Button onClick={handleImportPayments} disabled={isImportingPayments}>

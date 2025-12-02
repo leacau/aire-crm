@@ -43,9 +43,11 @@ export type PaymentEntry = {
   advisorId: string;
   advisorName: string;
   company: string;
+  tipo?: string;
   comprobanteNumber?: string;
   razonSocial?: string;
   amount?: number;
+  pendingAmount?: number;
   issueDate?: string;
   dueDate?: string;
   daysLate?: number;
