@@ -86,10 +86,8 @@ const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, all
         )}
       </TableCell>
       <TableCell className="font-medium">{entry.company}</TableCell>
-      <TableCell>{entry.tipo || '—'}</TableCell>
       <TableCell>{entry.comprobanteNumber || '—'}</TableCell>
       <TableCell>{entry.razonSocial || '—'}</TableCell>
-      <TableCell>{formatCurrency(entry.amount)}</TableCell>
       <TableCell>{formatCurrency(entry.pendingAmount)}</TableCell>
       <TableCell>{formatDate(entry.issueDate)}</TableCell>
       <TableCell>{formatDate(entry.dueDate)}</TableCell>
@@ -209,11 +207,9 @@ export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onTogg
                 )}
               </TableHead>
               <TableHead>Empresa</TableHead>
-              <TableHead>Tipo</TableHead>
               <TableHead>Nro. comprobante</TableHead>
               <TableHead>Razón Social</TableHead>
-              <TableHead>Importe</TableHead>
-              <TableHead>Pendiente</TableHead>
+              <TableHead>Importe pendiente</TableHead>
               <TableHead>Emisión</TableHead>
               <TableHead>Vencimiento</TableHead>
               <TableHead>Días de atraso</TableHead>

@@ -75,21 +75,20 @@ const parsePastedPayments = (
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => line.split(/\t|;/).map((cell) => cell.trim()))
-    .filter((cols) => cols.length >= 8)
+    .filter((cols) => cols.length >= 7)
     .map((cols) => {
-      const [company, tipo, comprobante, razonSocial, amountRaw, pendingRaw, issueDateRaw, dueDateRaw] = cols;
-      const numericAmount = Number(String(amountRaw).replace(/[^0-9.,-]/g, '').replace(',', '.'));
+      const [company, , comprobante, razonSocial, pendingRaw, issueDateRaw, dueDateRaw] = cols;
       const pendingAmount = Number(String(pendingRaw).replace(/[^0-9.,-]/g, '').replace(',', '.'));
       const issueDate = normalizeDate(issueDateRaw);
       const dueDate = normalizeDate(dueDateRaw);
 
       return {
-        company: company || tipo || '—',
-        tipo: tipo || undefined,
+        company: company || '—',
         comprobanteNumber: comprobante || undefined,
         razonSocial: razonSocial || undefined,
-        amount: Number.isFinite(numericAmount) ? numericAmount : undefined,
         pendingAmount: Number.isFinite(pendingAmount) ? pendingAmount : undefined,
+        // Importe pendiente es la única cifra provista; la usamos como total de referencia
+        amount: Number.isFinite(pendingAmount) ? pendingAmount : undefined,
         issueDate,
         dueDate,
         daysLate: computeDaysLate(dueDate || undefined) ?? undefined,
@@ -594,7 +593,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                     className="min-h-[120px] w-full rounded-md border bg-background p-3 text-sm"
                     value={pastedPayments}
                     onChange={(e) => setPastedPayments(e.target.value)}
-                    placeholder="Empresa\tTipo\tNro comprobante\tRazón social\tImporte\tPendiente\tFecha emisión\tFecha vencimiento\tDías de atraso"
+                    placeholder="Empresa\tTipo\tNro comprobante\tRazón social\tImporte pendiente\tFecha emisión\tFecha vencimiento\tDías de atraso"
                   />
                   <div className="flex justify-end gap-2">
                     <Button onClick={handleImportPayments} disabled={isImportingPayments}>
