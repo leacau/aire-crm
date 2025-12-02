@@ -11,10 +11,16 @@ import { es } from 'date-fns/locale';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 
 type Props = {
   entries: PaymentEntry[];
   onUpdate: (id: string, updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt'>>) => void;
+  onDelete: (ids: string[]) => void;
+  selectedIds: string[];
+  onToggleSelected: (id: string, checked: boolean) => void;
+  onToggleSelectAll: (checked: boolean) => void;
+  allowDelete?: boolean;
 };
 
 const paymentStatuses: PaymentStatus[] = ['Pendiente', 'Reclamado', 'Pagado', 'Incobrable'];
@@ -57,12 +63,28 @@ const formatCurrency = (value?: number) => {
   return `$${value.toLocaleString('es-AR')}`;
 };
 
-const PaymentRow = ({ entry, onUpdate }: { entry: PaymentEntry; onUpdate: Props['onUpdate'] }) => {
+const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, allowDelete }: {
+  entry: PaymentEntry;
+  onUpdate: Props['onUpdate'];
+  onDelete: Props['onDelete'];
+  onToggleSelected: Props['onToggleSelected'];
+  selected: boolean;
+  allowDelete?: boolean;
+}) => {
   const [reminderDate, setReminderDate] = useState(entry.nextContactAt?.substring(0, 10) || '');
   const daysLate = useMemo(() => entry.daysLate ?? getDaysLate(entry), [entry]);
 
   return (
     <TableRow key={entry.id}>
+      <TableCell>
+        {allowDelete && (
+          <Checkbox
+            aria-label="Seleccionar pago"
+            checked={selected}
+            onCheckedChange={(checked) => onToggleSelected(entry.id, Boolean(checked))}
+          />
+        )}
+      </TableCell>
       <TableCell className="font-medium">{entry.company}</TableCell>
       <TableCell>{entry.tipo || '—'}</TableCell>
       <TableCell>{entry.comprobanteNumber || '—'}</TableCell>
@@ -129,6 +151,19 @@ const PaymentRow = ({ entry, onUpdate }: { entry: PaymentEntry; onUpdate: Props[
                 Guardar
               </Button>
             </div>
+            {allowDelete && (
+              <div className="flex justify-end border-t pt-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    if (confirm('¿Eliminar este pago?')) onDelete([entry.id]);
+                  }}
+                >
+                  Eliminar pago
+                </Button>
+              </div>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>
@@ -136,16 +171,43 @@ const PaymentRow = ({ entry, onUpdate }: { entry: PaymentEntry; onUpdate: Props[
   );
 };
 
-export function PaymentsTable({ entries, onUpdate }: Props) {
+export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onToggleSelected, onToggleSelectAll, allowDelete }: Props) {
+  const allSelected = allowDelete && entries.length > 0 && selectedIds.length === entries.length;
+
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between gap-3">
         <CardTitle>Pagos asignados</CardTitle>
+        {allowDelete && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={selectedIds.length === 0}
+              onClick={() => {
+                if (selectedIds.length === 0) return;
+                if (confirm(`¿Eliminar ${selectedIds.length} pago(s)?`)) onDelete(selectedIds);
+              }}
+            >
+              Eliminar seleccionados
+            </Button>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                {allowDelete && (
+                  <Checkbox
+                    aria-label="Seleccionar todos"
+                    checked={allSelected}
+                    onCheckedChange={(checked) => onToggleSelectAll(Boolean(checked))}
+                    indeterminate={allowDelete && selectedIds.length > 0 && selectedIds.length < entries.length}
+                  />
+                )}
+              </TableHead>
               <TableHead>Empresa</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Nro. comprobante</TableHead>
@@ -162,11 +224,19 @@ export function PaymentsTable({ entries, onUpdate }: Props) {
           </TableHeader>
           <TableBody>
             {entries.map((entry) => (
-              <PaymentRow key={entry.id} entry={entry} onUpdate={onUpdate} />
+              <PaymentRow
+                key={entry.id}
+                entry={entry}
+                onUpdate={onUpdate}
+                onDelete={onDelete}
+                onToggleSelected={onToggleSelected}
+                selected={selectedIds.includes(entry.id)}
+                allowDelete={allowDelete}
+              />
             ))}
             {entries.length === 0 && (
               <TableRow>
-                <TableCell colSpan={12} className="text-center text-sm text-muted-foreground">
+                <TableCell colSpan={13} className="text-center text-sm text-muted-foreground">
                   No hay pagos cargados para este vendedor.
                 </TableCell>
               </TableRow>

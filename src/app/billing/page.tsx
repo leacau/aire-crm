@@ -7,7 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry } from '@/lib/firebase-service';
+import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries } from '@/lib/firebase-service';
 import type { Opportunity, Client, User, Invoice, PaymentEntry } from '@/lib/types';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { updateOpportunity } from '@/lib/firebase-service';
@@ -130,6 +130,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   }, [selectedDate]);
 
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
+  const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
   
   const opportunitiesMap = useMemo(() => 
     opportunities.reduce((acc, opp) => {
@@ -306,6 +307,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       .sort((a, b) => (b.daysLate ?? -Infinity) - (a.daysLate ?? -Infinity));
   }, [isBoss, payments, selectedAdvisor, userInfo]);
 
+  useEffect(() => {
+    setSelectedPaymentIds((prev) => prev.filter((id) => filteredPayments.some((entry) => entry.id === id)));
+  }, [filteredPayments]);
+
 
   const handleUpdateOpportunity = async (updatedData: Partial<Opportunity>) => {
     if (!selectedOpportunity || !userInfo) return;
@@ -408,6 +413,31 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     } catch (error) {
       console.error('Error updating payment entry', error);
       toast({ title: 'No se pudo actualizar el pago', variant: 'destructive' });
+      fetchData();
+    }
+  };
+
+  const handleTogglePaymentSelection = (paymentId: string, checked: boolean) => {
+    setSelectedPaymentIds((prev) =>
+      checked ? [...prev, paymentId] : prev.filter((id) => id !== paymentId)
+    );
+  };
+
+  const handleSelectAllPayments = (checked: boolean) => {
+    setSelectedPaymentIds(checked ? filteredPayments.map((p) => p.id) : []);
+  };
+
+  const handleDeletePayments = async (ids: string[]) => {
+    if (!isBoss || ids.length === 0) return;
+    const remaining = new Set(ids);
+    setPayments((prev) => prev.filter((p) => !remaining.has(p.id)));
+    setSelectedPaymentIds((prev) => prev.filter((id) => !remaining.has(id)));
+    try {
+      await deletePaymentEntries(ids);
+      toast({ title: ids.length === 1 ? 'Pago eliminado' : 'Pagos eliminados' });
+    } catch (error) {
+      console.error('Error deleting payment entries', error);
+      toast({ title: 'No se pudieron eliminar los pagos', variant: 'destructive' });
       fetchData();
     }
   };
@@ -574,7 +604,15 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 </div>
               )}
 
-              <PaymentsTable entries={filteredPayments} onUpdate={handleUpdatePaymentEntry} />
+              <PaymentsTable
+                entries={filteredPayments}
+                onUpdate={handleUpdatePaymentEntry}
+                onDelete={handleDeletePayments}
+                selectedIds={selectedPaymentIds}
+                onToggleSelected={handleTogglePaymentSelection}
+                onToggleSelectAll={handleSelectAllPayments}
+                allowDelete={isBoss}
+              />
             </div>
           </TabsContent>
         </Tabs>

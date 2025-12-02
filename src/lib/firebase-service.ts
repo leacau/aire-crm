@@ -1347,6 +1347,18 @@ export const updatePaymentEntry = async (
     invalidateCache(PAYMENT_CACHE_KEY);
 };
 
+export const deletePaymentEntries = async (paymentIds: string[]) => {
+    if (paymentIds.length === 0) return;
+
+    const batch = writeBatch(db);
+    paymentIds.forEach((id) => {
+        batch.delete(doc(collections.paymentEntries, id));
+    });
+
+    await batch.commit();
+    invalidateCache(PAYMENT_CACHE_KEY);
+};
+
 
 // --- Agency Functions ---
 
