@@ -234,7 +234,7 @@ export function TeamPerformanceTable() {
             );
         }
     },
-     {
+    {
       accessorKey: 'area',
       header: 'Área',
       cell: ({ row }) => {
@@ -253,7 +253,36 @@ export function TeamPerformanceTable() {
         );
       },
     },
-     {
+    {
+      id: 'manager',
+      header: 'Jefe directo',
+      cell: ({ row }) => {
+        const { user } = row.original;
+
+        return (
+          <Select
+            value={user.managerId ?? ''}
+            onValueChange={(newManagerId) =>
+              handleUpdateUser(user.id, { managerId: newManagerId || undefined })
+            }
+            disabled={!isBoss}
+          >
+            <SelectTrigger className="w-[190px]">
+              <SelectValue placeholder="Asignar jefe..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Sin jefe asignado</SelectItem>
+              {managers.map(manager => (
+                <SelectItem key={manager.id} value={manager.id}>
+                  {manager.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      },
+    },
+    {
       id: 'monthlyObjective',
       header: () => <div className="text-right">Objetivo Mensual</div>,
       cell: ({ row }) => {
