@@ -70,6 +70,13 @@ const computeDaysLate = (dueDate?: string) => {
 const parsePastedPayments = (
   raw: string,
 ): Omit<PaymentEntry, 'id' | 'advisorId' | 'advisorName' | 'status' | 'createdAt'>[] => {
+  const parseAmount = (value?: string) => {
+    if (!value) return undefined;
+    const cleaned = String(value).replace(/[^0-9.,-]/g, '').replace(/,/g, '');
+    const numeric = parseFloat(cleaned);
+    return Number.isFinite(numeric) ? numeric : undefined;
+  };
+
   return raw
     .split(/\n+/)
     .map((line) => line.trim())
@@ -77,9 +84,8 @@ const parsePastedPayments = (
     .map((line) => line.split(/\t|;/).map((cell) => cell.trim()))
     .filter((cols) => cols.length >= 7)
     .map((cols) => {
-      const [company, , comprobante, razonSocial, pendingRaw, issueDateRaw, dueDateRaw] = cols;
-      const pendingAmount = Number(String(pendingRaw).replace(/[^0-9.,-]/g, '').replace(',', '.'));
-      const issueDate = normalizeDate(issueDateRaw);
+      const [company, , comprobante, razonSocial, pendingRaw, , dueDateRaw] = cols;
+      const pendingAmount = parseAmount(pendingRaw);
       const dueDate = normalizeDate(dueDateRaw);
 
       return {
@@ -89,7 +95,6 @@ const parsePastedPayments = (
         pendingAmount: Number.isFinite(pendingAmount) ? pendingAmount : undefined,
         // Importe pendiente es la única cifra provista; la usamos como total de referencia
         amount: Number.isFinite(pendingAmount) ? pendingAmount : undefined,
-        issueDate,
         dueDate,
         daysLate: computeDaysLate(dueDate || undefined) ?? undefined,
         notes: '',
