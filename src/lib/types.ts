@@ -36,6 +36,26 @@ export type Invoice = {
   creditNoteMarkedAt?: string | null;
 };
 
+export type PaymentStatus = 'Pendiente' | 'Reclamado' | 'Pagado' | 'Incobrable';
+
+export type PaymentEntry = {
+  id: string;
+  advisorId: string;
+  advisorName: string;
+  company: string;
+  comprobanteNumber?: string;
+  razonSocial?: string;
+  amount?: number;
+  issueDate?: string;
+  dueDate?: string;
+  daysLate?: number;
+  status: PaymentStatus;
+  notes?: string;
+  nextContactAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+};
+
 export type SupervisorCommentReply = {
   id: string;
   authorId: string;

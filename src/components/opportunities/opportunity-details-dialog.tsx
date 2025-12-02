@@ -153,7 +153,7 @@ export function OpportunityDetailsDialog({
   onCreate = () => {},
   client
 }: OpportunityDetailsDialogProps) {
-  const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
+  const { userInfo, isBoss, getGoogleAccessToken, ensureGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -896,14 +896,14 @@ export function OpportunityDetailsDialog({
       </DialogContent>
     </Dialog>
      {isTaskFormOpen && opportunity && userInfo && (
-        <TaskFormDialog
-            isOpen={isTaskFormOpen}
-            onOpenChange={setIsTaskFormOpen}
-            opportunity={opportunity}
-            client={client || { id: opportunity.clientId, name: opportunity.clientName }}
-            userInfo={userInfo}
-            getGoogleAccessToken={getGoogleAccessToken}
-        />
+            <TaskFormDialog
+                isOpen={isTaskFormOpen}
+                onOpenChange={setIsTaskFormOpen}
+                opportunity={opportunity}
+                client={client || { id: opportunity.clientId, name: opportunity.clientName }}
+                userInfo={userInfo}
+                ensureGoogleAccessToken={ensureGoogleAccessToken}
+            />
      )}
     {isOrdenPautadoFormOpen && (
         <OrdenPautadoFormDialog

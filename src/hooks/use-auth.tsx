@@ -9,6 +9,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
 import { getUserProfile, updateUserProfile } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
+import { validateGoogleServicesAccess } from '@/lib/google-service-check';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -16,6 +17,7 @@ interface AuthContextType {
   loading: boolean;
   isBoss: boolean;
   getGoogleAccessToken: (options?: { silent?: boolean }) => Promise<string | null>;
+  ensureGoogleAccessToken: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -24,6 +26,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isBoss: false,
   getGoogleAccessToken: async () => null,
+  ensureGoogleAccessToken: async () => null,
 });
 
 const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service'];
@@ -135,6 +138,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
     };
 
+    const ensureGoogleAccessToken = async (): Promise<string | null> => {
+        const token = await getGoogleAccessToken();
+        if (!token) return null;
+
+        try {
+            await validateGoogleServicesAccess(token);
+            return token;
+        } catch (error) {
+            console.error('Google services check failed, signing out', error);
+            try {
+                sessionStorage.removeItem('google-access-token');
+            } catch (err) {
+                console.warn('Unable to clear Google token from session storage', err);
+            }
+            await auth.signOut();
+            router.push('/login');
+            return null;
+        }
+    };
+
 
   if (loading && !publicRoutes.includes(pathname)) {
     return (
@@ -146,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (!loading && (user || publicRoutes.includes(pathname))) {
     return (
-      <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken }}>
+      <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, ensureGoogleAccessToken }}>
         {children}
       </AuthContext.Provider>
     );

@@ -7,8 +7,8 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice } from '@/lib/firebase-service';
-import type { Opportunity, Client, User, Invoice } from '@/lib/types';
+import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry } from '@/lib/firebase-service';
+import type { Opportunity, Client, User, Invoice, PaymentEntry } from '@/lib/types';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BillingTable } from '@/components/billing/billing-table';
 import { ToInvoiceTable } from '@/components/billing/to-invoice-table';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
+import { PaymentsTable } from '@/components/billing/payments-table';
 
 const getPeriodDurationInMonths = (period: string): number => {
     switch (period) {
@@ -30,6 +31,32 @@ const getPeriodDurationInMonths = (period: string): number => {
         default: return 0;
     }
 }
+
+const parsePastedPayments = (raw: string): Omit<PaymentEntry, 'id' | 'advisorId' | 'advisorName' | 'status' | 'createdAt'>[] => {
+    return raw
+        .split(/\n+/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => line.split(/\t|;/).map(cell => cell.trim()))
+        .filter(cols => cols.length >= 7)
+        .map(cols => {
+            const [company, tipo, comprobante, razonSocial, amountRaw, issueDate, dueDate, daysLateRaw] = cols;
+            const numericAmount = Number(String(amountRaw).replace(/[^0-9.,-]/g, '').replace(',', '.'));
+            const daysLate = Number(daysLateRaw);
+
+            return {
+                company: company || tipo || '—',
+                comprobanteNumber: comprobante || undefined,
+                razonSocial: razonSocial || undefined,
+                amount: Number.isFinite(numericAmount) ? numericAmount : undefined,
+                issueDate: issueDate || undefined,
+                dueDate: dueDate || undefined,
+                daysLate: Number.isFinite(daysLate) ? daysLate : undefined,
+                notes: '',
+                nextContactAt: null,
+            };
+        });
+};
 
 export type NewInvoiceData = {
     invoiceNumber: string;
@@ -45,9 +72,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
+  const [payments, setPayments] = useState<PaymentEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [pastedPayments, setPastedPayments] = useState('');
+  const [isImportingPayments, setIsImportingPayments] = useState(false);
   
   const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -85,16 +115,18 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [allOpps, allClients, allAdvisors, allInvoices] = await Promise.all([
+      const [allOpps, allClients, allAdvisors, allInvoices, paymentRows] = await Promise.all([
         getAllOpportunities(),
         getClients(),
         getAllUsers('Asesor'),
-        getInvoices()
+        getInvoices(),
+        getPaymentEntries(),
       ]);
       setOpportunities(allOpps);
       setClients(allClients);
       setAdvisors(allAdvisors);
       setInvoices(allInvoices);
+      setPayments(paymentRows);
 
     } catch (error) {
       console.error("Error fetching billing data:", error);
@@ -219,6 +251,17 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
   }, [opportunities, invoices, clients, selectedAdvisor, isBoss, userInfo, dateRange]);
 
+  const filteredPayments = useMemo(() => {
+    if (!userInfo) return [] as PaymentEntry[];
+
+    if (isBoss) {
+      if (selectedAdvisor === 'all') return payments;
+      return payments.filter((p) => p.advisorId === selectedAdvisor);
+    }
+
+    return payments.filter((p) => p.advisorId === userInfo.id);
+  }, [isBoss, payments, selectedAdvisor, userInfo]);
+
 
   const handleUpdateOpportunity = async (updatedData: Partial<Opportunity>) => {
     if (!selectedOpportunity || !userInfo) return;
@@ -278,6 +321,50 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     } catch (error) {
         console.error("Error creating invoice:", error);
         toast({ title: "Error al crear la factura", variant: "destructive" });
+    }
+  };
+
+  const handleImportPayments = async () => {
+    if (!userInfo || !isBoss) return;
+    if (!selectedAdvisor || selectedAdvisor === 'all') {
+      toast({ title: 'Seleccioná un asesor', description: 'Elegí un asesor antes de pegar la lista de pagos.', variant: 'destructive' });
+      return;
+    }
+
+    const advisor = advisors.find((a) => a.id === selectedAdvisor);
+    if (!advisor) {
+      toast({ title: 'Asesor no encontrado', variant: 'destructive' });
+      return;
+    }
+
+    const rows = parsePastedPayments(pastedPayments);
+    if (rows.length === 0) {
+      toast({ title: 'No se pudo leer la lista', description: 'Pegá la tabla con las columnas en pestañas o separadas por ;', variant: 'destructive' });
+      return;
+    }
+
+    setIsImportingPayments(true);
+    try {
+      await replacePaymentEntriesForAdvisor(advisor.id, advisor.name || advisor.email || 'Asesor', rows, userInfo.id, userInfo.name);
+      toast({ title: 'Pagos actualizados' });
+      setPastedPayments('');
+      fetchData();
+    } catch (error) {
+      console.error('Error importing payments', error);
+      toast({ title: 'Error al cargar pagos', variant: 'destructive' });
+    } finally {
+      setIsImportingPayments(false);
+    }
+  };
+
+  const handleUpdatePaymentEntry = async (paymentId: string, updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt'>>) => {
+    setPayments((prev) => prev.map((p) => (p.id === paymentId ? { ...p, ...updates } : p)));
+    try {
+      await updatePaymentEntry(paymentId, updates);
+    } catch (error) {
+      console.error('Error updating payment entry', error);
+      toast({ title: 'No se pudo actualizar el pago', variant: 'destructive' });
+      fetchData();
     }
   };
 
@@ -380,11 +467,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <Tabs defaultValue={initialTab}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="to-invoice">A Facturar</TabsTrigger>
             <TabsTrigger value="to-collect">A Cobrar</TabsTrigger>
             <TabsTrigger value="paid">Pagado</TabsTrigger>
             <TabsTrigger value="credit-notes">NC</TabsTrigger>
+            <TabsTrigger value="payments">Pagos</TabsTrigger>
           </TabsList>
           <TabsContent value="to-invoice">
             <ToInvoiceTable 
@@ -420,6 +508,30 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               onToggleCreditNote={handleToggleCreditNote}
               showCreditNoteDate
             />
+          </TabsContent>
+          <TabsContent value="payments">
+            <div className="grid gap-4">
+              {isBoss && (
+                <div className="grid gap-3 rounded-lg border bg-card p-4">
+                  <p className="text-sm text-muted-foreground">
+                    Pegá las filas que recibís por mail (separadas por tabulaciones o punto y coma) y reemplazaremos la lista de ese asesor.
+                  </p>
+                  <textarea
+                    className="min-h-[120px] w-full rounded-md border bg-background p-3 text-sm"
+                    value={pastedPayments}
+                    onChange={(e) => setPastedPayments(e.target.value)}
+                    placeholder="Empresa\tTipo\tNro comprobante\tRazón social\tImporte\tFecha emisión\tFecha vencimiento\tDías de atraso"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button onClick={handleImportPayments} disabled={isImportingPayments}>
+                      {isImportingPayments ? <Spinner size="small" /> : 'Reemplazar lista de pagos'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <PaymentsTable entries={filteredPayments} onUpdate={handleUpdatePaymentEntry} />
+            </div>
           </TabsContent>
         </Tabs>
       </main>

@@ -4,7 +4,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent as apiCreateCalendarEvent } from './google-gmail-service';
 import { format, parseISO } from 'date-fns';
@@ -34,6 +34,7 @@ const collections = {
     licenses: collection(db, 'licencias'),
     systemConfig: collection(db, 'system_config'),
     supervisorComments: collection(db, 'supervisor_comments'),
+    paymentEntries: collection(db, 'payment_entries'),
 };
 
 const cache: {
@@ -1224,6 +1225,101 @@ export const deleteInvoice = async (id: string, userId: string, userName: string
     });
 };
 
+
+// --- Payment entries ---
+
+const PAYMENT_CACHE_KEY = 'paymentEntries';
+
+export const getPaymentEntries = async (): Promise<PaymentEntry[]> => {
+    const cached = getFromCache(PAYMENT_CACHE_KEY);
+    if (cached) return cached;
+
+    const snapshot = await getDocs(query(collections.paymentEntries, orderBy('createdAt', 'desc')));
+    const payments = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        const parsed: PaymentEntry = {
+            id: docSnap.id,
+            advisorId: data.advisorId,
+            advisorName: data.advisorName,
+            company: data.company,
+            comprobanteNumber: data.comprobanteNumber,
+            razonSocial: data.razonSocial,
+            amount: typeof data.amount === 'number' ? data.amount : Number(data.amount) || undefined,
+            issueDate: timestampToISO((data as any).issueDate) || data.issueDate,
+            dueDate: timestampToISO((data as any).dueDate) || data.dueDate,
+            daysLate: typeof data.daysLate === 'number' ? data.daysLate : Number(data.daysLate) || undefined,
+            status: (data.status as PaymentStatus) || 'Pendiente',
+            notes: data.notes,
+            nextContactAt: timestampToISO((data as any).nextContactAt) || data.nextContactAt || null,
+            createdAt: timestampToISO((data as any).createdAt) || new Date().toISOString(),
+            updatedAt: timestampToISO((data as any).updatedAt),
+        };
+        return parsed;
+    });
+
+    setInCache(PAYMENT_CACHE_KEY, payments);
+    return payments;
+};
+
+export const replacePaymentEntriesForAdvisor = async (
+    advisorId: string,
+    advisorName: string,
+    rows: Omit<PaymentEntry, 'id' | 'advisorId' | 'advisorName' | 'status' | 'createdAt'>[],
+    userId: string,
+    userName: string,
+) => {
+    const existingQuery = query(collections.paymentEntries, where('advisorId', '==', advisorId));
+    const existingSnap = await getDocs(existingQuery);
+
+    const batch = writeBatch(db);
+    existingSnap.forEach((docSnap) => batch.delete(docSnap.ref));
+
+    rows.forEach((row) => {
+        const docRef = doc(collections.paymentEntries);
+        batch.set(docRef, {
+            advisorId,
+            advisorName,
+            company: row.company,
+            comprobanteNumber: row.comprobanteNumber,
+            razonSocial: row.razonSocial,
+            amount: row.amount ?? null,
+            issueDate: row.issueDate || null,
+            dueDate: row.dueDate || null,
+            daysLate: row.daysLate ?? null,
+            status: 'Pendiente' as PaymentStatus,
+            notes: row.notes || '',
+            nextContactAt: row.nextContactAt || null,
+            createdAt: serverTimestamp(),
+        });
+    });
+
+    await batch.commit();
+    invalidateCache(PAYMENT_CACHE_KEY);
+
+    await logActivity({
+        userId,
+        userName,
+        ownerName: advisorName,
+        type: 'update',
+        entityType: 'invoice',
+        entityId: advisorId,
+        entityName: 'Pagos',
+        details: `actualizó la lista de pagos del asesor ${advisorName}`,
+        timestamp: new Date().toISOString(),
+    });
+};
+
+export const updatePaymentEntry = async (
+    paymentId: string,
+    updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt'>>,
+) => {
+    const docRef = doc(collections.paymentEntries, paymentId);
+    await updateDoc(docRef, {
+        ...updates,
+        updatedAt: serverTimestamp(),
+    });
+    invalidateCache(PAYMENT_CACHE_KEY);
+};
 
 
 // --- Agency Functions ---
