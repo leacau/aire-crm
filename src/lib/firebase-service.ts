@@ -1296,9 +1296,43 @@ export const replacePaymentEntriesForAdvisor = async (
     const existingSnap = await getDocs(existingQuery);
 
     const batch = writeBatch(db);
-    existingSnap.forEach((docSnap) => batch.delete(docSnap.ref));
+    const existingEntries = existingSnap.docs.map((docSnap) => {
+        const data = docSnap.data();
+        const comprobanteNumber = typeof data.comprobanteNumber === 'string'
+            ? data.comprobanteNumber.trim()
+            : '';
 
-    rows.forEach((row) => {
+        return {
+            ref: docSnap.ref,
+            comprobanteNumber: comprobanteNumber || null,
+        };
+    });
+
+    const existingNumbers = new Set(
+        existingEntries
+            .map((entry) => entry.comprobanteNumber)
+            .filter((value): value is string => Boolean(value)),
+    );
+
+    const incomingNumbers = new Set(
+        rows
+            .map((row) => (row.comprobanteNumber || '').trim())
+            .filter(Boolean),
+    );
+
+    const entriesToDelete = existingEntries.filter(
+        (entry) => entry.comprobanteNumber && !incomingNumbers.has(entry.comprobanteNumber),
+    );
+
+    entriesToDelete.forEach((entry) => batch.delete(entry.ref));
+
+    const rowsToInsert = rows.filter((row) => {
+        const comprobante = (row.comprobanteNumber || '').trim();
+        if (!comprobante) return true;
+        return !existingNumbers.has(comprobante);
+    });
+
+    rowsToInsert.forEach((row) => {
         const docRef = doc(collections.paymentEntries);
         batch.set(docRef, {
             advisorId,
