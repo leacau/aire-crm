@@ -5,17 +5,18 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search, Activity, Clock } from 'lucide-react';
+import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search, Activity, Clock, Bell } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Prospect, User, Client, ClientActivity } from '@/lib/types';
-import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers, getActivitiesForEntity, getAllClientActivities, getOpportunityAlertsConfig } from '@/lib/firebase-service';
+import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers, getActivitiesForEntity, getAllClientActivities, getOpportunityAlertsConfig, recordProspectNotifications } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { sendEmail } from '@/lib/google-gmail-service';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { ProspectFormDialog } from '@/components/prospects/prospect-form-dialog';
@@ -55,6 +56,7 @@ export default function ProspectsPage() {
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [showOnlyMyProspects, setShowOnlyMyProspects] = useState(!isBoss);
+  const [isSendingNotifications, setIsSendingNotifications] = useState(false);
   
   const [isActivityFormOpen, setIsActivityFormOpen] = useState(false);
   const [selectedProspectForActivity, setSelectedProspectForActivity] = useState<Prospect | null>(null);
@@ -233,6 +235,152 @@ export default function ProspectsPage() {
     });
     return result;
   }, [prospects, activitiesByProspectId]);
+
+  const usersById = useMemo(() => {
+    return users.reduce((acc, user) => {
+      acc[user.id] = user;
+      return acc;
+    }, {} as Record<string, User>);
+  }, [users]);
+
+  const handleSendProspectNotifications = useCallback(async () => {
+    if (!isBoss || !userInfo) return;
+    setIsSendingNotifications(true);
+    try {
+      const now = new Date();
+      const isRecentlyNotified = (prospect: Prospect) => {
+        if (!prospect.lastProspectNotificationAt) return false;
+        try {
+          return differenceInDays(now, parseISO(prospect.lastProspectNotificationAt)) < 7;
+        } catch (error) {
+          return false;
+        }
+      };
+
+      const eligibleProspects = prospects.filter(prospect =>
+        prospect.status !== 'Convertido' && !isRecentlyNotified(prospect)
+      );
+
+      const listOne = eligibleProspects.filter(prospect => {
+        if (prospect.status !== 'Nuevo') return false;
+        try {
+          return differenceInDays(now, parseISO(prospect.createdAt)) >= 3;
+        } catch (error) {
+          return false;
+        }
+      });
+
+      const listOneIds = new Set(listOne.map(p => p.id));
+
+      const listTwo = eligibleProspects.filter(prospect => {
+        if (listOneIds.has(prospect.id)) return false;
+        const prospectActivities = activitiesByProspectId[prospect.id] || [];
+        if (prospectActivities.length === 0) return false;
+        try {
+          const lastActivityDate = parseISO(prospectActivities[0].timestamp);
+          return differenceInDays(now, lastActivityDate) > 7;
+        } catch (error) {
+          return false;
+        }
+      });
+
+      const listTwoIds = new Set(listTwo.map(p => p.id));
+
+      const listThree = eligibleProspects.filter(prospect => {
+        if (listOneIds.has(prospect.id) || listTwoIds.has(prospect.id)) return false;
+        if (prospect.status === 'Nuevo') return false;
+        const prospectActivities = activitiesByProspectId[prospect.id] || [];
+        return prospectActivities.length === 0;
+      });
+
+      const allTargets = [...listOne, ...listTwo, ...listThree];
+      if (allTargets.length === 0) {
+        toast({ title: 'Sin notificaciones', description: 'No hay prospectos pendientes para notificar.' });
+        return;
+      }
+
+      const notificationsByOwner = new Map<string, { owner: User; listOne: Prospect[]; listTwo: Prospect[]; listThree: Prospect[] }>();
+      const addProspectToOwner = (prospect: Prospect, bucket: 'listOne' | 'listTwo' | 'listThree') => {
+        const owner = usersById[prospect.ownerId];
+        if (!owner) return;
+        if (!notificationsByOwner.has(owner.id)) {
+          notificationsByOwner.set(owner.id, { owner, listOne: [], listTwo: [], listThree: [] });
+        }
+        const target = notificationsByOwner.get(owner.id)!;
+        target[bucket].push(prospect);
+      };
+
+      listOne.forEach(prospect => addProspectToOwner(prospect, 'listOne'));
+      listTwo.forEach(prospect => addProspectToOwner(prospect, 'listTwo'));
+      listThree.forEach(prospect => addProspectToOwner(prospect, 'listThree'));
+
+      const accessToken = await getGoogleAccessToken();
+      if (!accessToken) {
+        toast({ title: 'Autorización requerida', description: 'No pudimos enviar las notificaciones sin acceso a Gmail.', variant: 'destructive' });
+        return;
+      }
+
+      for (const [, { owner, listOne: ownerListOne, listTwo: ownerListTwo, listThree: ownerListThree }] of notificationsByOwner.entries()) {
+        if (!owner.email) continue;
+        const sections: string[] = [];
+        const formatListItems = (items: Prospect[]) =>
+          items
+            .map(item => `<li><strong>${item.companyName}</strong>${item.contactName ? ` (${item.contactName})` : ''}</li>`)
+            .join('');
+
+        if (ownerListOne.length > 0) {
+          sections.push(`
+            <h4>Prospectos nuevos sin atención (3+ días)</h4>
+            <p>Estos prospectos fueron creados hace 3 días y a la fecha no tienen atención. Trabajarlos o asentar lo trabajado.</p>
+            <ul>${formatListItems(ownerListOne)}</ul>
+          `);
+        }
+
+        if (ownerListTwo.length > 0) {
+          sections.push(`
+            <h4>Prospectos con más de 7 días sin actividad</h4>
+            <p>Estos prospecto llevan más de 7 días desde la última actividad. Volver a trabajarlos o realizar nuevas aclaraciones.</p>
+            <ul>${formatListItems(ownerListTwo)}</ul>
+          `);
+        }
+
+        if (ownerListThree.length > 0) {
+          sections.push(`
+            <h4>Prospectos sin actividades registradas</h4>
+            <p>Estos prospectos no tienen actividades detalladas, comentar lo trabajado en cada uno.</p>
+            <ul>${formatListItems(ownerListThree)}</ul>
+          `);
+        }
+
+        if (sections.length === 0) continue;
+
+        const body = `
+          <p>Hola ${owner.name},</p>
+          <p>Detectamos prospectos que requieren tu atención:</p>
+          ${sections.join('')}
+          <p>Notificación enviada el ${format(now, 'P', { locale: es })}.</p>
+        `;
+
+        await sendEmail({
+          accessToken,
+          to: owner.email,
+          subject: 'Seguimiento de prospectos pendientes',
+          body,
+        });
+      }
+
+      const notifiedProspectIds = Array.from(new Set(allTargets.map(p => p.id)));
+      await recordProspectNotifications(notifiedProspectIds, userInfo.id, userInfo.name);
+      toast({ title: 'Notificaciones enviadas', description: 'Se registraron los avisos para los prospectos pendientes.' });
+      fetchData();
+    } catch (error) {
+      console.error('Error sending prospect notifications', error);
+      toast({ title: 'Error al notificar', description: 'No se pudieron enviar las notificaciones.', variant: 'destructive' });
+    } finally {
+      setIsSendingNotifications(false);
+    }
+  }, [isBoss, userInfo, prospects, activitiesByProspectId, usersById, getGoogleAccessToken, toast, fetchData]);
+
 
   const isProspectHidden = useCallback((prospect: Prospect) => {
     if (!prospectVisibilityDays || prospectVisibilityDays <= 0) return false;
@@ -417,10 +565,16 @@ export default function ProspectsPage() {
               </SelectContent>
             </Select>
           )}
-           <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2">
             <Checkbox id="my-prospects" name="my-prospects" checked={showOnlyMyProspects} onCheckedChange={(checked) => setShowOnlyMyProspects(!!checked)} />
             <Label htmlFor="my-prospects" className="whitespace-nowrap text-sm font-medium">Solo mis prospectos</Label>
           </div>
+          {isBoss && (
+            <Button variant="outline" onClick={handleSendProspectNotifications} disabled={isSendingNotifications}>
+              <Bell className="mr-2 h-4 w-4" />
+              {isSendingNotifications ? 'Enviando...' : 'Notificar prospectos'}
+            </Button>
+          )}
           <Button onClick={() => handleOpenForm()}>
             <PlusCircle className="mr-2" />
             Nuevo Prospecto

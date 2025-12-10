@@ -216,6 +216,7 @@ export type Prospect = {
   ownerName: string;
   createdAt: string;
   statusChangedAt?: string;
+  lastProspectNotificationAt?: string;
 };
 
 export type Agency = {

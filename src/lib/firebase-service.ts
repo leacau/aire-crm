@@ -559,11 +559,12 @@ export const getProspects = async (): Promise<Prospect[]> => {
     const prospects = snapshot.docs.map(doc => {
       const data = doc.data();
       const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
-      return { 
+      return {
           id: doc.id,
           ...data,
           createdAt: convertTimestamp(data.createdAt),
           statusChangedAt: convertTimestamp(data.statusChangedAt),
+          lastProspectNotificationAt: convertTimestamp((data as any).lastProspectNotificationAt),
       } as Prospect
     });
     setInCache('prospects', prospects);
@@ -636,6 +637,34 @@ export const deleteProspect = async (id: string, userId: string, userName: strin
         entityName: prospectData.companyName,
         details: `eliminó el prospecto <strong>${prospectData.companyName}</strong>`,
         ownerName: prospectData.ownerName,
+    });
+};
+
+export const recordProspectNotifications = async (
+    prospectIds: string[],
+    userId: string,
+    userName: string,
+): Promise<void> => {
+    if (prospectIds.length === 0) return;
+
+    const batch = writeBatch(db);
+    prospectIds.forEach(prospectId => {
+        const prospectRef = doc(db, 'prospects', prospectId);
+        batch.update(prospectRef, { lastProspectNotificationAt: serverTimestamp() });
+    });
+
+    await batch.commit();
+    invalidateCache('prospects');
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'prospect',
+        entityId: 'prospect_notifications',
+        entityName: 'Notificaciones de prospectos',
+        details: `envió recordatorios de seguimiento para ${prospectIds.length} prospecto(s).`,
+        ownerName: userName,
     });
 };
 
