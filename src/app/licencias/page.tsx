@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { User, VacationRequest } from '@/lib/types';
-import { getAllUsers, getVacationRequests, createVacationRequest, deleteVacationRequest, approveVacationRequest, updateUserProfile } from '@/lib/firebase-service';
+import { getAllUsers, getVacationRequests, createVacationRequest, deleteVacationRequest, approveVacationRequest, addVacationDays } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
 import { LicensesTable } from '@/components/licencias/licenses-table';
@@ -17,6 +17,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { sendEmail } from '@/lib/google-gmail-service';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 export default function LicensesPage() {
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
@@ -25,6 +27,8 @@ export default function LicensesPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [daysToAdd, setDaysToAdd] = useState<Record<string, string>>({});
+  const [updatingDays, setUpdatingDays] = useState<Record<string, boolean>>({});
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<VacationRequest | null>(null);
@@ -32,6 +36,7 @@ export default function LicensesPage() {
   const [requestToDelete, setRequestToDelete] = useState<VacationRequest | null>(null);
 
   const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
+  const directReports = useMemo(() => users.filter(u => u.managerId === userInfo?.id), [users, userInfo?.id]);
 
   const fetchData = useCallback(async () => {
     if (!userInfo) return;
@@ -160,6 +165,29 @@ export default function LicensesPage() {
     return requests.filter(r => r.userId === requestOwner.id && (r.status === 'Aprobado' || r.status === 'Pendiente'));
   }, [requests, requestOwner]);
 
+  const handleAddVacationDays = async (userId: string) => {
+    if (!userInfo) return;
+
+    const value = Number(daysToAdd[userId]);
+    if (Number.isNaN(value) || value <= 0) {
+      toast({ title: 'Cantidad inválida', description: 'Ingresa un número mayor a cero para sumar días.', variant: 'destructive' });
+      return;
+    }
+
+    setUpdatingDays(prev => ({ ...prev, [userId]: true }));
+    try {
+      await addVacationDays(userId, value, userInfo.id, userInfo.name);
+      toast({ title: 'Días actualizados', description: `Se agregaron ${value} días de licencia.` });
+      setDaysToAdd(prev => ({ ...prev, [userId]: '' }));
+      fetchData();
+    } catch (error) {
+      console.error('Error al agregar días de licencia:', error);
+      toast({ title: 'Error al agregar días', description: (error as Error).message, variant: 'destructive' });
+    } finally {
+      setUpdatingDays(prev => ({ ...prev, [userId]: false }));
+    }
+  };
+
 
   if (loading || !userInfo) {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
@@ -174,15 +202,73 @@ export default function LicensesPage() {
             Nueva Solicitud
           </Button>
         </Header>
-        <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-            <LicensesTable
-              requests={requests}
-              isManagerView={isBoss}
-              onEdit={handleOpenForm}
-              onDelete={setRequestToDelete}
-              onUpdateRequest={handleUpdateRequest}
-              currentUserId={userInfo.id}
-            />
+        <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
+            {isBoss && (
+              <section className="space-y-3">
+                <div>
+                  <h2 className="text-lg font-semibold">Días pendientes de tu equipo</h2>
+                  <p className="text-sm text-muted-foreground">Visualiza y ajusta los saldos de licencias de tus subordinados directos.</p>
+                </div>
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Colaborador</TableHead>
+                        <TableHead>Rol</TableHead>
+                        <TableHead>Días pendientes</TableHead>
+                        <TableHead className="w-[260px]">Agregar días</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {directReports.length > 0 ? (
+                        directReports.map(member => (
+                          <TableRow key={member.id}>
+                            <TableCell className="font-medium">{member.name}</TableCell>
+                            <TableCell>{member.role}</TableCell>
+                            <TableCell>{member.vacationDays ?? 0}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  value={daysToAdd[member.id] ?? ''}
+                                  onChange={(e) => setDaysToAdd(prev => ({ ...prev, [member.id]: e.target.value }))}
+                                  placeholder="Cantidad"
+                                  className="w-28"
+                                />
+                                <Button
+                                  onClick={() => handleAddVacationDays(member.id)}
+                                  disabled={updatingDays[member.id] === true}
+                                  variant="outline"
+                                >
+                                  {updatingDays[member.id] ? 'Guardando...' : 'Sumar días'}
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="h-16 text-center text-sm text-muted-foreground">
+                            No tienes colaboradores directos asignados.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </section>
+            )}
+            <section>
+              <LicensesTable
+                requests={requests}
+                isManagerView={isBoss}
+                onEdit={handleOpenForm}
+                onDelete={setRequestToDelete}
+                onUpdateRequest={handleUpdateRequest}
+                currentUserId={userInfo.id}
+              />
+            </section>
         </main>
       </div>
 

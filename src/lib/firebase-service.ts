@@ -504,6 +504,44 @@ export const approveVacationRequest = async (
     return { emailPayload };
 };
 
+export const addVacationDays = async (userId: string, daysToAdd: number, updatedBy: string, updatedByName: string): Promise<void> => {
+    if (daysToAdd <= 0) {
+        throw new Error('La cantidad de días a agregar debe ser mayor a cero.');
+    }
+
+    const userRef = doc(db, 'users', userId);
+
+    await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) {
+            throw new Error('Usuario no encontrado.');
+        }
+
+        const userData = userSnap.data() as User;
+        const currentDays = userData.vacationDays || 0;
+        const newVacationDays = currentDays + daysToAdd;
+
+        transaction.update(userRef, {
+            vacationDays: newVacationDays,
+            updatedAt: serverTimestamp(),
+            updatedBy,
+        });
+    });
+
+    invalidateCache('users');
+
+    const updatedUser = await getDoc(userRef);
+    await logActivity({
+        userId: updatedBy,
+        userName: updatedByName,
+        type: 'update',
+        entityType: 'user',
+        entityId: userId,
+        entityName: (updatedUser.data() as User)?.name || 'Usuario',
+        details: `agregó <strong>${daysToAdd}</strong> días de licencia a <strong>${(updatedUser.data() as User)?.name || 'un usuario'}</strong>`,
+    });
+};
+
 
 export const deleteVacationRequest = async (requestId: string): Promise<void> => {
     const docRef = doc(db, 'licencias', requestId);
