@@ -96,20 +96,21 @@ const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, all
 
   return (
     <TableRow key={entry.id} style={rowColor ? { backgroundColor: rowColor } : undefined}>
-      <TableCell>
-        {allowDelete && (
+      {allowDelete && (
+        <TableCell>
           <Checkbox
             aria-label="Seleccionar pago"
             checked={selected}
             onCheckedChange={(checked) => onToggleSelected(entry.id, Boolean(checked))}
           />
-        )}
-      </TableCell>
-      <TableCell className="font-medium">{entry.company}</TableCell>
+        </TableCell>
+      )}
+      {!isBossView && <TableCell className="font-medium">{entry.company}</TableCell>}
       <TableCell>{entry.comprobanteNumber || '—'}</TableCell>
       <TableCell>{entry.razonSocial || '—'}</TableCell>
       <TableCell>{formatCurrency(entry.pendingAmount)}</TableCell>
-      <TableCell>{formatDate(entry.dueDate)}</TableCell>
+      {isBossView && <TableCell>{entry.advisorName}</TableCell>}
+      {!isBossView && <TableCell>{formatDate(entry.dueDate)}</TableCell>}
       <TableCell>{typeof daysLate === 'number' ? daysLate : '—'}</TableCell>
       <TableCell>
         {isBossView ? (
@@ -131,10 +132,8 @@ const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, all
         )}
       </TableCell>
       <TableCell className="whitespace-pre-wrap break-words max-w-xs">{entry.notes?.trim() || '—'}</TableCell>
-      <TableCell>
-        {isBossView ? (
-          '—'
-        ) : (
+      {!isBossView && (
+        <TableCell>
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Abrir acciones">
@@ -194,14 +193,26 @@ const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, all
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-        )}
-      </TableCell>
+        </TableCell>
+      )}
     </TableRow>
   );
 };
 
 export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onToggleSelected, onToggleSelectAll, allowDelete, isBossView }: Props) {
   const allSelected = allowDelete && entries.length > 0 && selectedIds.length === entries.length;
+  const columnCount =
+    (allowDelete ? 1 : 0) +
+    (isBossView ? 0 : 1) +
+    1 +
+    1 +
+    1 +
+    (isBossView ? 1 : 0) +
+    (isBossView ? 0 : 1) +
+    1 +
+    1 +
+    1 +
+    (isBossView ? 0 : 1);
 
   return (
     <Card>
@@ -227,25 +238,26 @@ export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onTogg
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-10">
-                {allowDelete && (
+              {allowDelete && (
+                <TableHead className="w-10">
                   <Checkbox
                     aria-label="Seleccionar todos"
                     checked={allSelected}
                     onCheckedChange={(checked) => onToggleSelectAll(Boolean(checked))}
                     indeterminate={allowDelete && selectedIds.length > 0 && selectedIds.length < entries.length}
                   />
-                )}
-              </TableHead>
-              <TableHead>Empresa</TableHead>
+                </TableHead>
+              )}
+              {!isBossView && <TableHead>Empresa</TableHead>}
               <TableHead>Nro. comprobante</TableHead>
               <TableHead>Razón Social</TableHead>
               <TableHead>Importe pendiente</TableHead>
-              <TableHead>Vencimiento</TableHead>
+              {isBossView && <TableHead>Asesor responsable</TableHead>}
+              {!isBossView && <TableHead>Vencimiento</TableHead>}
               <TableHead>Días de atraso</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Nota/Aclaración</TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
+              {!isBossView && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -263,7 +275,7 @@ export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onTogg
             ))}
             {entries.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-sm text-muted-foreground">
+                <TableCell colSpan={columnCount} className="text-center text-sm text-muted-foreground">
                   No hay pagos cargados para este vendedor.
                 </TableCell>
               </TableRow>
