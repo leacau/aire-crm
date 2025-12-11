@@ -236,6 +236,14 @@ export default function ProspectsPage() {
     return result;
   }, [prospects, activitiesByProspectId]);
 
+  const isProspectHidden = useCallback((prospect: Prospect) => {
+    if (!prospectVisibilityDays || prospectVisibilityDays <= 0) return false;
+    if (prospect.status === 'Convertido' || prospect.status === 'No Próspero') return false;
+    const lastActivityDate = lastActivityByProspectId[prospect.id];
+    if (!lastActivityDate) return false;
+    return differenceInDays(new Date(), lastActivityDate) >= prospectVisibilityDays;
+  }, [lastActivityByProspectId, prospectVisibilityDays]);
+
   const usersById = useMemo(() => {
     return users.reduce((acc, user) => {
       acc[user.id] = user;
@@ -258,7 +266,10 @@ export default function ProspectsPage() {
       };
 
       const eligibleProspects = prospects.filter(prospect =>
-        prospect.status !== 'Convertido' && !isRecentlyNotified(prospect)
+        prospect.status !== 'Convertido' &&
+        prospect.status !== 'No Próspero' &&
+        !isProspectHidden(prospect) &&
+        !isRecentlyNotified(prospect)
       );
 
       const listOne = eligibleProspects.filter(prospect => {
@@ -379,16 +390,7 @@ export default function ProspectsPage() {
     } finally {
       setIsSendingNotifications(false);
     }
-  }, [isBoss, userInfo, prospects, activitiesByProspectId, usersById, getGoogleAccessToken, toast, fetchData]);
-
-
-  const isProspectHidden = useCallback((prospect: Prospect) => {
-    if (!prospectVisibilityDays || prospectVisibilityDays <= 0) return false;
-    if (prospect.status === 'Convertido' || prospect.status === 'No Próspero') return false;
-    const lastActivityDate = lastActivityByProspectId[prospect.id];
-    if (!lastActivityDate) return false;
-    return differenceInDays(new Date(), lastActivityDate) >= prospectVisibilityDays;
-  }, [lastActivityByProspectId, prospectVisibilityDays]);
+  }, [isBoss, userInfo, prospects, activitiesByProspectId, usersById, getGoogleAccessToken, toast, fetchData, isProspectHidden]);
 
 
   const filteredProspects = useMemo(() => {
