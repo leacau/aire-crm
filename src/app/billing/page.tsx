@@ -616,6 +616,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 onToggleSelected={handleTogglePaymentSelection}
                 onToggleSelectAll={handleSelectAllPayments}
                 allowDelete={isBoss}
+                isBossView={isBoss}
               />
             </div>
           </TabsContent>

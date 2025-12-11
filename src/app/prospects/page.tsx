@@ -450,10 +450,21 @@ export default function ProspectsPage() {
       enableSorting: true,
       cell: ({ row }) => row.original.sector || '-',
     },
-     {
+    {
       id: 'lastActivity',
       header: 'Última Actividad',
-      sortingFn: 'datetime',
+      accessorFn: (row) => {
+        const prospectActivities = activitiesByProspectId[row.id] || [];
+        return prospectActivities[0]?.timestamp ?? null;
+      },
+      sortingFn: (rowA, rowB, columnId) => {
+        const a = rowA.getValue<string | null>(columnId);
+        const b = rowB.getValue<string | null>(columnId);
+        if (!a && !b) return 0;
+        if (!a) return 1;
+        if (!b) return -1;
+        return new Date(a).getTime() - new Date(b).getTime();
+      },
       enableSorting: true,
       size: 150,
       cell: ({ row }) => {

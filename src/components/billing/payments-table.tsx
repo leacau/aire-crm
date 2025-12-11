@@ -22,6 +22,7 @@ type Props = {
   onToggleSelected: (id: string, checked: boolean) => void;
   onToggleSelectAll: (checked: boolean) => void;
   allowDelete?: boolean;
+  isBossView?: boolean;
 };
 
 const paymentStatuses: PaymentStatus[] = ['Pendiente', 'Reclamado', 'Pagado', 'Incobrable'];
@@ -74,13 +75,14 @@ const resolveRowColor = (daysLate: number | null | undefined) => {
   return '#bbd5ed';
 };
 
-const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, allowDelete }: {
+const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, allowDelete, isBossView }: {
   entry: PaymentEntry;
   onUpdate: Props['onUpdate'];
   onDelete: Props['onDelete'];
   onToggleSelected: Props['onToggleSelected'];
   selected: boolean;
   allowDelete?: boolean;
+  isBossView?: boolean;
 }) => {
   const [reminderDate, setReminderDate] = useState(entry.nextContactAt?.substring(0, 10) || '');
   const daysLate = useMemo(() => entry.daysLate ?? getDaysLate(entry), [entry]);
@@ -110,86 +112,95 @@ const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, all
       <TableCell>{formatDate(entry.dueDate)}</TableCell>
       <TableCell>{typeof daysLate === 'number' ? daysLate : '—'}</TableCell>
       <TableCell>
-        <Select
-          value={entry.status}
-          onValueChange={(value) => onUpdate(entry.id, { status: value as PaymentStatus })}
-        >
-          <SelectTrigger className="w-[140px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {paymentStatuses.map((status) => (
-              <SelectItem key={status} value={status}>{status}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {isBossView ? (
+          entry.status
+        ) : (
+          <Select
+            value={entry.status}
+            onValueChange={(value) => onUpdate(entry.id, { status: value as PaymentStatus })}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {paymentStatuses.map((status) => (
+                <SelectItem key={status} value={status}>{status}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </TableCell>
+      <TableCell className="whitespace-pre-wrap break-words max-w-xs">{entry.notes?.trim() || '—'}</TableCell>
       <TableCell>
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Abrir acciones">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72 space-y-3 p-3">
-            <div className="space-y-1">
-              <p className="text-sm font-medium leading-none">Explicación</p>
-              <p className="text-xs text-muted-foreground">Guarda notas o aclaraciones sobre este pago.</p>
+        {isBossView ? (
+          '—'
+        ) : (
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Abrir acciones">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72 space-y-3 p-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium leading-none">Explicación</p>
+                <p className="text-xs text-muted-foreground">Guarda notas o aclaraciones sobre este pago.</p>
+                <Input
+                  value={localNotes}
+                  placeholder="Agregar detalle"
+                  onChange={(e) => setLocalNotes(e.target.value)}
+                  onBlur={() => onUpdate(entry.id, { notes: localNotes })}
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium leading-none">Recordatorio</p>
+                <p className="text-xs text-muted-foreground">Seleccioná una fecha para volver a contactar.</p>
+              </div>
               <Input
-                value={localNotes}
-                placeholder="Agregar detalle"
-                onChange={(e) => setLocalNotes(e.target.value)}
-                onBlur={() => onUpdate(entry.id, { notes: localNotes })}
+                type="date"
+                value={reminderDate}
+                onChange={(e) => setReminderDate(e.target.value)}
               />
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium leading-none">Recordatorio</p>
-              <p className="text-xs text-muted-foreground">Seleccioná una fecha para volver a contactar.</p>
-            </div>
-            <Input
-              type="date"
-              value={reminderDate}
-              onChange={(e) => setReminderDate(e.target.value)}
-            />
-            <div className="flex justify-end gap-2 pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setReminderDate('');
-                  onUpdate(entry.id, { nextContactAt: null });
-                }}
-              >
-                Quitar
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => onUpdate(entry.id, { nextContactAt: reminderDate || null })}
-              >
-                Guardar
-              </Button>
-            </div>
-            {allowDelete && (
-              <div className="flex justify-end border-t pt-2">
+              <div className="flex justify-end gap-2 pt-1">
                 <Button
-                  variant="destructive"
+                  variant="outline"
                   size="sm"
                   onClick={() => {
-                    if (confirm('¿Eliminar este pago?')) onDelete([entry.id]);
+                    setReminderDate('');
+                    onUpdate(entry.id, { nextContactAt: null });
                   }}
                 >
-                  Eliminar pago
+                  Quitar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => onUpdate(entry.id, { nextContactAt: reminderDate || null })}
+                >
+                  Guardar
                 </Button>
               </div>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {allowDelete && (
+                <div className="flex justify-end border-t pt-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm('¿Eliminar este pago?')) onDelete([entry.id]);
+                    }}
+                  >
+                    Eliminar pago
+                  </Button>
+                </div>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </TableCell>
     </TableRow>
   );
 };
 
-export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onToggleSelected, onToggleSelectAll, allowDelete }: Props) {
+export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onToggleSelected, onToggleSelectAll, allowDelete, isBossView }: Props) {
   const allSelected = allowDelete && entries.length > 0 && selectedIds.length === entries.length;
 
   return (
@@ -233,6 +244,7 @@ export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onTogg
               <TableHead>Vencimiento</TableHead>
               <TableHead>Días de atraso</TableHead>
               <TableHead>Estado</TableHead>
+              <TableHead>Nota/Aclaración</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -246,11 +258,12 @@ export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onTogg
                 onToggleSelected={onToggleSelected}
                 selected={selectedIds.includes(entry.id)}
                 allowDelete={allowDelete}
+                isBossView={isBossView}
               />
             ))}
             {entries.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-sm text-muted-foreground">
+                <TableCell colSpan={10} className="text-center text-sm text-muted-foreground">
                   No hay pagos cargados para este vendedor.
                 </TableCell>
               </TableRow>
