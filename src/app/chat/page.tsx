@@ -49,6 +49,7 @@ export default function ChatPage() {
       setLastResult('success');
       toast({ title: 'Mensaje enviado', description: 'El mensaje se envió al espacio configurado en Google Chat.' });
       setMessage('');
+      setThreadKey('');
       setWebhookUrl('');
     } catch (error: any) {
       console.error('Error al enviar mensaje de Chat', error);
@@ -120,7 +121,7 @@ export default function ChatPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <Button type="submit" disabled={isSending}>
+                <Button type="submit" disabled={isSending || !message.trim()}>
                   {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Enviar a Google Chat
                 </Button>
                 <Button asChild variant="outline">
