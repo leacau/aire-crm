@@ -13,7 +13,7 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb, ClipboardCheck, Target } from 'lucide-react';
+import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb, ClipboardCheck, Target, MessageCircle } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
@@ -35,6 +35,7 @@ const menuItems: { href: string; label: string; icon: React.ElementType, screenN
   { href: '/licencias', label: 'Licencias', icon: ClipboardCheck, screenName: 'Licenses' },
   { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, screenName: 'Approvals' },
   { href: '/activity', label: 'Actividad', icon: LayoutList, screenName: 'Activity' },
+  { href: '/chat', label: 'Chat', icon: MessageCircle, screenName: 'Chat' },
   { href: '/team', label: 'Equipo', icon: Users, screenName: 'Team' },
   { href: '/rates', label: 'Tarifas', icon: Banknote, screenName: 'Rates' },
   { href: '/reports', label: 'Reportes', icon: BarChart, screenName: 'Reports' },

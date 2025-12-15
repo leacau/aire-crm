@@ -332,9 +332,9 @@ export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'P
 export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'];
 
 export const screenNames = [
-    'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs', 
-    'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals', 
-    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives'
+    'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
+    'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat'
 ] as const;
 export type ScreenName = typeof screenNames[number];
 
