@@ -47,6 +47,8 @@ export default function ChatPage() {
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [targetEmail, setTargetEmail] = useState('');
 
+  const directMessageValue = targetEmail || 'none';
+
   const advisoryOptions = useMemo(() => advisors.filter((user) => !!user.email), [advisors]);
 
   const loadMessages = useCallback(async () => {
@@ -64,10 +66,14 @@ export default function ChatPage() {
         },
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      const payload = contentType.includes('application/json') ? await response.json() : await response.text();
+
       if (!response.ok) {
-        throw new Error(data?.error || 'No se pudieron obtener los mensajes.');
+        const message = typeof payload === 'string' ? payload : payload?.error;
+        throw new Error(message || 'No se pudieron obtener los mensajes.');
       }
+      const data = typeof payload === 'string' ? {} : payload;
       setMessages(Array.isArray(data?.messages) ? data.messages : []);
     } catch (error: any) {
       console.error('Error cargando mensajes de Chat', error);
@@ -230,12 +236,15 @@ export default function ChatPage() {
               </div>
               <div className="flex flex-col gap-2">
                 <Label>Enviar directo a asesor (opcional)</Label>
-                <Select value={targetEmail} onValueChange={setTargetEmail}>
+                <Select
+                  value={directMessageValue}
+                  onValueChange={(value) => setTargetEmail(value === 'none' ? '' : value)}
+                >
                   <SelectTrigger className="w-full md:w-80">
                     <SelectValue placeholder="Sin mensaje directo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sin mensaje directo</SelectItem>
+                    <SelectItem value="none">Sin mensaje directo</SelectItem>
                     {advisoryOptions.map((user) => (
                       <SelectItem key={user.id} value={user.email!}>
                         {user.name} ({user.email})
