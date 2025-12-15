@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendChatMessage } from '@/lib/google-chat-service';
+import { ChatServiceError, sendChatMessage } from '@/lib/google-chat-service';
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -27,10 +27,26 @@ export async function POST(request: Request) {
   }
 
   try {
+    const parsed = new URL(resolvedWebhook);
+    if (parsed.protocol !== 'https:') {
+      return NextResponse.json({ error: 'El webhook debe usar https.' }, { status: 400 });
+    }
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'El webhook configurado no es una URL válida. Verifica la variable GOOGLE_CHAT_WEBHOOK_URL o el valor enviado.' },
+      { status: 400 },
+    );
+  }
+
+  try {
     await sendChatMessage({ text, threadKey, webhookUrl: resolvedWebhook });
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('Error enviando mensaje a Google Chat', error);
-    return NextResponse.json({ error: 'No se pudo enviar el mensaje a Google Chat.' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'No se pudo enviar el mensaje a Google Chat.';
+    if (error instanceof ChatServiceError) {
+      return NextResponse.json({ error: message }, { status: error.status ?? 502 });
+    }
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }
