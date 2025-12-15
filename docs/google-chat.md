@@ -15,6 +15,10 @@
 - `FIREBASE_PROJECT_ID` (opcional, usa `GOOGLE_CHAT_PROJECT_ID` como fallback).
 - `FIREBASE_CLIENT_EMAIL` (opcional, usa `GOOGLE_CHAT_CLIENT_EMAIL`).
 - `FIREBASE_PRIVATE_KEY` (opcional, usa `GOOGLE_CHAT_PRIVATE_KEY`).
+- Para la página interna `/chat` (cliente) sigue aplicando el endpoint existente `/api/chat` que usa la API de Chat
+  clásica o webhooks: configura `GOOGLE_CHAT_SPACE_ID` o `GOOGLE_CHAT_WEBHOOK_URL` si quieres seguir usando esa
+  pantalla. Si ves el mensaje de error "El endpoint /api/chat no está disponible", redeploya el proyecto asegurándote
+  de que la ruta `src/app/api/chat/route.ts` está incluida; no requiere variables nuevas más allá de las anteriores.
 
 ## Despliegue en Vercel
 
