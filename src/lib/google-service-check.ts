@@ -4,7 +4,8 @@ const SERVICE_CHECKS = [
   { name: 'gmail', url: 'https://www.googleapis.com/gmail/v1/users/me/profile' },
   { name: 'calendar', url: 'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1' },
   { name: 'drive', url: 'https://www.googleapis.com/drive/v3/about?fields=user' },
-];
+  { name: 'chat', url: 'https://chat.googleapis.com/v1/spaces?pageSize=1', optional: true },
+] satisfies Array<{ name: string; url: string; optional?: boolean }>;
 
 export async function validateGoogleServicesAccess(accessToken: string) {
   const failures: string[] = [];
@@ -18,7 +19,7 @@ export async function validateGoogleServicesAccess(accessToken: string) {
           },
         });
 
-        if (!resp.ok) {
+        if (!resp.ok && !service.optional) {
           failures.push(service.name);
         }
       } catch (error) {

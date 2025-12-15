@@ -115,6 +115,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
             provider.addScope('https://www.googleapis.com/auth/drive.file');
+            provider.addScope('https://www.googleapis.com/auth/chat.messages');
+            provider.addScope('https://www.googleapis.com/auth/chat.messages.readonly');
+            provider.addScope('https://www.googleapis.com/auth/chat.spaces.readonly');
             
             try {
                 // Re-authenticate to get a fresh token

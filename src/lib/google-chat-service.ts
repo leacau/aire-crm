@@ -14,6 +14,21 @@ type ChatMessageInput = {
   webhookUrl?: string;
 };
 
+type ChatApiMessageInput = {
+  accessToken: string;
+  space: string;
+  text: string;
+  threadName?: string;
+};
+
+type ChatMessage = {
+  name: string;
+  text: string;
+  createTime?: string;
+  sender?: { displayName?: string };
+  thread?: { name?: string };
+};
+
 export async function sendChatMessage({ text, threadKey, webhookUrl }: ChatMessageInput) {
   const targetUrl = webhookUrl || process.env.GOOGLE_CHAT_WEBHOOK_URL;
 
@@ -49,4 +64,84 @@ export async function sendChatMessage({ text, threadKey, webhookUrl }: ChatMessa
       response.status,
     );
   }
+}
+
+function getBaseApiHeaders(accessToken: string) {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  } satisfies HeadersInit;
+}
+
+export function getSpaceFromWebhook(webhookUrl?: string | null) {
+  if (!webhookUrl) return null;
+  try {
+    const parsed = new URL(webhookUrl);
+    const pathParts = parsed.pathname.split('/');
+    const spaceIndex = pathParts.findIndex((part) => part === 'spaces');
+    if (spaceIndex >= 0 && pathParts[spaceIndex + 1]) {
+      return decodeURIComponent(pathParts[spaceIndex + 1]);
+    }
+  } catch (error) {
+    console.warn('No se pudo parsear el webhook de Chat para extraer el espacio', error);
+  }
+  return null;
+}
+
+export async function findDirectMessageSpace(accessToken: string, userEmail: string) {
+  const response = await fetch('https://chat.googleapis.com/v1/spaces:findDirectMessage', {
+    method: 'POST',
+    headers: getBaseApiHeaders(accessToken),
+    body: JSON.stringify({ requestedUser: `users/${userEmail}` }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new ChatServiceError(
+      `No se pudo abrir el chat directo con ${userEmail}. ${errorText || response.statusText}`,
+      response.status,
+    );
+  }
+
+  const data = await response.json();
+  return data?.name as string;
+}
+
+export async function sendChatMessageViaApi({ accessToken, space, text, threadName }: ChatApiMessageInput) {
+  const response = await fetch(`https://chat.googleapis.com/v1/${space}/messages`, {
+    method: 'POST',
+    headers: getBaseApiHeaders(accessToken),
+    body: JSON.stringify({ text, thread: threadName ? { name: threadName } : undefined }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new ChatServiceError(
+      `Error enviando mensaje por la API de Chat (${response.status}): ${(errorText || response.statusText).trim()}`,
+      response.status,
+    );
+  }
+}
+
+export async function listChatMessages(accessToken: string, space: string, options?: { pageSize?: number }) {
+  const { pageSize = 30 } = options || {};
+  const response = await fetch(
+    `https://chat.googleapis.com/v1/${space}/messages?orderBy=DESCENDING&pageSize=${pageSize}`,
+    {
+      headers: getBaseApiHeaders(accessToken),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new ChatServiceError(
+      `No se pudieron obtener los mensajes del espacio. ${(errorText || response.statusText).trim()}`,
+      response.status,
+    );
+  }
+
+  const data = await response.json();
+  const messages = (data?.messages as ChatMessage[] | undefined) || [];
+  // Devolver en orden cronológico ascendente para leer el hilo natural.
+  return messages.reverse();
 }
