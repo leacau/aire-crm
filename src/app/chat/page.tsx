@@ -16,6 +16,7 @@ export default function ChatPage() {
   const { toast } = useToast();
   const [message, setMessage] = useState('');
   const [threadKey, setThreadKey] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [lastResult, setLastResult] = useState<'success' | 'error' | null>(null);
 
@@ -33,7 +34,11 @@ export default function ChatPage() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: message.trim(), threadKey: threadKey.trim() || undefined }),
+        body: JSON.stringify({
+          text: message.trim(),
+          threadKey: threadKey.trim() || undefined,
+          webhookUrl: webhookUrl.trim() || undefined,
+        }),
       });
 
       if (!response.ok) {
@@ -44,6 +49,7 @@ export default function ChatPage() {
       setLastResult('success');
       toast({ title: 'Mensaje enviado', description: 'El mensaje se envió al espacio configurado en Google Chat.' });
       setMessage('');
+      setWebhookUrl('');
     } catch (error: any) {
       console.error('Error al enviar mensaje de Chat', error);
       setLastResult('error');
@@ -99,6 +105,19 @@ export default function ChatPage() {
                   value={threadKey}
                   onChange={(e) => setThreadKey(e.target.value)}
                 />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="webhook">Webhook alternativo (opcional)</Label>
+                <Input
+                  id="webhook"
+                  placeholder="https://chat.googleapis.com/v1/spaces/..."
+                  value={webhookUrl}
+                  onChange={(e) => setWebhookUrl(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Si lo dejas vacío se usará <code>GOOGLE_CHAT_WEBHOOK_URL</code>. Sirve para probar otros espacios sin cambiar
+                  la configuración global.
+                </p>
               </div>
               <div className="flex items-center gap-3">
                 <Button type="submit" disabled={isSending}>
