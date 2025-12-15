@@ -1,5 +1,3 @@
-'use server';
-
 export class ChatServiceError extends Error {
   status?: number;
 
