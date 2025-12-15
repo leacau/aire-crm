@@ -8,6 +8,9 @@ import {
   sendChatMessageViaApi,
 } from '@/lib/google-chat-service';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 function getSpaceFromConfig() {
   return process.env.GOOGLE_CHAT_SPACE_ID || getSpaceFromWebhook(process.env.GOOGLE_CHAT_WEBHOOK_URL);
 }

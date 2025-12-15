@@ -71,7 +71,11 @@ export default function ChatPage() {
 
       if (!response.ok) {
         const message = typeof payload === 'string' ? payload : payload?.error;
-        throw new Error(message || 'No se pudieron obtener los mensajes.');
+        const friendly =
+          response.status === 404
+            ? 'El endpoint /api/chat no está disponible en este despliegue. Verifica que la app se haya redeployado con la ruta de Chat.'
+            : undefined;
+        throw new Error(friendly || message || 'No se pudieron obtener los mensajes.');
       }
       const data = typeof payload === 'string' ? {} : payload;
       setMessages(Array.isArray(data?.messages) ? data.messages : []);
@@ -131,7 +135,11 @@ export default function ChatPage() {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error?.error || 'No se pudo enviar el mensaje.');
+        const friendly =
+          response.status === 404
+            ? 'El endpoint /api/chat no está disponible en este despliegue. Verifica el redeploy o usa el webhook directo.'
+            : undefined;
+        throw new Error(friendly || error?.error || 'No se pudo enviar el mensaje.');
       }
 
       setLastResult('success');
