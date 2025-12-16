@@ -74,7 +74,16 @@ export default function ChatPage() {
         const friendly =
           response.status === 404
             ? 'El endpoint /api/chat no está disponible en este despliegue. Verifica que la app se haya redeployado con la ruta de Chat.'
-            : undefined;
+            : response.status === 403
+              ? 'Tu sesión de Google no tiene habilitados los permisos de Google Chat. Vuelve a iniciar sesión aceptando los permisos solicitados.'
+              : undefined;
+        if (response.status === 403) {
+          try {
+            sessionStorage.removeItem('google-access-token');
+          } catch (error) {
+            console.warn('No se pudo limpiar el token de Google en sesión', error);
+          }
+        }
         throw new Error(friendly || message || 'No se pudieron obtener los mensajes.');
       }
       const data = typeof payload === 'string' ? {} : payload;

@@ -122,8 +122,14 @@ export async function sendChatMessageViaApi({ accessToken, space, text, threadNa
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
+    const scopedMessage =
+      response.status === 403 && errorText.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT')
+        ? 'Tu sesión de Google no tiene permisos de Google Chat. Vuelve a iniciar sesión aceptando los permisos de Chat.'
+        : undefined;
     throw new ChatServiceError(
-      `Error enviando mensaje por la API de Chat (${response.status}): ${(errorText || response.statusText).trim()}`,
+      scopedMessage
+        ? scopedMessage
+        : `Error enviando mensaje por la API de Chat (${response.status}): ${(errorText || response.statusText).trim()}`,
       response.status,
     );
   }
@@ -141,8 +147,14 @@ export async function listChatMessages(accessToken: string, space: string, optio
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
+    const scopedMessage =
+      response.status === 403 && errorText.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT')
+        ? 'Faltan permisos de Google Chat para leer este espacio. Vuelve a iniciar sesión aceptando los scopes de Chat.'
+        : undefined;
     throw new ChatServiceError(
-      `No se pudieron obtener los mensajes del espacio. ${(errorText || response.statusText).trim()}`,
+      scopedMessage
+        ? scopedMessage
+        : `No se pudieron obtener los mensajes del espacio. ${(errorText || response.statusText).trim()}`,
       response.status,
     );
   }
