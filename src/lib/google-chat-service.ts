@@ -139,7 +139,7 @@ export async function listChatMessages(accessToken: string, space: string, optio
   const { pageSize = 30 } = options || {};
   const normalizedSpace = normalizeSpaceName(space);
   const response = await fetch(
-    `https://chat.googleapis.com/v1/${normalizedSpace}/messages?orderBy=DESCENDING&pageSize=${pageSize}`,
+    `https://chat.googleapis.com/v1/${normalizedSpace}/messages?orderBy=createTime%20desc&pageSize=${pageSize}`,
     {
       headers: getBaseApiHeaders(accessToken),
     },
