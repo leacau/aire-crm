@@ -382,6 +382,15 @@ export type User = {
   permissions?: Partial<Record<ScreenName, ScreenPermission>>;
 };
 
+export type ChatSpaceMapping = {
+  userId: string;
+  userEmail: string;
+  spaceId: string;
+  updatedById?: string;
+  updatedByName?: string;
+  updatedAt?: string;
+};
+
 export type VacationRequestStatus = 'Pendiente' | 'Aprobado' | 'Rechazado';
 
 export type VacationRequest = {

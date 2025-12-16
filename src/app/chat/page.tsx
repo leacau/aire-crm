@@ -13,8 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { getAllUsers } from '@/lib/firebase-service';
-import type { User } from '@/lib/types';
+import { getAllUsers, getChatSpaces, upsertChatSpace } from '@/lib/firebase-service';
+import type { ChatSpaceMapping, User } from '@/lib/types';
 import { Loader2, MessageSquare, RefreshCw, Send, Users } from 'lucide-react';
 
 interface ChatMessage {
@@ -36,7 +36,7 @@ function formatDate(iso?: string) {
 
 export default function ChatPage() {
   const { toast } = useToast();
-  const { getGoogleAccessToken } = useAuth();
+  const { getGoogleAccessToken, userInfo } = useAuth();
   const [message, setMessage] = useState('');
   const [threadKey, setThreadKey] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -45,11 +45,25 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [advisors, setAdvisors] = useState<User[]>([]);
-  const [targetEmail, setTargetEmail] = useState('');
+  const [targetAdvisorId, setTargetAdvisorId] = useState('');
+  const [chatSpaces, setChatSpaces] = useState<ChatSpaceMapping[]>([]);
+  const [isSavingSpace, setIsSavingSpace] = useState(false);
+  const [mappingAdvisorId, setMappingAdvisorId] = useState('');
+  const [mappingSpaceId, setMappingSpaceId] = useState('');
+  const [isLoadingSpaces, setIsLoadingSpaces] = useState(false);
 
-  const directMessageValue = targetEmail || 'none';
+  const directMessageValue = targetAdvisorId || 'none';
 
   const advisoryOptions = useMemo(() => advisors.filter((user) => !!user.email), [advisors]);
+  const targetAdvisor = useMemo(
+    () => advisoryOptions.find((user) => user.id === targetAdvisorId),
+    [advisoryOptions, targetAdvisorId],
+  );
+  const targetEmail = targetAdvisor?.email || '';
+  const savedSpaceForTarget = useMemo(
+    () => chatSpaces.find((space) => space.userId === targetAdvisorId)?.spaceId,
+    [chatSpaces, targetAdvisorId],
+  );
 
   const loadMessages = useCallback(async () => {
     setIsLoadingMessages(true);
@@ -118,6 +132,14 @@ export default function ChatPage() {
       });
       return;
     }
+    if (wantsDirectMessage && !targetEmail) {
+      toast({
+        title: 'Correo del asesor faltante',
+        description: 'El asesor seleccionado no tiene correo asignado.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     setIsSending(true);
     setLastResult(null);
@@ -136,6 +158,7 @@ export default function ChatPage() {
           threadKey: threadKey.trim() || undefined,
           webhookUrl: webhookUrl.trim() || undefined,
           targetEmail: targetEmail || undefined,
+          targetSpace: savedSpaceForTarget || undefined,
           // Forzar API cuando hay token para poder responder hilos existentes.
           mode: token ? 'api' : undefined,
           accessToken: token || undefined,
@@ -161,7 +184,7 @@ export default function ChatPage() {
       setMessage('');
       setThreadKey('');
       setWebhookUrl('');
-      setTargetEmail('');
+      setTargetAdvisorId('');
       if (token) {
         loadMessages();
       }
@@ -184,6 +207,87 @@ export default function ChatPage() {
     toast({ title: 'Hilo seleccionado', description: 'Responderás en el hilo elegido.' });
   };
 
+  const loadChatSpaces = useCallback(async () => {
+    setIsLoadingSpaces(true);
+    try {
+      const spaces = await getChatSpaces();
+      setChatSpaces(spaces);
+    } catch (error) {
+      console.error('No se pudieron obtener los espacios de chat', error);
+      toast({
+        title: 'Error cargando espacios',
+        description: 'No pudimos leer las asociaciones de chat guardadas.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingSpaces(false);
+    }
+  }, [toast]);
+
+  const handleSelectMappingAdvisor = (value: string) => {
+    setMappingAdvisorId(value === 'none' ? '' : value);
+    if (value === 'none') {
+      setMappingSpaceId('');
+      return;
+    }
+    const existing = chatSpaces.find((space) => space.userId === value)?.spaceId;
+    setMappingSpaceId(existing || '');
+  };
+
+  const handleSaveChatSpace = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!mappingAdvisorId || !mappingSpaceId.trim()) {
+      toast({
+        title: 'Datos incompletos',
+        description: 'Selecciona un asesor y un spaceId válido.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!userInfo?.id || !userInfo?.name) {
+      toast({
+        title: 'Sesión requerida',
+        description: 'Inicia sesión para guardar asociaciones de chat.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const advisor = advisoryOptions.find((user) => user.id === mappingAdvisorId);
+    if (!advisor?.email) {
+      toast({
+        title: 'Correo faltante',
+        description: 'El asesor seleccionado no tiene correo configurado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSavingSpace(true);
+    try {
+      await upsertChatSpace({
+        userId: advisor.id,
+        userEmail: advisor.email,
+        spaceId: mappingSpaceId.trim(),
+        updatedById: userInfo.id,
+        updatedByName: userInfo.name,
+      });
+      toast({ title: 'Espacio guardado', description: 'El space quedó asociado al asesor.' });
+      setMappingAdvisorId('');
+      setMappingSpaceId('');
+      loadChatSpaces();
+    } catch (error: any) {
+      console.error('No se pudo guardar el espacio de chat', error);
+      toast({
+        title: 'Error al guardar',
+        description: error?.message || 'Intenta nuevamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingSpace(false);
+    }
+  };
+
   useEffect(() => {
     loadMessages();
   }, [loadMessages]);
@@ -195,6 +299,10 @@ export default function ChatPage() {
         console.error('No se pudieron cargar los asesores para Chat', error);
       });
   }, []);
+
+  useEffect(() => {
+    loadChatSpaces();
+  }, [loadChatSpaces]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -260,7 +368,7 @@ export default function ChatPage() {
                 <Label>Enviar directo a asesor (opcional)</Label>
                 <Select
                   value={directMessageValue}
-                  onValueChange={(value) => setTargetEmail(value === 'none' ? '' : value)}
+                  onValueChange={(value) => setTargetAdvisorId(value === 'none' ? '' : value)}
                 >
                   <SelectTrigger className="w-full md:w-80">
                     <SelectValue placeholder="Sin mensaje directo" />
@@ -268,7 +376,7 @@ export default function ChatPage() {
                   <SelectContent>
                     <SelectItem value="none">Sin mensaje directo</SelectItem>
                     {advisoryOptions.map((user) => (
-                      <SelectItem key={user.id} value={user.email!}>
+                      <SelectItem key={user.id} value={user.id}>
                         {user.name} ({user.email})
                       </SelectItem>
                     ))}
@@ -337,6 +445,79 @@ export default function ChatPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Asociar asesor con space de Chat</CardTitle>
+          <CardDescription>
+            Guarda el identificador del space directo para cada asesor y reutilízalo en los envíos de mensajes directos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto]" onSubmit={handleSaveChatSpace}>
+            <div className="flex flex-col gap-2">
+              <Label>Asesor</Label>
+              <Select value={mappingAdvisorId || 'none'} onValueChange={handleSelectMappingAdvisor}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un asesor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Seleccionar</SelectItem>
+                  {advisoryOptions.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name} ({user.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Space ID</Label>
+              <Input
+                placeholder="spaces/AAA..."
+                value={mappingSpaceId}
+                onChange={(event) => setMappingSpaceId(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Usa el identificador completo o el valor sin prefijo.</p>
+            </div>
+            <div className="flex items-end">
+              <Button type="submit" disabled={isSavingSpace || !mappingAdvisorId || !mappingSpaceId.trim()}>
+                {isSavingSpace && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar
+              </Button>
+            </div>
+          </form>
+
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            {isLoadingSpaces ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            <span>Espacios guardados ({chatSpaces.length})</span>
+            <Button variant="ghost" size="sm" className="gap-2" onClick={loadChatSpaces} disabled={isLoadingSpaces}>
+              <RefreshCw className="h-4 w-4" /> Actualizar
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {chatSpaces.map((space) => {
+              const advisor = advisoryOptions.find((user) => user.id === space.userId);
+              return (
+                <div key={space.userId} className="rounded-lg border p-3">
+                  <div className="font-medium">{advisor?.name || space.userEmail}</div>
+                  <p className="text-xs text-muted-foreground">{advisor?.email || space.userEmail}</p>
+                  <p className="text-sm mt-1">{space.spaceId}</p>
+                  {space.updatedAt || space.updatedByName ? (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Última actualización {space.updatedAt ? `el ${formatDate(space.updatedAt)}` : ''} por{' '}
+                      {space.updatedByName || 'N/D'}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
+            {chatSpaces.length === 0 && !isLoadingSpaces ? (
+              <p className="text-sm text-muted-foreground">Aún no hay asociaciones guardadas.</p>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

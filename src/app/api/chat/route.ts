@@ -56,6 +56,7 @@ export async function POST(request: Request) {
   const threadKey = typeof body.threadKey === 'string' ? body.threadKey.trim() : undefined;
   const webhookUrlRaw = typeof body.webhookUrl === 'string' ? body.webhookUrl.trim() : '';
   const targetEmail = typeof body.targetEmail === 'string' ? body.targetEmail.trim() : '';
+  const targetSpace = typeof body.targetSpace === 'string' ? body.targetSpace.trim() : '';
   const forceApi = body?.mode === 'api';
 
   const accessToken = extractAccessToken(request) || (typeof body.accessToken === 'string' ? body.accessToken.trim() : '');
@@ -72,13 +73,17 @@ export async function POST(request: Request) {
 
   try {
     // Preferir la API autenticada si hay token o si se requiere un mensaje directo.
-    if (forceApi || accessToken || targetEmail) {
+    if (forceApi || accessToken || targetEmail || targetSpace) {
       const baseSpace = getSpaceFromConfig();
       if (!accessToken) {
         return NextResponse.json({ error: 'Falta token de Google para enviar por la API de Chat.' }, { status: 401 });
       }
 
-      const space = targetEmail ? await findDirectMessageSpace(accessToken, targetEmail) : baseSpace;
+      const space = targetSpace
+        ? targetSpace
+        : targetEmail
+          ? await findDirectMessageSpace(accessToken, targetEmail)
+          : baseSpace;
 
       if (!space) {
         return NextResponse.json(

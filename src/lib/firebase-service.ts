@@ -4,7 +4,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping } from './types';
 import { logActivity } from './activity-logger';
 import { sendEmail, createCalendarEvent as apiCreateCalendarEvent } from './google-gmail-service';
 import { format, parseISO, differenceInCalendarDays, parse } from 'date-fns';
@@ -35,6 +35,7 @@ const collections = {
     systemConfig: collection(db, 'system_config'),
     supervisorComments: collection(db, 'supervisor_comments'),
     paymentEntries: collection(db, 'payment_entries'),
+    chatSpaces: collection(db, 'chat_spaces'),
 };
 
 const cache: {
@@ -45,6 +46,7 @@ const cache: {
 } = {};
 
 const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const CHAT_SPACES_CACHE_KEY = 'chat_spaces_cache';
 
 const getFromCache = (key: string) => {
     const cached = cache[key];
@@ -2535,4 +2537,67 @@ export const updateClientActivity = async (
 
     await updateDoc(docRef, updateData);
     invalidateCache('client_activities');
+};
+
+// --- Google Chat direct spaces ---
+
+export const getChatSpaces = async (): Promise<ChatSpaceMapping[]> => {
+    const cached = getFromCache(CHAT_SPACES_CACHE_KEY);
+    if (cached) return cached;
+
+    const snap = await getDocs(collections.chatSpaces);
+    const mappings: ChatSpaceMapping[] = snap.docs
+        .map((docSnap) => {
+            const data = docSnap.data() as any;
+            if (!data?.spaceId || !data?.userEmail) return null;
+            return {
+                userId: docSnap.id,
+                userEmail: data.userEmail as string,
+                spaceId: data.spaceId as string,
+                updatedById: data.updatedById as string | undefined,
+                updatedByName: data.updatedByName as string | undefined,
+                updatedAt: timestampToISO(data.updatedAt),
+            } satisfies ChatSpaceMapping;
+        })
+        .filter(Boolean) as ChatSpaceMapping[];
+
+    setInCache(CHAT_SPACES_CACHE_KEY, mappings);
+    return mappings;
+};
+
+export const upsertChatSpace = async (params: {
+    userId: string;
+    userEmail: string;
+    spaceId: string;
+    updatedById: string;
+    updatedByName: string;
+}) => {
+    const { userId, userEmail, spaceId, updatedById, updatedByName } = params;
+    const docRef = doc(collections.chatSpaces, userId);
+
+    await setDoc(
+        docRef,
+        {
+            userId,
+            userEmail,
+            spaceId,
+            updatedById,
+            updatedByName,
+            updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+    );
+
+    invalidateCache(CHAT_SPACES_CACHE_KEY);
+
+    await logActivity({
+        userId: updatedById,
+        userName: updatedByName,
+        type: 'update',
+        entityType: 'chat_space',
+        entityId: userId,
+        entityName: 'Chat directo',
+        details: `actualizó el space de chat para ${userEmail}.`,
+        ownerName: updatedByName,
+    });
 };
