@@ -37,6 +37,7 @@ function formatDate(iso?: string) {
 export default function ChatPage() {
   const { toast } = useToast();
   const { getGoogleAccessToken } = useAuth();
+  const chatEndpoint = process.env.NEXT_PUBLIC_CHAT_ENDPOINT || '/api/chat';
   const [message, setMessage] = useState('');
   const [threadKey, setThreadKey] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -60,7 +61,7 @@ export default function ChatPage() {
         return;
       }
 
-      const response = await fetch('/api/chat', {
+      const response = await fetch(chatEndpoint, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -73,7 +74,7 @@ export default function ChatPage() {
         const message = typeof payload === 'string' ? payload : payload?.error;
         const friendly =
           response.status === 404
-            ? 'El endpoint /api/chat no está disponible en este despliegue. Verifica que la app se haya redeployado con la ruta de Chat.'
+            ? `El endpoint ${chatEndpoint} no está disponible en este despliegue. Verifica que la app se haya redeployado con la ruta de Chat.`
             : undefined;
         throw new Error(friendly || message || 'No se pudieron obtener los mensajes.');
       }
@@ -119,7 +120,7 @@ export default function ChatPage() {
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch('/api/chat', {
+      const response = await fetch(chatEndpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -137,7 +138,7 @@ export default function ChatPage() {
         const error = await response.json().catch(() => ({}));
         const friendly =
           response.status === 404
-            ? 'El endpoint /api/chat no está disponible en este despliegue. Verifica el redeploy o usa el webhook directo.'
+            ? `El endpoint ${chatEndpoint} no está disponible en este despliegue. Verifica el redeploy o usa el webhook directo.`
             : undefined;
         throw new Error(friendly || error?.error || 'No se pudo enviar el mensaje.');
       }
