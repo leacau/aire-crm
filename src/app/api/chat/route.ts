@@ -1,69 +1,45 @@
 import { NextResponse } from 'next/server';
-import {
-  ChatServiceError,
-  findDirectMessageSpace,
-  getSpaceFromWebhook,
-  listChatMessages,
-  sendChatMessage,
-  sendChatMessageViaApi,
-} from '@/lib/google-chat-service';
+import { listSpaceMessages, sendMessage } from '@/lib/googleChat';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function getSpaceFromConfig() {
-  return process.env.GOOGLE_CHAT_SPACE_ID || getSpaceFromWebhook(process.env.GOOGLE_CHAT_WEBHOOK_URL);
-}
-
-function extractAccessToken(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader) return null;
-  const [scheme, token] = authHeader.split(' ');
-  if (scheme?.toLowerCase() !== 'bearer') return null;
-  return token || null;
+  return process.env.GOOGLE_CHAT_SPACE_ID;
 }
 
 export async function GET(request: Request) {
-  const accessToken = extractAccessToken(request);
-  if (!accessToken) {
-    return NextResponse.json({ error: 'Falta el token de acceso de Google para leer el espacio.' }, { status: 401 });
-  }
-
   const { searchParams } = new URL(request.url);
   const space = searchParams.get('space') || getSpaceFromConfig();
 
   if (!space) {
     return NextResponse.json(
-      { error: 'Define GOOGLE_CHAT_SPACE_ID o usa un webhook que incluya el espacio para leer las conversaciones.' },
+      { error: 'Define GOOGLE_CHAT_SPACE_ID para leer las conversaciones del espacio mediante la API de Chat.' },
       { status: 400 },
     );
   }
 
   try {
-    const messages = await listChatMessages(accessToken, space, { pageSize: 50 });
+    const messages = await listSpaceMessages(space, { pageSize: 50 });
     return NextResponse.json({ messages });
   } catch (error) {
     console.error('Error obteniendo mensajes de Google Chat', error);
     const message = error instanceof Error ? error.message : 'No se pudieron recuperar los mensajes.';
-    const status = error instanceof ChatServiceError && error.status ? error.status : 502;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const text = typeof body.text === 'string' ? body.text.trim() : '';
-  const threadKey = typeof body.threadKey === 'string' ? body.threadKey.trim() : undefined;
-  const webhookUrlRaw = typeof body.webhookUrl === 'string' ? body.webhookUrl.trim() : '';
-  const targetEmail = typeof body.targetEmail === 'string' ? body.targetEmail.trim() : '';
-  const forceApi = body?.mode === 'api';
+  const threadName = typeof body.threadName === 'string' ? body.threadName.trim() : undefined;
+  const space = typeof body.space === 'string' && body.space.trim() ? body.space.trim() : getSpaceFromConfig();
 
-  const accessToken = extractAccessToken(request) || (typeof body.accessToken === 'string' ? body.accessToken.trim() : '');
-
-  const webhookUrl = webhookUrlRaw ? new URL(webhookUrlRaw) : undefined;
-
-  if (webhookUrl && webhookUrl.protocol !== 'https:') {
-    return NextResponse.json({ error: 'El webhook debe ser una URL https válida.' }, { status: 400 });
+  if (!space) {
+    return NextResponse.json(
+      { error: 'Configura GOOGLE_CHAT_SPACE_ID para poder enviar mensajes a través de la API de Chat.' },
+      { status: 400 },
+    );
   }
 
   if (!text) {
@@ -71,57 +47,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Preferir la API autenticada si hay token o si se requiere un mensaje directo.
-    if (forceApi || accessToken || targetEmail) {
-      const baseSpace = getSpaceFromConfig();
-      if (!accessToken) {
-        return NextResponse.json({ error: 'Falta token de Google para enviar por la API de Chat.' }, { status: 401 });
-      }
-
-      const space = targetEmail ? await findDirectMessageSpace(accessToken, targetEmail) : baseSpace;
-
-      if (!space) {
-        return NextResponse.json(
-          { error: 'Define GOOGLE_CHAT_SPACE_ID para usar la API de Chat o envía un webhook alternativo.' },
-          { status: 400 },
-        );
-      }
-
-      await sendChatMessageViaApi({ accessToken, space, text, threadName: threadKey });
-      return NextResponse.json({ ok: true, space, mode: 'api' });
+    const payload: Record<string, unknown> = { text };
+    if (threadName) {
+      payload.thread = { name: threadName };
     }
 
-    const resolvedWebhook = webhookUrl?.toString() ?? process.env.GOOGLE_CHAT_WEBHOOK_URL;
-
-    if (!resolvedWebhook) {
-      return NextResponse.json(
-        { error: 'Configura GOOGLE_CHAT_WEBHOOK_URL o proporciona un webhook alternativo para enviar el mensaje.' },
-        { status: 400 },
-      );
-    }
-
-    try {
-      const parsed = new URL(resolvedWebhook);
-      if (parsed.protocol !== 'https:') {
-        return NextResponse.json({ error: 'El webhook debe usar https.' }, { status: 400 });
-      }
-    } catch (error) {
-      return NextResponse.json(
-        {
-          error: 'El webhook configurado no es una URL válida. Verifica la variable GOOGLE_CHAT_WEBHOOK_URL o el valor enviado.',
-        },
-        { status: 400 },
-      );
-    }
-
-    await sendChatMessage({ text, threadKey, webhookUrl: resolvedWebhook });
-    return NextResponse.json({ ok: true, mode: 'webhook' });
+    await sendMessage(space, payload);
+    return NextResponse.json({ ok: true, space, mode: 'api' });
   } catch (error) {
     console.error('Error enviando mensaje a Google Chat', error);
     const message = error instanceof Error ? error.message : 'No se pudo enviar el mensaje a Google Chat.';
-    if (error instanceof ChatServiceError) {
-      return NextResponse.json({ error: message }, { status: error.status ?? 502 });
-    }
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

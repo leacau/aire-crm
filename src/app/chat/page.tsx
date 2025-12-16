@@ -1,21 +1,16 @@
-'use client';
+"use client";
 
-import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/use-auth';
-import { getAllUsers } from '@/lib/firebase-service';
-import type { User } from '@/lib/types';
-import { Loader2, MessageSquare, RefreshCw, Send, Users } from 'lucide-react';
+import type React from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, MessageSquare, RefreshCw, Send, Users } from "lucide-react";
 
 interface ChatMessage {
   name: string;
@@ -26,9 +21,9 @@ interface ChatMessage {
 }
 
 function formatDate(iso?: string) {
-  if (!iso) return '';
+  if (!iso) return "";
   try {
-    return new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+    return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
   } catch (error) {
     return iso;
   }
@@ -36,77 +31,48 @@ function formatDate(iso?: string) {
 
 export default function ChatPage() {
   const { toast } = useToast();
-  const { getGoogleAccessToken } = useAuth();
-  const [message, setMessage] = useState('');
-  const [threadKey, setThreadKey] = useState('');
-  const [webhookUrl, setWebhookUrl] = useState('');
+  const chatEndpoint = process.env.NEXT_PUBLIC_CHAT_ENDPOINT || "/api/google-chat/chat";
+  const [message, setMessage] = useState("");
+  const [threadName, setThreadName] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [lastResult, setLastResult] = useState<'success' | 'error' | null>(null);
+  const [lastResult, setLastResult] = useState<"success" | "error" | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const [advisors, setAdvisors] = useState<User[]>([]);
-  const [targetEmail, setTargetEmail] = useState('');
-
-  const directMessageValue = targetEmail || 'none';
-
-  const advisoryOptions = useMemo(() => advisors.filter((user) => !!user.email), [advisors]);
 
   const loadMessages = useCallback(async () => {
     setIsLoadingMessages(true);
     try {
-      const token = await getGoogleAccessToken();
-      if (!token) {
-        toast({ title: 'Acceso a Google requerido', description: 'Inicia sesión con Google para leer el hilo del espacio.' });
-        return;
-      }
+      const response = await fetch(chatEndpoint);
 
-      const response = await fetch('/api/chat', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const contentType = response.headers.get('content-type') || '';
-      const payload = contentType.includes('application/json') ? await response.json() : await response.text();
+      const contentType = response.headers.get("content-type") || "";
+      const payload = contentType.includes("application/json") ? await response.json() : await response.text();
 
       if (!response.ok) {
-        const message = typeof payload === 'string' ? payload : payload?.error;
+        const message = typeof payload === "string" ? payload : payload?.error;
         const friendly =
           response.status === 404
-            ? 'El endpoint /api/chat no está disponible en este despliegue. Verifica que la app se haya redeployado con la ruta de Chat.'
+            ? `El endpoint ${chatEndpoint} no está disponible en este despliegue. Verifica que la app se haya redeployado con la ruta de Chat o ajusta NEXT_PUBLIC_CHAT_ENDPOINT.`
             : undefined;
-        throw new Error(friendly || message || 'No se pudieron obtener los mensajes.');
+        throw new Error(friendly || message || "No se pudieron obtener los mensajes.");
       }
-      const data = typeof payload === 'string' ? {} : payload;
+      const data = typeof payload === "string" ? {} : payload;
       setMessages(Array.isArray(data?.messages) ? data.messages : []);
     } catch (error: any) {
-      console.error('Error cargando mensajes de Chat', error);
+      console.error("Error cargando mensajes de Chat", error);
       toast({
-        title: 'No se pudieron cargar los mensajes',
-        description: error?.message || 'Revisa los permisos de Chat en tu cuenta de Google.',
-        variant: 'destructive',
+        title: "No se pudieron cargar los mensajes",
+        description: error?.message || "Revisa que el bot tenga acceso al espacio configurado.",
+        variant: "destructive",
       });
     } finally {
       setIsLoadingMessages(false);
     }
-  }, [getGoogleAccessToken, toast]);
+  }, [chatEndpoint, toast]);
 
   const handleSend = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!message.trim()) {
-      toast({ title: 'Mensaje requerido', description: 'Escribe un mensaje para enviarlo a Google Chat.' });
-      return;
-    }
-
-    const wantsDirectMessage = Boolean(targetEmail);
-    const token = await getGoogleAccessToken(wantsDirectMessage ? undefined : { silent: true });
-
-    if (wantsDirectMessage && !token) {
-      toast({
-        title: 'Google Chat requerido',
-        description: 'Vuelve a iniciar sesión con Google para enviar mensajes directos en Chat.',
-        variant: 'destructive',
-      });
+      toast({ title: "Mensaje requerido", description: "Escribe un mensaje para enviarlo a Google Chat." });
       return;
     }
 
@@ -114,22 +80,12 @@ export default function ChatPage() {
     setLastResult(null);
 
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers,
+      const response = await fetch(chatEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: message.trim(),
-          threadKey: threadKey.trim() || undefined,
-          webhookUrl: webhookUrl.trim() || undefined,
-          targetEmail: targetEmail || undefined,
-          // Forzar API cuando hay token para poder responder hilos existentes.
-          mode: token ? 'api' : undefined,
-          accessToken: token || undefined,
+          threadName: threadName.trim() || undefined,
         }),
       });
 
@@ -137,59 +93,46 @@ export default function ChatPage() {
         const error = await response.json().catch(() => ({}));
         const friendly =
           response.status === 404
-            ? 'El endpoint /api/chat no está disponible en este despliegue. Verifica el redeploy o usa el webhook directo.'
+            ? `El endpoint ${chatEndpoint} no está disponible en este despliegue. Verifica el redeploy o usa NEXT_PUBLIC_CHAT_ENDPOINT.`
             : undefined;
-        throw new Error(friendly || error?.error || 'No se pudo enviar el mensaje.');
+        throw new Error(friendly || error?.error || "No se pudo enviar el mensaje.");
       }
 
-      setLastResult('success');
-      toast({ title: 'Mensaje enviado', description: 'El mensaje se envió al espacio configurado en Google Chat.' });
-      setMessage('');
-      setThreadKey('');
-      setWebhookUrl('');
-      setTargetEmail('');
-      if (token) {
-        loadMessages();
-      }
+      setLastResult("success");
+      toast({ title: "Mensaje enviado", description: "El mensaje se envió al espacio configurado en Google Chat." });
+      setMessage("");
+      setThreadName("");
+      loadMessages();
     } catch (error: any) {
-      console.error('Error al enviar mensaje de Chat', error);
-      setLastResult('error');
+      console.error("Error al enviar mensaje de Chat", error);
+      setLastResult("error");
       toast({
-        title: 'Error al enviar',
-        description: error?.message || 'No se pudo entregar el mensaje en Google Chat.',
-        variant: 'destructive',
+        title: "Error al enviar",
+        description: error?.message || "No se pudo entregar el mensaje en Google Chat.",
+        variant: "destructive",
       });
     } finally {
       setIsSending(false);
     }
   };
 
-  const handleSetThread = (threadName?: string) => {
-    if (!threadName) return;
-    setThreadKey(threadName);
-    toast({ title: 'Hilo seleccionado', description: 'Responderás en el hilo elegido.' });
+  const handleSetThread = (thread?: string) => {
+    if (!thread) return;
+    setThreadName(thread);
+    toast({ title: "Hilo seleccionado", description: "Responderás en el hilo elegido." });
   };
 
   useEffect(() => {
     loadMessages();
   }, [loadMessages]);
 
-  useEffect(() => {
-    getAllUsers('Asesor')
-      .then((data) => setAdvisors(data))
-      .catch((error) => {
-        console.error('No se pudieron cargar los asesores para Chat', error);
-      });
-  }, []);
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight">Google Chat</h1>
         <p className="text-muted-foreground max-w-3xl">
-          Usa el botón del menú para abrir el espacio de Chat de tu cuenta laboral o envía un mensaje directo al webhook
-          configurado para notificaciones internas. Este módulo agrega conversación en el espacio existente y chats directos con
-          cada asesor.
+          Envía y revisa mensajes del espacio configurado en Google Chat usando el bot de Service Account. No necesitas iniciar
+          sesión con Google; la API se invoca desde el backend con las credenciales del bot.
         </p>
       </div>
 
@@ -201,8 +144,7 @@ export default function ChatPage() {
               Enviar mensaje
             </CardTitle>
             <CardDescription>
-              Publica un aviso en el espacio de Google Chat configurado con el webhook <code>GOOGLE_CHAT_WEBHOOK_URL</code> o
-              envía un mensaje directo a un asesor.
+              Publica un aviso en el espacio definido por <code>GOOGLE_CHAT_SPACE_ID</code> usando la API de Google Chat.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -219,75 +161,35 @@ export default function ChatPage() {
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="thread">Clave de hilo / Thread name (opcional)</Label>
+                  <Label htmlFor="thread">Nombre de hilo (opcional)</Label>
                   <Input
                     id="thread"
-                    placeholder="Usa la misma clave para agrupar mensajes en un hilo."
-                    value={threadKey}
-                    onChange={(e) => setThreadKey(e.target.value)}
+                    placeholder="Selecciona un hilo existente o pega el nombre del thread."
+                    value={threadName}
+                    onChange={(e) => setThreadName(e.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground">Cuando lees mensajes puedes elegir un hilo existente.</p>
+                  <p className="text-xs text-muted-foreground">Cuando leas mensajes puedes elegir un hilo existente.</p>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="webhook">Webhook alternativo (opcional)</Label>
-                  <Input
-                    id="webhook"
-                    placeholder="https://chat.googleapis.com/v1/spaces/..."
-                    value={webhookUrl}
-                    onChange={(e) => setWebhookUrl(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Si lo dejas vacío se usará <code>GOOGLE_CHAT_WEBHOOK_URL</code>. Sirve para probar otros espacios sin cambiar
-                    la configuración global.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label>Enviar directo a asesor (opcional)</Label>
-                <Select
-                  value={directMessageValue}
-                  onValueChange={(value) => setTargetEmail(value === 'none' ? '' : value)}
-                >
-                  <SelectTrigger className="w-full md:w-80">
-                    <SelectValue placeholder="Sin mensaje directo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin mensaje directo</SelectItem>
-                    {advisoryOptions.map((user) => (
-                      <SelectItem key={user.id} value={user.email!}>
-                        {user.name} ({user.email})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Si eliges un asesor se abrirá un chat directo con su cuenta de Google Chat usando tu sesión de Google.
-                </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <Button type="submit" disabled={isSending || !message.trim()}>
                   {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Enviar a Google Chat
-                </Button>
-                <Button asChild variant="outline">
-                  <Link href="https://chat.google.com" target="_blank" rel="noreferrer">
-                    Abrir Chat en Google Workspace
-                  </Link>
                 </Button>
                 <Button type="button" variant="ghost" className="gap-2" onClick={loadMessages} disabled={isLoadingMessages}>
                   {isLoadingMessages ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Recargar hilos
                 </Button>
               </div>
-              {lastResult === 'success' && (
+              {lastResult === "success" && (
                 <Alert variant="default" className="border-green-500">
                   <AlertTitle>Mensaje enviado</AlertTitle>
                   <AlertDescription>Se registró el envío en el espacio de Chat configurado.</AlertDescription>
                 </Alert>
               )}
-              {lastResult === 'error' && (
+              {lastResult === "error" && (
                 <Alert variant="destructive">
                   <AlertTitle>No se pudo enviar</AlertTitle>
-                  <AlertDescription>Revisa la configuración del webhook o vuelve a intentar en unos minutos.</AlertDescription>
+                  <AlertDescription>Revisa la configuración del bot o vuelve a intentar en unos minutos.</AlertDescription>
                 </Alert>
               )}
             </form>
@@ -298,9 +200,9 @@ export default function ChatPage() {
           <CardHeader>
             <CardTitle>Configuración recomendada</CardTitle>
             <CardDescription>
-              Para habilitar el envío y lectura, crea un webhook entrante en el espacio de Google Chat y guárdalo en
-              <code> GOOGLE_CHAT_WEBHOOK_URL </code>. Opcionalmente configura <code>GOOGLE_CHAT_SPACE_ID</code> para recuperar los
-              hilos.
+              Configura <code>GOOGLE_CHAT_PROJECT_ID</code>, <code>GOOGLE_CHAT_CLIENT_EMAIL</code>,
+              <code>GOOGLE_CHAT_PRIVATE_KEY</code> y <code>GOOGLE_CHAT_SPACE_ID</code>. La página usa el bot para listar y
+              publicar mensajes sin exponer credenciales en el cliente.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 text-sm text-muted-foreground">
@@ -309,16 +211,12 @@ export default function ChatPage() {
               recordatorios inmediatos al equipo sin alterar los procesos existentes.
             </p>
             <p>
-              Usa la clave de hilo para mantener conversaciones agrupadas en un mismo tema (por ejemplo,
-              <strong>prospectos-pendientes</strong>). Si la dejas vacía, cada mensaje se publicará como un hilo nuevo.
+              Usa el nombre de hilo para mantener conversaciones agrupadas. Si lo dejas vacío, cada mensaje se publicará como
+              un hilo nuevo.
             </p>
             <p>
-              Para chats directos y lectura de hilos, autoriza la app con los scopes de Google Chat (messages y spaces) y habilita
-              la API Google Chat en el proyecto de Google Cloud.
-            </p>
-            <p>
-              El acceso se rige por los mismos permisos de pantalla; los roles con permiso de edición podrán enviar mensajes al
-              webhook configurado.
+              Asegúrate de que el Service Account del bot tenga acceso al espacio y el scope <code>chat.bot</code> habilitado en
+              el proyecto de Google Cloud. No es necesario iniciar sesión en el cliente.
             </p>
           </CardContent>
         </Card>
@@ -351,15 +249,15 @@ export default function ChatPage() {
             {messages.map((msg) => (
               <div key={msg.name} className="flex flex-col gap-2 rounded-lg border p-3 shadow-sm">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">{msg.sender?.displayName || 'Sin nombre'}</span>
+                  <span className="font-medium text-foreground">{msg.sender?.displayName || "Sin nombre"}</span>
                   <span>{formatDate(msg.createTime)}</span>
                 </div>
                 <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  {msg.thread?.name ? <Badge variant="outline">Hilo: {msg.thread.name.split('/').pop()}</Badge> : null}
+                  {msg.thread?.name ? <Badge variant="outline">Hilo: {msg.thread.name.split("/").pop()}</Badge> : null}
                   <Badge variant="secondary" className="flex items-center gap-1">
                     <Send className="h-3 w-3" />
-                    {msg.name.split('/').pop()}
+                    {msg.name.split("/").pop()}
                   </Badge>
                 </div>
                 {msg.thread?.name ? (
