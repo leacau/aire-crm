@@ -37,7 +37,7 @@ function formatDate(iso?: string) {
 export default function ChatPage() {
   const { toast } = useToast();
   const { getGoogleAccessToken } = useAuth();
-  const chatEndpoint = process.env.NEXT_PUBLIC_CHAT_ENDPOINT || '/api/chat';
+  const chatEndpoint = process.env.NEXT_PUBLIC_CHAT_ENDPOINT || '/api/google-chat/chat';
   const [message, setMessage] = useState('');
   const [threadKey, setThreadKey] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -74,7 +74,7 @@ export default function ChatPage() {
         const message = typeof payload === 'string' ? payload : payload?.error;
         const friendly =
           response.status === 404
-            ? `El endpoint ${chatEndpoint} no está disponible en este despliegue. Verifica que la app se haya redeployado con la ruta de Chat.`
+            ? `El endpoint ${chatEndpoint} no está disponible en este despliegue. Verifica que la app se haya redeployado con la ruta de Chat o ajusta NEXT_PUBLIC_CHAT_ENDPOINT.`
             : undefined;
         throw new Error(friendly || message || 'No se pudieron obtener los mensajes.');
       }

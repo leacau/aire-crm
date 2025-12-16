@@ -21,8 +21,8 @@
   del payload de un mensaje enviado por el bot.
 - `GOOGLE_CHAT_WEBHOOK_URL` (opcional, solo para la página interna `/chat`): URL del webhook de Chat (solo si sigues
   usando el flujo legacy basado en webhooks).
-- `NEXT_PUBLIC_CHAT_ENDPOINT` (opcional, cliente `/chat`): por defecto usa `/api/chat`; si el despliegue expone la ruta
-  en otro path, redefine aquí para que el cliente apunte al endpoint correcto.
+- `NEXT_PUBLIC_CHAT_ENDPOINT` (opcional, cliente `/chat`): por defecto usa `/api/google-chat/chat`; si el despliegue expone
+  la ruta en otro path, redefine aquí para que el cliente apunte al endpoint correcto.
 
 Cómo obtenerlas:
 
@@ -37,9 +37,9 @@ Cómo obtenerlas:
    de Chat (formato `spaces/AAAA...`) o usa el webhook generado al crear el webhook entrante en ese space. No son
    necesarias para los nuevos endpoints `/api/google-chat/*`.
 
-Nota: Si ves el mensaje de error "El endpoint /api/chat no está disponible", redeploya el proyecto asegurándote de que
-la ruta `src/app/api/chat/route.ts` está incluida; no requiere variables nuevas más allá de las anteriores. Si tu
-despliegue expone el handler en otro path, define `NEXT_PUBLIC_CHAT_ENDPOINT` con la URL relativa correcta.
+Nota: Si ves el mensaje de error "El endpoint /api/google-chat/chat no está disponible", redeploya el proyecto asegurándote
+de que la ruta `src/app/api/google-chat/chat/route.ts` (alias de `/api/chat`) está incluida. Si tu despliegue expone el
+handler en otro path, define `NEXT_PUBLIC_CHAT_ENDPOINT` con la URL relativa correcta.
 
 ## Despliegue en Vercel
 
