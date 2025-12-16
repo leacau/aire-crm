@@ -143,12 +143,17 @@ export default function ChatPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
+        const contentType = response.headers.get('content-type') || '';
+        const errorPayload = contentType.includes('application/json')
+          ? await response.json().catch(() => ({}))
+          : await response.text().catch(() => '');
+        const serverMessage =
+          typeof errorPayload === 'string' ? errorPayload : (errorPayload as { error?: string })?.error;
         const friendly =
-          response.status === 404
+          response.status === 404 && !serverMessage
             ? 'El endpoint /api/chat no está disponible en este despliegue. Verifica el redeploy o usa el webhook directo.'
             : undefined;
-        throw new Error(friendly || error?.error || 'No se pudo enviar el mensaje.');
+        throw new Error(serverMessage || friendly || 'No se pudo enviar el mensaje.');
       }
 
       setLastResult('success');
