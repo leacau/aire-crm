@@ -97,19 +97,40 @@ export async function findDirectMessageSpace(accessToken: string, userEmail: str
   const response = await fetch('https://chat.googleapis.com/v1/spaces:findDirectMessage', {
     method: 'POST',
     headers: getBaseApiHeaders(accessToken),
-    body: JSON.stringify({ requestedUser: `users/${userEmail}` }),
+    body: JSON.stringify({ requestedUser: `users/${encodeURIComponent(userEmail)}` }),
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
+    const raw = await response.text().catch(() => '');
+    let parsedMessage: string | null = null;
+
+    try {
+      const parsed = JSON.parse(raw);
+      parsedMessage = parsed?.error?.message as string | undefined;
+    } catch (error) {
+      parsedMessage = null;
+    }
+
+    const scopedMessage =
+      response.status === 403 && (raw.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT') || parsedMessage?.includes('scope'))
+        ? 'Tu sesión de Google no tiene permisos de Google Chat. Vuelve a iniciar sesión aceptando los permisos de Chat.'
+        : undefined;
+
     throw new ChatServiceError(
-      `No se pudo abrir el chat directo con ${userEmail}. ${errorText || response.statusText}`,
+      scopedMessage ||
+        `No se pudo abrir el chat directo con ${userEmail}. ${(parsedMessage || raw || response.statusText).trim()}`,
       response.status,
     );
   }
 
   const data = await response.json();
-  return data?.name as string;
+  const spaceName = (data?.name as string | undefined) || (data?.space?.name as string | undefined);
+
+  if (!spaceName) {
+    throw new ChatServiceError('La API de Chat no devolvió el identificador del espacio directo.', 502);
+  }
+
+  return normalizeSpaceName(spaceName) as string;
 }
 
 export async function sendChatMessageViaApi({ accessToken, space, text, threadName }: ChatApiMessageInput) {
