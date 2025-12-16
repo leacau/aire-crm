@@ -42,7 +42,7 @@ const CHAT_SCOPES = ['https://www.googleapis.com/auth/chat.bot'];
 function getChatCredentials() {
   const projectId = process.env.GOOGLE_CHAT_PROJECT_ID;
   const clientEmail = process.env.GOOGLE_CHAT_CLIENT_EMAIL;
-  const privateKey = process.env.GOOGLE_CHAT_PRIVATE_KEY!.replace(/\\n/g, '\n');
+  const privateKey = process.env.GOOGLE_CHAT_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error('Faltan variables de entorno de Google Chat (PROJECT_ID, CLIENT_EMAIL, PRIVATE_KEY).');
