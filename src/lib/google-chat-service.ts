@@ -29,6 +29,11 @@ type ChatMessage = {
   thread?: { name?: string };
 };
 
+function normalizeSpaceName(space: string | null | undefined) {
+  if (!space) return space;
+  return space.startsWith('spaces/') ? space : `spaces/${space}`;
+}
+
 export async function sendChatMessage({ text, threadKey, webhookUrl }: ChatMessageInput) {
   const targetUrl = webhookUrl || process.env.GOOGLE_CHAT_WEBHOOK_URL;
 
@@ -108,7 +113,8 @@ export async function findDirectMessageSpace(accessToken: string, userEmail: str
 }
 
 export async function sendChatMessageViaApi({ accessToken, space, text, threadName }: ChatApiMessageInput) {
-  const response = await fetch(`https://chat.googleapis.com/v1/${space}/messages`, {
+  const normalizedSpace = normalizeSpaceName(space);
+  const response = await fetch(`https://chat.googleapis.com/v1/${normalizedSpace}/messages`, {
     method: 'POST',
     headers: getBaseApiHeaders(accessToken),
     body: JSON.stringify({ text, thread: threadName ? { name: threadName } : undefined }),
@@ -125,8 +131,9 @@ export async function sendChatMessageViaApi({ accessToken, space, text, threadNa
 
 export async function listChatMessages(accessToken: string, space: string, options?: { pageSize?: number }) {
   const { pageSize = 30 } = options || {};
+  const normalizedSpace = normalizeSpaceName(space);
   const response = await fetch(
-    `https://chat.googleapis.com/v1/${space}/messages?orderBy=DESCENDING&pageSize=${pageSize}`,
+    `https://chat.googleapis.com/v1/${normalizedSpace}/messages?orderBy=DESCENDING&pageSize=${pageSize}`,
     {
       headers: getBaseApiHeaders(accessToken),
     },
