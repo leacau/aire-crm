@@ -18,7 +18,7 @@ interface ChatMessage {
   name: string;
   text: string;
   createTime?: string;
-  sender?: { displayName?: string; name?: string };
+  sender?: { displayName?: string; name?: string; email?: string };
   thread?: { name?: string };
 }
 
@@ -275,9 +275,12 @@ export default function ChatPage() {
 
           <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-3">
             {orderedMessages.map((msg) => {
+              const senderId = msg.sender?.name?.split('/').pop();
+              const senderEmail = msg.sender?.email || (senderId && senderId.includes('@') ? senderId : undefined);
               const senderLabel =
                 msg.sender?.displayName ||
-                msg.sender?.name?.split('/').pop()?.replace('users/', '') ||
+                senderEmail ||
+                senderId?.replace('users/', '') ||
                 'Sin nombre';
 
               return (

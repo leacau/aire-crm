@@ -25,7 +25,7 @@ type ChatMessage = {
   name: string;
   text: string;
   createTime?: string;
-  sender?: { displayName?: string; name?: string };
+  sender?: { displayName?: string; name?: string; email?: string };
   thread?: { name?: string };
 };
 
@@ -165,7 +165,7 @@ export async function listChatMessages(accessToken: string, space: string, optio
       headers: {
         ...getBaseApiHeaders(accessToken),
         'X-Goog-FieldMask':
-          'messages.name,messages.text,messages.createTime,messages.thread.name,messages.sender.displayName,messages.sender.name',
+          'messages.name,messages.text,messages.createTime,messages.thread.name,messages.sender.displayName,messages.sender.name,messages.sender.email',
       },
     },
   );
