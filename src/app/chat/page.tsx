@@ -18,7 +18,7 @@ interface ChatMessage {
   name: string;
   text: string;
   createTime?: string;
-  sender?: { displayName?: string };
+  sender?: { displayName?: string; name?: string };
   thread?: { name?: string };
 }
 
@@ -132,10 +132,16 @@ export default function ChatPage() {
       const [spaces, appUsers] = await Promise.all([getChatSpaces(), getAllUsers()]);
       setUsers(appUsers);
       setChatSpaces(spaces);
-      if (!selectedSpace && spaces.length > 0) {
-        setSelectedSpace(spaces[0].spaceId);
-        loadMessages(spaces[0].spaceId);
-        return;
+
+      let defaultSpace = '';
+      setSelectedSpace((current) => {
+        if (current) return current;
+        defaultSpace = spaces[0]?.spaceId || '';
+        return defaultSpace;
+      });
+
+      if (defaultSpace) {
+        loadMessages(defaultSpace);
       }
     } catch (error) {
       console.error('No se pudieron obtener los espacios de chat', error);
@@ -145,7 +151,7 @@ export default function ChatPage() {
         variant: 'destructive',
       });
     }
-  }, [loadMessages, selectedSpace, toast]);
+  }, [loadMessages, toast]);
 
   useEffect(() => {
     loadMessages(selectedSpace || undefined);
@@ -254,21 +260,26 @@ export default function ChatPage() {
           ) : null}
 
           <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-3">
-            {orderedMessages.map((msg) => (
-              <div key={msg.name} className="flex flex-col gap-1 rounded-md bg-background p-3 shadow-sm">
-                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                  <span className="font-semibold text-foreground">{msg.sender?.displayName || 'Sin nombre'}</span>
-                  <span>{formatDate(msg.createTime)}</span>
+            {orderedMessages.map((msg) => {
+              const senderLabel =
+                msg.sender?.displayName || msg.sender?.name?.split('/').pop() || 'Sin nombre';
+
+              return (
+                <div key={msg.name} className="flex flex-col gap-1 rounded-md bg-background p-3 shadow-sm">
+                  <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">{senderLabel}</span>
+                    <span>{formatDate(msg.createTime)}</span>
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                    {msg.thread?.name ? <Badge variant="outline">Hilo: {msg.thread.name.split('/').pop()}</Badge> : null}
+                    <Badge variant="secondary" className="flex items-center gap-1">
+                      {msg.thread?.name ? 'Mensaje de hilo' : 'Mensaje'}
+                    </Badge>
+                  </div>
                 </div>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                  {msg.thread?.name ? <Badge variant="outline">Hilo: {msg.thread.name.split('/').pop()}</Badge> : null}
-                  <Badge variant="secondary" className="flex items-center gap-1">
-                    {msg.thread?.name ? 'Mensaje de hilo' : 'Mensaje'}
-                  </Badge>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="flex flex-col gap-2 rounded-lg border bg-background p-3">
