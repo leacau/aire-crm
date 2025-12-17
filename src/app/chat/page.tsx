@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { getChatSpaces } from '@/lib/firebase-service';
-import type { ChatSpaceMapping } from '@/lib/types';
-import { Loader2, MessageSquare, RefreshCw } from 'lucide-react';
+import { getAllUsers, getChatSpaces } from '@/lib/firebase-service';
+import type { ChatSpaceMapping, User } from '@/lib/types';
+import { Loader2, MessageSquare, RefreshCw, SendHorizontal } from 'lucide-react';
 
 interface ChatMessage {
   name: string;
@@ -38,12 +39,30 @@ export default function ChatPage() {
   const [chatSpaces, setChatSpaces] = useState<ChatSpaceMapping[]>([]);
   const [selectedSpace, setSelectedSpace] = useState('');
   const [lastError, setLastError] = useState<string | null>(null);
+  const [messageText, setMessageText] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
 
   const selectedSpaceValue = selectedSpace || 'default';
 
   const availableSpaces = useMemo(() => {
     return chatSpaces.filter((space) => !!space.spaceId);
   }, [chatSpaces]);
+
+  const spaceLabel = useCallback(
+    (space: ChatSpaceMapping) => {
+      const user = users.find((u) => u.id === space.userId);
+      return user?.name || space.userEmail || space.spaceId;
+    },
+    [users],
+  );
+
+  const orderedMessages = useMemo(() => {
+    return [...messages].sort((a, b) => {
+      if (!a.createTime || !b.createTime) return 0;
+      return new Date(a.createTime).getTime() - new Date(b.createTime).getTime();
+    });
+  }, [messages]);
 
   const loadMessages = useCallback(
     async (space?: string) => {
@@ -110,7 +129,8 @@ export default function ChatPage() {
 
   const loadChatSpaces = useCallback(async () => {
     try {
-      const spaces = await getChatSpaces();
+      const [spaces, appUsers] = await Promise.all([getChatSpaces(), getAllUsers()]);
+      setUsers(appUsers);
       setChatSpaces(spaces);
       if (!selectedSpace && spaces.length > 0) {
         setSelectedSpace(spaces[0].spaceId);
@@ -134,6 +154,42 @@ export default function ChatPage() {
   useEffect(() => {
     loadChatSpaces();
   }, [loadChatSpaces]);
+
+  const handleSendMessage = useCallback(async () => {
+    const text = messageText.trim();
+    if (!text) return;
+
+    setIsSending(true);
+    try {
+      const token = await getGoogleAccessToken();
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ text, mode: 'api', targetSpace: selectedSpace || undefined }),
+      });
+
+      const payload = await response.json().catch(() => ({ error: 'No se pudo enviar el mensaje a Google Chat.' }));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'No se pudo enviar el mensaje a Google Chat.');
+      }
+
+      toast({ title: 'Mensaje enviado', description: 'El mensaje fue entregado en Google Chat.' });
+      setMessageText('');
+      loadMessages(selectedSpace || undefined);
+    } catch (error: any) {
+      console.error('Error enviando mensaje de Chat', error);
+      toast({
+        title: 'No se pudo enviar el mensaje',
+        description: error?.message || 'Revisa los permisos de Chat en tu cuenta de Google.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSending(false);
+    }
+  }, [getGoogleAccessToken, loadMessages, messageText, selectedSpace, toast]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -168,7 +224,7 @@ export default function ChatPage() {
                   <SelectItem value="default">Espacio principal</SelectItem>
                   {availableSpaces.map((space) => (
                     <SelectItem key={space.spaceId} value={space.spaceId}>
-                      {space.spaceId}
+                      {spaceLabel(space)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -197,22 +253,42 @@ export default function ChatPage() {
             <p className="text-sm text-muted-foreground">Aún no pudimos mostrar mensajes de este espacio.</p>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {messages.map((msg) => (
-              <div key={msg.name} className="flex flex-col gap-2 rounded-lg border p-3 shadow-sm">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">{msg.sender?.displayName || 'Sin nombre'}</span>
+          <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-3">
+            {orderedMessages.map((msg) => (
+              <div key={msg.name} className="flex flex-col gap-1 rounded-md bg-background p-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{msg.sender?.displayName || 'Sin nombre'}</span>
                   <span>{formatDate(msg.createTime)}</span>
                 </div>
-                <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                   {msg.thread?.name ? <Badge variant="outline">Hilo: {msg.thread.name.split('/').pop()}</Badge> : null}
                   <Badge variant="secondary" className="flex items-center gap-1">
-                    {msg.thread?.name ? 'Mensaje de hilo' : 'Mensaje' }
+                    {msg.thread?.name ? 'Mensaje de hilo' : 'Mensaje'}
                   </Badge>
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-lg border bg-background p-3">
+            <Label htmlFor="chat-message" className="text-xs">Escribir nuevo mensaje</Label>
+            <Textarea
+              id="chat-message"
+              placeholder="Escribe un mensaje para el espacio seleccionado"
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              rows={3}
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                onClick={handleSendMessage}
+                disabled={!messageText.trim() || isSending || isLoadingMessages}
+                className="gap-2"
+              >
+                {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}Enviar
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
