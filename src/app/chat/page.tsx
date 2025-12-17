@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,7 @@ export default function ChatPage() {
   const [users, setUsers] = useState<User[]>([]);
 
   const selectedSpaceValue = selectedSpace || 'default';
+  const hasManyMessages = messages.length > 10;
 
   const availableSpaces = useMemo(() => {
     return chatSpaces.filter((space) => !!space.spaceId);
@@ -64,6 +65,8 @@ export default function ChatPage() {
       return new Date(a.createTime).getTime() - new Date(b.createTime).getTime();
     });
   }, [messages]);
+
+  const historyRef = useRef<HTMLDivElement | null>(null);
 
   const loadMessages = useCallback(
     async (space?: string) => {
@@ -165,6 +168,11 @@ export default function ChatPage() {
       loadChatSpaces();
     }
   }, [loadChatSpaces, selectionHydrated]);
+
+  useEffect(() => {
+    if (!historyRef.current) return;
+    historyRef.current.scrollTop = historyRef.current.scrollHeight;
+  }, [orderedMessages.length]);
 
   useEffect(() => {
     if (!selectionHydrated) return;
@@ -273,13 +281,20 @@ export default function ChatPage() {
             <p className="text-sm text-muted-foreground">Aún no pudimos mostrar mensajes de este espacio.</p>
           ) : null}
 
-          <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-3">
+          {hasManyMessages ? (
+            <p className="text-xs text-muted-foreground">Mostrando los últimos mensajes. Desplázate para ver el historial.</p>
+          ) : null}
+
+          <div ref={historyRef} className="flex max-h-[500px] flex-col gap-3 overflow-y-auto rounded-lg border bg-muted/40 p-3">
             {orderedMessages.map((msg) => {
               const senderId = msg.sender?.name?.split('/').pop();
               const senderEmail = msg.sender?.email || (senderId && senderId.includes('@') ? senderId : undefined);
+              const displayName = msg.sender?.displayName?.trim();
+              const displayEmail = displayName && displayName.includes('@') ? displayName : undefined;
               const senderLabel =
-                msg.sender?.displayName ||
                 senderEmail ||
+                displayEmail ||
+                displayName ||
                 senderId?.replace('users/', '') ||
                 'Sin nombre';
 
