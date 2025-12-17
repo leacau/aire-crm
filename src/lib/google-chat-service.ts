@@ -25,7 +25,7 @@ type ChatMessage = {
   name: string;
   text: string;
   createTime?: string;
-  sender?: { displayName?: string };
+  sender?: { displayName?: string; name?: string };
   thread?: { name?: string };
 };
 
@@ -162,7 +162,11 @@ export async function listChatMessages(accessToken: string, space: string, optio
   const response = await fetch(
     `https://chat.googleapis.com/v1/${normalizedSpace}/messages?orderBy=createTime%20desc&pageSize=${pageSize}`,
     {
-      headers: getBaseApiHeaders(accessToken),
+      headers: {
+        ...getBaseApiHeaders(accessToken),
+        'X-Goog-FieldMask':
+          'messages.name,messages.text,messages.createTime,messages.thread.name,messages.sender.displayName,messages.sender.name',
+      },
     },
   );
 

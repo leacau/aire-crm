@@ -38,6 +38,7 @@ export default function ChatPage() {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [chatSpaces, setChatSpaces] = useState<ChatSpaceMapping[]>([]);
   const [selectedSpace, setSelectedSpace] = useState('');
+  const [selectionHydrated, setSelectionHydrated] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -132,17 +133,6 @@ export default function ChatPage() {
       const [spaces, appUsers] = await Promise.all([getChatSpaces(), getAllUsers()]);
       setUsers(appUsers);
       setChatSpaces(spaces);
-
-      let defaultSpace = '';
-      setSelectedSpace((current) => {
-        if (current) return current;
-        defaultSpace = spaces[0]?.spaceId || '';
-        return defaultSpace;
-      });
-
-      if (defaultSpace) {
-        loadMessages(defaultSpace);
-      }
     } catch (error) {
       console.error('No se pudieron obtener los espacios de chat', error);
       toast({
@@ -151,15 +141,39 @@ export default function ChatPage() {
         variant: 'destructive',
       });
     }
-  }, [loadMessages, toast]);
+  }, [toast]);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('chat-selected-space');
+      if (stored !== null) {
+        setSelectedSpace(stored);
+      }
+    } catch (error) {
+      console.warn('No se pudo leer la selección previa de Chat', error);
+    } finally {
+      setSelectionHydrated(true);
+    }
+  }, []);
 
   useEffect(() => {
     loadMessages(selectedSpace || undefined);
   }, [loadMessages, selectedSpace]);
 
   useEffect(() => {
-    loadChatSpaces();
-  }, [loadChatSpaces]);
+    if (selectionHydrated) {
+      loadChatSpaces();
+    }
+  }, [loadChatSpaces, selectionHydrated]);
+
+  useEffect(() => {
+    if (!selectionHydrated) return;
+    try {
+      sessionStorage.setItem('chat-selected-space', selectedSpace);
+    } catch (error) {
+      console.warn('No se pudo guardar la selección del espacio', error);
+    }
+  }, [selectedSpace, selectionHydrated]);
 
   const handleSendMessage = useCallback(async () => {
     const text = messageText.trim();
@@ -262,7 +276,9 @@ export default function ChatPage() {
           <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-3">
             {orderedMessages.map((msg) => {
               const senderLabel =
-                msg.sender?.displayName || msg.sender?.name?.split('/').pop() || 'Sin nombre';
+                msg.sender?.displayName ||
+                msg.sender?.name?.split('/').pop()?.replace('users/', '') ||
+                'Sin nombre';
 
               return (
                 <div key={msg.name} className="flex flex-col gap-1 rounded-md bg-background p-3 shadow-sm">
