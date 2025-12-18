@@ -111,7 +111,7 @@ export type NewInvoiceData = {
 
 
 function BillingPageComponent({ initialTab }: { initialTab: string }) {
-  const { userInfo, loading: authLoading, isBoss, ensureGoogleAccessToken } = useAuth();
+  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -445,12 +445,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       return;
     }
 
-    const token = await ensureGoogleAccessToken();
-    if (!token) {
-      toast({ title: 'Faltan permisos de Google Chat', description: 'Inicia sesión con Google y acepta los permisos de Chat.', variant: 'destructive' });
-      return;
-    }
-
     const baseUrl = typeof window !== 'undefined'
       ? window.location.origin
       : process.env.NEXT_PUBLIC_APP_URL || '';
@@ -462,18 +456,45 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     ].filter(Boolean);
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ text: messageLines.join('\n'), targetEmail: advisor.email, mode: 'api' }),
-      });
+      let sent = false;
+      let lastError: unknown = null;
+      const token = await getGoogleAccessToken({ silent: true });
+      const text = messageLines.join('\n');
 
-      if (!response.ok) {
-        const error = await response.text().catch(() => '');
-        throw new Error(error || 'No se pudo enviar el mensaje.');
+      if (token) {
+        try {
+          const apiResponse = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ text, targetEmail: advisor.email, mode: 'api' }),
+          });
+
+          if (!apiResponse.ok) {
+            const error = await apiResponse.text().catch(() => '');
+            throw new Error(error || 'No se pudo enviar el mensaje directo.');
+          }
+          sent = true;
+        } catch (error) {
+          console.warn('Fallo el envío directo por Google Chat, se intenta webhook', error);
+          lastError = error;
+        }
+      }
+
+      if (!sent) {
+        const webhookResponse = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+
+        if (!webhookResponse.ok) {
+          const error = await webhookResponse.text().catch(() => '');
+          throw new Error(error || (lastError instanceof Error ? lastError.message : 'No se pudo enviar el mensaje.'));
+        }
+        sent = true;
       }
 
       await requestPaymentExplanation(entry.id, {
