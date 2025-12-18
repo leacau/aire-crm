@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import type { PaymentEntry, PaymentStatus } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button';
 import { MoreHorizontal } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useEffect } from 'react';
+import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
 
 type Props = {
   entries: PaymentEntry[];
@@ -200,6 +202,7 @@ const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, all
 };
 
 export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onToggleSelected, onToggleSelectAll, allowDelete, isBossView }: Props) {
+  const tableContainerRef = useRef<HTMLDivElement>(null);
   const allSelected = allowDelete && entries.length > 0 && selectedIds.length === entries.length;
   const columnCount =
     (allowDelete ? 1 : 0) +
@@ -214,12 +217,115 @@ export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onTogg
     1 +
     (isBossView ? 0 : 1);
 
+  const exportRows = useMemo(() => {
+    return entries.map((entry) => {
+      const daysLate = typeof entry.daysLate === 'number' ? entry.daysLate : getDaysLate(entry);
+      return {
+        comprobante: entry.comprobanteNumber || '—',
+        razonSocial: entry.razonSocial || entry.company || '—',
+        pendingAmount: typeof entry.pendingAmount === 'number' ? entry.pendingAmount : entry.amount ?? null,
+        advisor: entry.advisorName || '—',
+        daysLate: typeof daysLate === 'number' ? daysLate : '—',
+        status: entry.status,
+        notes: entry.notes?.trim() || '—',
+      };
+    });
+  }, [entries]);
+
+  const exportAdvisorLabel = exportRows[0]?.advisor || 'asesor';
+  const exportFileLabel = exportAdvisorLabel.toLowerCase().replace(/[^a-z0-9]+/gi, '-').replace(/(^-|-$)/g, '') || 'asesor';
+
+  const handleExportExcel = () => {
+    if (exportRows.length === 0) return;
+
+    const worksheet = XLSX.utils.json_to_sheet(
+      exportRows.map((row) => ({
+        'Nro. comprobante': row.comprobante,
+        'Razón Social': row.razonSocial,
+        'Importe pendiente': row.pendingAmount ?? '—',
+        'Asesor responsable': row.advisor,
+        'Días de atraso': row.daysLate,
+        Estado: row.status,
+        'Nota/Aclaración': row.notes,
+      }))
+    );
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Mora');
+    XLSX.writeFile(workbook, `mora-${exportFileLabel || 'asesor'}.xlsx`);
+  };
+
+  const handleExportPdf = () => {
+    if (exportRows.length === 0) return;
+
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const marginLeft = 12;
+    const marginTop = 18;
+    const marginBottom = 14;
+    const columns = [
+      { key: 'comprobante', label: 'Nro.', width: 32 },
+      { key: 'razonSocial', label: 'Razón Social', width: 60 },
+      { key: 'pendingAmount', label: 'Importe pendiente', width: 40 },
+      { key: 'advisor', label: 'Asesor', width: 40 },
+      { key: 'daysLate', label: 'Días atraso', width: 28 },
+      { key: 'status', label: 'Estado', width: 28 },
+      { key: 'notes', label: 'Nota/Aclaración', width: 80 },
+    ];
+
+    doc.setFontSize(12);
+    doc.text(`Mora - ${exportAdvisorLabel}`, marginLeft, 12);
+    doc.setFontSize(10);
+
+    let y = marginTop;
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    const columnPositions: number[] = [];
+    columns.reduce((offset, column) => {
+      columnPositions.push(offset);
+      return offset + column.width;
+    }, marginLeft);
+
+    exportRows.forEach((row) => {
+      const values = columns.map((col) => {
+        if (col.key === 'pendingAmount') return formatCurrency(row.pendingAmount as number | undefined);
+        return String((row as Record<string, unknown>)[col.key] ?? '—');
+      });
+
+      const wrapped = values.map((text, idx) => doc.splitTextToSize(text, columns[idx].width));
+      const rowHeight = Math.max(...wrapped.map((lines) => (Array.isArray(lines) ? lines.length : 1))) * 6 + 2;
+
+      if (y + rowHeight > pageHeight - marginBottom) {
+        doc.addPage();
+        doc.setFontSize(10);
+        y = marginTop;
+      }
+
+      wrapped.forEach((text, idx) => {
+        doc.text(text as string[], columnPositions[idx], y);
+      });
+
+      y += rowHeight;
+    });
+
+    doc.save(`mora-${exportFileLabel || 'asesor'}.pdf`);
+  };
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle>Pagos asignados</CardTitle>
-        {allowDelete && (
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {isBossView && (
+            <>
+              <Button variant="outline" size="sm" disabled={entries.length === 0} onClick={handleExportExcel}>
+                Exportar Excel
+              </Button>
+              <Button variant="outline" size="sm" disabled={entries.length === 0} onClick={handleExportPdf}>
+                Exportar PDF
+              </Button>
+            </>
+          )}
+          {allowDelete && (
             <Button
               variant="outline"
               size="sm"
@@ -231,14 +337,15 @@ export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onTogg
             >
               Eliminar seleccionados
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {allowDelete && (
+      <CardContent>
+        <div className="overflow-x-auto" ref={tableContainerRef}>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {allowDelete && (
                 <TableHead className="w-10">
                   <Checkbox
                     aria-label="Seleccionar todos"
@@ -282,6 +389,7 @@ export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onTogg
             )}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
     </Card>
   );

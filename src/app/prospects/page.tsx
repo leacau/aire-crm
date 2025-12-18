@@ -687,6 +687,7 @@ export default function ProspectsPage() {
             entity={{ id: selectedProspectForActivity.id, name: selectedProspectForActivity.companyName, type: 'prospect' }}
             userInfo={userInfo}
             getGoogleAccessToken={getGoogleAccessToken}
+            entityOwner={usersById[selectedProspectForActivity.ownerId]}
             onActivitySaved={() => fetchData()}
         />
       )}

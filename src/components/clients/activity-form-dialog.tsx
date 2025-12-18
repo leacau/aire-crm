@@ -33,10 +33,12 @@ import { Input } from '../ui/input';
 interface ActivityFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  entity: { id: string; name: string, type: 'client' | 'prospect' };
+  entity: { id: string; name: string; type: 'client' | 'prospect' };
   userInfo: User;
   getGoogleAccessToken: () => Promise<string | null>;
   onActivitySaved?: () => void;
+  /** Owner of the entity; used to invite them to calendar tasks when creating prospect activities. */
+  entityOwner?: User;
 }
 
 const combineDateAndTime = (date: Date, time: string): Date => {
@@ -44,7 +46,7 @@ const combineDateAndTime = (date: Date, time: string): Date => {
   return set(date, { hours, minutes, seconds: 0, milliseconds: 0 });
 };
 
-export function ActivityFormDialog({ isOpen, onOpenChange, entity, userInfo, getGoogleAccessToken, onActivitySaved }: ActivityFormDialogProps) {
+export function ActivityFormDialog({ isOpen, onOpenChange, entity, userInfo, getGoogleAccessToken, onActivitySaved, entityOwner }: ActivityFormDialogProps) {
   const { toast } = useToast();
   
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -109,29 +111,40 @@ export function ActivityFormDialog({ isOpen, onOpenChange, entity, userInfo, get
 
     let calendarEventId: string | undefined = undefined;
     if (activityPayload.isTask && activityPayload.dueDate) {
-        const token = await getGoogleAccessToken();
-        if (token) {
-            try {
-                const calendarEvent = {
-                    summary: `Tarea CRM: ${activityPayload.observation.substring(0, 100)}`,
-                    description: `Tarea registrada en el CRM para ${entity.type === 'client' ? 'el cliente' : 'el prospecto'}: ${entity.name}.\n\nObservación: ${activityPayload.observation}`,
-                    start: { dateTime: activityPayload.dueDate },
-                    end: { dateTime: activityPayload.dueDate },
-                    reminders: {
-                        useDefault: false,
-                        overrides: [
-                            { method: 'popup', minutes: 10 },
-                            { method: 'popup', minutes: 60 * 24 }, // 24 hours
-                        ],
+      const token = await getGoogleAccessToken();
+      if (token) {
+        try {
+          const calendarEvent = {
+            summary: `Tarea CRM: ${activityPayload.observation.substring(0, 100)}`,
+            description: `Tarea registrada en el CRM para ${entity.type === 'client' ? 'el cliente' : 'el prospecto'}: ${entity.name}.\n\nObservación: ${activityPayload.observation}`,
+            start: { dateTime: activityPayload.dueDate },
+            end: { dateTime: activityPayload.dueDate },
+            reminders: {
+              useDefault: false,
+              overrides: [
+                { method: 'popup', minutes: 10 },
+                { method: 'popup', minutes: 60 * 24 }, // 24 hours
+              ],
+            },
+            ...(entity.type === 'prospect' && entityOwner?.email
+              ? {
+                  attendees: [
+                    {
+                      email: entityOwner.email,
+                      displayName: entityOwner.name,
                     },
-                };
-                const createdEvent = await createCalendarEvent(token, calendarEvent);
-                calendarEventId = createdEvent.id;
-            } catch (e) {
-                 console.error("Failed to create calendar event", e);
-                 toast({ title: "Error al crear evento en calendario", description: "La tarea se guardó en el CRM, pero no se pudo crear el evento en Google Calendar.", variant: "destructive" });
-            }
+                  ],
+                  sendUpdates: 'all' as const,
+                }
+              : {}),
+          };
+          const createdEvent = await createCalendarEvent(token, calendarEvent);
+          calendarEventId = createdEvent.id;
+        } catch (e) {
+          console.error("Failed to create calendar event", e);
+          toast({ title: "Error al crear evento en calendario", description: "La tarea se guardó en el CRM, pero no se pudo crear el evento en Google Calendar.", variant: "destructive" });
         }
+      }
     }
 
     try {
