@@ -425,6 +425,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         notes: 'Nota de mora',
         reminder: 'Recordatorio de mora',
         'reminder-clear': 'Recordatorio de mora',
+        pendingAmount: 'Importe pendiente',
       };
 
       await updatePaymentEntry(entry.id, updates, {

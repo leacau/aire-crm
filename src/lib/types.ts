@@ -233,8 +233,23 @@ export type ActivityLog = {
   userId: string;
   userName: string;
   ownerName: string;
-  type: 'create' | 'update' | 'delete' | 'stage_change';
-  entityType: 'client' | 'person' | 'opportunity' | 'agency' | 'invoice' | 'canje' | 'prospect' | 'user' | 'program' | 'commercial_item' | 'commercial_item_series' | 'licencia' | 'monthly_closure' | 'opportunity_alerts_config';
+  type: 'create' | 'update' | 'delete' | 'stage_change' | 'comment';
+  entityType:
+    | 'client'
+    | 'person'
+    | 'opportunity'
+    | 'agency'
+    | 'invoice'
+    | 'canje'
+    | 'prospect'
+    | 'user'
+    | 'program'
+    | 'commercial_item'
+    | 'commercial_item_series'
+    | 'licencia'
+    | 'monthly_closure'
+    | 'opportunity_alerts_config'
+    | 'payment';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action

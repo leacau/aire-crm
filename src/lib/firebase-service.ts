@@ -1445,7 +1445,7 @@ export const replacePaymentEntriesForAdvisor = async (
 
 export const updatePaymentEntry = async (
     paymentId: string,
-    updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt'>>,
+    updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt' | 'pendingAmount'>>,
     audit?: { userId?: string; userName?: string; ownerName?: string; details?: string },
 ) => {
     const docRef = doc(collections.paymentEntries, paymentId);
@@ -2437,6 +2437,22 @@ export const getActivities = async (activityLimit: number = 20): Promise<Activit
     const activities = snapshot.docs.map(convertActivityLogDoc);
     setInCache('activities_limit_100', activities);
     return activities;
+};
+
+
+export const getPaymentActivities = async (paymentId: string, activityLimit: number = 50): Promise<ActivityLog[]> => {
+    if (!paymentId) return [];
+
+    const q = query(
+        collections.activities,
+        where('entityType', '==', 'payment'),
+        where('entityId', '==', paymentId),
+        orderBy('timestamp', 'desc'),
+        limit(activityLimit),
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(convertActivityLogDoc);
 };
 
 

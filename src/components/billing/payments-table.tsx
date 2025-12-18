@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { PaymentEntry, PaymentStatus } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,15 +10,17 @@ import { format, parse, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { getPaymentActivities } from '@/lib/firebase-service';
 
 type Props = {
   entries: PaymentEntry[];
   onUpdate: (
     entry: PaymentEntry,
-    updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt'>>,
+    updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt' | 'pendingAmount'>>,
     options?: { reason?: string },
   ) => void;
   onDelete: (ids: string[]) => void;
@@ -80,6 +82,204 @@ const resolveRowColor = (daysLate: number | null | undefined) => {
   return '#bbd5ed';
 };
 
+const PaymentDetailDialog = ({
+  entry,
+  open,
+  onOpenChange,
+  isBossView,
+  onUpdate,
+  onRequestExplanation,
+}: {
+  entry: PaymentEntry;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  isBossView?: boolean;
+  onUpdate: Props['onUpdate'];
+  onRequestExplanation?: Props['onRequestExplanation'];
+}) => {
+  const [reminderDate, setReminderDate] = useState(entry.nextContactAt?.substring(0, 10) || '');
+  const [localNotes, setLocalNotes] = useState(entry.notes || '');
+  const [explanationNote, setExplanationNote] = useState('');
+  const [history, setHistory] = useState<{ id: string; description: string; when: string; author: string }[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setReminderDate(entry.nextContactAt?.substring(0, 10) || '');
+    setLocalNotes(entry.notes || '');
+    setExplanationNote('');
+  }, [entry]);
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      setLoadingHistory(true);
+      setHistoryError(null);
+      try {
+        const logs = await getPaymentActivities(entry.id, 100);
+        setHistory(
+          logs.map((log) => ({
+            id: log.id,
+            description: log.details,
+            when: log.timestamp,
+            author: log.userName,
+          })),
+        );
+      } catch (error) {
+        console.error('No se pudo cargar el historial de mora', error);
+        setHistoryError('No se pudo cargar el historial de anotaciones.');
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+
+    if (open) {
+      loadHistory();
+    }
+  }, [entry.id, open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Comprobante {entry.comprobanteNumber || 'sin número'}</DialogTitle>
+          <DialogDescription>
+            {entry.razonSocial || entry.company || 'Sin razón social'} — Asesor: {entry.advisorName}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Estado</Label>
+            {isBossView ? (
+              <p className="rounded-md border bg-muted px-3 py-2 text-sm">{entry.status}</p>
+            ) : (
+              <Select
+                value={entry.status}
+                onValueChange={(value) => onUpdate(entry, { status: value as PaymentStatus }, { reason: 'status' })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {paymentStatuses.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Importe pendiente</Label>
+            <p className="rounded-md border bg-muted px-3 py-2 text-sm">{formatCurrency(entry.pendingAmount)}</p>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Nota/Aclaración del asesor</Label>
+            {isBossView ? (
+              <p className="min-h-[48px] rounded-md border bg-muted px-3 py-2 text-sm whitespace-pre-wrap">
+                {entry.notes?.trim() || '—'}
+              </p>
+            ) : (
+              <Input
+                value={localNotes}
+                placeholder="Agregar detalle"
+                onChange={(e) => setLocalNotes(e.target.value)}
+                onBlur={() => onUpdate(entry, { notes: localNotes }, { reason: 'notes' })}
+              />
+            )}
+          </div>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Recordatorio</Label>
+              <Input type="date" value={reminderDate} onChange={(e) => setReminderDate(e.target.value)} />
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setReminderDate('');
+                    onUpdate(entry, { nextContactAt: null }, { reason: 'reminder-clear' });
+                  }}
+                >
+                  Quitar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => onUpdate(entry, { nextContactAt: reminderDate || null }, { reason: 'reminder' })}
+                >
+                  Guardar
+                </Button>
+              </div>
+            </div>
+            {isBossView && onRequestExplanation && (
+              <div className="space-y-2 border-t pt-2">
+                <Label>Nuevo pedido de aclaración</Label>
+                <Input
+                  placeholder="Motivo o detalle"
+                  value={explanationNote}
+                  onChange={(e) => setExplanationNote(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    onRequestExplanation(entry, explanationNote.trim() || undefined);
+                    setExplanationNote('');
+                  }}
+                >
+                  Enviar pedido
+                </Button>
+                {(entry.explanationRequestNote || entry.lastExplanationRequestAt) && (
+                  <p className="text-[12px] text-muted-foreground">
+                    Último pedido: {formatDate(entry.lastExplanationRequestAt)} —{' '}
+                    {entry.explanationRequestNote || 'Sin detalle'}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Fechas</Label>
+            <p className="text-sm text-muted-foreground">
+              Emisión: {formatDate(entry.issueDate)}
+              <br />
+              Vencimiento: {formatDate(entry.dueDate)}
+              <br />
+              Creado: {formatDate(entry.createdAt)}
+            </p>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Historial de anotaciones y pedidos</Label>
+            <div className="max-h-60 overflow-y-auto rounded-md border p-3 text-sm">
+              {loadingHistory && <p className="text-muted-foreground">Cargando historial...</p>}
+              {historyError && <p className="text-destructive">{historyError}</p>}
+              {!loadingHistory && !historyError && history.length === 0 && (
+                <p className="text-muted-foreground">No hay actividad registrada para este comprobante.</p>
+              )}
+              {!loadingHistory &&
+                !historyError &&
+                history.map((item) => (
+                  <div key={item.id} className="border-b py-2 last:border-0">
+                    <p className="font-medium">{item.author}</p>
+                    <p className="whitespace-pre-wrap">{item.description}</p>
+                    <p className="text-[11px] text-muted-foreground">{formatDate(item.when)}</p>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 const PaymentRow = ({
   entry,
   onUpdate,
@@ -99,17 +299,25 @@ const PaymentRow = ({
   isBossView?: boolean;
   onRequestExplanation?: Props['onRequestExplanation'];
 }) => {
-  const [reminderDate, setReminderDate] = useState(entry.nextContactAt?.substring(0, 10) || '');
+  const [pendingAmount, setPendingAmount] = useState(
+    typeof entry.pendingAmount === 'number' ? entry.pendingAmount.toString() : '',
+  );
+  const [localNote, setLocalNote] = useState(entry.notes || '');
   const daysLate = useMemo(() => entry.daysLate ?? getDaysLate(entry), [entry]);
-  const [localNotes, setLocalNotes] = useState(entry.notes || '');
-  const [explanationNote, setExplanationNote] = useState('');
   const rowColor = useMemo(() => resolveRowColor(daysLate), [daysLate]);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   useEffect(() => {
-    setLocalNotes(entry.notes || '');
-    setReminderDate(entry.nextContactAt?.substring(0, 10) || '');
-    setExplanationNote('');
-  }, [entry.notes, entry.nextContactAt]);
+    setPendingAmount(typeof entry.pendingAmount === 'number' ? entry.pendingAmount.toString() : '');
+    setLocalNote(entry.notes || '');
+  }, [entry.notes, entry.pendingAmount]);
+
+  const persistPendingAmount = () => {
+    const parsed = pendingAmount === '' ? null : Number(pendingAmount);
+    if (pendingAmount !== '' && Number.isNaN(parsed)) return;
+    if (parsed === entry.pendingAmount || (parsed === null && entry.pendingAmount == null)) return;
+    onUpdate(entry, { pendingAmount: parsed ?? undefined }, { reason: 'pendingAmount' });
+  };
 
   return (
     <TableRow key={entry.id} style={rowColor ? { backgroundColor: rowColor } : undefined}>
@@ -125,102 +333,80 @@ const PaymentRow = ({
       {!isBossView && <TableCell className="font-medium">{entry.company}</TableCell>}
       <TableCell>{entry.comprobanteNumber || '—'}</TableCell>
       <TableCell>{entry.razonSocial || '—'}</TableCell>
-      <TableCell>{formatCurrency(entry.pendingAmount)}</TableCell>
+      <TableCell>
+        {isBossView ? (
+          <Input
+            type="number"
+            value={pendingAmount}
+            onChange={(e) => setPendingAmount(e.target.value)}
+            onBlur={persistPendingAmount}
+            className="w-28"
+          />
+        ) : (
+          formatCurrency(entry.pendingAmount)
+        )}
+      </TableCell>
       {isBossView && <TableCell>{entry.advisorName}</TableCell>}
       {!isBossView && <TableCell>{formatDate(entry.dueDate)}</TableCell>}
       <TableCell>{typeof daysLate === 'number' ? daysLate : '—'}</TableCell>
       <TableCell>
-        <Select
-          value={entry.status}
-          onValueChange={(value) => onUpdate(entry, { status: value as PaymentStatus }, { reason: 'status' })}
-        >
-          <SelectTrigger className="w-[140px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {paymentStatuses.map((status) => (
-              <SelectItem key={status} value={status}>{status}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {isBossView ? (
+          <span className="text-sm font-medium">{entry.status}</span>
+        ) : (
+          <Select
+            value={entry.status}
+            onValueChange={(value) => onUpdate(entry, { status: value as PaymentStatus }, { reason: 'status' })}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {paymentStatuses.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </TableCell>
       <TableCell className="max-w-xs">
-        <div className="space-y-1">
+        {isBossView ? (
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground">{entry.notes?.trim() || '—'}</p>
+        ) : (
           <Input
-            value={localNotes}
+            value={localNote}
             placeholder="Agregar detalle"
-            onChange={(e) => setLocalNotes(e.target.value)}
-            onBlur={() => onUpdate(entry, { notes: localNotes }, { reason: 'notes' })}
+            onChange={(e) => setLocalNote(e.target.value)}
+            onBlur={() => onUpdate(entry, { notes: localNote }, { reason: 'notes' })}
           />
-          <p className="text-[11px] text-muted-foreground whitespace-pre-wrap">
-            {(entry.explanationRequestNote || entry.lastExplanationRequestAt) && (
-              <>Último pedido: {formatDate(entry.lastExplanationRequestAt)} — {entry.explanationRequestNote || 'Sin detalle'}</>
-            )}
-          </p>
-        </div>
+        )}
       </TableCell>
       <TableCell>
-        <div className="flex flex-col gap-3">
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Recordatorio</p>
-            <Input
-              type="date"
-              value={reminderDate}
-              onChange={(e) => setReminderDate(e.target.value)}
-            />
-            <div className="flex gap-2 pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setReminderDate('');
-                  onUpdate(entry, { nextContactAt: null }, { reason: 'reminder-clear' });
-                }}
-              >
-                Quitar
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => onUpdate(entry, { nextContactAt: reminderDate || null }, { reason: 'reminder' })}
-              >
-                Guardar
-              </Button>
-            </div>
-          </div>
-          {isBossView && onRequestExplanation && (
-            <div className="space-y-2 border-t pt-2">
-              <p className="text-xs text-muted-foreground">Pedir nueva aclaración</p>
-              <Input
-                placeholder="Motivo o detalle"
-                value={explanationNote}
-                onChange={(e) => setExplanationNote(e.target.value)}
-              />
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  onRequestExplanation(entry, explanationNote.trim() || undefined);
-                  setExplanationNote('');
-                }}
-              >
-                Enviar pedido
-              </Button>
-            </div>
-          )}
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setDetailOpen(true)}>
+            Ver detalle
+          </Button>
           {!isBossView && allowDelete && (
-            <div className="flex justify-end border-t pt-2">
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  if (confirm('¿Eliminar este pago?')) onDelete([entry.id]);
-                }}
-              >
-                Eliminar pago
-              </Button>
-            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (confirm('¿Eliminar este pago?')) onDelete([entry.id]);
+              }}
+            >
+              Eliminar
+            </Button>
           )}
         </div>
+        <PaymentDetailDialog
+          entry={entry}
+          open={detailOpen}
+          onOpenChange={setDetailOpen}
+          isBossView={isBossView}
+          onUpdate={onUpdate}
+          onRequestExplanation={onRequestExplanation}
+        />
       </TableCell>
     </TableRow>
   );
