@@ -1344,6 +1344,11 @@ export const getPaymentEntries = async (): Promise<PaymentEntry[]> => {
             status: (data.status as PaymentStatus) || 'Pendiente',
             notes: data.notes,
             nextContactAt: timestampToISO((data as any).nextContactAt) || data.nextContactAt || null,
+            lastExplanationRequestAt:
+                timestampToISO((data as any).lastExplanationRequestAt) || (data as any).lastExplanationRequestAt,
+            lastExplanationRequestById: (data as any).lastExplanationRequestById,
+            lastExplanationRequestByName: (data as any).lastExplanationRequestByName,
+            explanationRequestNote: (data as any).explanationRequestNote,
             createdAt: timestampToISO((data as any).createdAt) || new Date().toISOString(),
             updatedAt: timestampToISO((data as any).updatedAt),
         };
@@ -1441,6 +1446,7 @@ export const replacePaymentEntriesForAdvisor = async (
 export const updatePaymentEntry = async (
     paymentId: string,
     updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt'>>,
+    audit?: { userId?: string; userName?: string; ownerName?: string; details?: string },
 ) => {
     const docRef = doc(collections.paymentEntries, paymentId);
     await updateDoc(docRef, {
@@ -1448,6 +1454,57 @@ export const updatePaymentEntry = async (
         updatedAt: serverTimestamp(),
     });
     invalidateCache(PAYMENT_CACHE_KEY);
+
+    if (audit?.userId && audit?.userName) {
+        await logActivity({
+            userId: audit.userId,
+            userName: audit.userName,
+            ownerName: audit.ownerName,
+            type: 'update',
+            entityType: 'payment',
+            entityId: paymentId,
+            entityName: 'Mora',
+            details: audit.details || 'Actualizó un registro de mora',
+            timestamp: new Date().toISOString(),
+        });
+    }
+};
+
+export const requestPaymentExplanation = async (
+    paymentId: string,
+    params: {
+        advisorId: string;
+        advisorName?: string;
+        requestedById: string;
+        requestedByName: string;
+        note?: string;
+        comprobanteNumber?: string | null;
+    },
+) => {
+    const docRef = doc(collections.paymentEntries, paymentId);
+    await updateDoc(docRef, {
+        lastExplanationRequestAt: serverTimestamp(),
+        lastExplanationRequestById: params.requestedById,
+        lastExplanationRequestByName: params.requestedByName,
+        explanationRequestNote: params.note || null,
+        updatedAt: serverTimestamp(),
+    });
+    invalidateCache(PAYMENT_CACHE_KEY);
+
+    await logActivity({
+        userId: params.requestedById,
+        userName: params.requestedByName,
+        ownerName: params.advisorName,
+        type: 'comment',
+        entityType: 'payment',
+        entityId: paymentId,
+        entityName: params.comprobanteNumber ? `Comprobante ${params.comprobanteNumber}` : 'Mora',
+        details:
+            params.note
+                ? `Solicitó aclaración (${params.note})`
+                : 'Solicitó aclaración al asesor sobre el registro de mora.',
+        timestamp: new Date().toISOString(),
+    });
 };
 
 export const deletePaymentEntries = async (paymentIds: string[]) => {

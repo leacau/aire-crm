@@ -54,6 +54,10 @@ export type PaymentEntry = {
   status: PaymentStatus;
   notes?: string;
   nextContactAt?: string | null;
+  lastExplanationRequestAt?: string;
+  lastExplanationRequestById?: string;
+  lastExplanationRequestByName?: string;
+  explanationRequestNote?: string;
   createdAt: string;
   updatedAt?: string;
 };

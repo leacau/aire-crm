@@ -8,9 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { format, parse, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useEffect } from 'react';
 import { jsPDF } from 'jspdf';
@@ -18,13 +16,18 @@ import * as XLSX from 'xlsx';
 
 type Props = {
   entries: PaymentEntry[];
-  onUpdate: (id: string, updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt'>>) => void;
+  onUpdate: (
+    entry: PaymentEntry,
+    updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt'>>,
+    options?: { reason?: string },
+  ) => void;
   onDelete: (ids: string[]) => void;
   selectedIds: string[];
   onToggleSelected: (id: string, checked: boolean) => void;
   onToggleSelectAll: (checked: boolean) => void;
   allowDelete?: boolean;
   isBossView?: boolean;
+  onRequestExplanation?: (entry: PaymentEntry, note?: string) => void;
 };
 
 const paymentStatuses: PaymentStatus[] = ['Pendiente', 'Reclamado', 'Pagado', 'Incobrable'];
@@ -77,7 +80,16 @@ const resolveRowColor = (daysLate: number | null | undefined) => {
   return '#bbd5ed';
 };
 
-const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, allowDelete, isBossView }: {
+const PaymentRow = ({
+  entry,
+  onUpdate,
+  onDelete,
+  onToggleSelected,
+  selected,
+  allowDelete,
+  isBossView,
+  onRequestExplanation,
+}: {
   entry: PaymentEntry;
   onUpdate: Props['onUpdate'];
   onDelete: Props['onDelete'];
@@ -85,15 +97,18 @@ const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, all
   selected: boolean;
   allowDelete?: boolean;
   isBossView?: boolean;
+  onRequestExplanation?: Props['onRequestExplanation'];
 }) => {
   const [reminderDate, setReminderDate] = useState(entry.nextContactAt?.substring(0, 10) || '');
   const daysLate = useMemo(() => entry.daysLate ?? getDaysLate(entry), [entry]);
   const [localNotes, setLocalNotes] = useState(entry.notes || '');
+  const [explanationNote, setExplanationNote] = useState('');
   const rowColor = useMemo(() => resolveRowColor(daysLate), [daysLate]);
 
   useEffect(() => {
     setLocalNotes(entry.notes || '');
     setReminderDate(entry.nextContactAt?.substring(0, 10) || '');
+    setExplanationNote('');
   }, [entry.notes, entry.nextContactAt]);
 
   return (
@@ -115,93 +130,113 @@ const PaymentRow = ({ entry, onUpdate, onDelete, onToggleSelected, selected, all
       {!isBossView && <TableCell>{formatDate(entry.dueDate)}</TableCell>}
       <TableCell>{typeof daysLate === 'number' ? daysLate : '—'}</TableCell>
       <TableCell>
-        {isBossView ? (
-          entry.status
-        ) : (
-          <Select
-            value={entry.status}
-            onValueChange={(value) => onUpdate(entry.id, { status: value as PaymentStatus })}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {paymentStatuses.map((status) => (
-                <SelectItem key={status} value={status}>{status}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        <Select
+          value={entry.status}
+          onValueChange={(value) => onUpdate(entry, { status: value as PaymentStatus }, { reason: 'status' })}
+        >
+          <SelectTrigger className="w-[140px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {paymentStatuses.map((status) => (
+              <SelectItem key={status} value={status}>{status}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </TableCell>
-      <TableCell className="whitespace-pre-wrap break-words max-w-xs">{entry.notes?.trim() || '—'}</TableCell>
-      {!isBossView && (
-        <TableCell>
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Abrir acciones">
-                <MoreHorizontal className="h-4 w-4" />
+      <TableCell className="max-w-xs">
+        <div className="space-y-1">
+          <Input
+            value={localNotes}
+            placeholder="Agregar detalle"
+            onChange={(e) => setLocalNotes(e.target.value)}
+            onBlur={() => onUpdate(entry, { notes: localNotes }, { reason: 'notes' })}
+          />
+          <p className="text-[11px] text-muted-foreground whitespace-pre-wrap">
+            {(entry.explanationRequestNote || entry.lastExplanationRequestAt) && (
+              <>Último pedido: {formatDate(entry.lastExplanationRequestAt)} — {entry.explanationRequestNote || 'Sin detalle'}</>
+            )}
+          </p>
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex flex-col gap-3">
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Recordatorio</p>
+            <Input
+              type="date"
+              value={reminderDate}
+              onChange={(e) => setReminderDate(e.target.value)}
+            />
+            <div className="flex gap-2 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setReminderDate('');
+                  onUpdate(entry, { nextContactAt: null }, { reason: 'reminder-clear' });
+                }}
+              >
+                Quitar
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72 space-y-3 p-3">
-              <div className="space-y-1">
-                <p className="text-sm font-medium leading-none">Explicación</p>
-                <p className="text-xs text-muted-foreground">Guarda notas o aclaraciones sobre este pago.</p>
-                <Input
-                  value={localNotes}
-                  placeholder="Agregar detalle"
-                  onChange={(e) => setLocalNotes(e.target.value)}
-                  onBlur={() => onUpdate(entry.id, { notes: localNotes })}
-                />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium leading-none">Recordatorio</p>
-                <p className="text-xs text-muted-foreground">Seleccioná una fecha para volver a contactar.</p>
-              </div>
+              <Button
+                size="sm"
+                onClick={() => onUpdate(entry, { nextContactAt: reminderDate || null }, { reason: 'reminder' })}
+              >
+                Guardar
+              </Button>
+            </div>
+          </div>
+          {isBossView && onRequestExplanation && (
+            <div className="space-y-2 border-t pt-2">
+              <p className="text-xs text-muted-foreground">Pedir nueva aclaración</p>
               <Input
-                type="date"
-                value={reminderDate}
-                onChange={(e) => setReminderDate(e.target.value)}
+                placeholder="Motivo o detalle"
+                value={explanationNote}
+                onChange={(e) => setExplanationNote(e.target.value)}
               />
-              <div className="flex justify-end gap-2 pt-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setReminderDate('');
-                    onUpdate(entry.id, { nextContactAt: null });
-                  }}
-                >
-                  Quitar
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => onUpdate(entry.id, { nextContactAt: reminderDate || null })}
-                >
-                  Guardar
-                </Button>
-              </div>
-              {allowDelete && (
-                <div className="flex justify-end border-t pt-2">
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => {
-                      if (confirm('¿Eliminar este pago?')) onDelete([entry.id]);
-                    }}
-                  >
-                    Eliminar pago
-                  </Button>
-                </div>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </TableCell>
-      )}
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  onRequestExplanation(entry, explanationNote.trim() || undefined);
+                  setExplanationNote('');
+                }}
+              >
+                Enviar pedido
+              </Button>
+            </div>
+          )}
+          {!isBossView && allowDelete && (
+            <div className="flex justify-end border-t pt-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  if (confirm('¿Eliminar este pago?')) onDelete([entry.id]);
+                }}
+              >
+                Eliminar pago
+              </Button>
+            </div>
+          )}
+        </div>
+      </TableCell>
     </TableRow>
   );
 };
 
-export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onToggleSelected, onToggleSelectAll, allowDelete, isBossView }: Props) {
+export function PaymentsTable({
+  entries,
+  onUpdate,
+  onDelete,
+  selectedIds,
+  onToggleSelected,
+  onToggleSelectAll,
+  allowDelete,
+  isBossView,
+  onRequestExplanation,
+}: Props) {
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const allSelected = allowDelete && entries.length > 0 && selectedIds.length === entries.length;
   const columnCount =
@@ -215,7 +250,7 @@ export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onTogg
     1 +
     1 +
     1 +
-    (isBossView ? 0 : 1);
+    1;
 
   const exportRows = useMemo(() => {
     return entries.map((entry) => {
@@ -364,7 +399,7 @@ export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onTogg
               <TableHead>Días de atraso</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Nota/Aclaración</TableHead>
-              {!isBossView && <TableHead className="text-right">Acciones</TableHead>}
+              <TableHead>Seguimiento</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -378,6 +413,7 @@ export function PaymentsTable({ entries, onUpdate, onDelete, selectedIds, onTogg
                 selected={selectedIds.includes(entry.id)}
                 allowDelete={allowDelete}
                 isBossView={isBossView}
+                onRequestExplanation={onRequestExplanation}
               />
             ))}
             {entries.length === 0 && (
