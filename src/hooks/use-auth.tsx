@@ -91,6 +91,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
+  useEffect(() => {
+    if (loading || !user) return;
+
+    let cancelled = false;
+
+    const verifyGoogleAccess = async () => {
+        try {
+            const token = await ensureGoogleAccessToken();
+            if (!token && !cancelled) {
+                // If the user dismissed the popup or token couldn't be obtained, sign out to force re-auth.
+                await auth.signOut();
+                router.push('/login');
+            }
+        } catch (error) {
+            console.error('Error verifying Google access', error);
+            if (!cancelled) {
+                await auth.signOut();
+                router.push('/login');
+            }
+        }
+    };
+
+    verifyGoogleAccess();
+
+    return () => {
+        cancelled = true;
+    };
+  }, [loading, user, pathname, router]);
+
     const getGoogleAccessToken = async (options?: { silent?: boolean }): Promise<string | null> => {
         if (typeof window === 'undefined') return null;
 
