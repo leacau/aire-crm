@@ -38,10 +38,6 @@ type TangoRow = {
   razonSocial: string;
   tangoId: string;
   cuit?: string;
-  clientId?: string;
-  clientName?: string;
-  matchScore?: number;
-  matchedBy?: 'cuit' | 'name';
 };
 
 const REQUIRED_FIELDS: (keyof ColumnSelection)[] = ['razonSocial', 'tangoId'];
@@ -49,6 +45,12 @@ const UNASSIGNED_CLIENT_VALUE = '__none__';
 const NO_CUIT_COLUMN = '__none__';
 
 const normalizeText = (value: string) => value?.toString().trim().toLowerCase() || '';
+
+type ClientSuggestion = {
+  rowKey?: string;
+  matchedBy?: 'cuit' | 'name';
+  matchScore?: number;
+};
 
 export default function TangoMappingPage() {
   const router = useRouter();
@@ -63,6 +65,8 @@ export default function TangoMappingPage() {
   const [rows, setRows] = useState<TangoRow[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [filter, setFilter] = useState('');
+  const [clientSelections, setClientSelections] = useState<Record<string, string | undefined>>({});
+  const [suggestions, setSuggestions] = useState<Record<string, ClientSuggestion>>({});
 
   const canAccess = userInfo && hasManagementPrivileges(userInfo);
 
@@ -101,17 +105,22 @@ export default function TangoMappingPage() {
     }));
   }, [clients]);
 
-  const filteredRows = useMemo(() => {
-    if (!filter.trim()) return rows;
+  const rowMap = useMemo(() => {
+    const map = new Map<string, TangoRow>();
+    rows.forEach((row) => map.set(`${row.index}-${row.tangoId}`, row));
+    return map;
+  }, [rows]);
+
+  const filteredClients = useMemo(() => {
+    if (!filter.trim()) return clients;
     const query = normalizeText(filter);
-    return rows.filter(
-      (row) =>
-        normalizeText(row.razonSocial).includes(query) ||
-        normalizeText(row.tangoId).includes(query) ||
-        normalizeText(row.cuit || '').includes(query) ||
-        normalizeText(row.clientName || '').includes(query)
+    return clients.filter(
+      (client) =>
+        normalizeText(client.denominacion || client.razonSocial).includes(query) ||
+        normalizeText(client.cuit || '').includes(query) ||
+        normalizeText(client.tangoCompanyId || '').includes(query)
     );
-  }, [rows, filter]);
+  }, [clients, filter]);
 
   const guessHeader = (target: keyof ColumnSelection, availableHeaders: string[]) => {
     const patterns: Record<keyof ColumnSelection, RegExp[]> = {
@@ -160,66 +169,84 @@ export default function TangoMappingPage() {
       })
       .filter(Boolean) as TangoRow[];
 
-    const clientNameLookup = clientNameList.map((c) => c.name);
+    const rowKeyMap = new Map<string, TangoRow>();
+    mappedRows.forEach((row) => {
+      rowKeyMap.set(`${row.index}-${row.tangoId}`, row);
+    });
+    setRows(mappedRows);
 
-    const rowsWithSuggestions = mappedRows.map((row) => {
-      const normalizedCuit = row.cuit ? normalizeText(row.cuit) : '';
-      let clientId: string | undefined;
-      let matchedBy: TangoRow['matchedBy'];
+    const clientNameLookup = clientNameList.map((c) => c.name);
+    const newSuggestions: Record<string, ClientSuggestion> = {};
+
+    clients.forEach((client) => {
+      const normalizedCuit = client.cuit ? normalizeText(client.cuit) : '';
+      let rowKey: string | undefined;
+      let matchedBy: ClientSuggestion['matchedBy'];
       let matchScore: number | undefined;
 
-      if (normalizedCuit && existingCuitMap.has(normalizedCuit)) {
-        const match = existingCuitMap.get(normalizedCuit)!;
-        clientId = match.id;
-        matchedBy = 'cuit';
-        matchScore = 1;
-      } else if (clientNameLookup.length > 0) {
-        const { bestMatch } = findBestMatch(row.razonSocial, clientNameLookup);
-        const match = clientNameList.find((c) => c.name === bestMatch.target);
-        clientId = bestMatch.rating > 0.5 ? match?.id : undefined;
-        matchedBy = clientId ? 'name' : undefined;
-        matchScore = bestMatch.rating;
+      if (normalizedCuit) {
+        const match = mappedRows.find((row) => row.cuit && normalizeText(row.cuit) === normalizedCuit);
+        if (match) {
+          rowKey = `${match.index}-${match.tangoId}`;
+          matchedBy = 'cuit';
+          matchScore = 1;
+        }
       }
 
-      const matchedClient = clients.find((c) => c.id === clientId);
+      if (!rowKey && clientNameLookup.length > 0) {
+        const { bestMatch } = findBestMatch(client.denominacion || client.razonSocial, mappedRows.map((r) => r.razonSocial));
+        if (bestMatch.rating > 0.5) {
+          const match = mappedRows.find((r) => r.razonSocial === bestMatch.target);
+          if (match) {
+            rowKey = `${match.index}-${match.tangoId}`;
+            matchedBy = 'name';
+            matchScore = bestMatch.rating;
+          }
+        }
+      }
 
-      return {
-        ...row,
-        clientId,
-        clientName: matchedClient ? matchedClient.denominacion || matchedClient.razonSocial : undefined,
-        matchedBy,
-        matchScore,
-      };
+      newSuggestions[client.id] = { rowKey, matchedBy, matchScore };
     });
 
-    setRows(rowsWithSuggestions);
+    setSuggestions(newSuggestions);
+    setClientSelections({});
     setStep('review');
   };
 
-  const updateRowClient = (rowIndex: number, clientId?: string) => {
-    const selectedClient = clientId ? clients.find((c) => c.id === clientId) : undefined;
-    const selectedName = selectedClient ? selectedClient.denominacion || selectedClient.razonSocial : undefined;
-    setRows((prev) =>
-      prev.map((row) =>
-        row.index === rowIndex
-          ? {
-              ...row,
-              clientId,
-              clientName: selectedName,
-              matchedBy: clientId ? undefined : row.matchedBy,
-            }
-          : row
-      )
-    );
+  const updateRowClient = (clientId: string, rowKey?: string) => {
+    setClientSelections((prev) => ({ ...prev, [clientId]: rowKey }));
   };
 
   const handleApplyMapping = async () => {
     if (!userInfo) return;
-    const rowsToUpdate = rows.filter((row) => row.clientId);
-    if (rowsToUpdate.length === 0) {
+    const rowMap = new Map<string, TangoRow>();
+    rows.forEach((row) => rowMap.set(`${row.index}-${row.tangoId}`, row));
+
+    const pendingUpdates = clients
+      .map((client) => {
+        const selection = clientSelections[client.id] ?? suggestions[client.id]?.rowKey;
+        if (!selection) return null;
+        const row = rowMap.get(selection);
+        if (!row) return null;
+
+        const data: { cuit?: string; tangoCompanyId?: string } = {};
+        if (!client.cuit && row.cuit) {
+          data.cuit = row.cuit;
+        }
+        if (!client.tangoCompanyId && row.tangoId) {
+          data.tangoCompanyId = row.tangoId;
+        }
+
+        if (Object.keys(data).length === 0) return null;
+
+        return { client, data };
+      })
+      .filter(Boolean) as { client: Client; data: { cuit?: string; tangoCompanyId?: string } }[];
+
+    if (pendingUpdates.length === 0) {
       toast({
-        title: 'Sin asignaciones',
-        description: 'Selecciona al menos un cliente para actualizar.',
+        title: 'Sin cambios',
+        description: 'No hay datos faltantes para actualizar con el archivo cargado.',
         variant: 'destructive',
       });
       return;
@@ -229,11 +256,11 @@ export default function TangoMappingPage() {
     let success = 0;
     let failed = 0;
 
-    for (const row of rowsToUpdate) {
+    for (const item of pendingUpdates) {
       try {
         await updateClientTangoMapping(
-          row.clientId!,
-          { cuit: row.cuit, tangoCompanyId: row.tangoId },
+          item.client.id,
+          item.data,
           userInfo.id,
           userInfo.name
         );
@@ -247,7 +274,7 @@ export default function TangoMappingPage() {
     setIsSaving(false);
     toast({
       title: 'Mapeo completado',
-      description: `${success} clientes actualizados${failed ? `, ${failed} con errores` : ''}.`,
+      description: `${success} clientes actualizados${failed ? `, ${failed} con errores` : ''}. Solo se completaron campos faltantes.`,
       variant: failed ? 'destructive' : 'default',
     });
   };
@@ -366,76 +393,82 @@ export default function TangoMappingPage() {
               <CardHeader>
                 <CardTitle>Previsualización y mapeo</CardTitle>
                 <CardDescription>
-                  Ajusta el cliente correspondiente a cada empresa de Tango. Sólo se actualizarán las filas con un
-                  cliente seleccionado.
+                  Ajusta la fila del archivo de Tango para cada cliente del CRM. Sólo se completarán datos faltantes
+                  (CUIT o ID de Tango) en los clientes seleccionados.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <Input
-                    placeholder="Buscar por Razón Social, CUIT o cliente"
+                    placeholder="Buscar por cliente, CUIT o ID Tango"
                     value={filter}
                     onChange={(e) => setFilter(e.target.value)}
                     className="md:w-80"
                   />
                   <div className="flex gap-2">
-                    <Badge variant="secondary">Filas: {rows.length}</Badge>
-                    <Badge variant="outline">Con cliente: {rows.filter((r) => r.clientId).length}</Badge>
+                    <Badge variant="secondary">Clientes: {clients.length}</Badge>
+                    <Badge variant="outline">Filas de archivo: {rows.length}</Badge>
                   </div>
                 </div>
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Razón Social (Excel)</TableHead>
-                        <TableHead>ID Tango</TableHead>
-                        <TableHead>CUIT</TableHead>
-                        <TableHead>Cliente en CRM</TableHead>
-                        <TableHead className="w-[160px]">Coincidencia</TableHead>
+                        <TableHead>Cliente CRM</TableHead>
+                        <TableHead>CUIT (CRM)</TableHead>
+                        <TableHead>ID Tango (CRM)</TableHead>
+                        <TableHead>Fila de archivo</TableHead>
+                        <TableHead className="w-[180px]">Coincidencia</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredRows.map((row) => (
-                        <TableRow key={`${row.index}-${row.tangoId}`}>
-                          <TableCell className="max-w-[240px] break-words">{row.razonSocial}</TableCell>
-                          <TableCell>{row.tangoId}</TableCell>
-                          <TableCell>{row.cuit || '-'}</TableCell>
-                          <TableCell>
-                            <Select
-                              value={row.clientId || UNASSIGNED_CLIENT_VALUE}
-                              onValueChange={(value) =>
-                                updateRowClient(row.index, value === UNASSIGNED_CLIENT_VALUE ? undefined : value)
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar cliente" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value={UNASSIGNED_CLIENT_VALUE}>Sin asignar</SelectItem>
-                                {clients.map((client) => (
-                                  <SelectItem key={client.id} value={client.id}>
-                                    {client.denominacion || client.razonSocial}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            {row.clientId ? (
-                              <Badge variant={row.matchedBy ? 'default' : 'secondary'}>
-                                {row.matchedBy === 'cuit'
-                                  ? 'Coincidencia por CUIT'
-                                  : row.matchedBy === 'name'
-                                  ? `Nombre ~${Math.round((row.matchScore || 0) * 100)}%`
-                                  : 'Asignado manualmente'}
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline">Sin coincidencia</Badge>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {filteredRows.length === 0 && (
+                      {filteredClients.map((client) => {
+                        const suggestion = suggestions[client.id];
+                        const selectedRowKey = clientSelections[client.id] ?? suggestion?.rowKey ?? UNASSIGNED_CLIENT_VALUE;
+                        const row = rowMap.get(selectedRowKey);
+                        return (
+                          <TableRow key={client.id}>
+                            <TableCell className="max-w-[240px] break-words">
+                              <div className="font-medium">{client.denominacion || client.razonSocial}</div>
+                              <p className="text-xs text-muted-foreground">{client.ownerName}</p>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">{client.cuit || '—'}</TableCell>
+                            <TableCell className="whitespace-nowrap">{client.tangoCompanyId || '—'}</TableCell>
+                            <TableCell>
+                              <Select
+                                value={selectedRowKey}
+                                onValueChange={(value) => updateRowClient(client.id, value === UNASSIGNED_CLIENT_VALUE ? undefined : value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Seleccionar fila" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={UNASSIGNED_CLIENT_VALUE}>Sin asignar</SelectItem>
+                                  {rows.map((r) => (
+                                    <SelectItem key={`${r.index}-${r.tangoId}`} value={`${r.index}-${r.tangoId}`}>
+                                      {r.razonSocial} — ID {r.tangoId}{r.cuit ? ` — CUIT ${r.cuit}` : ''}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              {selectedRowKey !== UNASSIGNED_CLIENT_VALUE && row ? (
+                                <Badge variant={clientSelections[client.id] ? 'secondary' : 'default'}>
+                                  {suggestion?.matchedBy === 'cuit'
+                                    ? 'Coincidencia por CUIT'
+                                    : suggestion?.matchedBy === 'name'
+                                    ? `Nombre ~${Math.round((suggestion.matchScore || 0) * 100)}%`
+                                    : 'Asignado manualmente'}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline">Sin coincidencia</Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {filteredClients.length === 0 && (
                         <TableRow>
                           <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                             No hay filas para mostrar.
