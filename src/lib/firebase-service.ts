@@ -90,6 +90,11 @@ const parseDateWithTimezone = (dateString: string) => {
     return new Date(year, month - 1, day);
 };
 
+export type ClientTangoUpdate = {
+    cuit?: string;
+    tangoCompanyId?: string;
+};
+
 // --- Config Functions ---
 
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
@@ -1835,6 +1840,52 @@ export const updateClient = async (
         entityName: clientName,
         details: details,
         ownerName: newOwnerName
+    });
+};
+
+export const updateClientTangoMapping = async (
+    id: string,
+    data: ClientTangoUpdate,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(db, 'clients', id);
+    const originalDoc = await getDoc(docRef);
+    if (!originalDoc.exists()) throw new Error('Client not found');
+    const originalData = originalDoc.data() as Client;
+
+    const updatePayload: Record<string, any> = {
+        updatedAt: serverTimestamp(),
+    };
+
+    if (data.cuit && data.cuit.trim().length > 0) {
+        updatePayload.cuit = data.cuit.trim();
+    }
+    if (data.tangoCompanyId && data.tangoCompanyId.toString().trim().length > 0) {
+        updatePayload.tangoCompanyId = data.tangoCompanyId.toString().trim();
+    }
+
+    await updateDoc(docRef, updatePayload);
+    invalidateCache('clients');
+
+    const detailsParts = [];
+    if (updatePayload.cuit && updatePayload.cuit !== originalData.cuit) {
+        detailsParts.push(`CUIT <strong>${updatePayload.cuit}</strong>`);
+    }
+    if (updatePayload.tangoCompanyId && updatePayload.tangoCompanyId !== originalData.tangoCompanyId) {
+        detailsParts.push(`ID de Tango <strong>${updatePayload.tangoCompanyId}</strong>`);
+    }
+    const detailText = detailsParts.length > 0 ? detailsParts.join(' y ') : 'datos de Tango';
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'client',
+        entityId: id,
+        entityName: originalData.denominacion,
+        details: `actualizó ${detailText} para <a href="/clients/${id}" class="font-bold text-primary hover:underline">${originalData.denominacion}</a>`,
+        ownerName: originalData.ownerName,
     });
 };
 

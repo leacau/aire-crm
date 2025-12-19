@@ -21,6 +21,7 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
         Rates: { view: true, edit: true },
         Reports: { view: true, edit: true },
         Import: { view: true, edit: true },
+        TangoMapping: { view: true, edit: true },
     },
     'Recursos Humanos': {
         Licenses: { view: true, edit: true },
@@ -46,6 +47,7 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
         Rates: { view: true, edit: true },
         Reports: { view: true, edit: true },
         Import: { view: true, edit: true },
+        TangoMapping: { view: true, edit: true },
     },
     'Programación': {
         Grilla: { view: true, edit: false },

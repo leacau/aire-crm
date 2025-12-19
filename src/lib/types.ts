@@ -185,6 +185,7 @@ export type Client = {
   denominacion: string;
   razonSocial: string;
   cuit?: string;
+  tangoCompanyId?: string;
   condicionIVA: CondicionIVA;
   provincia: string;
   localidad: string;
@@ -353,7 +354,7 @@ export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
-    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat'
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping'
 ] as const;
 export type ScreenName = typeof screenNames[number];
 
