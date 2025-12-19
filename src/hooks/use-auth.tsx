@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { getUserProfile, updateUserProfile } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
 import { validateGoogleServicesAccess } from '@/lib/google-service-check';
+import { useToast } from '@/hooks/use-toast';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -96,29 +98,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
 
-    const verifyGoogleAccess = async () => {
+    const runCheck = async () => {
+      const storageKey = 'google-access-validated';
+      const hasValidated = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) === 'true' : false;
+      if (hasValidated) return;
+
+      const attemptValidation = async (interactive: boolean) => {
+        const token = await getGoogleAccessToken(interactive ? undefined : { silent: true });
+        if (!token) return false;
+
         try {
-            const token = await ensureGoogleAccessToken();
-            if (!token && !cancelled) {
-                // If the user dismissed the popup or token couldn't be obtained, sign out to force re-auth.
-                await auth.signOut();
-                router.push('/login');
-            }
+          await validateGoogleServicesAccess(token);
+          if (!cancelled && typeof window !== 'undefined') {
+            sessionStorage.setItem(storageKey, 'true');
+          }
+          return true;
         } catch (error) {
-            console.error('Error verifying Google access', error);
-            if (!cancelled) {
-                await auth.signOut();
-                router.push('/login');
-            }
+          console.error('Error verifying Google access', error);
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('google-access-token');
+          }
+          return false;
         }
+      };
+
+      const silentOk = await attemptValidation(false);
+      if (silentOk || cancelled) return;
+
+      const interactiveOk = await attemptValidation(true);
+      if (interactiveOk || cancelled) return;
+
+      if (!cancelled) {
+        toast({
+          title: 'Acceso a Google requerido',
+          description: 'Inicia sesión nuevamente para habilitar Gmail, Calendar, Drive y Chat.',
+          variant: 'destructive',
+          duration: 8000,
+        });
+        await auth.signOut();
+        router.push('/login');
+      }
     };
 
-    verifyGoogleAccess();
+    runCheck();
 
     return () => {
-        cancelled = true;
+      cancelled = true;
     };
-  }, [loading, user, pathname, router]);
+  }, [loading, user, pathname, router, toast]);
 
     const getGoogleAccessToken = async (options?: { silent?: boolean }): Promise<string | null> => {
         if (typeof window === 'undefined') return null;
