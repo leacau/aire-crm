@@ -101,7 +101,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const runCheck = async () => {
       const storageKey = 'google-access-validated';
       const hasValidated = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) === 'true' : false;
-      if (hasValidated) return;
+      const hasFailed = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) === 'failed' : false;
+      if (hasValidated || hasFailed) return;
 
       const attemptValidation = async (interactive: boolean) => {
         const token = await getGoogleAccessToken(interactive ? undefined : { silent: true });
@@ -135,8 +136,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           variant: 'destructive',
           duration: 8000,
         });
-        await auth.signOut();
-        router.push('/login');
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(storageKey, 'failed');
+        }
       }
     };
 
