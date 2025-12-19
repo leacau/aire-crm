@@ -43,6 +43,7 @@ type TangoRow = {
 const REQUIRED_FIELDS: (keyof ColumnSelection)[] = ['razonSocial', 'tangoId'];
 const UNASSIGNED_CLIENT_VALUE = '__none__';
 const NO_CUIT_COLUMN = '__none__';
+const MAX_PREVIEW_ROWS = 12000;
 
 const normalizeText = (value: string) => value?.toString().trim().toLowerCase() || '';
 
@@ -180,6 +181,19 @@ export default function TangoMappingPage() {
       razonSocial: guessHeader('razonSocial', result.headers || []),
       tangoId: guessHeader('tangoId', result.headers || []),
       cuit: guessHeader('cuit', result.headers || []) || undefined,
+    });
+  };
+
+  const handleDataExtracted = (data: any[], extractedHeaders: string[]) => {
+    const limited = data.slice(0, MAX_PREVIEW_ROWS);
+    setRawData(limited);
+    setHeaders(extractedHeaders);
+    setRowsTruncated(data.length > limited.length);
+    setStep('map');
+    setColumnSelection({
+      razonSocial: guessHeader('razonSocial', extractedHeaders),
+      tangoId: guessHeader('tangoId', extractedHeaders),
+      cuit: guessHeader('cuit', extractedHeaders) || undefined,
     });
   };
 
@@ -337,20 +351,20 @@ export default function TangoMappingPage() {
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
         {step === 'upload' && (
           <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Importar archivo de Tango</CardTitle>
-                <CardDescription>
-                  Sube un Excel o CSV con Razón Social, ID de Tango y CUIT. Sólo jefes, gerentes y administradores
-                  pueden acceder a este mapeo.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FileUploader onDataExtracted={handleDataExtracted} />
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Importar archivo de Tango</CardTitle>
+                    <CardDescription>
+                      Sube un Excel o CSV con Razón Social, ID de Tango y CUIT. Sólo jefes, gerentes y administradores
+                      pueden acceder a este mapeo.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FileUploader onDataExtracted={handleDataExtracted} onServerProcess={handleServerFile} />
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
         {step === 'map' && (
           <Card>
