@@ -12,9 +12,10 @@ import { Spinner } from '../ui/spinner';
 interface FileUploaderProps {
   onDataExtracted: (data: any[], headers: string[]) => void;
   disabled?: boolean;
+  onServerProcess?: (file: File) => Promise<void>;
 }
 
-export function FileUploader({ onDataExtracted, disabled }: FileUploaderProps) {
+export function FileUploader({ onDataExtracted, disabled, onServerProcess }: FileUploaderProps) {
     const { toast } = useToast();
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -31,6 +32,19 @@ export function FileUploader({ onDataExtracted, disabled }: FileUploaderProps) {
             description: <div className="flex items-center gap-2"><Spinner size="small" /> Por favor, espera.</div>,
             duration: Infinity
         });
+
+        if (onServerProcess) {
+            onServerProcess(file)
+              .catch((error) => {
+                console.error("Error processing file on server:", error);
+                toast({ title: "Error al procesar el archivo", description: error.message || 'Intenta nuevamente.', variant: "destructive" });
+              })
+              .finally(() => {
+                setIsProcessing(false);
+                dismiss();
+              });
+            return;
+        }
 
         // Create a Web Worker to process the file off the main thread
         const worker = new Worker('/xlsx-worker.js');

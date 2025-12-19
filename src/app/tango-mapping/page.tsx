@@ -67,6 +67,8 @@ export default function TangoMappingPage() {
   const [filter, setFilter] = useState('');
   const [clientSelections, setClientSelections] = useState<Record<string, string | undefined>>({});
   const [suggestions, setSuggestions] = useState<Record<string, ClientSuggestion>>({});
+  const [rowsTruncated, setRowsTruncated] = useState(false);
+  const rowOptionsCache = React.useRef<Record<string, { rowsVersion: number; options: TangoRow[] }>>({});
 
   const canAccess = userInfo && hasManagementPrivileges(userInfo);
 
@@ -161,14 +163,23 @@ export default function TangoMappingPage() {
     return availableHeaders.find((h) => regexes.some((r) => r.test(h)));
   };
 
-  const handleDataExtracted = (data: any[], extractedHeaders: string[]) => {
-    setRawData(data);
-    setHeaders(extractedHeaders);
+  const handleServerFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/tango-mapping/upload', { method: 'POST', body: formData });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'No se pudo procesar el archivo');
+    }
+    const result = await response.json();
+    setRawData(result.rows || []);
+    setHeaders(result.headers || []);
+    setRowsTruncated(Boolean(result.truncated));
     setStep('map');
     setColumnSelection({
-      razonSocial: guessHeader('razonSocial', extractedHeaders),
-      tangoId: guessHeader('tangoId', extractedHeaders),
-      cuit: guessHeader('cuit', extractedHeaders) || undefined,
+      razonSocial: guessHeader('razonSocial', result.headers || []),
+      tangoId: guessHeader('tangoId', result.headers || []),
+      cuit: guessHeader('cuit', result.headers || []) || undefined,
     });
   };
 
@@ -205,6 +216,7 @@ export default function TangoMappingPage() {
     });
     setRows(mappedRows);
     setRawData([]); // liberar memoria del archivo original
+    rowOptionsCache.current = {};
 
     const newSuggestions: Record<string, ClientSuggestion> = {};
 
