@@ -169,14 +169,17 @@ export default function TangoMappingPage() {
       })
       .filter(Boolean) as TangoRow[];
 
+    const mappedNames = mappedRows.map((r) => r.razonSocial);
     const rowKeyMap = new Map<string, TangoRow>();
     mappedRows.forEach((row) => {
       rowKeyMap.set(`${row.index}-${row.tangoId}`, row);
     });
     setRows(mappedRows);
+    setRawData([]); // liberar memoria del archivo original
 
-    const clientNameLookup = clientNameList.map((c) => c.name);
     const newSuggestions: Record<string, ClientSuggestion> = {};
+
+    const allowFuzzy = mappedNames.length <= 2000; // evitar uso intensivo de memoria con archivos grandes
 
     clients.forEach((client) => {
       const normalizedCuit = client.cuit ? normalizeText(client.cuit) : '';
@@ -193,8 +196,8 @@ export default function TangoMappingPage() {
         }
       }
 
-      if (!rowKey && clientNameLookup.length > 0) {
-        const { bestMatch } = findBestMatch(client.denominacion || client.razonSocial, mappedRows.map((r) => r.razonSocial));
+      if (!rowKey && allowFuzzy) {
+        const { bestMatch } = findBestMatch(client.denominacion || client.razonSocial, mappedNames);
         if (bestMatch.rating > 0.5) {
           const match = mappedRows.find((r) => r.razonSocial === bestMatch.target);
           if (match) {
