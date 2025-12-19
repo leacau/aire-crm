@@ -122,6 +122,35 @@ export default function TangoMappingPage() {
     );
   }, [clients, filter]);
 
+  const getRowOptions = (client: Client, allRows: TangoRow[]) => {
+    const MAX_OPTIONS = 200;
+    if (allRows.length <= MAX_OPTIONS) return allRows;
+
+    const normalizedClientName = normalizeText(client.denominacion || client.razonSocial);
+    const options: TangoRow[] = [];
+
+    if (client.cuit) {
+      const normalizedCuit = normalizeText(client.cuit);
+      options.push(...allRows.filter((r) => r.cuit && normalizeText(r.cuit) === normalizedCuit));
+    }
+
+    if (options.length < MAX_OPTIONS) {
+      options.push(
+        ...allRows.filter(
+          (r) =>
+            normalizeText(r.razonSocial).includes(normalizedClientName) &&
+            !options.some((opt) => opt.index === r.index && opt.tangoId === r.tangoId)
+        )
+      );
+    }
+
+    if (options.length < MAX_OPTIONS) {
+      options.push(...allRows.slice(0, MAX_OPTIONS - options.length));
+    }
+
+    return options;
+  };
+
   const guessHeader = (target: keyof ColumnSelection, availableHeaders: string[]) => {
     const patterns: Record<keyof ColumnSelection, RegExp[]> = {
       razonSocial: [/razon/i, /razón/i, /empresa/i, /nombre/i],
@@ -429,6 +458,7 @@ export default function TangoMappingPage() {
                         const suggestion = suggestions[client.id];
                         const selectedRowKey = clientSelections[client.id] ?? suggestion?.rowKey ?? UNASSIGNED_CLIENT_VALUE;
                         const row = rowMap.get(selectedRowKey);
+                        const rowOptions = getRowOptions(client, rows);
                         return (
                           <TableRow key={client.id}>
                             <TableCell className="max-w-[240px] break-words">
@@ -447,11 +477,16 @@ export default function TangoMappingPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value={UNASSIGNED_CLIENT_VALUE}>Sin asignar</SelectItem>
-                                  {rows.map((r) => (
+                                  {rowOptions.map((r) => (
                                     <SelectItem key={`${r.index}-${r.tangoId}`} value={`${r.index}-${r.tangoId}`}>
                                       {r.razonSocial} — ID {r.tangoId}{r.cuit ? ` — CUIT ${r.cuit}` : ''}
                                     </SelectItem>
                                   ))}
+                                  {rowOptions.length < rows.length && (
+                                    <SelectItem value="__truncated" disabled>
+                                      {`Mostrando ${rowOptions.length} de ${rows.length} filas, filtra por CUIT o nombre para acotar.`}
+                                    </SelectItem>
+                                  )}
                                 </SelectContent>
                               </Select>
                             </TableCell>
