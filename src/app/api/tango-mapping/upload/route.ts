@@ -3,10 +3,12 @@ import * as XLSX from 'xlsx';
 
 export const runtime = 'nodejs';
 const MAX_ROWS = 200;
+const MAX_MATCHES = 200;
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const file = formData.get('file');
+  const searchTerm = (formData.get('q') as string | null)?.toLowerCase().trim();
 
   if (!file || !(file instanceof Blob)) {
     return NextResponse.json({ error: 'Archivo no recibido' }, { status: 400 });
@@ -26,6 +28,32 @@ export async function POST(req: NextRequest) {
   }
 
   const headers = (rows[0] || []).map((h) => (h === undefined ? '' : String(h)));
+
+  if (searchTerm) {
+    const matches: any[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const rowLower = row.map((cell) => (cell === undefined || cell === null ? '' : String(cell).toLowerCase()));
+      const found = rowLower.some((cell) => cell.includes(searchTerm));
+      if (found) {
+        const obj: Record<string, any> = {};
+        headers.forEach((header, colIdx) => {
+          obj[header || `Columna ${colIdx + 1}`] = row[colIdx] ?? '';
+        });
+        matches.push({ __row: i - 1, ...obj });
+      }
+      if (matches.length >= MAX_MATCHES) break;
+    }
+
+    return NextResponse.json({
+      headers,
+      rows: matches,
+      totalRows: Math.max(rows.length - 1, 0),
+      truncated: matches.length >= MAX_MATCHES,
+      search: searchTerm,
+    });
+  }
+
   const dataRows = rows.slice(1, MAX_ROWS + 1).map((row, idx) => {
     const obj: Record<string, any> = {};
     headers.forEach((header, colIdx) => {

@@ -71,6 +71,8 @@ export default function TangoMappingPage() {
   const [suggestions, setSuggestions] = useState<Record<string, ClientSuggestion>>({});
   const [rowsTruncated, setRowsTruncated] = useState(false);
   const rowOptionsCache = React.useRef<Record<string, { rowsVersion: number; options: TangoRow[] }>>({});
+  const [lastFile, setLastFile] = useState<File | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const canAccess = userInfo && hasManagementPrivileges(userInfo);
 
@@ -179,6 +181,7 @@ export default function TangoMappingPage() {
   };
 
   const handleServerFile = async (file: File) => {
+    setLastFile(file);
     const formData = new FormData();
     formData.append('file', file);
     const response = await fetch('/api/tango-mapping/upload', { method: 'POST', body: formData });
@@ -208,6 +211,35 @@ export default function TangoMappingPage() {
       razonSocial: guessHeader('razonSocial', extractedHeaders),
       tangoId: guessHeader('tangoId', extractedHeaders),
       cuit: guessHeader('cuit', extractedHeaders) || undefined,
+    });
+  };
+
+  const handleSearchInFile = async () => {
+    if (!lastFile || !searchTerm.trim()) return;
+    const formData = new FormData();
+    formData.append('file', lastFile);
+    formData.append('q', searchTerm.trim());
+    const response = await fetch('/api/tango-mapping/upload', { method: 'POST', body: formData });
+    if (!response.ok) {
+      toast({
+        title: 'Error en la búsqueda',
+        description: 'No se pudo buscar en el archivo.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const result = await response.json();
+    setRawData(result.rows || []);
+    setHeaders(result.headers || headers);
+    setRowsTruncated(Boolean(result.truncated));
+    setSuggestions({});
+    setClientSelections({});
+    rowOptionsCache.current = {};
+    setStep('map');
+    setColumnSelection({
+      razonSocial: guessHeader('razonSocial', result.headers || headers || []),
+      tangoId: guessHeader('tangoId', result.headers || headers || []),
+      cuit: guessHeader('cuit', result.headers || headers || []) || undefined,
     });
   };
 
@@ -246,11 +278,11 @@ export default function TangoMappingPage() {
     setRawData([]); // liberar memoria del archivo original
     rowOptionsCache.current = {};
 
-    const newSuggestions: Record<string, ClientSuggestion> = {};
+  const newSuggestions: Record<string, ClientSuggestion> = {};
 
-    const allowFuzzy = mappedNames.length <= 2000; // evitar uso intensivo de memoria con archivos grandes
+  const allowFuzzy = mappedNames.length <= 2000; // evitar uso intensivo de memoria con archivos grandes
 
-    clients.forEach((client) => {
+  clients.forEach((client) => {
       const normalizedCuit = client.cuit ? normalizeText(client.cuit) : '';
       let rowKey: string | undefined;
       let matchedBy: ClientSuggestion['matchedBy'];
@@ -265,14 +297,14 @@ export default function TangoMappingPage() {
         }
       }
 
-      if (!rowKey && allowFuzzy) {
-        const { bestMatch } = findBestMatch(client.denominacion || client.razonSocial, mappedNames);
-        if (bestMatch.rating > 0.5) {
-          const match = mappedRows.find((r) => r.razonSocial === bestMatch.target);
-          if (match) {
-            rowKey = `${match.index}-${match.tangoId}`;
-            matchedBy = 'name';
-            matchScore = bestMatch.rating;
+    if (!rowKey && allowFuzzy) {
+      const { bestMatch } = findBestMatch(client.denominacion || client.razonSocial, mappedNames);
+      if (bestMatch.rating === 1) {
+        const match = mappedRows.find((r) => r.razonSocial === bestMatch.target);
+        if (match) {
+          rowKey = `${match.index}-${match.tangoId}`;
+          matchedBy = 'name';
+          matchScore = bestMatch.rating;
           }
         }
       }
@@ -286,7 +318,7 @@ export default function TangoMappingPage() {
   };
 
   const updateRowClient = (clientId: string, rowKey?: string) => {
-    setClientSelections((prev) => ({ ...prev, [clientId]: rowKey }));
+    setClientSelections((prev) => ({ ...prev, [clientId]: rowKey ?? UNASSIGNED_CLIENT_VALUE }));
   };
 
   const handleApplyMapping = async () => {
@@ -471,17 +503,33 @@ export default function TangoMappingPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <Input
-                    placeholder="Buscar por cliente, CUIT o ID Tango"
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                    className="md:w-80"
-                  />
-                  <div className="flex gap-2">
-                    <Badge variant="secondary">Clientes: {clients.length}</Badge>
-                    <Badge variant="outline">Filas de archivo: {rows.length}</Badge>
+                    <Input
+                      placeholder="Buscar por cliente, CUIT o ID Tango"
+                      value={filter}
+                      onChange={(e) => setFilter(e.target.value)}
+                      className="md:w-80"
+                    />
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Buscar en el archivo (nombre/ID/CUIT)"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="md:w-72"
+                        disabled={!lastFile}
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={handleSearchInFile}
+                        disabled={!lastFile || !searchTerm.trim()}
+                      >
+                        Buscar en archivo
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Badge variant="secondary">Clientes: {clients.length}</Badge>
+                      <Badge variant="outline">Filas de archivo: {rows.length}</Badge>
+                    </div>
                   </div>
-                </div>
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
@@ -496,7 +544,9 @@ export default function TangoMappingPage() {
                     <TableBody>
                       {filteredClients.map((client) => {
                         const suggestion = suggestions[client.id];
-                        const selectedRowKey = clientSelections[client.id] ?? suggestion?.rowKey ?? UNASSIGNED_CLIENT_VALUE;
+                        const storedSelection = clientSelections[client.id];
+                        const hasStored = Object.prototype.hasOwnProperty.call(clientSelections, client.id);
+                        const selectedRowKey = hasStored ? storedSelection : suggestion?.rowKey ?? UNASSIGNED_CLIENT_VALUE;
                         const row = rowMap.get(selectedRowKey);
                         const rowOptions = getRowOptions(client, rows);
                         return (

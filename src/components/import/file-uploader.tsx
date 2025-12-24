@@ -13,9 +13,10 @@ interface FileUploaderProps {
   onDataExtracted: (data: any[], headers: string[]) => void;
   disabled?: boolean;
   onServerProcess?: (file: File) => Promise<void>;
+  onFileSelected?: (file: File) => void;
 }
 
-export function FileUploader({ onDataExtracted, disabled, onServerProcess }: FileUploaderProps) {
+export function FileUploader({ onDataExtracted, disabled, onServerProcess, onFileSelected }: FileUploaderProps) {
     const { toast } = useToast();
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -32,6 +33,10 @@ export function FileUploader({ onDataExtracted, disabled, onServerProcess }: Fil
             description: <div className="flex items-center gap-2"><Spinner size="small" /> Por favor, espera.</div>,
             duration: Infinity
         });
+
+        if (onFileSelected) {
+            onFileSelected(file);
+        }
 
         if (onServerProcess) {
             onServerProcess(file)
