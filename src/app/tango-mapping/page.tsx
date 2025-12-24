@@ -51,6 +51,7 @@ type TangoRow = {
 const REQUIRED_FIELDS: (keyof ColumnSelection)[] = ['razonSocial', 'idTango'];
 const UNASSIGNED_CLIENT_VALUE = '__none__';
 const NO_CUIT_COLUMN = '__none__';
+const NO_OPTIONAL_COLUMN = '__none_optional__';
 const MAX_PREVIEW_ROWS = 200;
 const MAX_OPTIONS = 50;
 
@@ -602,11 +603,11 @@ export default function TangoMappingPage() {
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Denominación / Fantasía (opcional)</p>
                   <Select
-                    value={columnSelection.denominacion ?? ''}
+                    value={columnSelection.denominacion ?? NO_OPTIONAL_COLUMN}
                     onValueChange={(value) =>
                       setColumnSelection((prev) => ({
                         ...prev,
-                        denominacion: value || undefined,
+                        denominacion: value === NO_OPTIONAL_COLUMN ? undefined : value,
                       }))
                     }
                   >
@@ -614,7 +615,7 @@ export default function TangoMappingPage() {
                       <SelectValue placeholder="Seleccionar columna" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Ninguna</SelectItem>
+                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
                       {headers.map((header) => (
                         <SelectItem key={header} value={header}>
                           {header}
@@ -628,11 +629,11 @@ export default function TangoMappingPage() {
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Email (opcional)</p>
                   <Select
-                    value={columnSelection.email ?? ''}
+                    value={columnSelection.email ?? NO_OPTIONAL_COLUMN}
                     onValueChange={(value) =>
                       setColumnSelection((prev) => ({
                         ...prev,
-                        email: value || undefined,
+                        email: value === NO_OPTIONAL_COLUMN ? undefined : value,
                       }))
                     }
                   >
@@ -640,7 +641,7 @@ export default function TangoMappingPage() {
                       <SelectValue placeholder="Seleccionar columna" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Ninguna</SelectItem>
+                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
                       {headers.map((header) => (
                         <SelectItem key={header} value={header}>
                           {header}
@@ -652,11 +653,11 @@ export default function TangoMappingPage() {
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Teléfono (opcional)</p>
                   <Select
-                    value={columnSelection.phone ?? ''}
+                    value={columnSelection.phone ?? NO_OPTIONAL_COLUMN}
                     onValueChange={(value) =>
                       setColumnSelection((prev) => ({
                         ...prev,
-                        phone: value || undefined,
+                        phone: value === NO_OPTIONAL_COLUMN ? undefined : value,
                       }))
                     }
                   >
@@ -664,7 +665,7 @@ export default function TangoMappingPage() {
                       <SelectValue placeholder="Seleccionar columna" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Ninguna</SelectItem>
+                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
                       {headers.map((header) => (
                         <SelectItem key={header} value={header}>
                           {header}
@@ -676,11 +677,11 @@ export default function TangoMappingPage() {
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Rubro (opcional)</p>
                   <Select
-                    value={columnSelection.rubro ?? ''}
+                    value={columnSelection.rubro ?? NO_OPTIONAL_COLUMN}
                     onValueChange={(value) =>
                       setColumnSelection((prev) => ({
                         ...prev,
-                        rubro: value || undefined,
+                        rubro: value === NO_OPTIONAL_COLUMN ? undefined : value,
                       }))
                     }
                   >
@@ -688,7 +689,7 @@ export default function TangoMappingPage() {
                       <SelectValue placeholder="Seleccionar columna" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Ninguna</SelectItem>
+                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
                       {headers.map((header) => (
                         <SelectItem key={header} value={header}>
                           {header}
