@@ -185,6 +185,7 @@ export type Client = {
   denominacion: string;
   razonSocial: string;
   cuit?: string;
+  idTango?: string;
   tangoCompanyId?: string;
   condicionIVA: CondicionIVA;
   provincia: string;

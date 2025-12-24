@@ -93,6 +93,7 @@ const parseDateWithTimezone = (dateString: string) => {
 export type ClientTangoUpdate = {
     cuit?: string;
     tangoCompanyId?: string;
+    idTango?: string;
 };
 
 // --- Config Functions ---
@@ -1863,6 +1864,10 @@ export const updateClientTangoMapping = async (
     }
     if (data.tangoCompanyId && data.tangoCompanyId.toString().trim().length > 0) {
         updatePayload.tangoCompanyId = data.tangoCompanyId.toString().trim();
+        updatePayload.idTango = updatePayload.tangoCompanyId;
+    } else if (data.idTango && data.idTango.toString().trim().length > 0) {
+        updatePayload.idTango = data.idTango.toString().trim();
+        updatePayload.tangoCompanyId = updatePayload.idTango;
     }
 
     await updateDoc(docRef, updatePayload);

@@ -29,18 +29,20 @@ type MappingStep = 'upload' | 'map' | 'review';
 
 type ColumnSelection = {
   razonSocial?: string;
-  tangoId?: string;
+  idTango?: string;
   cuit?: string;
+  denominacion?: string;
 };
 
 type TangoRow = {
   index: number;
   razonSocial: string;
-  tangoId: string;
+  idTango: string;
   cuit?: string;
+  denominacion?: string;
 };
 
-const REQUIRED_FIELDS: (keyof ColumnSelection)[] = ['razonSocial', 'tangoId'];
+const REQUIRED_FIELDS: (keyof ColumnSelection)[] = ['razonSocial', 'idTango'];
 const UNASSIGNED_CLIENT_VALUE = '__none__';
 const NO_CUIT_COLUMN = '__none__';
 const MAX_PREVIEW_ROWS = 200;
@@ -95,7 +97,8 @@ export default function TangoMappingPage() {
               cuit: c.cuit,
               ownerName: c.ownerName,
               tangoCompanyId: c.tangoCompanyId,
-            })).filter((c) => !c.cuit || !c.tangoCompanyId)
+              idTango: c.idTango,
+            })).filter((c) => !c.cuit || !(c.tangoCompanyId || c.idTango))
           )
         )
         .catch(() => {
@@ -127,7 +130,7 @@ export default function TangoMappingPage() {
 
   const rowMap = useMemo(() => {
     const map = new Map<string, TangoRow>();
-    rows.forEach((row) => map.set(`${row.index}-${row.tangoId}`, row));
+    rows.forEach((row) => map.set(`${row.index}-${row.idTango}`, row));
     return map;
   }, [rows]);
 
@@ -138,7 +141,7 @@ export default function TangoMappingPage() {
       (client) =>
         normalizeText(client.denominacion || client.razonSocial).includes(query) ||
         normalizeText(client.cuit || '').includes(query) ||
-        normalizeText(client.tangoCompanyId || '').includes(query)
+        normalizeText(client.tangoCompanyId || client.idTango || '').includes(query)
     );
   }, [clients, filter]);
 
@@ -159,7 +162,7 @@ export default function TangoMappingPage() {
         ...allRows.filter(
           (r) =>
             normalizeText(r.razonSocial).includes(normalizedClientName) &&
-            !options.some((opt) => opt.index === r.index && opt.tangoId === r.tangoId)
+            !options.some((opt) => opt.index === r.index && opt.idTango === r.idTango)
         )
       );
     }
@@ -174,8 +177,9 @@ export default function TangoMappingPage() {
   const guessHeader = (target: keyof ColumnSelection, availableHeaders: string[]) => {
     const patterns: Record<keyof ColumnSelection, RegExp[]> = {
       razonSocial: [/razon/i, /razón/i, /empresa/i, /nombre/i],
-      tangoId: [/id/i, /codigo/i, /código/i],
+      idTango: [/id/i, /codigo/i, /código/i],
       cuit: [/cuit/i],
+      denominacion: [/denominacion/i, /denominación/i, /nombre/i],
     };
     const regexes = patterns[target];
     return availableHeaders.find((h) => regexes.some((r) => r.test(h)));
@@ -197,8 +201,9 @@ export default function TangoMappingPage() {
     setStep('map');
     setColumnSelection({
       razonSocial: guessHeader('razonSocial', result.headers || []),
-      tangoId: guessHeader('tangoId', result.headers || []),
+      idTango: guessHeader('idTango', result.headers || []),
       cuit: guessHeader('cuit', result.headers || []) || undefined,
+      denominacion: guessHeader('denominacion', result.headers || []),
     });
   };
 
@@ -210,8 +215,9 @@ export default function TangoMappingPage() {
     setStep('map');
     setColumnSelection({
       razonSocial: guessHeader('razonSocial', extractedHeaders),
-      tangoId: guessHeader('tangoId', extractedHeaders),
+      idTango: guessHeader('idTango', extractedHeaders),
       cuit: guessHeader('cuit', extractedHeaders) || undefined,
+      denominacion: guessHeader('denominacion', extractedHeaders),
     });
   };
 
@@ -239,8 +245,9 @@ export default function TangoMappingPage() {
     setStep('map');
     setColumnSelection({
       razonSocial: guessHeader('razonSocial', result.headers || headers || []),
-      tangoId: guessHeader('tangoId', result.headers || headers || []),
+      idTango: guessHeader('idTango', result.headers || headers || []),
       cuit: guessHeader('cuit', result.headers || headers || []) || undefined,
+      denominacion: guessHeader('denominacion', result.headers || headers || []),
     });
   };
 
@@ -258,32 +265,27 @@ export default function TangoMappingPage() {
     const mappedRows: TangoRow[] = rawData
       .map((row, index) => {
         const razonSocial = row[columnSelection.razonSocial as string];
-        const tangoId = row[columnSelection.tangoId as string];
-        if (!razonSocial || !tangoId) return null;
-        const cuit = columnSelection.cuit && columnSelection.cuit !== NO_CUIT_COLUMN ? row[columnSelection.cuit] : undefined;
+        const idTango = row[columnSelection.idTango as string];
+        if (!razonSocial || !idTango) return null;
+        const cuit =
+          columnSelection.cuit && columnSelection.cuit !== NO_CUIT_COLUMN ? row[columnSelection.cuit] : undefined;
+        const denominacion = columnSelection.denominacion ? row[columnSelection.denominacion] : undefined;
+        const rowIndex = typeof row.__row === 'number' ? row.__row : index;
         return {
-          index,
+          index: rowIndex,
           razonSocial: String(razonSocial),
-          tangoId: String(tangoId),
+          idTango: String(idTango),
           cuit: cuit ? String(cuit) : undefined,
+          denominacion: denominacion ? String(denominacion) : undefined,
         } as TangoRow;
       })
       .filter(Boolean) as TangoRow[];
 
-    const mappedNames = mappedRows.map((r) => r.razonSocial);
-    const rowKeyMap = new Map<string, TangoRow>();
-    mappedRows.forEach((row) => {
-      rowKeyMap.set(`${row.index}-${row.tangoId}`, row);
-    });
-    setRows(mappedRows);
-    setRawData([]); // liberar memoria del archivo original
-    rowOptionsCache.current = {};
+    const mappedNames = mappedRows.map((r) => r.denominacion || r.razonSocial);
+    const allowFuzzy = mappedNames.length <= 2000; // evitar uso intensivo de memoria con archivos grandes
+    const newSuggestions: Record<string, ClientSuggestion> = {};
 
-  const newSuggestions: Record<string, ClientSuggestion> = {};
-
-  const allowFuzzy = mappedNames.length <= 2000; // evitar uso intensivo de memoria con archivos grandes
-
-  clients.forEach((client) => {
+    clients.forEach((client) => {
       const normalizedCuit = client.cuit ? normalizeText(client.cuit) : '';
       let rowKey: string | undefined;
       let matchedBy: ClientSuggestion['matchedBy'];
@@ -292,20 +294,22 @@ export default function TangoMappingPage() {
       if (normalizedCuit) {
         const match = mappedRows.find((row) => row.cuit && normalizeText(row.cuit) === normalizedCuit);
         if (match) {
-          rowKey = `${match.index}-${match.tangoId}`;
+          rowKey = `${match.index}-${match.idTango}`;
           matchedBy = 'cuit';
           matchScore = 1;
         }
       }
 
-    if (!rowKey && allowFuzzy) {
-      const { bestMatch } = findBestMatch(client.denominacion || client.razonSocial, mappedNames);
-      if (bestMatch.rating === 1) {
-        const match = mappedRows.find((r) => r.razonSocial === bestMatch.target);
-        if (match) {
-          rowKey = `${match.index}-${match.tangoId}`;
-          matchedBy = 'name';
-          matchScore = bestMatch.rating;
+      if (!rowKey && allowFuzzy) {
+        const { bestMatch } = findBestMatch(client.denominacion || client.razonSocial, mappedNames);
+        if (bestMatch.rating === 1) {
+          const match = mappedRows.find(
+            (r) => (r.denominacion || r.razonSocial) === bestMatch.target
+          );
+          if (match) {
+            rowKey = `${match.index}-${match.idTango}`;
+            matchedBy = 'name';
+            matchScore = bestMatch.rating;
           }
         }
       }
@@ -313,6 +317,9 @@ export default function TangoMappingPage() {
       newSuggestions[client.id] = { rowKey, matchedBy, matchScore };
     });
 
+    setRows(mappedRows);
+    setRawData([]); // liberar memoria del archivo original
+    rowOptionsCache.current = {};
     setSuggestions(newSuggestions);
     setClientSelections({});
     setStep('review');
@@ -359,7 +366,7 @@ export default function TangoMappingPage() {
   const handleApplyMapping = async () => {
     if (!userInfo) return;
     const rowMap = new Map<string, TangoRow>();
-    rows.forEach((row) => rowMap.set(`${row.index}-${row.tangoId}`, row));
+    rows.forEach((row) => rowMap.set(`${row.index}-${row.idTango}`, row));
 
     const pendingUpdates = clients
       .map((client) => {
@@ -368,19 +375,20 @@ export default function TangoMappingPage() {
         const row = rowMap.get(selection);
         if (!row) return null;
 
-        const data: { cuit?: string; tangoCompanyId?: string } = {};
+        const data: { cuit?: string; tangoCompanyId?: string; idTango?: string } = {};
         if (!client.cuit && row.cuit) {
           data.cuit = row.cuit;
         }
-        if (!client.tangoCompanyId && row.tangoId) {
-          data.tangoCompanyId = row.tangoId;
+        if (!client.tangoCompanyId && !client.idTango && row.idTango) {
+          data.tangoCompanyId = row.idTango;
+          data.idTango = row.idTango;
         }
 
         if (Object.keys(data).length === 0) return null;
 
         return { client, data };
       })
-      .filter(Boolean) as { client: Client; data: { cuit?: string; tangoCompanyId?: string } }[];
+      .filter(Boolean) as { client: Client; data: { cuit?: string; tangoCompanyId?: string; idTango?: string } }[];
 
     if (pendingUpdates.length === 0) {
       toast({
@@ -476,8 +484,8 @@ export default function TangoMappingPage() {
                 <div className="space-y-2">
                   <p className="text-sm font-medium">ID de Tango *</p>
                   <Select
-                    value={columnSelection.tangoId ?? undefined}
-                    onValueChange={(value) => setColumnSelection((prev) => ({ ...prev, tangoId: value }))}
+                    value={columnSelection.idTango ?? undefined}
+                    onValueChange={(value) => setColumnSelection((prev) => ({ ...prev, idTango: value }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar columna" />
@@ -599,7 +607,9 @@ export default function TangoMappingPage() {
                               <p className="text-xs text-muted-foreground">{client.ownerName}</p>
                             </TableCell>
                             <TableCell className="whitespace-nowrap">{client.cuit || '—'}</TableCell>
-                            <TableCell className="whitespace-nowrap">{client.tangoCompanyId || '—'}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {client.idTango || client.tangoCompanyId || '—'}
+                            </TableCell>
                             <TableCell>
                               <Select
                                 value={selectedRowKey}
@@ -611,8 +621,9 @@ export default function TangoMappingPage() {
                                 <SelectContent>
                                   <SelectItem value={UNASSIGNED_CLIENT_VALUE}>Sin asignar</SelectItem>
                                   {rowOptions.map((r) => (
-                                    <SelectItem key={`${r.index}-${r.tangoId}`} value={`${r.index}-${r.tangoId}`}>
-                                      {r.razonSocial} — ID {r.tangoId}{r.cuit ? ` — CUIT ${r.cuit}` : ''}
+                                    <SelectItem key={`${r.index}-${r.idTango}`} value={`${r.index}-${r.idTango}`}>
+                                      {r.razonSocial} — ID {r.idTango}
+                                      {r.cuit ? ` — CUIT ${r.cuit}` : ''}
                                     </SelectItem>
                                   ))}
                                   {rowOptions.length < rows.length && (
