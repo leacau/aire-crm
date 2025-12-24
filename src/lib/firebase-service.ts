@@ -94,6 +94,11 @@ export type ClientTangoUpdate = {
     cuit?: string;
     tangoCompanyId?: string;
     idTango?: string;
+    email?: string;
+    phone?: string;
+    rubro?: string;
+    razonSocial?: string;
+    denominacion?: string;
 };
 
 // --- Config Functions ---
@@ -1869,6 +1874,21 @@ export const updateClientTangoMapping = async (
         updatePayload.idTango = data.idTango.toString().trim();
         updatePayload.tangoCompanyId = updatePayload.idTango;
     }
+    if (data.email && data.email.trim().length > 0) {
+        updatePayload.email = data.email.trim();
+    }
+    if (data.phone && data.phone.trim().length > 0) {
+        updatePayload.phone = data.phone.trim();
+    }
+    if (data.rubro && data.rubro.trim().length > 0) {
+        updatePayload.rubro = data.rubro.trim();
+    }
+    if (data.razonSocial && data.razonSocial.trim().length > 0) {
+        updatePayload.razonSocial = data.razonSocial.trim();
+    }
+    if (data.denominacion && data.denominacion.trim().length > 0) {
+        updatePayload.denominacion = data.denominacion.trim();
+    }
 
     await updateDoc(docRef, updatePayload);
     invalidateCache('clients');
@@ -1879,6 +1899,21 @@ export const updateClientTangoMapping = async (
     }
     if (updatePayload.tangoCompanyId && updatePayload.tangoCompanyId !== originalData.tangoCompanyId) {
         detailsParts.push(`ID de Tango <strong>${updatePayload.tangoCompanyId}</strong>`);
+    }
+    if (updatePayload.email && updatePayload.email !== originalData.email) {
+        detailsParts.push(`Email <strong>${updatePayload.email}</strong>`);
+    }
+    if (updatePayload.phone && updatePayload.phone !== originalData.phone) {
+        detailsParts.push(`Teléfono <strong>${updatePayload.phone}</strong>`);
+    }
+    if (updatePayload.rubro && updatePayload.rubro !== originalData.rubro) {
+        detailsParts.push(`Rubro <strong>${updatePayload.rubro}</strong>`);
+    }
+    if (updatePayload.razonSocial && updatePayload.razonSocial !== originalData.razonSocial) {
+        detailsParts.push(`Razón Social <strong>${updatePayload.razonSocial}</strong>`);
+    }
+    if (updatePayload.denominacion && updatePayload.denominacion !== originalData.denominacion) {
+        detailsParts.push(`Denominación <strong>${updatePayload.denominacion}</strong>`);
     }
     const detailText = detailsParts.length > 0 ? detailsParts.join(' y ') : 'datos de Tango';
 

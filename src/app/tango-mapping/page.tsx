@@ -32,6 +32,9 @@ type ColumnSelection = {
   idTango?: string;
   cuit?: string;
   denominacion?: string;
+  email?: string;
+  phone?: string;
+  rubro?: string;
 };
 
 type TangoRow = {
@@ -40,6 +43,9 @@ type TangoRow = {
   idTango: string;
   cuit?: string;
   denominacion?: string;
+  email?: string;
+  phone?: string;
+  rubro?: string;
 };
 
 const REQUIRED_FIELDS: (keyof ColumnSelection)[] = ['razonSocial', 'idTango'];
@@ -90,15 +96,28 @@ export default function TangoMappingPage() {
       getClients()
         .then((list) =>
           setClients(
-            list.map((c) => ({
-              id: c.id,
-              denominacion: c.denominacion,
-              razonSocial: c.razonSocial,
-              cuit: c.cuit,
-              ownerName: c.ownerName,
-              tangoCompanyId: c.tangoCompanyId,
-              idTango: c.idTango,
-            })).filter((c) => !c.cuit || !(c.tangoCompanyId || c.idTango))
+            list
+              .map((c) => ({
+                id: c.id,
+                denominacion: c.denominacion,
+                razonSocial: c.razonSocial,
+                cuit: c.cuit,
+                ownerName: c.ownerName,
+                tangoCompanyId: c.tangoCompanyId,
+                idTango: c.idTango,
+                phone: c.phone,
+                email: c.email,
+                rubro: c.rubro,
+              }))
+              .filter(
+                (c) =>
+                  !c.cuit ||
+                  !(c.tangoCompanyId || c.idTango) ||
+                  !c.email ||
+                  !c.phone ||
+                  !c.rubro ||
+                  !c.denominacion
+              )
           )
         )
         .catch(() => {
@@ -141,7 +160,10 @@ export default function TangoMappingPage() {
       (client) =>
         normalizeText(client.denominacion || client.razonSocial).includes(query) ||
         normalizeText(client.cuit || '').includes(query) ||
-        normalizeText(client.tangoCompanyId || client.idTango || '').includes(query)
+        normalizeText(client.tangoCompanyId || client.idTango || '').includes(query) ||
+        normalizeText(client.email || '').includes(query) ||
+        normalizeText(client.phone || '').includes(query) ||
+        normalizeText(client.rubro || '').includes(query)
     );
   }, [clients, filter]);
 
@@ -180,6 +202,9 @@ export default function TangoMappingPage() {
       idTango: [/id/i, /codigo/i, /código/i],
       cuit: [/cuit/i],
       denominacion: [/denominacion/i, /denominación/i, /nombre/i],
+      email: [/mail/i, /correo/i, /email/i],
+      phone: [/telefono/i, /teléfono/i, /celular/i, /phone/i],
+      rubro: [/rubro/i, /categoria/i, /categoría/i],
     };
     const regexes = patterns[target];
     return availableHeaders.find((h) => regexes.some((r) => r.test(h)));
@@ -204,6 +229,9 @@ export default function TangoMappingPage() {
       idTango: guessHeader('idTango', result.headers || []),
       cuit: guessHeader('cuit', result.headers || []) || undefined,
       denominacion: guessHeader('denominacion', result.headers || []),
+      email: guessHeader('email', result.headers || []),
+      phone: guessHeader('phone', result.headers || []),
+      rubro: guessHeader('rubro', result.headers || []),
     });
   };
 
@@ -218,6 +246,9 @@ export default function TangoMappingPage() {
       idTango: guessHeader('idTango', extractedHeaders),
       cuit: guessHeader('cuit', extractedHeaders) || undefined,
       denominacion: guessHeader('denominacion', extractedHeaders),
+      email: guessHeader('email', extractedHeaders),
+      phone: guessHeader('phone', extractedHeaders),
+      rubro: guessHeader('rubro', extractedHeaders),
     });
   };
 
@@ -248,6 +279,9 @@ export default function TangoMappingPage() {
       idTango: guessHeader('idTango', result.headers || headers || []),
       cuit: guessHeader('cuit', result.headers || headers || []) || undefined,
       denominacion: guessHeader('denominacion', result.headers || headers || []),
+      email: guessHeader('email', result.headers || headers || []),
+      phone: guessHeader('phone', result.headers || headers || []),
+      rubro: guessHeader('rubro', result.headers || headers || []),
     });
   };
 
@@ -270,6 +304,9 @@ export default function TangoMappingPage() {
         const cuit =
           columnSelection.cuit && columnSelection.cuit !== NO_CUIT_COLUMN ? row[columnSelection.cuit] : undefined;
         const denominacion = columnSelection.denominacion ? row[columnSelection.denominacion] : undefined;
+        const email = columnSelection.email ? row[columnSelection.email] : undefined;
+        const phone = columnSelection.phone ? row[columnSelection.phone] : undefined;
+        const rubro = columnSelection.rubro ? row[columnSelection.rubro] : undefined;
         const rowIndex = typeof row.__row === 'number' ? row.__row : index;
         return {
           index: rowIndex,
@@ -277,6 +314,9 @@ export default function TangoMappingPage() {
           idTango: String(idTango),
           cuit: cuit ? String(cuit) : undefined,
           denominacion: denominacion ? String(denominacion) : undefined,
+          email: email ? String(email) : undefined,
+          phone: phone ? String(phone) : undefined,
+          rubro: rubro ? String(rubro) : undefined,
         } as TangoRow;
       })
       .filter(Boolean) as TangoRow[];
@@ -375,7 +415,16 @@ export default function TangoMappingPage() {
         const row = rowMap.get(selection);
         if (!row) return null;
 
-        const data: { cuit?: string; tangoCompanyId?: string; idTango?: string } = {};
+        const data: {
+          cuit?: string;
+          tangoCompanyId?: string;
+          idTango?: string;
+          email?: string;
+          phone?: string;
+          rubro?: string;
+          razonSocial?: string;
+          denominacion?: string;
+        } = {};
         if (!client.cuit && row.cuit) {
           data.cuit = row.cuit;
         }
@@ -383,12 +432,39 @@ export default function TangoMappingPage() {
           data.tangoCompanyId = row.idTango;
           data.idTango = row.idTango;
         }
+        if (!client.email && row.email) {
+          data.email = row.email;
+        }
+        if (!client.phone && row.phone) {
+          data.phone = row.phone;
+        }
+        if (!client.rubro && row.rubro) {
+          data.rubro = row.rubro;
+        }
+        if (!client.denominacion && row.denominacion) {
+          data.denominacion = row.denominacion;
+        }
+        if (!client.razonSocial && row.razonSocial) {
+          data.razonSocial = row.razonSocial;
+        }
 
         if (Object.keys(data).length === 0) return null;
 
         return { client, data };
       })
-      .filter(Boolean) as { client: Client; data: { cuit?: string; tangoCompanyId?: string; idTango?: string } }[];
+      .filter(Boolean) as {
+        client: Client;
+        data: {
+          cuit?: string;
+          tangoCompanyId?: string;
+          idTango?: string;
+          email?: string;
+          phone?: string;
+          rubro?: string;
+          razonSocial?: string;
+          denominacion?: string;
+        };
+      }[];
 
     if (pendingUpdates.length === 0) {
       toast({
@@ -523,8 +599,106 @@ export default function TangoMappingPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Denominación / Fantasía (opcional)</p>
+                  <Select
+                    value={columnSelection.denominacion ?? ''}
+                    onValueChange={(value) =>
+                      setColumnSelection((prev) => ({
+                        ...prev,
+                        denominacion: value || undefined,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar columna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Ninguna</SelectItem>
+                      {headers.map((header) => (
+                        <SelectItem key={header} value={header}>
+                          {header}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Email (opcional)</p>
+                  <Select
+                    value={columnSelection.email ?? ''}
+                    onValueChange={(value) =>
+                      setColumnSelection((prev) => ({
+                        ...prev,
+                        email: value || undefined,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar columna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Ninguna</SelectItem>
+                      {headers.map((header) => (
+                        <SelectItem key={header} value={header}>
+                          {header}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Teléfono (opcional)</p>
+                  <Select
+                    value={columnSelection.phone ?? ''}
+                    onValueChange={(value) =>
+                      setColumnSelection((prev) => ({
+                        ...prev,
+                        phone: value || undefined,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar columna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Ninguna</SelectItem>
+                      {headers.map((header) => (
+                        <SelectItem key={header} value={header}>
+                          {header}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Rubro (opcional)</p>
+                  <Select
+                    value={columnSelection.rubro ?? ''}
+                    onValueChange={(value) =>
+                      setColumnSelection((prev) => ({
+                        ...prev,
+                        rubro: value || undefined,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar columna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Ninguna</SelectItem>
+                      {headers.map((header) => (
+                        <SelectItem key={header} value={header}>
+                          {header}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setStep('upload')}>
                   Volver
                 </Button>
@@ -581,6 +755,7 @@ export default function TangoMappingPage() {
                         <TableHead>CUIT (CRM)</TableHead>
                         <TableHead>ID Tango (CRM)</TableHead>
                         <TableHead>Fila de archivo</TableHead>
+                        <TableHead>Datos del archivo</TableHead>
                         <TableHead className="w-[180px]">
                           <button
                             type="button"
@@ -618,14 +793,18 @@ export default function TangoMappingPage() {
                                 <SelectTrigger>
                                   <SelectValue placeholder="Seleccionar fila" />
                                 </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value={UNASSIGNED_CLIENT_VALUE}>Sin asignar</SelectItem>
-                                  {rowOptions.map((r) => (
-                                    <SelectItem key={`${r.index}-${r.idTango}`} value={`${r.index}-${r.idTango}`}>
-                                      {r.razonSocial} — ID {r.idTango}
-                                      {r.cuit ? ` — CUIT ${r.cuit}` : ''}
-                                    </SelectItem>
-                                  ))}
+                                  <SelectContent>
+                                    <SelectItem value={UNASSIGNED_CLIENT_VALUE}>Sin asignar</SelectItem>
+                                    {rowOptions.map((r) => (
+                                      <SelectItem key={`${r.index}-${r.idTango}`} value={`${r.index}-${r.idTango}`}>
+                                        <span className="font-medium">{r.denominacion || r.razonSocial}</span>
+                                        {` — ID ${r.idTango}`}
+                                        {r.cuit ? ` — CUIT ${r.cuit}` : ''}
+                                        {r.email ? ` — ${r.email}` : ''}
+                                        {r.phone ? ` — Tel ${r.phone}` : ''}
+                                        {r.rubro ? ` — Rubro ${r.rubro}` : ''}
+                                      </SelectItem>
+                                    ))}
                                   {rowOptions.length < rows.length && (
                                     <SelectItem value="__truncated" disabled>
                                       {`Mostrando ${rowOptions.length} de ${rows.length} filas, filtra por CUIT o nombre para acotar.`}
@@ -633,6 +812,22 @@ export default function TangoMappingPage() {
                                   )}
                                 </SelectContent>
                               </Select>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {row ? (
+                                <div className="space-y-1">
+                                  <div className="text-foreground">{row.denominacion || row.razonSocial}</div>
+                                  <div className="flex flex-wrap gap-2 text-xs">
+                                    {row.idTango && <Badge variant="outline">ID {row.idTango}</Badge>}
+                                    {row.cuit && <Badge variant="outline">CUIT {row.cuit}</Badge>}
+                                    {row.email && <Badge variant="outline">{row.email}</Badge>}
+                                    {row.phone && <Badge variant="outline">{row.phone}</Badge>}
+                                    {row.rubro && <Badge variant="outline">{row.rubro}</Badge>}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span>—</span>
+                              )}
                             </TableCell>
                             <TableCell>
                               {selectedRowKey !== UNASSIGNED_CLIENT_VALUE && row ? (
@@ -652,7 +847,7 @@ export default function TangoMappingPage() {
                       })}
                       {filteredClients.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                          <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                             No hay filas para mostrar.
                           </TableCell>
                         </TableRow>
