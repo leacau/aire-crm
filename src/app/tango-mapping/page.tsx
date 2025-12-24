@@ -73,6 +73,7 @@ export default function TangoMappingPage() {
   const rowOptionsCache = React.useRef<Record<string, { rowsVersion: number; options: TangoRow[] }>>({});
   const [lastFile, setLastFile] = useState<File | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const canAccess = userInfo && hasManagementPrivileges(userInfo);
 
@@ -321,6 +322,40 @@ export default function TangoMappingPage() {
     setClientSelections((prev) => ({ ...prev, [clientId]: rowKey ?? UNASSIGNED_CLIENT_VALUE }));
   };
 
+  const getSelectionForClient = (clientId: string, defaultRowKey?: string) => {
+    const storedSelection = clientSelections[clientId];
+    const hasStored = Object.prototype.hasOwnProperty.call(clientSelections, clientId);
+    return hasStored ? storedSelection : defaultRowKey ?? UNASSIGNED_CLIENT_VALUE;
+  };
+
+  const getCoincidenceScore = (clientId: string, selectedKey: string | undefined) => {
+    if (!selectedKey || selectedKey === UNASSIGNED_CLIENT_VALUE) return -1;
+    const suggestion = suggestions[clientId];
+    if (suggestion?.matchedBy === 'cuit') return 3;
+    if (suggestion?.matchedBy === 'name' && suggestion.matchScore) return 1 + suggestion.matchScore;
+    return 0;
+  };
+
+  const sortedClients = useMemo(() => {
+    return filteredClients
+      .map((client) => {
+        const suggestion = suggestions[client.id];
+        const selectedRowKey = getSelectionForClient(client.id, suggestion?.rowKey);
+        const score = getCoincidenceScore(client.id, selectedRowKey);
+        return { client, selectedRowKey, score };
+      })
+      .sort((a, b) => {
+        if (sortDirection === 'desc') {
+          if (b.score !== a.score) return b.score - a.score;
+        } else {
+          if (a.score !== b.score) return a.score - b.score;
+        }
+        return (a.client.denominacion || a.client.razonSocial).localeCompare(
+          b.client.denominacion || b.client.razonSocial
+        );
+      });
+  }, [filteredClients, suggestions, clientSelections, sortDirection]);
+
   const handleApplyMapping = async () => {
     if (!userInfo) return;
     const rowMap = new Map<string, TangoRow>();
@@ -538,15 +573,23 @@ export default function TangoMappingPage() {
                         <TableHead>CUIT (CRM)</TableHead>
                         <TableHead>ID Tango (CRM)</TableHead>
                         <TableHead>Fila de archivo</TableHead>
-                        <TableHead className="w-[180px]">Coincidencia</TableHead>
+                        <TableHead className="w-[180px]">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 text-sm font-medium"
+                            onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+                          >
+                            Coincidencia
+                            <span className="text-xs text-muted-foreground">
+                              {sortDirection === 'desc' ? '▼' : '▲'}
+                            </span>
+                          </button>
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredClients.map((client) => {
+                      {sortedClients.map(({ client, selectedRowKey }) => {
                         const suggestion = suggestions[client.id];
-                        const storedSelection = clientSelections[client.id];
-                        const hasStored = Object.prototype.hasOwnProperty.call(clientSelections, client.id);
-                        const selectedRowKey = hasStored ? storedSelection : suggestion?.rowKey ?? UNASSIGNED_CLIENT_VALUE;
                         const row = rowMap.get(selectedRowKey);
                         const rowOptions = getRowOptions(client, rows);
                         return (
