@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 
 export const runtime = 'nodejs';
-const MAX_ROWS = 12000;
+const MAX_ROWS = 200;
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();

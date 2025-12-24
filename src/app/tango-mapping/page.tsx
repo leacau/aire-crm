@@ -43,8 +43,8 @@ type TangoRow = {
 const REQUIRED_FIELDS: (keyof ColumnSelection)[] = ['razonSocial', 'tangoId'];
 const UNASSIGNED_CLIENT_VALUE = '__none__';
 const NO_CUIT_COLUMN = '__none__';
-const MAX_PREVIEW_ROWS = 500;
-const MAX_OPTIONS = 100;
+const MAX_PREVIEW_ROWS = 200;
+const MAX_OPTIONS = 50;
 
 const normalizeText = (value: string) => value?.toString().trim().toLowerCase() || '';
 
@@ -92,7 +92,7 @@ export default function TangoMappingPage() {
               cuit: c.cuit,
               ownerName: c.ownerName,
               tangoCompanyId: c.tangoCompanyId,
-            }))
+            })).filter((c) => !c.cuit || !c.tangoCompanyId)
           )
         )
         .catch(() => {
@@ -140,7 +140,7 @@ export default function TangoMappingPage() {
   }, [clients, filter]);
 
   const getRowOptions = (client: Client, allRows: TangoRow[]) => {
-    const MAX_OPTIONS = 200;
+    const MAX_OPTIONS = 50;
     if (allRows.length <= MAX_OPTIONS) return allRows;
 
     const normalizedClientName = normalizeText(client.denominacion || client.razonSocial);
