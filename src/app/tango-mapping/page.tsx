@@ -43,7 +43,8 @@ type TangoRow = {
 const REQUIRED_FIELDS: (keyof ColumnSelection)[] = ['razonSocial', 'tangoId'];
 const UNASSIGNED_CLIENT_VALUE = '__none__';
 const NO_CUIT_COLUMN = '__none__';
-const MAX_PREVIEW_ROWS = 12000;
+const MAX_PREVIEW_ROWS = 500;
+const MAX_OPTIONS = 100;
 
 const normalizeText = (value: string) => value?.toString().trim().toLowerCase() || '';
 
@@ -81,13 +82,26 @@ export default function TangoMappingPage() {
 
   useEffect(() => {
     if (canAccess) {
-      getClients().then(setClients).catch(() => {
-        toast({
-          title: 'Error',
-          description: 'No se pudieron cargar los clientes existentes.',
-          variant: 'destructive',
+      getClients()
+        .then((list) =>
+          setClients(
+            list.map((c) => ({
+              id: c.id,
+              denominacion: c.denominacion,
+              razonSocial: c.razonSocial,
+              cuit: c.cuit,
+              ownerName: c.ownerName,
+              tangoCompanyId: c.tangoCompanyId,
+            }))
+          )
+        )
+        .catch(() => {
+          toast({
+            title: 'Error',
+            description: 'No se pudieron cargar los clientes existentes.',
+            variant: 'destructive',
+          });
         });
-      });
     }
   }, [canAccess, toast]);
 
