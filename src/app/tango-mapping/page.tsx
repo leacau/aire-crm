@@ -22,12 +22,13 @@ import {
 } from '@/components/ui/table';
 import { findBestMatch } from 'string-similarity';
 import { hasManagementPrivileges } from '@/lib/role-utils';
-import type { Client, Opportunity } from '@/lib/types';
+import type { Client, Opportunity, Invoice } from '@/lib/types';
 import {
   createInvoice,
   createOpportunity,
   getClients,
   getOpportunitiesByClientId,
+  getInvoicesForClient,
   updateClientTangoMapping,
 } from '@/lib/firebase-service';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -96,6 +97,12 @@ const BILLING_ENTITY_OPTIONS: { value: BillingEntity; label: string }[] = [
   { value: 'aire-digital', label: 'Aire Digital SAS' },
 ];
 
+const extractLastFiveDigits = (value: string) => {
+  const digits = (value.match(/\d/g) || []).join('');
+  if (!digits) return '';
+  return digits.slice(-5);
+};
+
 const normalizeText = (value: string) => value?.toString().trim().toLowerCase() || '';
 
 type ClientSuggestion = {
@@ -134,6 +141,8 @@ export default function TangoMappingPage() {
   const [invoiceSelections, setInvoiceSelections] = useState<Record<number, { opportunityId?: string }>>({});
   const [opportunitiesByClient, setOpportunitiesByClient] = useState<Record<string, Opportunity[]>>({});
   const [loadingOpportunities, setLoadingOpportunities] = useState<Record<string, boolean>>({});
+  const [invoicesByClient, setInvoicesByClient] = useState<Record<string, Invoice[]>>({});
+  const [loadingInvoices, setLoadingInvoices] = useState<Record<string, boolean>>({});
 
   const canAccess = userInfo && hasManagementPrivileges(userInfo);
 
@@ -512,6 +521,36 @@ export default function TangoMappingPage() {
     });
   };
 
+  const loadInvoicesForClients = async (clientIds: string[]) => {
+    const idsToLoad = clientIds.filter((id) => !invoicesByClient[id] && !loadingInvoices[id]);
+    if (idsToLoad.length === 0) return;
+    setLoadingInvoices((prev) =>
+      idsToLoad.reduce((acc, id) => ({ ...acc, [id]: true }), { ...prev })
+    );
+    const results = await Promise.all(
+      idsToLoad.map(async (clientId) => {
+        try {
+          const invs = await getInvoicesForClient(clientId);
+          return { clientId, invs };
+        } catch {
+          return { clientId, invs: [] };
+        }
+      })
+    );
+    setInvoicesByClient((prev) => {
+      const updated = { ...prev };
+      results.forEach(({ clientId, invs }) => {
+        updated[clientId] = invs;
+      });
+      return updated;
+    });
+    setLoadingInvoices((prev) => {
+      const updated = { ...prev };
+      idsToLoad.forEach((id) => delete updated[id]);
+      return updated;
+    });
+  };
+
   const applyInvoiceColumnSelection = () => {
     if (!billingEntity) {
       toast({
@@ -574,6 +613,7 @@ export default function TangoMappingPage() {
     setInvoiceRows(withClients);
     const clientIds = Array.from(new Set(withClients.map((i) => i.clientId).filter(Boolean) as string[]));
     loadOpportunitiesForClients(clientIds);
+    loadInvoicesForClients(clientIds);
     setInvoiceSelections({});
     toast({ title: 'Archivo de facturas listo', description: `${withClients.length} facturas detectadas.` });
   };
@@ -581,6 +621,14 @@ export default function TangoMappingPage() {
   const getOpportunityOptions = (clientId?: string) => {
     if (!clientId) return [];
     return opportunitiesByClient[clientId] || [];
+  };
+
+  const isDuplicateInvoice = (inv: InvoiceRow) => {
+    if (!inv.clientId) return false;
+    const existing = invoicesByClient[inv.clientId] || [];
+    const targetLast5 = extractLastFiveDigits(inv.invoiceNumber);
+    if (!targetLast5) return false;
+    return existing.some((e) => extractLastFiveDigits(e.invoiceNumber || '') === targetLast5);
   };
 
   const updateInvoiceSelection = (rowIndex: number, opportunityId?: string) => {
@@ -591,11 +639,17 @@ export default function TangoMappingPage() {
     if (!userInfo) return;
     let success = 0;
     let failed = 0;
+    let duplicates = 0;
 
     for (const invoice of invoiceRows) {
       try {
         if (!invoice.clientId) {
           failed++;
+          continue;
+        }
+        const duplicate = isDuplicateInvoice(invoice);
+        if (duplicate) {
+          duplicates++;
           continue;
         }
         const selected = invoiceSelections[invoice.index]?.opportunityId;
@@ -662,6 +716,24 @@ export default function TangoMappingPage() {
           userInfo.name,
           clients.find((c) => c.id === invoice.clientId)?.ownerName || userInfo.name
         );
+        setInvoicesByClient((prev) => ({
+          ...prev,
+          [invoice.clientId]: [
+            ...(prev[invoice.clientId] || []),
+            {
+              id: `${invoice.clientId}-${invoice.invoiceNumber}-${Date.now()}`,
+              opportunityId,
+              invoiceNumber: invoice.invoiceNumber,
+              amount: invoice.amount,
+              date: invoice.issueDate,
+              dueDate: invoice.dueDate,
+              status: 'Generada',
+              dateGenerated: new Date().toISOString(),
+              isCreditNote: false,
+              creditNoteMarkedAt: null,
+            },
+          ],
+        }));
         success++;
       } catch (error) {
         console.error('Error importing invoice', error);
@@ -671,8 +743,8 @@ export default function TangoMappingPage() {
 
     toast({
       title: 'Importación de facturas',
-      description: `${success} facturas cargadas${failed ? `, ${failed} con errores` : ''}.`,
-      variant: failed ? 'destructive' : 'default',
+      description: `${success} facturas cargadas${duplicates ? `, ${duplicates} duplicadas` : ''}${failed ? `, ${failed} con errores` : ''}.`,
+      variant: failed || duplicates ? 'destructive' : 'default',
     });
   };
 
