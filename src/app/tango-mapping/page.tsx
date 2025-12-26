@@ -36,6 +36,11 @@ type ColumnSelection = {
   email?: string;
   phone?: string;
   rubro?: string;
+  condicionIVA?: string;
+  provincia?: string;
+  localidad?: string;
+  tipoEntidad?: string;
+  observaciones?: string;
 };
 
 type TangoRow = {
@@ -47,6 +52,11 @@ type TangoRow = {
   email?: string;
   phone?: string;
   rubro?: string;
+  condicionIVA?: string;
+  provincia?: string;
+  localidad?: string;
+  tipoEntidad?: string;
+  observaciones?: string;
 };
 
 const REQUIRED_FIELDS: (keyof ColumnSelection)[] = ['razonSocial', 'idTango'];
@@ -212,6 +222,11 @@ export default function TangoMappingPage() {
       email: [/mail/i, /correo/i, /email/i],
       phone: [/telefono/i, /teléfono/i, /celular/i, /phone/i],
       rubro: [/rubro/i, /categoria/i, /categoría/i],
+      condicionIVA: [/iva/i, /condicion/i, /condición/i],
+      provincia: [/provincia/i],
+      localidad: [/localidad/i, /ciudad/i],
+      tipoEntidad: [/tipo/i, /entidad/i],
+      observaciones: [/observ/i, /nota/i, /coment/i],
     };
     const regexes = patterns[target];
     return availableHeaders.find((h) => regexes.some((r) => r.test(h)));
@@ -239,6 +254,11 @@ export default function TangoMappingPage() {
       email: guessHeader('email', result.headers || []),
       phone: guessHeader('phone', result.headers || []),
       rubro: guessHeader('rubro', result.headers || []),
+      condicionIVA: guessHeader('condicionIVA', result.headers || []),
+      provincia: guessHeader('provincia', result.headers || []),
+      localidad: guessHeader('localidad', result.headers || []),
+      tipoEntidad: guessHeader('tipoEntidad', result.headers || []),
+      observaciones: guessHeader('observaciones', result.headers || []),
     });
   };
 
@@ -256,6 +276,11 @@ export default function TangoMappingPage() {
       email: guessHeader('email', extractedHeaders),
       phone: guessHeader('phone', extractedHeaders),
       rubro: guessHeader('rubro', extractedHeaders),
+      condicionIVA: guessHeader('condicionIVA', extractedHeaders),
+      provincia: guessHeader('provincia', extractedHeaders),
+      localidad: guessHeader('localidad', extractedHeaders),
+      tipoEntidad: guessHeader('tipoEntidad', extractedHeaders),
+      observaciones: guessHeader('observaciones', extractedHeaders),
     });
   };
 
@@ -289,6 +314,11 @@ export default function TangoMappingPage() {
       email: guessHeader('email', result.headers || headers || []),
       phone: guessHeader('phone', result.headers || headers || []),
       rubro: guessHeader('rubro', result.headers || headers || []),
+      condicionIVA: guessHeader('condicionIVA', result.headers || headers || []),
+      provincia: guessHeader('provincia', result.headers || headers || []),
+      localidad: guessHeader('localidad', result.headers || headers || []),
+      tipoEntidad: guessHeader('tipoEntidad', result.headers || headers || []),
+      observaciones: guessHeader('observaciones', result.headers || headers || []),
     });
   };
 
@@ -323,6 +353,11 @@ export default function TangoMappingPage() {
         const email = columnSelection.email ? row[columnSelection.email] : undefined;
         const phone = columnSelection.phone ? row[columnSelection.phone] : undefined;
         const rubro = columnSelection.rubro ? row[columnSelection.rubro] : undefined;
+        const condicionIVA = columnSelection.condicionIVA ? row[columnSelection.condicionIVA] : undefined;
+        const provincia = columnSelection.provincia ? row[columnSelection.provincia] : undefined;
+        const localidad = columnSelection.localidad ? row[columnSelection.localidad] : undefined;
+        const tipoEntidad = columnSelection.tipoEntidad ? row[columnSelection.tipoEntidad] : undefined;
+        const observaciones = columnSelection.observaciones ? row[columnSelection.observaciones] : undefined;
         const rowIndex = typeof row.__row === 'number' ? row.__row : index;
         return {
           index: rowIndex,
@@ -333,6 +368,11 @@ export default function TangoMappingPage() {
           email: email ? String(email) : undefined,
           phone: phone ? String(phone) : undefined,
           rubro: rubro ? String(rubro) : undefined,
+          condicionIVA: condicionIVA ? String(condicionIVA) : undefined,
+          provincia: provincia ? String(provincia) : undefined,
+          localidad: localidad ? String(localidad) : undefined,
+          tipoEntidad: tipoEntidad ? String(tipoEntidad) : undefined,
+          observaciones: observaciones ? String(observaciones) : undefined,
         } as TangoRow;
       })
       .filter(Boolean) as TangoRow[];
@@ -442,6 +482,11 @@ export default function TangoMappingPage() {
           denominacion?: string;
           idAireSrl?: string;
           idAireDigital?: string;
+          condicionIVA?: string;
+          provincia?: string;
+          localidad?: string;
+          tipoEntidad?: string;
+          observaciones?: string;
         } = {};
         if (!client.cuit && row.cuit) {
           data.cuit = row.cuit;
@@ -473,6 +518,21 @@ export default function TangoMappingPage() {
         if (!client.razonSocial && row.razonSocial) {
           data.razonSocial = row.razonSocial;
         }
+        if (!client.condicionIVA && row.condicionIVA) {
+          data.condicionIVA = row.condicionIVA as any;
+        }
+        if (!client.provincia && row.provincia) {
+          data.provincia = row.provincia;
+        }
+        if (!client.localidad && row.localidad) {
+          data.localidad = row.localidad;
+        }
+        if (!client.tipoEntidad && row.tipoEntidad) {
+          data.tipoEntidad = row.tipoEntidad as any;
+        }
+        if (!client.observaciones && row.observaciones) {
+          data.observaciones = row.observaciones;
+        }
 
         if (Object.keys(data).length === 0) return null;
 
@@ -491,6 +551,11 @@ export default function TangoMappingPage() {
           denominacion?: string;
           idAireSrl?: string;
           idAireDigital?: string;
+          condicionIVA?: string;
+          provincia?: string;
+          localidad?: string;
+          tipoEntidad?: string;
+          observaciones?: string;
         };
       }[];
 
@@ -729,6 +794,130 @@ export default function TangoMappingPage() {
                       setColumnSelection((prev) => ({
                         ...prev,
                         rubro: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar columna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                      {headers.map((header) => (
+                        <SelectItem key={header} value={header}>
+                          {header}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Condición IVA (opcional)</p>
+                  <Select
+                    value={columnSelection.condicionIVA ?? NO_OPTIONAL_COLUMN}
+                    onValueChange={(value) =>
+                      setColumnSelection((prev) => ({
+                        ...prev,
+                        condicionIVA: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar columna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                      {headers.map((header) => (
+                        <SelectItem key={header} value={header}>
+                          {header}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Provincia (opcional)</p>
+                  <Select
+                    value={columnSelection.provincia ?? NO_OPTIONAL_COLUMN}
+                    onValueChange={(value) =>
+                      setColumnSelection((prev) => ({
+                        ...prev,
+                        provincia: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar columna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                      {headers.map((header) => (
+                        <SelectItem key={header} value={header}>
+                          {header}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Localidad (opcional)</p>
+                  <Select
+                    value={columnSelection.localidad ?? NO_OPTIONAL_COLUMN}
+                    onValueChange={(value) =>
+                      setColumnSelection((prev) => ({
+                        ...prev,
+                        localidad: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar columna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                      {headers.map((header) => (
+                        <SelectItem key={header} value={header}>
+                          {header}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Tipo de Entidad (opcional)</p>
+                  <Select
+                    value={columnSelection.tipoEntidad ?? NO_OPTIONAL_COLUMN}
+                    onValueChange={(value) =>
+                      setColumnSelection((prev) => ({
+                        ...prev,
+                        tipoEntidad: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar columna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                      {headers.map((header) => (
+                        <SelectItem key={header} value={header}>
+                          {header}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Observaciones (opcional)</p>
+                  <Select
+                    value={columnSelection.observaciones ?? NO_OPTIONAL_COLUMN}
+                    onValueChange={(value) =>
+                      setColumnSelection((prev) => ({
+                        ...prev,
+                        observaciones: value === NO_OPTIONAL_COLUMN ? undefined : value,
                       }))
                     }
                   >

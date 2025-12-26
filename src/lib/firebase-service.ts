@@ -101,6 +101,11 @@ export type ClientTangoUpdate = {
     denominacion?: string;
     idAireSrl?: string;
     idAireDigital?: string;
+    condicionIVA?: string;
+    provincia?: string;
+    localidad?: string;
+    tipoEntidad?: string;
+    observaciones?: string;
 };
 
 // --- Config Functions ---
@@ -1897,6 +1902,21 @@ export const updateClientTangoMapping = async (
     if (data.idAireDigital && data.idAireDigital.toString().trim().length > 0) {
         updatePayload.idAireDigital = data.idAireDigital.toString().trim();
     }
+    if (data.condicionIVA && data.condicionIVA.trim().length > 0) {
+        updatePayload.condicionIVA = data.condicionIVA.trim() as any;
+    }
+    if (data.provincia && data.provincia.trim().length > 0) {
+        updatePayload.provincia = data.provincia.trim();
+    }
+    if (data.localidad && data.localidad.trim().length > 0) {
+        updatePayload.localidad = data.localidad.trim();
+    }
+    if (data.tipoEntidad && data.tipoEntidad.trim().length > 0) {
+        updatePayload.tipoEntidad = data.tipoEntidad.trim() as any;
+    }
+    if (data.observaciones && data.observaciones.trim().length > 0) {
+        updatePayload.observaciones = data.observaciones.trim();
+    }
 
     await updateDoc(docRef, updatePayload);
     invalidateCache('clients');
@@ -1928,6 +1948,21 @@ export const updateClientTangoMapping = async (
     }
     if (updatePayload.idAireDigital && updatePayload.idAireDigital !== (originalData as any).idAireDigital) {
         detailsParts.push(`ID Aire Digital <strong>${updatePayload.idAireDigital}</strong>`);
+    }
+    if (updatePayload.condicionIVA && updatePayload.condicionIVA !== originalData.condicionIVA) {
+        detailsParts.push(`Condición IVA <strong>${updatePayload.condicionIVA}</strong>`);
+    }
+    if (updatePayload.provincia && updatePayload.provincia !== originalData.provincia) {
+        detailsParts.push(`Provincia <strong>${updatePayload.provincia}</strong>`);
+    }
+    if (updatePayload.localidad && updatePayload.localidad !== originalData.localidad) {
+        detailsParts.push(`Localidad <strong>${updatePayload.localidad}</strong>`);
+    }
+    if (updatePayload.tipoEntidad && updatePayload.tipoEntidad !== originalData.tipoEntidad) {
+        detailsParts.push(`Tipo de Entidad <strong>${updatePayload.tipoEntidad}</strong>`);
+    }
+    if (updatePayload.observaciones && updatePayload.observaciones !== originalData.observaciones) {
+        detailsParts.push(`Observaciones`);
     }
     const detailText = detailsParts.length > 0 ? detailsParts.join(' y ') : 'datos de Tango';
 
