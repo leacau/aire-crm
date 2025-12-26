@@ -29,6 +29,7 @@ export type Invoice = {
   invoiceNumber: string;
   amount: number;
   date?: string;
+  dueDate?: string;
   status: InvoiceStatus;
   dateGenerated: string;
   datePaid?: string;

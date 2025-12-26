@@ -22,8 +22,15 @@ import {
 } from '@/components/ui/table';
 import { findBestMatch } from 'string-similarity';
 import { hasManagementPrivileges } from '@/lib/role-utils';
-import type { Client } from '@/lib/types';
-import { getClients, updateClientTangoMapping } from '@/lib/firebase-service';
+import type { Client, Opportunity } from '@/lib/types';
+import {
+  createInvoice,
+  createOpportunity,
+  getClients,
+  getOpportunitiesByClientId,
+  updateClientTangoMapping,
+} from '@/lib/firebase-service';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type MappingStep = 'upload' | 'map' | 'review';
 type BillingEntity = 'aire-srl' | 'aire-digital';
@@ -99,6 +106,15 @@ export default function TangoMappingPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [billingEntity, setBillingEntity] = useState<BillingEntity | undefined>();
+  const [activeTab, setActiveTab] = useState<'clients' | 'invoices'>('clients');
+
+  const [invoiceHeaders, setInvoiceHeaders] = useState<string[]>([]);
+  const [invoiceRawData, setInvoiceRawData] = useState<any[]>([]);
+  const [invoiceRows, setInvoiceRows] = useState<InvoiceRow[]>([]);
+  const [invoiceColumnSelection, setInvoiceColumnSelection] = useState<InvoiceColumnSelection>({});
+  const [invoiceSelections, setInvoiceSelections] = useState<Record<number, { opportunityId?: string }>>({});
+  const [opportunitiesByClient, setOpportunitiesByClient] = useState<Record<string, Opportunity[]>>({});
+  const [loadingOpportunities, setLoadingOpportunities] = useState<Record<string, boolean>>({});
 
   const canAccess = userInfo && hasManagementPrivileges(userInfo);
 
@@ -607,8 +623,15 @@ export default function TangoMappingPage() {
     <div className="flex h-full flex-col">
       <Header title="Mapeo con Tango" />
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
-        {step === 'upload' && (
-          <div className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'clients' | 'invoices')}>
+          <TabsList>
+            <TabsTrigger value="clients">Clientes</TabsTrigger>
+            <TabsTrigger value="invoices">Facturas</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="clients" className="space-y-6">
+            {step === 'upload' && (
+              <div className="space-y-4">
                 <Card>
                   <CardHeader>
                     <CardTitle>Empresa facturadora</CardTitle>
@@ -644,476 +667,701 @@ export default function TangoMappingPage() {
               </div>
             )}
 
-        {step === 'map' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Selecciona las columnas</CardTitle>
-              <CardDescription>Indica qué columnas corresponden a los datos de Tango.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Razón Social *</p>
-                  <Select
-                    value={columnSelection.razonSocial ?? undefined}
-                    onValueChange={(value) => setColumnSelection((prev) => ({ ...prev, razonSocial: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">ID de Tango *</p>
-                  <Select
-                    value={columnSelection.idTango ?? undefined}
-                    onValueChange={(value) => setColumnSelection((prev) => ({ ...prev, idTango: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">CUIT (opcional)</p>
-                  <Select
-                    value={columnSelection.cuit || NO_CUIT_COLUMN}
-                    onValueChange={(value) =>
-                      setColumnSelection((prev) => ({
-                        ...prev,
-                        cuit: value === NO_CUIT_COLUMN ? undefined : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_CUIT_COLUMN}>Ninguna</SelectItem>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Denominación / Fantasía (opcional)</p>
-                  <Select
-                    value={columnSelection.denominacion ?? NO_OPTIONAL_COLUMN}
-                    onValueChange={(value) =>
-                      setColumnSelection((prev) => ({
-                        ...prev,
-                        denominacion: value === NO_OPTIONAL_COLUMN ? undefined : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Email (opcional)</p>
-                  <Select
-                    value={columnSelection.email ?? NO_OPTIONAL_COLUMN}
-                    onValueChange={(value) =>
-                      setColumnSelection((prev) => ({
-                        ...prev,
-                        email: value === NO_OPTIONAL_COLUMN ? undefined : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Teléfono (opcional)</p>
-                  <Select
-                    value={columnSelection.phone ?? NO_OPTIONAL_COLUMN}
-                    onValueChange={(value) =>
-                      setColumnSelection((prev) => ({
-                        ...prev,
-                        phone: value === NO_OPTIONAL_COLUMN ? undefined : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Rubro (opcional)</p>
-                  <Select
-                    value={columnSelection.rubro ?? NO_OPTIONAL_COLUMN}
-                    onValueChange={(value) =>
-                      setColumnSelection((prev) => ({
-                        ...prev,
-                        rubro: value === NO_OPTIONAL_COLUMN ? undefined : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Condición IVA (opcional)</p>
-                  <Select
-                    value={columnSelection.condicionIVA ?? NO_OPTIONAL_COLUMN}
-                    onValueChange={(value) =>
-                      setColumnSelection((prev) => ({
-                        ...prev,
-                        condicionIVA: value === NO_OPTIONAL_COLUMN ? undefined : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Provincia (opcional)</p>
-                  <Select
-                    value={columnSelection.provincia ?? NO_OPTIONAL_COLUMN}
-                    onValueChange={(value) =>
-                      setColumnSelection((prev) => ({
-                        ...prev,
-                        provincia: value === NO_OPTIONAL_COLUMN ? undefined : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Localidad (opcional)</p>
-                  <Select
-                    value={columnSelection.localidad ?? NO_OPTIONAL_COLUMN}
-                    onValueChange={(value) =>
-                      setColumnSelection((prev) => ({
-                        ...prev,
-                        localidad: value === NO_OPTIONAL_COLUMN ? undefined : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Tipo de Entidad (opcional)</p>
-                  <Select
-                    value={columnSelection.tipoEntidad ?? NO_OPTIONAL_COLUMN}
-                    onValueChange={(value) =>
-                      setColumnSelection((prev) => ({
-                        ...prev,
-                        tipoEntidad: value === NO_OPTIONAL_COLUMN ? undefined : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Observaciones (opcional)</p>
-                  <Select
-                    value={columnSelection.observaciones ?? NO_OPTIONAL_COLUMN}
-                    onValueChange={(value) =>
-                      setColumnSelection((prev) => ({
-                        ...prev,
-                        observaciones: value === NO_OPTIONAL_COLUMN ? undefined : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar columna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => setStep('upload')}>
-                  Volver
-                </Button>
-                <Button onClick={applyColumnSelection}>Continuar</Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {step === 'review' && (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Previsualización y mapeo</CardTitle>
-                <CardDescription>
-                  Ajusta la fila del archivo de Tango para cada cliente del CRM. Sólo se completarán datos faltantes
-                  (CUIT o ID de Tango) en los clientes seleccionados.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                  <Badge variant="secondary">Empresa: {billingEntityLabel}</Badge>
-                  {rowsTruncated && <span>Mostrando primeras {MAX_PREVIEW_ROWS} filas.</span>}
-                </div>
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <Input
-                      placeholder="Buscar por cliente, CUIT o ID Tango"
-                      value={filter}
-                      onChange={(e) => setFilter(e.target.value)}
-                      className="md:w-80"
-                    />
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Buscar en el archivo (nombre/ID/CUIT)"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="md:w-72"
-                        disabled={!lastFile}
-                      />
-                      <Button
-                        variant="outline"
-                        onClick={handleSearchInFile}
-                        disabled={!lastFile || !searchTerm.trim()}
+            {step === 'map' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Selecciona las columnas</CardTitle>
+                  <CardDescription>Indica qué columnas corresponden a los datos de Tango.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Razón Social *</p>
+                      <Select
+                        value={columnSelection.razonSocial ?? undefined}
+                        onValueChange={(value) => setColumnSelection((prev) => ({ ...prev, razonSocial: value }))}
                       >
-                        Buscar en archivo
-                      </Button>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className="flex gap-2">
-                      <Badge variant="secondary">Clientes: {clients.length}</Badge>
-                      <Badge variant="outline">Filas de archivo: {rows.length}</Badge>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">ID de Tango *</p>
+                      <Select
+                        value={columnSelection.idTango ?? undefined}
+                        onValueChange={(value) => setColumnSelection((prev) => ({ ...prev, idTango: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">CUIT (opcional)</p>
+                      <Select
+                        value={columnSelection.cuit || NO_CUIT_COLUMN}
+                        onValueChange={(value) =>
+                          setColumnSelection((prev) => ({
+                            ...prev,
+                            cuit: value === NO_CUIT_COLUMN ? undefined : value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_CUIT_COLUMN}>Ninguna</SelectItem>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Denominación / Fantasía (opcional)</p>
+                      <Select
+                        value={columnSelection.denominacion ?? NO_OPTIONAL_COLUMN}
+                        onValueChange={(value) =>
+                          setColumnSelection((prev) => ({
+                            ...prev,
+                            denominacion: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Cliente CRM</TableHead>
-                        <TableHead>CUIT (CRM)</TableHead>
-                        <TableHead>{billingEntityLabel} (CRM)</TableHead>
-                        <TableHead>Fila de archivo</TableHead>
-                        <TableHead>Datos del archivo</TableHead>
-                        <TableHead className="w-[180px]">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 text-sm font-medium"
-                            onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
-                          >
-                            Coincidencia
-                            <span className="text-xs text-muted-foreground">
-                              {sortDirection === 'desc' ? '▼' : '▲'}
-                            </span>
-                          </button>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sortedClients.map(({ client, selectedRowKey }) => {
-                        const suggestion = suggestions[client.id];
-                        const row = rowMap.get(selectedRowKey);
-                        const rowOptions = getRowOptions(client, rows);
-                        const clientBillingId =
-                          billingEntity === 'aire-srl'
-                            ? (client as any).idAireSrl
-                            : billingEntity === 'aire-digital'
-                            ? (client as any).idAireDigital
-                            : client.idTango || client.tangoCompanyId;
-                        return (
-                          <TableRow key={client.id}>
-                            <TableCell className="max-w-[240px] break-words">
-                              <div className="font-medium">{client.denominacion || client.razonSocial}</div>
-                              <p className="text-xs text-muted-foreground">{client.ownerName}</p>
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap">{client.cuit || '—'}</TableCell>
-                            <TableCell className="whitespace-nowrap">
-                              {clientBillingId || '—'}
-                            </TableCell>
-                            <TableCell>
-                              <Select
-                                value={selectedRowKey}
-                                onValueChange={(value) => updateRowClient(client.id, value === UNASSIGNED_CLIENT_VALUE ? undefined : value)}
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Email (opcional)</p>
+                      <Select
+                        value={columnSelection.email ?? NO_OPTIONAL_COLUMN}
+                        onValueChange={(value) =>
+                          setColumnSelection((prev) => ({
+                            ...prev,
+                            email: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Teléfono (opcional)</p>
+                      <Select
+                        value={columnSelection.phone ?? NO_OPTIONAL_COLUMN}
+                        onValueChange={(value) =>
+                          setColumnSelection((prev) => ({
+                            ...prev,
+                            phone: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Rubro (opcional)</p>
+                      <Select
+                        value={columnSelection.rubro ?? NO_OPTIONAL_COLUMN}
+                        onValueChange={(value) =>
+                          setColumnSelection((prev) => ({
+                            ...prev,
+                            rubro: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Condición IVA (opcional)</p>
+                      <Select
+                        value={columnSelection.condicionIVA ?? NO_OPTIONAL_COLUMN}
+                        onValueChange={(value) =>
+                          setColumnSelection((prev) => ({
+                            ...prev,
+                            condicionIVA: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Provincia (opcional)</p>
+                      <Select
+                        value={columnSelection.provincia ?? NO_OPTIONAL_COLUMN}
+                        onValueChange={(value) =>
+                          setColumnSelection((prev) => ({
+                            ...prev,
+                            provincia: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Localidad (opcional)</p>
+                      <Select
+                        value={columnSelection.localidad ?? NO_OPTIONAL_COLUMN}
+                        onValueChange={(value) =>
+                          setColumnSelection((prev) => ({
+                            ...prev,
+                            localidad: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Tipo de Entidad (opcional)</p>
+                      <Select
+                        value={columnSelection.tipoEntidad ?? NO_OPTIONAL_COLUMN}
+                        onValueChange={(value) =>
+                          setColumnSelection((prev) => ({
+                            ...prev,
+                            tipoEntidad: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Observaciones (opcional)</p>
+                      <Select
+                        value={columnSelection.observaciones ?? NO_OPTIONAL_COLUMN}
+                        onValueChange={(value) =>
+                          setColumnSelection((prev) => ({
+                            ...prev,
+                            observaciones: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar columna" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                          {headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button variant="outline" onClick={() => setStep('upload')}>
+                      Volver
+                    </Button>
+                    <Button onClick={applyColumnSelection}>Continuar</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {step === 'review' && (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Previsualización y mapeo</CardTitle>
+                    <CardDescription>
+                      Ajusta la fila del archivo de Tango para cada cliente del CRM. Sólo se completarán datos faltantes
+                      (CUIT o ID de Tango) en los clientes seleccionados.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                      <Badge variant="secondary">Empresa: {billingEntityLabel}</Badge>
+                      {rowsTruncated && <span>Mostrando primeras {MAX_PREVIEW_ROWS} filas.</span>}
+                    </div>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <Input
+                        placeholder="Buscar por cliente, CUIT o ID Tango"
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value)}
+                        className="md:w-80"
+                      />
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Buscar en el archivo (nombre/ID/CUIT)"
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="md:w-72"
+                          disabled={!lastFile}
+                        />
+                        <Button
+                          variant="outline"
+                          onClick={handleSearchInFile}
+                          disabled={!lastFile || !searchTerm.trim()}
+                        >
+                          Buscar en archivo
+                        </Button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Badge variant="secondary">Clientes: {clients.length}</Badge>
+                        <Badge variant="outline">Filas de archivo: {rows.length}</Badge>
+                      </div>
+                    </div>
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Cliente CRM</TableHead>
+                            <TableHead>CUIT (CRM)</TableHead>
+                            <TableHead>{billingEntityLabel} (CRM)</TableHead>
+                            <TableHead>Fila de archivo</TableHead>
+                            <TableHead>Datos del archivo</TableHead>
+                            <TableHead className="w-[180px]">
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 text-sm font-medium"
+                                onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
                               >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Seleccionar fila" />
-                                </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value={UNASSIGNED_CLIENT_VALUE}>Sin asignar</SelectItem>
-                                    {rowOptions.map((r) => (
-                                      <SelectItem key={`${r.index}-${r.idTango}`} value={`${r.index}-${r.idTango}`}>
-                                        <span className="font-medium">{r.denominacion || r.razonSocial}</span>
-                                        {` — ID ${r.idTango}`}
-                                        {r.cuit ? ` — CUIT ${r.cuit}` : ''}
-                                        {r.email ? ` — ${r.email}` : ''}
-                                        {r.phone ? ` — Tel ${r.phone}` : ''}
-                                        {r.rubro ? ` — Rubro ${r.rubro}` : ''}
-                                      </SelectItem>
-                                    ))}
-                                  {rowOptions.length < rows.length && (
-                                    <SelectItem value="__truncated" disabled>
-                                      {`Mostrando ${rowOptions.length} de ${rows.length} filas, filtra por CUIT o nombre para acotar.`}
-                                    </SelectItem>
-                                  )}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {row ? (
-                                <div className="space-y-1">
-                                  <div className="text-foreground">{row.denominacion || row.razonSocial}</div>
-                                  <div className="flex flex-wrap gap-2 text-xs">
-                                    {row.idTango && <Badge variant="outline">ID {row.idTango}</Badge>}
-                                    {row.cuit && <Badge variant="outline">CUIT {row.cuit}</Badge>}
-                                    {row.email && <Badge variant="outline">{row.email}</Badge>}
-                                    {row.phone && <Badge variant="outline">{row.phone}</Badge>}
-                                    {row.rubro && <Badge variant="outline">{row.rubro}</Badge>}
-                                  </div>
-                                </div>
-                              ) : (
-                                <span>—</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {selectedRowKey !== UNASSIGNED_CLIENT_VALUE && row ? (
-                                <Badge variant={clientSelections[client.id] ? 'secondary' : 'default'}>
-                                  {suggestion?.matchedBy === 'cuit'
-                                    ? 'Coincidencia por CUIT'
-                                    : suggestion?.matchedBy === 'name'
-                                    ? `Nombre ~${Math.round((suggestion.matchScore || 0) * 100)}%`
-                                    : 'Asignado manualmente'}
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline">Sin coincidencia</Badge>
-                              )}
-                            </TableCell>
+                                Coincidencia
+                                <span className="text-xs text-muted-foreground">
+                                  {sortDirection === 'desc' ? '▼' : '▲'}
+                                </span>
+                              </button>
+                            </TableHead>
                           </TableRow>
-                        );
-                      })}
-                      {filteredClients.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
-                            No hay filas para mostrar.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {sortedClients.map(({ client, selectedRowKey }) => {
+                            const suggestion = suggestions[client.id];
+                            const row = rowMap.get(selectedRowKey);
+                            const rowOptions = getRowOptions(client, rows);
+                            const clientBillingId =
+                              billingEntity === 'aire-srl'
+                                ? client.idAireSrl
+                                : billingEntity === 'aire-digital'
+                                ? client.idAireDigital
+                                : client.idTango || client.tangoCompanyId;
+                            return (
+                              <TableRow key={client.id}>
+                                <TableCell className="max-w-[240px] break-words">
+                                  <div className="font-medium">{client.denominacion || client.razonSocial}</div>
+                                  <p className="text-xs text-muted-foreground">{client.ownerName}</p>
+                                </TableCell>
+                                <TableCell className="whitespace-nowrap">{client.cuit || '—'}</TableCell>
+                                <TableCell className="whitespace-nowrap">{clientBillingId || '—'}</TableCell>
+                                <TableCell>
+                                  <Select
+                                    value={selectedRowKey}
+                                    onValueChange={(value) =>
+                                      updateRowClient(client.id, value === UNASSIGNED_CLIENT_VALUE ? undefined : value)
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar fila" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value={UNASSIGNED_CLIENT_VALUE}>Sin asignar</SelectItem>
+                                      {rowOptions.map((r) => (
+                                        <SelectItem key={`${r.index}-${r.idTango}`} value={`${r.index}-${r.idTango}`}>
+                                          <span className="font-medium">{r.denominacion || r.razonSocial}</span>
+                                          {` — ID ${r.idTango}`}
+                                          {r.cuit ? ` — CUIT ${r.cuit}` : ''}
+                                          {r.email ? ` — ${r.email}` : ''}
+                                          {r.phone ? ` — Tel ${r.phone}` : ''}
+                                          {r.rubro ? ` — Rubro ${r.rubro}` : ''}
+                                        </SelectItem>
+                                      ))}
+                                      {rowOptions.length < rows.length && (
+                                        <SelectItem value="__truncated" disabled>
+                                          {`Mostrando ${rowOptions.length} de ${rows.length} filas, filtra por CUIT o nombre para acotar.`}
+                                        </SelectItem>
+                                      )}
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
+                                  {row ? (
+                                    <div className="space-y-1">
+                                      <div className="text-foreground">{row.denominacion || row.razonSocial}</div>
+                                      <div className="flex flex-wrap gap-2 text-xs">
+                                        {row.idTango && <Badge variant="outline">ID {row.idTango}</Badge>}
+                                        {row.cuit && <Badge variant="outline">CUIT {row.cuit}</Badge>}
+                                        {row.email && <Badge variant="outline">{row.email}</Badge>}
+                                        {row.phone && <Badge variant="outline">{row.phone}</Badge>}
+                                        {row.rubro && <Badge variant="outline">{row.rubro}</Badge>}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span>—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {selectedRowKey !== UNASSIGNED_CLIENT_VALUE && row ? (
+                                    <Badge variant={clientSelections[client.id] ? 'secondary' : 'default'}>
+                                      {suggestion?.matchedBy === 'cuit'
+                                        ? 'Coincidencia por CUIT'
+                                        : suggestion?.matchedBy === 'name'
+                                        ? `Nombre ~${Math.round((suggestion.matchScore || 0) * 100)}%`
+                                        : 'Asignado manualmente'}
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline">Sin coincidencia</Badge>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          {filteredClients.length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                                No hay filas para mostrar.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setStep('map')}>
+                        Ajustar columnas
+                      </Button>
+                      <Button onClick={handleApplyMapping} disabled={isSaving}>
+                        {isSaving ? 'Actualizando...' : 'Aplicar mapeo a clientes'}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="invoices" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Importar facturas</CardTitle>
+                <CardDescription>Selecciona el archivo y asigna las facturas a propuestas existentes o nuevas.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Empresa facturadora</p>
+                  <Select value={billingEntity} onValueChange={(value: BillingEntity) => setBillingEntity(value)}>
+                    <SelectTrigger className="w-full md:w-80">
+                      <SelectValue placeholder="Seleccionar empresa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BILLING_ENTITY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setStep('map')}>
-                    Ajustar columnas
-                  </Button>
-                  <Button onClick={handleApplyMapping} disabled={isSaving}>
-                    {isSaving ? 'Actualizando...' : 'Aplicar mapeo a clientes'}
-                  </Button>
-                </div>
+                <FileUploader onDataExtracted={handleInvoiceDataExtracted} />
+                {invoiceHeaders.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Columnas de facturas</h4>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">ID Aire / Tango *</p>
+                        <Select
+                          value={invoiceColumnSelection.idTango ?? undefined}
+                          onValueChange={(value) =>
+                            setInvoiceColumnSelection((prev) => ({ ...prev, idTango: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar columna" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {invoiceHeaders.map((header) => (
+                              <SelectItem key={header} value={header}>
+                                {header}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Número de factura *</p>
+                        <Select
+                          value={invoiceColumnSelection.invoiceNumber ?? undefined}
+                          onValueChange={(value) =>
+                            setInvoiceColumnSelection((prev) => ({ ...prev, invoiceNumber: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar columna" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {invoiceHeaders.map((header) => (
+                              <SelectItem key={header} value={header}>
+                                {header}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Monto *</p>
+                        <Select
+                          value={invoiceColumnSelection.amount ?? undefined}
+                          onValueChange={(value) =>
+                            setInvoiceColumnSelection((prev) => ({ ...prev, amount: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar columna" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {invoiceHeaders.map((header) => (
+                              <SelectItem key={header} value={header}>
+                                {header}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Fecha factura</p>
+                        <Select
+                          value={invoiceColumnSelection.issueDate ?? NO_OPTIONAL_COLUMN}
+                          onValueChange={(value) =>
+                            setInvoiceColumnSelection((prev) => ({
+                              ...prev,
+                              issueDate: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar columna" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                            {invoiceHeaders.map((header) => (
+                              <SelectItem key={header} value={header}>
+                                {header}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Fecha de vencimiento</p>
+                        <Select
+                          value={invoiceColumnSelection.dueDate ?? NO_OPTIONAL_COLUMN}
+                          onValueChange={(value) =>
+                            setInvoiceColumnSelection((prev) => ({
+                              ...prev,
+                              dueDate: value === NO_OPTIONAL_COLUMN ? undefined : value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar columna" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NO_OPTIONAL_COLUMN}>Ninguna</SelectItem>
+                            {invoiceHeaders.map((header) => (
+                              <SelectItem key={header} value={header}>
+                                {header}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button onClick={applyInvoiceColumnSelection}>Generar vista previa</Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
-          </div>
-        )}
+
+            {invoiceRows.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Asignar facturas a propuestas</CardTitle>
+                  <CardDescription>Relaciona cada factura con su cliente y propuesta.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Factura</TableHead>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead>Monto</TableHead>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead>Vencimiento</TableHead>
+                          <TableHead>Propuesta</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {invoiceRows.map((inv) => {
+                          const client = clients.find((c) => c.id === inv.clientId);
+                          const ops = getOpportunityOptions(inv.clientId);
+                          const selection = invoiceSelections[inv.index]?.opportunityId;
+                          return (
+                            <TableRow key={inv.index}>
+                              <TableCell>
+                                <div className="font-medium">#{inv.invoiceNumber}</div>
+                                <div className="text-xs text-muted-foreground">ID {inv.idTango}</div>
+                              </TableCell>
+                              <TableCell className="max-w-[220px]">
+                                {client ? (
+                                  <div className="space-y-1">
+                                    <div className="font-medium">{client.denominacion || client.razonSocial}</div>
+                                    <div className="text-xs text-muted-foreground">{client.ownerName}</div>
+                                  </div>
+                                ) : (
+                                  <Badge variant="destructive">Cliente no encontrado</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>${inv.amount.toLocaleString('es-AR')}</TableCell>
+                              <TableCell>{inv.issueDate || '—'}</TableCell>
+                              <TableCell>{inv.dueDate || '—'}</TableCell>
+                              <TableCell>
+                                {client ? (
+                                  <Select
+                                    value={selection ?? (ops[0]?.id || '__create__')}
+                                    onValueChange={(value) => updateInvoiceSelection(inv.index, value)}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar propuesta" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {ops.map((op) => (
+                                        <SelectItem key={op.id} value={op.id}>
+                                          {op.title}
+                                        </SelectItem>
+                                      ))}
+                                      <SelectItem value="__create__">Crear nueva propuesta</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">No disponible</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button onClick={handleApplyInvoices}>Importar facturas</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
