@@ -66,12 +66,31 @@ type TangoRow = {
   observaciones?: string;
 };
 
+type InvoiceColumnSelection = {
+  idTango?: string;
+  invoiceNumber?: string;
+  amount?: string;
+  issueDate?: string;
+  dueDate?: string;
+};
+
+type InvoiceRow = {
+  index: number;
+  idTango: string;
+  invoiceNumber: string;
+  amount: number;
+  issueDate?: string;
+  dueDate?: string;
+  clientId?: string;
+};
+
 const REQUIRED_FIELDS: (keyof ColumnSelection)[] = ['razonSocial', 'idTango'];
 const UNASSIGNED_CLIENT_VALUE = '__none__';
 const NO_CUIT_COLUMN = '__none__';
 const NO_OPTIONAL_COLUMN = '__none_optional__';
 const MAX_PREVIEW_ROWS = 200;
 const MAX_OPTIONS = 50;
+const INVOICE_REQUIRED_FIELDS: (keyof InvoiceColumnSelection)[] = ['idTango', 'invoiceNumber', 'amount'];
 const BILLING_ENTITY_OPTIONS: { value: BillingEntity; label: string }[] = [
   { value: 'aire-srl', label: 'Aire SRL' },
   { value: 'aire-digital', label: 'Aire Digital SAS' },
@@ -248,6 +267,18 @@ export default function TangoMappingPage() {
     return availableHeaders.find((h) => regexes.some((r) => r.test(h)));
   };
 
+  const guessInvoiceHeader = (target: keyof InvoiceColumnSelection, availableHeaders: string[]) => {
+    const patterns: Record<keyof InvoiceColumnSelection, RegExp[]> = {
+      idTango: [/id/i, /tango/i, /aire/i],
+      invoiceNumber: [/nro/i, /numero/i, /factura/i, /número/i],
+      amount: [/monto/i, /importe/i, /total/i],
+      issueDate: [/fecha/i, /emision/i, /emisión/i],
+      dueDate: [/vencimiento/i, /vence/i],
+    };
+    const regexes = patterns[target];
+    return availableHeaders.find((h) => regexes.some((r) => r.test(h)));
+  };
+
   const handleServerFile = async (file: File) => {
     setLastFile(file);
     const formData = new FormData();
@@ -335,6 +366,20 @@ export default function TangoMappingPage() {
       localidad: guessHeader('localidad', result.headers || headers || []),
       tipoEntidad: guessHeader('tipoEntidad', result.headers || headers || []),
       observaciones: guessHeader('observaciones', result.headers || headers || []),
+    });
+  };
+
+  const handleInvoiceDataExtracted = (data: any[], extractedHeaders: string[]) => {
+    setInvoiceRawData(data);
+    setInvoiceHeaders(extractedHeaders);
+    setInvoiceRows([]);
+    setInvoiceSelections({});
+    setInvoiceColumnSelection({
+      idTango: guessInvoiceHeader('idTango', extractedHeaders),
+      invoiceNumber: guessInvoiceHeader('invoiceNumber', extractedHeaders),
+      amount: guessInvoiceHeader('amount', extractedHeaders),
+      issueDate: guessInvoiceHeader('issueDate', extractedHeaders),
+      dueDate: guessInvoiceHeader('dueDate', extractedHeaders),
     });
   };
 
@@ -436,6 +481,201 @@ export default function TangoMappingPage() {
     setClientSelections({});
     setStep('review');
   };
+
+  const loadOpportunitiesForClients = async (clientIds: string[]) => {
+    const idsToLoad = clientIds.filter((id) => !opportunitiesByClient[id] && !loadingOpportunities[id]);
+    if (idsToLoad.length === 0) return;
+    setLoadingOpportunities((prev) =>
+      idsToLoad.reduce((acc, id) => ({ ...acc, [id]: true }), { ...prev })
+    );
+    const results = await Promise.all(
+      idsToLoad.map(async (clientId) => {
+        try {
+          const ops = await getOpportunitiesByClientId(clientId);
+          return { clientId, ops };
+        } catch {
+          return { clientId, ops: [] };
+        }
+      })
+    );
+    setOpportunitiesByClient((prev) => {
+      const updated = { ...prev };
+      results.forEach(({ clientId, ops }) => {
+        updated[clientId] = ops;
+      });
+      return updated;
+    });
+    setLoadingOpportunities((prev) => {
+      const updated = { ...prev };
+      idsToLoad.forEach((id) => delete updated[id]);
+      return updated;
+    });
+  };
+
+  const applyInvoiceColumnSelection = () => {
+    if (!billingEntity) {
+      toast({
+        title: 'Selecciona la empresa facturadora',
+        description: 'Indica si el archivo corresponde a Aire SRL o Aire Digital SAS.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const missing = INVOICE_REQUIRED_FIELDS.filter((field) => !invoiceColumnSelection[field]);
+    if (missing.length > 0) {
+      toast({
+        title: 'Campos requeridos',
+        description: 'Selecciona las columnas de ID Tango, Número y Monto de factura.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const mappedInvoices: InvoiceRow[] = invoiceRawData
+      .map((row, index) => {
+        const idTango = row[invoiceColumnSelection.idTango as string];
+        const invoiceNumber = row[invoiceColumnSelection.invoiceNumber as string];
+        const amountRaw = row[invoiceColumnSelection.amount as string];
+        if (!idTango || !invoiceNumber || amountRaw === undefined || amountRaw === null) return null;
+        const amount = Number(String(amountRaw).replace(',', '.'));
+        if (Number.isNaN(amount)) return null;
+        const issueDate = invoiceColumnSelection.issueDate ? row[invoiceColumnSelection.issueDate] : undefined;
+        const dueDate = invoiceColumnSelection.dueDate ? row[invoiceColumnSelection.dueDate] : undefined;
+        const rowIndex = typeof row.__row === 'number' ? row.__row : index;
+        return {
+          index: rowIndex,
+          idTango: String(idTango),
+          invoiceNumber: String(invoiceNumber),
+          amount,
+          issueDate: issueDate ? String(issueDate) : undefined,
+          dueDate: dueDate ? String(dueDate) : undefined,
+        } as InvoiceRow;
+      })
+      .filter(Boolean) as InvoiceRow[];
+
+    const normalize = (v: string) => normalizeText(v);
+    const resolveClientForId = (idValue: string) => {
+      if (billingEntity === 'aire-srl') {
+        return clients.find((c) => c.idAireSrl && normalize(c.idAireSrl) === normalize(idValue));
+      }
+      if (billingEntity === 'aire-digital') {
+        return clients.find((c) => c.idAireDigital && normalize(c.idAireDigital) === normalize(idValue));
+      }
+      return (
+        clients.find((c) => c.idTango && normalize(c.idTango) === normalize(idValue)) ||
+        clients.find((c) => c.tangoCompanyId && normalize(c.tangoCompanyId) === normalize(idValue))
+      );
+    };
+
+    const withClients = mappedInvoices.map((inv) => {
+      const client = resolveClientForId(inv.idTango);
+      return { ...inv, clientId: client?.id };
+    });
+    setInvoiceRows(withClients);
+    const clientIds = Array.from(new Set(withClients.map((i) => i.clientId).filter(Boolean) as string[]));
+    loadOpportunitiesForClients(clientIds);
+    setInvoiceSelections({});
+    toast({ title: 'Archivo de facturas listo', description: `${withClients.length} facturas detectadas.` });
+  };
+
+  const getOpportunityOptions = (clientId?: string) => {
+    if (!clientId) return [];
+    return opportunitiesByClient[clientId] || [];
+  };
+
+  const updateInvoiceSelection = (rowIndex: number, opportunityId?: string) => {
+    setInvoiceSelections((prev) => ({ ...prev, [rowIndex]: { opportunityId } }));
+  };
+
+  const handleApplyInvoices = async () => {
+    if (!userInfo) return;
+    let success = 0;
+    let failed = 0;
+
+    for (const invoice of invoiceRows) {
+      try {
+        if (!invoice.clientId) {
+          failed++;
+          continue;
+        }
+        const selected = invoiceSelections[invoice.index]?.opportunityId;
+        let opportunityId = selected;
+        if (!opportunityId) {
+          const opts = getOpportunityOptions(invoice.clientId);
+          opportunityId = opts[0]?.id;
+        }
+        if (opportunityId === '__create__' || !opportunityId) {
+          const client = clients.find((c) => c.id === invoice.clientId);
+          if (!client) {
+            failed++;
+            continue;
+          }
+          const newOppId = await createOpportunity(
+            {
+              title: `Factura ${invoice.invoiceNumber}`,
+              clientId: client.id,
+              clientName: client.denominacion || client.razonSocial,
+              value: invoice.amount,
+              stage: 'Nuevo',
+              closeDate: invoice.issueDate || new Date().toISOString().split('T')[0],
+              createdAt: new Date().toISOString(),
+            },
+            userInfo.id,
+            userInfo.name,
+            client.ownerName
+          );
+          opportunityId = newOppId;
+          setOpportunitiesByClient((prev) => ({
+            ...prev,
+            [client.id]: [
+              ...(prev[client.id] || []),
+              {
+                id: newOppId,
+                title: `Factura ${invoice.invoiceNumber}`,
+                clientId: client.id,
+                clientName: client.denominacion || client.razonSocial,
+                value: invoice.amount,
+                stage: 'Nuevo',
+                closeDate: invoice.issueDate || new Date().toISOString().split('T')[0],
+                createdAt: new Date().toISOString(),
+              } as Opportunity,
+            ],
+          }));
+        }
+
+        if (!opportunityId) {
+          failed++;
+          continue;
+        }
+
+        await createInvoice(
+          {
+            opportunityId,
+            invoiceNumber: invoice.invoiceNumber,
+            amount: invoice.amount,
+            date: invoice.issueDate || new Date().toISOString().split('T')[0],
+            dueDate: invoice.dueDate,
+            status: 'Generada',
+            dateGenerated: new Date().toISOString(),
+          },
+          userInfo.id,
+          userInfo.name,
+          clients.find((c) => c.id === invoice.clientId)?.ownerName || userInfo.name
+        );
+        success++;
+      } catch (error) {
+        console.error('Error importing invoice', error);
+        failed++;
+      }
+    }
+
+    toast({
+      title: 'Importación de facturas',
+      description: `${success} facturas cargadas${failed ? `, ${failed} con errores` : ''}.`,
+      variant: failed ? 'destructive' : 'default',
+    });
+  };
+
 
   const updateRowClient = (clientId: string, rowKey?: string) => {
     setClientSelections((prev) => ({ ...prev, [clientId]: rowKey ?? UNASSIGNED_CLIENT_VALUE }));
