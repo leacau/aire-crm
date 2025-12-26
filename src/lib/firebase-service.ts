@@ -99,6 +99,8 @@ export type ClientTangoUpdate = {
     rubro?: string;
     razonSocial?: string;
     denominacion?: string;
+    idAireSrl?: string;
+    idAireDigital?: string;
 };
 
 // --- Config Functions ---
@@ -1889,6 +1891,12 @@ export const updateClientTangoMapping = async (
     if (data.denominacion && data.denominacion.trim().length > 0) {
         updatePayload.denominacion = data.denominacion.trim();
     }
+    if (data.idAireSrl && data.idAireSrl.toString().trim().length > 0) {
+        updatePayload.idAireSrl = data.idAireSrl.toString().trim();
+    }
+    if (data.idAireDigital && data.idAireDigital.toString().trim().length > 0) {
+        updatePayload.idAireDigital = data.idAireDigital.toString().trim();
+    }
 
     await updateDoc(docRef, updatePayload);
     invalidateCache('clients');
@@ -1914,6 +1922,12 @@ export const updateClientTangoMapping = async (
     }
     if (updatePayload.denominacion && updatePayload.denominacion !== originalData.denominacion) {
         detailsParts.push(`Denominación <strong>${updatePayload.denominacion}</strong>`);
+    }
+    if (updatePayload.idAireSrl && updatePayload.idAireSrl !== (originalData as any).idAireSrl) {
+        detailsParts.push(`ID Aire SRL <strong>${updatePayload.idAireSrl}</strong>`);
+    }
+    if (updatePayload.idAireDigital && updatePayload.idAireDigital !== (originalData as any).idAireDigital) {
+        detailsParts.push(`ID Aire Digital <strong>${updatePayload.idAireDigital}</strong>`);
     }
     const detailText = detailsParts.length > 0 ? detailsParts.join(' y ') : 'datos de Tango';
 

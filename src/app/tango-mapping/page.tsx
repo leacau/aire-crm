@@ -26,6 +26,7 @@ import type { Client } from '@/lib/types';
 import { getClients, updateClientTangoMapping } from '@/lib/firebase-service';
 
 type MappingStep = 'upload' | 'map' | 'review';
+type BillingEntity = 'aire-srl' | 'aire-digital';
 
 type ColumnSelection = {
   razonSocial?: string;
@@ -54,6 +55,10 @@ const NO_CUIT_COLUMN = '__none__';
 const NO_OPTIONAL_COLUMN = '__none_optional__';
 const MAX_PREVIEW_ROWS = 200;
 const MAX_OPTIONS = 50;
+const BILLING_ENTITY_OPTIONS: { value: BillingEntity; label: string }[] = [
+  { value: 'aire-srl', label: 'Aire SRL' },
+  { value: 'aire-digital', label: 'Aire Digital SAS' },
+];
 
 const normalizeText = (value: string) => value?.toString().trim().toLowerCase() || '';
 
@@ -83,8 +88,15 @@ export default function TangoMappingPage() {
   const [lastFile, setLastFile] = useState<File | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [billingEntity, setBillingEntity] = useState<BillingEntity | undefined>();
 
   const canAccess = userInfo && hasManagementPrivileges(userInfo);
+
+  const billingEntityLabel = useMemo(() => {
+    if (billingEntity === 'aire-srl') return 'ID Aire SRL';
+    if (billingEntity === 'aire-digital') return 'ID Aire Digital';
+    return 'ID Tango';
+  }, [billingEntity]);
 
   useEffect(() => {
     if (!loading && !canAccess) {
@@ -97,28 +109,20 @@ export default function TangoMappingPage() {
       getClients()
         .then((list) =>
           setClients(
-            list
-              .map((c) => ({
-                id: c.id,
-                denominacion: c.denominacion,
-                razonSocial: c.razonSocial,
-                cuit: c.cuit,
-                ownerName: c.ownerName,
-                tangoCompanyId: c.tangoCompanyId,
-                idTango: c.idTango,
-                phone: c.phone,
-                email: c.email,
-                rubro: c.rubro,
-              }))
-              .filter(
-                (c) =>
-                  !c.cuit ||
-                  !(c.tangoCompanyId || c.idTango) ||
-                  !c.email ||
-                  !c.phone ||
-                  !c.rubro ||
-                  !c.denominacion
-              )
+            list.map((c) => ({
+              id: c.id,
+              denominacion: c.denominacion,
+              razonSocial: c.razonSocial,
+              cuit: c.cuit,
+              ownerName: c.ownerName,
+              tangoCompanyId: c.tangoCompanyId,
+              idTango: c.idTango,
+              idAireSrl: c.idAireSrl,
+              idAireDigital: c.idAireDigital,
+              phone: c.phone,
+              email: c.email,
+              rubro: c.rubro,
+            }))
           )
         )
         .catch(() => {
@@ -162,6 +166,8 @@ export default function TangoMappingPage() {
         normalizeText(client.denominacion || client.razonSocial).includes(query) ||
         normalizeText(client.cuit || '').includes(query) ||
         normalizeText(client.tangoCompanyId || client.idTango || '').includes(query) ||
+        normalizeText(client.idAireSrl || '').includes(query) ||
+        normalizeText(client.idAireDigital || '').includes(query) ||
         normalizeText(client.email || '').includes(query) ||
         normalizeText(client.phone || '').includes(query) ||
         normalizeText(client.rubro || '').includes(query)
@@ -287,6 +293,15 @@ export default function TangoMappingPage() {
   };
 
   const applyColumnSelection = () => {
+    if (!billingEntity) {
+      toast({
+        title: 'Selecciona la empresa facturadora',
+        description: 'Indica si el archivo corresponde a Aire SRL o Aire Digital SAS.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const missing = REQUIRED_FIELDS.filter((field) => !columnSelection[field]);
     if (missing.length > 0) {
       toast({
@@ -405,7 +420,7 @@ export default function TangoMappingPage() {
   }, [filteredClients, suggestions, clientSelections, sortDirection]);
 
   const handleApplyMapping = async () => {
-    if (!userInfo) return;
+    if (!userInfo || !billingEntity) return;
     const rowMap = new Map<string, TangoRow>();
     rows.forEach((row) => rowMap.set(`${row.index}-${row.idTango}`, row));
 
@@ -425,9 +440,19 @@ export default function TangoMappingPage() {
           rubro?: string;
           razonSocial?: string;
           denominacion?: string;
+          idAireSrl?: string;
+          idAireDigital?: string;
         } = {};
         if (!client.cuit && row.cuit) {
           data.cuit = row.cuit;
+        }
+        const clientIdAireSrl = client.idAireSrl;
+        const clientIdAireDigital = client.idAireDigital;
+        if (billingEntity === 'aire-srl' && !clientIdAireSrl && row.idTango) {
+          data.idAireSrl = row.idTango;
+        }
+        if (billingEntity === 'aire-digital' && !clientIdAireDigital && row.idTango) {
+          data.idAireDigital = row.idTango;
         }
         if (!client.tangoCompanyId && !client.idTango && row.idTango) {
           data.tangoCompanyId = row.idTango;
@@ -464,6 +489,8 @@ export default function TangoMappingPage() {
           rubro?: string;
           razonSocial?: string;
           denominacion?: string;
+          idAireSrl?: string;
+          idAireDigital?: string;
         };
       }[];
 
@@ -517,6 +544,26 @@ export default function TangoMappingPage() {
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
         {step === 'upload' && (
           <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Empresa facturadora</CardTitle>
+                    <CardDescription>Elegí si el ID Tango corresponde a Aire SRL o Aire Digital SAS.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Select value={billingEntity} onValueChange={(value: BillingEntity) => setBillingEntity(value)}>
+                      <SelectTrigger className="w-full md:w-80">
+                        <SelectValue placeholder="Seleccionar empresa" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BILLING_ENTITY_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </CardContent>
+                </Card>
                 <Card>
                   <CardHeader>
                     <CardTitle>Importar archivo de Tango</CardTitle>
@@ -720,6 +767,10 @@ export default function TangoMappingPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <Badge variant="secondary">Empresa: {billingEntityLabel}</Badge>
+                  {rowsTruncated && <span>Mostrando primeras {MAX_PREVIEW_ROWS} filas.</span>}
+                </div>
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <Input
                       placeholder="Buscar por cliente, CUIT o ID Tango"
@@ -754,7 +805,7 @@ export default function TangoMappingPage() {
                       <TableRow>
                         <TableHead>Cliente CRM</TableHead>
                         <TableHead>CUIT (CRM)</TableHead>
-                        <TableHead>ID Tango (CRM)</TableHead>
+                        <TableHead>{billingEntityLabel} (CRM)</TableHead>
                         <TableHead>Fila de archivo</TableHead>
                         <TableHead>Datos del archivo</TableHead>
                         <TableHead className="w-[180px]">
@@ -776,6 +827,12 @@ export default function TangoMappingPage() {
                         const suggestion = suggestions[client.id];
                         const row = rowMap.get(selectedRowKey);
                         const rowOptions = getRowOptions(client, rows);
+                        const clientBillingId =
+                          billingEntity === 'aire-srl'
+                            ? (client as any).idAireSrl
+                            : billingEntity === 'aire-digital'
+                            ? (client as any).idAireDigital
+                            : client.idTango || client.tangoCompanyId;
                         return (
                           <TableRow key={client.id}>
                             <TableCell className="max-w-[240px] break-words">
@@ -784,7 +841,7 @@ export default function TangoMappingPage() {
                             </TableCell>
                             <TableCell className="whitespace-nowrap">{client.cuit || '—'}</TableCell>
                             <TableCell className="whitespace-nowrap">
-                              {client.idTango || client.tangoCompanyId || '—'}
+                              {clientBillingId || '—'}
                             </TableCell>
                             <TableCell>
                               <Select
