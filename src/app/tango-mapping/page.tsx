@@ -634,7 +634,7 @@ export default function TangoMappingPage() {
         return {
           index: rowIndex,
           idTango: String(idTango),
-          invoiceNumber: String(invoiceNumber),
+          invoiceNumber: extractLastFiveDigits(String(invoiceNumber)) || String(invoiceNumber),
           amount,
           issueDate: parseDateValue(issueDateRaw),
           dueDate: parseDateValue(dueDateRaw),
@@ -679,6 +679,15 @@ export default function TangoMappingPage() {
     const targetLast5 = extractLastFiveDigits(inv.invoiceNumber);
     if (!targetLast5) return false;
     return existing.some((e) => extractLastFiveDigits(e.invoiceNumber || '') === targetLast5);
+  };
+
+  const removeInvoiceRow = (rowIndex: number) => {
+    setInvoiceRows((prev) => prev.filter((r) => r.index !== rowIndex));
+    setInvoiceSelections((prev) => {
+      const updated = { ...prev };
+      delete updated[rowIndex];
+      return updated;
+    });
   };
 
   const updateInvoiceSelection = (rowIndex: number, opportunityId?: string) => {
@@ -1677,6 +1686,7 @@ export default function TangoMappingPage() {
                           <TableHead>Fecha</TableHead>
                           <TableHead>Vencimiento</TableHead>
                           <TableHead>Propuesta</TableHead>
+                          <TableHead></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1724,6 +1734,11 @@ export default function TangoMappingPage() {
                                 ) : (
                                   <span className="text-sm text-muted-foreground">No disponible</span>
                                 )}
+                              </TableCell>
+                              <TableCell>
+                                <Button variant="ghost" size="sm" onClick={() => removeInvoiceRow(inv.index)}>
+                                  Eliminar
+                                </Button>
                               </TableCell>
                             </TableRow>
                           );
