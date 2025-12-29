@@ -80,8 +80,8 @@ type InvoiceRow = {
   idTango: string;
   invoiceNumber: string;
   amount: number;
-  issueDate?: string;
-  dueDate?: string;
+  issueDate?: string | null;
+  dueDate?: string | null;
   clientId?: string;
 };
 
@@ -109,6 +109,34 @@ const formatCuit = (value: string) => {
   const digits = extractDigits(value);
   if (digits.length !== 11) return value;
   return `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}`;
+};
+
+const excelSerialToDate = (serial: number) => {
+  const base = Date.UTC(1899, 11, 30);
+  const millis = Math.round(serial * 24 * 60 * 60 * 1000);
+  return new Date(base + millis);
+};
+
+const parseDateValue = (value: any): string | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const dt = excelSerialToDate(value);
+    return dt.toISOString().slice(0, 10);
+  }
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const ddmmyyyy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (ddmmyyyy) {
+    const [, d, m, y] = ddmmyyyy;
+    const year = y.length === 2 ? `20${y}` : y.padStart(4, '0');
+    const iso = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    return iso;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return raw;
 };
 
 const normalizeText = (value: string) => value?.toString().trim().toLowerCase() || '';
@@ -600,16 +628,16 @@ export default function TangoMappingPage() {
         if (!idTango || !invoiceNumber || amountRaw === undefined || amountRaw === null) return null;
         const amount = Number(String(amountRaw).replace(',', '.'));
         if (Number.isNaN(amount)) return null;
-        const issueDate = invoiceColumnSelection.issueDate ? row[invoiceColumnSelection.issueDate] : undefined;
-        const dueDate = invoiceColumnSelection.dueDate ? row[invoiceColumnSelection.dueDate] : undefined;
+        const issueDateRaw = invoiceColumnSelection.issueDate ? row[invoiceColumnSelection.issueDate] : undefined;
+        const dueDateRaw = invoiceColumnSelection.dueDate ? row[invoiceColumnSelection.dueDate] : undefined;
         const rowIndex = typeof row.__row === 'number' ? row.__row : index;
         return {
           index: rowIndex,
           idTango: String(idTango),
           invoiceNumber: String(invoiceNumber),
           amount,
-          issueDate: issueDate ? String(issueDate) : undefined,
-          dueDate: dueDate ? String(dueDate) : undefined,
+          issueDate: parseDateValue(issueDateRaw),
+          dueDate: parseDateValue(dueDateRaw),
         } as InvoiceRow;
       })
       .filter(Boolean) as InvoiceRow[];
@@ -743,7 +771,7 @@ export default function TangoMappingPage() {
             invoiceNumber: invoice.invoiceNumber,
             amount: invoice.amount,
             date: invoice.issueDate || new Date().toISOString().split('T')[0],
-            dueDate: invoice.dueDate,
+            dueDate: invoice.dueDate || null,
             status: 'Generada',
             dateGenerated: new Date().toISOString(),
           },
