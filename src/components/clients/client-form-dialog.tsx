@@ -23,6 +23,7 @@ import { Spinner } from '../ui/spinner';
 import { getAgencies, createClient, getClients } from '@/lib/firebase-service';
 import { Checkbox } from '../ui/checkbox';
 import { useAuth } from '@/hooks/use-auth';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 type ClientFormData = Partial<Omit<Client, 'id' | 'personIds' | 'deactivationHistory' | 'newClientDate'>>;
 
@@ -49,6 +50,8 @@ const initialFormData: ClientFormData = {
   agencyId: undefined,
   isNewClient: false,
   isDeactivated: false,
+  idAireSrl: '',
+  idAireDigital: '',
 };
 
 export function ClientFormDialog({
@@ -65,6 +68,7 @@ export function ClientFormDialog({
   const { toast } = useToast();
 
   const isEditing = client && client.id;
+  const canEditIds = userInfo ? hasManagementPrivileges(userInfo) : false;
 
   useEffect(() => {
     if (isOpen) {
@@ -116,6 +120,8 @@ export function ClientFormDialog({
       agencyId: formData.agencyId,
       isNewClient: formData.isNewClient || false,
       isDeactivated: formData.isDeactivated || false,
+      idAireSrl: canEditIds ? (formData.idAireSrl || '').trim() : client?.idAireSrl,
+      idAireDigital: canEditIds ? (formData.idAireDigital || '').trim() : client?.idAireDigital,
     };
     
     try {
@@ -201,7 +207,35 @@ export function ClientFormDialog({
             </Label>
             <Input id="cuit" name="cuit" value={formData.cuit} onChange={handleChange} className="col-span-3"/>
           </div>
-           <div className="grid grid-cols-4 items-center gap-4">
+          {isEditing && canEditIds && (
+            <>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="idAireSrl" className="text-right">
+                  ID Aire SRL / Tango
+                </Label>
+                <Input
+                  id="idAireSrl"
+                  name="idAireSrl"
+                  value={formData.idAireSrl || ''}
+                  onChange={handleChange}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="idAireDigital" className="text-right">
+                  ID Aire Digital / Tango
+                </Label>
+                <Input
+                  id="idAireDigital"
+                  name="idAireDigital"
+                  value={formData.idAireDigital || ''}
+                  onChange={handleChange}
+                  className="col-span-3"
+                />
+              </div>
+            </>
+          )}
+          <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="condicionIVA" className="text-right">
               Condición IVA
             </Label>
