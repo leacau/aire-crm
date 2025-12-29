@@ -662,12 +662,18 @@ export default function TangoMappingPage() {
     let success = 0;
     let failed = 0;
     let duplicates = 0;
+    const genericByClient: Record<string, string> = {};
 
     for (const invoice of invoiceRows) {
       try {
         if (!invoice.clientId) {
           failed++;
           continue;
+        }
+        const existingOps = getOpportunityOptions(invoice.clientId);
+        const existingGeneric = existingOps.find((op) => op.title === 'Genérica para carga de facturas');
+        if (existingGeneric) {
+          genericByClient[invoice.clientId] = existingGeneric.id;
         }
         const duplicate = isDuplicateInvoice(invoice);
         if (duplicate) {
@@ -680,15 +686,19 @@ export default function TangoMappingPage() {
           const opts = getOpportunityOptions(invoice.clientId);
           opportunityId = opts[0]?.id;
         }
-        if (opportunityId === '__create__' || !opportunityId) {
+        if (!opportunityId && genericByClient[invoice.clientId]) {
+          opportunityId = genericByClient[invoice.clientId];
+        }
+        if (opportunityId === '__create__' || (!opportunityId && existingOps.length === 0)) {
           const client = clients.find((c) => c.id === invoice.clientId);
           if (!client) {
             failed++;
             continue;
           }
+          const genericTitle = 'Genérica para carga de facturas';
           const newOppId = await createOpportunity(
             {
-              title: `Factura ${invoice.invoiceNumber}`,
+              title: existingOps.length === 0 ? genericTitle : `Factura ${invoice.invoiceNumber}`,
               clientId: client.id,
               clientName: client.denominacion || client.razonSocial,
               value: invoice.amount,
@@ -701,13 +711,16 @@ export default function TangoMappingPage() {
             client.ownerName
           );
           opportunityId = newOppId;
+          if (existingOps.length === 0) {
+            genericByClient[client.id] = newOppId;
+          }
           setOpportunitiesByClient((prev) => ({
             ...prev,
             [client.id]: [
               ...(prev[client.id] || []),
               {
                 id: newOppId,
-                title: `Factura ${invoice.invoiceNumber}`,
+                title: existingOps.length === 0 ? genericTitle : `Factura ${invoice.invoiceNumber}`,
                 clientId: client.id,
                 clientName: client.denominacion || client.razonSocial,
                 value: invoice.amount,
