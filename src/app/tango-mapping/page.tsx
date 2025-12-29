@@ -830,9 +830,9 @@ export default function TangoMappingPage() {
     const pendingUpdates = clients
       .map((client) => {
         const selection = clientSelections[client.id] ?? suggestions[client.id]?.rowKey;
-        if (!selection) return null;
-        const row = rowMap.get(selection);
-        if (!row) return null;
+        const manualId = (manualIdOverrides[client.id] || '').trim();
+        if (!selection && !manualId) return null;
+        const row = selection ? rowMap.get(selection) : undefined;
 
         const data: {
           cuit?: string;
@@ -851,48 +851,51 @@ export default function TangoMappingPage() {
           tipoEntidad?: string;
           observaciones?: string;
         } = {};
-        const rowCuitDigits = extractDigits(row.cuit);
-        if (rowCuitDigits) {
+        const idToUse = manualId || row?.idTango;
+        if (row?.cuit) {
           data.cuit = formatCuit(row.cuit || '');
         }
-        if (billingEntity === 'aire-srl' && row.idTango) {
-          data.idAireSrl = row.idTango;
+        if (billingEntity === 'aire-srl' && idToUse) {
+          data.idAireSrl = idToUse;
         }
-        if (billingEntity === 'aire-digital' && row.idTango) {
-          data.idAireDigital = row.idTango;
+        if (billingEntity === 'aire-digital' && idToUse) {
+          data.idAireDigital = idToUse;
         }
-        if (row.idTango) {
-          data.tangoCompanyId = row.idTango;
-          data.idTango = row.idTango;
+        if (idToUse) {
+          data.tangoCompanyId = idToUse;
+          data.idTango = idToUse;
         }
-        if (row.provincia) {
+        if (row?.provincia) {
           data.provincia = row.provincia;
         }
-        if (row.localidad) {
+        if (row?.localidad) {
           data.localidad = row.localidad;
         }
-        if (row.razonSocial) {
+        if (row?.razonSocial) {
           data.razonSocial = row.razonSocial;
         }
-        if (!client.email && row.email) {
+        if (row?.email && !client.email) {
           data.email = row.email;
         }
-        if (!client.phone && row.phone) {
+        if (row?.phone && !client.phone) {
           data.phone = row.phone;
         }
-        if (!client.rubro && row.rubro) {
+        if (row?.rubro && !client.rubro) {
           data.rubro = row.rubro;
         }
-        if (!client.denominacion && row.denominacion) {
+        if (row?.denominacion && !client.denominacion) {
           data.denominacion = row.denominacion;
         }
-        if (!client.condicionIVA && row.condicionIVA) {
+        if (row?.razonSocial && !client.razonSocial) {
+          data.razonSocial = row.razonSocial;
+        }
+        if (row?.condicionIVA && !client.condicionIVA) {
           data.condicionIVA = row.condicionIVA as any;
         }
-        if (!client.tipoEntidad && row.tipoEntidad) {
+        if (row?.tipoEntidad && !client.tipoEntidad) {
           data.tipoEntidad = row.tipoEntidad as any;
         }
-        if (!client.observaciones && row.observaciones) {
+        if (row?.observaciones && !client.observaciones) {
           data.observaciones = row.observaciones;
         }
 
