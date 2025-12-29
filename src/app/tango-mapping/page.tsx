@@ -103,6 +103,14 @@ const extractLastFiveDigits = (value: string) => {
   return digits.slice(-5);
 };
 
+const extractDigits = (value?: string) => (value?.match(/\d/g) || []).join('');
+
+const formatCuit = (value: string) => {
+  const digits = extractDigits(value);
+  if (digits.length !== 11) return value;
+  return `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}`;
+};
+
 const normalizeText = (value: string) => value?.toString().trim().toLowerCase() || '';
 
 type ClientSuggestion = {
@@ -236,8 +244,8 @@ export default function TangoMappingPage() {
     const options: TangoRow[] = [];
 
     if (client.cuit) {
-      const normalizedCuit = normalizeText(client.cuit);
-      options.push(...allRows.filter((r) => r.cuit && normalizeText(r.cuit) === normalizedCuit));
+      const normalizedCuit = extractDigits(client.cuit);
+      options.push(...allRows.filter((r) => r.cuit && extractDigits(r.cuit) === normalizedCuit));
     }
 
     if (options.length < MAX_OPTIONS) {
@@ -447,18 +455,32 @@ export default function TangoMappingPage() {
       })
       .filter(Boolean) as TangoRow[];
 
-    const mappedNames = mappedRows.map((r) => r.denominacion || r.razonSocial);
+    const shouldExcludeByTangoId = (row: TangoRow) => {
+      const targetId = normalizeText(row.idTango);
+      if (!targetId) return false;
+      if (billingEntity === 'aire-srl') {
+        return clients.some((c) => normalizeText(c.idAireSrl || '') === targetId);
+      }
+      if (billingEntity === 'aire-digital') {
+        return clients.some((c) => normalizeText(c.idAireDigital || '') === targetId);
+      }
+      return clients.some((c) => normalizeText(c.idTango || c.tangoCompanyId || '') === targetId);
+    };
+
+    const filteredRows = mappedRows.filter((row) => !shouldExcludeByTangoId(row));
+
+    const mappedNames = filteredRows.map((r) => r.denominacion || r.razonSocial);
     const allowFuzzy = mappedNames.length <= 2000; // evitar uso intensivo de memoria con archivos grandes
     const newSuggestions: Record<string, ClientSuggestion> = {};
 
     clients.forEach((client) => {
-      const normalizedCuit = client.cuit ? normalizeText(client.cuit) : '';
+      const normalizedCuit = extractDigits(client.cuit);
       let rowKey: string | undefined;
       let matchedBy: ClientSuggestion['matchedBy'];
       let matchScore: number | undefined;
 
       if (normalizedCuit) {
-        const match = mappedRows.find((row) => row.cuit && normalizeText(row.cuit) === normalizedCuit);
+        const match = filteredRows.find((row) => row.cuit && extractDigits(row.cuit) === normalizedCuit);
         if (match) {
           rowKey = `${match.index}-${match.idTango}`;
           matchedBy = 'cuit';
@@ -469,7 +491,7 @@ export default function TangoMappingPage() {
       if (!rowKey && allowFuzzy) {
         const { bestMatch } = findBestMatch(client.denominacion || client.razonSocial, mappedNames);
         if (bestMatch.rating === 1) {
-          const match = mappedRows.find(
+          const match = filteredRows.find(
             (r) => (r.denominacion || r.razonSocial) === bestMatch.target
           );
           if (match) {
@@ -483,7 +505,7 @@ export default function TangoMappingPage() {
       newSuggestions[client.id] = { rowKey, matchedBy, matchScore };
     });
 
-    setRows(mappedRows);
+    setRows(filteredRows);
     setRawData([]); // liberar memoria del archivo original
     rowOptionsCache.current = {};
     setSuggestions(newSuggestions);
@@ -816,8 +838,10 @@ export default function TangoMappingPage() {
           tipoEntidad?: string;
           observaciones?: string;
         } = {};
-        if (!client.cuit && row.cuit) {
-          data.cuit = row.cuit;
+        const clientCuitDigits = extractDigits(client.cuit);
+        const rowCuitDigits = extractDigits(row.cuit);
+        if (rowCuitDigits && (!client.cuit || clientCuitDigits === rowCuitDigits)) {
+          data.cuit = formatCuit(row.cuit || '');
         }
         const clientIdAireSrl = client.idAireSrl;
         const clientIdAireDigital = client.idAireDigital;
