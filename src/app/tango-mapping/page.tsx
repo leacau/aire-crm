@@ -838,22 +838,28 @@ export default function TangoMappingPage() {
           tipoEntidad?: string;
           observaciones?: string;
         } = {};
-        const clientCuitDigits = extractDigits(client.cuit);
         const rowCuitDigits = extractDigits(row.cuit);
-        if (rowCuitDigits && (!client.cuit || clientCuitDigits === rowCuitDigits)) {
+        if (rowCuitDigits) {
           data.cuit = formatCuit(row.cuit || '');
         }
-        const clientIdAireSrl = client.idAireSrl;
-        const clientIdAireDigital = client.idAireDigital;
-        if (billingEntity === 'aire-srl' && !clientIdAireSrl && row.idTango) {
+        if (billingEntity === 'aire-srl' && row.idTango) {
           data.idAireSrl = row.idTango;
         }
-        if (billingEntity === 'aire-digital' && !clientIdAireDigital && row.idTango) {
+        if (billingEntity === 'aire-digital' && row.idTango) {
           data.idAireDigital = row.idTango;
         }
-        if (!client.tangoCompanyId && !client.idTango && row.idTango) {
+        if (row.idTango) {
           data.tangoCompanyId = row.idTango;
           data.idTango = row.idTango;
+        }
+        if (row.provincia) {
+          data.provincia = row.provincia;
+        }
+        if (row.localidad) {
+          data.localidad = row.localidad;
+        }
+        if (row.razonSocial) {
+          data.razonSocial = row.razonSocial;
         }
         if (!client.email && row.email) {
           data.email = row.email;
@@ -867,17 +873,8 @@ export default function TangoMappingPage() {
         if (!client.denominacion && row.denominacion) {
           data.denominacion = row.denominacion;
         }
-        if (!client.razonSocial && row.razonSocial) {
-          data.razonSocial = row.razonSocial;
-        }
         if (!client.condicionIVA && row.condicionIVA) {
           data.condicionIVA = row.condicionIVA as any;
-        }
-        if (!client.provincia && row.provincia) {
-          data.provincia = row.provincia;
-        }
-        if (!client.localidad && row.localidad) {
-          data.localidad = row.localidad;
         }
         if (!client.tipoEntidad && row.tipoEntidad) {
           data.tipoEntidad = row.tipoEntidad as any;
