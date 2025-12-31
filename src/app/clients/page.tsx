@@ -164,6 +164,7 @@ export default function ClientsPage() {
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
   const [selectedOpportunityStage, setSelectedOpportunityStage] = useState('all');
+  const [selectedRubro, setSelectedRubro] = useState('all');
   
   const [isActivityFormOpen, setIsActivityFormOpen] = useState(false);
   const [selectedClientForActivity, setSelectedClientForActivity] = useState<Client | null>(null);
@@ -217,7 +218,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     setRowSelection({});
-  }, [searchTerm, showOnlyMyClients, showDuplicates, selectedAdvisor, selectedOpportunityStage]);
+  }, [searchTerm, showOnlyMyClients, showDuplicates, selectedAdvisor, selectedOpportunityStage, selectedRubro]);
   
    const clientOpportunityData = useMemo(() => {
     if (opportunities.length === 0) return {};
@@ -255,6 +256,14 @@ export default function ClientsPage() {
     });
     return Array.from(stages);
   }, [opportunities]);
+
+  const availableRubros = useMemo(() => {
+    const rubros = new Set<string>();
+    clients.forEach((client) => {
+      if (client.rubro) rubros.add(client.rubro);
+    });
+    return Array.from(rubros).sort((a, b) => a.localeCompare(b));
+  }, [clients]);
 
 
   const displayedClients = useMemo(() => {
@@ -310,6 +319,11 @@ export default function ClientsPage() {
       );
     }
 
+    if (selectedRubro !== 'all') {
+      const normalizedRubro = selectedRubro.toLowerCase();
+      clientsToShow = clientsToShow.filter((client) => (client.rubro || '').toLowerCase() === normalizedRubro);
+    }
+
 
     if (searchTerm.length < 3) {
       return clientsToShow;
@@ -336,7 +350,35 @@ export default function ClientsPage() {
     selectedOpportunityStage,
     opportunities,
     clientOpportunityData,
+    selectedRubro,
   ]);
+
+  const handleExport = () => {
+    if (displayedClients.length === 0) {
+      toast({ title: 'Sin datos', description: 'No hay clientes para exportar con los filtros actuales.', variant: 'destructive' });
+      return;
+    }
+    const headers = ['Denominación', 'Razón Social', 'Rubro', 'CUIT', 'Email', 'Teléfono', 'Propietario'];
+    const rows = displayedClients.map((client) => [
+      client.denominacion || '',
+      client.razonSocial || '',
+      client.rubro || '',
+      client.cuit || '',
+      client.email || '',
+      client.phone || '',
+      client.ownerName || '',
+    ]);
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'clientes.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
   
   const handleBulkDelete = async () => {
     const idsToDelete = Object.keys(rowSelection);
@@ -460,7 +502,7 @@ export default function ClientsPage() {
         accessorKey: 'denominacion',
         header: 'Denominación',
         enableSorting: true,
-        size: 250,
+        size: 260,
         cell: ({ row }) => {
           const client = row.original;
           return (
@@ -498,61 +540,15 @@ export default function ClientsPage() {
         accessorKey: 'razonSocial',
         header: 'Razón Social',
         enableSorting: true,
-        size: 250,
+        size: 240,
         cell: ({ row }) => <div className="truncate" title={row.original.razonSocial}>{row.original.razonSocial}</div>,
       },
       {
-        id: 'quickActions',
-        header: 'Acciones Rápidas',
-        size: 150,
-        cell: ({ row }) => {
-          const client = row.original;
-          const isOwner = userInfo?.id === client.ownerId;
-          if (!isBoss && !isOwner) return null;
-
-          return (
-            <div className="flex items-center justify-start gap-1">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleOpenActivityForm(client); }}>
-                      <Activity className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>Registrar Actividad</p></TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              {client.email && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <a href={`mailto:${client.email}`} onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Mail className="h-4 w-4" />
-                        </Button>
-                      </a>
-                    </TooltipTrigger>
-                    <TooltipContent><p>Enviar Correo</p></TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-               {client.phone && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                       <a href={`https://wa.me/${client.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MessageSquare className="h-4 w-4" />
-                        </Button>
-                       </a>
-                    </TooltipTrigger>
-                    <TooltipContent><p>Enviar WhatsApp</p></TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </div>
-          );
-        },
+        accessorKey: 'rubro',
+        header: 'Rubro',
+        enableSorting: true,
+        size: 180,
+        cell: ({ row }) => <div className="truncate" title={row.original.rubro}>{row.original.rubro || '—'}</div>,
       },
       {
         id: 'actions',
@@ -668,13 +664,30 @@ export default function ClientsPage() {
             ))}
           </SelectContent>
         </Select>
-         <div className="flex items-center space-x-2">
-            <Checkbox id="my-clients" name="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
-            <Label htmlFor="my-clients" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis clientes</Label>
-        </div>
+        <Select value={selectedRubro} onValueChange={setSelectedRubro}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="Filtrar por rubro" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los rubros</SelectItem>
+            {availableRubros.map((rubro) => (
+              <SelectItem key={rubro} value={rubro}>
+                {rubro}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center space-x-2">
+           <Checkbox id="my-clients" name="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
+           <Label htmlFor="my-clients" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis clientes</Label>
+       </div>
         <Button variant="outline" onClick={() => setShowDuplicates(s => !s)}>
           <CopyCheck className="mr-2 h-4 w-4" />
           {showDuplicates ? 'Ver Todos' : 'Buscar Duplicados'}
+        </Button>
+        <Button variant="outline" onClick={handleExport}>
+          <FileDown className="mr-2 h-4 w-4" />
+          Exportar Excel
         </Button>
         <Button onClick={() => setIsFormOpen(true)}>
           <PlusCircle className="mr-2" />
@@ -738,4 +751,3 @@ export default function ClientsPage() {
 }
 
     
-
