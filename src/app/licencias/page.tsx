@@ -197,9 +197,7 @@ export default function LicensesPage() {
     const today = new Date();
     const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
     const start = format(new Date(request.startDate), "d 'de' MMMM 'de' yyyy", { locale: es });
-    console.log('requestday formated: ', request.startDate);
-    console.log('requestday formated + 1: ', (request.startDate + 1));
-    console.log('requestday newDate: ', new Date(request.startDate));
+    console.log('requestday formated: ', format(parseISO(request.startDate), 'P', { locale: es }));
     const end = format(new Date(request.endDate), "d 'de' MMMM 'de' yyyy", { locale: es });
     const returnDate = format(new Date(request.returnDate), "d 'de' MMMM 'de' yyyy", { locale: es });
     const remaining = pendingDays ?? applicant?.vacationDays ?? 0;
