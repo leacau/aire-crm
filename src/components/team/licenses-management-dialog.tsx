@@ -164,7 +164,7 @@ export function LicensesManagementDialog({ isOpen, onOpenChange }: LicensesManag
     setEditingRequest(null);
   };
 
-  const buildLicenseDocument = (request: VacationRequest) => {
+  const buildLicenseDocument = (request: VacationRequest, logoUrl: string) => {
     const today = new Date();
     const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
     const start = format(new Date(request.startDate), "d 'de' MMMM 'de' yyyy", { locale: es });
@@ -173,6 +173,9 @@ export function LicensesManagementDialog({ isOpen, onOpenChange }: LicensesManag
 
     return `
       <div style="font-family: Arial, sans-serif; color: #222; line-height: 1.6; max-width: 900px; margin: 0 auto; padding: 24px;">
+        <div style="margin-top:5cm; margin-bottom:32px; text-align:center;">
+          <img src="${logoUrl}" alt="Aire de Santa Fe" style="max-width:340px; width:100%; height:auto;" />
+        </div>
         <div style="text-align:right; margin-bottom:24px;">Santa Fé, ${todayFormatted}</div>
         <p>Estimado/a <strong>${request.userName}</strong></p>
         <p>Mediante la presente le informamos la autorización de la solicitud de <strong>${request.daysRequested}</strong> días de vacaciones.</p>
@@ -190,7 +193,8 @@ export function LicensesManagementDialog({ isOpen, onOpenChange }: LicensesManag
   };
 
   const handlePrint = (request: VacationRequest) => {
-    const html = buildLicenseDocument(request);
+    const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/aire-logo.svg` : '/aire-logo.svg';
+    const html = buildLicenseDocument(request, logoUrl);
     const printWindow = window.open('', '_blank', 'width=900,height=900');
     if (printWindow) {
       printWindow.document.write(`<!doctype html><html><head><title>Constancia de Licencia</title></head><body>${html}</body></html>`);
