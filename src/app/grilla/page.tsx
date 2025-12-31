@@ -26,6 +26,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { GrillaPdf } from '@/components/grilla/grilla-pdf';
+import { hasPermission } from '@/lib/permissions';
 
 const parseDateString = (dateString: string) => {
     const [year, month, day] = dateString.split('-').map(Number);
@@ -56,7 +57,7 @@ export default function GrillaPage() {
   const [pdfOptions, setPdfOptions] = useState({ dateType: 'generic', includeItems: true });
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-  const canManage = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion';
+  const canManage = userInfo ? hasPermission(userInfo, 'Grilla', 'edit') : false;
 
 
   const fetchPrograms = useCallback(async () => {

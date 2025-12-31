@@ -25,6 +25,7 @@ import { es } from 'date-fns/locale';
 import { useAuth } from '@/hooks/use-auth';
 import { Trash2 } from 'lucide-react';
 import { Input } from '../ui/input';
+import { hasPermission } from '@/lib/permissions';
 
 interface CommercialItemFormDialogProps {
   isOpen: boolean;
@@ -43,7 +44,7 @@ const parseDateString = (dateString: string) => {
 
 
 export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelete, item, programs, preselectedData }: CommercialItemFormDialogProps) {
-  const { userInfo, isBoss } = useAuth();
+  const { userInfo } = useAuth();
   const [programId, setProgramId] = useState<string | undefined>();
   const [type, setType] = useState<CommercialItem['type']>('Pauta');
   const [title, setTitle] = useState('');
@@ -60,7 +61,7 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
   
   const { toast } = useToast();
   const isEditing = !!item;
-  const canManage = isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Gerencia';
+  const canManage = userInfo ? hasPermission(userInfo, 'Grilla', 'edit') : false;
 
   useEffect(() => {
     if (isOpen) {

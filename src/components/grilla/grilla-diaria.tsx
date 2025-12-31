@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Building, CircleDollarSign, PlusCircle, InfoIcon } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '../ui/button';
+import { hasPermission } from '@/lib/permissions';
 
 interface GrillaDiariaProps {
   date: Date;
@@ -36,6 +37,7 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
   const [items, setItems] = useState<CommercialItem[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasGrillaEditPermission = userInfo ? hasPermission(userInfo, 'Grilla', 'edit') : false;
 
   const formattedDate = format(date, 'yyyy-MM-dd');
 
@@ -61,12 +63,12 @@ export function GrillaDiaria({ date, programs, canManage, onItemClick, onAddItem
   }, [fetchData]);
 
   const userClientIds = useMemo(() => {
-    if (!userInfo || canManage) return null;
+    if (!userInfo || canManage || hasGrillaEditPermission) return null;
     return new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
-  }, [clients, userInfo, canManage]);
+  }, [clients, userInfo, canManage, hasGrillaEditPermission]);
 
   const canEditItem = (item: CommercialItem) => {
-    if (canManage) return true;
+    if (canManage || hasGrillaEditPermission) return true;
     if (item.status === 'Disponible') return false; // Advisors cannot edit available items
     if (userClientIds && item.clientId) {
       return userClientIds.has(item.clientId);

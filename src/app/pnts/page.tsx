@@ -20,6 +20,7 @@ import { DeleteItemDialog } from '@/components/grilla/delete-item-dialog';
 import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PntViewByProgram } from '@/components/pnts/pnt-view-by-program';
+import { hasPermission } from '@/lib/permissions';
 
 
 interface PntItemRowProps {
@@ -64,7 +65,7 @@ const PntItemRow: React.FC<PntItemRowProps> = ({ item, onClick }) => {
 };
 
 export default function PntsPage() {
-  const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const { userInfo, loading: authLoading } = useAuth();
   const { toast } = useToast();
   
   const [currentDate, setCurrentDate] = useState(startOfToday());
@@ -81,7 +82,7 @@ export default function PntsPage() {
   const [itemToDelete, setItemToDelete] = useState<CommercialItem | null>(null);
 
   const dayOfWeek = useMemo(() => currentDate.getDay() === 0 ? 7 : currentDate.getDay(), [currentDate]);
-  const canManage = isBoss || userInfo?.role === 'Gerencia';
+  const canManage = userInfo ? hasPermission(userInfo, 'PNTs', 'edit') : false;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
