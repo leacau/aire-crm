@@ -203,8 +203,8 @@ export default function LicensesPage() {
 
     return `
       <div style="font-family: Arial, sans-serif; color: #222; line-height: 1.6; max-width: 900px; margin: 0 auto; padding: 24px;">
-        <div style="margin-top:5cm; margin-bottom:32px; text-align:center;">
-          <img src="${logoUrl}" alt="Aire de Santa Fe" style="max-width:340px; width:100%; height:auto;" />
+        <div style="margin-top:32px; margin-bottom:32px; text-align:center;">
+          <img src="${logoUrl}" alt="Aire de Santa Fe" style="max-width:340px; width:200px; height:auto;" />
         </div>
         <div style="text-align:right; margin-bottom:24px;">Santa Fé, ${todayFormatted}</div>
         <p>Estimado/a <strong>${request.userName}</strong></p>
