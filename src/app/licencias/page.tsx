@@ -14,7 +14,6 @@ import { PlusCircle } from 'lucide-react';
 import { LicensesTable } from '@/components/licencias/licenses-table';
 import { LicenseRequestFormDialog } from '@/components/licencias/license-request-form-dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { format, parseISO } from 'date-fns';
 import { sendEmail } from '@/lib/google-gmail-service';
