@@ -18,7 +18,7 @@ import {
 } from '../ui/tooltip';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
-import { useAuth } from '@/hooks/use-auth.tsx';
+import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { getAllOpportunities, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';

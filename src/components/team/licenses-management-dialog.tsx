@@ -29,6 +29,7 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Card } from '../ui/card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
+import { sendEmail } from '@/lib/google-gmail-service';
 
 interface LicensesManagementDialogProps {
   isOpen: boolean;
@@ -119,17 +120,22 @@ export function LicensesManagementDialog({ isOpen, onOpenChange }: LicensesManag
     fetchData();
   };
 
-  const handleApprove = async (requestId: string) => {
+  const handleUpdateRequest = async (request: VacationRequest, status: 'Aprobado' | 'Rechazado') => {
     if (!userInfo) return;
+    const applicant = users.find((u) => u.id === request.userId);
     try {
-      const accessToken = await getGoogleAccessToken();
-      if (!accessToken) throw new Error("No se pudo obtener el token de acceso.");
-      await approveVacationRequest(requestId, userInfo!.id, accessToken);
-      toast({ title: 'Solicitud Aprobada' });
+      const { emailPayload } = await approveVacationRequest(request.id, status, userInfo.id, applicant?.email || null);
+      toast({ title: `Solicitud ${status === 'Aprobado' ? 'aprobada' : 'rechazada'}` });
+      if (emailPayload) {
+        const accessToken = await getGoogleAccessToken();
+        if (accessToken) {
+          sendEmail({ ...emailPayload, accessToken }).catch((err) => console.error('Error enviando email de licencia:', err));
+        }
+      }
       fetchData();
     } catch (error) {
-      console.error("Error approving request:", error);
-      toast({ title: 'Error al aprobar', variant: 'destructive', description: (error as Error).message });
+      console.error("Error approving/rejecting request:", error);
+      toast({ title: 'Error al actualizar', variant: 'destructive', description: (error as Error).message });
     }
   };
 
@@ -158,6 +164,42 @@ export function LicensesManagementDialog({ isOpen, onOpenChange }: LicensesManag
     setEditingRequest(null);
   };
 
+  const buildLicenseDocument = (request: VacationRequest) => {
+    const today = new Date();
+    const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
+    const start = format(new Date(request.startDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+    const end = format(new Date(request.endDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+    const returnDate = format(new Date(request.returnDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+
+    return `
+      <div style="font-family: Arial, sans-serif; color: #222; line-height: 1.6; max-width: 900px; margin: 0 auto; padding: 24px;">
+        <div style="text-align:right; margin-bottom:24px;">Santa Fé, ${todayFormatted}</div>
+        <p>Estimado/a <strong>${request.userName}</strong></p>
+        <p>Mediante la presente le informamos la autorización de la solicitud de <strong>${request.daysRequested}</strong> días de vacaciones.</p>
+        <p>Del <strong>${start}</strong> al <strong>${end}</strong> de acuerdo con el período vacacional correspondiente al año actual.</p>
+        <p>La fecha de reincorporación a la actividad laboral será el día <strong>${returnDate}</strong>.</p>
+        <p>Saludos cordiales.</p>
+        <div style="display:flex; gap:64px; margin-top:48px; flex-wrap:wrap;">
+          <span>Gte. de área</span>
+          <span>Jefe de área</span>
+          <span>Área de rrhh</span>
+        </div>
+        <p style="margin-top:48px;">Notificado: ____________________</p>
+      </div>
+    `;
+  };
+
+  const handlePrint = (request: VacationRequest) => {
+    const html = buildLicenseDocument(request);
+    const printWindow = window.open('', '_blank', 'width=900,height=900');
+    if (printWindow) {
+      printWindow.document.write(`<!doctype html><html><head><title>Constancia de Licencia</title></head><body>${html}</body></html>`);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  };
+
   const tableColumns = useMemo<ColumnDef<VacationRequest>[]>(() => [
     { accessorKey: 'userName', header: 'Asesor', cell: ({ row }) => <div className="font-medium">{row.original.userName}</div> },
     { accessorKey: 'startDate', header: 'Desde', cell: ({ row }) => format(new Date(row.original.startDate), 'P', { locale: es }) },
@@ -166,13 +208,13 @@ export function LicensesManagementDialog({ isOpen, onOpenChange }: LicensesManag
     { accessorKey: 'returnDate', header: 'Reincorpora', cell: ({ row }) => format(new Date(row.original.returnDate), 'P', { locale: es }) },
     { id: 'actions', cell: ({ row }) => (
         <div className="flex items-center justify-end gap-2">
-            {row.original.status === 'Pendiente' && <Button size="sm" onClick={() => handleApprove(row.original.id)}>Aprobar</Button>}
+            {row.original.status === 'Pendiente' && <Button size="sm" onClick={() => handleUpdateRequest(row.original, 'Aprobado')}>Aprobar</Button>}
             <Button size="sm" variant="outline" onClick={() => openForm(row.original)}>Editar</Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setRequestToDelete(row.original)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
         </div>
       )
     },
-  ], [handleApprove]);
+  ], [handleUpdateRequest]);
 
 
   return (
@@ -217,12 +259,20 @@ export function LicensesManagementDialog({ isOpen, onOpenChange }: LicensesManag
                     </div>
                 </div>
             ) : (
-                <div className="flex-1 overflow-hidden flex flex-col">
+                    <div className="flex-1 overflow-hidden flex flex-col">
                     <div className="flex justify-end mb-4">
                         <Button onClick={() => openForm(null)}><PlusCircle className="mr-2 h-4 w-4" /> Nueva Solicitud</Button>
                     </div>
                     <div className="flex-1 overflow-y-auto">
-                        <LicensesTable requests={requests} isManagerView={true} onUpdateRequest={handleApprove} />
+                        <LicensesTable
+                          requests={requests}
+                          isManagerView={true}
+                          onUpdateRequest={handleUpdateRequest}
+                          onEdit={openForm}
+                          onDelete={setRequestToDelete}
+                          currentUserId={userInfo?.id || ''}
+                          onPrint={handlePrint}
+                        />
                     </div>
                 </div>
             )

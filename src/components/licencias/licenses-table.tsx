@@ -19,6 +19,7 @@ interface LicensesTableProps {
   onEdit: (request: VacationRequest) => void;
   onDelete: (request: VacationRequest) => void;
   onUpdateRequest: (request: VacationRequest, newStatus: 'Aprobado' | 'Rechazado') => void;
+  onPrint: (request: VacationRequest) => void;
 }
 
 const getStatusBadge = (status: VacationRequest['status']) => {
@@ -30,7 +31,7 @@ const getStatusBadge = (status: VacationRequest['status']) => {
   return <Badge className={cn(variants[status], 'capitalize')}>{status}</Badge>;
 };
 
-export function LicensesTable({ requests, isManagerView, currentUserId, onEdit, onDelete, onUpdateRequest }: LicensesTableProps) {
+export function LicensesTable({ requests, isManagerView, currentUserId, onEdit, onDelete, onUpdateRequest, onPrint }: LicensesTableProps) {
   return (
     <div className="rounded-md border">
       <Table>
@@ -82,6 +83,11 @@ export function LicensesTable({ requests, isManagerView, currentUserId, onEdit, 
                               <DropdownMenuItem onClick={() => onUpdateRequest(req, 'Aprobado')}>Aprobar</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => onUpdateRequest(req, 'Rechazado')}>Rechazar</DropdownMenuItem>
                             </>
+                          )}
+                          {req.status === 'Aprobado' && (
+                            <DropdownMenuItem onClick={() => onPrint(req)}>
+                              Imprimir constancia
+                            </DropdownMenuItem>
                           )}
                           { (isManagerView || (isOwner && req.status === 'Pendiente')) && 
                             <DropdownMenuItem className="text-destructive" onClick={() => onDelete(req)}>

@@ -468,6 +468,8 @@ export const approveVacationRequest = async (
 ): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
     const requestRef = doc(db, 'licencias', requestId);
 
+    let pendingDaysAfterUpdate: number | null = null;
+
     await runTransaction(db, async (transaction) => {
         const requestDoc = await transaction.get(requestRef);
         if (!requestDoc.exists()) {
@@ -501,6 +503,7 @@ export const approveVacationRequest = async (
             transaction.update(userRef, { vacationDays: newVacationDays });
             invalidateCache('users');
         }
+        pendingDaysAfterUpdate = newVacationDays;
         
         transaction.update(requestRef, updatePayload);
     });
@@ -510,15 +513,49 @@ export const approveVacationRequest = async (
     
     let emailPayload: { to: string, subject: string, body: string } | null = null;
     if (applicantEmail) {
-        emailPayload = {
-            to: applicantEmail,
-            subject: `Tu Solicitud de Licencia ha sido ${newStatus}`,
-            body: `
-                <p>Hola ${requestAfterUpdate.userName},</p>
-                <p>Tu solicitud de licencia para el período del <strong>${format(new Date(requestAfterUpdate.startDate), 'P', { locale: es })}</strong> al <strong>${format(new Date(requestAfterUpdate.endDate), 'P', { locale: es })}</strong> ha sido <strong>${newStatus}</strong>.</p>
-                <p>Puedes ver el estado de tus solicitudes en el CRM.</p>
-            `,
-        };
+        if (newStatus === 'Aprobado') {
+            const today = new Date();
+            const start = format(new Date(requestAfterUpdate.startDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+            const end = format(new Date(requestAfterUpdate.endDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+            const returnDate = format(new Date(requestAfterUpdate.returnDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+            const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
+            const pending = pendingDaysAfterUpdate ?? 0;
+
+            const approvalLetter = `
+                <div style="font-family: Arial, sans-serif; color: #222; line-height: 1.6;">
+                  <div style="text-align: right; margin-bottom: 16px;">Santa Fé, ${todayFormatted}</div>
+                  <p>Estimado/a <strong>${requestAfterUpdate.userName}</strong></p>
+                  <p>Mediante la presente le informamos la autorización de la solicitud de <strong>${requestAfterUpdate.daysRequested}</strong> días de vacaciones.</p>
+                  <p>Del <strong>${start}</strong> al <strong>${end}</strong> de acuerdo con el período vacacional correspondiente al año actual.</p>
+                  <p>La fecha de reincorporación a la actividad laboral será el día <strong>${returnDate}</strong>.</p>
+                  <p>Quedarán <strong>${pending}</strong> días pendientes de licencia ${today.getFullYear()}.</p>
+                  <p>Saludos cordiales.</p>
+                  <br/>
+                  <div style="display:flex; gap:48px; margin-top:32px; flex-wrap: wrap;">
+                    <span>Gte. de área</span>
+                    <span>Jefe de área</span>
+                    <span>Área de rrhh</span>
+                  </div>
+                  <p style="margin-top:32px;">Notificado: ____________________</p>
+                </div>
+            `;
+
+            emailPayload = {
+                to: applicantEmail,
+                subject: `Autorización de licencia (${requestAfterUpdate.daysRequested} días)`,
+                body: approvalLetter,
+            };
+        } else {
+            emailPayload = {
+                to: applicantEmail,
+                subject: `Tu Solicitud de Licencia ha sido ${newStatus}`,
+                body: `
+                    <p>Hola ${requestAfterUpdate.userName},</p>
+                    <p>Tu solicitud de licencia para el período del <strong>${format(new Date(requestAfterUpdate.startDate), 'P', { locale: es })}</strong> al <strong>${format(new Date(requestAfterUpdate.endDate), 'P', { locale: es })}</strong> ha sido <strong>${newStatus}</strong>.</p>
+                    <p>Puedes ver el estado de tus solicitudes en el CRM.</p>
+                `,
+            };
+        }
     }
     
     return { emailPayload };

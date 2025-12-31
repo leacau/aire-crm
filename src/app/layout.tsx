@@ -3,7 +3,7 @@ import './globals.css';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { AppSidebar } from '@/components/layout/app-sidebar';
-import { AuthProvider } from '@/hooks/use-auth.tsx';
+import { AuthProvider } from '@/hooks/use-auth';
 import { AuthLayout } from '@/components/layout/auth-layout';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from "@vercel/speed-insights/next"

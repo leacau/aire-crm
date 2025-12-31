@@ -25,7 +25,7 @@ import {
 import { opportunityStages } from '@/lib/data';
 import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, SupervisorComment } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions, invoiceStatusOptions } from '@/lib/types';
-import { useAuth } from '@/hooks/use-auth.tsx';
+import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';

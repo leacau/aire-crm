@@ -188,6 +188,46 @@ export default function LicensesPage() {
     }
   };
 
+  const buildLicenseDocument = (request: VacationRequest, applicant: User | undefined, pendingDays?: number) => {
+    const today = new Date();
+    const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
+    const start = format(new Date(request.startDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+    const end = format(new Date(request.endDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+    const returnDate = format(new Date(request.returnDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+    const remaining = pendingDays ?? applicant?.vacationDays ?? 0;
+
+    return `
+      <div style="font-family: Arial, sans-serif; color: #222; line-height: 1.6; max-width: 900px; margin: 0 auto; padding: 24px;">
+        <div style="text-align:right; margin-bottom:24px;">Santa Fé, ${todayFormatted}</div>
+        <p>Estimado/a <strong>${request.userName}</strong></p>
+        <p>Mediante la presente le informamos la autorización de la solicitud de <strong>${request.daysRequested}</strong> días de vacaciones.</p>
+        <p>Del <strong>${start}</strong> al <strong>${end}</strong> de acuerdo con el período vacacional correspondiente al año actual.</p>
+        <p>La fecha de reincorporación a la actividad laboral será el día <strong>${returnDate}</strong>.</p>
+        <p>Quedarán <strong>${remaining}</strong> días pendientes de licencia ${today.getFullYear()}.</p>
+        <p>Saludos cordiales.</p>
+        <div style="display:flex; gap:64px; margin-top:48px; flex-wrap:wrap;">
+          <span>Gte. de área</span>
+          <span>Jefe de área</span>
+          <span>Área de rrhh</span>
+        </div>
+        <p style="margin-top:48px;">Notificado: ____________________</p>
+      </div>
+    `;
+  };
+
+  const handlePrintDocument = (request: VacationRequest) => {
+    const applicant = users.find((u) => u.id === request.userId);
+    const pendingDays = applicant?.vacationDays;
+    const html = buildLicenseDocument(request, applicant, pendingDays);
+    const printWindow = window.open('', '_blank', 'width=900,height=900');
+    if (printWindow) {
+      printWindow.document.write(`<!doctype html><html><head><title>Constancia de Licencia</title></head><body>${html}</body></html>`);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  };
+
 
   if (loading || !userInfo) {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
@@ -266,6 +306,7 @@ export default function LicensesPage() {
                 onEdit={handleOpenForm}
                 onDelete={setRequestToDelete}
                 onUpdateRequest={handleUpdateRequest}
+                onPrint={handlePrintDocument}
                 currentUserId={userInfo.id}
               />
             </section>
