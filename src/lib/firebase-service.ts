@@ -1236,6 +1236,12 @@ export const getInvoices = async (): Promise<Invoice[]> => {
             : typeof rawCreditNoteDate === 'string'
                 ? rawCreditNoteDate
                 : null;
+        const rawDeletionMarkedAt = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkedAt = rawDeletionMarkedAt instanceof Timestamp
+            ? rawDeletionMarkedAt.toDate().toISOString()
+            : typeof rawDeletionMarkedAt === 'string'
+                ? rawDeletionMarkedAt
+                : null;
 
         return {
             id: doc.id,
@@ -1246,6 +1252,10 @@ export const getInvoices = async (): Promise<Invoice[]> => {
             datePaid: validDatePaid ? format(validDatePaid, 'yyyy-MM-dd') : undefined,
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
+            markedForDeletion: Boolean((data as any).markedForDeletion),
+            deletionMarkedAt: normalizedDeletionMarkedAt,
+            deletionMarkedById: (data as any).deletionMarkedById,
+            deletionMarkedByName: (data as any).deletionMarkedByName,
         } as Invoice;
     });
     setInCache('invoices', invoices);
@@ -1264,6 +1274,12 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
             : typeof rawCreditNoteDate === 'string'
                 ? rawCreditNoteDate
                 : null;
+        const rawDeletionMarkedAt = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkedAt = rawDeletionMarkedAt instanceof Timestamp
+            ? rawDeletionMarkedAt.toDate().toISOString()
+            : typeof rawDeletionMarkedAt === 'string'
+                ? rawDeletionMarkedAt
+                : null;
 
         return {
             id: doc.id,
@@ -1271,6 +1287,10 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
             amount: normalizeInvoiceAmount(data.amount),
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
+            markedForDeletion: Boolean((data as any).markedForDeletion),
+            deletionMarkedAt: normalizedDeletionMarkedAt,
+            deletionMarkedById: (data as any).deletionMarkedById,
+            deletionMarkedByName: (data as any).deletionMarkedByName,
         } as Invoice;
     });
     invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
@@ -1292,6 +1312,12 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
             : typeof rawCreditNoteDate === 'string'
                 ? rawCreditNoteDate
                 : null;
+        const rawDeletionMarkedAt = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkedAt = rawDeletionMarkedAt instanceof Timestamp
+            ? rawDeletionMarkedAt.toDate().toISOString()
+            : typeof rawDeletionMarkedAt === 'string'
+                ? rawDeletionMarkedAt
+                : null;
 
         return {
             id: doc.id,
@@ -1299,6 +1325,10 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
             amount: normalizeInvoiceAmount(data.amount),
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
+            markedForDeletion: Boolean((data as any).markedForDeletion),
+            deletionMarkedAt: normalizedDeletionMarkedAt,
+            deletionMarkedById: (data as any).deletionMarkedById,
+            deletionMarkedByName: (data as any).deletionMarkedByName,
         } as Invoice;
     });
 };
@@ -1309,6 +1339,10 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
       dateGenerated: new Date().toISOString(),
       isCreditNote: invoiceData.isCreditNote ?? false,
       creditNoteMarkedAt: invoiceData.creditNoteMarkedAt ?? null,
+      markedForDeletion: invoiceData.markedForDeletion ?? false,
+      deletionMarkedAt: invoiceData.deletionMarkedAt ?? null,
+      deletionMarkedById: invoiceData.deletionMarkedById ?? null,
+      deletionMarkedByName: invoiceData.deletionMarkedByName ?? null,
     };
     const docRef = await addDoc(collections.invoices, dataToSave);
     invalidateCache('invoices');

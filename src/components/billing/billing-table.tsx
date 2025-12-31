@@ -22,6 +22,7 @@ export const BillingTable = ({
   onMarkAsPaid,
   onToggleCreditNote,
   showCreditNoteDate,
+  onToggleDeletionMark,
 }: {
   items: (Opportunity | Invoice)[];
   type: 'opportunities' | 'invoices';
@@ -32,6 +33,7 @@ export const BillingTable = ({
   onMarkAsPaid?: (invoiceId: string) => void;
   onToggleCreditNote?: (invoiceId: string, nextValue: boolean) => void;
   showCreditNoteDate?: boolean;
+  onToggleDeletionMark?: (invoiceId: string, nextValue: boolean) => void;
 }) => {
 
   const columns = useMemo<ColumnDef<Opportunity | Invoice>[]>(() => {
@@ -129,6 +131,29 @@ export const BillingTable = ({
             }
           })
         }
+        if (onToggleDeletionMark) {
+          cols.push({
+            id: 'mark-for-deletion',
+            header: 'Eliminar',
+            cell: ({ row }) => {
+              const invoice = row.original as Invoice;
+              return (
+                <div className="flex items-center justify-center space-x-2">
+                  <Checkbox
+                    id={`delete-${invoice.id}`}
+                    checked={!!invoice.markedForDeletion}
+                    onCheckedChange={(value) => {
+                      const nextValue = value === true;
+                      onToggleDeletionMark(invoice.id, nextValue);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <Label htmlFor={`delete-${invoice.id}`}>Eliminar</Label>
+                </div>
+              );
+            }
+          });
+        }
         if (onToggleCreditNote) {
           cols.push({
             id: 'mark-credit-note',
@@ -156,7 +181,7 @@ export const BillingTable = ({
 
     return cols;
 
-  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, usersMap, onToggleCreditNote, showCreditNoteDate]);
+  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, usersMap, onToggleCreditNote, showCreditNoteDate, onToggleDeletionMark]);
 
   const total = items.reduce((acc, item) => {
     if (type === 'invoices') return acc + Number((item as Invoice).amount || 0);

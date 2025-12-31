@@ -7,7 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries, requestPaymentExplanation, getChatSpaces } from '@/lib/firebase-service';
+import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries, requestPaymentExplanation, getChatSpaces, deleteInvoice } from '@/lib/firebase-service';
 import type { Opportunity, Client, User, Invoice, PaymentEntry, ChatSpaceMapping } from '@/lib/types';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { updateOpportunity } from '@/lib/firebase-service';
@@ -124,8 +124,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [pastedPayments, setPastedPayments] = useState('');
   const [isImportingPayments, setIsImportingPayments] = useState(false);
+  const [isDeletingDuplicates, setIsDeletingDuplicates] = useState(false);
   
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const canManageBillingDeletion = Boolean(
+    isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Admin',
+  );
 
   const dateRange: DateRange | undefined = useMemo(() => {
     return {
@@ -552,6 +556,42 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   };
 
+  const handleToggleDeletionMark = async (invoiceId: string, nextValue: boolean) => {
+    if (!userInfo || !canManageBillingDeletion) return;
+
+    const invoiceToUpdate = invoices.find((inv) => inv.id === invoiceId);
+    if (!invoiceToUpdate) return;
+
+    const opp = opportunities.find((o) => o.id === invoiceToUpdate.opportunityId);
+    if (!opp) return;
+
+    const client = clients.find((c) => c.id === opp.clientId);
+    if (!client) return;
+
+    const updatePayload: Partial<Invoice> = {
+      markedForDeletion: nextValue,
+      deletionMarkedAt: nextValue ? new Date().toISOString() : null,
+      deletionMarkedById: nextValue ? userInfo.id : null,
+      deletionMarkedByName: nextValue ? userInfo.name : null,
+    };
+
+    setInvoices((prev) =>
+      prev.map((inv) => (inv.id === invoiceId ? { ...inv, ...updatePayload } : inv)),
+    );
+
+    try {
+      await updateInvoice(invoiceId, updatePayload, userInfo.id, userInfo.name, client.ownerName);
+      toast({
+        title: `Factura #${invoiceToUpdate.invoiceNumber} ${nextValue ? 'marcada para eliminar' : 'sin pedido de eliminación'}.`,
+      });
+      setTimeout(fetchData, 300);
+    } catch (error) {
+      console.error('Error toggling deletion mark:', error);
+      toast({ title: 'No se pudo actualizar la factura', variant: 'destructive' });
+      fetchData();
+    }
+  };
+
 
   const handleMarkAsPaid = async (invoiceId: string) => {
     if (!userInfo) return;
@@ -611,6 +651,70 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       fetchData();
     }
   };
+
+  const handleDeleteDuplicateInvoices = async () => {
+    if (!userInfo || !canManageBillingDeletion) return;
+
+    const grouped = new Map<string, Invoice[]>();
+
+    toCollectInvoices.forEach((invoice) => {
+      const opp = opportunitiesMap[invoice.opportunityId];
+      if (!opp || !invoice.date) return;
+
+      const clientId = opp.clientId;
+      const amount = Number(invoice.amount);
+      const normalizedNumber = getNormalizedInvoiceNumber(invoice);
+      const lastFour = normalizedNumber.slice(-4);
+
+      if (!clientId || !Number.isFinite(amount) || !lastFour) return;
+
+      const key = `${clientId}|${invoice.date}|${amount}|${lastFour}`;
+      const current = grouped.get(key) || [];
+      current.push(invoice);
+      grouped.set(key, current);
+    });
+
+    const invoicesToDelete: Invoice[] = [];
+    grouped.forEach((group) => {
+      if (group.length <= 1) return;
+
+      const sortedGroup = [...group].sort((a, b) => {
+        const dateA = new Date(a.dateGenerated || a.date || '').getTime();
+        const dateB = new Date(b.dateGenerated || b.date || '').getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        return a.id.localeCompare(b.id);
+      });
+      const [, ...duplicates] = sortedGroup;
+      invoicesToDelete.push(...duplicates);
+    });
+
+    if (invoicesToDelete.length === 0) {
+      toast({ title: 'No se encontraron facturas duplicadas en A Cobrar' });
+      return;
+    }
+
+    const idsToDelete = new Set(invoicesToDelete.map((inv) => inv.id));
+    setInvoices((prev) => prev.filter((inv) => !idsToDelete.has(inv.id)));
+    setIsDeletingDuplicates(true);
+
+    try {
+      for (const invoice of invoicesToDelete) {
+        const opp = opportunitiesMap[invoice.opportunityId];
+        const client = opp ? clientsMap[opp.clientId] : undefined;
+        await deleteInvoice(invoice.id, userInfo.id, userInfo.name, client?.ownerName || '');
+      }
+      toast({
+        title: invoicesToDelete.length === 1 ? 'Factura duplicada eliminada' : 'Facturas duplicadas eliminadas',
+      });
+      setTimeout(fetchData, 300);
+    } catch (error) {
+      console.error('Error deleting duplicate invoices:', error);
+      toast({ title: 'No se pudieron eliminar los duplicados', variant: 'destructive' });
+      fetchData();
+    } finally {
+      setIsDeletingDuplicates(false);
+    }
+  };
   
   const handleRowClick = (item: Opportunity | Invoice) => {
       const oppId = 'clientId' in item ? item.id.split('_')[0] : (opportunitiesMap[item.opportunityId] ? item.opportunityId : null);
@@ -667,16 +771,30 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             />
           </TabsContent>
           <TabsContent value="to-collect">
-            <BillingTable
-              items={toCollectInvoices}
-              type="invoices"
-              onRowClick={handleRowClick}
-              clientsMap={clientsMap}
-              usersMap={usersMap}
-              opportunitiesMap={opportunitiesMap}
-              onMarkAsPaid={handleMarkAsPaid}
-              onToggleCreditNote={handleToggleCreditNote}
-            />
+            <div className="grid gap-4">
+              {canManageBillingDeletion && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeleteDuplicateInvoices}
+                    disabled={isDeletingDuplicates}
+                  >
+                    {isDeletingDuplicates ? <Spinner size="small" /> : 'Eliminar facturas duplicadas'}
+                  </Button>
+                </div>
+              )}
+              <BillingTable
+                items={toCollectInvoices}
+                type="invoices"
+                onRowClick={handleRowClick}
+                clientsMap={clientsMap}
+                usersMap={usersMap}
+                opportunitiesMap={opportunitiesMap}
+                onMarkAsPaid={handleMarkAsPaid}
+                onToggleCreditNote={handleToggleCreditNote}
+                onToggleDeletionMark={canManageBillingDeletion ? handleToggleDeletionMark : undefined}
+              />
+            </div>
           </TabsContent>
            <TabsContent value="paid">
             <BillingTable items={paidInvoices} type="invoices" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} />
