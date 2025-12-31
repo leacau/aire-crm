@@ -197,7 +197,7 @@ export default function LicensesPage() {
     const today = new Date();
     const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
     const start = format(parseISO(request.startDate), 'P', { locale: es });
-    console.log('requestday formated: ', format(parseISO(request.startDate), "DDDD d 'de' MMMM 'de' yyyy", { locale: es }));
+    console.log('requestday formated: ', format(parseISO(request.startDate), "EEEE d 'de' MMMM 'de' yyyy", { locale: es }));
     const end = format(parseISO(request.endDate), 'P', { locale: es });
     const returnDate = format(parseISO(request.returnDate), 'P', { locale: es });
     const remaining = pendingDays ?? applicant?.vacationDays ?? 0;
@@ -214,12 +214,12 @@ export default function LicensesPage() {
         <p>La fecha de reincorporación a la actividad laboral será el día <strong>${returnDate}</strong>.</p>
         <p>Quedarán <strong>${remaining}</strong> días pendientes de licencia ${today.getFullYear()}.</p>
         <p>Saludos cordiales.</p>
-        <div style="display:flex; justify-content: space-between; margin-top:48px; flex-wrap:wrap">
+        <div style="display:flex; justify-content: space-between; margin-top:70px; flex-wrap:wrap">
           <span>Gte. de área</span>
           <span>Jefe de área</span>
           <span>Área de rrhh</span>
         </div>
-        <p style="margin-top:48px;">Notificado: ____________________</p>
+        <p style="margin-top:70px;">Notificado: ____________________</p>
       </div>
     `;
   };
