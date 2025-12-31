@@ -19,7 +19,7 @@ import { Logo } from '@/components/logo';
 import { createUserProfile, getUserProfile } from '@/lib/firebase-service';
 import Link from 'next/link';
 
-const ALLOWED_DOMAINS = ['airedesantafe.com.ar', 'airedigital.com', 'gmail.com'];
+const ALLOWED_DOMAINS = ['airedesantafe.com.ar', 'airedigital.com'];
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
