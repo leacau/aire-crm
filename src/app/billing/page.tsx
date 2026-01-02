@@ -22,6 +22,7 @@ import { BillingTable } from '@/components/billing/billing-table';
 import { ToInvoiceTable } from '@/components/billing/to-invoice-table';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { PaymentsTable } from '@/components/billing/payments-table';
+import { logActivity } from '@/lib/activity-logger';
 import { Switch } from '@/components/ui/switch';
 import {
   AlertDialog,
@@ -595,6 +596,18 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
     try {
       await updateInvoice(invoiceId, updatePayload, userInfo.id, userInfo.name, client.ownerName);
+      await logActivity({
+        userId: userInfo.id,
+        userName: userInfo.name,
+        ownerName: client.ownerName,
+        type: 'update',
+        entityType: 'invoice',
+        entityId: invoiceId,
+        entityName: `Factura #${invoiceToUpdate.invoiceNumber}`,
+        details: nextValue
+          ? `marcó para eliminar la factura #${invoiceToUpdate.invoiceNumber}`
+          : `quitó el marcado de eliminación de la factura #${invoiceToUpdate.invoiceNumber}`,
+      });
       toast({
         title: `Factura #${invoiceToUpdate.invoiceNumber} ${nextValue ? 'marcada para eliminar' : 'sin pedido de eliminación'}.`,
       });
