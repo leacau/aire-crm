@@ -27,5 +27,18 @@ export const getPaidInvoiceDate = (invoice: Invoice): Date | null => {
 };
 
 export const getNormalizedInvoiceNumber = (invoice: Pick<Invoice, 'invoiceNumber'>): string => {
-  return sanitizeInvoiceNumber(invoice.invoiceNumber);
+  const digitChunks = String(invoice.invoiceNumber || '').match(/\d+/g);
+  if (!digitChunks) return '';
+
+  const numericOnly = digitChunks.join('');
+  const withoutLeadingZeros = numericOnly.replace(/^0+/, '');
+
+  /**
+   * Ejemplos de normalización esperada:
+   * - "FAC-000123-A" => "123"
+   * - "inv 045/2024" => "452024"
+   * - "000987" => "987"
+   * - "A-B-C" => ""
+   */
+  return withoutLeadingZeros || '0';
 };
