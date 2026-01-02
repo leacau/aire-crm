@@ -116,6 +116,7 @@ export type NewInvoiceData = {
 type DuplicateInvoiceGroup = {
   invoiceNumber: string;
   invoices: Invoice[];
+  hasCreditNote: boolean;
 };
 
 type DeleteProgressState = {
@@ -138,6 +139,10 @@ const EMPTY_DELETE_PROGRESS: DeleteProgressState = {
 function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
+  const isCreditNoteRelated = useCallback(
+    (invoice: Invoice) => invoice.isCreditNote || Boolean(invoice.creditNoteMarkedAt),
+    [],
+  );
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -200,10 +205,14 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         }, {} as Record<string, Invoice[]>);
 
         return Object.entries(grouped)
-          .map(([invoiceNumber, groupedInvoices]) => ({ invoiceNumber, invoices: groupedInvoices }))
+          .map(([invoiceNumber, groupedInvoices]) => ({
+            invoiceNumber,
+            invoices: groupedInvoices,
+            hasCreditNote: groupedInvoices.some(isCreditNoteRelated),
+          }))
           .filter((group) => group.invoices.length > 1);
       },
-    [],
+    [isCreditNoteRelated],
   );
 
   const duplicateInvoiceGroups = useMemo(
@@ -219,10 +228,14 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const totalSelectedDuplicateInvoices = useMemo(
     () =>
       duplicateInvoiceGroups.reduce(
-        (acc, group) => acc + group.invoices.filter((inv) => invoiceSelection[inv.id]).length,
+        (acc, group) =>
+          acc +
+          group.invoices.filter(
+            (inv) => invoiceSelection[inv.id] && !isCreditNoteRelated(inv),
+          ).length,
         0,
       ),
-    [duplicateInvoiceGroups, invoiceSelection],
+    [duplicateInvoiceGroups, invoiceSelection, isCreditNoteRelated],
   );
 
   useEffect(() => {
@@ -230,12 +243,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       const next: Record<string, boolean> = {};
       duplicateInvoiceGroups.forEach((group) => {
         group.invoices.forEach((inv) => {
-          next[inv.id] = prev[inv.id] ?? true;
+          next[inv.id] = isCreditNoteRelated(inv) ? false : prev[inv.id] ?? true;
         });
       });
       return next;
     });
-  }, [duplicateInvoiceGroups]);
+  }, [duplicateInvoiceGroups, isCreditNoteRelated]);
 
   useEffect(() => {
     if (!isDuplicateModalOpen) {
@@ -652,7 +665,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     setInvoiceSelection((prev) => {
       const next = { ...prev };
       group.invoices.forEach((inv) => {
-        next[inv.id] = checked;
+        next[inv.id] = isCreditNoteRelated(inv) ? false : checked;
       });
       return next;
     });
@@ -667,6 +680,11 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       return client?.ownerName || opportunity?.clientName || 'Cliente';
     },
     [clientsMap, invoices, opportunitiesMap],
+  );
+
+  const hasCreditNotesInDuplicates = useMemo(
+    () => duplicateInvoiceGroups.some((group) => group.hasCreditNote),
+    [duplicateInvoiceGroups],
   );
 
   const runBatchInvoiceDeletion = useCallback(
@@ -715,9 +733,11 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const handleDeleteDuplicateInvoices = async (idsToDelete?: string[]) => {
     if (!userInfo) return;
 
-    const selectedInvoices = idsToDelete
+    const selectedInvoices = (idsToDelete
       ? invoices.filter((inv) => idsToDelete.includes(inv.id))
-      : duplicateInvoiceGroups.flatMap((group) => group.invoices.filter((inv) => invoiceSelection[inv.id]));
+      : duplicateInvoiceGroups.flatMap((group) => group.invoices.filter((inv) => invoiceSelection[inv.id]))).filter(
+      (inv) => !isCreditNoteRelated(inv),
+    );
 
     if (selectedInvoices.length === 0) return;
 
@@ -966,6 +986,15 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
           </DialogHeader>
 
           <div className="space-y-4">
+            {hasCreditNotesInDuplicates ? (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-medium">Atención: hay notas de crédito en los grupos detectados.</p>
+                <p className="text-muted-foreground">
+                  Las facturas marcadas como NC o vinculadas a una NC se excluyen del borrado automático. Revísalas antes de continuar.
+                </p>
+              </div>
+            ) : null}
+
             <div className="rounded-md border bg-muted/50 p-3 text-sm space-y-2">
               <div>
                 Seleccionadas <strong>{totalSelectedDuplicateInvoices}</strong> de {totalDuplicateInvoices} facturas para eliminar.
@@ -1044,6 +1073,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                                 <Checkbox
                                   id={`invoice-${invoice.id}`}
                                   checked={!!invoiceSelection[invoice.id]}
+                                  disabled={invoice.isCreditNote || Boolean(invoice.creditNoteMarkedAt)}
                                   onCheckedChange={(value) => handleToggleInvoiceSelection(invoice.id, value === true)}
                                 />
                                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -1063,6 +1093,11 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                                   </div>
                                 </div>
                               </div>
+                              {invoice.isCreditNote || invoice.creditNoteMarkedAt ? (
+                                <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900">
+                                  Factura con NC: no se elimina automáticamente
+                                </div>
+                              ) : null}
                             </div>
                           );
                         })}
