@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import type { Opportunity, Client, User, Invoice } from '@/lib/types';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
@@ -11,6 +11,8 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { TableFooter, TableRow, TableCell } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '../ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { AlertTriangle } from 'lucide-react';
 
 export const BillingTable = ({
   items,
@@ -33,6 +35,15 @@ export const BillingTable = ({
   onToggleCreditNote?: (invoiceId: string, nextValue: boolean) => void;
   showCreditNoteDate?: boolean;
 }) => {
+
+  const isDeletionMarked = useCallback((item: Opportunity | Invoice) => {
+    const invoice = item as Invoice;
+    return Boolean(
+      (invoice as any).deletionMarked ||
+      invoice.deletionMarkedAt ||
+      (invoice as any).markedForDeletion
+    );
+  }, []);
 
   const columns = useMemo<ColumnDef<Opportunity | Invoice>[]>(() => {
     let cols: ColumnDef<any>[] = [
@@ -76,6 +87,53 @@ export const BillingTable = ({
     ];
 
     if (type === 'invoices') {
+        cols.push({
+          id: 'deletion-mark',
+          accessorFn: (row) => (row as Invoice).deletionMarkedAt || null,
+          header: 'Estado',
+          size: 140,
+          cell: ({ row }) => {
+            const invoice = row.original as Invoice;
+            const marked = isDeletionMarked(invoice);
+            if (!marked) return <span className="text-muted-foreground">—</span>;
+
+            const markerName = (invoice as any).deletionMarkedByName as string | undefined;
+            const markedAtRaw = invoice.deletionMarkedAt as string | undefined | null;
+            const formattedDate = markedAtRaw
+              ? (() => {
+                  try {
+                    return format(parseISO(markedAtRaw), 'Pp', { locale: es });
+                  } catch (error) {
+                    return markedAtRaw;
+                  }
+                })()
+              : null;
+
+            return (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="inline-flex items-center gap-1 rounded-full border border-destructive/50 bg-destructive/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-destructive">
+                      <AlertTriangle className="h-3 w-3" />
+                      <span>Marcada</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="space-y-1">
+                      <p className="font-medium leading-none">Marcada para eliminar</p>
+                      {markerName ? (
+                        <p className="text-xs text-muted-foreground">Por {markerName}</p>
+                      ) : null}
+                      {formattedDate ? (
+                        <p className="text-xs text-muted-foreground">El {formattedDate}</p>
+                      ) : null}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          },
+        });
         cols.push({
             accessorKey: 'date',
             header: 'Fecha Factura',
@@ -156,7 +214,7 @@ export const BillingTable = ({
 
     return cols;
 
-  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, usersMap, onToggleCreditNote, showCreditNoteDate]);
+  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, usersMap, onToggleCreditNote, showCreditNoteDate, isDeletionMarked]);
 
   const total = items.reduce((acc, item) => {
     if (type === 'invoices') return acc + Number((item as Invoice).amount || 0);
@@ -183,6 +241,11 @@ export const BillingTable = ({
         emptyStateMessage="No hay items en esta sección."
         footerContent={footerContent}
         enableRowResizing={false}
+        rowClassName={(row) =>
+          isDeletionMarked(row.original)
+            ? 'bg-red-100/80 dark:bg-red-950/40 border-l-4 border-red-400 dark:border-red-700'
+            : undefined
+        }
       />
   );
 };

@@ -1237,6 +1237,13 @@ export const getInvoices = async (): Promise<Invoice[]> => {
                 ? rawCreditNoteDate
                 : null;
 
+        const rawDeletionMarkDate = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkDate = rawDeletionMarkDate instanceof Timestamp
+            ? rawDeletionMarkDate.toDate().toISOString()
+            : typeof rawDeletionMarkDate === 'string'
+                ? rawDeletionMarkDate
+                : null;
+
         return {
             id: doc.id,
             ...data,
@@ -1246,6 +1253,7 @@ export const getInvoices = async (): Promise<Invoice[]> => {
             datePaid: validDatePaid ? format(validDatePaid, 'yyyy-MM-dd') : undefined,
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
+            deletionMarkedAt: normalizedDeletionMarkDate,
         } as Invoice;
     });
     setInCache('invoices', invoices);
@@ -1264,6 +1272,12 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
             : typeof rawCreditNoteDate === 'string'
                 ? rawCreditNoteDate
                 : null;
+        const rawDeletionMarkDate = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkDate = rawDeletionMarkDate instanceof Timestamp
+            ? rawDeletionMarkDate.toDate().toISOString()
+            : typeof rawDeletionMarkDate === 'string'
+                ? rawDeletionMarkDate
+                : null;
 
         return {
             id: doc.id,
@@ -1271,6 +1285,7 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
             amount: normalizeInvoiceAmount(data.amount),
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
+            deletionMarkedAt: normalizedDeletionMarkDate,
         } as Invoice;
     });
     invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
@@ -1292,6 +1307,12 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
             : typeof rawCreditNoteDate === 'string'
                 ? rawCreditNoteDate
                 : null;
+        const rawDeletionMarkDate = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkDate = rawDeletionMarkDate instanceof Timestamp
+            ? rawDeletionMarkDate.toDate().toISOString()
+            : typeof rawDeletionMarkDate === 'string'
+                ? rawDeletionMarkDate
+                : null;
 
         return {
             id: doc.id,
@@ -1299,6 +1320,7 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
             amount: normalizeInvoiceAmount(data.amount),
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
+            deletionMarkedAt: normalizedDeletionMarkDate,
         } as Invoice;
     });
 };
