@@ -281,7 +281,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [isImportingPayments, setIsImportingPayments] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const [invoiceSelection, setInvoiceSelection] = useState<Record<string, boolean>>({});
-  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
   const [isDeletingDuplicates, setIsDeletingDuplicates] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<DeleteProgressState>(EMPTY_DELETE_PROGRESS);
   const [isRetryingFailed, setIsRetryingFailed] = useState(false);
