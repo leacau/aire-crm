@@ -1243,6 +1243,13 @@ export const getInvoices = async (): Promise<Invoice[]> => {
                 ? rawDeletionMarkedAt
                 : null;
 
+        const rawDeletionMarkDate = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkDate = rawDeletionMarkDate instanceof Timestamp
+            ? rawDeletionMarkDate.toDate().toISOString()
+            : typeof rawDeletionMarkDate === 'string'
+                ? rawDeletionMarkDate
+                : null;
+
         return {
             id: doc.id,
             ...data,
@@ -1252,10 +1259,7 @@ export const getInvoices = async (): Promise<Invoice[]> => {
             datePaid: validDatePaid ? format(validDatePaid, 'yyyy-MM-dd') : undefined,
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
-            markedForDeletion: Boolean((data as any).markedForDeletion),
-            deletionMarkedAt: normalizedDeletionMarkedAt,
-            deletionMarkedById: (data as any).deletionMarkedById,
-            deletionMarkedByName: (data as any).deletionMarkedByName,
+            deletionMarkedAt: normalizedDeletionMarkDate,
         } as Invoice;
     });
     setInCache('invoices', invoices);
@@ -1274,11 +1278,11 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
             : typeof rawCreditNoteDate === 'string'
                 ? rawCreditNoteDate
                 : null;
-        const rawDeletionMarkedAt = (data as any).deletionMarkedAt;
-        const normalizedDeletionMarkedAt = rawDeletionMarkedAt instanceof Timestamp
-            ? rawDeletionMarkedAt.toDate().toISOString()
-            : typeof rawDeletionMarkedAt === 'string'
-                ? rawDeletionMarkedAt
+        const rawDeletionMarkDate = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkDate = rawDeletionMarkDate instanceof Timestamp
+            ? rawDeletionMarkDate.toDate().toISOString()
+            : typeof rawDeletionMarkDate === 'string'
+                ? rawDeletionMarkDate
                 : null;
 
         return {
@@ -1287,10 +1291,7 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
             amount: normalizeInvoiceAmount(data.amount),
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
-            markedForDeletion: Boolean((data as any).markedForDeletion),
-            deletionMarkedAt: normalizedDeletionMarkedAt,
-            deletionMarkedById: (data as any).deletionMarkedById,
-            deletionMarkedByName: (data as any).deletionMarkedByName,
+            deletionMarkedAt: normalizedDeletionMarkDate,
         } as Invoice;
     });
     invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
@@ -1312,11 +1313,11 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
             : typeof rawCreditNoteDate === 'string'
                 ? rawCreditNoteDate
                 : null;
-        const rawDeletionMarkedAt = (data as any).deletionMarkedAt;
-        const normalizedDeletionMarkedAt = rawDeletionMarkedAt instanceof Timestamp
-            ? rawDeletionMarkedAt.toDate().toISOString()
-            : typeof rawDeletionMarkedAt === 'string'
-                ? rawDeletionMarkedAt
+        const rawDeletionMarkDate = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkDate = rawDeletionMarkDate instanceof Timestamp
+            ? rawDeletionMarkDate.toDate().toISOString()
+            : typeof rawDeletionMarkDate === 'string'
+                ? rawDeletionMarkDate
                 : null;
 
         return {
@@ -1325,10 +1326,7 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
             amount: normalizeInvoiceAmount(data.amount),
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
-            markedForDeletion: Boolean((data as any).markedForDeletion),
-            deletionMarkedAt: normalizedDeletionMarkedAt,
-            deletionMarkedById: (data as any).deletionMarkedById,
-            deletionMarkedByName: (data as any).deletionMarkedByName,
+            deletionMarkedAt: normalizedDeletionMarkDate,
         } as Invoice;
     });
 };
@@ -1381,6 +1379,69 @@ export const deleteInvoice = async (id: string, userId: string, userName: string
         details: `eliminó la factura #${invoiceData?.invoiceNumber || id}`,
         ownerName: ownerName
     });
+};
+
+export type InvoiceBatchDeleteResult = {
+    deleted: string[];
+    failed: { id: string; error: string }[];
+};
+
+export type InvoiceBatchDeleteProgress = InvoiceBatchDeleteResult & {
+    total: number;
+    processed: number;
+    chunk: string[];
+};
+
+type InvoiceBatchDeleteOptions = {
+    batchSize?: number;
+    onProgress?: (progress: InvoiceBatchDeleteProgress) => void;
+    resolveOwnerName?: (invoiceId: string) => string;
+};
+
+export const deleteInvoicesInBatches = async (
+    ids: string[],
+    userId: string,
+    userName: string,
+    options: InvoiceBatchDeleteOptions = {},
+): Promise<InvoiceBatchDeleteResult> => {
+    const { batchSize = 25, onProgress, resolveOwnerName } = options;
+    const result: InvoiceBatchDeleteResult = { deleted: [], failed: [] };
+    const total = ids.length;
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += batchSize) {
+        chunks.push(ids.slice(i, i + batchSize));
+    }
+
+    for (const chunk of chunks) {
+        const settled = await Promise.allSettled(
+            chunk.map(async (invoiceId) => {
+                const ownerName = resolveOwnerName?.(invoiceId) || 'Cliente';
+                await deleteInvoice(invoiceId, userId, userName, ownerName);
+            }),
+        );
+
+        settled.forEach((res, index) => {
+            const invoiceId = chunk[index];
+            if (res.status === 'fulfilled') {
+                result.deleted.push(invoiceId);
+            } else {
+                const message = res.reason instanceof Error ? res.reason.message : String(res.reason);
+                result.failed.push({ id: invoiceId, error: message });
+            }
+        });
+
+        const processed = result.deleted.length + result.failed.length;
+        onProgress?.({
+            total,
+            processed,
+            chunk,
+            deleted: [...result.deleted],
+            failed: [...result.failed],
+        });
+    }
+
+    return result;
 };
 
 

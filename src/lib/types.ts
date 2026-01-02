@@ -35,10 +35,9 @@ export type Invoice = {
   datePaid?: string;
   isCreditNote?: boolean;
   creditNoteMarkedAt?: string | null;
-  markedForDeletion?: boolean;
   deletionMarkedAt?: string | null;
-  deletionMarkedById?: string | null;
-  deletionMarkedByName?: string | null;
+  deletionMarkedById?: string;
+  deletionMarkedByName?: string;
 };
 
 export type PaymentStatus = 'Pendiente' | 'Reclamado' | 'Pagado' | 'Incobrable';
