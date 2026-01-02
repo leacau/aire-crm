@@ -774,184 +774,186 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   }
   
   return (
-    <div className="flex flex-col h-full">
-      <Header title="Estado de Cobranzas">
-         <MonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
-          {isBoss && (
-            <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
-              <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Filtrar por asesor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los asesores</SelectItem>
-                {advisors.map(advisor => (
-                  <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-      </Header>
-      <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-        <Tabs defaultValue={initialTab}>
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="to-invoice">A Facturar</TabsTrigger>
-            <TabsTrigger value="to-collect">A Cobrar</TabsTrigger>
-            <TabsTrigger value="paid">Pagado</TabsTrigger>
-            <TabsTrigger value="credit-notes">NC</TabsTrigger>
-            <TabsTrigger value="payments">Mora</TabsTrigger>
-          </TabsList>
-          <TabsContent value="to-invoice">
-            <ToInvoiceTable 
-                items={toInvoiceOpps}
-                clientsMap={clientsMap}
-                onCreateInvoice={handleCreateInvoice}
-                onRowClick={handleRowClick}
-            />
-          </TabsContent>
-          <TabsContent value="to-collect">
-            <div className="grid gap-4">
-              {canManageBillingDeletion && (
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Switch
-                      id="only-marked"
-                      checked={showOnlyMarkedForDeletion}
-                      onCheckedChange={(checked) => setShowOnlyMarkedForDeletion(checked === true)}
-                    />
-                    <label htmlFor="only-marked">Ver solo facturas marcadas para eliminar</label>
+    <>
+      <div className="flex flex-col h-full">
+        <Header title="Estado de Cobranzas">
+           <MonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
+            {isBoss && (
+              <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
+                <SelectTrigger className="w-full sm:w-[200px]">
+                  <SelectValue placeholder="Filtrar por asesor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los asesores</SelectItem>
+                  {advisors.map(advisor => (
+                    <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+        </Header>
+        <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
+          <Tabs defaultValue={initialTab}>
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="to-invoice">A Facturar</TabsTrigger>
+              <TabsTrigger value="to-collect">A Cobrar</TabsTrigger>
+              <TabsTrigger value="paid">Pagado</TabsTrigger>
+              <TabsTrigger value="credit-notes">NC</TabsTrigger>
+              <TabsTrigger value="payments">Mora</TabsTrigger>
+            </TabsList>
+            <TabsContent value="to-invoice">
+              <ToInvoiceTable 
+                  items={toInvoiceOpps}
+                  clientsMap={clientsMap}
+                  onCreateInvoice={handleCreateInvoice}
+                  onRowClick={handleRowClick}
+              />
+            </TabsContent>
+            <TabsContent value="to-collect">
+              <div className="grid gap-4">
+                {canManageBillingDeletion && (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Switch
+                        id="only-marked"
+                        checked={showOnlyMarkedForDeletion}
+                        onCheckedChange={(checked) => setShowOnlyMarkedForDeletion(checked === true)}
+                      />
+                      <label htmlFor="only-marked">Ver solo facturas marcadas para eliminar</label>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      onClick={handleOpenDuplicateDialog}
+                      disabled={isDeletingDuplicates}
+                    >
+                      {isDeletingDuplicates ? <Spinner size="small" /> : 'Eliminar facturas duplicadas'}
+                    </Button>
                   </div>
-                  <Button
-                    variant="destructive"
-                    onClick={handleOpenDuplicateDialog}
-                    disabled={isDeletingDuplicates}
-                  >
-                    {isDeletingDuplicates ? <Spinner size="small" /> : 'Eliminar facturas duplicadas'}
-                  </Button>
-                </div>
-              )}
+                )}
+                <BillingTable
+                  items={showOnlyMarkedForDeletion ? toCollectInvoices.filter((inv) => inv.markedForDeletion) : toCollectInvoices}
+                  type="invoices"
+                  onRowClick={handleRowClick}
+                  clientsMap={clientsMap}
+                  usersMap={usersMap}
+                  opportunitiesMap={opportunitiesMap}
+                  onMarkAsPaid={handleMarkAsPaid}
+                  onToggleCreditNote={handleToggleCreditNote}
+                  onToggleDeletionMark={canManageBillingDeletion ? handleToggleDeletionMark : undefined}
+                  highlightMarkedForDeletion
+                />
+              </div>
+            </TabsContent>
+             <TabsContent value="paid">
+              <BillingTable items={paidInvoices} type="invoices" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} />
+            </TabsContent>
+            <TabsContent value="credit-notes">
               <BillingTable
-                items={showOnlyMarkedForDeletion ? toCollectInvoices.filter((inv) => inv.markedForDeletion) : toCollectInvoices}
+                items={creditNoteInvoices}
                 type="invoices"
                 onRowClick={handleRowClick}
                 clientsMap={clientsMap}
                 usersMap={usersMap}
                 opportunitiesMap={opportunitiesMap}
-                onMarkAsPaid={handleMarkAsPaid}
                 onToggleCreditNote={handleToggleCreditNote}
-                onToggleDeletionMark={canManageBillingDeletion ? handleToggleDeletionMark : undefined}
-                highlightMarkedForDeletion
+                showCreditNoteDate
               />
-            </div>
-          </TabsContent>
-           <TabsContent value="paid">
-            <BillingTable items={paidInvoices} type="invoices" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} />
-          </TabsContent>
-          <TabsContent value="credit-notes">
-            <BillingTable
-              items={creditNoteInvoices}
-              type="invoices"
-              onRowClick={handleRowClick}
-              clientsMap={clientsMap}
-              usersMap={usersMap}
-              opportunitiesMap={opportunitiesMap}
-              onToggleCreditNote={handleToggleCreditNote}
-              showCreditNoteDate
-            />
-          </TabsContent>
-          <TabsContent value="payments">
-            <div className="grid gap-4">
-              {isBoss && (
-                <div className="grid gap-3 rounded-lg border bg-card p-4">
-                  <p className="text-sm text-muted-foreground">
-                    Pegá las filas que recibís por mail (separadas por tabulaciones o punto y coma) y reemplazaremos la lista de ese asesor.
-                  </p>
-                  <textarea
-                    className="min-h-[120px] w-full rounded-md border bg-background p-3 text-sm"
-                    value={pastedPayments}
-                    onChange={(e) => setPastedPayments(e.target.value)}
-                    placeholder="Empresa\tTipo\tNro comprobante\tRazón social\tImporte pendiente\tFecha emisión\tFecha vencimiento\tDías de atraso"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button onClick={handleImportPayments} disabled={isImportingPayments}>
-                      {isImportingPayments ? <Spinner size="small" /> : 'Reemplazar lista de pagos'}
-                    </Button>
+            </TabsContent>
+            <TabsContent value="payments">
+              <div className="grid gap-4">
+                {isBoss && (
+                  <div className="grid gap-3 rounded-lg border bg-card p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Pegá las filas que recibís por mail (separadas por tabulaciones o punto y coma) y reemplazaremos la lista de ese asesor.
+                    </p>
+                    <textarea
+                      className="min-h-[120px] w-full rounded-md border bg-background p-3 text-sm"
+                      value={pastedPayments}
+                      onChange={(e) => setPastedPayments(e.target.value)}
+                      placeholder="Empresa\tTipo\tNro comprobante\tRazón social\tImporte pendiente\tFecha emisión\tFecha vencimiento\tDías de atraso"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button onClick={handleImportPayments} disabled={isImportingPayments}>
+                        {isImportingPayments ? <Spinner size="small" /> : 'Reemplazar lista de pagos'}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <PaymentsTable
-                entries={filteredPayments}
-                onUpdate={handleUpdatePaymentEntry}
-                onDelete={handleDeletePayments}
-                selectedIds={selectedPaymentIds}
-                onToggleSelected={handleTogglePaymentSelection}
-                onToggleSelectAll={handleSelectAllPayments}
-                allowDelete={isBoss}
-                isBossView={isBoss}
-                onRequestExplanation={isBoss ? handleRequestPaymentExplanation : undefined}
-              />
-            </div>
-          </TabsContent>
-        </Tabs>
-      </main>
-      
-       {isFormOpen && (
-        <OpportunityDetailsDialog
-          opportunity={selectedOpportunity}
-          isOpen={isFormOpen}
-          onOpenChange={setIsFormOpen}
-          onUpdate={handleUpdateOpportunity}
-        />
-      )}
-    </div>
-
-    <AlertDialog open={isDuplicateDialogOpen} onOpenChange={setIsDuplicateDialogOpen}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Eliminar facturas duplicadas</AlertDialogTitle>
-          <AlertDialogDescription>
-            {duplicateGroups.length === 0
-              ? 'No se encontraron duplicados.'
-              : `Se eliminarán ${duplicateGroups.reduce((acc, g) => acc + Math.max(g.length - 1, 0), 0)} factura(s) duplicada(s) y se conservará una por grupo.`}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-
-        <div className="space-y-3 max-h-[50vh] overflow-auto">
-          {duplicateGroups.slice(0, 8).map((group, index) => {
-            const opp = opportunitiesMap[group[0].opportunityId];
-            const client = opp ? clientsMap[opp.clientId] : undefined;
-            return (
-              <div key={`${group[0].id}-${index}`} className="rounded-md border p-3">
-                <p className="text-sm font-medium">
-                  {client?.denominacion || opp?.clientName || 'Cliente'} — {group[0].date || 'Sin fecha'}
-                </p>
-                <p className="text-xs text-muted-foreground">Se conserva: #{group[0].invoiceNumber}</p>
-                <ul className="mt-2 space-y-1 text-sm">
-                  {group.slice(1).map((inv) => (
-                    <li key={inv.id} className="flex items-center justify-between">
-                      <span>#{inv.invoiceNumber}</span>
-                      <span className="text-muted-foreground">${Number(inv.amount).toLocaleString('es-AR')}</span>
-                    </li>
-                  ))}
-                </ul>
+                <PaymentsTable
+                  entries={filteredPayments}
+                  onUpdate={handleUpdatePaymentEntry}
+                  onDelete={handleDeletePayments}
+                  selectedIds={selectedPaymentIds}
+                  onToggleSelected={handleTogglePaymentSelection}
+                  onToggleSelectAll={handleSelectAllPayments}
+                  allowDelete={isBoss}
+                  isBossView={isBoss}
+                  onRequestExplanation={isBoss ? handleRequestPaymentExplanation : undefined}
+                />
               </div>
-            );
-          })}
-          {duplicateGroups.length > 8 && (
-            <p className="text-xs text-muted-foreground">
-              Hay {duplicateGroups.length - 8} grupo(s) adicional(es) de duplicados.
-            </p>
-          )}
-        </div>
+            </TabsContent>
+          </Tabs>
+        </main>
+        
+         {isFormOpen && (
+          <OpportunityDetailsDialog
+            opportunity={selectedOpportunity}
+            isOpen={isFormOpen}
+            onOpenChange={setIsFormOpen}
+            onUpdate={handleUpdateOpportunity}
+          />
+        )}
+      </div>
 
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeletingDuplicates}>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirmDeleteDuplicates} disabled={isDeletingDuplicates} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-            {isDeletingDuplicates ? <Spinner size="small" /> : 'Eliminar duplicados'}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialog open={isDuplicateDialogOpen} onOpenChange={setIsDuplicateDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar facturas duplicadas</AlertDialogTitle>
+            <AlertDialogDescription>
+              {duplicateGroups.length === 0
+                ? 'No se encontraron duplicados.'
+                : `Se eliminarán ${duplicateGroups.reduce((acc, g) => acc + Math.max(g.length - 1, 0), 0)} factura(s) duplicada(s) y se conservará una por grupo.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-3 max-h-[50vh] overflow-auto">
+            {duplicateGroups.slice(0, 8).map((group, index) => {
+              const opp = opportunitiesMap[group[0].opportunityId];
+              const client = opp ? clientsMap[opp.clientId] : undefined;
+              return (
+                <div key={`${group[0].id}-${index}`} className="rounded-md border p-3">
+                  <p className="text-sm font-medium">
+                    {client?.denominacion || opp?.clientName || 'Cliente'} — {group[0].date || 'Sin fecha'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Se conserva: #{group[0].invoiceNumber}</p>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {group.slice(1).map((inv) => (
+                      <li key={inv.id} className="flex items-center justify-between">
+                        <span>#{inv.invoiceNumber}</span>
+                        <span className="text-muted-foreground">${Number(inv.amount).toLocaleString('es-AR')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+            {duplicateGroups.length > 8 && (
+              <p className="text-xs text-muted-foreground">
+                Hay {duplicateGroups.length - 8} grupo(s) adicional(es) de duplicados.
+              </p>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingDuplicates}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDeleteDuplicates} disabled={isDeletingDuplicates} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {isDeletingDuplicates ? <Spinner size="small" /> : 'Eliminar duplicados'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
