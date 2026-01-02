@@ -27,6 +27,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { es } from 'date-fns/locale';
 
+const MARKED_ONLY_STORAGE_KEY = 'billing:markedOnly';
+
 const getPeriodDurationInMonths = (period: string): number => {
     switch (period) {
         case 'Mensual': return 1;
@@ -143,6 +145,15 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     (invoice: Invoice) => invoice.isCreditNote || Boolean(invoice.creditNoteMarkedAt),
     [],
   );
+  const isDeletionMarked = useCallback(
+    (invoice: Invoice) =>
+      Boolean(
+        (invoice as any).deletionMarked ||
+        invoice.deletionMarkedAt ||
+        (invoice as any).markedForDeletion,
+      ),
+    [],
+  );
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -171,6 +182,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
   const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
+  const [markedOnly, setMarkedOnly] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const stored = localStorage.getItem(MARKED_ONLY_STORAGE_KEY);
+    return stored === 'true';
+  });
+  const [prefsReady, setPrefsReady] = useState(false);
   
   const opportunitiesMap = useMemo(() => 
     opportunities.reduce((acc, opp) => {
@@ -258,6 +275,21 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   }, [isDuplicateModalOpen]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setPrefsReady(true);
+      return;
+    }
+    const stored = localStorage.getItem(MARKED_ONLY_STORAGE_KEY);
+    setMarkedOnly(stored === 'true');
+    setPrefsReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!prefsReady || typeof window === 'undefined') return;
+    localStorage.setItem(MARKED_ONLY_STORAGE_KEY, markedOnly ? 'true' : 'false');
+  }, [markedOnly, prefsReady]);
+
 
   const fetchData = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent;
@@ -297,7 +329,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   }, [userInfo, fetchData]);
 
   const { toInvoiceOpps, toCollectInvoices, paidInvoices, creditNoteInvoices } = useMemo(() => {
-    if (!userInfo || !userInfo.id) {
+    if (!userInfo || !userInfo.id || !prefsReady) {
       return { toInvoiceOpps: [], toCollectInvoices: [], paidInvoices: [], creditNoteInvoices: [] };
     }
 
@@ -384,14 +416,16 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       userFilteredInvoices = invoices.filter(inv => userOppIds.has(inv.opportunityId));
     }
     
-    const toCollectInvoices = userFilteredInvoices.filter(inv =>
+    const visibleInvoices = markedOnly ? userFilteredInvoices.filter(isDeletionMarked) : userFilteredInvoices;
+
+    const toCollectInvoices = visibleInvoices.filter(inv =>
         inv.date && isDateInRange(parseISO(inv.date)) && inv.status !== 'Pagada' && !inv.isCreditNote
     );
-    const paidInvoices = userFilteredInvoices.filter(inv =>
+    const paidInvoices = visibleInvoices.filter(inv =>
         inv.datePaid && isDateInRange(parseISO(inv.datePaid)) && inv.status === 'Pagada'
     );
 
-    const creditNoteInvoices = userFilteredInvoices.filter(inv => {
+    const creditNoteInvoices = visibleInvoices.filter(inv => {
         if (!inv.isCreditNote) return false;
         if (!inv.creditNoteMarkedAt) return false;
         try {
@@ -403,7 +437,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
     return { toInvoiceOpps, toCollectInvoices, paidInvoices, creditNoteInvoices };
 
-  }, [opportunities, invoices, clients, selectedAdvisor, isBoss, userInfo, dateRange]);
+  }, [opportunities, invoices, clients, selectedAdvisor, isBoss, userInfo, dateRange, markedOnly, isDeletionMarked, prefsReady]);
 
   const filteredPayments = useMemo(() => {
     if (!userInfo) return [] as PaymentEntry[];
@@ -422,6 +456,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   useEffect(() => {
     setSelectedPaymentIds((prev) => prev.filter((id) => filteredPayments.some((entry) => entry.id === id)));
   }, [filteredPayments]);
+
+  const handleToggleMarkedOnly = useCallback((checked: boolean) => {
+    setMarkedOnly(checked);
+  }, []);
 
 
   const handleUpdateOpportunity = async (updatedData: Partial<Opportunity>) => {
@@ -854,7 +892,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       }
   }
 
-  if (authLoading || loading) {
+  if (authLoading || loading || !prefsReady) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
@@ -903,6 +941,16 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             <TabsTrigger value="credit-notes">NC</TabsTrigger>
             <TabsTrigger value="payments">Mora</TabsTrigger>
           </TabsList>
+          <div className="mb-4 flex items-center gap-2">
+            <Checkbox
+              id="marked-only"
+              checked={markedOnly}
+              onCheckedChange={(value) => handleToggleMarkedOnly(value === true)}
+            />
+            <Label htmlFor="marked-only" className="text-sm text-muted-foreground">
+              Solo marcadas
+            </Label>
+          </div>
           <TabsContent value="to-invoice">
             <ToInvoiceTable 
                 items={toInvoiceOpps}
