@@ -1236,6 +1236,12 @@ export const getInvoices = async (): Promise<Invoice[]> => {
             : typeof rawCreditNoteDate === 'string'
                 ? rawCreditNoteDate
                 : null;
+        const rawDeletionMarkedAt = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkedAt = rawDeletionMarkedAt instanceof Timestamp
+            ? rawDeletionMarkedAt.toDate().toISOString()
+            : typeof rawDeletionMarkedAt === 'string'
+                ? rawDeletionMarkedAt
+                : null;
 
         const rawDeletionMarkDate = (data as any).deletionMarkedAt;
         const normalizedDeletionMarkDate = rawDeletionMarkDate instanceof Timestamp
@@ -1331,6 +1337,10 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
       dateGenerated: new Date().toISOString(),
       isCreditNote: invoiceData.isCreditNote ?? false,
       creditNoteMarkedAt: invoiceData.creditNoteMarkedAt ?? null,
+      markedForDeletion: invoiceData.markedForDeletion ?? false,
+      deletionMarkedAt: invoiceData.deletionMarkedAt ?? null,
+      deletionMarkedById: invoiceData.deletionMarkedById ?? null,
+      deletionMarkedByName: invoiceData.deletionMarkedByName ?? null,
     };
     const docRef = await addDoc(collections.invoices, dataToSave);
     invalidateCache('invoices');

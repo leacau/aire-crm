@@ -288,6 +288,9 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(() => new Set());
   
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const canManageBillingDeletion = Boolean(
+    isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Admin',
+  );
 
   const dateRange: DateRange | undefined = useMemo(() => {
     return {
@@ -1103,6 +1106,59 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       console.error('Error updating credit note state:', error);
       toast({ title: 'Error al actualizar la factura', variant: 'destructive' });
       fetchData();
+    }
+  };
+
+  const handleOpenDuplicateDialog = () => {
+    const duplicates = findDuplicateInvoiceGroups();
+    if (duplicates.length === 0) {
+      toast({ title: 'No se encontraron facturas duplicadas en A Cobrar' });
+      return;
+    }
+    const initialSelected = new Set<string>();
+    duplicates.forEach((group) => {
+      group.slice(1).forEach((inv) => initialSelected.add(inv.id));
+    });
+    setSelectedDuplicateIds(initialSelected);
+    setDuplicateGroups(duplicates);
+    setIsDuplicateDialogOpen(true);
+  };
+
+  const handleConfirmDeleteDuplicates = async () => {
+    if (!userInfo || !canManageBillingDeletion) return;
+    const duplicates = findDuplicateInvoiceGroups();
+    setDuplicateGroups(duplicates);
+
+    const invoicesToDelete = duplicates.flatMap((group) =>
+      group.slice(1).filter((inv) => selectedDuplicateIds.has(inv.id)),
+    );
+    if (invoicesToDelete.length === 0) {
+      toast({ title: 'No se encontraron facturas duplicadas en A Cobrar' });
+      setIsDuplicateDialogOpen(false);
+      return;
+    }
+
+    const idsToDelete = new Set(invoicesToDelete.map((inv) => inv.id));
+    setInvoices((prev) => prev.filter((inv) => !idsToDelete.has(inv.id)));
+    setIsDeletingDuplicates(true);
+    setIsDuplicateDialogOpen(false);
+
+    try {
+      for (const invoice of invoicesToDelete) {
+        const opp = opportunitiesMap[invoice.opportunityId];
+        const client = opp ? clientsMap[opp.clientId] : undefined;
+        await deleteInvoice(invoice.id, userInfo.id, userInfo.name, client?.ownerName || '');
+      }
+      toast({
+        title: invoicesToDelete.length === 1 ? 'Factura duplicada eliminada' : 'Facturas duplicadas eliminadas',
+      });
+      setTimeout(fetchData, 300);
+    } catch (error) {
+      console.error('Error deleting duplicate invoices:', error);
+      toast({ title: 'No se pudieron eliminar los duplicados', variant: 'destructive' });
+      fetchData();
+    } finally {
+      setIsDeletingDuplicates(false);
     }
   };
   

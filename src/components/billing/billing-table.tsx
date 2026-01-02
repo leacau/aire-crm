@@ -259,6 +259,36 @@ export const BillingTable = ({
             }
           })
         }
+        if (onToggleDeletionMark) {
+          cols.push({
+            id: 'mark-for-deletion',
+            header: 'Eliminar',
+            cell: ({ row }) => {
+              const invoice = row.original as Invoice;
+              return (
+                <div className="flex items-center justify-center space-x-2">
+                  <Checkbox
+                    id={`delete-${invoice.id}`}
+                    checked={!!invoice.markedForDeletion}
+                    onCheckedChange={(value) => {
+                      const nextValue = value === true;
+                      onToggleDeletionMark(invoice.id, nextValue);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor={`delete-${invoice.id}`}>Eliminar</Label>
+                    {invoice.markedForDeletion && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {invoice.deletionMarkedByName || 'Solicitada'} {invoice.deletionMarkedAt ? `· ${format(parseISO(invoice.deletionMarkedAt), 'P', { locale: es })}` : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+          });
+        }
         if (onToggleCreditNote) {
           cols.push({
             id: 'mark-credit-note',
