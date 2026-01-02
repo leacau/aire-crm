@@ -281,6 +281,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [isImportingPayments, setIsImportingPayments] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const [invoiceSelection, setInvoiceSelection] = useState<Record<string, boolean>>({});
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
   const [isDeletingDuplicates, setIsDeletingDuplicates] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<DeleteProgressState>(EMPTY_DELETE_PROGRESS);
   const [isRetryingFailed, setIsRetryingFailed] = useState(false);
@@ -866,9 +867,36 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   };
 
-  const handleToggleInvoiceSelection = (invoiceId: string, checked: boolean) => {
+  const handleToggleDuplicateInvoiceSelection = (invoiceId: string, checked: boolean) => {
     setInvoiceSelection((prev) => ({ ...prev, [invoiceId]: checked }));
   };
+
+  const handleToggleInvoiceSelection = useCallback((invoiceId: string) => {
+    setSelectedInvoiceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(invoiceId)) {
+        next.delete(invoiceId);
+      } else {
+        next.add(invoiceId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleAllInvoiceSelection = useCallback((checked: boolean, list: Invoice[]) => {
+    setSelectedInvoiceIds((prev) => {
+      const next = new Set(prev);
+      const ids = list.map((inv) => inv.id);
+      ids.forEach((id) => {
+        if (checked) {
+          next.add(id);
+        } else {
+          next.delete(id);
+        }
+      });
+      return next;
+    });
+  }, []);
 
   const handleToggleGroupSelection = (group: DuplicateInvoiceGroup, checked: boolean) => {
     setInvoiceSelection((prev) => {
@@ -1189,6 +1217,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             )}
           </TabsContent>
           <TabsContent value="to-collect">
+            {renderDeletionMarkActions(toCollectInvoices)}
             <BillingTable
               items={toCollectInvoices}
               type="invoices"
@@ -1210,6 +1239,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             />
           </TabsContent>
            <TabsContent value="paid">
+            {renderDeletionMarkActions(paidInvoices)}
             <BillingTable
               items={paidInvoices}
               type="invoices"
@@ -1387,7 +1417,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                                   id={`invoice-${invoice.id}`}
                                   checked={!!invoiceSelection[invoice.id]}
                                   disabled={invoice.isCreditNote || Boolean(invoice.creditNoteMarkedAt)}
-                                  onCheckedChange={(value) => handleToggleInvoiceSelection(invoice.id, value === true)}
+                                  onCheckedChange={(value) => handleToggleDuplicateInvoiceSelection(invoice.id, value === true)}
                                 />
                                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                   <div className="flex flex-col">
