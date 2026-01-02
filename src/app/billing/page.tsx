@@ -324,6 +324,29 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }, {} as Record<string, User>),
   [advisors]);
 
+  const loadMarkedOnlyPreference = useCallback(() => {
+    if (typeof window === 'undefined') {
+      setPrefsReady(true);
+      return;
+    }
+
+    try {
+      const stored = localStorage.getItem(MARKED_ONLY_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setMarkedOnly(parsed === true);
+      } else {
+        setMarkedOnly(false);
+      }
+    } catch (error) {
+      console.error('No se pudieron leer las preferencias de facturación, usando valores por defecto', error);
+      localStorage.removeItem(MARKED_ONLY_STORAGE_KEY);
+      setMarkedOnly(false);
+    } finally {
+      setPrefsReady(true);
+    }
+  }, []);
+
   const findDuplicateInvoiceGroups = useMemo(
     () =>
       (items: Invoice[]): DuplicateInvoiceGroup[] => {
@@ -395,7 +418,11 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
   useEffect(() => {
     if (!prefsReady || typeof window === 'undefined') return;
-    localStorage.setItem(MARKED_ONLY_STORAGE_KEY, markedOnly ? 'true' : 'false');
+    try {
+      localStorage.setItem(MARKED_ONLY_STORAGE_KEY, JSON.stringify(markedOnly));
+    } catch (error) {
+      console.error('No se pudieron guardar las preferencias de facturación', error);
+    }
   }, [markedOnly, prefsReady]);
 
 
@@ -1000,7 +1027,15 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       }
   }
 
-  if (authLoading || loading || !prefsReady) {
+  const prefsLoader = (
+    <div className="flex min-h-[260px] items-center justify-center rounded-md border border-dashed bg-muted/40">
+      <Spinner size="small" />
+    </div>
+  );
+
+  const renderWithPrefs = (content: React.ReactNode) => (prefsReady ? content : prefsLoader);
+
+  if (authLoading || loading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
@@ -1060,12 +1095,14 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             </Label>
           </div>
           <TabsContent value="to-invoice">
-            <ToInvoiceTable 
-                items={toInvoiceOpps}
-                clientsMap={clientsMap}
-                onCreateInvoice={handleCreateInvoice}
-                onRowClick={handleRowClick}
-            />
+            {renderWithPrefs(
+              <ToInvoiceTable 
+                  items={toInvoiceOpps}
+                  clientsMap={clientsMap}
+                  onCreateInvoice={handleCreateInvoice}
+                  onRowClick={handleRowClick}
+              />
+            )}
           </TabsContent>
           <TabsContent value="to-collect">
             <BillingTable
@@ -1143,17 +1180,19 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 </div>
               )}
 
-              <PaymentsTable
-                entries={filteredPayments}
-                onUpdate={handleUpdatePaymentEntry}
-                onDelete={handleDeletePayments}
-                selectedIds={selectedPaymentIds}
-                onToggleSelected={handleTogglePaymentSelection}
-                onToggleSelectAll={handleSelectAllPayments}
-                allowDelete={isBoss}
-                isBossView={isBoss}
-                onRequestExplanation={isBoss ? handleRequestPaymentExplanation : undefined}
-              />
+              {renderWithPrefs(
+                <PaymentsTable
+                  entries={filteredPayments}
+                  onUpdate={handleUpdatePaymentEntry}
+                  onDelete={handleDeletePayments}
+                  selectedIds={selectedPaymentIds}
+                  onToggleSelected={handleTogglePaymentSelection}
+                  onToggleSelectAll={handleSelectAllPayments}
+                  allowDelete={isBoss}
+                  isBossView={isBoss}
+                  onRequestExplanation={isBoss ? handleRequestPaymentExplanation : undefined}
+                />
+              )}
             </div>
           </TabsContent>
         </Tabs>
