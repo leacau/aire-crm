@@ -7,7 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries, requestPaymentExplanation, getChatSpaces } from '@/lib/firebase-service';
+import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries, requestPaymentExplanation, getChatSpaces, deleteInvoice } from '@/lib/firebase-service';
 import type { Opportunity, Client, User, Invoice, PaymentEntry, ChatSpaceMapping } from '@/lib/types';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { updateOpportunity } from '@/lib/firebase-service';
@@ -22,6 +22,19 @@ import { BillingTable } from '@/components/billing/billing-table';
 import { ToInvoiceTable } from '@/components/billing/to-invoice-table';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { PaymentsTable } from '@/components/billing/payments-table';
+import { logActivity } from '@/lib/activity-logger';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const getPeriodDurationInMonths = (period: string): number => {
     switch (period) {
@@ -124,8 +137,16 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [pastedPayments, setPastedPayments] = useState('');
   const [isImportingPayments, setIsImportingPayments] = useState(false);
+  const [isDeletingDuplicates, setIsDeletingDuplicates] = useState(false);
+  const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false);
+  const [duplicateGroups, setDuplicateGroups] = useState<Invoice[][]>([]);
+  const [showOnlyMarkedForDeletion, setShowOnlyMarkedForDeletion] = useState(false);
+  const [selectedDuplicateIds, setSelectedDuplicateIds] = useState<Set<string>>(new Set());
   
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const canManageBillingDeletion = Boolean(
+    isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Admin',
+  );
 
   const dateRange: DateRange | undefined = useMemo(() => {
     return {
@@ -552,6 +573,96 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   };
 
+  const handleToggleDeletionMark = async (invoiceId: string, nextValue: boolean) => {
+    if (!userInfo || !canManageBillingDeletion) return;
+
+    const invoiceToUpdate = invoices.find((inv) => inv.id === invoiceId);
+    if (!invoiceToUpdate) return;
+
+    const opp = opportunities.find((o) => o.id === invoiceToUpdate.opportunityId);
+    if (!opp) return;
+
+    const client = clients.find((c) => c.id === opp.clientId);
+    if (!client) return;
+
+    const updatePayload: Partial<Invoice> = {
+      markedForDeletion: nextValue,
+      deletionMarkedAt: nextValue ? new Date().toISOString() : null,
+      deletionMarkedById: nextValue ? userInfo.id : null,
+      deletionMarkedByName: nextValue ? userInfo.name : null,
+    };
+
+    setInvoices((prev) =>
+      prev.map((inv) => (inv.id === invoiceId ? { ...inv, ...updatePayload } : inv)),
+    );
+
+    try {
+      await updateInvoice(invoiceId, updatePayload, userInfo.id, userInfo.name, client.ownerName);
+      await logActivity({
+        userId: userInfo.id,
+        userName: userInfo.name,
+        ownerName: client.ownerName,
+        type: 'update',
+        entityType: 'invoice',
+        entityId: invoiceId,
+        entityName: `Factura #${invoiceToUpdate.invoiceNumber}`,
+        details: nextValue
+          ? `marcó para eliminar la factura #${invoiceToUpdate.invoiceNumber}`
+          : `quitó el marcado de eliminación de la factura #${invoiceToUpdate.invoiceNumber}`,
+      });
+      toast({
+        title: `Factura #${invoiceToUpdate.invoiceNumber} ${nextValue ? 'marcada para eliminar' : 'sin pedido de eliminación'}.`,
+      });
+      setTimeout(fetchData, 300);
+    } catch (error) {
+      console.error('Error toggling deletion mark:', error);
+      toast({ title: 'No se pudo actualizar la factura', variant: 'destructive' });
+      fetchData();
+    }
+  };
+
+  const findDuplicateInvoiceGroups = useCallback((): Invoice[][] => {
+    const grouped = new Map<string, Invoice[]>();
+
+    invoices.forEach((invoice) => {
+      const opp = opportunitiesMap[invoice.opportunityId];
+      if (!opp || !invoice.date) return;
+
+      const clientId = opp.clientId;
+      const amount = Number(invoice.amount);
+      const normalizedNumber = getNormalizedInvoiceNumber(invoice);
+      const lastFour = normalizedNumber.slice(-4);
+
+      if (!clientId || !Number.isFinite(amount) || !lastFour) return;
+
+      const key = `${clientId}|${invoice.date}|${amount}|${lastFour}`;
+      const current = grouped.get(key) || [];
+      current.push(invoice);
+      grouped.set(key, current);
+    });
+
+    const duplicates: Invoice[][] = [];
+    grouped.forEach((group) => {
+      if (group.length <= 1) return;
+
+      const sortedGroup = [...group].sort((a, b) => {
+        const dateA = new Date(a.dateGenerated || a.date || '').getTime();
+        const dateB = new Date(b.dateGenerated || b.date || '').getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        return a.id.localeCompare(b.id);
+      });
+      duplicates.push(sortedGroup);
+    });
+
+    duplicates.sort((a, b) => {
+      const clientA = opportunitiesMap[a[0].opportunityId]?.clientId || '';
+      const clientB = opportunitiesMap[b[0].opportunityId]?.clientId || '';
+      return clientA.localeCompare(clientB);
+    });
+
+    return duplicates;
+  }, [invoices, opportunitiesMap]);
+
 
   const handleMarkAsPaid = async (invoiceId: string) => {
     if (!userInfo) return;
@@ -611,6 +722,59 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       fetchData();
     }
   };
+
+  const handleOpenDuplicateDialog = () => {
+    const duplicates = findDuplicateInvoiceGroups();
+    if (duplicates.length === 0) {
+      toast({ title: 'No se encontraron facturas duplicadas en A Cobrar' });
+      return;
+    }
+    const initialSelected = new Set<string>();
+    duplicates.forEach((group) => {
+      group.slice(1).forEach((inv) => initialSelected.add(inv.id));
+    });
+    setSelectedDuplicateIds(initialSelected);
+    setDuplicateGroups(duplicates);
+    setIsDuplicateDialogOpen(true);
+  };
+
+  const handleConfirmDeleteDuplicates = async () => {
+    if (!userInfo || !canManageBillingDeletion) return;
+    const duplicates = findDuplicateInvoiceGroups();
+    setDuplicateGroups(duplicates);
+
+    const invoicesToDelete = duplicates.flatMap((group) =>
+      group.slice(1).filter((inv) => selectedDuplicateIds.has(inv.id)),
+    );
+    if (invoicesToDelete.length === 0) {
+      toast({ title: 'No se encontraron facturas duplicadas en A Cobrar' });
+      setIsDuplicateDialogOpen(false);
+      return;
+    }
+
+    const idsToDelete = new Set(invoicesToDelete.map((inv) => inv.id));
+    setInvoices((prev) => prev.filter((inv) => !idsToDelete.has(inv.id)));
+    setIsDeletingDuplicates(true);
+    setIsDuplicateDialogOpen(false);
+
+    try {
+      for (const invoice of invoicesToDelete) {
+        const opp = opportunitiesMap[invoice.opportunityId];
+        const client = opp ? clientsMap[opp.clientId] : undefined;
+        await deleteInvoice(invoice.id, userInfo.id, userInfo.name, client?.ownerName || '');
+      }
+      toast({
+        title: invoicesToDelete.length === 1 ? 'Factura duplicada eliminada' : 'Facturas duplicadas eliminadas',
+      });
+      setTimeout(fetchData, 300);
+    } catch (error) {
+      console.error('Error deleting duplicate invoices:', error);
+      toast({ title: 'No se pudieron eliminar los duplicados', variant: 'destructive' });
+      fetchData();
+    } finally {
+      setIsDeletingDuplicates(false);
+    }
+  };
   
   const handleRowClick = (item: Opportunity | Invoice) => {
       const oppId = 'clientId' in item ? item.id.split('_')[0] : (opportunitiesMap[item.opportunityId] ? item.opportunityId : null);
@@ -632,113 +796,206 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   }
   
   return (
-    <div className="flex flex-col h-full">
-      <Header title="Estado de Cobranzas">
-         <MonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
-          {isBoss && (
-            <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
-              <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Filtrar por asesor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los asesores</SelectItem>
-                {advisors.map(advisor => (
-                  <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-      </Header>
-      <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-        <Tabs defaultValue={initialTab}>
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="to-invoice">A Facturar</TabsTrigger>
-            <TabsTrigger value="to-collect">A Cobrar</TabsTrigger>
-            <TabsTrigger value="paid">Pagado</TabsTrigger>
-            <TabsTrigger value="credit-notes">NC</TabsTrigger>
-            <TabsTrigger value="payments">Mora</TabsTrigger>
-          </TabsList>
-          <TabsContent value="to-invoice">
-            <ToInvoiceTable 
-                items={toInvoiceOpps}
-                clientsMap={clientsMap}
-                onCreateInvoice={handleCreateInvoice}
-                onRowClick={handleRowClick}
-            />
-          </TabsContent>
-          <TabsContent value="to-collect">
-            <BillingTable
-              items={toCollectInvoices}
-              type="invoices"
-              onRowClick={handleRowClick}
-              clientsMap={clientsMap}
-              usersMap={usersMap}
-              opportunitiesMap={opportunitiesMap}
-              onMarkAsPaid={handleMarkAsPaid}
-              onToggleCreditNote={handleToggleCreditNote}
-            />
-          </TabsContent>
-           <TabsContent value="paid">
-            <BillingTable items={paidInvoices} type="invoices" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} />
-          </TabsContent>
-          <TabsContent value="credit-notes">
-            <BillingTable
-              items={creditNoteInvoices}
-              type="invoices"
-              onRowClick={handleRowClick}
-              clientsMap={clientsMap}
-              usersMap={usersMap}
-              opportunitiesMap={opportunitiesMap}
-              onToggleCreditNote={handleToggleCreditNote}
-              showCreditNoteDate
-            />
-          </TabsContent>
-          <TabsContent value="payments">
-            <div className="grid gap-4">
-              {isBoss && (
-                <div className="grid gap-3 rounded-lg border bg-card p-4">
-                  <p className="text-sm text-muted-foreground">
-                    Pegá las filas que recibís por mail (separadas por tabulaciones o punto y coma) y reemplazaremos la lista de ese asesor.
-                  </p>
-                  <textarea
-                    className="min-h-[120px] w-full rounded-md border bg-background p-3 text-sm"
-                    value={pastedPayments}
-                    onChange={(e) => setPastedPayments(e.target.value)}
-                    placeholder="Empresa\tTipo\tNro comprobante\tRazón social\tImporte pendiente\tFecha emisión\tFecha vencimiento\tDías de atraso"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button onClick={handleImportPayments} disabled={isImportingPayments}>
-                      {isImportingPayments ? <Spinner size="small" /> : 'Reemplazar lista de pagos'}
+    <>
+      <div className="flex flex-col h-full">
+        <Header title="Estado de Cobranzas">
+           <MonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
+            {isBoss && (
+              <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
+                <SelectTrigger className="w-full sm:w-[200px]">
+                  <SelectValue placeholder="Filtrar por asesor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los asesores</SelectItem>
+                  {advisors.map(advisor => (
+                    <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+        </Header>
+        <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
+          <Tabs defaultValue={initialTab}>
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="to-invoice">A Facturar</TabsTrigger>
+              <TabsTrigger value="to-collect">A Cobrar</TabsTrigger>
+              <TabsTrigger value="paid">Pagado</TabsTrigger>
+              <TabsTrigger value="credit-notes">NC</TabsTrigger>
+              <TabsTrigger value="payments">Mora</TabsTrigger>
+            </TabsList>
+            <TabsContent value="to-invoice">
+              <ToInvoiceTable 
+                  items={toInvoiceOpps}
+                  clientsMap={clientsMap}
+                  onCreateInvoice={handleCreateInvoice}
+                  onRowClick={handleRowClick}
+              />
+            </TabsContent>
+            <TabsContent value="to-collect">
+              <div className="grid gap-4">
+                {canManageBillingDeletion && (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Switch
+                        id="only-marked"
+                        checked={showOnlyMarkedForDeletion}
+                        onCheckedChange={(checked) => setShowOnlyMarkedForDeletion(checked === true)}
+                      />
+                      <label htmlFor="only-marked">Ver solo facturas marcadas para eliminar</label>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      onClick={handleOpenDuplicateDialog}
+                      disabled={isDeletingDuplicates}
+                    >
+                      {isDeletingDuplicates ? <Spinner size="small" /> : 'Eliminar facturas duplicadas'}
                     </Button>
                   </div>
-                </div>
-              )}
-
-              <PaymentsTable
-                entries={filteredPayments}
-                onUpdate={handleUpdatePaymentEntry}
-                onDelete={handleDeletePayments}
-                selectedIds={selectedPaymentIds}
-                onToggleSelected={handleTogglePaymentSelection}
-                onToggleSelectAll={handleSelectAllPayments}
-                allowDelete={isBoss}
-                isBossView={isBoss}
-                onRequestExplanation={isBoss ? handleRequestPaymentExplanation : undefined}
+                )}
+                <BillingTable
+                  items={showOnlyMarkedForDeletion ? toCollectInvoices.filter((inv) => inv.markedForDeletion) : toCollectInvoices}
+                  type="invoices"
+                  onRowClick={handleRowClick}
+                  clientsMap={clientsMap}
+                  usersMap={usersMap}
+                  opportunitiesMap={opportunitiesMap}
+                  onMarkAsPaid={handleMarkAsPaid}
+                  onToggleCreditNote={handleToggleCreditNote}
+                  onToggleDeletionMark={canManageBillingDeletion ? handleToggleDeletionMark : undefined}
+                  highlightMarkedForDeletion
+                />
+              </div>
+            </TabsContent>
+             <TabsContent value="paid">
+              <BillingTable items={paidInvoices} type="invoices" onRowClick={handleRowClick} clientsMap={clientsMap} usersMap={usersMap} opportunitiesMap={opportunitiesMap} />
+            </TabsContent>
+            <TabsContent value="credit-notes">
+              <BillingTable
+                items={creditNoteInvoices}
+                type="invoices"
+                onRowClick={handleRowClick}
+                clientsMap={clientsMap}
+                usersMap={usersMap}
+                opportunitiesMap={opportunitiesMap}
+                onToggleCreditNote={handleToggleCreditNote}
+                showCreditNoteDate
               />
-            </div>
-          </TabsContent>
-        </Tabs>
-      </main>
-      
-       {isFormOpen && (
-        <OpportunityDetailsDialog
-          opportunity={selectedOpportunity}
-          isOpen={isFormOpen}
-          onOpenChange={setIsFormOpen}
-          onUpdate={handleUpdateOpportunity}
-        />
-      )}
-    </div>
+            </TabsContent>
+            <TabsContent value="payments">
+              <div className="grid gap-4">
+                {isBoss && (
+                  <div className="grid gap-3 rounded-lg border bg-card p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Pegá las filas que recibís por mail (separadas por tabulaciones o punto y coma) y reemplazaremos la lista de ese asesor.
+                    </p>
+                    <textarea
+                      className="min-h-[120px] w-full rounded-md border bg-background p-3 text-sm"
+                      value={pastedPayments}
+                      onChange={(e) => setPastedPayments(e.target.value)}
+                      placeholder="Empresa\tTipo\tNro comprobante\tRazón social\tImporte pendiente\tFecha emisión\tFecha vencimiento\tDías de atraso"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button onClick={handleImportPayments} disabled={isImportingPayments}>
+                        {isImportingPayments ? <Spinner size="small" /> : 'Reemplazar lista de pagos'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <PaymentsTable
+                  entries={filteredPayments}
+                  onUpdate={handleUpdatePaymentEntry}
+                  onDelete={handleDeletePayments}
+                  selectedIds={selectedPaymentIds}
+                  onToggleSelected={handleTogglePaymentSelection}
+                  onToggleSelectAll={handleSelectAllPayments}
+                  allowDelete={isBoss}
+                  isBossView={isBoss}
+                  onRequestExplanation={isBoss ? handleRequestPaymentExplanation : undefined}
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
+        </main>
+        
+         {isFormOpen && (
+          <OpportunityDetailsDialog
+            opportunity={selectedOpportunity}
+            isOpen={isFormOpen}
+            onOpenChange={setIsFormOpen}
+            onUpdate={handleUpdateOpportunity}
+          />
+        )}
+      </div>
+
+      <AlertDialog open={isDuplicateDialogOpen} onOpenChange={setIsDuplicateDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar facturas duplicadas</AlertDialogTitle>
+            <AlertDialogDescription>
+              {duplicateGroups.length === 0
+                ? 'No se encontraron duplicados.'
+                : `Se eliminarán ${Array.from(selectedDuplicateIds).length} factura(s) duplicada(s) y se conservará una por grupo.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-3 max-h-[50vh] overflow-auto">
+            {duplicateGroups.slice(0, 8).map((group, index) => {
+              const opp = opportunitiesMap[group[0].opportunityId];
+              const client = opp ? clientsMap[opp.clientId] : undefined;
+              return (
+                <div key={`${group[0].id}-${index}`} className="rounded-md border p-3">
+                  <p className="text-sm font-medium">
+                    {client?.denominacion || opp?.clientName || 'Cliente'} — {group[0].date || 'Sin fecha'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Se conserva: #{group[0].invoiceNumber}</p>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {group.slice(1).map((inv) => (
+                      <li key={inv.id} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={selectedDuplicateIds.has(inv.id)}
+                            onCheckedChange={(checked) => {
+                              setSelectedDuplicateIds((prev) => {
+                                const next = new Set(prev);
+                                if (checked === true) {
+                                  next.add(inv.id);
+                                } else {
+                                  next.delete(inv.id);
+                                }
+                                return next;
+                              });
+                            }}
+                          />
+                          <span>#{inv.invoiceNumber}</span>
+                        </div>
+                        <span className="text-muted-foreground">${Number(inv.amount).toLocaleString('es-AR')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+            {duplicateGroups.length > 8 && (
+              <p className="text-xs text-muted-foreground">
+                Hay {duplicateGroups.length - 8} grupo(s) adicional(es) de duplicados.
+              </p>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingDuplicates}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteDuplicates}
+              disabled={isDeletingDuplicates || selectedDuplicateIds.size === 0}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingDuplicates ? <Spinner size="small" /> : 'Eliminar duplicados seleccionados'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
