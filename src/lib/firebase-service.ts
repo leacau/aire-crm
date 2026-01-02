@@ -1349,6 +1349,69 @@ export const deleteInvoice = async (id: string, userId: string, userName: string
     });
 };
 
+export type InvoiceBatchDeleteResult = {
+    deleted: string[];
+    failed: { id: string; error: string }[];
+};
+
+export type InvoiceBatchDeleteProgress = InvoiceBatchDeleteResult & {
+    total: number;
+    processed: number;
+    chunk: string[];
+};
+
+type InvoiceBatchDeleteOptions = {
+    batchSize?: number;
+    onProgress?: (progress: InvoiceBatchDeleteProgress) => void;
+    resolveOwnerName?: (invoiceId: string) => string;
+};
+
+export const deleteInvoicesInBatches = async (
+    ids: string[],
+    userId: string,
+    userName: string,
+    options: InvoiceBatchDeleteOptions = {},
+): Promise<InvoiceBatchDeleteResult> => {
+    const { batchSize = 25, onProgress, resolveOwnerName } = options;
+    const result: InvoiceBatchDeleteResult = { deleted: [], failed: [] };
+    const total = ids.length;
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += batchSize) {
+        chunks.push(ids.slice(i, i + batchSize));
+    }
+
+    for (const chunk of chunks) {
+        const settled = await Promise.allSettled(
+            chunk.map(async (invoiceId) => {
+                const ownerName = resolveOwnerName?.(invoiceId) || 'Cliente';
+                await deleteInvoice(invoiceId, userId, userName, ownerName);
+            }),
+        );
+
+        settled.forEach((res, index) => {
+            const invoiceId = chunk[index];
+            if (res.status === 'fulfilled') {
+                result.deleted.push(invoiceId);
+            } else {
+                const message = res.reason instanceof Error ? res.reason.message : String(res.reason);
+                result.failed.push({ id: invoiceId, error: message });
+            }
+        });
+
+        const processed = result.deleted.length + result.failed.length;
+        onProgress?.({
+            total,
+            processed,
+            chunk,
+            deleted: [...result.deleted],
+            failed: [...result.failed],
+        });
+    }
+
+    return result;
+};
+
 
 // --- Payment entries ---
 

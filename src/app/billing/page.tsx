@@ -7,7 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries, requestPaymentExplanation, getChatSpaces, deleteInvoice } from '@/lib/firebase-service';
+import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries, requestPaymentExplanation, getChatSpaces, deleteInvoicesInBatches } from '@/lib/firebase-service';
 import type { Opportunity, Client, User, Invoice, PaymentEntry, ChatSpaceMapping } from '@/lib/types';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { updateOpportunity } from '@/lib/firebase-service';
@@ -118,6 +118,22 @@ type DuplicateInvoiceGroup = {
   invoices: Invoice[];
 };
 
+type DeleteProgressState = {
+  total: number;
+  processed: number;
+  deleted: string[];
+  failed: { id: string; error: string }[];
+  chunk?: string[];
+};
+
+const EMPTY_DELETE_PROGRESS: DeleteProgressState = {
+  total: 0,
+  processed: 0,
+  deleted: [],
+  failed: [],
+  chunk: [],
+};
+
 
 function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
@@ -136,6 +152,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const [invoiceSelection, setInvoiceSelection] = useState<Record<string, boolean>>({});
   const [isDeletingDuplicates, setIsDeletingDuplicates] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState<DeleteProgressState>(EMPTY_DELETE_PROGRESS);
+  const [isRetryingFailed, setIsRetryingFailed] = useState(false);
   
   const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -219,9 +237,20 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     });
   }, [duplicateInvoiceGroups]);
 
+  useEffect(() => {
+    if (!isDuplicateModalOpen) {
+      setDeleteProgress(EMPTY_DELETE_PROGRESS);
+      setIsDeletingDuplicates(false);
+      setIsRetryingFailed(false);
+    }
+  }, [isDuplicateModalOpen]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+
+  const fetchData = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent;
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const [allOpps, allClients, allAdvisors, allInvoices, paymentRows, savedSpaces] = await Promise.all([
         getAllOpportunities(),
@@ -242,7 +271,9 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       console.error("Error fetching billing data:", error);
       toast({ title: 'Error al cargar datos de facturación', variant: 'destructive' });
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [toast]);
 
@@ -627,42 +658,108 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     });
   };
 
-  const handleDeleteDuplicateInvoices = async () => {
+  const resolveOwnerNameForInvoice = useCallback(
+    (invoiceId: string) => {
+      const invoice = invoices.find((inv) => inv.id === invoiceId);
+      if (!invoice) return 'Cliente';
+      const opportunity = opportunitiesMap[invoice.opportunityId];
+      const client = opportunity ? clientsMap[opportunity.clientId] : undefined;
+      return client?.ownerName || opportunity?.clientName || 'Cliente';
+    },
+    [clientsMap, invoices, opportunitiesMap],
+  );
+
+  const runBatchInvoiceDeletion = useCallback(
+    async (invoiceIds: string[]) => {
+      if (!userInfo) {
+        return {
+          deleted: [],
+          failed: invoiceIds.map((id) => ({ id, error: 'Usuario no autenticado' })),
+        };
+      }
+
+      setIsDeletingDuplicates(true);
+      setDeleteProgress({
+        total: invoiceIds.length,
+        processed: 0,
+        deleted: [],
+        failed: [],
+      });
+
+      try {
+        const result = await deleteInvoicesInBatches(invoiceIds, userInfo.id, userInfo.name, {
+          batchSize: 25,
+          resolveOwnerName: resolveOwnerNameForInvoice,
+          onProgress: (progress) => {
+            setDeleteProgress(progress);
+            fetchData({ silent: true });
+          },
+        });
+        return result;
+      } catch (error) {
+        console.error('Error deleting duplicate invoices', error);
+        return {
+          deleted: [],
+          failed: invoiceIds.map((id) => ({
+            id,
+            error: error instanceof Error ? error.message : 'Error desconocido al eliminar facturas',
+          })),
+        };
+      } finally {
+        setIsDeletingDuplicates(false);
+      }
+    },
+    [fetchData, resolveOwnerNameForInvoice, userInfo],
+  );
+
+  const handleDeleteDuplicateInvoices = async (idsToDelete?: string[]) => {
     if (!userInfo) return;
 
-    const selectedInvoices = duplicateInvoiceGroups.flatMap((group) =>
-      group.invoices.filter((inv) => invoiceSelection[inv.id]),
-    );
+    const selectedInvoices = idsToDelete
+      ? invoices.filter((inv) => idsToDelete.includes(inv.id))
+      : duplicateInvoiceGroups.flatMap((group) => group.invoices.filter((inv) => invoiceSelection[inv.id]));
 
     if (selectedInvoices.length === 0) return;
 
-    const selectedIds = new Set(selectedInvoices.map((inv) => inv.id));
-    setIsDeletingDuplicates(true);
-    setInvoices((prev) => prev.filter((inv) => !selectedIds.has(inv.id)));
+    setIsRetryingFailed(Boolean(idsToDelete));
 
     try {
-      await Promise.all(
-        selectedInvoices.map(async (invoice) => {
-          const opportunity = opportunitiesMap[invoice.opportunityId];
-          const client = opportunity ? clientsMap[opportunity.clientId] : undefined;
-          const ownerName = client?.ownerName || opportunity?.clientName || 'Cliente';
+      const result = await runBatchInvoiceDeletion(selectedInvoices.map((inv) => inv.id));
 
-          await deleteInvoice(invoice.id, userInfo.id, userInfo.name, ownerName);
-        }),
-      );
+      if (result.deleted.length > 0) {
+        setInvoices((prev) => prev.filter((inv) => !result.deleted.includes(inv.id)));
+        toast({
+          title: result.deleted.length === 1 ? 'Factura eliminada' : 'Facturas eliminadas',
+          description: `${result.deleted.length} factura${result.deleted.length === 1 ? '' : 's'} duplicada${result.deleted.length === 1 ? '' : 's'} eliminada${result.deleted.length === 1 ? '' : 's'}.`,
+        });
+      }
 
-      toast({
-        title: selectedInvoices.length === 1 ? 'Factura eliminada' : 'Facturas eliminadas',
-        description: `${selectedInvoices.length} factura${selectedInvoices.length === 1 ? '' : 's'} duplicada${selectedInvoices.length === 1 ? '' : 's'} eliminada${selectedInvoices.length === 1 ? '' : 's'}.`,
+      if (result.failed.length > 0) {
+        toast({
+          title: 'Eliminación parcial',
+          description: `No se pudieron eliminar ${result.failed.length} factura${result.failed.length === 1 ? '' : 's'}. Reintentá las fallidas.`,
+          variant: 'destructive',
+        });
+      }
+
+      setInvoiceSelection((prev) => {
+        const next = { ...prev };
+        result.deleted.forEach((id) => delete next[id]);
+        result.failed.forEach(({ id }) => {
+          next[id] = true;
+        });
+        return next;
       });
-      setIsDuplicateModalOpen(false);
-      fetchData();
-    } catch (error) {
-      console.error('Error deleting duplicate invoices', error);
-      toast({ title: 'No se pudieron eliminar las facturas', variant: 'destructive' });
-      fetchData();
+
+      fetchData({ silent: true });
+
+      if (result.failed.length === 0) {
+        setIsDuplicateModalOpen(false);
+        setDeleteProgress(EMPTY_DELETE_PROGRESS);
+        setInvoiceSelection({});
+      }
     } finally {
-      setIsDeletingDuplicates(false);
+      setIsRetryingFailed(false);
     }
   };
 
@@ -765,9 +862,16 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
           <Button
             variant="outline"
             onClick={() => setIsDuplicateModalOpen(true)}
-            disabled={totalDuplicateInvoices === 0}
+            disabled={totalDuplicateInvoices === 0 || isDeletingDuplicates}
           >
-            Eliminar facturas duplicadas {totalDuplicateInvoices > 0 ? `(${totalDuplicateInvoices})` : ''}
+            {isDeletingDuplicates ? (
+              <>
+                <Spinner size="small" className="mr-2" />
+                Eliminando duplicados...
+              </>
+            ) : (
+              <>Eliminar facturas duplicadas {totalDuplicateInvoices > 0 ? `(${totalDuplicateInvoices})` : ''}</>
+            )}
           </Button>
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
@@ -862,9 +966,37 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="rounded-md border bg-muted/50 p-3 text-sm">
-              Seleccionadas <strong>{totalSelectedDuplicateInvoices}</strong> de {totalDuplicateInvoices} facturas para eliminar.
+            <div className="rounded-md border bg-muted/50 p-3 text-sm space-y-2">
+              <div>
+                Seleccionadas <strong>{totalSelectedDuplicateInvoices}</strong> de {totalDuplicateInvoices} facturas para eliminar.
+              </div>
+              {deleteProgress.total > 0 && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {isDeletingDuplicates ? <Spinner size="small" /> : null}
+                  <span>
+                    Progreso: {deleteProgress.processed}/{deleteProgress.total} procesadas · {deleteProgress.deleted.length} eliminadas · {deleteProgress.failed.length} con error
+                  </span>
+                </div>
+              )}
             </div>
+
+            {deleteProgress.failed.length > 0 && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                <p className="font-medium">
+                  No se pudieron eliminar {deleteProgress.failed.length} factura{deleteProgress.failed.length === 1 ? '' : 's'}.
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
+                  {deleteProgress.failed.slice(0, 3).map((failure) => (
+                    <li key={failure.id}>
+                      {failure.id}: {failure.error}
+                    </li>
+                  ))}
+                  {deleteProgress.failed.length > 3 && (
+                    <li>y {deleteProgress.failed.length - 3} más...</li>
+                  )}
+                </ul>
+              </div>
+            )}
 
             {duplicateInvoiceGroups.length === 0 ? (
               <p className="text-sm text-muted-foreground">No se encontraron facturas duplicadas.</p>
@@ -942,16 +1074,33 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setIsDuplicateModalOpen(false)} disabled={isDeletingDuplicates}>
               Cancelar
             </Button>
+            {deleteProgress.failed.length > 0 && (
+              <Button
+                variant="secondary"
+                onClick={() => handleDeleteDuplicateInvoices(deleteProgress.failed.map((f) => f.id))}
+                disabled={isDeletingDuplicates}
+              >
+                {isRetryingFailed ? <Spinner size="small" className="mr-2" /> : null}
+                Reintentar fallidos
+              </Button>
+            )}
             <Button
               variant="destructive"
-              onClick={handleDeleteDuplicateInvoices}
+              onClick={() => handleDeleteDuplicateInvoices()}
               disabled={totalSelectedDuplicateInvoices === 0 || isDeletingDuplicates}
             >
-              {isDeletingDuplicates ? <Spinner size="small" /> : 'Eliminar seleccionadas'}
+              {isDeletingDuplicates ? (
+                <>
+                  <Spinner size="small" className="mr-2" />
+                  Eliminando... {deleteProgress.processed}/{deleteProgress.total || totalSelectedDuplicateInvoices}
+                </>
+              ) : (
+                'Eliminar seleccionadas'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
