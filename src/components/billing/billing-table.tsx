@@ -32,7 +32,8 @@ export const BillingTable = ({
   setColumnOrder,
   isReady = true,
   selectedInvoiceIds,
-  onSelectedInvoicesChange,
+  onToggleSelect,
+  onToggleSelectAll,
 }: {
   items: (Opportunity | Invoice)[];
   type: 'opportunities' | 'invoices';
@@ -51,7 +52,8 @@ export const BillingTable = ({
   setColumnOrder?: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
   isReady?: boolean;
   selectedInvoiceIds?: Set<string>;
-  onSelectedInvoicesChange?: (ids: Set<string>) => void;
+  onToggleSelect?: (id: string) => void;
+  onToggleSelectAll?: (checked: boolean) => void;
 }) => {
 
   const isDeletionMarked = useCallback((item: Opportunity | Invoice) => {
@@ -63,60 +65,60 @@ export const BillingTable = ({
     );
   }, []);
 
-  const selectionEnabled = type === 'invoices' && !!selectedInvoiceIds && !!onSelectedInvoicesChange;
+  const selectionEnabled = useMemo(
+    () => type === 'invoices' && !!selectedInvoiceIds && !!onToggleSelect && !!onToggleSelectAll,
+    [onToggleSelect, onToggleSelectAll, selectedInvoiceIds, type]
+  );
 
-  const rowSelection = useMemo<RowSelectionState>(() => {
-    if (!selectionEnabled || !selectedInvoiceIds) return {};
-    return items.reduce<RowSelectionState>((acc, item) => {
-      const id = (item as Invoice).id;
-      if (selectedInvoiceIds.has(id)) {
-        acc[id] = true;
-      }
-      return acc;
-    }, {});
-  }, [items, selectedInvoiceIds, selectionEnabled]);
+  const displayedInvoiceIds = useMemo(() => {
+    if (!selectionEnabled || !isReady) return [] as string[];
 
-  const handleRowSelectionChange = useCallback<React.Dispatch<React.SetStateAction<RowSelectionState>>>(
-    (updater) => {
-      if (!selectionEnabled || !onSelectedInvoicesChange) return;
-      const nextState = typeof updater === 'function' ? updater(rowSelection) : updater;
-      const nextSet = new Set<string>();
-      Object.entries(nextState).forEach(([key, value]) => {
-        if (value) nextSet.add(key);
-      });
-      onSelectedInvoicesChange(nextSet);
-    },
-    [onSelectedInvoicesChange, rowSelection, selectionEnabled],
+    return items
+      .filter((item): item is Invoice => (item as Invoice).id !== undefined)
+      .map((invoice) => invoice.id);
+  }, [isReady, items, selectionEnabled]);
+
+  const allSelected = useMemo(
+    () => selectionEnabled && displayedInvoiceIds.length > 0 && displayedInvoiceIds.every((id) => selectedInvoiceIds?.has(id)),
+    [displayedInvoiceIds, selectedInvoiceIds, selectionEnabled]
+  );
+
+  const someSelected = useMemo(
+    () => selectionEnabled && displayedInvoiceIds.some((id) => selectedInvoiceIds?.has(id)),
+    [displayedInvoiceIds, selectedInvoiceIds, selectionEnabled]
   );
 
   const columns = useMemo<ColumnDef<Opportunity | Invoice>[]>(() => {
-    let cols: ColumnDef<any>[] = [
-      ...(selectionEnabled
-        ? [
-            {
-              id: 'select',
-              header: ({ table }) => (
-                <Checkbox
-                  aria-label="Seleccionar todas las facturas visibles"
-                  checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
-                  onCheckedChange={(value) => table.toggleAllPageRowsSelected(value === true)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ),
-              cell: ({ row }) => (
-                <Checkbox
-                  aria-label="Seleccionar factura"
-                  checked={row.getIsSelected()}
-                  onCheckedChange={(value) => row.toggleSelected(value === true)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ),
-              size: 42,
-              enableSorting: false,
-              enableHiding: false,
-            } satisfies ColumnDef<Opportunity | Invoice>,
-          ]
-        : []),
+    let cols: ColumnDef<any>[] = [];
+
+    if (type === 'invoices' && selectionEnabled) {
+      cols.push({
+        id: 'select',
+        header: () => (
+          <Checkbox
+            checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+            onCheckedChange={(value) => onToggleSelectAll?.(value === true)}
+            aria-label="Seleccionar todas las facturas visibles"
+            onClick={(e) => e.stopPropagation()}
+          />
+        ),
+        cell: ({ row }) => {
+          const invoice = row.original as Invoice;
+          return (
+            <Checkbox
+              checked={selectedInvoiceIds?.has(invoice.id) ?? false}
+              onCheckedChange={() => onToggleSelect?.(invoice.id)}
+              aria-label={`Seleccionar factura ${invoice.invoiceNumber || invoice.id}`}
+              onClick={(e) => e.stopPropagation()}
+            />
+          );
+        },
+        size: 48,
+        enableResizing: false,
+      });
+    }
+
+    cols.push(
       {
         accessorKey: 'opportunityTitle',
         header: 'Oportunidad',
@@ -154,7 +156,7 @@ export const BillingTable = ({
             );
         },
       },
-    ];
+    );
 
     if (type === 'invoices') {
         cols.push({
@@ -285,16 +287,21 @@ export const BillingTable = ({
     return cols;
 
   }, [
-    type,
-    onRowClick,
+    allSelected,
     clientsMap,
-    opportunitiesMap,
-    onMarkAsPaid,
-    usersMap,
-    onToggleCreditNote,
-    showCreditNoteDate,
     isDeletionMarked,
+    onMarkAsPaid,
+    onRowClick,
+    onToggleCreditNote,
+    onToggleSelect,
+    onToggleSelectAll,
+    opportunitiesMap,
+    selectedInvoiceIds,
     selectionEnabled,
+    showCreditNoteDate,
+    type,
+    someSelected,
+    usersMap,
   ]);
 
   const total = items.reduce((acc, item) => {
