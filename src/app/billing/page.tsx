@@ -26,6 +26,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { es } from 'date-fns/locale';
+import { logActivity } from '@/lib/activity-logger';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 const getPeriodDurationInMonths = (period: string): number => {
     switch (period) {
@@ -166,6 +168,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
   const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
+  const canManageBillingDeletion = useMemo(
+    () => hasManagementPrivileges(userInfo) || userInfo?.role === 'Administracion',
+    [userInfo],
+  );
   
   const opportunitiesMap = useMemo(() => 
     opportunities.reduce((acc, opp) => {
@@ -669,6 +675,40 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     [clientsMap, invoices, opportunitiesMap],
   );
 
+  const ensureCanManageBillingDeletion = useCallback(
+    async ({ action, invoice }: { action: string; invoice?: Invoice }) => {
+      if (canManageBillingDeletion) return true;
+
+      toast({
+        title: 'Acceso denegado',
+        description: 'No tenés permisos para modificar o eliminar facturas.',
+        variant: 'destructive',
+      });
+
+      if (userInfo) {
+        const ownerName = invoice ? resolveOwnerNameForInvoice(invoice.id) : 'Cliente';
+        const invoiceName = invoice?.invoiceNumber
+          ? `Factura #${invoice.invoiceNumber}`
+          : invoice
+            ? `Factura ${invoice.id}`
+            : 'Factura';
+        await logActivity({
+          userId: userInfo.id,
+          userName: userInfo.name,
+          ownerName,
+          type: 'comment',
+          entityType: 'invoice',
+          entityId: invoice?.id || 'sin-id',
+          entityName: invoiceName,
+          details: `${userInfo.name} intentó ${action} sin permisos.`,
+        });
+      }
+
+      return false;
+    },
+    [canManageBillingDeletion, resolveOwnerNameForInvoice, toast, userInfo],
+  );
+
   const runBatchInvoiceDeletion = useCallback(
     async (invoiceIds: string[]) => {
       if (!userInfo) {
@@ -721,6 +761,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
     if (selectedInvoices.length === 0) return;
 
+    const canProceed = await ensureCanManageBillingDeletion({
+      action: 'eliminar facturas duplicadas',
+      invoice: selectedInvoices[0],
+    });
+    if (!canProceed) return;
+
     setIsRetryingFailed(Boolean(idsToDelete));
 
     try {
@@ -769,6 +815,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
     const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
     if (!invoiceToUpdate) return;
+
+    const canProceed = await ensureCanManageBillingDeletion({
+      action: 'marcar la factura como pagada',
+      invoice: invoiceToUpdate,
+    });
+    if (!canProceed) return;
     
     const opp = opportunities.find(o => o.id === invoiceToUpdate.opportunityId);
     if (!opp) return;
@@ -798,6 +850,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
     const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
     if (!invoiceToUpdate) return;
+
+    const canProceed = await ensureCanManageBillingDeletion({
+      action: `marcar la factura ${nextValue ? 'con' : 'sin'} nota de crédito`,
+      invoice: invoiceToUpdate,
+    });
+    if (!canProceed) return;
 
     const opp = opportunities.find(o => o.id === invoiceToUpdate.opportunityId);
     if (!opp) return;
