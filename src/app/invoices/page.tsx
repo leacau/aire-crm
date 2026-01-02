@@ -179,7 +179,8 @@ export default function InvoiceUploadPage() {
             if (!client) throw new Error(`Cliente no encontrado para la fila con factura ${row.invoiceNumber}`);
 
             const sanitizedNumber = sanitizeInvoiceNumber(row.invoiceNumber);
-            if (!sanitizedNumber) {
+            const normalizedNumber = getNormalizedInvoiceNumber({ invoiceNumber: sanitizedNumber });
+            if (!sanitizedNumber || !normalizedNumber) {
                 toast({
                     title: 'Número de factura inválido',
                     description: 'Solo se permiten dígitos en el número de factura.',
@@ -188,7 +189,7 @@ export default function InvoiceUploadPage() {
                 continue;
             }
 
-            if (existingNumbers.has(sanitizedNumber) || newNumbers.has(sanitizedNumber)) {
+            if (existingNumbers.has(normalizedNumber) || newNumbers.has(normalizedNumber)) {
                 toast({
                     title: `Factura duplicada #${row.invoiceNumber}`,
                     description: 'Ya existe una factura con ese número. Usa un número único.',
@@ -197,7 +198,7 @@ export default function InvoiceUploadPage() {
                 continue;
             }
 
-            newNumbers.add(sanitizedNumber);
+            newNumbers.add(normalizedNumber);
 
             await createInvoice(
                 {
