@@ -1,5 +1,3 @@
-
-
 'use client';
 import { Logo } from '@/components/logo';
 import {
@@ -15,21 +13,34 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar } from 'lucide-react';
+import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb, ClipboardCheck, Target, MessageCircle, Building2 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
+import type { ScreenName } from '@/lib/types';
+import { hasPermission } from '@/lib/permissions';
 
-const menuItems = [
-  { href: '/', label: 'Panel', icon: Home, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/opportunities', label: 'Oportunidades', icon: CircleDollarSign, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/clients', label: 'Clientes', icon: Users, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/billing', label: 'Facturación', icon: Receipt, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/calendar', label: 'Calendario', icon: Calendar, roles: ['Jefe', 'Gerencia', 'Asesor', 'Administracion'] },
-  { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, roles: ['Jefe', 'Gerencia'] },
-  { href: '/activity', label: 'Actividad', icon: LayoutList, roles: ['Jefe', 'Gerencia'] },
-  { href: '/team', label: 'Equipo', icon: Users, roles: ['Jefe', 'Gerencia'] },
-  { href: '/reports', label: 'Reportes', icon: BarChart, roles: ['Jefe', 'Gerencia'] },
+const menuItems: { href: string; label: string; icon: React.ElementType, screenName: ScreenName }[] = [
+  { href: '/', label: 'Panel', icon: Home, screenName: 'Dashboard' },
+  { href: '/objectives', label: 'Objetivos', icon: Target, screenName: 'Objectives' },
+  { href: '/opportunities', label: 'Oportunidades', icon: CircleDollarSign, screenName: 'Opportunities' },
+  { href: '/prospects', label: 'Prospectos', icon: Lightbulb, screenName: 'Prospects' },
+  { href: '/clients', label: 'Clientes', icon: Users, screenName: 'Clients' },
+  { href: '/grilla', label: 'Grilla', icon: Grid3X3, screenName: 'Grilla' },
+  { href: '/pnts', label: 'PNTs', icon: Megaphone, screenName: 'PNTs' },
+  { href: '/canjes', label: 'Canjes', icon: Repeat, screenName: 'Canjes' },
+  { href: '/invoices', label: 'Facturación', icon: Receipt, screenName: 'Invoices' },
+  { href: '/billing', label: 'Cobranzas', icon: Banknote, screenName: 'Billing' },
+  { href: '/calendar', label: 'Calendario', icon: Calendar, screenName: 'Calendar' },
+  { href: '/licencias', label: 'Licencias', icon: ClipboardCheck, screenName: 'Licenses' },
+  { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, screenName: 'Approvals' },
+  { href: '/activity', label: 'Actividad', icon: LayoutList, screenName: 'Activity' },
+  { href: '/chat', label: 'Chat', icon: MessageCircle, screenName: 'Chat' },
+  { href: '/tango-mapping', label: 'Tango', icon: Building2, screenName: 'TangoMapping' },
+  { href: '/team', label: 'Equipo', icon: Users, screenName: 'Team' },
+  { href: '/rates', label: 'Tarifas', icon: Banknote, screenName: 'Rates' },
+  { href: '/reports', label: 'Reportes', icon: BarChart, screenName: 'Reports' },
+  { href: '/import', label: 'Importar', icon: Upload, screenName: 'Import' },
 ];
 
 function MenuLink({ item }: { item: typeof menuItems[0] }) {
@@ -38,7 +49,11 @@ function MenuLink({ item }: { item: typeof menuItems[0] }) {
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
-    return pathname.startsWith(href);
+    // Exact match for specific routes, otherwise prefix match
+    const exactMatchRoutes = ['/billing', '/invoices', '/rates', '/licencias', '/objectives'];
+    if (exactMatchRoutes.includes(href)) return pathname === href;
+    
+    return pathname.startsWith(href) && href !== '/';
   };
 
   return (
@@ -63,7 +78,14 @@ export function AppSidebar() {
   
   if (!userInfo) return null;
 
-  const accessibleItems = menuItems.filter(item => item.roles.includes(userInfo.role));
+  const accessibleItems = menuItems
+    .filter(item => hasPermission(userInfo, item.screenName, 'view'))
+    .filter(item => {
+      if (userInfo.role === 'Asesor' && item.href === '/objectives') {
+        return false;
+      }
+      return true;
+    });
 
   return (
     <Sidebar collapsible="icon">

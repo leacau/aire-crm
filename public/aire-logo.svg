@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="496" height="246" viewBox="0 0 496 246">
+  <style>
+    .headline { font-family: "Arial Black", "Helvetica Neue", sans-serif; font-weight: 800; }
+    .subtitle { font-family: Arial, "Helvetica Neue", sans-serif; font-weight: 500; letter-spacing: 1.5px; }
+  </style>
+  <g fill="#2e2d2e">
+    <text class="headline" x="42" y="135" font-size="140">AIRE</text>
+    <text class="subtitle" x="115" y="195" font-size="46">DE SANTA FE</text>
+  </g>
+</svg>

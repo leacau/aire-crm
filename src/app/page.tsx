@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -22,22 +21,24 @@ import {
   CalendarCheck,
   CalendarClock,
   CheckCircle,
+  Lightbulb,
+  TrendingDown,
 } from 'lucide-react';
-import type { Opportunity, Client, ActivityLog, ClientActivity, User } from '@/lib/types';
+import type { Opportunity, Client, ActivityLog, ClientActivity, User, Invoice } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
   getAllOpportunities,
-  getOpportunitiesForUser,
   getClients,
   getActivities,
   getAllClientActivities,
   updateClientActivity,
   getAllUsers,
+  getInvoices,
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { isWithinInterval, isToday, isTomorrow, startOfToday, format } from 'date-fns';
+import { MonthYearPicker } from '@/components/ui/month-year-picker';
+import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -51,6 +52,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TasksModal } from '@/components/dashboard/tasks-modal';
 import { TaskNotification } from '@/components/dashboard/task-notification';
+import { useRouter } from 'next/navigation';
 
 const activityIcons: Record<string, React.ReactNode> = {
   'create': <PlusCircle className="h-5 w-5 text-green-500" />,
@@ -70,7 +72,7 @@ interface TaskSectionProps {
     usersMap: Record<string, User>;
 }
 
-const DynamicDateRangePicker = dynamic(() => import('@/components/ui/date-range-picker').then(mod => mod.DateRangePicker), {
+const DynamicMonthYearPicker = dynamic(() => import('@/components/ui/month-year-picker').then(mod => mod.MonthYearPicker), {
   ssr: false,
   loading: () => <Skeleton className="h-10 w-[260px]" />,
 });
@@ -148,32 +150,50 @@ const TaskSummaryCard = ({ title, count, icon, onClick, isSelected }: { title: s
 
 export default function DashboardPage() {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
   const { notificationPermission, requestNotificationPermission, showNotification } = useNotifications();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [tasks, setTasks] = useState<ClientActivity[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [notified, setNotified] = useState(false);
   const [selectedTaskStatus, setSelectedTaskStatus] = useState<TaskStatus | null>(null);
-  const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
+  const [selectedAdvisor, setSelectedAdvisor] = useState('all');
   const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
   const tasksSectionRef = useRef<HTMLDivElement>(null);
+
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  const dateRange: DateRange | undefined = useMemo(() => {
+    return {
+      from: startOfMonth(selectedDate),
+      to: endOfMonth(selectedDate),
+    };
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (userInfo && userInfo.role === 'Asesor') {
+      router.replace('/objectives');
+    }
+  }, [userInfo, router]);
 
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!userInfo) return;
       setLoadingData(true);
       try {
-        const [allOpps, allClients, allActivities, allTasks, allUsers, allAdvisors] = await Promise.all([
-            getAllOpportunities(),
+        const [allOpps, allClients, allActivities, allTasks, allInvoices, allUsers, allAdvisors] = await Promise.all([
+            getAllOpportunities(userInfo, isBoss),
             getClients(),
             getActivities(100),
             getAllClientActivities(),
+            getInvoices(),
             getAllUsers(),
             getAllUsers('Asesor'),
         ]);
@@ -182,6 +202,7 @@ export default function DashboardPage() {
         setClients(allClients);
         setActivities(allActivities);
         setTasks(allTasks);
+        setInvoices(allInvoices);
         setUsers(allUsers);
         setAdvisors(allAdvisors);
 
@@ -191,52 +212,54 @@ export default function DashboardPage() {
         setLoadingData(false);
       }
     };
-
-    fetchData();
-  }, []);
+    
+    if (userInfo) {
+      fetchData();
+    }
+  }, [userInfo, isBoss]);
   
-  const advisorClientIds = useMemo(() => {
-    if (selectedAdvisor === 'all' || !isBoss) return null;
-    return new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
-  }, [clients, selectedAdvisor, isBoss]);
-
-
   const { 
     userOpportunities, 
     userClients, 
     userActivities, 
-    userTasks 
+    userTasks,
+    userInvoices,
   } = useMemo(() => {
-    if (!userInfo) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [] };
+    if (!userInfo || !userInfo.id) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [], userInvoices: [] };
     
-    if (isBoss) {
-      if (selectedAdvisor === 'all') {
-        return { userOpportunities: opportunities, userClients: clients, userActivities: activities, userTasks: tasks.filter(t => t.isTask) };
-      }
-      return {
-        userOpportunities: opportunities.filter(opp => advisorClientIds?.has(opp.clientId)),
-        userClients: clients.filter(c => c.ownerId === selectedAdvisor),
-        userActivities: activities.filter(act => {
-            const client = clients.find(c => c.id === act.entityId);
-            return client?.ownerId === selectedAdvisor;
-        }),
-        userTasks: tasks.filter(t => t.isTask && advisorClientIds?.has(t.clientId))
-      }
+    let filteredOpps = opportunities;
+    let filteredClients = clients;
+    let filteredActivities = activities;
+    let filteredTasks = tasks.filter(t => t.isTask);
+    let filteredInvoices = invoices;
+
+    if (!isBoss) {
+      const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
+      filteredClients = clients.filter(c => userClientIds.has(c.id));
+      filteredOpps = opportunities.filter(opp => userClientIds.has(opp.clientId));
+      filteredTasks = tasks.filter(t => t.isTask && (t.userId === userInfo.id || (t.clientId && userClientIds.has(t.clientId))));
+      const oppIds = new Set(filteredOpps.map(o => o.id));
+      filteredInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
+      
+    } else if (selectedAdvisor !== 'all') {
+      const advisorClientIds = new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
+      filteredClients = clients.filter(c => advisorClientIds.has(c.id));
+      filteredOpps = opportunities.filter(opp => advisorClientIds.has(opp.clientId));
+      filteredTasks = tasks.filter(t => t.isTask && (t.userId === selectedAdvisor || (t.clientId && advisorClientIds.has(t.clientId))));
+       const oppIds = new Set(filteredOpps.map(o => o.id));
+      filteredInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
     }
 
-    // For non-boss users
-    const ownClientIds = new Set(clients.filter(client => client.ownerId === userInfo.id).map(c => c.id));
+
     return {
-        userOpportunities: opportunities.filter(opp => ownClientIds.has(opp.clientId)),
-        userClients: clients.filter(client => client.ownerId === userInfo.id),
-        userActivities: activities.filter(act => {
-            const client = clients.find(c => c.id === act.entityId);
-            return client && client.ownerId === userInfo.id;
-        }),
-        userTasks: tasks.filter(t => t.isTask && ownClientIds.has(t.clientId))
-    }
+        userOpportunities: filteredOpps,
+        userClients: filteredClients,
+        userActivities: filteredActivities,
+        userTasks: filteredTasks,
+        userInvoices: filteredInvoices
+    };
 
-  }, [userInfo, isBoss, opportunities, clients, activities, tasks, selectedAdvisor, advisorClientIds]);
+  }, [userInfo, isBoss, selectedAdvisor, opportunities, clients, activities, tasks, invoices]);
 
 
   const today = startOfToday();
@@ -345,7 +368,7 @@ export default function DashboardPage() {
   };
 
 
-  if (authLoading || loadingData) {
+  if (authLoading || loadingData || userInfo?.role === 'Asesor') {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
@@ -361,8 +384,8 @@ export default function DashboardPage() {
 
   const filteredOpportunities = userOpportunities.filter(opp => {
     if (!dateRange?.from || !dateRange?.to) return true;
-    const closeDate = new Date(opp.closeDate);
-    return isWithinInterval(closeDate, { start: dateRange.from, end: dateRange.to });
+    const oppDate = opp.closeDate ? parseISO(opp.closeDate) : new Date(); // Use today if no close date
+    return isWithinInterval(oppDate, { start: dateRange.from, end: dateRange.to });
   });
   
   const filteredActivities = userActivities.filter(activity => {
@@ -370,17 +393,52 @@ export default function DashboardPage() {
       const activityDate = new Date(activity.timestamp);
       return isWithinInterval(activityDate, { start: dateRange.from, end: dateRange.to });
   }).slice(0, 10);
-
-
-  const totalRevenue = filteredOpportunities
-    .filter((o) => o.stage === 'Cerrado - Ganado')
-    .reduce((acc, o) => acc + (o.valorCerrado || o.value), 0);
-
-  const activeOpportunities = filteredOpportunities.filter(
-    (o) => o.stage !== 'Cerrado - Ganado' && o.stage !== 'Cerrado - Perdido'
-  );
-  const forecastedRevenue = activeOpportunities.reduce((acc, o) => acc + o.value * 0.5, 0);
   
+  const dateFilter = (dateStr: string | null | undefined, range: DateRange) => {
+    if (!dateStr || !range.from || !range.to) return false;
+    try {
+        const date = parseISO(dateStr);
+        return isWithinInterval(date, { start: range.from, end: range.to });
+    } catch (e) {
+        return false;
+    }
+  };
+  
+  const totalPaidInPeriod = userInvoices
+    .filter(inv => inv.status === 'Pagada' && dateRange && dateFilter(inv.datePaid, dateRange))
+    .reduce((acc, inv) => acc + inv.amount, 0);
+
+  const totalToCollectInPeriod = userInvoices
+    .filter(inv => inv.status !== 'Pagada' && !inv.isCreditNote && dateRange && dateFilter(inv.date, dateRange))
+    .reduce((acc, inv) => acc + inv.amount, 0);
+
+  const totalBillingInPeriod = totalPaidInPeriod + totalToCollectInPeriod;
+
+  const prevMonthStart = dateRange?.from ? startOfMonth(subMonths(dateRange.from, 1)) : null;
+  const prevMonthEnd = dateRange?.from ? endOfMonth(subMonths(dateRange.from, 1)) : null;
+  
+  let previousMonthBilling = 0;
+  if(prevMonthStart && prevMonthEnd) {
+      const prevMonthRange = { from: prevMonthStart, to: prevMonthEnd };
+      const prevPaid = userInvoices
+        .filter(inv => inv.status === 'Pagada' && dateFilter(inv.datePaid, prevMonthRange))
+        .reduce((acc, inv) => acc + inv.amount, 0);
+      const prevToCollect = userInvoices
+        .filter(inv => inv.status !== 'Pagada' && !inv.isCreditNote && dateFilter(inv.date, prevMonthRange))
+        .reduce((acc, inv) => acc + inv.amount, 0);
+      previousMonthBilling = prevPaid + prevToCollect;
+  }
+  
+  const billingDifference = totalBillingInPeriod - previousMonthBilling;
+
+  const prospectingValue = filteredOpportunities
+    .filter(o => o.stage === 'Nuevo')
+    .reduce((acc, o) => acc + Number(o.value || 0), 0);
+    
+  const forecastedValue = filteredOpportunities
+    .filter(o => ['Propuesta', 'Negociación', 'Negociación a Aprobar'].includes(o.stage))
+    .reduce((acc, o) => acc + Number(o.value || 0), 0);
+
   const totalClients = userClients.length;
 
   return (
@@ -394,7 +452,7 @@ export default function DashboardPage() {
     )}
     <div className="flex flex-col h-full">
       <Header title="Panel">
-        <DynamicDateRangePicker date={dateRange} onDateChange={setDateRange} />
+        <DynamicMonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
         {isBoss && (
           <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
             <SelectTrigger className="w-full sm:w-[200px]">
@@ -411,20 +469,49 @@ export default function DashboardPage() {
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-          <Link href="/billing?tab=paid">
+          <Link href="/billing?tab=to-collect">
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Ingresos Totales
+                  Facturación del Período
                 </CardTitle>
                 <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${totalRevenue.toLocaleString('es-AR')}
+                  ${totalBillingInPeriod.toLocaleString('es-AR')}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Total de negocios ganados en el período.
+                  Pagado: ${totalPaidInPeriod.toLocaleString('es-AR')} / 
+                  A cobrar: ${totalToCollectInPeriod.toLocaleString('es-AR')}
+                </p>
+                 <p className="text-xs text-muted-foreground mt-1">
+                    Mes Anterior: ${previousMonthBilling ? previousMonthBilling.toLocaleString('es-AR') : '0'}
+                </p>
+                 <p className={cn(
+                    "text-xs font-medium flex items-center mt-1",
+                    billingDifference >= 0 ? "text-green-600" : "text-red-600"
+                  )}>
+                  {billingDifference >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
+                  Dif: ${billingDifference.toLocaleString('es-AR')}
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+           <Link href="/opportunities">
+            <Card className="hover:bg-muted/50 transition-colors">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Ingresos Previstos
+                </CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  ${forecastedValue.toLocaleString('es-AR')}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Propuesta, Negociación y Aprobación.
                 </p>
               </CardContent>
             </Card>
@@ -433,15 +520,15 @@ export default function DashboardPage() {
             <Card className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Oportunidades Activas
+                  En Prospección
                 </CardTitle>
-                <Activity className="h-4 w-4 text-muted-foreground" />
+                <Lightbulb className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {activeOpportunities.length}
+                  ${prospectingValue.toLocaleString('es-AR')}
                 </div>
-                <p className="text-xs text-muted-foreground">Oportunidades en curso en el período.</p>
+                <p className="text-xs text-muted-foreground">Oportunidades en etapa "Nuevo".</p>
               </CardContent>
             </Card>
           </Link>
@@ -453,28 +540,10 @@ export default function DashboardPage() {
             <CardContent>
               <div className="text-2xl font-bold">{totalClients}</div>
               <p className="text-xs text-muted-foreground">
-                Total de clientes registrados.
+                Total de clientes en cartera.
               </p>
             </CardContent>
           </Card>
-           <Link href="/opportunities">
-            <Card className="hover:bg-muted/50 transition-colors">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Ingresos Previstos
-                </CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  ${forecastedRevenue.toLocaleString('es-AR')}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Basado en el pipeline del período.
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
         </div>
 
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-1 gap-6" ref={tasksSectionRef}>

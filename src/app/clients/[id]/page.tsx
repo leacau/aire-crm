@@ -3,7 +3,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { ClientDetails } from '@/components/clients/client-details';
 import { Spinner } from '@/components/ui/spinner';
@@ -11,49 +11,52 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import type { Client } from '@/lib/types';
-import { getClient, updateClient, getClients } from '@/lib/firebase-service';
+import type { Client, Opportunity, Invoice } from '@/lib/types';
+import { getClient, updateClient, getClients, createOpportunity, createInvoice } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ClientPage() {
   const { userInfo, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const params = useParams();
-  
+
   const id = params.id as string;
+  const focusedOpportunityId = searchParams.get('opportunityId');
   
   const [client, setClient] = useState<Client | null>(null);
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [loadingClient, setLoadingClient] = useState(true);
 
-  useEffect(() => {
-    const fetchClient = async () => {
-      if (!id) return;
-      setLoadingClient(true);
-      try {
-        const [fetchedClient, allFetchedClients] = await Promise.all([
-            getClient(id),
-            getClients()
-        ]);
+  const fetchClientData = async () => {
+    if (!id) return;
+    setLoadingClient(true);
+    try {
+      const [fetchedClient, allFetchedClients] = await Promise.all([
+          getClient(id),
+          getClients()
+      ]);
 
-        if (fetchedClient) {
-          setClient(fetchedClient);
-          setAllClients(allFetchedClients);
-        } else {
-          toast({ title: "Cliente no encontrado", variant: "destructive" });
-          router.push('/clients');
-        }
-      } catch (error) {
-        console.error("Error fetching client:", error);
-        toast({ title: "Error al cargar el cliente", variant: "destructive" });
+      if (fetchedClient) {
+        setClient(fetchedClient);
+        setAllClients(allFetchedClients);
+      } else {
+        toast({ title: "Cliente no encontrado", variant: "destructive" });
         router.push('/clients');
-      } finally {
-        setLoadingClient(false);
       }
-    };
+    } catch (error) {
+      console.error("Error fetching client:", error);
+      toast({ title: "Error al cargar el cliente", variant: "destructive" });
+      router.push('/clients');
+    } finally {
+      setLoadingClient(false);
+    }
+  };
 
-    fetchClient();
+
+  useEffect(() => {
+    fetchClientData();
   }, [id, router, toast]);
 
   const userHasAccess = useMemo(() => {
@@ -78,16 +81,49 @@ export default function ClientPage() {
     if (!client || !userInfo) return;
     try {
         await updateClient(client.id, updatedData, userInfo.id, userInfo.name);
-        setClient(prev => prev ? { ...prev, ...updatedData } : null);
-        toast({ title: "Cliente Actualizado", description: "Los datos del cliente se han guardado." });
+        // No toast here, it's handled in the form dialog
+        // Refetch data to show updated values on the page
+        await fetchClientData();
     } catch (error) {
         console.error("Error updating client:", error);
         toast({ title: "Error al actualizar", variant: "destructive" });
     }
   };
 
+  const handleOpportunityCreate = async (newOppData: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[] = []) => {
+    if(!userInfo || !client) return;
+    try {
+        const fullNewOpp = {
+            ...newOppData,
+            clientId: client.id,
+            clientName: client.denominacion,
+        }
+        const newOppId = await createOpportunity(fullNewOpp, userInfo.id, userInfo.name, client.ownerName);
+        
+        if (newOppId && pendingInvoices.length > 0) {
+            for (const invoiceData of pendingInvoices) {
+                await createInvoice({
+                    ...invoiceData,
+                    opportunityId: newOppId,
+                }, userInfo.id, userInfo.name, client.ownerName);
+            }
+        }
+
+        fetchClientData();
+        toast({ title: 'Oportunidad Creada' });
+    } catch (error) {
+        console.error("Error creating opportunity", error);
+        toast({ title: "Error al crear la oportunidad", variant: "destructive" });
+    }
+  };
+
+
   const validateCuit = async (cuit: string, clientId?: string): Promise<string | false> => {
-    const existingClient = allClients.find(c => c.cuit === cuit && c.id !== clientId);
+    if (!cuit) return false;
+    // Ensure allClients is fresh
+    const currentClients = await getClients();
+    setAllClients(currentClients);
+    const existingClient = currentClients.find(c => c.cuit === cuit && c.id !== clientId);
     if (existingClient) {
       return `El CUIT ya pertenece al cliente "${existingClient.denominacion}", asignado a ${existingClient.ownerName}.`;
     }
@@ -117,6 +153,8 @@ export default function ClientPage() {
           client={client}
           onUpdate={handleUpdateClient}
           onValidateCuit={validateCuit}
+          onCreateOpportunity={handleOpportunityCreate}
+          initialOpportunityId={focusedOpportunityId || undefined}
         />
       </main>
     </div>

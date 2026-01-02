@@ -3,8 +3,9 @@
 import { usePathname } from 'next/navigation';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/app-sidebar';
+import { ObjectiveReminderBanner } from '@/components/objectives/objective-reminder-banner';
 
-const publicRoutes = ['/login', '/register'];
+const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service'];
 
 export function AuthLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
@@ -17,7 +18,10 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
     return (
         <SidebarProvider>
           <AppSidebar />
-          <SidebarInset>{children}</SidebarInset>
+          <SidebarInset>
+            <ObjectiveReminderBanner />
+            {children}
+          </SidebarInset>
         </SidebarProvider>
     )
 }

@@ -1,0 +1,70 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return request.auth.token.email == 'lchena@airedesantafe.com.ar';
+    }
+
+    function isManagement() {
+      let userRole = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return userRole in ['Jefe', 'Gerencia', 'Admin', 'Administracion'];
+    }
+
+    function isOwner(resource) {
+      return request.auth.uid == resource.data.ownerId;
+    }
+
+    function isClientOwner(clientId) {
+      let clientDoc = get(/databases/$(database)/documents/clients/$(clientId));
+      return clientDoc.data.ownerId == request.auth.uid;
+    }
+    
+    // System configuration is readable by all signed-in users, but only writable by super admins.
+    match /system_config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // Users can read their own profile, managers can read all profiles.
+    // Only super admins can change roles or critical data.
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.email == request.auth.token.email;
+      allow update: if request.auth.uid == userId // Users can update their own profile (name, photo)
+                      || isManagement(); // Managers can update user details like roles
+    }
+
+    // Clients can be created by anyone. Read/write is restricted to owner or management.
+    match /clients/{clientId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (isClientOwner(clientId) || isManagement());
+      allow delete: if isManagement();
+    }
+    
+    // Opportunities can be created if the user owns the client. 
+    // Updates are restricted to owner or management.
+    match /opportunities/{oppId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isClientOwner(request.resource.data.clientId);
+      allow update: if isSignedIn() && (isClientOwner(resource.data.clientId) || isManagement());
+      allow delete: if isManagement() || isClientOwner(resource.data.clientId);
+    }
+    
+    // All other collections are generally accessible by signed-in users for now.
+    // More granular rules can be added as needed.
+    match /{collection}/{docId} {
+      allow read, write, delete: if isSignedIn();
+    }
+  }
+}

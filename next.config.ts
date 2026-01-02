@@ -29,11 +29,18 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+       {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+        port: '',
+        pathname: '/**',
+      },
     ],
   },
   devIndicators: {
     allowedDevOrigins: [
       'https://6000-firebase-studio-1758894286543.cluster-f73ibkkuije66wssuontdtbx6q.cloudworkstations.dev',
+      'https://9000-firebase-studio-1758894286543.cluster-f73ibkkuije66wssuontdtbx6q.cloudworkstations.dev',
     ],
   },
 };

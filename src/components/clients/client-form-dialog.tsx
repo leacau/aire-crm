@@ -17,17 +17,21 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/lib/data';
-import type { Client, TipoEntidad, CondicionIVA } from '@/lib/types';
+import type { Client, TipoEntidad, CondicionIVA, Agency } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
+import { getAgencies, createClient, getClients } from '@/lib/firebase-service';
+import { Checkbox } from '../ui/checkbox';
+import { useAuth } from '@/hooks/use-auth';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
-type ClientFormData = Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>;
+type ClientFormData = Partial<Omit<Client, 'id' | 'personIds' | 'deactivationHistory' | 'newClientDate'>>;
 
 interface ClientFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (clientData: ClientFormData) => void;
-  client?: Client | null;
+  onSaveSuccess: (clientData?: any) => void;
+  client?: Partial<Client> | null;
   onValidateCuit: (cuit: string, clientId?: string) => Promise<string | false>;
 }
 
@@ -43,83 +47,122 @@ const initialFormData: ClientFormData = {
   email: '',
   phone: '',
   observaciones: '',
+  agencyId: undefined,
+  isNewClient: false,
+  isDeactivated: false,
+  idAireSrl: '',
+  idAireDigital: '',
 };
 
 export function ClientFormDialog({
   isOpen,
   onOpenChange,
-  onSave,
+  onSaveSuccess,
   client = null,
   onValidateCuit,
 }: ClientFormDialogProps) {
+  const { userInfo } = useAuth();
   const [formData, setFormData] = useState<ClientFormData>(initialFormData);
   const [isSaving, setIsSaving] = useState(false);
+  const [agencies, setAgencies] = useState<Agency[]>([]);
   const { toast } = useToast();
+
+  const isEditing = client && client.id;
+  const canEditIds = userInfo ? hasManagementPrivileges(userInfo) : false;
 
   useEffect(() => {
     if (isOpen) {
         if (client) {
-            setFormData({
-                denominacion: client.denominacion,
-                razonSocial: client.razonSocial,
-                cuit: client.cuit,
-                condicionIVA: client.condicionIVA,
-                provincia: client.provincia,
-                localidad: client.localidad,
-                tipoEntidad: client.tipoEntidad,
-                rubro: client.rubro,
-                email: client.email,
-                phone: client.phone,
-                observaciones: client.observaciones || '',
-            });
+            const combinedData = { ...initialFormData, ...client };
+            setFormData(combinedData);
         } else {
             setFormData(initialFormData);
         }
+        getAgencies().then(setAgencies);
         setIsSaving(false);
     }
   }, [client, isOpen]);
 
   const handleSave = async () => {
-    if (!formData.cuit.trim() || !formData.denominacion.trim()) {
-        toast({ title: "Campos requeridos", description: "La Denominación y el CUIT son obligatorios.", variant: "destructive"});
+    if (!formData.denominacion?.trim()) {
+        toast({ title: "Campo requerido", description: "La Denominación es obligatoria.", variant: "destructive"});
         return;
     }
 
     setIsSaving(true);
-
-    const validationMessage = await onValidateCuit(formData.cuit, client?.id);
-
-    if (validationMessage) {
-        toast({
-            title: "CUIT Duplicado",
-            description: validationMessage,
-            variant: "destructive",
-            duration: 10000,
-        });
-        setIsSaving(false);
-        return;
+    
+    if (formData.cuit) {
+        const validationMessage = await onValidateCuit(formData.cuit, client?.id);
+        if (validationMessage) {
+            toast({
+                title: "CUIT Duplicado",
+                description: validationMessage,
+                variant: "destructive",
+                duration: 10000,
+            });
+            setIsSaving(false);
+            return;
+        }
     }
     
-    onSave(formData);
-    onOpenChange(false);
+    const finalData = {
+      denominacion: formData.denominacion,
+      razonSocial: formData.razonSocial || '',
+      cuit: formData.cuit || '',
+      condicionIVA: formData.condicionIVA || 'Consumidor Final',
+      provincia: formData.provincia || '',
+      localidad: formData.localidad || '',
+      tipoEntidad: formData.tipoEntidad || 'Privada',
+      rubro: formData.rubro || '',
+      email: formData.email || '',
+      phone: formData.phone || '',
+      observaciones: formData.observaciones || '',
+      agencyId: formData.agencyId,
+      isNewClient: formData.isNewClient || false,
+      isDeactivated: formData.isDeactivated || false,
+      idAireSrl: canEditIds ? (formData.idAireSrl || '').trim() : client?.idAireSrl,
+      idAireDigital: canEditIds ? (formData.idAireDigital || '').trim() : client?.idAireDigital,
+    };
+    
+    try {
+        if (isEditing) {
+          // This onSaveSuccess is now handled in client-details page, which calls the update function.
+          onSaveSuccess(finalData); 
+          toast({ title: "Cliente Actualizado", description: "Los datos del cliente se han guardado." });
+        } else {
+           const ownerId = client?.ownerId || userInfo?.id;
+           const ownerName = client?.ownerName || userInfo?.name;
+           if (!ownerId || !ownerName) {
+               throw new Error("No se pudo determinar el propietario del cliente.");
+           }
+           await createClient(finalData, ownerId, ownerName);
+           toast({ title: "Cliente Creado", description: `${finalData.denominacion} ha sido añadido a la lista.`});
+           onSaveSuccess(); // Callback for prospect conversion or simple creation.
+        }
+        onOpenChange(false);
+    } catch (error: any) {
+        console.error("Error saving client:", error);
+        toast({ title: "Error al guardar el cliente", description: error.message, variant: "destructive"});
+    } finally {
+        setIsSaving(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSelectChange = (name: keyof ClientFormData, value: string) => {
     setFormData(prev => ({
         ...prev,
-        [name]: value,
+        [name]: value === 'none' ? undefined : value,
     }));
   };
 
-  const isEditing = client !== null;
+  const handleCheckboxChange = (name: keyof ClientFormData, checked: boolean | "indeterminate") => {
+    setFormData(prev => ({...prev, [name]: !!checked }));
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -134,6 +177,18 @@ export function ClientFormDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
+          {!isEditing && (
+             <div className="flex items-center space-x-2">
+                <Checkbox id="isNewClient" name="isNewClient" checked={formData.isNewClient} onCheckedChange={(checked) => handleCheckboxChange('isNewClient', checked)} />
+                <Label htmlFor="isNewClient" className="font-normal">Marcar como Cliente Nuevo</Label>
+            </div>
+          )}
+          {isEditing && (
+             <div className="flex items-center space-x-2">
+                <Checkbox id="isDeactivated" name="isDeactivated" checked={formData.isDeactivated} onCheckedChange={(checked) => handleCheckboxChange('isDeactivated', checked)} />
+                <Label htmlFor="isDeactivated" className="font-normal">Dar de baja al cliente</Label>
+            </div>
+          )}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="denominacion" className="text-right">
               Denominación
@@ -152,12 +207,40 @@ export function ClientFormDialog({
             </Label>
             <Input id="cuit" name="cuit" value={formData.cuit} onChange={handleChange} className="col-span-3"/>
           </div>
-           <div className="grid grid-cols-4 items-center gap-4">
+          {isEditing && canEditIds && (
+            <>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="idAireSrl" className="text-right">
+                  ID Aire SRL / Tango
+                </Label>
+                <Input
+                  id="idAireSrl"
+                  name="idAireSrl"
+                  value={formData.idAireSrl || ''}
+                  onChange={handleChange}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="idAireDigital" className="text-right">
+                  ID Aire Digital / Tango
+                </Label>
+                <Input
+                  id="idAireDigital"
+                  name="idAireDigital"
+                  value={formData.idAireDigital || ''}
+                  onChange={handleChange}
+                  className="col-span-3"
+                />
+              </div>
+            </>
+          )}
+          <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="condicionIVA" className="text-right">
               Condición IVA
             </Label>
             <Select name="condicionIVA" value={formData.condicionIVA} onValueChange={(value: CondicionIVA) => handleSelectChange('condicionIVA', value)}>
-                <SelectTrigger className="col-span-3">
+                <SelectTrigger id="condicionIVA" className="col-span-3">
                     <SelectValue placeholder="Selecciona una condición" />
                 </SelectTrigger>
                 <SelectContent>
@@ -170,7 +253,7 @@ export function ClientFormDialog({
               Provincia
             </Label>
             <Select name="provincia" value={formData.provincia} onValueChange={(value) => handleSelectChange('provincia', value)}>
-                <SelectTrigger className="col-span-3">
+                <SelectTrigger id="provincia" className="col-span-3">
                     <SelectValue placeholder="Selecciona una provincia" />
                 </SelectTrigger>
                 <SelectContent>
@@ -189,7 +272,7 @@ export function ClientFormDialog({
               Tipo Entidad
             </Label>
              <Select name="tipoEntidad" value={formData.tipoEntidad} onValueChange={(value: TipoEntidad) => handleSelectChange('tipoEntidad', value)}>
-                <SelectTrigger className="col-span-3">
+                <SelectTrigger id="tipoEntidad" className="col-span-3">
                     <SelectValue placeholder="Selecciona un tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -215,6 +298,20 @@ export function ClientFormDialog({
             </Label>
             <Input id="phone" name="phone" value={formData.phone} onChange={handleChange} className="col-span-3"/>
           </div>
+           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="agencyId" className="text-right">
+              Agencia
+            </Label>
+             <Select name="agencyId" value={formData.agencyId || 'none'} onValueChange={(value) => handleSelectChange('agencyId', value)}>
+                <SelectTrigger id="agencyId" className="col-span-3">
+                    <SelectValue placeholder="Asignar a una agencia (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="none">Ninguna</SelectItem>
+                    {agencies.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                </SelectContent>
+            </Select>
+          </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="observaciones" className="text-right">
               Observaciones
@@ -223,7 +320,7 @@ export function ClientFormDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button>
           <Button onClick={handleSave} disabled={isSaving}>
             {isSaving ? <Spinner size="small" color="white" /> : 'Guardar'}
           </Button>

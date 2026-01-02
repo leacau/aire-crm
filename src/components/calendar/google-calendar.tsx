@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -24,6 +25,7 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { CalendarToolbar } from './calendar-toolbar';
+import { getUserProfile } from '@/lib/firebase-service';
 
 
 const locales = {
@@ -55,8 +57,12 @@ interface EventFormData {
   description: string;
 }
 
-export function GoogleCalendar() {
-  const { getGoogleAccessToken, isBoss } = useAuth();
+interface GoogleCalendarProps {
+    selectedUserId?: string;
+}
+
+export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
+  const { userInfo, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,19 +71,33 @@ export function GoogleCalendar() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [formData, setFormData] = useState<Partial<EventFormData>>({});
+  const [isReadOnly, setIsReadOnly] = useState(false);
 
   const [date, setDate] = useState(new Date());
   const [view, setView] = useState<View>(Views.MONTH);
 
 
   const fetchEvents = useCallback(async () => {
+    if (!userInfo) return;
     setLoading(true);
     setError(null);
+    
+    let calendarId = 'primary';
+    if (selectedUserId && selectedUserId !== userInfo.id) {
+        const userToView = await getUserProfile(selectedUserId);
+        if (userToView?.email) {
+            calendarId = userToView.email;
+        } else {
+            setError(`No se pudo encontrar el email para el usuario seleccionado.`);
+            setLoading(false);
+            return;
+        }
+    }
+
     const token = await getGoogleAccessToken();
 
     if (token) {
       try {
-        const calendarId = isBoss && process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID ? process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID : 'primary';
         const eventItems = await getCalendarEvents(token, calendarId);
         const formattedEvents = eventItems.map((item: any) => ({
           id: item.id,
@@ -90,26 +110,33 @@ export function GoogleCalendar() {
         setEvents(formattedEvents);
       } catch (err: any) {
         console.error(err);
-        setError(`No se pudieron cargar los eventos del calendario. ${err.message}`);
+        setError(`No se pudieron cargar los eventos del calendario. Es posible que no tengas permisos para ver este calendario. Detalle: ${err.message}`);
       }
     } else {
       setError('No se pudo obtener el permiso para acceder a Google Calendar.');
     }
     setLoading(false);
-  }, [getGoogleAccessToken, isBoss]);
+  }, [getGoogleAccessToken, userInfo, selectedUserId]);
 
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
 
   const handleSelectSlot = useCallback(({ start, end }: { start: Date; end: Date }) => {
+    // Disable creating events on other people's calendars
+    if(selectedUserId !== userInfo?.id) return;
+    
     setSelectedEvent(null);
+    setIsReadOnly(false);
     setFormData({ start, end, title: '', description: '' });
     setIsDialogOpen(true);
-  }, []);
+  }, [selectedUserId, userInfo?.id]);
 
   const handleSelectEvent = useCallback((event: CalendarEvent) => {
+    const readOnly = selectedUserId !== userInfo?.id;
+    
     setSelectedEvent(event);
+    setIsReadOnly(readOnly);
     setFormData({
       start: event.start,
       end: event.end,
@@ -117,7 +144,7 @@ export function GoogleCalendar() {
       description: event.description,
     });
     setIsDialogOpen(true);
-  }, []);
+  }, [selectedUserId, userInfo?.id]);
   
   const handleSaveEvent = async () => {
     const token = await getGoogleAccessToken();
@@ -127,11 +154,10 @@ export function GoogleCalendar() {
     }
 
     try {
-      const calendarId = isBoss && process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID ? process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID : 'primary';
-
       if (selectedEvent?.id) {
+        // Update logic would go here if API supports it easily, for now we delete and create
         // For simplicity, this example just recreates. A real app should implement PATCH.
-        await deleteCalendarEvent(token, selectedEvent.id, calendarId);
+        await deleteCalendarEvent(token, selectedEvent.id);
       }
       
       const eventToSave = {
@@ -143,6 +169,7 @@ export function GoogleCalendar() {
             useDefault: false,
             overrides: [
                 { method: 'popup', minutes: 10 },
+                { method: 'popup', minutes: (24 * 60) }, // 24 hours
             ]
         }
       };
@@ -163,8 +190,7 @@ export function GoogleCalendar() {
     if (!token) return;
 
     try {
-      const calendarId = isBoss && process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID ? process.env.NEXT_PUBLIC_SHARED_CALENDAR_ID : 'primary';
-      await deleteCalendarEvent(token, selectedEvent.id, calendarId);
+      await deleteCalendarEvent(token, selectedEvent.id);
       toast({ title: 'Evento eliminado' });
       setIsDialogOpen(false);
       fetchEvents();
@@ -235,9 +261,12 @@ export function GoogleCalendar() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{selectedEvent ? 'Editar Evento' : 'Crear Nuevo Evento'}</DialogTitle>
+            <DialogTitle>{selectedEvent ? (isReadOnly ? 'Detalles del Evento' : 'Editar Evento') : 'Crear Nuevo Evento'}</DialogTitle>
             <DialogDescription>
-              {selectedEvent ? 'Edita los detalles de tu evento.' : 'Completa los detalles para crear un nuevo evento en tu Google Calendar.'}
+              {selectedEvent 
+                ? (isReadOnly ? 'Viendo los detalles de un evento del calendario.' : 'Edita los detalles de tu evento.') 
+                : 'Completa los detalles para crear un nuevo evento en tu Google Calendar.'
+              }
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -247,6 +276,7 @@ export function GoogleCalendar() {
                     id="title"
                     value={formData.title || ''}
                     onChange={(e) => setFormData(p => ({...p, title: e.target.value}))}
+                    readOnly={isReadOnly}
                 />
             </div>
              <div className="space-y-2">
@@ -255,6 +285,7 @@ export function GoogleCalendar() {
                     id="description"
                     value={formData.description || ''}
                     onChange={(e) => setFormData(p => ({...p, description: e.target.value}))}
+                    readOnly={isReadOnly}
                 />
             </div>
              <div className="grid grid-cols-2 gap-4">
@@ -265,6 +296,7 @@ export function GoogleCalendar() {
                         type="datetime-local"
                         value={formData.start && !isNaN(new Date(formData.start).valueOf()) ? format(new Date(formData.start), "yyyy-MM-dd'T'HH:mm") : ''}
                         onChange={(e) => setFormData(p => ({...p, start: new Date(e.target.value)}))}
+                        readOnly={isReadOnly}
                     />
                 </div>
                 <div className="space-y-2">
@@ -274,17 +306,18 @@ export function GoogleCalendar() {
                         type="datetime-local"
                         value={formData.end && !isNaN(new Date(formData.end).valueOf()) ? format(new Date(formData.end), "yyyy-MM-dd'T'HH:mm") : ''}
                         onChange={(e) => setFormData(p => ({...p, end: new Date(e.target.value)}))}
+                        readOnly={isReadOnly}
                     />
                 </div>
              </div>
           </div>
           <DialogFooter className="sm:justify-between">
-            {selectedEvent ? (
+            {selectedEvent && !isReadOnly ? (
                 <Button variant="destructive" onClick={handleDeleteEvent}>Eliminar</Button>
             ) : <div />}
             <div className='flex gap-2'>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={handleSaveEvent}>Guardar</Button>
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cerrar</Button>
+              {!isReadOnly && <Button onClick={handleSaveEvent}>Guardar</Button>}
             </div>
           </DialogFooter>
         </DialogContent>
