@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef, ColumnOrderState, ColumnVisibilityState, SortingState } from '@tanstack/react-table';
 import { TableFooter, TableRow, TableCell } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '../ui/label';
@@ -24,6 +24,13 @@ export const BillingTable = ({
   onMarkAsPaid,
   onToggleCreditNote,
   showCreditNoteDate,
+  sorting,
+  setSorting,
+  columnVisibility,
+  setColumnVisibility,
+  columnOrder,
+  setColumnOrder,
+  isReady = true,
 }: {
   items: (Opportunity | Invoice)[];
   type: 'opportunities' | 'invoices';
@@ -34,6 +41,13 @@ export const BillingTable = ({
   onMarkAsPaid?: (invoiceId: string) => void;
   onToggleCreditNote?: (invoiceId: string, nextValue: boolean) => void;
   showCreditNoteDate?: boolean;
+  sorting?: SortingState;
+  setSorting?: React.Dispatch<React.SetStateAction<SortingState>>;
+  columnVisibility?: ColumnVisibilityState;
+  setColumnVisibility?: React.Dispatch<React.SetStateAction<ColumnVisibilityState>>;
+  columnOrder?: ColumnOrderState;
+  setColumnOrder?: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
+  isReady?: boolean;
 }) => {
 
   const isDeletionMarked = useCallback((item: Opportunity | Invoice) => {
@@ -236,7 +250,13 @@ export const BillingTable = ({
   return (
       <ResizableDataTable
         columns={columns}
-        data={items}
+        data={isReady ? items : []}
+        sorting={sorting}
+        setSorting={setSorting}
+        columnVisibility={columnVisibility}
+        setColumnVisibility={setColumnVisibility}
+        columnOrder={columnOrder}
+        setColumnOrder={setColumnOrder}
         onRowClick={onRowClick}
         emptyStateMessage="No hay items en esta sección."
         footerContent={footerContent}
