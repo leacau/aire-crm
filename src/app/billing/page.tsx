@@ -277,6 +277,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [isImportingPayments, setIsImportingPayments] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const [invoiceSelection, setInvoiceSelection] = useState<Record<string, boolean>>({});
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
   const [isDeletingDuplicates, setIsDeletingDuplicates] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<DeleteProgressState>(EMPTY_DELETE_PROGRESS);
   const [isRetryingFailed, setIsRetryingFailed] = useState(false);
@@ -592,6 +593,13 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     setSelectedPaymentIds((prev) => prev.filter((id) => filteredPayments.some((entry) => entry.id === id)));
   }, [filteredPayments]);
 
+  useEffect(() => {
+    setSelectedInvoiceIds((prev) => {
+      const available = new Set(invoices.map((inv) => inv.id));
+      return new Set([...prev].filter((id) => available.has(id)));
+    });
+  }, [invoices]);
+
   const handleToggleMarkedOnly = useCallback((checked: boolean) => {
     setMarkedOnly(checked);
   }, []);
@@ -830,9 +838,36 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   };
 
-  const handleToggleInvoiceSelection = (invoiceId: string, checked: boolean) => {
+  const handleToggleDuplicateInvoiceSelection = (invoiceId: string, checked: boolean) => {
     setInvoiceSelection((prev) => ({ ...prev, [invoiceId]: checked }));
   };
+
+  const handleToggleInvoiceSelection = useCallback((invoiceId: string) => {
+    setSelectedInvoiceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(invoiceId)) {
+        next.delete(invoiceId);
+      } else {
+        next.add(invoiceId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleAllInvoiceSelection = useCallback((checked: boolean, list: Invoice[]) => {
+    setSelectedInvoiceIds((prev) => {
+      const next = new Set(prev);
+      const ids = list.map((inv) => inv.id);
+      ids.forEach((id) => {
+        if (checked) {
+          next.add(id);
+        } else {
+          next.delete(id);
+        }
+      });
+      return next;
+    });
+  }, []);
 
   const handleToggleGroupSelection = (group: DuplicateInvoiceGroup, checked: boolean) => {
     setInvoiceSelection((prev) => {
@@ -956,6 +991,142 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   };
 
+  const captureDeletionMarkState = useCallback(
+    (ids: string[]) =>
+      ids.reduce((acc, id) => {
+        const invoice = invoices.find((inv) => inv.id === id);
+        if (invoice) {
+          acc.set(id, {
+            deletionMarkedAt: invoice.deletionMarkedAt ?? null,
+            deletionMarkedById: invoice.deletionMarkedById,
+            deletionMarkedByName: invoice.deletionMarkedByName,
+          });
+        }
+        return acc;
+      }, new Map<string, Pick<Invoice, 'deletionMarkedAt' | 'deletionMarkedById' | 'deletionMarkedByName'>>()),
+    [invoices],
+  );
+
+  const applyOptimisticDeletionMark = useCallback(
+    (ids: string[], shouldMark: boolean, timestamp?: string) => {
+      if (!userInfo) return;
+      const markDate = shouldMark ? timestamp ?? new Date().toISOString() : null;
+      const idSet = new Set(ids);
+      setInvoices((prev) =>
+        prev.map((inv) =>
+          idSet.has(inv.id)
+            ? {
+                ...inv,
+                deletionMarkedAt: markDate,
+                deletionMarkedById: shouldMark ? userInfo.id : null,
+                deletionMarkedByName: shouldMark ? userInfo.name : null,
+              }
+            : inv,
+        ),
+      );
+    },
+    [userInfo],
+  );
+
+  const handleToggleDeletionMark = useCallback(
+    async (
+      invoiceId: string,
+      shouldMark: boolean,
+      options?: {
+        applyOptimistic?: boolean;
+        previousState?: Pick<Invoice, 'deletionMarkedAt' | 'deletionMarkedById' | 'deletionMarkedByName'>;
+        timestamp?: string;
+      },
+    ) => {
+      if (!userInfo) return;
+      const invoice = invoices.find((inv) => inv.id === invoiceId);
+      if (!invoice) return;
+
+      const previousState =
+        options?.previousState ?? {
+          deletionMarkedAt: invoice.deletionMarkedAt ?? null,
+          deletionMarkedById: invoice.deletionMarkedById,
+          deletionMarkedByName: invoice.deletionMarkedByName,
+        };
+
+      const markDate = shouldMark ? options?.timestamp ?? new Date().toISOString() : null;
+      const updatePayload: Partial<Invoice> = shouldMark
+        ? {
+            deletionMarkedAt: markDate,
+            deletionMarkedById: userInfo.id,
+            deletionMarkedByName: userInfo.name,
+          }
+        : {
+            deletionMarkedAt: null,
+            deletionMarkedById: null,
+            deletionMarkedByName: null,
+          };
+
+      if (options?.applyOptimistic !== false) {
+        setInvoices((prev) => prev.map((inv) => (inv.id === invoiceId ? { ...inv, ...updatePayload } : inv)));
+      }
+
+      try {
+        await updateInvoice(invoiceId, updatePayload, userInfo.id, userInfo.name, resolveOwnerNameForInvoice(invoiceId));
+      } catch (error) {
+        console.error('Error updating deletion mark state:', error);
+        setInvoices((prev) => prev.map((inv) => (inv.id === invoiceId ? { ...inv, ...previousState } : inv)));
+        toast({ title: 'No se pudo actualizar la marca de eliminación', variant: 'destructive' });
+        throw error;
+      }
+    },
+    [invoices, resolveOwnerNameForInvoice, toast, userInfo],
+  );
+
+  const handleBatchDeletionMarkUpdate = useCallback(
+    async (shouldMark: boolean) => {
+      if (!userInfo) return;
+      const ids = Array.from(selectedInvoiceIds);
+      if (ids.length === 0) return;
+
+      const previousStates = captureDeletionMarkState(ids);
+      const timestamp = shouldMark ? new Date().toISOString() : null;
+
+      applyOptimisticDeletionMark(ids, shouldMark, timestamp || undefined);
+
+      const results = await Promise.allSettled(
+        ids.map((id) =>
+          // TODO: Reemplazar por una operación batch cuando esté disponible en la API.
+          handleToggleDeletionMark(id, shouldMark, {
+            applyOptimistic: false,
+            previousState: previousStates.get(id),
+            timestamp: timestamp || undefined,
+          }),
+        ),
+      );
+
+      const failed = results.filter((res) => res.status === 'rejected');
+      if (failed.length > 0) {
+        toast({
+          title: 'Actualización parcial',
+          description: `No se pudieron actualizar ${failed.length} factura${failed.length === 1 ? '' : 's'}.`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: shouldMark ? 'Facturas marcadas para eliminar' : 'Facturas desmarcadas',
+          description: `${ids.length} factura${ids.length === 1 ? '' : 's'} actualizada${ids.length === 1 ? '' : 's'}.`,
+        });
+      }
+    },
+    [applyOptimisticDeletionMark, captureDeletionMarkState, handleToggleDeletionMark, selectedInvoiceIds, toast, userInfo],
+  );
+
+  const handleMarkSelectedForDeletion = useCallback(
+    () => handleBatchDeletionMarkUpdate(true),
+    [handleBatchDeletionMarkUpdate],
+  );
+
+  const handleUnmarkSelectedForDeletion = useCallback(
+    () => handleBatchDeletionMarkUpdate(false),
+    [handleBatchDeletionMarkUpdate],
+  );
+
 
   const handleMarkAsPaid = async (invoiceId: string) => {
     if (!userInfo) return;
@@ -1026,6 +1197,35 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         setIsFormOpen(true);
       }
   }
+
+  const renderDeletionMarkActions = (visibleInvoices: Invoice[]) => {
+    const selectedCount = selectedInvoiceIds.size;
+    const visibleSelectedCount = visibleInvoices.filter((inv) => selectedInvoiceIds.has(inv.id)).length;
+    const hasSelection = selectedCount > 0;
+
+    return (
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted-foreground">
+          {hasSelection
+            ? `${selectedCount} factura${selectedCount === 1 ? '' : 's'} seleccionada${selectedCount === 1 ? '' : 's'}.`
+            : 'Seleccioná facturas para aplicar cambios masivos.'}
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={handleMarkSelectedForDeletion} disabled={!hasSelection}>
+            Marcar para eliminar
+          </Button>
+          <Button size="sm" variant="ghost" onClick={handleUnmarkSelectedForDeletion} disabled={!hasSelection}>
+            Quitar marca
+          </Button>
+          {visibleSelectedCount > 0 ? (
+            <span className="text-xs text-muted-foreground">
+              {visibleSelectedCount} seleccionada{visibleSelectedCount === 1 ? '' : 's'} en esta vista
+            </span>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
 
   const prefsLoader = (
     <div className="flex min-h-[260px] items-center justify-center rounded-md border border-dashed bg-muted/40">
@@ -1105,6 +1305,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             )}
           </TabsContent>
           <TabsContent value="to-collect">
+            {renderDeletionMarkActions(toCollectInvoices)}
             <BillingTable
               items={toCollectInvoices}
               type="invoices"
@@ -1121,9 +1322,13 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               columnOrder={toCollectTableState.columnOrder}
               setColumnOrder={toCollectTableState.setColumnOrder}
               isReady={prefsReady}
+              selectedInvoiceIds={selectedInvoiceIds}
+              onToggleSelect={handleToggleInvoiceSelection}
+              onToggleSelectAll={(checked) => handleToggleAllInvoiceSelection(checked, toCollectInvoices as Invoice[])}
             />
           </TabsContent>
            <TabsContent value="paid">
+            {renderDeletionMarkActions(paidInvoices)}
             <BillingTable
               items={paidInvoices}
               type="invoices"
@@ -1138,6 +1343,9 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               columnOrder={paidTableState.columnOrder}
               setColumnOrder={paidTableState.setColumnOrder}
               isReady={prefsReady}
+              selectedInvoiceIds={selectedInvoiceIds}
+              onToggleSelect={handleToggleInvoiceSelection}
+              onToggleSelectAll={(checked) => handleToggleAllInvoiceSelection(checked, paidInvoices as Invoice[])}
             />
           </TabsContent>
           <TabsContent value="credit-notes">
@@ -1297,7 +1505,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                                   id={`invoice-${invoice.id}`}
                                   checked={!!invoiceSelection[invoice.id]}
                                   disabled={invoice.isCreditNote || Boolean(invoice.creditNoteMarkedAt)}
-                                  onCheckedChange={(value) => handleToggleInvoiceSelection(invoice.id, value === true)}
+                                  onCheckedChange={(value) => handleToggleDuplicateInvoiceSelection(invoice.id, value === true)}
                                 />
                                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                   <div className="flex flex-col">
