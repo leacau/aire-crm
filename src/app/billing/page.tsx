@@ -1049,6 +1049,14 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     handleRestoreDeletionMarks(Array.from(selectedInvoiceIds));
   }, [handleRestoreDeletionMarks, selectedInvoiceIds]);
 
+  const renderDeletionMarkActions = useCallback(
+    (items: Invoice[]) => {
+      if (!canManageDeletionMarks || items.length === 0) return null;
+      return null;
+    },
+    [canManageDeletionMarks],
+  );
+
 
   const handleMarkAsPaid = async (invoiceId: string) => {
     if (!userInfo) return;
