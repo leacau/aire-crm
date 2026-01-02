@@ -251,6 +251,10 @@ const EMPTY_DELETE_PROGRESS: DeleteProgressState = {
 function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
+  const canManageDeletionMarks = useMemo(
+    () => isBoss || userInfo?.role === 'Administracion',
+    [isBoss, userInfo?.role],
+  );
   const isCreditNoteRelated = useCallback(
     (invoice: Invoice) => invoice.isCreditNote || Boolean(invoice.creditNoteMarkedAt),
     [],
@@ -280,6 +284,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [isDeletingDuplicates, setIsDeletingDuplicates] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<DeleteProgressState>(EMPTY_DELETE_PROGRESS);
   const [isRetryingFailed, setIsRetryingFailed] = useState(false);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(() => new Set());
   
   const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -573,6 +578,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     return { toInvoiceOpps, toCollectInvoices, paidInvoices, creditNoteInvoices };
 
   }, [opportunities, invoices, clients, selectedAdvisor, isBoss, userInfo, dateRange, markedOnly, isDeletionMarked, prefsReady]);
+  const visibleInvoiceIds = useMemo(
+    () => new Set([...toCollectInvoices, ...paidInvoices, ...creditNoteInvoices].map((inv) => inv.id)),
+    [toCollectInvoices, paidInvoices, creditNoteInvoices],
+  );
 
   const filteredPayments = useMemo(() => {
     if (!userInfo) return [] as PaymentEntry[];
@@ -592,8 +601,35 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     setSelectedPaymentIds((prev) => prev.filter((id) => filteredPayments.some((entry) => entry.id === id)));
   }, [filteredPayments]);
 
+  useEffect(() => {
+    setSelectedInvoiceIds((prev) => {
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (visibleInvoiceIds.has(id)) {
+          next.add(id);
+        }
+      });
+
+      if (next.size === prev.size) {
+        let unchanged = true;
+        prev.forEach((id) => {
+          if (!next.has(id)) {
+            unchanged = false;
+          }
+        });
+        if (unchanged) return prev;
+      }
+
+      return next;
+    });
+  }, [visibleInvoiceIds]);
+
   const handleToggleMarkedOnly = useCallback((checked: boolean) => {
     setMarkedOnly(checked);
+  }, []);
+
+  const handleInvoiceSelectionChange = useCallback((nextSelection: Set<string>) => {
+    setSelectedInvoiceIds(new Set(nextSelection));
   }, []);
 
 
@@ -956,6 +992,32 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   };
 
+  const handleMarkInvoicesForDeletion = useCallback(
+    (invoiceIds: string[]) => {
+      if (invoiceIds.length === 0) return;
+      // Implemented in the following task.
+    },
+    [],
+  );
+
+  const handleRestoreDeletionMarks = useCallback(
+    (invoiceIds: string[]) => {
+      if (invoiceIds.length === 0) return;
+      // Implemented in the following task.
+    },
+    [],
+  );
+
+  const handleMarkSelectedInvoicesForDeletion = useCallback(() => {
+    if (selectedInvoiceIds.size === 0) return;
+    handleMarkInvoicesForDeletion(Array.from(selectedInvoiceIds));
+  }, [handleMarkInvoicesForDeletion, selectedInvoiceIds]);
+
+  const handleRestoreSelectedDeletionMarks = useCallback(() => {
+    if (selectedInvoiceIds.size === 0) return;
+    handleRestoreDeletionMarks(Array.from(selectedInvoiceIds));
+  }, [handleRestoreDeletionMarks, selectedInvoiceIds]);
+
 
   const handleMarkAsPaid = async (invoiceId: string) => {
     if (!userInfo) return;
@@ -1027,6 +1089,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       }
   }
 
+  const hasInvoiceSelection = selectedInvoiceIds.size > 0;
+
   const prefsLoader = (
     <div className="flex min-h-[260px] items-center justify-center rounded-md border border-dashed bg-muted/40">
       <Spinner size="small" />
@@ -1084,15 +1148,35 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             <TabsTrigger value="credit-notes">NC</TabsTrigger>
             <TabsTrigger value="payments">Mora</TabsTrigger>
           </TabsList>
-          <div className="mb-4 flex items-center gap-2">
-            <Checkbox
-              id="marked-only"
-              checked={markedOnly}
-              onCheckedChange={(value) => handleToggleMarkedOnly(value === true)}
-            />
-            <Label htmlFor="marked-only" className="text-sm text-muted-foreground">
-              Solo marcadas
-            </Label>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="marked-only"
+                checked={markedOnly}
+                onCheckedChange={(value) => handleToggleMarkedOnly(value === true)}
+              />
+              <Label htmlFor="marked-only" className="text-sm text-muted-foreground">
+                Solo marcadas
+              </Label>
+            </div>
+            {canManageDeletionMarks ? (
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  disabled={!hasInvoiceSelection}
+                  onClick={handleRestoreSelectedDeletionMarks}
+                >
+                  Quitar marca
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={!hasInvoiceSelection}
+                  onClick={handleMarkSelectedInvoicesForDeletion}
+                >
+                  Marcar para eliminar
+                </Button>
+              </div>
+            ) : null}
           </div>
           <TabsContent value="to-invoice">
             {renderWithPrefs(
@@ -1121,6 +1205,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               columnOrder={toCollectTableState.columnOrder}
               setColumnOrder={toCollectTableState.setColumnOrder}
               isReady={prefsReady}
+              selectedInvoiceIds={selectedInvoiceIds}
+              onSelectedInvoicesChange={handleInvoiceSelectionChange}
             />
           </TabsContent>
            <TabsContent value="paid">
@@ -1138,6 +1224,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               columnOrder={paidTableState.columnOrder}
               setColumnOrder={paidTableState.setColumnOrder}
               isReady={prefsReady}
+              selectedInvoiceIds={selectedInvoiceIds}
+              onSelectedInvoicesChange={handleInvoiceSelectionChange}
             />
           </TabsContent>
           <TabsContent value="credit-notes">
@@ -1157,6 +1245,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               columnOrder={creditNotesTableState.columnOrder}
               setColumnOrder={creditNotesTableState.setColumnOrder}
               isReady={prefsReady}
+              selectedInvoiceIds={selectedInvoiceIds}
+              onSelectedInvoicesChange={handleInvoiceSelectionChange}
             />
           </TabsContent>
           <TabsContent value="payments">
