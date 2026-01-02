@@ -657,7 +657,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
     const grouped = new Map<string, Invoice[]>();
 
-    toCollectInvoices.forEach((invoice) => {
+    invoices.forEach((invoice) => {
       const opp = opportunitiesMap[invoice.opportunityId];
       if (!opp || !invoice.date) return;
 
