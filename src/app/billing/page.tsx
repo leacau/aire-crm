@@ -22,6 +22,16 @@ import { BillingTable } from '@/components/billing/billing-table';
 import { ToInvoiceTable } from '@/components/billing/to-invoice-table';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { PaymentsTable } from '@/components/billing/payments-table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const getPeriodDurationInMonths = (period: string): number => {
     switch (period) {
@@ -125,6 +135,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [pastedPayments, setPastedPayments] = useState('');
   const [isImportingPayments, setIsImportingPayments] = useState(false);
   const [isDeletingDuplicates, setIsDeletingDuplicates] = useState(false);
+  const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false);
+  const [duplicateGroups, setDuplicateGroups] = useState<Invoice[][]>([]);
   
   const [selectedDate, setSelectedDate] = useState(new Date());
   const canManageBillingDeletion = Boolean(
@@ -592,6 +604,48 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   };
 
+  const findDuplicateInvoiceGroups = useCallback((): Invoice[][] => {
+    const grouped = new Map<string, Invoice[]>();
+
+    invoices.forEach((invoice) => {
+      const opp = opportunitiesMap[invoice.opportunityId];
+      if (!opp || !invoice.date) return;
+
+      const clientId = opp.clientId;
+      const amount = Number(invoice.amount);
+      const normalizedNumber = getNormalizedInvoiceNumber(invoice);
+      const lastFour = normalizedNumber.slice(-4);
+
+      if (!clientId || !Number.isFinite(amount) || !lastFour) return;
+
+      const key = `${clientId}|${invoice.date}|${amount}|${lastFour}`;
+      const current = grouped.get(key) || [];
+      current.push(invoice);
+      grouped.set(key, current);
+    });
+
+    const duplicates: Invoice[][] = [];
+    grouped.forEach((group) => {
+      if (group.length <= 1) return;
+
+      const sortedGroup = [...group].sort((a, b) => {
+        const dateA = new Date(a.dateGenerated || a.date || '').getTime();
+        const dateB = new Date(b.dateGenerated || b.date || '').getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        return a.id.localeCompare(b.id);
+      });
+      duplicates.push(sortedGroup);
+    });
+
+    duplicates.sort((a, b) => {
+      const clientA = opportunitiesMap[a[0].opportunityId]?.clientId || '';
+      const clientB = opportunitiesMap[b[0].opportunityId]?.clientId || '';
+      return clientA.localeCompare(clientB);
+    });
+
+    return duplicates;
+  }, [invoices, opportunitiesMap]);
+
 
   const handleMarkAsPaid = async (invoiceId: string) => {
     if (!userInfo) return;
@@ -652,50 +706,32 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   };
 
-  const handleDeleteDuplicateInvoices = async () => {
+  const handleOpenDuplicateDialog = () => {
+    const duplicates = findDuplicateInvoiceGroups();
+    if (duplicates.length === 0) {
+      toast({ title: 'No se encontraron facturas duplicadas en A Cobrar' });
+      return;
+    }
+    setDuplicateGroups(duplicates);
+    setIsDuplicateDialogOpen(true);
+  };
+
+  const handleConfirmDeleteDuplicates = async () => {
     if (!userInfo || !canManageBillingDeletion) return;
+    const duplicates = findDuplicateInvoiceGroups();
+    setDuplicateGroups(duplicates);
 
-    const grouped = new Map<string, Invoice[]>();
-
-    invoices.forEach((invoice) => {
-      const opp = opportunitiesMap[invoice.opportunityId];
-      if (!opp || !invoice.date) return;
-
-      const clientId = opp.clientId;
-      const amount = Number(invoice.amount);
-      const normalizedNumber = getNormalizedInvoiceNumber(invoice);
-      const lastFour = normalizedNumber.slice(-4);
-
-      if (!clientId || !Number.isFinite(amount) || !lastFour) return;
-
-      const key = `${clientId}|${invoice.date}|${amount}|${lastFour}`;
-      const current = grouped.get(key) || [];
-      current.push(invoice);
-      grouped.set(key, current);
-    });
-
-    const invoicesToDelete: Invoice[] = [];
-    grouped.forEach((group) => {
-      if (group.length <= 1) return;
-
-      const sortedGroup = [...group].sort((a, b) => {
-        const dateA = new Date(a.dateGenerated || a.date || '').getTime();
-        const dateB = new Date(b.dateGenerated || b.date || '').getTime();
-        if (dateA !== dateB) return dateA - dateB;
-        return a.id.localeCompare(b.id);
-      });
-      const [, ...duplicates] = sortedGroup;
-      invoicesToDelete.push(...duplicates);
-    });
-
+    const invoicesToDelete = duplicates.flatMap((group) => group.slice(1));
     if (invoicesToDelete.length === 0) {
       toast({ title: 'No se encontraron facturas duplicadas en A Cobrar' });
+      setIsDuplicateDialogOpen(false);
       return;
     }
 
     const idsToDelete = new Set(invoicesToDelete.map((inv) => inv.id));
     setInvoices((prev) => prev.filter((inv) => !idsToDelete.has(inv.id)));
     setIsDeletingDuplicates(true);
+    setIsDuplicateDialogOpen(false);
 
     try {
       for (const invoice of invoicesToDelete) {
@@ -776,7 +812,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 <div className="flex justify-end">
                   <Button
                     variant="destructive"
-                    onClick={handleDeleteDuplicateInvoices}
+                    onClick={handleOpenDuplicateDialog}
                     disabled={isDeletingDuplicates}
                   >
                     {isDeletingDuplicates ? <Spinner size="small" /> : 'Eliminar facturas duplicadas'}
@@ -857,6 +893,54 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         />
       )}
     </div>
+
+    <AlertDialog open={isDuplicateDialogOpen} onOpenChange={setIsDuplicateDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Eliminar facturas duplicadas</AlertDialogTitle>
+          <AlertDialogDescription>
+            {duplicateGroups.length === 0
+              ? 'No se encontraron duplicados.'
+              : `Se eliminarán ${duplicateGroups.reduce((acc, g) => acc + Math.max(g.length - 1, 0), 0)} factura(s) duplicada(s) y se conservará una por grupo.`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="space-y-3 max-h-[50vh] overflow-auto">
+          {duplicateGroups.slice(0, 8).map((group, index) => {
+            const opp = opportunitiesMap[group[0].opportunityId];
+            const client = opp ? clientsMap[opp.clientId] : undefined;
+            return (
+              <div key={`${group[0].id}-${index}`} className="rounded-md border p-3">
+                <p className="text-sm font-medium">
+                  {client?.denominacion || opp?.clientName || 'Cliente'} — {group[0].date || 'Sin fecha'}
+                </p>
+                <p className="text-xs text-muted-foreground">Se conserva: #{group[0].invoiceNumber}</p>
+                <ul className="mt-2 space-y-1 text-sm">
+                  {group.slice(1).map((inv) => (
+                    <li key={inv.id} className="flex items-center justify-between">
+                      <span>#{inv.invoiceNumber}</span>
+                      <span className="text-muted-foreground">${Number(inv.amount).toLocaleString('es-AR')}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+          {duplicateGroups.length > 8 && (
+            <p className="text-xs text-muted-foreground">
+              Hay {duplicateGroups.length - 8} grupo(s) adicional(es) de duplicados.
+            </p>
+          )}
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeletingDuplicates}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction onClick={handleConfirmDeleteDuplicates} disabled={isDeletingDuplicates} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            {isDeletingDuplicates ? <Spinner size="small" /> : 'Eliminar duplicados'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
