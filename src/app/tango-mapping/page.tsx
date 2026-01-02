@@ -32,6 +32,7 @@ import {
   updateClientTangoMapping,
 } from '@/lib/firebase-service';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { getNormalizedInvoiceNumber } from '@/lib/invoice-utils';
 
 type MappingStep = 'upload' | 'map' | 'review';
 type BillingEntity = 'aire-srl' | 'aire-digital';
@@ -97,13 +98,8 @@ const BILLING_ENTITY_OPTIONS: { value: BillingEntity; label: string }[] = [
   { value: 'aire-digital', label: 'Aire Digital SAS' },
 ];
 
-const extractLastFiveDigits = (value: string) => {
-  const digits = (value.match(/\d/g) || []).join('');
-  if (!digits) return '';
-  return digits.slice(-5);
-};
-
 const extractDigits = (value?: string) => (value?.match(/\d/g) || []).join('');
+const normalizeInvoiceForDuplicateCheck = (value: string) => getNormalizedInvoiceNumber({ invoiceNumber: value });
 
 const formatCuit = (value: string) => {
   const digits = extractDigits(value);
@@ -631,10 +627,11 @@ export default function TangoMappingPage() {
         const issueDateRaw = invoiceColumnSelection.issueDate ? row[invoiceColumnSelection.issueDate] : undefined;
         const dueDateRaw = invoiceColumnSelection.dueDate ? row[invoiceColumnSelection.dueDate] : undefined;
         const rowIndex = typeof row.__row === 'number' ? row.__row : index;
+        const digitsInvoiceNumber = extractDigits(String(invoiceNumber));
         return {
           index: rowIndex,
           idTango: String(idTango),
-          invoiceNumber: extractLastFiveDigits(String(invoiceNumber)) || String(invoiceNumber),
+          invoiceNumber: digitsInvoiceNumber || String(invoiceNumber),
           amount,
           issueDate: parseDateValue(issueDateRaw),
           dueDate: parseDateValue(dueDateRaw),
@@ -676,9 +673,9 @@ export default function TangoMappingPage() {
   const isDuplicateInvoice = (inv: InvoiceRow) => {
     if (!inv.clientId) return false;
     const existing = invoicesByClient[inv.clientId] || [];
-    const targetLast5 = extractLastFiveDigits(inv.invoiceNumber);
-    if (!targetLast5) return false;
-    return existing.some((e) => extractLastFiveDigits(e.invoiceNumber || '') === targetLast5);
+    const targetNumber = normalizeInvoiceForDuplicateCheck(inv.invoiceNumber);
+    if (!targetNumber) return false;
+    return existing.some((e) => normalizeInvoiceForDuplicateCheck(e.invoiceNumber || '') === targetNumber);
   };
 
   const removeInvoiceRow = (rowIndex: number) => {

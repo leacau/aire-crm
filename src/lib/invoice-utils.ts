@@ -31,7 +31,8 @@ export const getNormalizedInvoiceNumber = (invoice: Pick<Invoice, 'invoiceNumber
   if (!digitChunks) return '';
 
   const numericOnly = digitChunks.join('');
-  const withoutLeadingZeros = numericOnly.replace(/^0+/, '');
+  const shouldStripLeadingZeros = numericOnly.length >= 5;
+  const withoutLeadingZeros = shouldStripLeadingZeros ? numericOnly.replace(/^0+/, '') : numericOnly;
 
   /**
    * Ejemplos de normalización esperada:

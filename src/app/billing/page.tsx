@@ -662,13 +662,14 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     if (!client) return;
 
     const sanitizedNumber = sanitizeInvoiceNumber(String(invoiceDetails.invoiceNumber));
-    if (!sanitizedNumber) {
+    const normalizedNumber = getNormalizedInvoiceNumber({ invoiceNumber: sanitizedNumber });
+    if (!sanitizedNumber || !normalizedNumber) {
       toast({ title: 'Número de factura inválido', description: 'Solo se permiten dígitos en el número de factura.', variant: 'destructive' });
       return;
     }
 
     const existingNumbers = new Set(invoices.map(inv => getNormalizedInvoiceNumber(inv)));
-    if (existingNumbers.has(sanitizedNumber)) {
+    if (existingNumbers.has(normalizedNumber)) {
       toast({ title: `Factura duplicada #${invoiceDetails.invoiceNumber}`, description: 'Ya existe una factura con ese número.', variant: 'destructive' });
       return;
     }
@@ -1047,6 +1048,14 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     if (selectedInvoiceIds.size === 0) return;
     handleRestoreDeletionMarks(Array.from(selectedInvoiceIds));
   }, [handleRestoreDeletionMarks, selectedInvoiceIds]);
+
+  const renderDeletionMarkActions = useCallback(
+    (items: Invoice[]) => {
+      if (!canManageDeletionMarks || items.length === 0) return null;
+      return null;
+    },
+    [canManageDeletionMarks],
+  );
 
 
   const handleMarkAsPaid = async (invoiceId: string) => {

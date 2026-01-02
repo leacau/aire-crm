@@ -405,14 +405,15 @@ export function OpportunityDetailsDialog({
   const handleSaveNewInvoice = async () => {
     if (!opportunity || !userInfo) return;
     const sanitizedNumber = sanitizeInvoiceNumber(newInvoiceRow.number);
+    const normalizedNumber = getNormalizedInvoiceNumber({ invoiceNumber: sanitizedNumber });
 
-    if (!sanitizedNumber || !newInvoiceRow.amount || Number(newInvoiceRow.amount) <= 0) {
+    if (!sanitizedNumber || !normalizedNumber || !newInvoiceRow.amount || Number(newInvoiceRow.amount) <= 0) {
       toast({ title: 'Datos de factura incompletos', description: 'Número de factura y monto son requeridos.', variant: 'destructive'});
       return;
     }
 
     const existingNumbers = new Set(invoices.map(inv => getNormalizedInvoiceNumber(inv)));
-    if (existingNumbers.has(sanitizedNumber)) {
+    if (existingNumbers.has(normalizedNumber)) {
       toast({ title: `Factura duplicada #${newInvoiceRow.number}`, description: 'Ya existe una factura con ese número.', variant: 'destructive' });
       return;
     }
