@@ -22,6 +22,8 @@ export const BillingTable = ({
   onMarkAsPaid,
   onToggleCreditNote,
   showCreditNoteDate,
+  onToggleDeletionMark,
+  highlightMarkedForDeletion,
 }: {
   items: (Opportunity | Invoice)[];
   type: 'opportunities' | 'invoices';
@@ -32,6 +34,8 @@ export const BillingTable = ({
   onMarkAsPaid?: (invoiceId: string) => void;
   onToggleCreditNote?: (invoiceId: string, nextValue: boolean) => void;
   showCreditNoteDate?: boolean;
+  onToggleDeletionMark?: (invoiceId: string, nextValue: boolean) => void;
+  highlightMarkedForDeletion?: boolean;
 }) => {
 
   const columns = useMemo<ColumnDef<Opportunity | Invoice>[]>(() => {
@@ -129,6 +133,36 @@ export const BillingTable = ({
             }
           })
         }
+        if (onToggleDeletionMark) {
+          cols.push({
+            id: 'mark-for-deletion',
+            header: 'Eliminar',
+            cell: ({ row }) => {
+              const invoice = row.original as Invoice;
+              return (
+                <div className="flex items-center justify-center space-x-2">
+                  <Checkbox
+                    id={`delete-${invoice.id}`}
+                    checked={!!invoice.markedForDeletion}
+                    onCheckedChange={(value) => {
+                      const nextValue = value === true;
+                      onToggleDeletionMark(invoice.id, nextValue);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor={`delete-${invoice.id}`}>Eliminar</Label>
+                    {invoice.markedForDeletion && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {invoice.deletionMarkedByName || 'Solicitada'} {invoice.deletionMarkedAt ? `· ${format(parseISO(invoice.deletionMarkedAt), 'P', { locale: es })}` : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+          });
+        }
         if (onToggleCreditNote) {
           cols.push({
             id: 'mark-credit-note',
@@ -156,7 +190,7 @@ export const BillingTable = ({
 
     return cols;
 
-  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, usersMap, onToggleCreditNote, showCreditNoteDate]);
+  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, usersMap, onToggleCreditNote, showCreditNoteDate, onToggleDeletionMark]);
 
   const total = items.reduce((acc, item) => {
     if (type === 'invoices') return acc + Number((item as Invoice).amount || 0);
@@ -183,6 +217,11 @@ export const BillingTable = ({
         emptyStateMessage="No hay items en esta sección."
         footerContent={footerContent}
         enableRowResizing={false}
+        rowClassName={
+          highlightMarkedForDeletion && type === 'invoices'
+            ? (row) => ((row.original as Invoice).markedForDeletion ? 'bg-red-50' : '')
+            : undefined
+        }
       />
   );
 };
