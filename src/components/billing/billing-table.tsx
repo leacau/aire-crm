@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
-import type { ColumnDef, ColumnOrderState, ColumnVisibilityState, SortingState } from '@tanstack/react-table';
+import type { ColumnDef, ColumnOrderState, ColumnVisibilityState, RowSelectionState, SortingState } from '@tanstack/react-table';
 import { TableFooter, TableRow, TableCell } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '../ui/label';
@@ -31,6 +31,8 @@ export const BillingTable = ({
   columnOrder,
   setColumnOrder,
   isReady = true,
+  selectedInvoiceIds,
+  onSelectedInvoicesChange,
 }: {
   items: (Opportunity | Invoice)[];
   type: 'opportunities' | 'invoices';
@@ -48,6 +50,8 @@ export const BillingTable = ({
   columnOrder?: ColumnOrderState;
   setColumnOrder?: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
   isReady?: boolean;
+  selectedInvoiceIds?: Set<string>;
+  onSelectedInvoicesChange?: (ids: Set<string>) => void;
 }) => {
 
   const isDeletionMarked = useCallback((item: Opportunity | Invoice) => {
@@ -59,8 +63,60 @@ export const BillingTable = ({
     );
   }, []);
 
+  const selectionEnabled = type === 'invoices' && !!selectedInvoiceIds && !!onSelectedInvoicesChange;
+
+  const rowSelection = useMemo<RowSelectionState>(() => {
+    if (!selectionEnabled || !selectedInvoiceIds) return {};
+    return items.reduce<RowSelectionState>((acc, item) => {
+      const id = (item as Invoice).id;
+      if (selectedInvoiceIds.has(id)) {
+        acc[id] = true;
+      }
+      return acc;
+    }, {});
+  }, [items, selectedInvoiceIds, selectionEnabled]);
+
+  const handleRowSelectionChange = useCallback<React.Dispatch<React.SetStateAction<RowSelectionState>>>(
+    (updater) => {
+      if (!selectionEnabled || !onSelectedInvoicesChange) return;
+      const nextState = typeof updater === 'function' ? updater(rowSelection) : updater;
+      const nextSet = new Set<string>();
+      Object.entries(nextState).forEach(([key, value]) => {
+        if (value) nextSet.add(key);
+      });
+      onSelectedInvoicesChange(nextSet);
+    },
+    [onSelectedInvoicesChange, rowSelection, selectionEnabled],
+  );
+
   const columns = useMemo<ColumnDef<Opportunity | Invoice>[]>(() => {
     let cols: ColumnDef<any>[] = [
+      ...(selectionEnabled
+        ? [
+            {
+              id: 'select',
+              header: ({ table }) => (
+                <Checkbox
+                  aria-label="Seleccionar todas las facturas visibles"
+                  checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+                  onCheckedChange={(value) => table.toggleAllPageRowsSelected(value === true)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ),
+              cell: ({ row }) => (
+                <Checkbox
+                  aria-label="Seleccionar factura"
+                  checked={row.getIsSelected()}
+                  onCheckedChange={(value) => row.toggleSelected(value === true)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ),
+              size: 42,
+              enableSorting: false,
+              enableHiding: false,
+            } satisfies ColumnDef<Opportunity | Invoice>,
+          ]
+        : []),
       {
         accessorKey: 'opportunityTitle',
         header: 'Oportunidad',
@@ -228,7 +284,18 @@ export const BillingTable = ({
 
     return cols;
 
-  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, usersMap, onToggleCreditNote, showCreditNoteDate, isDeletionMarked]);
+  }, [
+    type,
+    onRowClick,
+    clientsMap,
+    opportunitiesMap,
+    onMarkAsPaid,
+    usersMap,
+    onToggleCreditNote,
+    showCreditNoteDate,
+    isDeletionMarked,
+    selectionEnabled,
+  ]);
 
   const total = items.reduce((acc, item) => {
     if (type === 'invoices') return acc + Number((item as Invoice).amount || 0);
@@ -258,6 +325,9 @@ export const BillingTable = ({
         columnOrder={columnOrder}
         setColumnOrder={setColumnOrder}
         onRowClick={onRowClick}
+        rowSelection={selectionEnabled ? rowSelection : undefined}
+        setRowSelection={selectionEnabled ? handleRowSelectionChange : undefined}
+        getRowId={(row) => (type === 'invoices' ? (row as Invoice).id : (row as Opportunity).id)}
         emptyStateMessage="No hay items en esta sección."
         footerContent={footerContent}
         enableRowResizing={false}
