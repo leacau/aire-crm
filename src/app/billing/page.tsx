@@ -22,6 +22,7 @@ import { BillingTable } from '@/components/billing/billing-table';
 import { ToInvoiceTable } from '@/components/billing/to-invoice-table';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { PaymentsTable } from '@/components/billing/payments-table';
+import { Switch } from '@/components/ui/switch';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -137,6 +138,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [isDeletingDuplicates, setIsDeletingDuplicates] = useState(false);
   const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false);
   const [duplicateGroups, setDuplicateGroups] = useState<Invoice[][]>([]);
+  const [showOnlyMarkedForDeletion, setShowOnlyMarkedForDeletion] = useState(false);
   
   const [selectedDate, setSelectedDate] = useState(new Date());
   const canManageBillingDeletion = Boolean(
@@ -809,7 +811,15 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
           <TabsContent value="to-collect">
             <div className="grid gap-4">
               {canManageBillingDeletion && (
-                <div className="flex justify-end">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Switch
+                      id="only-marked"
+                      checked={showOnlyMarkedForDeletion}
+                      onCheckedChange={(checked) => setShowOnlyMarkedForDeletion(checked === true)}
+                    />
+                    <label htmlFor="only-marked">Ver solo facturas marcadas para eliminar</label>
+                  </div>
                   <Button
                     variant="destructive"
                     onClick={handleOpenDuplicateDialog}
@@ -820,7 +830,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 </div>
               )}
               <BillingTable
-                items={toCollectInvoices}
+                items={showOnlyMarkedForDeletion ? toCollectInvoices.filter((inv) => inv.markedForDeletion) : toCollectInvoices}
                 type="invoices"
                 onRowClick={handleRowClick}
                 clientsMap={clientsMap}
@@ -829,6 +839,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 onMarkAsPaid={handleMarkAsPaid}
                 onToggleCreditNote={handleToggleCreditNote}
                 onToggleDeletionMark={canManageBillingDeletion ? handleToggleDeletionMark : undefined}
+                highlightMarkedForDeletion
               />
             </div>
           </TabsContent>

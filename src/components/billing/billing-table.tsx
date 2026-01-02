@@ -23,6 +23,7 @@ export const BillingTable = ({
   onToggleCreditNote,
   showCreditNoteDate,
   onToggleDeletionMark,
+  highlightMarkedForDeletion,
 }: {
   items: (Opportunity | Invoice)[];
   type: 'opportunities' | 'invoices';
@@ -34,6 +35,7 @@ export const BillingTable = ({
   onToggleCreditNote?: (invoiceId: string, nextValue: boolean) => void;
   showCreditNoteDate?: boolean;
   onToggleDeletionMark?: (invoiceId: string, nextValue: boolean) => void;
+  highlightMarkedForDeletion?: boolean;
 }) => {
 
   const columns = useMemo<ColumnDef<Opportunity | Invoice>[]>(() => {
@@ -148,7 +150,14 @@ export const BillingTable = ({
                     }}
                     onClick={(e) => e.stopPropagation()}
                   />
-                  <Label htmlFor={`delete-${invoice.id}`}>Eliminar</Label>
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor={`delete-${invoice.id}`}>Eliminar</Label>
+                    {invoice.markedForDeletion && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {invoice.deletionMarkedByName || 'Solicitada'} {invoice.deletionMarkedAt ? `· ${format(parseISO(invoice.deletionMarkedAt), 'P', { locale: es })}` : ''}
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             }
@@ -208,6 +217,11 @@ export const BillingTable = ({
         emptyStateMessage="No hay items en esta sección."
         footerContent={footerContent}
         enableRowResizing={false}
+        rowClassName={
+          highlightMarkedForDeletion && type === 'invoices'
+            ? (row) => ((row.original as Invoice).markedForDeletion ? 'bg-red-50' : '')
+            : undefined
+        }
       />
   );
 };
