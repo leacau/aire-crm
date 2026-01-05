@@ -1573,6 +1573,8 @@ export const replacePaymentEntriesForAdvisor = async (
         issueDate: row.issueDate || null,
         dueDate: row.dueDate || null,
         daysLate: computeDaysLate(row.dueDate),
+        notes: row.notes || '',
+        nextContactAt: row.nextContactAt || null,
         updatedAt: serverTimestamp(),
     });
 
@@ -1583,13 +1585,7 @@ export const replacePaymentEntriesForAdvisor = async (
             batch.update(existingMap.get(comprobante), payload);
         } else {
             const docRef = doc(collections.paymentEntries);
-            batch.set(docRef, {
-                ...payload,
-                status: 'Pendiente' as PaymentStatus,
-                notes: row.notes || '',
-                nextContactAt: row.nextContactAt || null,
-                createdAt: serverTimestamp(),
-            });
+            batch.set(docRef, { ...payload, status: 'Pendiente' as PaymentStatus, createdAt: serverTimestamp() });
         }
     });
 
