@@ -1532,6 +1532,11 @@ export const replacePaymentEntriesForAdvisor = async (
         };
     });
 
+    const existingMap = existingEntries.reduce((acc, entry) => {
+        if (entry.comprobanteNumber) acc.set(entry.comprobanteNumber, entry.ref);
+        return acc;
+    }, new Map<string, any>());
+
     const existingNumbers = new Set(
         existingEntries
             .map((entry) => entry.comprobanteNumber)
@@ -1556,25 +1561,32 @@ export const replacePaymentEntriesForAdvisor = async (
         return !existingNumbers.has(comprobante);
     });
 
-    rowsToInsert.forEach((row) => {
-        const docRef = doc(collections.paymentEntries);
-        batch.set(docRef, {
-            advisorId,
-            advisorName,
-            company: row.company,
-            tipo: row.tipo || null,
-            comprobanteNumber: row.comprobanteNumber,
-            razonSocial: row.razonSocial,
-            amount: row.amount ?? null,
-            pendingAmount: row.pendingAmount ?? null,
-            issueDate: row.issueDate || null,
-            dueDate: row.dueDate || null,
-            daysLate: computeDaysLate(row.dueDate),
-            status: 'Pendiente' as PaymentStatus,
-            notes: row.notes || '',
-            nextContactAt: row.nextContactAt || null,
-            createdAt: serverTimestamp(),
-        });
+    const upsertPayload = (row: typeof rows[number]) => ({
+        advisorId,
+        advisorName,
+        company: row.company,
+        tipo: row.tipo || null,
+        comprobanteNumber: row.comprobanteNumber,
+        razonSocial: row.razonSocial,
+        amount: row.amount ?? null,
+        pendingAmount: row.pendingAmount ?? null,
+        issueDate: row.issueDate || null,
+        dueDate: row.dueDate || null,
+        daysLate: computeDaysLate(row.dueDate),
+        notes: row.notes || '',
+        nextContactAt: row.nextContactAt || null,
+        updatedAt: serverTimestamp(),
+    });
+
+    rows.forEach((row) => {
+        const comprobante = (row.comprobanteNumber || '').trim();
+        const payload = upsertPayload(row);
+        if (comprobante && existingMap.has(comprobante)) {
+            batch.update(existingMap.get(comprobante), payload);
+        } else {
+            const docRef = doc(collections.paymentEntries);
+            batch.set(docRef, { ...payload, status: 'Pendiente' as PaymentStatus, createdAt: serverTimestamp() });
+        }
     });
 
     await batch.commit();
