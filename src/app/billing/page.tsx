@@ -201,9 +201,10 @@ const parsePastedPayments = (
     .map((line) => line.split(/\t|;/).map((cell) => cell.trim()))
     .filter((cols) => cols.length >= 7)
     .map((cols) => {
-      const [company, , comprobante, razonSocial, pendingRaw, , dueDateRaw] = cols;
+      const [company, , comprobante, razonSocial, pendingRaw, issueDateRaw, dueDateRaw] = cols;
       const pendingAmount = parseAmount(pendingRaw);
       const dueDate = normalizeDate(dueDateRaw);
+      const issueDate = normalizeDate(issueDateRaw);
 
       return {
         company: company || '—',
@@ -212,6 +213,7 @@ const parsePastedPayments = (
         pendingAmount: Number.isFinite(pendingAmount) ? pendingAmount : undefined,
         // Importe pendiente es la única cifra provista; la usamos como total de referencia
         amount: Number.isFinite(pendingAmount) ? pendingAmount : undefined,
+        issueDate,
         dueDate,
         daysLate: computeDaysLate(dueDate || undefined) ?? undefined,
         notes: '',
