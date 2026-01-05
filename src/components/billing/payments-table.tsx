@@ -320,7 +320,11 @@ const PaymentRow = ({
   };
 
   return (
-    <TableRow key={entry.id} style={rowColor ? { backgroundColor: rowColor } : undefined}>
+    <TableRow
+      key={entry.id}
+      style={rowColor ? { backgroundColor: rowColor } : undefined}
+      className={entry.status === 'Pagado' ? 'line-through text-muted-foreground/80' : undefined}
+    >
       {allowDelete && (
         <TableCell>
           <Checkbox
@@ -333,6 +337,7 @@ const PaymentRow = ({
       {!isBossView && <TableCell className="font-medium">{entry.company}</TableCell>}
       <TableCell>{entry.comprobanteNumber || '—'}</TableCell>
       <TableCell>{entry.razonSocial || '—'}</TableCell>
+      <TableCell>{formatDate(entry.issueDate) || '—'}</TableCell>
       <TableCell>
         {isBossView ? (
           <Input
@@ -428,6 +433,7 @@ export function PaymentsTable({
   const columnCount =
     (allowDelete ? 1 : 0) +
     (isBossView ? 0 : 1) +
+    1 +
     1 +
     1 +
     1 +
@@ -579,6 +585,7 @@ export function PaymentsTable({
               {!isBossView && <TableHead>Empresa</TableHead>}
               <TableHead>Nro. comprobante</TableHead>
               <TableHead>Razón Social</TableHead>
+              <TableHead>Fecha de emisión</TableHead>
               <TableHead>Importe pendiente</TableHead>
               {isBossView && <TableHead>Asesor responsable</TableHead>}
               {!isBossView && <TableHead>Vencimiento</TableHead>}
