@@ -120,8 +120,8 @@ export function ClientFormDialog({
       agencyId: formData.agencyId,
       isNewClient: formData.isNewClient || false,
       isDeactivated: formData.isDeactivated || false,
-      idAireSrl: canEditIds ? (formData.idAireSrl || '').trim() : client?.idAireSrl,
-      idAireDigital: canEditIds ? (formData.idAireDigital || '').trim() : client?.idAireDigital,
+      idAireSrl: canEditIds ? (formData.idAireSrl || '').trim() : client?.idAireSrl || '',
+      idAireDigital: canEditIds ? (formData.idAireDigital || '').trim() : client?.idAireDigital || '',
     };
     
     try {
