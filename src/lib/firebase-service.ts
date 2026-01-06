@@ -1449,13 +1449,26 @@ export const deleteInvoicesInBatches = async (
 
 const PAYMENT_CACHE_KEY = 'paymentEntries';
 
-const normalizePaymentDate = (raw?: string | null) => {
+const PAYMENT_DATE_FORMATS = [
+    'yyyy-MM-dd',
+    'dd/MM/yyyy',
+    'd/M/yyyy',
+    'dd-MM-yyyy',
+    'd-M-yyyy',
+    'dd/MM/yy',
+    'd/M/yy',
+    'dd-MM-yy',
+    'd-M-yy',
+];
+
+const parsePaymentDate = (raw?: string | null) => {
     if (!raw) return null;
     const value = raw.toString().trim();
+
     const tryParse = (parser: () => Date) => {
         try {
             const parsed = parser();
-            if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+            if (!Number.isNaN(parsed.getTime())) return parsed;
         } catch (error) {
             return null;
         }
@@ -1464,27 +1477,18 @@ const normalizePaymentDate = (raw?: string | null) => {
 
     return (
         tryParse(() => parseISO(value)) ??
-        tryParse(() => parse(value, 'dd/MM/yyyy', new Date())) ??
-        value
+        PAYMENT_DATE_FORMATS.reduce<Date | null>((acc, formatString) => acc ?? tryParse(() => parse(value, formatString, new Date())), null)
     );
 };
 
+const normalizePaymentDate = (raw?: string | null) => {
+    const parsed = parsePaymentDate(raw);
+    if (parsed) return parsed.toISOString();
+    return raw ? raw.toString().trim() : null;
+};
+
 const computeDaysLate = (dueDate?: string | null) => {
-    if (!dueDate) return null;
-
-    const parseDate = () => {
-        try {
-            return parseISO(dueDate);
-        } catch (error) {
-            try {
-                return parse(dueDate, 'dd/MM/yyyy', new Date());
-            } catch (err) {
-                return null;
-            }
-        }
-    };
-
-    const parsed = parseDate();
+    const parsed = parsePaymentDate(dueDate);
     if (!parsed || Number.isNaN(parsed.getTime())) return null;
 
     const diff = differenceInCalendarDays(new Date(), parsed);
