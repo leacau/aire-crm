@@ -184,15 +184,17 @@ const computeDaysLate = (dueDate?: string) => {
   }
 };
 
-const parsePastedPayments = (
-  raw: string,
-): Omit<PaymentEntry, 'id' | 'advisorId' | 'advisorName' | 'status' | 'createdAt'>[] => {
-  const parseAmount = (value?: string) => {
-    if (!value) return undefined;
-    const cleaned = String(value).replace(/[^0-9.,-]/g, '').replace(/,/g, '');
-    const numeric = parseFloat(cleaned);
-    return Number.isFinite(numeric) ? numeric : undefined;
-  };
+  const parsePastedPayments = (
+    raw: string,
+  ): Omit<PaymentEntry, 'id' | 'advisorId' | 'advisorName' | 'status' | 'createdAt'>[] => {
+    const parseAmount = (value?: string) => {
+      if (!value) return undefined;
+      const cleaned = String(value).replace(/[^0-9.,-]/g, '');
+      // Remove thousand separators "." and use "," as decimal separator
+      const normalized = cleaned.replace(/\./g, '').replace(/,/g, '.');
+      const numeric = parseFloat(normalized);
+      return Number.isFinite(numeric) ? numeric : undefined;
+    };
 
   return raw
     .split(/\n+/)
@@ -598,7 +600,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         : payments.filter((p) => p.advisorId === selectedAdvisor)
       : payments.filter((p) => p.advisorId === userInfo.id);
 
-    const parseIssueDate = (value?: string | null) => {
+    const parseDateSafe = (value?: string | null) => {
       if (!value) return null;
       const normalized = normalizeDate(value);
       if (!normalized) return null;
@@ -609,11 +611,20 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       }
     };
 
+    const parseIssueDate = (value?: string | null) => {
+      return parseDateSafe(value);
+    };
+
+    const parseDueDate = (value?: string | null) => parseDateSafe(value);
+
     return [...baseList]
-      .map((entry) => ({ ...entry, daysLate: computeDaysLate(entry.dueDate || undefined) ?? entry.daysLate }))
+      .map((entry) => ({
+        ...entry,
+        daysLate: computeDaysLate(entry.dueDate || undefined) ?? entry.daysLate,
+      }))
       .sort((a, b) => {
-        const aDate = parseIssueDate(a.issueDate) ?? parseIssueDate(a.createdAt) ?? new Date(0);
-        const bDate = parseIssueDate(b.issueDate) ?? parseIssueDate(b.createdAt) ?? new Date(0);
+        const aDate = parseDueDate(a.dueDate) ?? parseIssueDate(a.issueDate) ?? parseIssueDate(a.createdAt) ?? new Date(0);
+        const bDate = parseDueDate(b.dueDate) ?? parseIssueDate(b.issueDate) ?? parseIssueDate(b.createdAt) ?? new Date(0);
         return aDate.getTime() - bDate.getTime();
       });
   }, [isBoss, payments, selectedAdvisor, userInfo]);
