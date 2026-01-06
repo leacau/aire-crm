@@ -1593,30 +1593,19 @@ export const replacePaymentEntriesForAdvisor = async (
         issueDate: row.issueDate || null,
         dueDate: row.dueDate || null,
         daysLate: computeDaysLate(row.dueDate),
+        notes: row.notes || '',
+        nextContactAt: row.nextContactAt || null,
         updatedAt: serverTimestamp(),
     });
 
     rows.forEach((row) => {
         const comprobante = (row.comprobanteNumber || '').trim();
-        const normalizedIssueDate = normalizePaymentDate(row.issueDate);
-        const normalizedDueDate = normalizePaymentDate(row.dueDate);
-        const payload = {
-            ...upsertPayload(row),
-            issueDate: normalizedIssueDate,
-            dueDate: normalizedDueDate,
-            daysLate: computeDaysLate(normalizedDueDate),
-        };
+        const payload = upsertPayload(row);
         if (comprobante && existingMap.has(comprobante)) {
             batch.update(existingMap.get(comprobante), payload);
         } else {
             const docRef = doc(collections.paymentEntries);
-            batch.set(docRef, {
-                ...payload,
-                status: 'Pendiente' as PaymentStatus,
-                notes: row.notes || '',
-                nextContactAt: row.nextContactAt || null,
-                createdAt: serverTimestamp(),
-            });
+            batch.set(docRef, { ...payload, status: 'Pendiente' as PaymentStatus, createdAt: serverTimestamp() });
         }
     });
 
