@@ -1449,6 +1449,26 @@ export const deleteInvoicesInBatches = async (
 
 const PAYMENT_CACHE_KEY = 'paymentEntries';
 
+const normalizePaymentDate = (raw?: string | null) => {
+    if (!raw) return null;
+    const value = raw.toString().trim();
+    const tryParse = (parser: () => Date) => {
+        try {
+            const parsed = parser();
+            if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+        } catch (error) {
+            return null;
+        }
+        return null;
+    };
+
+    return (
+        tryParse(() => parseISO(value)) ??
+        tryParse(() => parse(value, 'dd/MM/yyyy', new Date())) ??
+        value
+    );
+};
+
 const computeDaysLate = (dueDate?: string | null) => {
     if (!dueDate) return null;
 
