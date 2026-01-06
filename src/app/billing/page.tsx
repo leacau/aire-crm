@@ -23,6 +23,7 @@ import { BillingTable } from '@/components/billing/billing-table';
 import { ToInvoiceTable } from '@/components/billing/to-invoice-table';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { PaymentsTable } from '@/components/billing/payments-table';
+import { PaymentsSummary, type PaymentSummaryRow } from '@/components/billing/payments-summary';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -183,15 +184,17 @@ const computeDaysLate = (dueDate?: string) => {
   }
 };
 
-const parsePastedPayments = (
-  raw: string,
-): Omit<PaymentEntry, 'id' | 'advisorId' | 'advisorName' | 'status' | 'createdAt'>[] => {
-  const parseAmount = (value?: string) => {
-    if (!value) return undefined;
-    const cleaned = String(value).replace(/[^0-9.,-]/g, '').replace(/,/g, '');
-    const numeric = parseFloat(cleaned);
-    return Number.isFinite(numeric) ? numeric : undefined;
-  };
+  const parsePastedPayments = (
+    raw: string,
+  ): Omit<PaymentEntry, 'id' | 'advisorId' | 'advisorName' | 'status' | 'createdAt'>[] => {
+    const parseAmount = (value?: string) => {
+      if (!value) return undefined;
+      const cleaned = String(value).replace(/[^0-9.,-]/g, '');
+      // Remove thousand separators "." and use "," as decimal separator
+      const normalized = cleaned.replace(/\./g, '').replace(/,/g, '.');
+      const numeric = parseFloat(normalized);
+      return Number.isFinite(numeric) ? numeric : undefined;
+    };
 
   return raw
     .split(/\n+/)
@@ -200,9 +203,10 @@ const parsePastedPayments = (
     .map((line) => line.split(/\t|;/).map((cell) => cell.trim()))
     .filter((cols) => cols.length >= 7)
     .map((cols) => {
-      const [company, , comprobante, razonSocial, pendingRaw, , dueDateRaw] = cols;
+      const [company, , comprobante, razonSocial, pendingRaw, issueDateRaw, dueDateRaw] = cols;
       const pendingAmount = parseAmount(pendingRaw);
       const dueDate = normalizeDate(dueDateRaw);
+      const issueDate = normalizeDate(issueDateRaw);
 
       return {
         company: company || '—',
@@ -211,6 +215,7 @@ const parsePastedPayments = (
         pendingAmount: Number.isFinite(pendingAmount) ? pendingAmount : undefined,
         // Importe pendiente es la única cifra provista; la usamos como total de referencia
         amount: Number.isFinite(pendingAmount) ? pendingAmount : undefined,
+        issueDate,
         dueDate,
         daysLate: computeDaysLate(dueDate || undefined) ?? undefined,
         notes: '',
@@ -595,10 +600,76 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         : payments.filter((p) => p.advisorId === selectedAdvisor)
       : payments.filter((p) => p.advisorId === userInfo.id);
 
+    const parseDateSafe = (value?: string | null) => {
+      if (!value) return null;
+      const normalized = normalizeDate(value);
+      if (!normalized) return null;
+      try {
+        return parseISO(normalized);
+      } catch (error) {
+        return null;
+      }
+    };
+
+    const parseIssueDate = (value?: string | null) => {
+      return parseDateSafe(value);
+    };
+
+    const parseDueDate = (value?: string | null) => parseDateSafe(value);
+
     return [...baseList]
-      .map((entry) => ({ ...entry, daysLate: computeDaysLate(entry.dueDate || undefined) ?? entry.daysLate }))
-      .sort((a, b) => (b.daysLate ?? -Infinity) - (a.daysLate ?? -Infinity));
+      .map((entry) => ({
+        ...entry,
+        daysLate: computeDaysLate(entry.dueDate || undefined) ?? entry.daysLate,
+      }))
+      .sort((a, b) => {
+        const aDate = parseDueDate(a.dueDate) ?? parseIssueDate(a.issueDate) ?? parseIssueDate(a.createdAt) ?? new Date(0);
+        const bDate = parseDueDate(b.dueDate) ?? parseIssueDate(b.issueDate) ?? parseIssueDate(b.createdAt) ?? new Date(0);
+        return aDate.getTime() - bDate.getTime();
+      });
   }, [isBoss, payments, selectedAdvisor, userInfo]);
+
+  const paymentsSummary = useMemo<PaymentSummaryRow[]>(() => {
+    const buckets: Record<string, PaymentSummaryRow> = {};
+
+    const getBucket = (daysLate: number) => {
+      if (daysLate > 90) return '90+' as const;
+      if (daysLate > 60) return '61-90' as const;
+      if (daysLate > 30) return '31-60' as const;
+      return '1-30' as const;
+    };
+
+    filteredPayments.forEach((entry) => {
+      const daysLate = entry.daysLate ?? computeDaysLate(entry.dueDate || undefined);
+      if (daysLate == null || daysLate <= 0) return;
+      if (entry.status === 'Pagado') return;
+
+      const amount =
+        typeof entry.pendingAmount === 'number'
+          ? entry.pendingAmount
+          : typeof entry.amount === 'number'
+            ? entry.amount
+            : 0;
+
+      if (!amount || Number.isNaN(amount)) return;
+
+      const bucketKey = getBucket(daysLate);
+      const advisorId = entry.advisorId || 'sin-asesor';
+      if (!buckets[advisorId]) {
+        buckets[advisorId] = {
+          advisorId,
+          advisorName: entry.advisorName || 'Sin asesor',
+          ranges: { '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 },
+          total: 0,
+        };
+      }
+
+      buckets[advisorId].ranges[bucketKey] += amount;
+      buckets[advisorId].total += amount;
+    });
+
+    return Object.values(buckets).sort((a, b) => a.advisorName.localeCompare(b.advisorName, 'es'));
+  }, [filteredPayments]);
 
   useEffect(() => {
     setSelectedPaymentIds((prev) => prev.filter((id) => filteredPayments.some((entry) => entry.id === id)));
@@ -1365,17 +1436,20 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               )}
 
               {renderWithPrefs(
-                <PaymentsTable
-                  entries={filteredPayments}
-                  onUpdate={handleUpdatePaymentEntry}
-                  onDelete={handleDeletePayments}
-                  selectedIds={selectedPaymentIds}
-                  onToggleSelected={handleTogglePaymentSelection}
-                  onToggleSelectAll={handleSelectAllPayments}
-                  allowDelete={isBoss}
-                  isBossView={isBoss}
-                  onRequestExplanation={isBoss ? handleRequestPaymentExplanation : undefined}
-                />
+                <div className="grid gap-4">
+                  <PaymentsSummary rows={paymentsSummary} />
+                  <PaymentsTable
+                    entries={filteredPayments}
+                    onUpdate={handleUpdatePaymentEntry}
+                    onDelete={handleDeletePayments}
+                    selectedIds={selectedPaymentIds}
+                    onToggleSelected={handleTogglePaymentSelection}
+                    onToggleSelectAll={handleSelectAllPayments}
+                    allowDelete={isBoss}
+                    isBossView={isBoss}
+                    onRequestExplanation={isBoss ? handleRequestPaymentExplanation : undefined}
+                  />
+                </div>
               )}
             </div>
           </TabsContent>
