@@ -20,7 +20,8 @@ type QuoteLine = {
   programId: string;
   element: keyof ProgramRates;
   seconds: number;
-  quantity: number;
+  quantity: number; // Ahora representa "Repeticiones"
+  days: number;     // Nuevo campo "Días"
 };
 
 const elementOptions: { key: keyof ProgramRates; label: string; requiresSeconds?: boolean }[] = [
@@ -47,7 +48,8 @@ const createLine = (programId?: string): QuoteLine => ({
   programId: programId || '',
   element: 'spotRadio',
   seconds: 30,
-  quantity: 1,
+  quantity: 1, // Repeticiones por defecto
+  days: 1,     // Días por defecto
 });
 
 export default function QuotesPage() {
@@ -89,10 +91,15 @@ export default function QuotesPage() {
       const program = programs.find((p) => p.id === line.programId) || programs[0];
       const elementMeta = elementOptions.find((opt) => opt.key === line.element) || elementOptions[0];
       const baseRate = program?.rates?.[line.element] ?? 0;
+      
       const safeSeconds = elementMeta.requiresSeconds ? Math.max(line.seconds || 0, 1) : 1;
-      const safeQuantity = Math.max(line.quantity || 0, 1);
+      const safeQuantity = Math.max(line.quantity || 0, 1); // Repeticiones
+      const safeDays = Math.max(line.days || 0, 1);         // Días
+
       const unitValue = elementMeta.requiresSeconds ? baseRate * safeSeconds : baseRate;
-      const total = unitValue * safeQuantity;
+      
+      // Nuevo cálculo: Valor Unitario * Repeticiones * Días
+      const total = unitValue * safeQuantity * safeDays;
 
       return {
         ...line,
@@ -101,6 +108,7 @@ export default function QuotesPage() {
         baseRate,
         safeSeconds,
         safeQuantity,
+        safeDays,
         unitValue,
         total,
       };
@@ -137,9 +145,11 @@ export default function QuotesPage() {
       const programName = line.program?.name || 'Programa sin nombre';
       const elementLabel = line.elementMeta.label;
       const secondsPart = line.elementMeta.requiresSeconds ? ` · ${line.safeSeconds} seg` : '';
-      return `${index + 1}. ${programName} - ${elementLabel}${secondsPart} x ${
+      
+      // Actualizado para reflejar Repeticiones y Días en el resumen
+      return `${index + 1}. ${programName} - ${elementLabel}${secondsPart} | ${
         line.safeQuantity
-      } = ${formatCurrency(line.total)}`;
+      } rep. x ${line.safeDays} días = ${formatCurrency(line.total)}`;
     });
 
     const summary = [
@@ -229,12 +239,13 @@ export default function QuotesPage() {
                 <TableRow>
                   <TableHead className="min-w-[200px]">Programa</TableHead>
                   <TableHead className="min-w-[180px]">Elemento</TableHead>
-                  <TableHead className="w-[110px] text-right">Segundos</TableHead>
-                  <TableHead className="w-[110px] text-right">Cantidad</TableHead>
+                  <TableHead className="w-[100px] text-right">Segundos</TableHead>
+                  <TableHead className="w-[110px] text-right">Repeticiones</TableHead>
+                  <TableHead className="w-[100px] text-right">Días</TableHead>
                   <TableHead className="w-[140px] text-right">Tarifa base</TableHead>
                   <TableHead className="w-[150px] text-right">Valor unitario</TableHead>
                   <TableHead className="w-[150px] text-right">Total</TableHead>
-                  <TableHead className="w-[120px] text-right">Acciones</TableHead>
+                  <TableHead className="w-[100px] text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -298,6 +309,8 @@ export default function QuotesPage() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
+                      
+                      {/* Columna Repeticiones */}
                       <TableCell className="text-right">
                         <Input
                           type="number"
@@ -307,6 +320,18 @@ export default function QuotesPage() {
                           className="text-right"
                         />
                       </TableCell>
+
+                      {/* Columna Días */}
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={line.days}
+                          onChange={(e) => updateLine(line.id, { days: Math.max(Number(e.target.value) || 0, 1) })}
+                          className="text-right"
+                        />
+                      </TableCell>
+
                       <TableCell className="text-right">
                         {hasRate ? (
                           formatCurrency(line.baseRate)
@@ -327,7 +352,7 @@ export default function QuotesPage() {
 
                 {resolvedLines.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground">
                       No hay ítems. Agregá uno para empezar la cotización.
                     </TableCell>
                   </TableRow>
