@@ -74,6 +74,11 @@ export function hasPermission(user: User, screen: ScreenName, permissionType: 'v
         return areaPerms[user.area][screen]![permissionType] === true;
     }
 
+    // Fallback to defaults when a screen is not configured in Firestore (e.g., newly added screens).
+    if (user.area && defaultPermissions[user.area] && defaultPermissions[user.area][screen]) {
+        return defaultPermissions[user.area][screen]![permissionType] === true;
+    }
+
     // Default to no permission if none of the above match.
     return false;
 }

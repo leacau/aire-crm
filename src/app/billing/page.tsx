@@ -150,38 +150,49 @@ const getPeriodDurationInMonths = (period: string): number => {
     }
 };
 
-const normalizeDate = (raw?: string) => {
-  if (!raw) return undefined;
-  const value = raw.trim();
+const PAYMENT_DATE_FORMATS = [
+  'yyyy-MM-dd',
+  'dd/MM/yyyy',
+  'd/M/yyyy',
+  'dd-MM-yyyy',
+  'd-M-yyyy',
+  'dd/MM/yy',
+  'd/M/yy',
+  'dd-MM-yy',
+  'd-M-yy',
+];
+
+const parseFlexibleDate = (raw?: string | null) => {
+  if (!raw) return null;
+  const value = raw.toString().trim();
+
   const tryParse = (parser: () => Date) => {
     try {
       const parsed = parser();
-      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+      if (!Number.isNaN(parsed.getTime())) return parsed;
     } catch (error) {
-      return undefined;
+      return null;
     }
-    return undefined;
+    return null;
   };
 
   return (
     tryParse(() => parseISO(value)) ??
-    tryParse(() => parse(value, 'dd/MM/yyyy', new Date())) ??
-    value
+    PAYMENT_DATE_FORMATS.reduce<Date | null>((acc, formatString) => acc ?? tryParse(() => parse(value, formatString, new Date())), null)
   );
 };
 
+const normalizeDate = (raw?: string) => {
+  const parsed = parseFlexibleDate(raw);
+  if (parsed) return parsed.toISOString();
+  return raw ? raw.trim() : undefined;
+};
+
 const computeDaysLate = (dueDate?: string) => {
-  if (!dueDate) return null;
-  const parsedISO = normalizeDate(dueDate);
-  if (!parsedISO) return null;
-  try {
-    const parsedDate = parseISO(parsedISO);
-    if (Number.isNaN(parsedDate.getTime())) return null;
-    const diff = differenceInCalendarDays(new Date(), parsedDate);
-    return diff > 0 ? diff : 0;
-  } catch (error) {
-    return null;
-  }
+  const parsedDate = parseFlexibleDate(dueDate);
+  if (!parsedDate) return null;
+  const diff = differenceInCalendarDays(new Date(), parsedDate);
+  return diff > 0 ? diff : 0;
 };
 
   const parsePastedPayments = (
@@ -600,22 +611,9 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         : payments.filter((p) => p.advisorId === selectedAdvisor)
       : payments.filter((p) => p.advisorId === userInfo.id);
 
-    const parseDateSafe = (value?: string | null) => {
-      if (!value) return null;
-      const normalized = normalizeDate(value);
-      if (!normalized) return null;
-      try {
-        return parseISO(normalized);
-      } catch (error) {
-        return null;
-      }
-    };
+    const parseIssueDate = (value?: string | null) => parseFlexibleDate(value);
 
-    const parseIssueDate = (value?: string | null) => {
-      return parseDateSafe(value);
-    };
-
-    const parseDueDate = (value?: string | null) => parseDateSafe(value);
+    const parseDueDate = (value?: string | null) => parseFlexibleDate(value);
 
     return [...baseList]
       .map((entry) => ({
