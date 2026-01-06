@@ -13,7 +13,7 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb, ClipboardCheck, Target, MessageCircle, Building2 } from 'lucide-react';
+import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb, ClipboardCheck, Target, MessageCircle, Building2, Calculator } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
@@ -39,6 +39,7 @@ const menuItems: { href: string; label: string; icon: React.ElementType, screenN
   { href: '/tango-mapping', label: 'Tango', icon: Building2, screenName: 'TangoMapping' },
   { href: '/team', label: 'Equipo', icon: Users, screenName: 'Team' },
   { href: '/rates', label: 'Tarifas', icon: Banknote, screenName: 'Rates' },
+  { href: '/quotes', label: 'Cotizador', icon: Calculator, screenName: 'Quotes' },
   { href: '/reports', label: 'Reportes', icon: BarChart, screenName: 'Reports' },
   { href: '/import', label: 'Importar', icon: Upload, screenName: 'Import' },
 ];
@@ -50,7 +51,7 @@ function MenuLink({ item }: { item: typeof menuItems[0] }) {
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
     // Exact match for specific routes, otherwise prefix match
-    const exactMatchRoutes = ['/billing', '/invoices', '/rates', '/licencias', '/objectives'];
+    const exactMatchRoutes = ['/billing', '/invoices', '/rates', '/licencias', '/objectives', '/quotes'];
     if (exactMatchRoutes.includes(href)) return pathname === href;
     
     return pathname.startsWith(href) && href !== '/';
