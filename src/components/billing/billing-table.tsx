@@ -22,6 +22,7 @@ export const BillingTable = ({
   usersMap,
   opportunitiesMap,
   onMarkAsPaid,
+  onToggleDeletionMark,
   onToggleCreditNote,
   showCreditNoteDate,
   sorting,
@@ -42,6 +43,7 @@ export const BillingTable = ({
   usersMap: Record<string, User>;
   opportunitiesMap: Record<string, Opportunity>;
   onMarkAsPaid?: (invoiceId: string) => void;
+  onToggleDeletionMark?: (invoiceId: string, nextValue: boolean) => void;
   onToggleCreditNote?: (invoiceId: string, nextValue: boolean) => void;
   showCreditNoteDate?: boolean;
   sorting?: SortingState;
@@ -321,6 +323,7 @@ export const BillingTable = ({
     clientsMap,
     isDeletionMarked,
     onMarkAsPaid,
+    onToggleDeletionMark,
     onRowClick,
     onToggleCreditNote,
     onToggleSelect,
