@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -15,7 +13,7 @@ import { updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { MonthYearPicker } from '@/components/ui/month-year-picker';
-import { isWithinInterval, startOfMonth, endOfMonth, parseISO, addMonths, isSameMonth, getYear, getMonth, set, parse, differenceInCalendarDays, format } from 'date-fns';
+import { isWithinInterval, startOfMonth, endOfMonth, parseISO, addMonths, isSameMonth, differenceInCalendarDays, format, parse } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -28,6 +26,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { es } from 'date-fns/locale';
+import { Badge } from '@/components/ui/badge';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 const MARKED_ONLY_STORAGE_KEY = 'billing:markedOnly';
 const TO_COLLECT_TABLE_STORAGE_KEY = 'billing:toCollect:tableState';
@@ -242,9 +242,11 @@ export type NewInvoiceData = {
 };
 
 type DuplicateInvoiceGroup = {
-  invoiceNumber: string;
+  key: string;
+  label: string; // "Factura #XXX"
   invoices: Invoice[];
   hasCreditNote: boolean;
+  type: 'exact' | 'number'; // Exact: coinciden Num, Cliente, Fecha, Monto. Number: solo Num.
 };
 
 type DeleteProgressState = {
@@ -296,6 +298,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [pastedPayments, setPastedPayments] = useState('');
   const [isImportingPayments, setIsImportingPayments] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+  const [activeDuplicateTab, setActiveDuplicateTab] = useState('exact');
   const [invoiceSelection, setInvoiceSelection] = useState<Record<string, boolean>>({});
   const [isDeletingDuplicates, setIsDeletingDuplicates] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<DeleteProgressState>(EMPTY_DELETE_PROGRESS);
@@ -371,70 +374,126 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   }, []);
 
-  const findDuplicateInvoiceGroups = useMemo(
-    () =>
-      (items: Invoice[]): DuplicateInvoiceGroup[] => {
-        const grouped = items.reduce((acc, invoice) => {
-          const normalized = getNormalizedInvoiceNumber(invoice);
-          if (!normalized) return acc;
-          if (!acc[normalized]) acc[normalized] = [];
-          acc[normalized].push(invoice);
-          return acc;
-        }, {} as Record<string, Invoice[]>);
+  const { exactDuplicateGroups, numberDuplicateGroups } = useMemo(() => {
+    const exactGroups: DuplicateInvoiceGroup[] = [];
+    const numberGroups: DuplicateInvoiceGroup[] = [];
 
-        return Object.entries(grouped)
-          .map(([invoiceNumber, groupedInvoices]) => ({
-            invoiceNumber,
-            invoices: groupedInvoices,
-            hasCreditNote: groupedInvoices.some(isCreditNoteRelated),
-          }))
-          .filter((group) => group.invoices.length > 1);
-      },
-    [isCreditNoteRelated],
-  );
+    // 1. Group by Exact Matches (Num + Client + Amount + Date)
+    const byExactKey = invoices.reduce((acc, inv) => {
+      const normNum = getNormalizedInvoiceNumber(inv);
+      if (!normNum) return acc;
+      const opp = opportunitiesMap[inv.opportunityId];
+      const clientId = opp?.clientId || 'unknown';
+      const date = inv.date ? inv.date.split('T')[0] : 'nodate';
+      const amount = inv.amount.toFixed(2);
+      
+      const key = `${normNum}|${clientId}|${date}|${amount}`;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(inv);
+      return acc;
+    }, {} as Record<string, Invoice[]>);
 
-  const duplicateInvoiceGroups = useMemo(
-    () => findDuplicateInvoiceGroups(invoices),
-    [findDuplicateInvoiceGroups, invoices],
-  );
+    Object.entries(byExactKey).forEach(([key, items]) => {
+      if (items.length > 1) {
+        exactGroups.push({
+          key,
+          label: `Factura #${items[0].invoiceNumber}`,
+          invoices: items,
+          hasCreditNote: items.some(isCreditNoteRelated),
+          type: 'exact',
+        });
+      }
+    });
+
+    // 2. Group by Number Collisions (Num only)
+    const byNumKey = invoices.reduce((acc, inv) => {
+      const normNum = getNormalizedInvoiceNumber(inv);
+      if (!normNum) return acc;
+      if (!acc[normNum]) acc[normNum] = [];
+      acc[normNum].push(inv);
+      return acc;
+    }, {} as Record<string, Invoice[]>);
+
+    Object.entries(byNumKey).forEach(([key, items]) => {
+      if (items.length > 1) {
+        // Only include if it's NOT just a single exact group disguised as a number group.
+        // We check if all items in this number group belong to the SAME exact group.
+        const firstExactKey = `${key}|${opportunitiesMap[items[0].opportunityId]?.clientId || 'unknown'}|${items[0].date?.split('T')[0] || 'nodate'}|${items[0].amount.toFixed(2)}`;
+        const allMatchFirst = items.every(inv => {
+           const thisKey = `${key}|${opportunitiesMap[inv.opportunityId]?.clientId || 'unknown'}|${inv.date?.split('T')[0] || 'nodate'}|${inv.amount.toFixed(2)}`;
+           return thisKey === firstExactKey;
+        });
+
+        // If not all items are identical (meaning there is conflict), add to numberGroups.
+        // OR if they are identical but we want to show them in exact tab, we skip adding to numberGroups?
+        // Let's assume numberGroups contains everything that shares a number, but we prioritize exacts.
+        // Better strategy: Exclude groups that are already fully captured in exactGroups
+        
+        if (!allMatchFirst) {
+             numberGroups.push({
+                key,
+                label: `Colisión #${items[0].invoiceNumber}`,
+                invoices: items,
+                hasCreditNote: items.some(isCreditNoteRelated),
+                type: 'number',
+            });
+        }
+      }
+    });
+
+    return { exactDuplicateGroups: exactGroups, numberDuplicateGroups: numberGroups };
+  }, [invoices, opportunitiesMap, isCreditNoteRelated]);
 
   const totalDuplicateInvoices = useMemo(
-    () => duplicateInvoiceGroups.reduce((acc, group) => acc + group.invoices.length, 0),
-    [duplicateInvoiceGroups],
+    () => exactDuplicateGroups.length + numberDuplicateGroups.length,
+    [exactDuplicateGroups, numberDuplicateGroups],
   );
 
   const totalSelectedDuplicateInvoices = useMemo(
-    () =>
-      duplicateInvoiceGroups.reduce(
-        (acc, group) =>
-          acc +
-          group.invoices.filter(
-            (inv) => invoiceSelection[inv.id] && !isCreditNoteRelated(inv),
-          ).length,
-        0,
-      ),
-    [duplicateInvoiceGroups, invoiceSelection, isCreditNoteRelated],
+    () => {
+      const allDuplicates = [...exactDuplicateGroups, ...numberDuplicateGroups].flatMap(g => g.invoices);
+      const uniqueIds = new Set(allDuplicates.map(inv => inv.id));
+      return Array.from(uniqueIds).filter(id => invoiceSelection[id]).length;
+    },
+    [exactDuplicateGroups, numberDuplicateGroups, invoiceSelection],
   );
 
+  // Initialize selection logic for duplicates
   useEffect(() => {
-    setInvoiceSelection((prev) => {
-      const next: Record<string, boolean> = {};
-      duplicateInvoiceGroups.forEach((group) => {
-        group.invoices.forEach((inv) => {
-          next[inv.id] = isCreditNoteRelated(inv) ? false : prev[inv.id] ?? true;
+    if (isDuplicateModalOpen) {
+      setInvoiceSelection(prev => {
+        const next: Record<string, boolean> = {};
+        
+        // Auto-select duplicates for "Exact" groups (select all except the oldest one to keep one safe)
+        exactDuplicateGroups.forEach(group => {
+            // Sort by creation date (or ID if date missing) to keep the oldest
+            const sorted = [...group.invoices].sort((a, b) => (a.dateGenerated || '').localeCompare(b.dateGenerated || ''));
+            // Keep the first one (oldest), select the rest
+            sorted.forEach((inv, index) => {
+                if (index > 0 && !isCreditNoteRelated(inv)) {
+                    next[inv.id] = true;
+                } else {
+                    next[inv.id] = false;
+                }
+            });
         });
-      });
-      return next;
-    });
-  }, [duplicateInvoiceGroups, isCreditNoteRelated]);
 
-  useEffect(() => {
-    if (!isDuplicateModalOpen) {
-      setDeleteProgress(EMPTY_DELETE_PROGRESS);
-      setIsDeletingDuplicates(false);
-      setIsRetryingFailed(false);
+        // For number collisions, do NOT auto-select (safer)
+        numberDuplicateGroups.forEach(group => {
+            group.invoices.forEach(inv => {
+                next[inv.id] = false;
+            });
+        });
+
+        return next;
+      });
+    } else {
+        // Reset
+        setDeleteProgress(EMPTY_DELETE_PROGRESS);
+        setIsDeletingDuplicates(false);
+        setIsRetryingFailed(false);
     }
-  }, [isDuplicateModalOpen]);
+  }, [isDuplicateModalOpen, exactDuplicateGroups, numberDuplicateGroups, isCreditNoteRelated]);
 
   useEffect(() => {
     setPrefsReady(true);
@@ -992,8 +1051,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   );
 
   const hasCreditNotesInDuplicates = useMemo(
-    () => duplicateInvoiceGroups.some((group) => group.hasCreditNote),
-    [duplicateInvoiceGroups],
+    () => exactDuplicateGroups.some((group) => group.hasCreditNote) || numberDuplicateGroups.some((group) => group.hasCreditNote),
+    [exactDuplicateGroups, numberDuplicateGroups],
   );
 
   const runBatchInvoiceDeletion = useCallback(
@@ -1042,9 +1101,13 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const handleDeleteDuplicateInvoices = async (idsToDelete?: string[]) => {
     if (!userInfo) return;
 
+    // Filter selections based on the currently active tab if we are doing a bulk delete, 
+    // BUT user expects all selections to be honored. The original UX was single list.
+    // Let's gather selections from ALL duplicates since they are all visible in selection state.
+    const allGroups = [...exactDuplicateGroups, ...numberDuplicateGroups];
     const selectedInvoices = (idsToDelete
       ? invoices.filter((inv) => idsToDelete.includes(inv.id))
-      : duplicateInvoiceGroups.flatMap((group) => group.invoices.filter((inv) => invoiceSelection[inv.id]))).filter(
+      : allGroups.flatMap((group) => group.invoices.filter((inv) => invoiceSelection[inv.id]))).filter(
       (inv) => !isCreditNoteRelated(inv),
     );
 
@@ -1083,6 +1146,9 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       fetchData({ silent: true });
 
       if (result.failed.length === 0) {
+        // Only close if we cleared everything we selected? 
+        // Or if there are no more duplicates?
+        // Let's close for now as standard behavior
         setIsDuplicateModalOpen(false);
         setDeleteProgress(EMPTY_DELETE_PROGRESS);
         setInvoiceSelection({});
@@ -1185,59 +1251,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       fetchData();
     }
   };
-
-  const handleOpenDuplicateDialog = () => {
-    const duplicates = findDuplicateInvoiceGroups();
-    if (duplicates.length === 0) {
-      toast({ title: 'No se encontraron facturas duplicadas en A Cobrar' });
-      return;
-    }
-    const initialSelected = new Set<string>();
-    duplicates.forEach((group) => {
-      group.slice(1).forEach((inv) => initialSelected.add(inv.id));
-    });
-    setSelectedDuplicateIds(initialSelected);
-    setDuplicateGroups(duplicates);
-    setIsDuplicateDialogOpen(true);
-  };
-
-  const handleConfirmDeleteDuplicates = async () => {
-    if (!userInfo || !canManageBillingDeletion) return;
-    const duplicates = findDuplicateInvoiceGroups();
-    setDuplicateGroups(duplicates);
-
-    const invoicesToDelete = duplicates.flatMap((group) =>
-      group.slice(1).filter((inv) => selectedDuplicateIds.has(inv.id)),
-    );
-    if (invoicesToDelete.length === 0) {
-      toast({ title: 'No se encontraron facturas duplicadas en A Cobrar' });
-      setIsDuplicateDialogOpen(false);
-      return;
-    }
-
-    const idsToDelete = new Set(invoicesToDelete.map((inv) => inv.id));
-    setInvoices((prev) => prev.filter((inv) => !idsToDelete.has(inv.id)));
-    setIsDeletingDuplicates(true);
-    setIsDuplicateDialogOpen(false);
-
-    try {
-      for (const invoice of invoicesToDelete) {
-        const opp = opportunitiesMap[invoice.opportunityId];
-        const client = opp ? clientsMap[opp.clientId] : undefined;
-        await deleteInvoice(invoice.id, userInfo.id, userInfo.name, client?.ownerName || '');
-      }
-      toast({
-        title: invoicesToDelete.length === 1 ? 'Factura duplicada eliminada' : 'Facturas duplicadas eliminadas',
-      });
-      setTimeout(fetchData, 300);
-    } catch (error) {
-      console.error('Error deleting duplicate invoices:', error);
-      toast({ title: 'No se pudieron eliminar los duplicados', variant: 'destructive' });
-      fetchData();
-    } finally {
-      setIsDeletingDuplicates(false);
-    }
-  };
   
   const handleRowClick = (item: Opportunity | Invoice) => {
       const oppId = 'clientId' in item ? item.id.split('_')[0] : (opportunitiesMap[item.opportunityId] ? item.opportunityId : null);
@@ -1259,6 +1272,106 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   );
 
   const renderWithPrefs = (content: React.ReactNode) => (prefsReady ? content : prefsLoader);
+
+  // Helper to render duplicate rows
+  const renderDuplicateGroupList = (groups: DuplicateInvoiceGroup[]) => {
+    if (groups.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+                <CheckCircle2 className="h-8 w-8 mb-2 opacity-50" />
+                <p>¡Todo limpio! No se encontraron duplicados en esta categoría.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="max-h-[50vh] space-y-4 overflow-y-auto pr-2">
+            {groups.map((group) => {
+                const selectedCount = group.invoices.filter((inv) => invoiceSelection[inv.id]).length;
+                return (
+                <div key={group.key} className="space-y-3 rounded-lg border p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p className="font-semibold">{group.label}</p>
+                        <div className="flex items-center gap-2">
+                            {group.type === 'exact' && <Badge variant="secondary" className="text-xs">Idénticos</Badge>}
+                            <p className="text-xs text-muted-foreground">
+                            {selectedCount} de {group.invoices.length} seleccionadas
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleToggleGroupSelection(group, true)}>
+                        Seleccionar todo
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleToggleGroupSelection(group, false)}>
+                        Deseleccionar todo
+                        </Button>
+                    </div>
+                    </div>
+
+                    <div className="space-y-2">
+                    {group.invoices.map((invoice) => {
+                        const opportunity = opportunitiesMap[invoice.opportunityId];
+                        const client = opportunity ? clientsMap[opportunity.clientId] : undefined;
+                        const clientName = client?.denominacion || opportunity?.clientName || 'Cliente desconocido';
+                        const opportunityTitle = opportunity?.title || 'Oportunidad sin título';
+                        const invoiceDate = (() => {
+                        if (!invoice.date) return '—';
+                        try {
+                            return format(parseISO(invoice.date), 'P', { locale: es });
+                        } catch (error) {
+                            return invoice.date;
+                        }
+                        })();
+
+                        return (
+                        <div key={invoice.id} className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-start sm:justify-between bg-card">
+                            <div className="flex gap-3 w-full">
+                            <Checkbox
+                                id={`invoice-${invoice.id}`}
+                                checked={!!invoiceSelection[invoice.id]}
+                                disabled={invoice.isCreditNote || Boolean(invoice.creditNoteMarkedAt)}
+                                onCheckedChange={(value) => handleToggleDuplicateInvoiceSelection(invoice.id, value === true)}
+                                className="mt-1"
+                            />
+                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 w-full">
+                                <div className="flex flex-col">
+                                <Label className="text-xs text-muted-foreground">Cliente</Label>
+                                <span className="font-medium text-sm truncate" title={clientName}>{clientName}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                <Label className="text-xs text-muted-foreground">Oportunidad</Label>
+                                <span className="text-sm truncate" title={opportunityTitle}>{opportunityTitle}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                <Label className="text-xs text-muted-foreground">Monto</Label>
+                                <span className="font-medium text-sm">${Number(invoice.amount || 0).toLocaleString('es-AR')}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                <Label className="text-xs text-muted-foreground">Estado / Fecha</Label>
+                                <div className="flex flex-col">
+                                    <span className="font-medium text-sm">{invoice.status || '—'}</span>
+                                    <span className="text-xs text-muted-foreground">{invoiceDate}</span>
+                                </div>
+                                </div>
+                            </div>
+                            </div>
+                            {invoice.isCreditNote || invoice.creditNoteMarkedAt ? (
+                            <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900 shrink-0">
+                                NC
+                            </div>
+                            ) : null}
+                        </div>
+                        );
+                    })}
+                    </div>
+                </div>
+                );
+            })}
+        </div>
+    )
+  }
 
   if (authLoading || loading) {
     return (
@@ -1296,7 +1409,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 Eliminando duplicados...
               </>
             ) : (
-              <>Eliminar facturas duplicadas {totalDuplicateInvoices > 0 ? `(${totalDuplicateInvoices})` : ''}</>
+              <>Eliminar duplicados {totalDuplicateInvoices > 0 ? `(${totalDuplicateInvoices})` : ''}</>
             )}
           </Button>
       </Header>
@@ -1455,140 +1568,88 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       </main>
 
       <Dialog open={isDuplicateModalOpen} onOpenChange={setIsDuplicateModalOpen}>
-        <DialogContent className="max-w-5xl">
+        <DialogContent className="max-w-5xl h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Eliminar facturas duplicadas</DialogTitle>
             <DialogDescription>
-              Se detectaron {totalDuplicateInvoices} factura{totalDuplicateInvoices === 1 ? '' : 's'} duplicada{totalDuplicateInvoices === 1 ? '' : 's'} en{' '}
-              {duplicateInvoiceGroups.length} grupo{duplicateInvoiceGroups.length === 1 ? '' : 's'}.
+              Gestión de facturas repetidas. Revisa las pestañas para ver duplicados exactos o colisiones de numeración.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            {hasCreditNotesInDuplicates ? (
-              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                <p className="font-medium">Atención: hay notas de crédito en los grupos detectados.</p>
-                <p className="text-muted-foreground">
-                  Las facturas marcadas como NC o vinculadas a una NC se excluyen del borrado automático. Revísalas antes de continuar.
-                </p>
-              </div>
-            ) : null}
+          <Tabs value={activeDuplicateTab} onValueChange={setActiveDuplicateTab} className="flex-1 flex flex-col min-h-0">
+            <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="exact">
+                    Duplicados Idénticos
+                    <Badge variant="secondary" className="ml-2">{exactDuplicateGroups.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger value="number">
+                    Conflictos de Numeración
+                    <Badge variant="secondary" className="ml-2">{numberDuplicateGroups.length}</Badge>
+                </TabsTrigger>
+            </TabsList>
 
-            <div className="rounded-md border bg-muted/50 p-3 text-sm space-y-2">
-              <div>
-                Seleccionadas <strong>{totalSelectedDuplicateInvoices}</strong> de {totalDuplicateInvoices} facturas para eliminar.
-              </div>
-              {deleteProgress.total > 0 && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {isDeletingDuplicates ? <Spinner size="small" /> : null}
-                  <span>
-                    Progreso: {deleteProgress.processed}/{deleteProgress.total} procesadas · {deleteProgress.deleted.length} eliminadas · {deleteProgress.failed.length} con error
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {deleteProgress.failed.length > 0 && (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                <p className="font-medium">
-                  No se pudieron eliminar {deleteProgress.failed.length} factura{deleteProgress.failed.length === 1 ? '' : 's'}.
-                </p>
-                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
-                  {deleteProgress.failed.slice(0, 3).map((failure) => (
-                    <li key={failure.id}>
-                      {failure.id}: {failure.error}
-                    </li>
-                  ))}
-                  {deleteProgress.failed.length > 3 && (
-                    <li>y {deleteProgress.failed.length - 3} más...</li>
-                  )}
-                </ul>
-              </div>
-            )}
-
-            {duplicateInvoiceGroups.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No se encontraron facturas duplicadas.</p>
-            ) : (
-              <div className="max-h-[50vh] space-y-4 overflow-y-auto pr-2">
-                {duplicateInvoiceGroups.map((group) => {
-                  const selectedCount = group.invoices.filter((inv) => invoiceSelection[inv.id]).length;
-                  return (
-                    <div key={group.invoiceNumber} className="space-y-3 rounded-lg border p-3">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="font-semibold">Factura #{group.invoiceNumber}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {selectedCount} de {group.invoices.length} seleccionadas
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button variant="outline" size="sm" onClick={() => handleToggleGroupSelection(group, true)}>
-                            Seleccionar todo
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleToggleGroupSelection(group, false)}>
-                            Deseleccionar todo
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        {group.invoices.map((invoice) => {
-                          const opportunity = opportunitiesMap[invoice.opportunityId];
-                          const client = opportunity ? clientsMap[opportunity.clientId] : undefined;
-                          const clientName = client?.denominacion || opportunity?.clientName || 'Cliente desconocido';
-                          const opportunityTitle = opportunity?.title || 'Oportunidad sin título';
-                          const invoiceDate = (() => {
-                            if (!invoice.date) return '—';
-                            try {
-                              return format(parseISO(invoice.date), 'P', { locale: es });
-                            } catch (error) {
-                              return invoice.date;
-                            }
-                          })();
-
-                          return (
-                            <div key={invoice.id} className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-start sm:justify-between">
-                              <div className="flex gap-3">
-                                <Checkbox
-                                  id={`invoice-${invoice.id}`}
-                                  checked={!!invoiceSelection[invoice.id]}
-                                  disabled={invoice.isCreditNote || Boolean(invoice.creditNoteMarkedAt)}
-                                  onCheckedChange={(value) => handleToggleDuplicateInvoiceSelection(invoice.id, value === true)}
-                                />
-                                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                  <div className="flex flex-col">
-                                    <Label className="text-xs text-muted-foreground">Cliente / Oportunidad</Label>
-                                    <span className="font-medium">{clientName}</span>
-                                    <span className="text-sm text-muted-foreground">{opportunityTitle}</span>
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <Label className="text-xs text-muted-foreground">Monto</Label>
-                                    <span className="font-medium">${Number(invoice.amount || 0).toLocaleString('es-AR')}</span>
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <Label className="text-xs text-muted-foreground">Estado / Fecha</Label>
-                                    <span className="font-medium">{invoice.status || '—'}</span>
-                                    <span className="text-sm text-muted-foreground">{invoiceDate}</span>
-                                  </div>
-                                </div>
-                              </div>
-                              {invoice.isCreditNote || invoice.creditNoteMarkedAt ? (
-                                <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900">
-                                  Factura con NC: no se elimina automáticamente
-                                </div>
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
+            <div className="py-2 space-y-4 flex-1 flex flex-col min-h-0">
+                {hasCreditNotesInDuplicates ? (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 shrink-0">
+                    <div className="flex items-center gap-2 font-medium">
+                        <AlertCircle className="h-4 w-4" />
+                        Atención: Notas de crédito detectadas
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                    <p className="text-muted-foreground ml-6">
+                    Las facturas marcadas como NC o vinculadas a una se excluyen de la selección automática.
+                    </p>
+                </div>
+                ) : null}
 
-          <DialogFooter className="flex flex-wrap gap-2">
+                <div className="rounded-md border bg-muted/50 p-3 text-sm space-y-2 shrink-0">
+                <div>
+                    Seleccionadas <strong>{totalSelectedDuplicateInvoices}</strong> de {totalDuplicateInvoices} facturas totales para eliminar.
+                </div>
+                {deleteProgress.total > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {isDeletingDuplicates ? <Spinner size="small" /> : null}
+                    <span>
+                        Progreso: {deleteProgress.processed}/{deleteProgress.total} procesadas · {deleteProgress.deleted.length} eliminadas · {deleteProgress.failed.length} con error
+                    </span>
+                    </div>
+                )}
+                </div>
+
+                {deleteProgress.failed.length > 0 && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive shrink-0">
+                    <p className="font-medium">
+                    No se pudieron eliminar {deleteProgress.failed.length} factura{deleteProgress.failed.length === 1 ? '' : 's'}.
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
+                    {deleteProgress.failed.slice(0, 3).map((failure) => (
+                        <li key={failure.id}>
+                        {failure.id}: {failure.error}
+                        </li>
+                    ))}
+                    {deleteProgress.failed.length > 3 && (
+                        <li>y {deleteProgress.failed.length - 3} más...</li>
+                    )}
+                    </ul>
+                </div>
+                )}
+
+                <TabsContent value="exact" className="flex-1 overflow-auto min-h-0">
+                    <div className="mb-2 text-sm text-muted-foreground px-1">
+                        Estas facturas coinciden en <strong>Número, Cliente, Fecha y Monto</strong>. Se han pre-seleccionado las copias más recientes para dejar solo una original (la más antigua).
+                    </div>
+                    {renderDuplicateGroupList(exactDuplicateGroups)}
+                </TabsContent>
+                
+                <TabsContent value="number" className="flex-1 overflow-auto min-h-0">
+                    <div className="mb-2 text-sm text-muted-foreground px-1">
+                        Estas facturas comparten el <strong>mismo número</strong> pero difieren en cliente, monto o fecha. Revísalas cuidadosamente antes de eliminar. No se han pre-seleccionado automáticamente.
+                    </div>
+                    {renderDuplicateGroupList(numberDuplicateGroups)}
+                </TabsContent>
+            </div>
+          </Tabs>
+
+          <DialogFooter className="flex flex-wrap gap-2 shrink-0 pt-2 border-t">
             <Button variant="outline" onClick={() => setIsDuplicateModalOpen(false)} disabled={isDeletingDuplicates}>
               Cancelar
             </Button>
@@ -1613,7 +1674,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                   Eliminando... {deleteProgress.processed}/{deleteProgress.total || totalSelectedDuplicateInvoices}
                 </>
               ) : (
-                'Eliminar seleccionadas'
+                `Eliminar seleccionadas (${totalSelectedDuplicateInvoices})`
               )}
             </Button>
           </DialogFooter>
