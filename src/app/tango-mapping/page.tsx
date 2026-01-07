@@ -921,8 +921,7 @@ export default function TangoMappingPage() {
     const pendingUpdates = clients
       .map((client) => {
         const selection = clientSelections[client.id] ?? suggestions[client.id]?.rowKey;
-        const manualId = (manualIdOverrides[client.id] || '').trim();
-        if (!selection && !manualId) return null;
+        if (!selection) return null;
         const row = selection ? rowMap.get(selection) : undefined;
 
         const data: {
@@ -942,7 +941,7 @@ export default function TangoMappingPage() {
           tipoEntidad?: string;
           observaciones?: string;
         } = {};
-        const idToUse = manualId || row?.idTango;
+        const idToUse = row?.idTango;
         if (row?.cuit) {
           data.cuit = formatCuit(row.cuit || '');
         }
