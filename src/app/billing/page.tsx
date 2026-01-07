@@ -425,10 +425,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         });
 
         // If not all items are identical (meaning there is conflict), add to numberGroups.
-        // OR if they are identical but we want to show them in exact tab, we skip adding to numberGroups?
-        // Let's assume numberGroups contains everything that shares a number, but we prioritize exacts.
-        // Better strategy: Exclude groups that are already fully captured in exactGroups
-        
         if (!allMatchFirst) {
              numberGroups.push({
                 key,
@@ -1039,6 +1035,23 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     });
   };
 
+  const handleSelectSuggestedDuplicates = (group: DuplicateInvoiceGroup) => {
+    setInvoiceSelection(prev => {
+        const next = { ...prev };
+        // Sort by date/ID to keep the oldest one
+        const sorted = [...group.invoices].sort((a, b) => (a.dateGenerated || '').localeCompare(b.dateGenerated || ''));
+        // Select all except the first one (oldest)
+        sorted.forEach((inv, index) => {
+            if (index > 0 && !isCreditNoteRelated(inv)) {
+                next[inv.id] = true;
+            } else {
+                next[inv.id] = false;
+            }
+        });
+        return next;
+    });
+  };
+
   const resolveOwnerNameForInvoice = useCallback(
     (invoiceId: string) => {
       const invoice = invoices.find((inv) => inv.id === invoiceId);
@@ -1101,22 +1114,26 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const handleDeleteDuplicateInvoices = async (idsToDelete?: string[]) => {
     if (!userInfo) return;
 
-    // Filter selections based on the currently active tab if we are doing a bulk delete, 
-    // BUT user expects all selections to be honored. The original UX was single list.
-    // Let's gather selections from ALL duplicates since they are all visible in selection state.
+    // Filter selections from ALL groups to support batch deletion across tabs if necessary.
+    // Crucial fix: Ensure we don't pass duplicate IDs if an invoice appears in both groupings.
     const allGroups = [...exactDuplicateGroups, ...numberDuplicateGroups];
-    const selectedInvoices = (idsToDelete
+    const rawSelectedInvoices = idsToDelete
       ? invoices.filter((inv) => idsToDelete.includes(inv.id))
-      : allGroups.flatMap((group) => group.invoices.filter((inv) => invoiceSelection[inv.id]))).filter(
-      (inv) => !isCreditNoteRelated(inv),
-    );
+      : allGroups.flatMap((group) => group.invoices.filter((inv) => invoiceSelection[inv.id]));
+    
+    // Filter out credit notes and ensure unique IDs
+    const uniqueIds = Array.from(new Set(rawSelectedInvoices.map(inv => inv.id)))
+        .filter(id => {
+            const inv = invoices.find(i => i.id === id);
+            return inv && !isCreditNoteRelated(inv);
+        });
 
-    if (selectedInvoices.length === 0) return;
+    if (uniqueIds.length === 0) return;
 
     setIsRetryingFailed(Boolean(idsToDelete));
 
     try {
-      const result = await runBatchInvoiceDeletion(selectedInvoices.map((inv) => inv.id));
+      const result = await runBatchInvoiceDeletion(uniqueIds);
 
       if (result.deleted.length > 0) {
         setInvoices((prev) => prev.filter((inv) => !result.deleted.includes(inv.id)));
@@ -1146,9 +1163,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       fetchData({ silent: true });
 
       if (result.failed.length === 0) {
-        // Only close if we cleared everything we selected? 
-        // Or if there are no more duplicates?
-        // Let's close for now as standard behavior
+        // Only close if we cleared everything we selected
         setIsDuplicateModalOpen(false);
         setDeleteProgress(EMPTY_DELETE_PROGRESS);
         setInvoiceSelection({});
@@ -1301,11 +1316,14 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleSelectSuggestedDuplicates(group)}>
+                            Seleccionar sugeridos
+                        </Button>
                         <Button variant="outline" size="sm" onClick={() => handleToggleGroupSelection(group, true)}>
-                        Seleccionar todo
+                        Todo
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => handleToggleGroupSelection(group, false)}>
-                        Deseleccionar todo
+                        Nada
                         </Button>
                     </div>
                     </div>
@@ -1642,7 +1660,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 
                 <TabsContent value="number" className="flex-1 overflow-auto min-h-0">
                     <div className="mb-2 text-sm text-muted-foreground px-1">
-                        Estas facturas comparten el <strong>mismo número</strong> pero difieren en cliente, monto o fecha. Revísalas cuidadosamente antes de eliminar. No se han pre-seleccionado automáticamente.
+                        Estas facturas comparten el <strong>mismo número</strong> pero difieren en cliente, monto o fecha. Revísalas cuidadosamente antes de eliminar. Puedes usar "Seleccionar sugeridos" para marcar las más recientes automáticamente.
                     </div>
                     {renderDuplicateGroupList(numberDuplicateGroups)}
                 </TabsContent>
