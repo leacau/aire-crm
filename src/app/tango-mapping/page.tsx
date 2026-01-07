@@ -728,9 +728,6 @@ export default function TangoMappingPage() {
 
   const handleApplyInvoices = async () => {
     if (!userInfo) return;
-    
-    setIsSaving(true);
-
     let success = 0;
     let failed = 0;
     let duplicates = 0;
@@ -847,8 +844,6 @@ export default function TangoMappingPage() {
         failed++;
       }
     }
-
-    setIsSaving(false);
 
     toast({
       title: 'Importación de facturas',
@@ -1784,9 +1779,7 @@ export default function TangoMappingPage() {
                     </Table>
                   </div>
                   <div className="flex justify-end">
-                    <Button onClick={handleApplyInvoices} disabled={isSaving}>
-                      {isSaving ? 'Importando...' : 'Importar facturas'}
-                    </Button>
+                    <Button onClick={handleApplyInvoices}>Importar facturas</Button>
                   </div>
                 </CardContent>
               </Card>
