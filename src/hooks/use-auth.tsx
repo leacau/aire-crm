@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -7,7 +5,7 @@ import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWit
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
-import { getUserProfile, updateUserProfile } from '@/lib/firebase-service';
+import { getUserProfile } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
 import { validateGoogleServicesAccess } from '@/lib/google-service-check';
 import { useToast } from '@/hooks/use-toast';
@@ -102,6 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storageKey = 'google-access-validated';
       const hasValidated = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) === 'true' : false;
       const hasFailed = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) === 'failed' : false;
+      
+      // Si ya validamos o ya fallamos en esta sesión, no volvemos a molestar automáticamente en el flujo global.
+      // Dejamos que los componentes individuales (como Chat) pidan re-autenticación si lo necesitan.
       if (hasValidated || hasFailed) return;
 
       const attemptValidation = async (interactive: boolean) => {
@@ -126,19 +127,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const silentOk = await attemptValidation(false);
       if (silentOk || cancelled) return;
 
-      const interactiveOk = await attemptValidation(true);
-      if (interactiveOk || cancelled) return;
-
-      if (!cancelled) {
-        toast({
-          title: 'Acceso a Google requerido',
-          description: 'Inicia sesión nuevamente para habilitar Gmail, Calendar, Drive y Chat.',
-          variant: 'destructive',
-          duration: 8000,
-        });
-        if (typeof window !== 'undefined') {
+      // NOTA: Se ha removido el intento interactivo automático al cargar la app
+      // para evitar loops. Si se requiere acceso, el componente específico debe solicitarlo.
+      
+      if (!cancelled && typeof window !== 'undefined') {
           sessionStorage.setItem(storageKey, 'failed');
-        }
       }
     };
 
@@ -147,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [loading, user, pathname, router, toast]);
+  }, [loading, user, pathname, router]); // Se removió toast de deps para evitar loops raros
 
     const getGoogleAccessToken = async (options?: { silent?: boolean }): Promise<string | null> => {
         if (typeof window === 'undefined') return null;
@@ -159,17 +152,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.warn('Unable to access sessionStorage for Google token', error);
         }
 
-        // This is a simple check. A robust solution would check expiration.
-        // For this app's use case, re-authenticating on failure is acceptable.
+        // Si tenemos token guardado, lo devolvemos asumiendo validez temporal.
+        // Los componentes deben manejar el error 401/403 y pedir re-login.
         if (storedToken) return storedToken;
 
+        // Si es silencioso y no hay token, fallamos rápido.
         if (options?.silent) {
             return null;
         }
 
         if (auth.currentUser) {
             const provider = new GoogleAuthProvider();
-            // Re-request all necessary scopes to ensure the token is valid for all operations
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
             provider.addScope('https://www.googleapis.com/auth/drive.file');
@@ -178,13 +171,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             provider.addScope('https://www.googleapis.com/auth/chat.spaces.readonly');
             
             try {
-                // Re-authenticate to get a fresh token
+                // Re-autenticar para obtener token fresco
                 const result = await signInWithPopup(auth, provider);
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 const token = credential?.accessToken;
                 if (token) {
                     try {
                         sessionStorage.setItem('google-access-token', token);
+                        // Resetear estado de validación si conseguimos nuevo token
+                        sessionStorage.removeItem('google-access-validated');
                     } catch (error) {
                         console.warn('Unable to persist Google token in sessionStorage', error);
                     }
@@ -192,7 +187,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             } catch (error) {
                 console.error("Error getting Google access token:", error);
-                // The user may have closed the popup, which is not a critical error.
                 return null;
             }
         }
@@ -207,14 +201,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await validateGoogleServicesAccess(token);
             return token;
         } catch (error) {
-            console.error('Google services check failed, signing out', error);
+            console.error('Google services check failed', error);
             try {
                 sessionStorage.removeItem('google-access-token');
             } catch (err) {
-                console.warn('Unable to clear Google token from session storage', err);
+                console.warn('Unable to clear Google token', err);
             }
-            await auth.signOut();
-            router.push('/login');
+            // NO cerramos sesión global (auth.signOut) porque el usuario puede seguir usando la app
+            // sin las funciones de Google. Solo limpiamos el token inválido.
             return null;
         }
     };
