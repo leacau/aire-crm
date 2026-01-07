@@ -135,6 +135,15 @@ const parseDateValue = (value: any): string | null => {
   return raw;
 };
 
+// Helper for chunk processing
+const chunkArray = <T>(array: T[], size: number): T[][] => {
+  const result: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    result.push(array.slice(i, i + size));
+  }
+  return result;
+};
+
 const normalizeText = (value: string) => value?.toString().trim().toLowerCase() || '';
 
 type ClientSuggestion = {
@@ -660,20 +669,28 @@ export default function TangoMappingPage() {
 
     const clientIds = Array.from(new Set(withClients.map((i) => i.clientId).filter(Boolean) as string[]));
     
-    // Fetch existing invoices to filter out duplicates
+    // Fetch existing invoices to filter out duplicates with batch processing
     const existingInvoicesMap: Record<string, Invoice[]> = {};
-    
-    await Promise.all(
-      clientIds.map(async (clientId) => {
-        try {
-          const invs = await getInvoicesForClient(clientId);
-          existingInvoicesMap[clientId] = invs;
-        } catch (error) {
-          console.error(`Error loading invoices for client ${clientId}`, error);
-          existingInvoicesMap[clientId] = [];
-        }
-      })
-    );
+    const chunks = chunkArray(clientIds, 10); // Process 10 clients at a time
+
+    // Provide some feedback if the list is long
+    if (chunks.length > 5) {
+        toast({ title: 'Procesando...', description: 'Verificando duplicados con la base de datos.' });
+    }
+
+    for (const chunk of chunks) {
+        await Promise.all(
+            chunk.map(async (clientId) => {
+                try {
+                    const invs = await getInvoicesForClient(clientId);
+                    existingInvoicesMap[clientId] = invs;
+                } catch (error) {
+                    console.error(`Error loading invoices for client ${clientId}`, error);
+                    existingInvoicesMap[clientId] = [];
+                }
+            })
+        );
+    }
 
     // Update local cache
     setInvoicesByClient((prev) => ({ ...prev, ...existingInvoicesMap }));
@@ -728,6 +745,9 @@ export default function TangoMappingPage() {
 
   const handleApplyInvoices = async () => {
     if (!userInfo) return;
+    
+    setIsSaving(true);
+
     let success = 0;
     let failed = 0;
     let duplicates = 0;
@@ -844,6 +864,8 @@ export default function TangoMappingPage() {
         failed++;
       }
     }
+
+    setIsSaving(false);
 
     toast({
       title: 'Importación de facturas',
@@ -1779,7 +1801,9 @@ export default function TangoMappingPage() {
                     </Table>
                   </div>
                   <div className="flex justify-end">
-                    <Button onClick={handleApplyInvoices}>Importar facturas</Button>
+                    <Button onClick={handleApplyInvoices} disabled={isSaving}>
+                      {isSaving ? 'Importando...' : 'Importar facturas'}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
