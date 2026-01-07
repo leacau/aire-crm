@@ -597,7 +597,7 @@ export default function TangoMappingPage() {
     });
   };
 
-  const applyInvoiceColumnSelection = () => {
+  const applyInvoiceColumnSelection = async () => {
     if (!billingEntity) {
       toast({
         title: 'Selecciona la empresa facturadora',
@@ -657,12 +657,47 @@ export default function TangoMappingPage() {
       const client = resolveClientForId(inv.idTango);
       return { ...inv, clientId: client?.id };
     });
-    setInvoiceRows(withClients);
+
     const clientIds = Array.from(new Set(withClients.map((i) => i.clientId).filter(Boolean) as string[]));
+    
+    // Fetch existing invoices to filter out duplicates
+    const existingInvoicesMap: Record<string, Invoice[]> = {};
+    
+    await Promise.all(
+      clientIds.map(async (clientId) => {
+        try {
+          const invs = await getInvoicesForClient(clientId);
+          existingInvoicesMap[clientId] = invs;
+        } catch (error) {
+          console.error(`Error loading invoices for client ${clientId}`, error);
+          existingInvoicesMap[clientId] = [];
+        }
+      })
+    );
+
+    // Update local cache
+    setInvoicesByClient((prev) => ({ ...prev, ...existingInvoicesMap }));
+
+    const filteredRows = withClients.filter((inv) => {
+      if (!inv.clientId) return true; // Keep unassigned to warn user
+      const existing = existingInvoicesMap[inv.clientId];
+      if (!existing) return true;
+      const targetNumber = normalizeInvoiceForDuplicateCheck(inv.invoiceNumber);
+      if (!targetNumber) return true;
+      const isDuplicate = existing.some((e) => normalizeInvoiceForDuplicateCheck(e.invoiceNumber || '') === targetNumber);
+      return !isDuplicate;
+    });
+
+    const duplicatesCount = withClients.length - filteredRows.length;
+
+    setInvoiceRows(filteredRows);
     loadOpportunitiesForClients(clientIds);
-    loadInvoicesForClients(clientIds);
     setInvoiceSelections({});
-    toast({ title: 'Archivo de facturas listo', description: `${withClients.length} facturas detectadas.` });
+    
+    toast({ 
+      title: 'Archivo de facturas listo', 
+      description: `${filteredRows.length} facturas detectadas. ${duplicatesCount} duplicadas se han ocultado.` 
+    });
   };
 
   const getOpportunityOptions = (clientId?: string) => {
@@ -693,6 +728,9 @@ export default function TangoMappingPage() {
 
   const handleApplyInvoices = async () => {
     if (!userInfo) return;
+    
+    setIsSaving(true);
+
     let success = 0;
     let failed = 0;
     let duplicates = 0;
@@ -809,6 +847,8 @@ export default function TangoMappingPage() {
         failed++;
       }
     }
+
+    setIsSaving(false);
 
     toast({
       title: 'Importación de facturas',
@@ -1744,7 +1784,9 @@ export default function TangoMappingPage() {
                     </Table>
                   </div>
                   <div className="flex justify-end">
-                    <Button onClick={handleApplyInvoices}>Importar facturas</Button>
+                    <Button onClick={handleApplyInvoices} disabled={isSaving}>
+                      {isSaving ? 'Importando...' : 'Importar facturas'}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
