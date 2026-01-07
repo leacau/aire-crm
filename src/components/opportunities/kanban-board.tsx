@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import {
@@ -395,6 +393,9 @@ export function KanbanBoard({
     if (!userInfo) return [];
     
     let opps = opportunities;
+
+    // Filter out "Genérica para carga de facturas" globally from Kanban
+    opps = opps.filter(opp => opp.title !== 'Genérica para carga de facturas');
 
     // 1. Filter by Advisor/User
     if(isBoss) {
