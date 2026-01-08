@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { useRouter } from 'next/navigation';
 import { QuickOpportunityFormDialog } from '@/components/invoices/quick-opportunity-form-dialog';
-import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
+import { sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 
 type InvoiceRow = {
   id: number;
@@ -170,8 +170,8 @@ export default function InvoiceUploadPage() {
     setIsSaving(true);
     let successCount = 0;
     
-    const existingNumbers = new Set(existingInvoices.map(inv => getNormalizedInvoiceNumber(inv)));
-    const newNumbers = new Set<string>();
+    // We maintain a set of sanitised numbers added IN THIS BATCH to avoid internal duplicates
+    const batchNumbers = new Set<string>();
 
     for (const row of validRows) {
         try {
@@ -179,8 +179,8 @@ export default function InvoiceUploadPage() {
             if (!client) throw new Error(`Cliente no encontrado para la fila con factura ${row.invoiceNumber}`);
 
             const sanitizedNumber = sanitizeInvoiceNumber(row.invoiceNumber);
-            const normalizedNumber = getNormalizedInvoiceNumber({ invoiceNumber: sanitizedNumber });
-            if (!sanitizedNumber || !normalizedNumber) {
+            
+            if (!sanitizedNumber) {
                 toast({
                     title: 'Número de factura inválido',
                     description: 'Solo se permiten dígitos en el número de factura.',
@@ -189,16 +189,79 @@ export default function InvoiceUploadPage() {
                 continue;
             }
 
-            if (existingNumbers.has(normalizedNumber) || newNumbers.has(normalizedNumber)) {
-                toast({
-                    title: `Factura duplicada #${row.invoiceNumber}`,
-                    description: 'Ya existe una factura con ese número. Usa un número único.',
-                    variant: 'destructive'
-                });
-                continue;
+            // --- CHECK FOR DUPLICATES / CONFLICTS ---
+            let duplicateType: 'none' | 'identical' | 'conflict' = 'none';
+            let conflictDetails = '';
+
+            // Check against existing invoices in DB
+            for (const existing of existingInvoices) {
+                const cleanExistingNumber = sanitizeInvoiceNumber(existing.invoiceNumber);
+                
+                let numberMatch = false;
+
+                // Logic: "4 or 5 digits" rule
+                // If the INPUT has 4 or 5 digits, we match if the EXISTING number ENDS with those digits.
+                // Otherwise, we look for an exact match.
+                if (sanitizedNumber.length >= 4 && sanitizedNumber.length <= 5) {
+                    if (cleanExistingNumber.endsWith(sanitizedNumber)) {
+                        numberMatch = true;
+                    }
+                } else {
+                    if (cleanExistingNumber === sanitizedNumber) {
+                        numberMatch = true;
+                    }
+                }
+
+                if (numberMatch) {
+                     // Retrieve existing client from opportunity map
+                     const existingOpp = opportunities.find(o => o.id === existing.opportunityId);
+                     const existingClientId = existingOpp?.clientId;
+
+                     const clientMatch = existingClientId === row.clientId;
+                     const dateMatch = existing.date === row.date;
+                     // Float comparison with small epsilon
+                     const amountMatch = Math.abs(existing.amount - row.amount) < 0.1;
+
+                     if (clientMatch && dateMatch && amountMatch) {
+                         duplicateType = 'identical';
+                         // Identical is the strongest blocking condition, we can stop here.
+                         break;
+                     } else {
+                         // Found a number match but data differs. Mark as conflict.
+                         // Don't break yet, keep looking in case we find an IDENTICAL match later in the loop.
+                         duplicateType = 'conflict';
+                         conflictDetails = `Coincide con FC existente #${existing.invoiceNumber} (Cliente: ${existingOpp?.clientName || 'Desconocido'}, Monto: $${existing.amount})`;
+                     }
+                }
+            }
+            
+            // Check against current batch (simple exact match to avoid submitting same number twice now)
+            if (duplicateType === 'none' && batchNumbers.has(sanitizedNumber)) {
+                duplicateType = 'conflict';
+                conflictDetails = 'El número se repite dentro de este mismo lote de carga.';
             }
 
-            newNumbers.add(normalizedNumber);
+            if (duplicateType === 'identical') {
+                 toast({
+                    title: `Duplicado Idéntico: #${row.invoiceNumber}`,
+                    description: 'Esta factura ya existe con el mismo cliente, fecha y monto.',
+                    variant: 'destructive'
+                });
+                continue; // Skip this row
+            }
+
+            if (duplicateType === 'conflict') {
+                toast({
+                   title: `Conflicto de Numeración: #${row.invoiceNumber}`,
+                   description: conflictDetails || 'El número coincide con otra factura existente pero los datos difieren.',
+                   variant: 'destructive' // Or 'warning' if you prefer, but usually this blocks upload to avoid mess
+               });
+               continue; // Skip this row
+           }
+
+            // --- END CHECKS ---
+
+            batchNumbers.add(sanitizedNumber);
 
             await createInvoice(
                 {
@@ -213,10 +276,12 @@ export default function InvoiceUploadPage() {
                 userInfo.name,
                 client.ownerName
             );
+            
+            // Add to local state to reflect changes immediately
             setExistingInvoices(prev => [
               ...prev,
               {
-                id: `temp-${Date.now()}`,
+                id: `temp-${Date.now()}-${Math.random()}`,
                 opportunityId: row.opportunityId,
                 invoiceNumber: sanitizedNumber,
                 amount: row.amount,
@@ -244,7 +309,15 @@ export default function InvoiceUploadPage() {
     });
 
     if (successCount > 0) {
-        setInvoiceRows([]); // Clear the form
+        // Remove only the successfully saved rows or clear all?
+        // Usually clearing all is standard if successful, but if partial success, maybe keep failed ones?
+        // For simplicity as per previous code:
+        if (successCount === validRows.length) {
+             setInvoiceRows([]); 
+        } else {
+            // Optional: You could filter out saved ones here, but that requires tracking IDs.
+            // For now, keeping as is (user manually clears or fixes errors).
+        }
     }
   };
 
