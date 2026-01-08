@@ -193,23 +193,29 @@ export default function InvoiceUploadPage() {
             let duplicateType: 'none' | 'identical' | 'conflict' = 'none';
             let conflictDetails = '';
 
+            // Helper to check if a number is "short" (4 or 5 digits)
+            const isShort = (num: string) => num.length >= 4 && num.length <= 5;
+
             // Check against existing invoices in DB
             for (const existing of existingInvoices) {
                 const cleanExistingNumber = sanitizeInvoiceNumber(existing.invoiceNumber);
                 
                 let numberMatch = false;
 
-                // Logic: "4 or 5 digits" rule
-                // If the INPUT has 4 or 5 digits, we match if the EXISTING number ENDS with those digits.
-                // Otherwise, we look for an exact match.
-                if (sanitizedNumber.length >= 4 && sanitizedNumber.length <= 5) {
-                    if (cleanExistingNumber.endsWith(sanitizedNumber)) {
-                        numberMatch = true;
-                    }
-                } else {
-                    if (cleanExistingNumber === sanitizedNumber) {
-                        numberMatch = true;
-                    }
+                // BIDIRECTIONAL CHECK:
+                // 1. Exact match
+                if (cleanExistingNumber === sanitizedNumber) {
+                    numberMatch = true;
+                }
+                // 2. Existing is long, Input is short (suffix match)
+                // Ex: Input 8313 (4 digits) matches Existing 0000100008313
+                else if (isShort(sanitizedNumber) && cleanExistingNumber.length > 5 && cleanExistingNumber.endsWith(sanitizedNumber)) {
+                    numberMatch = true;
+                }
+                // 3. Existing is short, Input is long (suffix match)
+                // Ex: Input 0000100008313 matches Existing 8313
+                else if (isShort(cleanExistingNumber) && sanitizedNumber.length > 5 && sanitizedNumber.endsWith(cleanExistingNumber)) {
+                    numberMatch = true;
                 }
 
                 if (numberMatch) {
@@ -228,7 +234,6 @@ export default function InvoiceUploadPage() {
                          break;
                      } else {
                          // Found a number match but data differs. Mark as conflict.
-                         // Don't break yet, keep looking in case we find an IDENTICAL match later in the loop.
                          duplicateType = 'conflict';
                          conflictDetails = `Coincide con FC existente #${existing.invoiceNumber} (Cliente: ${existingOpp?.clientName || 'Desconocido'}, Monto: $${existing.amount})`;
                      }
@@ -244,7 +249,7 @@ export default function InvoiceUploadPage() {
             if (duplicateType === 'identical') {
                  toast({
                     title: `Duplicado Idéntico: #${row.invoiceNumber}`,
-                    description: 'Esta factura ya existe con el mismo cliente, fecha y monto.',
+                    description: 'Esta factura ya existe con el mismo cliente, fecha y monto (o es equivalente según regla de 4-5 dígitos).',
                     variant: 'destructive'
                 });
                 continue; // Skip this row
@@ -254,7 +259,7 @@ export default function InvoiceUploadPage() {
                 toast({
                    title: `Conflicto de Numeración: #${row.invoiceNumber}`,
                    description: conflictDetails || 'El número coincide con otra factura existente pero los datos difieren.',
-                   variant: 'destructive' // Or 'warning' if you prefer, but usually this blocks upload to avoid mess
+                   variant: 'destructive' 
                });
                continue; // Skip this row
            }
@@ -309,14 +314,8 @@ export default function InvoiceUploadPage() {
     });
 
     if (successCount > 0) {
-        // Remove only the successfully saved rows or clear all?
-        // Usually clearing all is standard if successful, but if partial success, maybe keep failed ones?
-        // For simplicity as per previous code:
         if (successCount === validRows.length) {
              setInvoiceRows([]); 
-        } else {
-            // Optional: You could filter out saved ones here, but that requires tracking IDs.
-            // For now, keeping as is (user manually clears or fixes errors).
         }
     }
   };
