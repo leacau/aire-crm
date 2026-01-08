@@ -23,13 +23,14 @@ import {
   CheckCircle,
   Briefcase,
   TrendingDown,
+  DollarSign,
+  Clock
 } from 'lucide-react';
 import type { Opportunity, Client, ActivityLog, ClientActivity, User, Invoice } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
   getAllOpportunities,
   getClients,
-  getActivities,
   getAllClientActivities,
   updateClientActivity,
   getAllUsers,
@@ -37,8 +38,7 @@ import {
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
-import { MonthYearPicker } from '@/components/ui/month-year-picker';
-import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, isSameMonth } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, eachMonthOfInterval, differenceInDays, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -53,14 +53,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { TasksModal } from '@/components/dashboard/tasks-modal';
 import { TaskNotification } from '@/components/dashboard/task-notification';
 import { useRouter } from 'next/navigation';
+import {
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    Cell
+} from 'recharts';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
 
-const activityIcons: Record<string, React.ReactNode> = {
-  'create': <PlusCircle className="h-5 w-5 text-green-500" />,
-  'update': <Edit className="h-5 w-5 text-blue-500" />,
-  'stage_change': <ArrowRight className="h-5 w-5 text-purple-500" />,
-};
-
-const getDefaultIcon = () => <Activity className="h-5 w-5 text-muted-foreground" />;
 
 type TaskStatus = 'overdue' | 'dueToday' | 'dueTomorrow';
 
@@ -150,6 +163,11 @@ const TaskSummaryCard = ({ title, count, icon, onClick, isSelected }: { title: s
 
 const EXCLUDED_OWNERS_FOR_BOSS_BILLING = ['Mario Altamirano', 'Corporativo', 'Sin Asesor', 'Sin propietario'];
 
+// Helper for currency formatting
+const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
+};
+
 export default function DashboardPage() {
   const { userInfo, loading: authLoading, isBoss } = useAuth();
   const router = useRouter();
@@ -157,7 +175,6 @@ export default function DashboardPage() {
   const { notificationPermission, requestNotificationPermission, showNotification } = useNotifications();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [tasks, setTasks] = useState<ClientActivity[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -178,22 +195,16 @@ export default function DashboardPage() {
     };
   }, [selectedDate]);
 
-  useEffect(() => {
-    if (userInfo && userInfo.role === 'Asesor') {
-      router.replace('/objectives');
-    }
-  }, [userInfo, router]);
-
+  // Removed redirect for 'Asesor' to allow them to view the dashboard
 
   useEffect(() => {
     const fetchData = async () => {
       if (!userInfo) return;
       setLoadingData(true);
       try {
-        const [allOpps, allClients, allActivities, allTasks, allInvoices, allUsers, allAdvisors] = await Promise.all([
+        const [allOpps, allClients, allTasks, allInvoices, allUsers, allAdvisors] = await Promise.all([
             getAllOpportunities(userInfo, isBoss),
             getClients(),
-            getActivities(100),
             getAllClientActivities(),
             getInvoices(),
             getAllUsers(),
@@ -202,7 +213,6 @@ export default function DashboardPage() {
 
         setOpportunities(allOpps);
         setClients(allClients);
-        setActivities(allActivities);
         setTasks(allTasks);
         setInvoices(allInvoices);
         setUsers(allUsers);
@@ -223,7 +233,6 @@ export default function DashboardPage() {
   const { 
     userOpportunities, 
     userClients, 
-    userActivities, 
     userTasks,
     userInvoices,
   } = useMemo(() => {
@@ -231,7 +240,6 @@ export default function DashboardPage() {
     
     let filteredOpps = opportunities;
     let filteredClients = clients;
-    let filteredActivities = activities;
     let filteredTasks = tasks.filter(t => t.isTask);
     let filteredInvoices = invoices;
 
@@ -256,12 +264,11 @@ export default function DashboardPage() {
     return {
         userOpportunities: filteredOpps,
         userClients: filteredClients,
-        userActivities: filteredActivities,
         userTasks: filteredTasks,
         userInvoices: filteredInvoices
     };
 
-  }, [userInfo, isBoss, selectedAdvisor, opportunities, clients, activities, tasks, invoices]);
+  }, [userInfo, isBoss, selectedAdvisor, opportunities, clients, tasks, invoices]);
 
 
   const today = startOfToday();
@@ -370,7 +377,7 @@ export default function DashboardPage() {
   };
 
 
-  if (authLoading || loadingData || userInfo?.role === 'Asesor') {
+  if (authLoading || loadingData) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
@@ -385,17 +392,11 @@ export default function DashboardPage() {
 
 
   const filteredOpportunities = userOpportunities.filter(opp => {
-    if (opp.title === 'Genérica para carga de facturas') return false; // Filter out generic proposals
+    if (opp.title === 'Genérica para carga de facturas') return false; 
     if (!dateRange?.from || !dateRange?.to) return true;
-    const oppDate = opp.closeDate ? parseISO(opp.closeDate) : new Date(); // Use today if no close date
+    const oppDate = opp.closeDate ? parseISO(opp.closeDate) : new Date();
     return isWithinInterval(oppDate, { start: dateRange.from, end: dateRange.to });
   });
-  
-  const filteredActivities = userActivities.filter(activity => {
-      if (!dateRange?.from || !dateRange?.to) return true;
-      const activityDate = new Date(activity.timestamp);
-      return isWithinInterval(activityDate, { start: dateRange.from, end: dateRange.to });
-  }).slice(0, 10);
   
   const dateFilter = (dateStr: string | null | undefined, range: DateRange) => {
     if (!dateStr || !range.from || !range.to) return false;
@@ -407,7 +408,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Mapeo auxiliar para verificar dueños
   const oppClientIdMap = new Map(opportunities.map(o => [o.id, o.clientId]));
   const clientOwnerMap = new Map(clients.map(c => [c.id, { id: c.ownerId, name: c.ownerName }]));
 
@@ -415,9 +415,8 @@ export default function DashboardPage() {
       const clientId = oppClientIdMap.get(inv.opportunityId);
       if (!clientId) return false;
       const ownerData = clientOwnerMap.get(clientId);
-      if (!ownerData || !ownerData.id) return false; // Must have an owner
+      if (!ownerData || !ownerData.id) return false;
 
-      // Si es jefe y ve "todos", aplicar exclusiones
       if (isBoss && selectedAdvisor === 'all') {
           const ownerName = ownerData.name || '';
           const isExcluded = EXCLUDED_OWNERS_FOR_BOSS_BILLING.some(excluded => 
@@ -461,6 +460,130 @@ export default function DashboardPage() {
 
   const totalClients = userClients.length;
 
+  // --- NEW VISUALIZATION LOGIC ---
+
+  const showManagementView = userInfo?.role === 'Admin' || (isBoss && userInfo?.area === 'Comercial');
+  const now = new Date();
+  
+  // 1. Billing Evolution Data
+  const last12Months = eachMonthOfInterval({
+      start: subMonths(startOfMonth(now), 11),
+      end: endOfMonth(now)
+  });
+
+  const getBillingForMonth = (date: Date, invoiceList: Invoice[]) => {
+      const monthStart = startOfMonth(date);
+      const monthEnd = endOfMonth(date);
+      const range = { from: monthStart, to: monthEnd };
+      
+      return invoiceList
+        .filter(inv => {
+             // For Evolution, we generally want to see what was "billed" (issued) in that month.
+             // Using issue date 'date' for consistency with "Sales Evolution".
+             // NOTE: Dashboard uses "Paid + To Collect". To be consistent with dashboard numbers, 
+             // we should stick to "Billing" definition = Amount of Invoices ISSUED in that month.
+             // This avoids the confusing "moving target" of payment dates.
+             return inv.date && dateFilter(inv.date, range) && isValidInvoice(inv);
+        })
+        .reduce((acc, inv) => acc + inv.amount, 0);
+  };
+
+  // Prepare data for Chart (Advisor View)
+  const billingChartData = last12Months.map(monthDate => ({
+      month: format(monthDate, 'MMM yy', { locale: es }),
+      amount: getBillingForMonth(monthDate, userInvoices),
+      fullDate: monthDate
+  }));
+
+  // Prepare data for Table (Management View)
+  // Rows: Advisors, Columns: Last few months (to save space, let's show last 6 months + Total Year)
+  // Actually, standard evolution table is usually months. 
+  // We'll show: Advisor | Total Last 12M | Last Month | Current Month | ...
+  // Or better: Advisor | Current Month | Prev Month | Prev-1 | Prev-2 | Total Year
+  
+  const billingTableColumns = [...last12Months].reverse().slice(0, 6); // Last 6 months
+  const billingTableData = advisors.map(advisor => {
+      // Get invoices for this advisor
+      const advisorClientIds = new Set(clients.filter(c => c.ownerId === advisor.id).map(c => c.id));
+      const oppIds = new Set(opportunities.filter(o => advisorClientIds.has(o.clientId)).map(o => o.id));
+      const advisorInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
+      
+      const rowData: any = {
+          advisorName: advisor.name,
+          advisorId: advisor.id,
+          totalYear: 0
+      };
+
+      let total = 0;
+      last12Months.forEach(month => {
+          const val = getBillingForMonth(month, advisorInvoices);
+          total += val;
+          // Only add to rowData if it's one of the columns we show
+          if (billingTableColumns.some(c => c.getTime() === month.getTime())) {
+              rowData[format(month, 'MMM yy', { locale: es })] = val;
+          }
+      });
+      rowData.totalYear = total;
+      return rowData;
+  }).sort((a, b) => b.totalYear - a.totalYear);
+
+
+  // 2. Mora Data
+  // Buckets: 0, 1-30, 31-60, 61-90, 91+
+  const getDaysLate = (inv: Invoice) => {
+      if (!inv.dueDate && !inv.date) return 0;
+      const due = inv.dueDate ? parseISO(inv.dueDate) : parseISO(inv.date!);
+      return differenceInDays(startOfDay(now), startOfDay(due));
+  };
+
+  const categorizeMora = (invoiceList: Invoice[]) => {
+      const buckets = {
+          '0': 0, // Not late or current
+          '1-30': 0,
+          '31-60': 0,
+          '61-90': 0,
+          '91+': 0
+      };
+
+      invoiceList.forEach(inv => {
+          if (inv.status === 'Pagada' || inv.isCreditNote || !isValidInvoice(inv)) return;
+          const days = getDaysLate(inv);
+          
+          if (days <= 0) buckets['0'] += inv.amount;
+          else if (days <= 30) buckets['1-30'] += inv.amount;
+          else if (days <= 60) buckets['31-60'] += inv.amount;
+          else if (days <= 90) buckets['61-90'] += inv.amount;
+          else buckets['91+'] += inv.amount;
+      });
+      return buckets;
+  };
+
+  const moraChartData = (() => {
+      const buckets = categorizeMora(userInvoices);
+      return [
+          { name: 'Al día', value: buckets['0'], color: '#22c55e' }, // green
+          { name: '1-30 días', value: buckets['1-30'], color: '#eab308' }, // yellow
+          { name: '31-60 días', value: buckets['31-60'], color: '#f97316' }, // orange
+          { name: '61-90 días', value: buckets['61-90'], color: '#ef4444' }, // red
+          { name: '+90 días', value: buckets['91+'], color: '#7f1d1d' }, // dark red
+      ];
+  })();
+
+  const moraTableData = advisors.map(advisor => {
+      const advisorClientIds = new Set(clients.filter(c => c.ownerId === advisor.id).map(c => c.id));
+      const oppIds = new Set(opportunities.filter(o => advisorClientIds.has(o.clientId)).map(o => o.id));
+      const advisorInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
+      
+      const buckets = categorizeMora(advisorInvoices);
+      return {
+          advisorName: advisor.name,
+          advisorId: advisor.id,
+          ...buckets,
+          total: Object.values(buckets).reduce((a, b) => a + b, 0)
+      };
+  }).sort((a, b) => b.total - a.total);
+
+
   return (
     <>
     {hasPendingTasks && (
@@ -499,21 +622,21 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${totalBillingInPeriod.toLocaleString('es-AR')}
+                  {formatCurrency(totalBillingInPeriod)}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Pagado: ${totalPaidInPeriod.toLocaleString('es-AR')} / 
-                  A cobrar: ${totalToCollectInPeriod.toLocaleString('es-AR')}
+                  Pagado: {formatCurrency(totalPaidInPeriod)} / 
+                  A cobrar: {formatCurrency(totalToCollectInPeriod)}
                 </p>
                  <p className="text-xs text-muted-foreground mt-1">
-                    Mes Anterior: ${previousMonthBilling ? previousMonthBilling.toLocaleString('es-AR') : '0'}
+                    Mes Anterior: {formatCurrency(previousMonthBilling)}
                 </p>
                  <p className={cn(
                     "text-xs font-medium flex items-center mt-1",
                     billingDifference >= 0 ? "text-green-600" : "text-red-600"
                   )}>
                   {billingDifference >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
-                  Dif: ${billingDifference.toLocaleString('es-AR')}
+                  Dif: {formatCurrency(billingDifference)}
                 </p>
               </CardContent>
             </Card>
@@ -528,7 +651,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${forecastedValue.toLocaleString('es-AR')}
+                  {formatCurrency(forecastedValue)}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Propuesta, Negociación y Aprobación.
@@ -550,8 +673,9 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-1 gap-6" ref={tasksSectionRef}>
-            <Card className="lg:col-span-1">
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6" ref={tasksSectionRef}>
+            {/* Tareas */}
+            <Card className="lg:row-span-2 h-full">
                  <CardHeader>
                     <CardTitle>Tareas Pendientes</CardTitle>
                     <CardDescription>
@@ -601,37 +725,161 @@ export default function DashboardPage() {
                     )}
                 </CardContent>
             </Card>
-            <Card className="lg:col-span-1">
+
+            {/* Evolución de Facturación */}
+            <Card className='flex flex-col'>
                 <CardHeader>
-                <CardTitle>Actividad Reciente</CardTitle>
-                <CardDescription>
-                    Un registro de las últimas acciones realizadas en el sistema.
-                </CardDescription>
+                    <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-primary" />
+                        Evolución de Facturación (12 meses)
+                    </CardTitle>
+                    <CardDescription>
+                        {showManagementView 
+                            ? "Comparativa de facturación por asesor en los últimos meses." 
+                            : "Tu histórico de facturación en el último año."}
+                    </CardDescription>
                 </CardHeader>
-                <CardContent>
-                <div className="space-y-4">
-                    {filteredActivities.map((activity) => (
-                        <div key={activity.id} className="flex items-start gap-4">
-                            <div className="p-2 bg-muted rounded-full">
-                            {activityIcons[activity.type] || getDefaultIcon()}
-                            </div>
-                            <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm" dangerouslySetInnerHTML={{ __html: activity.details }} />
-                                <p className="text-sm text-muted-foreground whitespace-nowrap">
-                                {new Date(activity.timestamp).toLocaleDateString()}
-                                </p>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                                Por: {usersMap[activity.userId]?.name || 'Usuario desconocido'}
-                            </p>
-                            </div>
+                <CardContent className='flex-1 min-h-[300px]'>
+                    {showManagementView ? (
+                         <div className="overflow-auto max-h-[400px]">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Asesor</TableHead>
+                                        <TableHead className='text-right'>Total Año</TableHead>
+                                        {billingTableColumns.map(col => (
+                                            <TableHead key={col.toISOString()} className='text-right whitespace-nowrap'>
+                                                {format(col, 'MMM yy', { locale: es })}
+                                            </TableHead>
+                                        ))}
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {billingTableData.map((row) => (
+                                        <TableRow key={row.advisorId}>
+                                            <TableCell className="font-medium">{row.advisorName}</TableCell>
+                                            <TableCell className='text-right font-bold'>{formatCurrency(row.totalYear)}</TableCell>
+                                            {billingTableColumns.map(col => (
+                                                <TableCell key={col.toISOString()} className='text-right'>
+                                                    {formatCurrency(row[format(col, 'MMM yy', { locale: es })] || 0)}
+                                                </TableCell>
+                                            ))}
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                         </div>
+                    ) : (
+                        <div className="h-[300px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={billingChartData}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                    <XAxis 
+                                        dataKey="month" 
+                                        tickLine={false}
+                                        axisLine={false}
+                                        tickMargin={8}
+                                        tick={{ fontSize: 12 }}
+                                    />
+                                    <YAxis 
+                                        tickFormatter={(value) => `$${value/1000}k`}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        tick={{ fontSize: 12 }}
+                                    />
+                                    <Tooltip 
+                                        formatter={(value: number) => formatCurrency(value)}
+                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    />
+                                    <Line 
+                                        type="monotone" 
+                                        dataKey="amount" 
+                                        stroke="hsl(var(--primary))" 
+                                        strokeWidth={2}
+                                        dot={{ r: 4, fill: "hsl(var(--primary))" }}
+                                        activeDot={{ r: 6 }}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
                         </div>
-                        )
                     )}
-                </div>
                 </CardContent>
             </Card>
+
+            {/* Resumen de Mora */}
+             <Card className='flex flex-col'>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Clock className="h-5 w-5 text-orange-500" />
+                        Resumen de Mora
+                    </CardTitle>
+                    <CardDescription>
+                         {showManagementView 
+                            ? "Estado de deuda vencida agrupada por asesor." 
+                            : "Tu cartera de deuda agrupada por días de atraso."}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className='flex-1 min-h-[300px]'>
+                    {showManagementView ? (
+                        <div className="overflow-auto max-h-[400px]">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Asesor</TableHead>
+                                        <TableHead className='text-right text-green-600'>Al día</TableHead>
+                                        <TableHead className='text-right text-yellow-600'>1-30</TableHead>
+                                        <TableHead className='text-right text-orange-600'>31-60</TableHead>
+                                        <TableHead className='text-right text-red-600'>61-90</TableHead>
+                                        <TableHead className='text-right text-red-800'>+90</TableHead>
+                                        <TableHead className='text-right font-bold'>Total</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {moraTableData.map((row) => (
+                                        <TableRow key={row.advisorId}>
+                                            <TableCell className="font-medium text-xs">{row.advisorName}</TableCell>
+                                            <TableCell className='text-right text-xs'>{formatCurrency(row['0'])}</TableCell>
+                                            <TableCell className='text-right text-xs'>{formatCurrency(row['1-30'])}</TableCell>
+                                            <TableCell className='text-right text-xs'>{formatCurrency(row['31-60'])}</TableCell>
+                                            <TableCell className='text-right text-xs'>{formatCurrency(row['61-90'])}</TableCell>
+                                            <TableCell className='text-right text-xs'>{formatCurrency(row['91+'])}</TableCell>
+                                            <TableCell className='text-right font-bold text-xs'>{formatCurrency(row.total)}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    ) : (
+                        <div className="h-[300px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={moraChartData} layout="vertical" margin={{ left: 20 }}>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                    <XAxis type="number" hide />
+                                    <YAxis 
+                                        dataKey="name" 
+                                        type="category" 
+                                        width={80}
+                                        tick={{ fontSize: 12 }}
+                                        tickLine={false}
+                                        axisLine={false}
+                                    />
+                                    <Tooltip 
+                                        cursor={{fill: 'transparent'}}
+                                        formatter={(value: number) => formatCurrency(value)}
+                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    />
+                                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                                        {moraChartData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
         </div>
       </main>
     </div>
