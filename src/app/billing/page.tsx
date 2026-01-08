@@ -374,12 +374,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   }, []);
 
-  // --- LÓGICA DE DETECCIÓN DE DUPLICADOS CORREGIDA ---
   const { exactDuplicateGroups, numberDuplicateGroups } = useMemo(() => {
-    // 1. Preparar datos limpios para comparación
     const invoiceData = invoices.map(inv => {
         const raw = sanitizeInvoiceNumber(inv.invoiceNumber || '');
-        const sig = raw.replace(/^0+/, ''); // Número significativo (sin ceros a la izq)
+        const sig = raw.replace(/^0+/, ''); 
         return {
             inv,
             id: inv.id,
@@ -388,7 +386,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         };
     });
 
-    // 2. Sistema Union-Find para agrupar
     const parent: Record<string, string> = {};
     invoiceData.forEach(d => parent[d.id] = d.id);
     
@@ -402,8 +399,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         if (rootI !== rootJ) parent[rootI] = rootJ;
     };
 
-    // 3. Agrupación Base: Números Significativos Idénticos
-    // Esto agrupa "0001", "1", "01" juntos.
     const bySig: Record<string, string[]> = {};
     invoiceData.forEach(d => {
         if (!d.sig) return; 
@@ -411,21 +406,17 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         bySig[d.sig].push(d.id);
     });
 
-    // Unir dentro de cada grupo base
     Object.values(bySig).forEach(ids => {
         for(let i=1; i<ids.length; i++) union(ids[0], ids[i]);
     });
 
-    // 4. Agrupación por Sufijo (Regla de 4 a 6 dígitos)
     const uniqueSigs = Object.keys(bySig);
-    // Identificar números "cortos" que son candidatos a ser sufijos
     const shortSigs = uniqueSigs.filter(s => s.length >= 4 && s.length <= 6);
 
     for (const short of shortSigs) {
         for (const other of uniqueSigs) {
-            if (short === other) continue; // Ya unidos por exactitud
+            if (short === other) continue; 
             
-            // Si 'other' termina con 'short' (ej: 100008313 termina en 8313)
             if (other.length > short.length && other.endsWith(short)) {
                 const shortIds = bySig[short];
                 const otherIds = bySig[other];
@@ -436,7 +427,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         }
     }
 
-    // 5. Recolectar Grupos Finales
     const groupsMap: Record<string, Invoice[]> = {};
     invoiceData.forEach(d => {
         const root = find(d.id);
@@ -444,14 +434,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         groupsMap[root].push(d.inv);
     });
 
-    // 6. Clasificar Grupos (Exactos vs Conflicto)
     const exactGroups: DuplicateInvoiceGroup[] = [];
     const numberGroups: DuplicateInvoiceGroup[] = [];
 
     Object.values(groupsMap).forEach(groupInvoices => {
         if (groupInvoices.length < 2) return;
 
-        // Criterio de identidad exacta: Cliente + Fecha + Monto
         const getIdentity = (inv: Invoice) => {
              const opp = opportunitiesMap[inv.opportunityId];
              const clientId = opp?.clientId || 'unknown';
@@ -463,7 +451,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         const firstIdentity = getIdentity(groupInvoices[0]);
         const allIdentical = groupInvoices.every(inv => getIdentity(inv) === firstIdentity);
 
-        // Ordenar para mostrar primero los números más completos/largos (mejor UX)
         groupInvoices.sort((a, b) => (b.invoiceNumber || '').length - (a.invoiceNumber || '').length);
 
         const groupObj: DuplicateInvoiceGroup = {
@@ -478,7 +465,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         else numberGroups.push(groupObj);
     });
 
-    // Ordenar grupos por etiqueta
     exactGroups.sort((a, b) => a.label.localeCompare(b.label));
     numberGroups.sort((a, b) => a.label.localeCompare(b.label));
 
@@ -500,17 +486,13 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     [exactDuplicateGroups, numberDuplicateGroups, invoiceSelection],
   );
 
-  // Initialize selection logic for duplicates
   useEffect(() => {
     if (isDuplicateModalOpen) {
       setInvoiceSelection(prev => {
         const next: Record<string, boolean> = {};
         
-        // Auto-select duplicates for "Exact" groups (select all except the oldest one to keep one safe)
         exactDuplicateGroups.forEach(group => {
-            // Sort by creation date (or ID if date missing) to keep the oldest
             const sorted = [...group.invoices].sort((a, b) => (a.dateGenerated || '').localeCompare(b.dateGenerated || ''));
-            // Keep the first one (oldest), select the rest
             sorted.forEach((inv, index) => {
                 if (index > 0 && !isCreditNoteRelated(inv)) {
                     next[inv.id] = true;
@@ -520,7 +502,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             });
         });
 
-        // For number collisions, do NOT auto-select (safer)
         numberDuplicateGroups.forEach(group => {
             group.invoices.forEach(inv => {
                 next[inv.id] = false;
@@ -530,7 +511,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         return next;
       });
     } else {
-        // Reset
         setDeleteProgress(EMPTY_DELETE_PROGRESS);
         setIsDeletingDuplicates(false);
         setIsRetryingFailed(false);
@@ -629,7 +609,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         const maxPeriodicity = opp.periodicidad?.[0] || 'Ocasional';
         const durationMonths = getPeriodDurationInMonths(maxPeriodicity);
 
-        if (durationMonths > 0) { // Handle periodic opportunities
+        if (durationMonths > 0) { 
             for (let i = 0; i < durationMonths; i++) {
                 const monthDate = addMonths(creationDate, i);
 
@@ -639,10 +619,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                     );
 
                     if (!hasInvoiceForMonth) {
-                        // Create a virtual opportunity for this month's billing
                         const virtualOpp = {
                             ...opp,
-                            // Add a stable unique ID for the table key and a reference date
                             id: `${opp.id}_${monthDate.toISOString()}`,
                             closeDate: monthDate.toISOString(),
                         };
@@ -650,7 +628,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                     }
                 }
             }
-        } else { // Handle one-time ("Ocasional") opportunities
+        } else { 
             if (isDateInRange(creationDate)) {
                 const hasInvoiceInMonth = (invoicesByOppId[opp.id] || []).some(inv =>
                     inv.date && !inv.isCreditNote && isSameMonth(parseISO(inv.date), creationDate)
@@ -663,7 +641,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         }
     });
 
-    // A Cobrar y Pagado
     let userFilteredInvoices = invoices;
     if (isBoss) {
       if (selectedAdvisor !== 'all') {
@@ -832,16 +809,37 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     if (!client) return;
 
     const sanitizedNumber = sanitizeInvoiceNumber(String(invoiceDetails.invoiceNumber));
-    const normalizedNumber = getNormalizedInvoiceNumber({ invoiceNumber: sanitizedNumber });
-    if (!sanitizedNumber || !normalizedNumber) {
+    
+    if (!sanitizedNumber) {
       toast({ title: 'Número de factura inválido', description: 'Solo se permiten dígitos en el número de factura.', variant: 'destructive' });
       return;
     }
 
-    const existingNumbers = new Set(invoices.map(inv => getNormalizedInvoiceNumber(inv)));
-    if (existingNumbers.has(normalizedNumber)) {
-      toast({ title: `Factura duplicada #${invoiceDetails.invoiceNumber}`, description: 'Ya existe una factura con ese número.', variant: 'destructive' });
-      return;
+    const getSignificant = (s: string) => s.replace(/^0+/, '');
+    const inputSignificant = getSignificant(sanitizedNumber);
+    const isInputShort = inputSignificant.length >= 4 && inputSignificant.length <= 6;
+
+    const hasDuplicate = invoices.some(inv => {
+        const existingRaw = sanitizeInvoiceNumber(inv.invoiceNumber || '');
+        const existingSignificant = getSignificant(existingRaw);
+        const isExistingShort = existingSignificant.length >= 4 && existingSignificant.length <= 6;
+
+        if (sanitizedNumber === existingRaw) return true;
+        
+        // Check Suffix logic bidirectionally
+        if (isInputShort && existingRaw.length > sanitizedNumber.length) {
+             if (existingRaw.endsWith(sanitizedNumber) || existingRaw.endsWith(inputSignificant)) return true;
+        }
+        
+        if (isExistingShort && sanitizedNumber.length > existingRaw.length) {
+             if (sanitizedNumber.endsWith(existingRaw) || sanitizedNumber.endsWith(existingSignificant)) return true;
+        }
+        return false;
+    });
+
+    if (hasDuplicate) {
+        toast({ title: `Factura duplicada #${invoiceDetails.invoiceNumber}`, description: 'El número coincide con una factura existente (o sus dígitos finales).', variant: 'destructive' });
+        return;
     }
 
     try {
