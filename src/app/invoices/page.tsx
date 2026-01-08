@@ -189,42 +189,38 @@ export default function InvoiceUploadPage() {
                 continue;
             }
 
-            // --- LÓGICA DE DUPLICADOS ---
+            // --- LÓGICA DE DUPLICADOS MEJORADA ---
             let duplicateType: 'none' | 'identical' | 'conflict' = 'none';
             let conflictDetails = '';
 
-            // Helper para identificar números cortos (4 o 5 dígitos)
-            // Nota: Usamos el inputRaw tal cual (con ceros si los escribió) para longitud, 
-            // pero para comparación de sufijo es mejor asegurar consistencia.
-            // Si el usuario escribe 00008313 (8 dígitos) vs 8313 (4 dígitos), técnicamente es el mismo número.
-            // Vamos a comparar basándonos en si uno TERMINA con el otro cuando uno es "corto" (<= 5 dígitos significativos).
-            
-            // Función para obtener el valor "corto" sin ceros a la izquierda para evaluar longitud real
+            // Obtiene los números significativos (sin ceros a la izquierda) para determinar longitud real
             const getSignificant = (s: string) => s.replace(/^0+/, '');
 
             const inputSignificant = getSignificant(inputRaw);
-            const isInputShort = inputSignificant.length >= 4 && inputSignificant.length <= 5;
+            // AHORA INCLUYE 4, 5 Y 6 DÍGITOS
+            const isInputShort = inputSignificant.length >= 4 && inputSignificant.length <= 6;
 
             for (const existing of existingInvoices) {
                 const existingRaw = sanitizeInvoiceNumber(existing.invoiceNumber);
                 const existingSignificant = getSignificant(existingRaw);
-                const isExistingShort = existingSignificant.length >= 4 && existingSignificant.length <= 5;
+                // AHORA INCLUYE 4, 5 Y 6 DÍGITOS
+                const isExistingShort = existingSignificant.length >= 4 && existingSignificant.length <= 6;
                 
                 let numberMatch = false;
 
-                // 1. Coincidencia exacta (todo el string de dígitos)
+                // 1. Coincidencia exacta (todo el string de dígitos igual)
                 if (inputRaw === existingRaw) {
                     numberMatch = true;
                 }
-                // 2. Si el INPUT es corto (4-5 dígitos reales) y el existente es más largo, chequear si existente TERMINA con inputRaw (o inputSignificant)
-                // Ejemplo: Input "8313", Existente "000100008313". 
+                // 2. Si el INPUT es corto (4-6 dígitos) y el existente es más largo, chequear si existente TERMINA con inputRaw (o inputSignificant)
+                // Ejemplo: Input "8313", Existente "000100008313" o "100008313"
                 else if (isInputShort && existingRaw.length > inputRaw.length) {
                     if (existingRaw.endsWith(inputRaw) || existingRaw.endsWith(inputSignificant)) {
                         numberMatch = true;
                     }
                 }
-                // 3. Si el EXISTENTE es corto (4-5 dígitos reales) y el input es más largo, chequear si input TERMINA con existingRaw
-                // Ejemplo: Input "000100008313", Existente "8313".
+                // 3. Si el EXISTENTE es corto (4-6 dígitos) y el input es más largo, chequear si input TERMINA con existingRaw
+                // Ejemplo: Input "000100008313", Existente "8313"
                 else if (isExistingShort && inputRaw.length > existingRaw.length) {
                     if (inputRaw.endsWith(existingRaw) || inputRaw.endsWith(existingSignificant)) {
                         numberMatch = true;
@@ -237,20 +233,21 @@ export default function InvoiceUploadPage() {
 
                      const clientMatch = existingClientId === row.clientId;
                      const dateMatch = existing.date === row.date;
+                     // Comparación de monto con pequeña tolerancia por decimales
                      const amountMatch = Math.abs(existing.amount - row.amount) < 0.1;
 
                      if (clientMatch && dateMatch && amountMatch) {
                          duplicateType = 'identical';
-                         break; // Bloqueo total
+                         break; // Es el caso más grave, bloqueamos y salimos.
                      } else {
                          duplicateType = 'conflict';
                          conflictDetails = `Coincide con FC existente #${existing.invoiceNumber} (Cliente: ${existingOpp?.clientName || 'Desconocido'}, Monto: $${existing.amount})`;
-                         // No hacemos break aquí por si encontramos un idéntico más adelante
+                         // No hacemos break por si más adelante encontramos un duplicado IDÉNTICO que tiene prioridad.
                      }
                 }
             }
             
-            // Verificación dentro del mismo lote (batch)
+            // Verificación dentro del mismo lote (batch) para evitar subir dos veces el mismo número ahora mismo
             if (duplicateType === 'none' && batchNumbers.has(inputRaw)) {
                 duplicateType = 'conflict';
                 conflictDetails = 'El número se repite dentro de este mismo lote de carga.';
@@ -262,16 +259,16 @@ export default function InvoiceUploadPage() {
                     description: 'Esta factura ya existe con el mismo cliente, fecha y monto.',
                     variant: 'destructive'
                 });
-                continue; 
+                continue; // Saltamos esta fila
             }
 
             if (duplicateType === 'conflict') {
                 toast({
                    title: `Conflicto de Numeración: #${row.invoiceNumber}`,
-                   description: conflictDetails || 'El número coincide con otra factura existente (regla de 4/5 dígitos).',
+                   description: conflictDetails || 'El número coincide con los dígitos finales de otra factura existente.',
                    variant: 'destructive' 
                });
-               continue; 
+               continue; // Saltamos esta fila
            }
 
             // --- FIN VERIFICACIONES ---
