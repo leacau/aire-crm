@@ -374,70 +374,116 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     }
   }, []);
 
+  // --- LÓGICA DE DETECCIÓN DE DUPLICADOS CORREGIDA ---
   const { exactDuplicateGroups, numberDuplicateGroups } = useMemo(() => {
+    // 1. Preparar datos limpios para comparación
+    const invoiceData = invoices.map(inv => {
+        const raw = sanitizeInvoiceNumber(inv.invoiceNumber || '');
+        const sig = raw.replace(/^0+/, ''); // Número significativo (sin ceros a la izq)
+        return {
+            inv,
+            id: inv.id,
+            raw,
+            sig,
+        };
+    });
+
+    // 2. Sistema Union-Find para agrupar
+    const parent: Record<string, string> = {};
+    invoiceData.forEach(d => parent[d.id] = d.id);
+    
+    const find = (i: string): string => {
+        if (parent[i] === i) return i;
+        return parent[i] = find(parent[i]);
+    };
+    const union = (i: string, j: string) => {
+        const rootI = find(i);
+        const rootJ = find(j);
+        if (rootI !== rootJ) parent[rootI] = rootJ;
+    };
+
+    // 3. Agrupación Base: Números Significativos Idénticos
+    // Esto agrupa "0001", "1", "01" juntos.
+    const bySig: Record<string, string[]> = {};
+    invoiceData.forEach(d => {
+        if (!d.sig) return; 
+        if (!bySig[d.sig]) bySig[d.sig] = [];
+        bySig[d.sig].push(d.id);
+    });
+
+    // Unir dentro de cada grupo base
+    Object.values(bySig).forEach(ids => {
+        for(let i=1; i<ids.length; i++) union(ids[0], ids[i]);
+    });
+
+    // 4. Agrupación por Sufijo (Regla de 4 a 6 dígitos)
+    const uniqueSigs = Object.keys(bySig);
+    // Identificar números "cortos" que son candidatos a ser sufijos
+    const shortSigs = uniqueSigs.filter(s => s.length >= 4 && s.length <= 6);
+
+    for (const short of shortSigs) {
+        for (const other of uniqueSigs) {
+            if (short === other) continue; // Ya unidos por exactitud
+            
+            // Si 'other' termina con 'short' (ej: 100008313 termina en 8313)
+            if (other.length > short.length && other.endsWith(short)) {
+                const shortIds = bySig[short];
+                const otherIds = bySig[other];
+                if (shortIds?.length && otherIds?.length) {
+                    union(shortIds[0], otherIds[0]);
+                }
+            }
+        }
+    }
+
+    // 5. Recolectar Grupos Finales
+    const groupsMap: Record<string, Invoice[]> = {};
+    invoiceData.forEach(d => {
+        const root = find(d.id);
+        if (!groupsMap[root]) groupsMap[root] = [];
+        groupsMap[root].push(d.inv);
+    });
+
+    // 6. Clasificar Grupos (Exactos vs Conflicto)
     const exactGroups: DuplicateInvoiceGroup[] = [];
     const numberGroups: DuplicateInvoiceGroup[] = [];
 
-    // 1. Group by Exact Matches (Num + Client + Amount + Date)
-    const byExactKey = invoices.reduce((acc, inv) => {
-      const normNum = getNormalizedInvoiceNumber(inv);
-      if (!normNum) return acc;
-      const opp = opportunitiesMap[inv.opportunityId];
-      const clientId = opp?.clientId || 'unknown';
-      const date = inv.date ? inv.date.split('T')[0] : 'nodate';
-      const amount = inv.amount.toFixed(2);
-      
-      const key = `${normNum}|${clientId}|${date}|${amount}`;
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(inv);
-      return acc;
-    }, {} as Record<string, Invoice[]>);
+    Object.values(groupsMap).forEach(groupInvoices => {
+        if (groupInvoices.length < 2) return;
 
-    Object.entries(byExactKey).forEach(([key, items]) => {
-      if (items.length > 1) {
-        exactGroups.push({
-          key,
-          label: `Factura #${items[0].invoiceNumber}`,
-          invoices: items,
-          hasCreditNote: items.some(isCreditNoteRelated),
-          type: 'exact',
-        });
-      }
+        // Criterio de identidad exacta: Cliente + Fecha + Monto
+        const getIdentity = (inv: Invoice) => {
+             const opp = opportunitiesMap[inv.opportunityId];
+             const clientId = opp?.clientId || 'unknown';
+             const date = inv.date ? inv.date.split('T')[0] : 'nodate';
+             const amount = Math.abs(inv.amount).toFixed(2);
+             return `${clientId}|${date}|${amount}`;
+        };
+
+        const firstIdentity = getIdentity(groupInvoices[0]);
+        const allIdentical = groupInvoices.every(inv => getIdentity(inv) === firstIdentity);
+
+        // Ordenar para mostrar primero los números más completos/largos (mejor UX)
+        groupInvoices.sort((a, b) => (b.invoiceNumber || '').length - (a.invoiceNumber || '').length);
+
+        const groupObj: DuplicateInvoiceGroup = {
+            key: groupInvoices[0].id,
+            label: `Factura ${groupInvoices[0].invoiceNumber}`, 
+            invoices: groupInvoices,
+            hasCreditNote: groupInvoices.some(isCreditNoteRelated),
+            type: allIdentical ? 'exact' : 'number'
+        };
+
+        if (allIdentical) exactGroups.push(groupObj);
+        else numberGroups.push(groupObj);
     });
 
-    // 2. Group by Number Collisions (Num only)
-    const byNumKey = invoices.reduce((acc, inv) => {
-      const normNum = getNormalizedInvoiceNumber(inv);
-      if (!normNum) return acc;
-      if (!acc[normNum]) acc[normNum] = [];
-      acc[normNum].push(inv);
-      return acc;
-    }, {} as Record<string, Invoice[]>);
-
-    Object.entries(byNumKey).forEach(([key, items]) => {
-      if (items.length > 1) {
-        // Only include if it's NOT just a single exact group disguised as a number group.
-        // We check if all items in this number group belong to the SAME exact group.
-        const firstExactKey = `${key}|${opportunitiesMap[items[0].opportunityId]?.clientId || 'unknown'}|${items[0].date?.split('T')[0] || 'nodate'}|${items[0].amount.toFixed(2)}`;
-        const allMatchFirst = items.every(inv => {
-           const thisKey = `${key}|${opportunitiesMap[inv.opportunityId]?.clientId || 'unknown'}|${inv.date?.split('T')[0] || 'nodate'}|${inv.amount.toFixed(2)}`;
-           return thisKey === firstExactKey;
-        });
-
-        // If not all items are identical (meaning there is conflict), add to numberGroups.
-        if (!allMatchFirst) {
-             numberGroups.push({
-                key,
-                label: `Colisión #${items[0].invoiceNumber}`,
-                invoices: items,
-                hasCreditNote: items.some(isCreditNoteRelated),
-                type: 'number',
-            });
-        }
-      }
-    });
+    // Ordenar grupos por etiqueta
+    exactGroups.sort((a, b) => a.label.localeCompare(b.label));
+    numberGroups.sort((a, b) => a.label.localeCompare(b.label));
 
     return { exactDuplicateGroups: exactGroups, numberDuplicateGroups: numberGroups };
+
   }, [invoices, opportunitiesMap, isCreditNoteRelated]);
 
   const totalDuplicateInvoices = useMemo(
