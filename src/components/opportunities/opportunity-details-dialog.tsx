@@ -29,7 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity } from '@/lib/firebase-service';
+import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices } from '@/lib/firebase-service';
 import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
@@ -69,7 +69,7 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     stage: 'Nuevo',
     observaciones: '',
     closeDate: new Date().toISOString().split('T')[0],
-    createdAt: new Date().toISOString(), // This will be overwritten by serverTimestamp
+    createdAt: new Date().toISOString(), 
     clientName: client?.name || '',
     clientId: client?.id || '',
     bonificacionDetalle: '',
@@ -403,48 +403,50 @@ export function OpportunityDetailsDialog({
   const handleSaveNewInvoice = async () => {
     if (!opportunity || !userInfo) return;
     
-    // 1. Sanear entrada (solo dígitos)
+    // 1. Sanear entrada
     const inputRaw = sanitizeInvoiceNumber(newInvoiceRow.number);
     
-    // Validaciones básicas
     if (!inputRaw || !newInvoiceRow.amount || Number(newInvoiceRow.amount) <= 0) {
       toast({ title: 'Datos de factura incompletos', description: 'Número de factura y monto son requeridos.', variant: 'destructive'});
       return;
     }
 
-    // 2. Lógica de comparación de sufijos (4-6 dígitos)
-    const getSignificant = (s: string) => s.replace(/^0+/, '');
-    const inputSignificant = getSignificant(inputRaw);
-    // Definimos "corto" como 4, 5 o 6 dígitos significativos
-    const isInputShort = inputSignificant.length >= 4 && inputSignificant.length <= 6;
-
-    const hasDuplicate = invoices.some(inv => {
-        const existingRaw = sanitizeInvoiceNumber(inv.invoiceNumber || '');
-        const existingSignificant = getSignificant(existingRaw);
-        const isExistingShort = existingSignificant.length >= 4 && existingSignificant.length <= 6;
-
-        // Coincidencia exacta
-        if (inputRaw === existingRaw) return true;
-        
-        // Input es corto, Existente es largo -> Chequear si Existente termina con Input
-        if (isInputShort && existingRaw.length > inputRaw.length) {
-             if (existingRaw.endsWith(inputRaw) || existingRaw.endsWith(inputSignificant)) return true;
-        }
-        
-        // Existente es corto, Input es largo -> Chequear si Input termina con Existente
-        if (isExistingShort && inputRaw.length > existingRaw.length) {
-             if (inputRaw.endsWith(existingRaw) || inputRaw.endsWith(existingSignificant)) return true;
-        }
-        return false;
-    });
-
-    if (hasDuplicate) {
-        toast({ title: `Factura duplicada #${newInvoiceRow.number}`, description: 'El número coincide con una factura existente (o sus dígitos finales).', variant: 'destructive' });
-        return;
-    }
-
     setIsSavingInvoice(true);
+
     try {
+        // 2. Obtener TODAS las facturas del sistema para validar globalmente
+        const allExistingInvoices = await getInvoices();
+
+        // 3. Lógica de comparación de sufijos (4-6 dígitos)
+        const getSignificant = (s: string) => s.replace(/^0+/, '');
+        const inputSignificant = getSignificant(inputRaw);
+        const isInputShort = inputSignificant.length >= 4 && inputSignificant.length <= 6;
+
+        const hasDuplicate = allExistingInvoices.some(inv => {
+            const existingRaw = sanitizeInvoiceNumber(inv.invoiceNumber || '');
+            const existingSignificant = getSignificant(existingRaw);
+            const isExistingShort = existingSignificant.length >= 4 && existingSignificant.length <= 6;
+
+            // Coincidencia exacta
+            if (inputRaw === existingRaw) return true;
+            
+            // Input es corto (4-6), Existente es largo -> Chequear si Existente termina con Input
+            if (isInputShort && existingRaw.length > inputRaw.length) {
+                if (existingRaw.endsWith(inputRaw) || existingRaw.endsWith(inputSignificant)) return true;
+            }
+            
+            // Existente es corto (4-6), Input es largo -> Chequear si Input termina con Existente
+            if (isExistingShort && inputRaw.length > existingRaw.length) {
+                if (inputRaw.endsWith(existingRaw) || inputRaw.endsWith(existingSignificant)) return true;
+            }
+            return false;
+        });
+
+        if (hasDuplicate) {
+            toast({ title: `Factura duplicada #${newInvoiceRow.number}`, description: 'El número coincide con una factura existente en el sistema (posiblemente de otro cliente).', variant: 'destructive' });
+            return;
+        }
+
         const newInvoice: Omit<Invoice, 'id'> = {
             opportunityId: opportunity.id,
             invoiceNumber: inputRaw,
