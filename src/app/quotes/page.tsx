@@ -18,19 +18,22 @@ import { Badge } from '@/components/ui/badge';
 type QuoteLine = {
   id: string;
   programId: string;
-  element: keyof ProgramRates;
+  element: keyof ProgramRates | 'custom';
   seconds: number;
-  quantity: number; // Ahora representa "Repeticiones"
-  days: number;     // Nuevo campo "Días"
+  quantity: number;
+  days: number;
+  customName?: string;
+  customUnitValue?: number;
 };
 
-const elementOptions: { key: keyof ProgramRates; label: string; requiresSeconds?: boolean }[] = [
+const elementOptions: { key: keyof ProgramRates | 'custom'; label: string; requiresSeconds?: boolean }[] = [
   { key: 'spotRadio', label: 'Spot Radio (seg)', requiresSeconds: true },
   { key: 'spotTv', label: 'Spot TV (seg)', requiresSeconds: true },
   { key: 'pnt', label: 'PNT' },
   { key: 'pntMasBarrida', label: 'PNT + Barrida TV' },
   { key: 'auspicio', label: 'Auspicio' },
   { key: 'notaComercial', label: 'Nota Comercial' },
+  { key: 'custom', label: 'Ítem Personalizado' },
 ];
 
 const formatCurrency = (value: number) =>
@@ -48,8 +51,8 @@ const createLine = (programId?: string): QuoteLine => ({
   programId: programId || '',
   element: 'spotRadio',
   seconds: 30,
-  quantity: 1, // Repeticiones por defecto
-  days: 1,     // Días por defecto
+  quantity: 1, 
+  days: 1,
 });
 
 export default function QuotesPage() {
@@ -88,17 +91,29 @@ export default function QuotesPage() {
 
   const resolvedLines = useMemo(() => {
     return lines.map((line) => {
+      const isCustom = line.element === 'custom';
       const program = programs.find((p) => p.id === line.programId) || programs[0];
       const elementMeta = elementOptions.find((opt) => opt.key === line.element) || elementOptions[0];
-      const baseRate = program?.rates?.[line.element] ?? 0;
+      
+      let baseRate = 0;
+      if (isCustom) {
+          baseRate = line.customUnitValue || 0;
+      } else {
+          // @ts-ignore - element is keyof ProgramRates when not custom
+          baseRate = program?.rates?.[line.element] ?? 0;
+      }
       
       const safeSeconds = elementMeta.requiresSeconds ? Math.max(line.seconds || 0, 1) : 1;
-      const safeQuantity = Math.max(line.quantity || 0, 1); // Repeticiones
-      const safeDays = Math.max(line.days || 0, 1);         // Días
+      const safeQuantity = Math.max(line.quantity || 0, 1);
+      const safeDays = Math.max(line.days || 0, 1); 
 
-      const unitValue = elementMeta.requiresSeconds ? baseRate * safeSeconds : baseRate;
+      let unitValue = 0;
+      if (isCustom) {
+          unitValue = baseRate;
+      } else {
+          unitValue = elementMeta.requiresSeconds ? baseRate * safeSeconds : baseRate;
+      }
       
-      // Nuevo cálculo: Valor Unitario * Repeticiones * Días
       const total = unitValue * safeQuantity * safeDays;
 
       return {
@@ -111,6 +126,7 @@ export default function QuotesPage() {
         safeDays,
         unitValue,
         total,
+        isCustom
       };
     });
   }, [lines, programs]);
@@ -142,12 +158,17 @@ export default function QuotesPage() {
 
   const copySummary = async () => {
     const summaryLines = resolvedLines.map((line, index) => {
-      const programName = line.program?.name || 'Programa sin nombre';
-      const elementLabel = line.elementMeta.label;
-      const secondsPart = line.elementMeta.requiresSeconds ? ` · ${line.safeSeconds} seg` : '';
+      let itemName = '';
+      if (line.isCustom) {
+          itemName = line.customName || 'Ítem Personalizado';
+      } else {
+          const programName = line.program?.name || 'Programa sin nombre';
+          const elementLabel = line.elementMeta.label;
+          const secondsPart = line.elementMeta.requiresSeconds ? ` · ${line.safeSeconds} seg` : '';
+          itemName = `${programName} - ${elementLabel}${secondsPart}`;
+      }
       
-      // Actualizado para reflejar Repeticiones y Días en el resumen
-      return `${index + 1}. ${programName} - ${elementLabel}${secondsPart} | ${
+      return `${index + 1}. ${itemName} | ${
         line.safeQuantity
       } rep. x ${line.safeDays} días = ${formatCurrency(line.total)}`;
     });
@@ -237,7 +258,7 @@ export default function QuotesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[200px]">Programa</TableHead>
+                  <TableHead className="min-w-[200px]">Programa / Nombre</TableHead>
                   <TableHead className="min-w-[180px]">Elemento</TableHead>
                   <TableHead className="w-[100px] text-right">Segundos</TableHead>
                   <TableHead className="w-[110px] text-right">Repeticiones</TableHead>
@@ -254,28 +275,36 @@ export default function QuotesPage() {
                   return (
                     <TableRow key={line.id}>
                       <TableCell>
-                        <Select
-                          value={line.programId}
-                          onValueChange={(value) => updateLine(line.id, { programId: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar programa" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {programs.map((program) => (
-                              <SelectItem key={program.id} value={program.id}>
-                                {program.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        {line.isCustom ? (
+                             <Input
+                                placeholder="Nombre del ítem"
+                                value={line.customName || ''}
+                                onChange={(e) => updateLine(line.id, { customName: e.target.value })}
+                             />
+                        ) : (
+                            <Select
+                              value={line.programId}
+                              onValueChange={(value) => updateLine(line.id, { programId: value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar programa" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {programs.map((program) => (
+                                  <SelectItem key={program.id} value={program.id}>
+                                    {program.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Select
                           value={line.element}
                           onValueChange={(value) =>
                             updateLine(line.id, {
-                              element: value as keyof ProgramRates,
+                              element: value as keyof ProgramRates | 'custom',
                               seconds: elementOptions.find((opt) => opt.key === value)?.requiresSeconds
                                 ? line.seconds || 30
                                 : 1,
@@ -333,10 +362,16 @@ export default function QuotesPage() {
                       </TableCell>
 
                       <TableCell className="text-right">
-                        {hasRate ? (
-                          formatCurrency(line.baseRate)
+                        {line.isCustom ? (
+                             <Input
+                                type="number"
+                                placeholder="0.00"
+                                value={line.customUnitValue || ''}
+                                onChange={(e) => updateLine(line.id, { customUnitValue: Number(e.target.value) })}
+                                className="text-right"
+                             />
                         ) : (
-                          <span className="text-xs text-muted-foreground">Sin tarifa</span>
+                             hasRate ? formatCurrency(line.baseRate) : <span className="text-xs text-muted-foreground">Sin tarifa</span>
                         )}
                       </TableCell>
                       <TableCell className="text-right">{formatCurrency(line.unitValue)}</TableCell>
