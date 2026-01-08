@@ -170,6 +170,7 @@ export default function InvoiceUploadPage() {
     setIsSaving(true);
     let successCount = 0;
     
+    // Conjunto para evitar duplicados dentro del mismo lote de carga actual
     const batchNumbers = new Set<string>();
 
     for (const row of validRows) {
@@ -177,9 +178,9 @@ export default function InvoiceUploadPage() {
             const client = clients.find(c => c.id === row.clientId);
             if (!client) throw new Error(`Cliente no encontrado para la fila con factura ${row.invoiceNumber}`);
 
-            const sanitizedNumber = sanitizeInvoiceNumber(row.invoiceNumber);
+            const inputRaw = sanitizeInvoiceNumber(row.invoiceNumber); // Solo dígitos
             
-            if (!sanitizedNumber) {
+            if (!inputRaw) {
                 toast({
                     title: 'Número de factura inválido',
                     description: 'Solo se permiten dígitos en el número de factura.',
@@ -188,33 +189,46 @@ export default function InvoiceUploadPage() {
                 continue;
             }
 
-            // --- CHECK FOR DUPLICATES / CONFLICTS ---
+            // --- LÓGICA DE DUPLICADOS ---
             let duplicateType: 'none' | 'identical' | 'conflict' = 'none';
             let conflictDetails = '';
 
-            const cleanInput = sanitizedNumber;
-            // Para la lógica de "4 o 5 dígitos", normalizamos quitando ceros a la izquierda
-            const normInput = cleanInput.replace(/^0+/, ''); 
+            // Helper para identificar números cortos (4 o 5 dígitos)
+            // Nota: Usamos el inputRaw tal cual (con ceros si los escribió) para longitud, 
+            // pero para comparación de sufijo es mejor asegurar consistencia.
+            // Si el usuario escribe 00008313 (8 dígitos) vs 8313 (4 dígitos), técnicamente es el mismo número.
+            // Vamos a comparar basándonos en si uno TERMINA con el otro cuando uno es "corto" (<= 5 dígitos significativos).
+            
+            // Función para obtener el valor "corto" sin ceros a la izquierda para evaluar longitud real
+            const getSignificant = (s: string) => s.replace(/^0+/, '');
+
+            const inputSignificant = getSignificant(inputRaw);
+            const isInputShort = inputSignificant.length >= 4 && inputSignificant.length <= 5;
 
             for (const existing of existingInvoices) {
-                const cleanExisting = sanitizeInvoiceNumber(existing.invoiceNumber);
-                const normExisting = cleanExisting.replace(/^0+/, '');
+                const existingRaw = sanitizeInvoiceNumber(existing.invoiceNumber);
+                const existingSignificant = getSignificant(existingRaw);
+                const isExistingShort = existingSignificant.length >= 4 && existingSignificant.length <= 5;
                 
                 let numberMatch = false;
 
-                // 1. Coincidencia exacta de números normalizados (ej: 001 vs 1)
-                if (normInput === normExisting) {
+                // 1. Coincidencia exacta (todo el string de dígitos)
+                if (inputRaw === existingRaw) {
                     numberMatch = true;
                 }
-                // 2. Input es corto (4-5 dígitos) y Existing es largo -> Existing termina con Input
-                // Ej: Input 8313, Existing 0000100008313.
-                else if (normInput.length >= 4 && normInput.length <= 5 && normExisting.length > normInput.length) {
-                    if (cleanExisting.endsWith(normInput)) numberMatch = true;
+                // 2. Si el INPUT es corto (4-5 dígitos reales) y el existente es más largo, chequear si existente TERMINA con inputRaw (o inputSignificant)
+                // Ejemplo: Input "8313", Existente "000100008313". 
+                else if (isInputShort && existingRaw.length > inputRaw.length) {
+                    if (existingRaw.endsWith(inputRaw) || existingRaw.endsWith(inputSignificant)) {
+                        numberMatch = true;
+                    }
                 }
-                // 3. Existing es corto (4-5 dígitos) y Input es largo -> Input termina con Existing
-                // Ej: Input 0000100008313, Existing 8313.
-                else if (normExisting.length >= 4 && normExisting.length <= 5 && normInput.length > normExisting.length) {
-                    if (cleanInput.endsWith(normExisting)) numberMatch = true;
+                // 3. Si el EXISTENTE es corto (4-5 dígitos reales) y el input es más largo, chequear si input TERMINA con existingRaw
+                // Ejemplo: Input "000100008313", Existente "8313".
+                else if (isExistingShort && inputRaw.length > existingRaw.length) {
+                    if (inputRaw.endsWith(existingRaw) || inputRaw.endsWith(existingSignificant)) {
+                        numberMatch = true;
+                    }
                 }
 
                 if (numberMatch) {
@@ -227,22 +241,19 @@ export default function InvoiceUploadPage() {
 
                      if (clientMatch && dateMatch && amountMatch) {
                          duplicateType = 'identical';
-                         break;
+                         break; // Bloqueo total
                      } else {
                          duplicateType = 'conflict';
                          conflictDetails = `Coincide con FC existente #${existing.invoiceNumber} (Cliente: ${existingOpp?.clientName || 'Desconocido'}, Monto: $${existing.amount})`;
+                         // No hacemos break aquí por si encontramos un idéntico más adelante
                      }
                 }
             }
             
-            // Check against current batch 
-            if (duplicateType === 'none') {
-                const normBatchCheck = batchNumbers.has(normInput); // Simple check on normalized
-                // A better batch check would replicate the full logic, but exact norm match catches most user errors in one session
-                if (normBatchCheck) {
-                    duplicateType = 'conflict';
-                    conflictDetails = 'El número se repite dentro de este mismo lote de carga.';
-                }
+            // Verificación dentro del mismo lote (batch)
+            if (duplicateType === 'none' && batchNumbers.has(inputRaw)) {
+                duplicateType = 'conflict';
+                conflictDetails = 'El número se repite dentro de este mismo lote de carga.';
             }
 
             if (duplicateType === 'identical') {
@@ -257,20 +268,20 @@ export default function InvoiceUploadPage() {
             if (duplicateType === 'conflict') {
                 toast({
                    title: `Conflicto de Numeración: #${row.invoiceNumber}`,
-                   description: conflictDetails || 'El número coincide con otra factura existente.',
+                   description: conflictDetails || 'El número coincide con otra factura existente (regla de 4/5 dígitos).',
                    variant: 'destructive' 
                });
                continue; 
            }
 
-            // --- END CHECKS ---
+            // --- FIN VERIFICACIONES ---
 
-            batchNumbers.add(normInput);
+            batchNumbers.add(inputRaw);
 
             await createInvoice(
                 {
                     opportunityId: row.opportunityId,
-                    invoiceNumber: sanitizedNumber,
+                    invoiceNumber: inputRaw,
                     amount: row.amount,
                     date: row.date,
                     status: 'Generada',
@@ -286,7 +297,7 @@ export default function InvoiceUploadPage() {
               {
                 id: `temp-${Date.now()}-${Math.random()}`,
                 opportunityId: row.opportunityId,
-                invoiceNumber: sanitizedNumber,
+                invoiceNumber: inputRaw,
                 amount: row.amount,
                 date: row.date,
                 status: 'Generada',
