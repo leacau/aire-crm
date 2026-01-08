@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -404,25 +402,52 @@ export function OpportunityDetailsDialog({
 
   const handleSaveNewInvoice = async () => {
     if (!opportunity || !userInfo) return;
-    const sanitizedNumber = sanitizeInvoiceNumber(newInvoiceRow.number);
-    const normalizedNumber = getNormalizedInvoiceNumber({ invoiceNumber: sanitizedNumber });
-
-    if (!sanitizedNumber || !normalizedNumber || !newInvoiceRow.amount || Number(newInvoiceRow.amount) <= 0) {
+    
+    // 1. Sanear entrada (solo dígitos)
+    const inputRaw = sanitizeInvoiceNumber(newInvoiceRow.number);
+    
+    // Validaciones básicas
+    if (!inputRaw || !newInvoiceRow.amount || Number(newInvoiceRow.amount) <= 0) {
       toast({ title: 'Datos de factura incompletos', description: 'Número de factura y monto son requeridos.', variant: 'destructive'});
       return;
     }
 
-    const existingNumbers = new Set(invoices.map(inv => getNormalizedInvoiceNumber(inv)));
-    if (existingNumbers.has(normalizedNumber)) {
-      toast({ title: `Factura duplicada #${newInvoiceRow.number}`, description: 'Ya existe una factura con ese número.', variant: 'destructive' });
-      return;
+    // 2. Lógica de comparación de sufijos (4-6 dígitos)
+    const getSignificant = (s: string) => s.replace(/^0+/, '');
+    const inputSignificant = getSignificant(inputRaw);
+    // Definimos "corto" como 4, 5 o 6 dígitos significativos
+    const isInputShort = inputSignificant.length >= 4 && inputSignificant.length <= 6;
+
+    const hasDuplicate = invoices.some(inv => {
+        const existingRaw = sanitizeInvoiceNumber(inv.invoiceNumber || '');
+        const existingSignificant = getSignificant(existingRaw);
+        const isExistingShort = existingSignificant.length >= 4 && existingSignificant.length <= 6;
+
+        // Coincidencia exacta
+        if (inputRaw === existingRaw) return true;
+        
+        // Input es corto, Existente es largo -> Chequear si Existente termina con Input
+        if (isInputShort && existingRaw.length > inputRaw.length) {
+             if (existingRaw.endsWith(inputRaw) || existingRaw.endsWith(inputSignificant)) return true;
+        }
+        
+        // Existente es corto, Input es largo -> Chequear si Input termina con Existente
+        if (isExistingShort && inputRaw.length > existingRaw.length) {
+             if (inputRaw.endsWith(existingRaw) || inputRaw.endsWith(existingSignificant)) return true;
+        }
+        return false;
+    });
+
+    if (hasDuplicate) {
+        toast({ title: `Factura duplicada #${newInvoiceRow.number}`, description: 'El número coincide con una factura existente (o sus dígitos finales).', variant: 'destructive' });
+        return;
     }
 
     setIsSavingInvoice(true);
     try {
         const newInvoice: Omit<Invoice, 'id'> = {
             opportunityId: opportunity.id,
-            invoiceNumber: sanitizedNumber,
+            invoiceNumber: inputRaw,
             amount: Number(newInvoiceRow.amount),
             date: newInvoiceRow.date,
             status: 'Generada',
