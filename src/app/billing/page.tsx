@@ -808,15 +808,15 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     const client = clientsMap[opp.clientId];
     if (!client) return;
 
-    const sanitizedNumber = sanitizeInvoiceNumber(String(invoiceDetails.invoiceNumber));
+    const inputRaw = sanitizeInvoiceNumber(String(invoiceDetails.invoiceNumber));
     
-    if (!sanitizedNumber) {
+    if (!inputRaw) {
       toast({ title: 'Número de factura inválido', description: 'Solo se permiten dígitos en el número de factura.', variant: 'destructive' });
       return;
     }
 
     const getSignificant = (s: string) => s.replace(/^0+/, '');
-    const inputSignificant = getSignificant(sanitizedNumber);
+    const inputSignificant = getSignificant(inputRaw);
     const isInputShort = inputSignificant.length >= 4 && inputSignificant.length <= 6;
 
     const hasDuplicate = invoices.some(inv => {
@@ -824,28 +824,27 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         const existingSignificant = getSignificant(existingRaw);
         const isExistingShort = existingSignificant.length >= 4 && existingSignificant.length <= 6;
 
-        if (sanitizedNumber === existingRaw) return true;
+        if (inputRaw === existingRaw) return true;
         
-        // Check Suffix logic bidirectionally
-        if (isInputShort && existingRaw.length > sanitizedNumber.length) {
-             if (existingRaw.endsWith(sanitizedNumber) || existingRaw.endsWith(inputSignificant)) return true;
+        if (isInputShort && existingRaw.length > inputRaw.length) {
+             if (existingRaw.endsWith(inputRaw) || existingRaw.endsWith(inputSignificant)) return true;
         }
         
-        if (isExistingShort && sanitizedNumber.length > existingRaw.length) {
-             if (sanitizedNumber.endsWith(existingRaw) || sanitizedNumber.endsWith(existingSignificant)) return true;
+        if (isExistingShort && inputRaw.length > existingRaw.length) {
+             if (inputRaw.endsWith(existingRaw) || inputRaw.endsWith(existingSignificant)) return true;
         }
         return false;
     });
 
     if (hasDuplicate) {
-        toast({ title: `Factura duplicada #${invoiceDetails.invoiceNumber}`, description: 'El número coincide con una factura existente (o sus dígitos finales).', variant: 'destructive' });
+        toast({ title: `Factura duplicada #${invoiceDetails.invoiceNumber}`, description: 'El número coincide con una factura existente en el sistema (posiblemente de otro cliente).', variant: 'destructive' });
         return;
     }
 
     try {
         const newInvoice: Omit<Invoice, 'id'> = {
             opportunityId: realOppId,
-            invoiceNumber: sanitizedNumber,
+            invoiceNumber: inputRaw,
             amount: Number(invoiceDetails.amount),
             date: invoiceDetails.date,
             status: 'Generada',
