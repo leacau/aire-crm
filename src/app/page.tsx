@@ -10,23 +10,18 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
-  Activity,
   CircleDollarSign,
   Users,
   TrendingUp,
-  PlusCircle,
-  Edit,
-  ArrowRight,
   AlertTriangle,
   CalendarCheck,
   CalendarClock,
   CheckCircle,
   Briefcase,
   TrendingDown,
-  DollarSign,
   Clock
 } from 'lucide-react';
-import type { Opportunity, Client, ActivityLog, ClientActivity, User, Invoice } from '@/lib/types';
+import type { Opportunity, Client, ClientActivity, User, Invoice, PaymentEntry } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
   getAllOpportunities,
@@ -35,6 +30,7 @@ import {
   updateClientActivity,
   getAllUsers,
   getInvoices,
+  getPaymentEntries,
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
@@ -177,6 +173,7 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [tasks, setTasks] = useState<ClientActivity[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -195,18 +192,18 @@ export default function DashboardPage() {
     };
   }, [selectedDate]);
 
-  // Removed redirect for 'Asesor' to allow them to view the dashboard
 
   useEffect(() => {
     const fetchData = async () => {
       if (!userInfo) return;
       setLoadingData(true);
       try {
-        const [allOpps, allClients, allTasks, allInvoices, allUsers, allAdvisors] = await Promise.all([
+        const [allOpps, allClients, allTasks, allInvoices, allPayments, allUsers, allAdvisors] = await Promise.all([
             getAllOpportunities(userInfo, isBoss),
             getClients(),
             getAllClientActivities(),
             getInvoices(),
+            getPaymentEntries(),
             getAllUsers(),
             getAllUsers('Asesor'),
         ]);
@@ -215,6 +212,7 @@ export default function DashboardPage() {
         setClients(allClients);
         setTasks(allTasks);
         setInvoices(allInvoices);
+        setPaymentEntries(allPayments);
         setUsers(allUsers);
         setAdvisors(allAdvisors);
 
@@ -235,13 +233,15 @@ export default function DashboardPage() {
     userClients, 
     userTasks,
     userInvoices,
+    userPayments
   } = useMemo(() => {
-    if (!userInfo || !userInfo.id) return { userOpportunities: [], userClients: [], userActivities: [], userTasks: [], userInvoices: [] };
+    if (!userInfo || !userInfo.id) return { userOpportunities: [], userClients: [], userTasks: [], userInvoices: [], userPayments: [] };
     
     let filteredOpps = opportunities;
     let filteredClients = clients;
     let filteredTasks = tasks.filter(t => t.isTask);
     let filteredInvoices = invoices;
+    let filteredPayments = paymentEntries;
 
     if (!isBoss) {
       const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
@@ -250,25 +250,27 @@ export default function DashboardPage() {
       filteredTasks = tasks.filter(t => t.isTask && (t.userId === userInfo.id || (t.clientId && userClientIds.has(t.clientId))));
       const oppIds = new Set(filteredOpps.map(o => o.id));
       filteredInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
+      filteredPayments = paymentEntries.filter(p => p.advisorId === userInfo.id);
       
     } else if (selectedAdvisor !== 'all') {
       const advisorClientIds = new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
       filteredClients = clients.filter(c => advisorClientIds.has(c.id));
       filteredOpps = opportunities.filter(opp => advisorClientIds.has(opp.clientId));
       filteredTasks = tasks.filter(t => t.isTask && (t.userId === selectedAdvisor || (t.clientId && advisorClientIds.has(t.clientId))));
-       const oppIds = new Set(filteredOpps.map(o => o.id));
+      const oppIds = new Set(filteredOpps.map(o => o.id));
       filteredInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
+      filteredPayments = paymentEntries.filter(p => p.advisorId === selectedAdvisor);
     }
-
 
     return {
         userOpportunities: filteredOpps,
         userClients: filteredClients,
         userTasks: filteredTasks,
-        userInvoices: filteredInvoices
+        userInvoices: filteredInvoices,
+        userPayments: filteredPayments
     };
 
-  }, [userInfo, isBoss, selectedAdvisor, opportunities, clients, tasks, invoices]);
+  }, [userInfo, isBoss, selectedAdvisor, opportunities, clients, tasks, invoices, paymentEntries]);
 
 
   const today = startOfToday();
@@ -460,15 +462,19 @@ export default function DashboardPage() {
 
   const totalClients = userClients.length;
 
-  // --- NEW VISUALIZATION LOGIC ---
+  // --- VISUALIZATION LOGIC ---
 
   const showManagementView = userInfo?.role === 'Admin' || (isBoss && userInfo?.area === 'Comercial');
   const now = new Date();
   
   // 1. Billing Evolution Data
+  // "no debe contabilizar el mes en curso, debe mostrar el mes ultimo pasado y los 11 anteriores"
+  // Range: [Start of 12 months ago, End of last month]
+  const startOfLastMonth = startOfMonth(subMonths(now, 1));
+  
   const last12Months = eachMonthOfInterval({
-      start: subMonths(startOfMonth(now), 11),
-      end: endOfMonth(now)
+      start: subMonths(startOfLastMonth, 11), // 11 months before last month = 12 months total
+      end: endOfMonth(subMonths(now, 1))
   });
 
   const getBillingForMonth = (date: Date, invoiceList: Invoice[]) => {
@@ -478,11 +484,7 @@ export default function DashboardPage() {
       
       return invoiceList
         .filter(inv => {
-             // For Evolution, we generally want to see what was "billed" (issued) in that month.
-             // Using issue date 'date' for consistency with "Sales Evolution".
-             // NOTE: Dashboard uses "Paid + To Collect". To be consistent with dashboard numbers, 
-             // we should stick to "Billing" definition = Amount of Invoices ISSUED in that month.
-             // This avoids the confusing "moving target" of payment dates.
+             // "Debe sumar el total de facturas cargadas a clientes del vendedor de acuerdo a la fecha de emisión"
              return inv.date && dateFilter(inv.date, range) && isValidInvoice(inv);
         })
         .reduce((acc, inv) => acc + inv.amount, 0);
@@ -496,12 +498,7 @@ export default function DashboardPage() {
   }));
 
   // Prepare data for Table (Management View)
-  // Rows: Advisors, Columns: Last few months (to save space, let's show last 6 months + Total Year)
-  // Actually, standard evolution table is usually months. 
-  // We'll show: Advisor | Total Last 12M | Last Month | Current Month | ...
-  // Or better: Advisor | Current Month | Prev Month | Prev-1 | Prev-2 | Total Year
-  
-  const billingTableColumns = [...last12Months].reverse().slice(0, 6); // Last 6 months
+  const billingTableColumns = [...last12Months].reverse().slice(0, 6); // Last 6 months for columns
   const billingTableData = advisors.map(advisor => {
       // Get invoices for this advisor
       const advisorClientIds = new Set(clients.filter(c => c.ownerId === advisor.id).map(c => c.id));
@@ -518,7 +515,6 @@ export default function DashboardPage() {
       last12Months.forEach(month => {
           const val = getBillingForMonth(month, advisorInvoices);
           total += val;
-          // Only add to rowData if it's one of the columns we show
           if (billingTableColumns.some(c => c.getTime() === month.getTime())) {
               rowData[format(month, 'MMM yy', { locale: es })] = val;
           }
@@ -529,14 +525,14 @@ export default function DashboardPage() {
 
 
   // 2. Mora Data
-  // Buckets: 0, 1-30, 31-60, 61-90, 91+
-  const getDaysLate = (inv: Invoice) => {
-      if (!inv.dueDate && !inv.date) return 0;
-      const due = inv.dueDate ? parseISO(inv.dueDate) : parseISO(inv.date!);
+  // "comprobantes cargados en la sección Mora para cada vendedor... no Pagado" -> Use PaymentEntry
+  const getDaysLatePayment = (payment: PaymentEntry) => {
+      if (!payment.dueDate) return 0;
+      const due = parseISO(payment.dueDate);
       return differenceInDays(startOfDay(now), startOfDay(due));
   };
 
-  const categorizeMora = (invoiceList: Invoice[]) => {
+  const categorizeMora = (paymentsList: PaymentEntry[]) => {
       const buckets = {
           '0': 0, // Not late or current
           '1-30': 0,
@@ -545,21 +541,23 @@ export default function DashboardPage() {
           '91+': 0
       };
 
-      invoiceList.forEach(inv => {
-          if (inv.status === 'Pagada' || inv.isCreditNote || !isValidInvoice(inv)) return;
-          const days = getDaysLate(inv);
+      paymentsList.forEach(payment => {
+          if (payment.status === 'Pagado') return;
           
-          if (days <= 0) buckets['0'] += inv.amount;
-          else if (days <= 30) buckets['1-30'] += inv.amount;
-          else if (days <= 60) buckets['31-60'] += inv.amount;
-          else if (days <= 90) buckets['61-90'] += inv.amount;
-          else buckets['91+'] += inv.amount;
+          const days = getDaysLatePayment(payment);
+          const amount = payment.amount || 0;
+          
+          if (days <= 0) buckets['0'] += amount;
+          else if (days <= 30) buckets['1-30'] += amount;
+          else if (days <= 60) buckets['31-60'] += amount;
+          else if (days <= 90) buckets['61-90'] += amount;
+          else buckets['91+'] += amount;
       });
       return buckets;
   };
 
   const moraChartData = (() => {
-      const buckets = categorizeMora(userInvoices);
+      const buckets = categorizeMora(userPayments);
       return [
           { name: 'Al día', value: buckets['0'], color: '#22c55e' }, // green
           { name: '1-30 días', value: buckets['1-30'], color: '#eab308' }, // yellow
@@ -570,11 +568,9 @@ export default function DashboardPage() {
   })();
 
   const moraTableData = advisors.map(advisor => {
-      const advisorClientIds = new Set(clients.filter(c => c.ownerId === advisor.id).map(c => c.id));
-      const oppIds = new Set(opportunities.filter(o => advisorClientIds.has(o.clientId)).map(o => o.id));
-      const advisorInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
+      const advisorPayments = paymentEntries.filter(p => p.advisorId === advisor.id);
       
-      const buckets = categorizeMora(advisorInvoices);
+      const buckets = categorizeMora(advisorPayments);
       return {
           advisorName: advisor.name,
           advisorId: advisor.id,
@@ -673,9 +669,9 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6" ref={tasksSectionRef}>
+        <div className="mt-6 flex flex-col gap-6" ref={tasksSectionRef}>
             {/* Tareas */}
-            <Card className="lg:row-span-2 h-full">
+            <Card className="w-full">
                  <CardHeader>
                     <CardTitle>Tareas Pendientes</CardTitle>
                     <CardDescription>
@@ -727,19 +723,19 @@ export default function DashboardPage() {
             </Card>
 
             {/* Evolución de Facturación */}
-            <Card className='flex flex-col'>
+            <Card className='w-full'>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <TrendingUp className="h-5 w-5 text-primary" />
-                        Evolución de Facturación (12 meses)
+                        Evolución de Facturación (12 meses anteriores)
                     </CardTitle>
                     <CardDescription>
                         {showManagementView 
-                            ? "Comparativa de facturación por asesor en los últimos meses." 
-                            : "Tu histórico de facturación en el último año."}
+                            ? "Comparativa de facturación por asesor (excluyendo mes en curso)." 
+                            : "Tu histórico de facturación (excluyendo mes en curso)."}
                     </CardDescription>
                 </CardHeader>
-                <CardContent className='flex-1 min-h-[300px]'>
+                <CardContent className='min-h-[300px]'>
                     {showManagementView ? (
                          <div className="overflow-auto max-h-[400px]">
                             <Table>
@@ -807,7 +803,7 @@ export default function DashboardPage() {
             </Card>
 
             {/* Resumen de Mora */}
-             <Card className='flex flex-col'>
+             <Card className='w-full'>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Clock className="h-5 w-5 text-orange-500" />
@@ -815,11 +811,11 @@ export default function DashboardPage() {
                     </CardTitle>
                     <CardDescription>
                          {showManagementView 
-                            ? "Estado de deuda vencida agrupada por asesor." 
-                            : "Tu cartera de deuda agrupada por días de atraso."}
+                            ? "Estado de deuda vencida agrupada por asesor (Sección Mora, excluyendo Pagados)." 
+                            : "Tu cartera de deuda agrupada por días de atraso (Sección Mora, excluyendo Pagados)."}
                     </CardDescription>
                 </CardHeader>
-                <CardContent className='flex-1 min-h-[300px]'>
+                <CardContent className='min-h-[300px]'>
                     {showManagementView ? (
                         <div className="overflow-auto max-h-[400px]">
                             <Table>
