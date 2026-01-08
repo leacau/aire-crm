@@ -170,7 +170,6 @@ export default function InvoiceUploadPage() {
     setIsSaving(true);
     let successCount = 0;
     
-    // We maintain a set of sanitised numbers added IN THIS BATCH to avoid internal duplicates
     const batchNumbers = new Set<string>();
 
     for (const row of validRows) {
@@ -193,80 +192,80 @@ export default function InvoiceUploadPage() {
             let duplicateType: 'none' | 'identical' | 'conflict' = 'none';
             let conflictDetails = '';
 
-            // Helper to check if a number is "short" (4 or 5 digits)
-            const isShort = (num: string) => num.length >= 4 && num.length <= 5;
+            const cleanInput = sanitizedNumber;
+            // Para la lógica de "4 o 5 dígitos", normalizamos quitando ceros a la izquierda
+            const normInput = cleanInput.replace(/^0+/, ''); 
 
-            // Check against existing invoices in DB
             for (const existing of existingInvoices) {
-                const cleanExistingNumber = sanitizeInvoiceNumber(existing.invoiceNumber);
+                const cleanExisting = sanitizeInvoiceNumber(existing.invoiceNumber);
+                const normExisting = cleanExisting.replace(/^0+/, '');
                 
                 let numberMatch = false;
 
-                // BIDIRECTIONAL CHECK:
-                // 1. Exact match
-                if (cleanExistingNumber === sanitizedNumber) {
+                // 1. Coincidencia exacta de números normalizados (ej: 001 vs 1)
+                if (normInput === normExisting) {
                     numberMatch = true;
                 }
-                // 2. Existing is long, Input is short (suffix match)
-                // Ex: Input 8313 (4 digits) matches Existing 0000100008313
-                else if (isShort(sanitizedNumber) && cleanExistingNumber.length > 5 && cleanExistingNumber.endsWith(sanitizedNumber)) {
-                    numberMatch = true;
+                // 2. Input es corto (4-5 dígitos) y Existing es largo -> Existing termina con Input
+                // Ej: Input 8313, Existing 0000100008313.
+                else if (normInput.length >= 4 && normInput.length <= 5 && normExisting.length > normInput.length) {
+                    if (cleanExisting.endsWith(normInput)) numberMatch = true;
                 }
-                // 3. Existing is short, Input is long (suffix match)
-                // Ex: Input 0000100008313 matches Existing 8313
-                else if (isShort(cleanExistingNumber) && sanitizedNumber.length > 5 && sanitizedNumber.endsWith(cleanExistingNumber)) {
-                    numberMatch = true;
+                // 3. Existing es corto (4-5 dígitos) y Input es largo -> Input termina con Existing
+                // Ej: Input 0000100008313, Existing 8313.
+                else if (normExisting.length >= 4 && normExisting.length <= 5 && normInput.length > normExisting.length) {
+                    if (cleanInput.endsWith(normExisting)) numberMatch = true;
                 }
 
                 if (numberMatch) {
-                     // Retrieve existing client from opportunity map
                      const existingOpp = opportunities.find(o => o.id === existing.opportunityId);
                      const existingClientId = existingOpp?.clientId;
 
                      const clientMatch = existingClientId === row.clientId;
                      const dateMatch = existing.date === row.date;
-                     // Float comparison with small epsilon
                      const amountMatch = Math.abs(existing.amount - row.amount) < 0.1;
 
                      if (clientMatch && dateMatch && amountMatch) {
                          duplicateType = 'identical';
-                         // Identical is the strongest blocking condition, we can stop here.
                          break;
                      } else {
-                         // Found a number match but data differs. Mark as conflict.
                          duplicateType = 'conflict';
                          conflictDetails = `Coincide con FC existente #${existing.invoiceNumber} (Cliente: ${existingOpp?.clientName || 'Desconocido'}, Monto: $${existing.amount})`;
                      }
                 }
             }
             
-            // Check against current batch (simple exact match to avoid submitting same number twice now)
-            if (duplicateType === 'none' && batchNumbers.has(sanitizedNumber)) {
-                duplicateType = 'conflict';
-                conflictDetails = 'El número se repite dentro de este mismo lote de carga.';
+            // Check against current batch 
+            if (duplicateType === 'none') {
+                const normBatchCheck = batchNumbers.has(normInput); // Simple check on normalized
+                // A better batch check would replicate the full logic, but exact norm match catches most user errors in one session
+                if (normBatchCheck) {
+                    duplicateType = 'conflict';
+                    conflictDetails = 'El número se repite dentro de este mismo lote de carga.';
+                }
             }
 
             if (duplicateType === 'identical') {
                  toast({
                     title: `Duplicado Idéntico: #${row.invoiceNumber}`,
-                    description: 'Esta factura ya existe con el mismo cliente, fecha y monto (o es equivalente según regla de 4-5 dígitos).',
+                    description: 'Esta factura ya existe con el mismo cliente, fecha y monto.',
                     variant: 'destructive'
                 });
-                continue; // Skip this row
+                continue; 
             }
 
             if (duplicateType === 'conflict') {
                 toast({
                    title: `Conflicto de Numeración: #${row.invoiceNumber}`,
-                   description: conflictDetails || 'El número coincide con otra factura existente pero los datos difieren.',
+                   description: conflictDetails || 'El número coincide con otra factura existente.',
                    variant: 'destructive' 
                });
-               continue; // Skip this row
+               continue; 
            }
 
             // --- END CHECKS ---
 
-            batchNumbers.add(sanitizedNumber);
+            batchNumbers.add(normInput);
 
             await createInvoice(
                 {
@@ -282,7 +281,6 @@ export default function InvoiceUploadPage() {
                 client.ownerName
             );
             
-            // Add to local state to reflect changes immediately
             setExistingInvoices(prev => [
               ...prev,
               {
