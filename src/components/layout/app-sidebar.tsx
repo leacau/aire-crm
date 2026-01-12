@@ -92,7 +92,6 @@ export function AppSidebar() {
         <div className="flex h-[60px] items-center border-b border-zinc-800 px-6 shrink-0">
           <Link className="flex items-center gap-2 font-semibold text-white" href="/">
             <Logo isInSidebar={true} />
-            <span className="">Aire CRM</span>
           </Link>
         </div>
         <ScrollArea className="flex-1 px-4">
