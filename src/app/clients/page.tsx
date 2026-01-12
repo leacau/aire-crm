@@ -677,14 +677,17 @@ export default function ClientsPage() {
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-2">
            <Checkbox id="my-clients" name="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
            <Label htmlFor="my-clients" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis clientes</Label>
        </div>
-        <Button variant="outline" onClick={() => setShowDuplicates(s => !s)}>
-          <CopyCheck className="mr-2 h-4 w-4" />
-          {showDuplicates ? 'Ver Todos' : 'Buscar Duplicados'}
-        </Button>
+        {/* MODIFICACIÓN: Se envuelve el botón en la condición canManage */}
+        {canManage && (
+          <Button variant="outline" onClick={() => setShowDuplicates(s => !s)}>
+            <CopyCheck className="mr-2 h-4 w-4" />
+            {showDuplicates ? 'Ver Todos' : 'Buscar Duplicados'}
+          </Button>
+        )}
         <Button variant="outline" onClick={handleExport}>
           <FileDown className="mr-2 h-4 w-4" />
           Exportar Excel
