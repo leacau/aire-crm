@@ -224,9 +224,27 @@ export default function ChatPage() {
     }
   };
 
+  // Función para resolver el nombre del remitente
+  const getSenderName = (sender?: { displayName?: string; name?: string; email?: string }) => {
+    if (!sender) return 'Usuario';
+
+    // 1. Si Google Chat ya nos da el nombre para mostrar, lo usamos.
+    if (sender.displayName) return sender.displayName;
+
+    // 2. Si no, intentamos buscar el usuario en nuestra base de datos local usando el email.
+    if (sender.email && users.length > 0) {
+      const localUser = users.find(u => u.email === sender.email);
+      if (localUser && localUser.name) {
+        return localUser.name;
+      }
+    }
+
+    // 3. Fallback: Si no hay email o no se encuentra, usamos el name (users/...) o 'Usuario'
+    return sender.name || 'Usuario';
+  };
+
   const availableSpaces = useMemo(() => chatSpaces.filter(s => !!s.spaceId), [chatSpaces]);
   const selectedSpaceValue = selectedSpace || 'default';
-  const hasManyMessages = messages.length > 10;
 
   const getSpaceLabel = (space: ChatSpaceMapping) => {
       const user = users.find(u => u.id === space.userId);
@@ -327,7 +345,7 @@ export default function ChatPage() {
                 </div>
             )}
             {orderedMessages.map((msg, idx) => {
-              const senderName = msg.sender?.displayName || msg.sender?.name || 'Usuario';
+              const senderName = getSenderName(msg.sender);
               return (
                 <div key={`${msg.createTime}-${idx}`} className="flex flex-col gap-1 rounded-md bg-background p-3 shadow-sm">
                   <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
