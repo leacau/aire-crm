@@ -507,3 +507,31 @@ export type CommercialItem = {
 export type OpportunityAlertsConfig = Partial<Record<OpportunityStage, number>> & {
   prospectVisibilityDays?: number;
 };
+
+// --- Coaching / Seguimiento Semanal ---
+
+export type CoachingItemStatus = 'Pendiente' | 'En Proceso' | 'Completado' | 'Cancelado';
+
+export type CoachingItem = {
+  id: string;
+  entityType: 'client' | 'prospect' | 'opportunity' | 'general';
+  entityId?: string; // ID del cliente/prospecto si aplica
+  entityName: string; // "Coca Cola", "Juan Perez", o "General"
+  action: string; // "Llamar para pedir saldo", "Presentar propuesta"
+  status: CoachingItemStatus;
+  advisorNotes?: string; // La "constancia" que deja el asesor
+  lastUpdate?: string; // Fecha de la última nota del asesor
+};
+
+export type CoachingSession = {
+  id: string;
+  advisorId: string;
+  advisorName: string;
+  managerId: string;
+  managerName: string;
+  date: string; // Fecha de la reunión
+  items: CoachingItem[];
+  generalNotes?: string; // Notas generales de la reunión
+  createdAt: string;
+  status: 'Open' | 'Closed'; // Open: Semana en curso, Closed: Ya revisado
+};
