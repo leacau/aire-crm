@@ -35,7 +35,8 @@ const formatDate = (iso?: string) => {
 
 export default function ChatPage() {
   const { toast } = useToast();
-  const { getGoogleAccessToken } = useAuth();
+  // Se agrega userInfo para identificar al usuario actual por email
+  const { getGoogleAccessToken, userInfo } = useAuth();
   
   // Estados
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -168,6 +169,14 @@ export default function ChatPage() {
     }
   }, [orderedMessages]);
 
+  // Identificar mi propio ID de Google Chat buscando en el historial mis mensajes por email
+  const myChatId = useMemo(() => {
+    if (!userInfo?.email || messages.length === 0) return null;
+    // Buscamos algún mensaje donde el sender tenga mi email
+    const myMsg = messages.find(m => m.sender?.email === userInfo.email);
+    return myMsg?.sender?.name || null;
+  }, [messages, userInfo]);
+
   const handleManualLogin = async () => {
     setIsCheckingAuth(true);
     try {
@@ -224,22 +233,39 @@ export default function ChatPage() {
     }
   };
 
-  // Función para resolver el nombre del remitente
-  const getSenderName = (sender?: { displayName?: string; name?: string; email?: string }) => {
-    if (!sender) return 'Usuario';
+  // Función mejorada para resolver el nombre del remitente
+  const resolveSenderName = (sender?: { displayName?: string; name?: string; email?: string }) => {
+    if (!sender) return 'Desconocido';
 
-    // 1. Si Google Chat ya nos da el nombre para mostrar, lo usamos.
+    // 1. Si Google nos da el nombre, lo usamos.
     if (sender.displayName) return sender.displayName;
 
-    // 2. Si no, intentamos buscar el usuario en nuestra base de datos local usando el email.
-    if (sender.email && users.length > 0) {
+    // 2. Si hay email, intentamos matchear conmigo o con usuarios del CRM.
+    if (sender.email) {
+      if (userInfo?.email && sender.email === userInfo.email) return 'Yo';
       const localUser = users.find(u => u.email === sender.email);
-      if (localUser && localUser.name) {
-        return localUser.name;
+      if (localUser?.name) return localUser.name;
+    }
+
+    // 3. Si no hay email, verificamos si el ID corresponde al "mío" identificado previamente.
+    if (myChatId && sender.name === myChatId) {
+      return 'Yo';
+    }
+
+    // 4. Fallback contextual:
+    // Si estamos en un espacio de chat mapeado (DM) y el remitente NO soy yo (o no sé quién soy pero hay un mapeo),
+    // asumimos que es el usuario destinatario.
+    if (selectedSpace && sender.name) {
+      const mapping = chatSpaces.find(s => s.spaceId === selectedSpace);
+      if (mapping) {
+        // Intentar obtener el nombre del usuario mapeado
+        const targetUser = users.find(u => u.id === mapping.userId);
+        if (targetUser?.name) return targetUser.name;
+        if (mapping.userEmail) return mapping.userEmail;
       }
     }
 
-    // 3. Fallback: Si no hay email o no se encuentra, usamos el name (users/...) o 'Usuario'
+    // 5. Último recurso: mostrar el ID crudo o "Usuario"
     return sender.name || 'Usuario';
   };
 
@@ -345,7 +371,7 @@ export default function ChatPage() {
                 </div>
             )}
             {orderedMessages.map((msg, idx) => {
-              const senderName = getSenderName(msg.sender);
+              const senderName = resolveSenderName(msg.sender);
               return (
                 <div key={`${msg.createTime}-${idx}`} className="flex flex-col gap-1 rounded-md bg-background p-3 shadow-sm">
                   <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
