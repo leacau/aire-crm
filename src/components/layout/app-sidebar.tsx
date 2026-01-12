@@ -1,113 +1,121 @@
 'use client';
-import { Logo } from '@/components/logo';
-import {
-  Sidebar,
-  SidebarHeader,
-  SidebarContent,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarFooter,
-  useSidebar,
-  SidebarTrigger,
-  SidebarRail,
-  SidebarSeparator,
-} from '@/components/ui/sidebar';
-import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb, ClipboardCheck, Target, MessageCircle, Building2, Calculator } from 'lucide-react';
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
+
 import { useAuth } from '@/hooks/use-auth';
+import { cn } from '@/lib/utils';
+import {
+  BarChart3,
+  Calendar,
+  CheckSquare,
+  Users,
+  FileText,
+  LayoutDashboard,
+  Megaphone,
+  Radio,
+  Repeat,
+  Target,
+  Trophy,
+  DollarSign,
+  Palmtree,
+  Activity,
+  Users2,
+  BadgePercent,
+  Upload,
+  Crosshair,
+  MessageSquare,
+  Database,
+  FileSpreadsheet,
+  ClipboardList
+} from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useMemo } from 'react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { ScreenName } from '@/lib/types';
-import { hasPermission } from '@/lib/permissions';
 
-const menuItems: { href: string; label: string; icon: React.ElementType, screenName: ScreenName }[] = [
-  { href: '/', label: 'Panel', icon: Home, screenName: 'Dashboard' },
-  { href: '/objectives', label: 'Objetivos', icon: Target, screenName: 'Objectives' },
-  { href: '/opportunities', label: 'Oportunidades', icon: CircleDollarSign, screenName: 'Opportunities' },
-  { href: '/prospects', label: 'Prospectos', icon: Lightbulb, screenName: 'Prospects' },
-  { href: '/clients', label: 'Clientes', icon: Users, screenName: 'Clients' },
-  { href: '/grilla', label: 'Grilla', icon: Grid3X3, screenName: 'Grilla' },
-  { href: '/pnts', label: 'PNTs', icon: Megaphone, screenName: 'PNTs' },
-  { href: '/canjes', label: 'Canjes', icon: Repeat, screenName: 'Canjes' },
-  { href: '/invoices', label: 'Facturación', icon: Receipt, screenName: 'Invoices' },
-  { href: '/billing', label: 'Cobranzas', icon: Banknote, screenName: 'Billing' },
-  { href: '/calendar', label: 'Calendario', icon: Calendar, screenName: 'Calendar' },
-  { href: '/licencias', label: 'Licencias', icon: ClipboardCheck, screenName: 'Licenses' },
-  { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, screenName: 'Approvals' },
-  { href: '/activity', label: 'Actividad', icon: LayoutList, screenName: 'Activity' },
-  { href: '/chat', label: 'Chat', icon: MessageCircle, screenName: 'Chat' },
-  { href: '/tango-mapping', label: 'Tango', icon: Building2, screenName: 'TangoMapping' },
-  { href: '/team', label: 'Equipo', icon: Users, screenName: 'Team' },
-  { href: '/rates', label: 'Tarifas', icon: Banknote, screenName: 'Rates' },
-  { href: '/quotes', label: 'Cotizador', icon: Calculator, screenName: 'Quotes' },
-  { href: '/reports', label: 'Reportes', icon: BarChart, screenName: 'Reports' },
-  { href: '/import', label: 'Importar', icon: Upload, screenName: 'Import' },
-];
-
-function MenuLink({ item }: { item: typeof menuItems[0] }) {
-  const pathname = usePathname();
-  const { setOpenMobile } = useSidebar();
-
-  const isActive = (href: string) => {
-    if (href === '/') return pathname === '/';
-    // Exact match for specific routes, otherwise prefix match
-    const exactMatchRoutes = ['/billing', '/invoices', '/rates', '/licencias', '/objectives', '/quotes'];
-    if (exactMatchRoutes.includes(href)) return pathname === href;
-    
-    return pathname.startsWith(href) && href !== '/';
-  };
-
-  return (
-    <SidebarMenuButton
-      asChild
-      isActive={isActive(item.href)}
-      tooltip={{ children: item.label, side: 'right' }}
-      onClick={() => setOpenMobile(false)}
-      size="lg"
-    >
-      <Link href={item.href}>
-        <item.icon />
-        <span>{item.label}</span>
-      </Link>
-    </SidebarMenuButton>
-  );
+interface SidebarItem {
+  title: string;
+  href: string;
+  icon: React.ElementType;
+  screenName: ScreenName;
+  variant: 'default' | 'ghost';
 }
 
-
 export function AppSidebar() {
+  const pathname = usePathname();
   const { userInfo } = useAuth();
-  
-  if (!userInfo) return null;
 
-  const accessibleItems = menuItems
-    .filter(item => hasPermission(userInfo, item.screenName, 'view'))
-    .filter(item => {
-      if (userInfo.role === 'Asesor' && item.href === '/objectives') {
-        return false;
+  const sidebarItems: SidebarItem[] = [
+    { title: 'Dashboard', href: '/', icon: LayoutDashboard, screenName: 'Dashboard', variant: 'ghost' },
+    { title: 'Objetivos', href: '/objectives', icon: Crosshair, screenName: 'Objectives', variant: 'ghost' },
+    { title: 'Oportunidades', href: '/opportunities', icon: Trophy, screenName: 'Opportunities', variant: 'ghost' },
+    { title: 'Prospectos', href: '/prospects', icon: Target, screenName: 'Prospects', variant: 'ghost' },
+    { title: 'Clientes', href: '/clients', icon: Users, screenName: 'Clients', variant: 'ghost' },
+    { title: 'Seguimiento', href: '/coaching', icon: ClipboardList, screenName: 'Coaching', variant: 'ghost' },
+    { title: 'Grilla', href: '/grilla', icon: Radio, screenName: 'Grilla', variant: 'ghost' },
+    { title: 'PNTs', href: '/pnts', icon: Megaphone, screenName: 'PNTs', variant: 'ghost' },
+    { title: 'Canjes', href: '/canjes', icon: Repeat, screenName: 'Canjes', variant: 'ghost' },
+    { title: 'Facturación', href: '/billing', icon: DollarSign, screenName: 'Billing', variant: 'ghost' },
+    { title: 'Facturas', href: '/invoices', icon: FileText, screenName: 'Invoices', variant: 'ghost' },
+    { title: 'Chat', href: '/chat', icon: MessageSquare, screenName: 'Chat', variant: 'ghost' },
+    { title: 'Calendario', href: '/calendar', icon: Calendar, screenName: 'Calendar', variant: 'ghost' },
+    { title: 'Licencias', href: '/licencias', icon: Palmtree, screenName: 'Licenses', variant: 'ghost' },
+    { title: 'Aprobaciones', href: '/approvals', icon: CheckSquare, screenName: 'Approvals', variant: 'ghost' },
+    { title: 'Actividad', href: '/activity', icon: Activity, screenName: 'Activity', variant: 'ghost' },
+    { title: 'Equipo', href: '/team', icon: Users2, screenName: 'Team', variant: 'ghost' },
+    { title: 'Tarifas', href: '/rates', icon: BadgePercent, screenName: 'Rates', variant: 'ghost' },
+    { title: 'Cotizador', href: '/quotes', icon: FileSpreadsheet, screenName: 'Quotes', variant: 'ghost' },
+    { title: 'Reportes', href: '/reports', icon: BarChart3, screenName: 'Reports', variant: 'ghost' },
+    { title: 'Importar', href: '/import', icon: Upload, screenName: 'Import', variant: 'ghost' },
+    { title: 'Mapeo Tango', href: '/tango-mapping', icon: Database, screenName: 'TangoMapping', variant: 'ghost' },
+  ];
+
+  const filteredItems = useMemo(() => {
+    if (!userInfo) return [];
+    
+    // Super admin can see everything
+    if (userInfo.email === 'lchena@airedesantafe.com.ar') return sidebarItems;
+
+    return sidebarItems.filter((item) => {
+      // Check permissions if available
+      if (userInfo.permissions) {
+        const permission = userInfo.permissions[item.screenName];
+        return permission?.view;
       }
-      return true;
+      
+      // Fallback to role-based filtering (legacy support or if permissions missing)
+      // Usually permissions should be populated by getAreaPermissions or similar logic in auth
+      return true; 
     });
+  }, [userInfo]);
 
   return (
-    <Sidebar collapsible="icon">
-        <SidebarRail />
-      <SidebarHeader>
-        <Logo isInSidebar={true} />
-        <SidebarTrigger className="ml-auto hidden data-[state=expanded]:md:flex" />
-      </SidebarHeader>
-      <SidebarSeparator />
-      <SidebarContent>
-        <div className="py-2" />
-        <SidebarMenu>
-          {accessibleItems.map((item) => (
-            <SidebarMenuItem key={item.label}>
-              <MenuLink item={item} />
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarContent>
-      <SidebarFooter>
-      </SidebarFooter>
-    </Sidebar>
+    <div className="hidden border-r bg-gray-100/40 lg:block dark:bg-gray-800/40 w-[240px]">
+      <div className="flex h-full max-h-screen flex-col gap-2">
+        <div className="flex h-[60px] items-center border-b px-6">
+          <Link className="flex items-center gap-2 font-semibold" href="/">
+            <span className="">Aire CRM</span>
+          </Link>
+        </div>
+        <ScrollArea className="flex-1 px-4">
+          <nav className="grid items-start px-2 text-sm font-medium lg:px-4 space-y-1 py-4">
+            {filteredItems.map((item, index) => (
+              <Link
+                key={index}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary",
+                  pathname === item.href
+                    ? "bg-gray-100 text-primary dark:bg-gray-800 dark:text-primary"
+                    : "text-muted-foreground hover:bg-gray-100 dark:hover:bg-gray-800"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.title}
+              </Link>
+            ))}
+          </nav>
+        </ScrollArea>
+      </div>
+    </div>
   );
 }
