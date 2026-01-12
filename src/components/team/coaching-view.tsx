@@ -34,7 +34,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
             const data = await getCoachingSessions(advisor.id);
             setSessions(data);
         } catch (error) {
-            console.error(error);
+            console.error("Error loading coaching sessions:", error);
         } finally {
             setLoading(false);
         }
@@ -60,7 +60,8 @@ export function CoachingView({ advisor }: { advisor: User }) {
             toast({ title: "Sesión iniciada", description: "Se ha creado una nueva acta de reunión." });
             loadData();
         } catch (error) {
-            toast({ title: "Error", variant: "destructive" });
+            console.error(error);
+            toast({ title: "Error", description: "No se pudo crear la sesión. Revisa la consola por errores de permisos o índices.", variant: "destructive" });
         }
     };
 
@@ -110,23 +111,23 @@ export function CoachingView({ advisor }: { advisor: User }) {
     if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
 
     return (
-        <div className="space-y-6 h-full flex flex-col">
+        <div className="space-y-6 h-full flex flex-col pt-2"> 
             <div className="flex justify-between items-center shrink-0 pb-4">
                 <div>
-                    <h2 className="text-2xl font-bold flex items-center gap-2">
-                        <UserCheck className="h-6 w-6 text-primary"/> 
-                        Seguimiento Semanal
+                    <h2 className="text-xl font-bold flex items-center gap-2">
+                        <UserCheck className="h-5 w-5 text-primary"/> 
+                        Historial de Reuniones
                     </h2>
-                    <p className="text-muted-foreground">Compromisos con {advisor.name}</p>
+                    <p className="text-muted-foreground text-sm">Compromisos con {advisor.name}</p>
                 </div>
                 {canManage && (
-                    <Button onClick={handleCreateSession}>
-                        <Plus className="mr-2 h-4 w-4" /> Iniciar Nueva Reunión
+                    <Button onClick={handleCreateSession} size="sm">
+                        <Plus className="mr-2 h-4 w-4" /> Nueva Reunión
                     </Button>
                 )}
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-6 pr-2">
+            <div className="flex-1 overflow-y-auto space-y-6 pr-2 pb-20">
                 {sessions.length === 0 && (
                     <Card className="bg-muted/50 border-dashed">
                         <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -138,18 +139,18 @@ export function CoachingView({ advisor }: { advisor: User }) {
 
                 {sessions.map((session) => (
                     <Card key={session.id} className="overflow-hidden border-l-4 border-l-primary/50">
-                        <CardHeader className="bg-muted/30 pb-3">
+                        <CardHeader className="bg-muted/30 pb-3 pt-4">
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <CardTitle>Reunión del {format(parseISO(session.date), "d 'de' MMMM, yyyy", { locale: es })}</CardTitle>
-                                    <CardDescription>Liderada por: {session.managerName}</CardDescription>
+                                    <CardTitle className="text-base">Reunión del {format(parseISO(session.date), "d 'de' MMMM, yyyy", { locale: es })}</CardTitle>
+                                    <CardDescription className="text-xs">Liderada por: {session.managerName}</CardDescription>
                                 </div>
                                 <Badge variant={session.status === 'Open' ? 'default' : 'secondary'}>
                                     {session.status === 'Open' ? 'En curso' : 'Cerrada'}
                                 </Badge>
                             </div>
                         </CardHeader>
-                        <CardContent className="pt-6 space-y-6">
+                        <CardContent className="pt-4 space-y-6">
                             {/* Lista de Compromisos */}
                             <div className="space-y-4">
                                 {session.items.length === 0 && session.status === 'Open' && (
@@ -164,7 +165,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                         <div className="space-y-3 border-r md:pr-4 border-dashed md:border-solid border-border/50">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <Badge variant="outline" className="capitalize bg-background">{item.entityType === 'general' ? 'General' : 'Cliente/Prospecto'}</Badge>
-                                                <span className="font-semibold text-base truncate" title={item.entityName}>{item.entityName}</span>
+                                                <span className="font-semibold text-sm truncate block max-w-full" title={item.entityName}>{item.entityName}</span>
                                             </div>
                                             <div className="bg-muted/30 p-2 rounded text-sm font-medium text-foreground/90 border">
                                                 {item.action}
@@ -221,7 +222,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                             {/* Formulario para agregar items (Solo visible para jefes si está abierta) */}
                             {canManage && session.status === 'Open' && (
                                 <div className="bg-muted/40 p-3 rounded-lg border border-dashed flex flex-col md:flex-row gap-3 items-end mt-4">
-                                    <div className="w-full md:w-[150px] space-y-1">
+                                    <div className="w-full md:w-[120px] space-y-1">
                                         <Label className="text-xs">Tipo</Label>
                                         <Select value={newItemType} onValueChange={(v: any) => setNewItemType(v)}>
                                             <SelectTrigger className="h-8 text-xs bg-background"><SelectValue /></SelectTrigger>
@@ -232,8 +233,8 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div className="w-full md:w-[250px] space-y-1">
-                                        <Label className="text-xs">Nombre (Cliente/Tema)</Label>
+                                    <div className="w-full md:w-[200px] space-y-1">
+                                        <Label className="text-xs">Nombre</Label>
                                         <Input 
                                             className="h-8 text-xs bg-background"
                                             placeholder="Ej: Coca Cola" 
@@ -245,14 +246,14 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                         <Label className="text-xs">Acción a realizar</Label>
                                         <Input 
                                             className="h-8 text-xs bg-background"
-                                            placeholder="Ej: Presentar propuesta de verano..." 
+                                            placeholder="Ej: Presentar propuesta..." 
                                             value={newItemAction}
                                             onChange={e => setNewItemAction(e.target.value)}
                                             onKeyDown={e => e.key === 'Enter' && handleAddItem(session.id)}
                                         />
                                     </div>
-                                    <Button size="sm" onClick={() => handleAddItem(session.id)} className="shrink-0 h-8">
-                                        <Plus className="mr-1 h-3 w-3" /> Agregar
+                                    <Button size="sm" onClick={() => handleAddItem(session.id)} className="shrink-0 h-8 px-3">
+                                        <Plus className="h-4 w-4" />
                                     </Button>
                                 </div>
                             )}
