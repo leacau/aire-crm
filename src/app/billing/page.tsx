@@ -310,6 +310,14 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Admin',
   );
 
+  // NUEVO: Definir permisos específicos para ver/eliminar duplicados (Jefe, Gerente, Admin)
+  const canManageDuplicates = Boolean(
+    isBoss || 
+    userInfo?.role === 'Administracion' || 
+    userInfo?.role === 'Admin' || 
+    userInfo?.role === 'Gerencia'
+  );
+
   const dateRange: DateRange | undefined = useMemo(() => {
     return {
       from: startOfMonth(selectedDate),
@@ -1459,20 +1467,22 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               </SelectContent>
             </Select>
           )}
-          <Button
-            variant="outline"
-            onClick={() => setIsDuplicateModalOpen(true)}
-            disabled={totalDuplicateInvoices === 0 || isDeletingDuplicates}
-          >
-            {isDeletingDuplicates ? (
-              <>
-                <Spinner size="small" className="mr-2" />
-                Eliminando duplicados...
-              </>
-            ) : (
-              <>Eliminar duplicados {totalDuplicateInvoices > 0 ? `(${totalDuplicateInvoices})` : ''}</>
-            )}
-          </Button>
+          {canManageDuplicates && (
+            <Button
+                variant="outline"
+                onClick={() => setIsDuplicateModalOpen(true)}
+                disabled={totalDuplicateInvoices === 0 || isDeletingDuplicates}
+            >
+                {isDeletingDuplicates ? (
+                <>
+                    <Spinner size="small" className="mr-2" />
+                    Eliminando duplicados...
+                </>
+                ) : (
+                <>Eliminar duplicados {totalDuplicateInvoices > 0 ? `(${totalDuplicateInvoices})` : ''}</>
+                )}
+            </Button>
+          )}
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <Tabs defaultValue={initialTab}>
