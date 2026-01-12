@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
+import { Logo } from '@/components/logo';
 import {
   BarChart3,
   Calendar,
@@ -93,7 +94,7 @@ export function AppSidebar() {
       <div className="flex h-full max-h-screen flex-col gap-2">
         <div className="flex h-[60px] items-center border-b px-6">
           <Link className="flex items-center gap-2 font-semibold" href="/">
-            <span className="">Aire CRM</span>
+            <Logo isInSidebar={true} />
           </Link>
         </div>
         <ScrollArea className="flex-1 px-4">
