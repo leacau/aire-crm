@@ -11,8 +11,8 @@ import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/hooks/use-auth';
-import { MoreHorizontal, Trash2, Save, BarChartHorizontal } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { MoreHorizontal, Trash2, Save, BarChartHorizontal, ClipboardList } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import {
@@ -25,10 +25,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Sheet,
+  SheetContent,
+} from "@/components/ui/sheet";
 import { addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
 import { MonthlyClosureDialog } from './monthly-closure-dialog';
 import { getObjectiveForDate, monthKey } from '@/lib/objective-utils';
 import { format } from 'date-fns';
+import { CoachingView } from './coaching-view';
 
 
 interface UserStats {
@@ -60,6 +65,9 @@ export function TeamPerformanceTable() {
   const [savingVisibility, setSavingVisibility] = useState(false);
   const [visibilityMonth, setVisibilityMonth] = useState('');
   const [visibilityDeadline, setVisibilityDeadline] = useState('');
+  
+  // Estado para el panel de Coaching
+  const [selectedAdvisorForCoaching, setSelectedAdvisorForCoaching] = useState<User | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -348,7 +356,9 @@ export function TeamPerformanceTable() {
         id: 'actions',
         cell: ({ row }) => {
             const { user } = row.original;
-            if (!isBoss || user.id === userInfo?.id) return null;
+            
+            // Allow access to self or if boss
+            if (!isBoss && user.id !== userInfo?.id) return null;
 
             return (
                 <DropdownMenu>
@@ -359,13 +369,22 @@ export function TeamPerformanceTable() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                         <DropdownMenuItem 
-                            className="text-destructive"
-                            onClick={() => setUserToDelete(user)}
-                         >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Eliminar Usuario
-                        </DropdownMenuItem>
+                        {user.role === 'Asesor' && (
+                            <DropdownMenuItem onClick={() => setSelectedAdvisorForCoaching(user)}>
+                                <ClipboardList className="mr-2 h-4 w-4" />
+                                Seguimiento Semanal
+                            </DropdownMenuItem>
+                        )}
+                        {isBoss && <DropdownMenuSeparator />}
+                        {isBoss && (
+                            <DropdownMenuItem 
+                                className="text-destructive"
+                                onClick={() => setUserToDelete(user)}
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Eliminar Usuario
+                            </DropdownMenuItem>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
             )
@@ -455,6 +474,13 @@ export function TeamPerformanceTable() {
               </AlertDialogFooter>
           </AlertDialogContent>
       </AlertDialog>
+      
+      <Sheet open={!!selectedAdvisorForCoaching} onOpenChange={(open) => !open && setSelectedAdvisorForCoaching(null)}>
+        <SheetContent side="right" className="sm:max-w-2xl w-full p-0">
+            {selectedAdvisorForCoaching && <CoachingView advisor={selectedAdvisorForCoaching} />}
+        </SheetContent>
+      </Sheet>
+
       <MonthlyClosureDialog
         isOpen={isClosureDialogOpen}
         onOpenChange={setIsClosureDialogOpen}
