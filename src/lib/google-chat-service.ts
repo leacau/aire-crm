@@ -29,9 +29,28 @@ type ChatMessage = {
   thread?: { name?: string };
 };
 
+export type ChatMember = {
+  name: string; // resource name like "spaces/X/members/Y"
+  state: string;
+  member: {
+    name: string; // "users/123..."
+    displayName: string;
+    avatarUrl?: string;
+    email?: string;
+    type: string;
+  };
+};
+
 function normalizeSpaceName(space: string | null | undefined) {
   if (!space) return space;
   return space.startsWith('spaces/') ? space : `spaces/${space}`;
+}
+
+function getBaseApiHeaders(accessToken: string) {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  } satisfies HeadersInit;
 }
 
 export async function sendChatMessage({ text, threadKey, webhookUrl }: ChatMessageInput) {
@@ -69,13 +88,6 @@ export async function sendChatMessage({ text, threadKey, webhookUrl }: ChatMessa
       response.status,
     );
   }
-}
-
-function getBaseApiHeaders(accessToken: string) {
-  return {
-    Authorization: `Bearer ${accessToken}`,
-    'Content-Type': 'application/json',
-  } satisfies HeadersInit;
 }
 
 export function getSpaceFromWebhook(webhookUrl?: string | null) {
@@ -188,4 +200,26 @@ export async function listChatMessages(accessToken: string, space: string, optio
   const messages = (data?.messages as ChatMessage[] | undefined) || [];
   // Devolver en orden cronológico ascendente para leer el hilo natural.
   return messages.reverse();
+}
+
+export async function listSpaceMembers(accessToken: string, space: string) {
+  const normalizedSpace = normalizeSpaceName(space);
+  // Solicitamos los campos mínimos necesarios: nombre (ID), displayName, email y avatar.
+  const response = await fetch(
+    `https://chat.googleapis.com/v1/${normalizedSpace}/members?pageSize=1000`,
+    {
+      headers: getBaseApiHeaders(accessToken),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    // No lanzamos error crítico si falla listar miembros, ya que puede ser por scopes restringidos,
+    // pero logueamos y devolvemos vacío para no romper el flujo principal.
+    console.warn(`No se pudieron listar miembros del espacio ${space}:`, errorText);
+    return [];
+  }
+
+  const data = await response.json();
+  return (data.memberships as ChatMember[]) || [];
 }
