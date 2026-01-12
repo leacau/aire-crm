@@ -358,7 +358,6 @@ export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Geren
 export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción';
 export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'];
 
-// Agregado 'Coaching' a la lista de pantallas
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
@@ -515,13 +514,15 @@ export type CoachingItemStatus = 'Pendiente' | 'En Proceso' | 'Completado' | 'Ca
 
 export type CoachingItem = {
   id: string;
+  taskId: string; // ID único que persiste a través de las reuniones para la misma tarea
+  originalCreatedAt: string; // Fecha en que se creó la tarea originalmente
   entityType: 'client' | 'prospect' | 'opportunity' | 'general';
-  entityId?: string; // ID del cliente/prospecto si aplica
-  entityName: string; // "Coca Cola", "Juan Perez", o "General"
-  action: string; // "Llamar para pedir saldo", "Presentar propuesta"
+  entityId?: string; 
+  entityName: string; 
+  action: string; 
   status: CoachingItemStatus;
-  advisorNotes?: string; // La "constancia" que deja el asesor
-  lastUpdate?: string; // Fecha de la última nota del asesor
+  advisorNotes?: string; 
+  lastUpdate?: string; 
 };
 
 export type CoachingSession = {
@@ -532,7 +533,7 @@ export type CoachingSession = {
   managerName: string;
   date: string; // Fecha de la reunión
   items: CoachingItem[];
-  generalNotes?: string; // Notas generales de la reunión
+  generalNotes?: string; 
   createdAt: string;
-  status: 'Open' | 'Closed'; // Open: Semana en curso, Closed: Ya revisado
+  status: 'Open' | 'Closed'; 
 };
