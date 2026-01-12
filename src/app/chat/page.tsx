@@ -8,14 +8,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { getAllUsers, getChatSpaces } from '@/lib/firebase-service';
+import { getAllUsers, getChatSpaces, getChatUserMappings, saveChatUserMappings } from '@/lib/firebase-service';
 import type { ChatSpaceMapping, User } from '@/lib/types';
-import type { ChatMember } from '@/lib/google-chat-service';
-import { Loader2, MessageSquare, RefreshCw, SendHorizontal, LogIn, AlertCircle } from 'lucide-react';
+import { Loader2, MessageSquare, RefreshCw, SendHorizontal, LogIn, AlertCircle, Users } from 'lucide-react';
 
-// Tipos definidos localmente
+// Tipos definidos fuera del componente para evitar conflictos
 interface ChatMessage {
   name: string;
   text: string;
@@ -24,7 +25,7 @@ interface ChatMessage {
   thread?: { name?: string };
 }
 
-// Función auxiliar simple
+// Función auxiliar simple, sin dependencias externas
 const formatDate = (iso?: string) => {
   if (!iso) return '';
   try {
@@ -36,15 +37,14 @@ const formatDate = (iso?: string) => {
 
 export default function ChatPage() {
   const { toast } = useToast();
-  const { getGoogleAccessToken, userInfo } = useAuth();
+  // Importamos isBoss y userInfo
+  const { getGoogleAccessToken, userInfo, isBoss } = useAuth();
   
   // Estados
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [spaceMembers, setSpaceMembers] = useState<Record<string, string>>({}); // Map: "users/ID" -> "Nombre"
-
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [chatSpaces, setChatSpaces] = useState<ChatSpaceMapping[]>([]);
   const [selectedSpace, setSelectedSpace] = useState('');
@@ -53,6 +53,12 @@ export default function ChatPage() {
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
+  
+  // Estado para mappings manuales
+  const [customMappings, setCustomMappings] = useState<Record<string, string>>({});
+  const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
+  const [pendingMappings, setPendingMappings] = useState<Record<string, string>>({});
+  const [isSavingMappings, setIsSavingMappings] = useState(false);
 
   const historyRef = useRef<HTMLDivElement | null>(null);
 
@@ -75,7 +81,7 @@ export default function ChatPage() {
     return () => { mounted = false; };
   }, [getGoogleAccessToken]);
 
-  // 2. Carga de espacios y usuarios
+  // 2. Carga de espacios, usuarios y mappings
   useEffect(() => {
     const loadResources = async () => {
       try {
@@ -84,10 +90,15 @@ export default function ChatPage() {
         if (storedSpace) setSelectedSpace(storedSpace);
         setSelectionHydrated(true);
 
-        // Cargar datos de Firebase
-        const [spaces, appUsers] = await Promise.all([getChatSpaces(), getAllUsers()]);
+        // Cargar datos de Firebase y mappings
+        const [spaces, appUsers, mappings] = await Promise.all([
+            getChatSpaces(), 
+            getAllUsers(),
+            getChatUserMappings()
+        ]);
         setUsers(appUsers);
         setChatSpaces(spaces);
+        setCustomMappings(mappings);
       } catch (error) {
         console.error('Error cargando recursos del chat:', error);
       }
@@ -102,7 +113,7 @@ export default function ChatPage() {
     }
   }, [selectedSpace, selectionHydrated]);
 
-  // 4. Función para cargar mensajes y miembros
+  // 4. Función para cargar mensajes
   const loadMessages = useCallback(
     async (space?: string, manualToken?: string) => {
       setIsLoadingMessages(true);
@@ -118,53 +129,30 @@ export default function ChatPage() {
         }
 
         const search = space ? `?space=${encodeURIComponent(space)}` : '';
-        
-        // 4a. Cargar Mensajes
-        const msgsPromise = fetch(`/api/chat${search}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const response = await fetch(`/api/chat${search}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         });
 
-        // 4b. Cargar Miembros del Espacio (para resolver nombres en grupos)
-        // Usamos el nuevo modo 'members'
-        const membersPromise = fetch(`/api/chat${search}${search ? '&' : '?'}mode=members`, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
+        const contentType = response.headers.get('content-type') || '';
+        const payload = contentType.includes('application/json') ? await response.json() : await response.text();
 
-        const [msgsResponse, membersResponse] = await Promise.all([msgsPromise, membersPromise]);
-
-        // Procesar mensajes
-        const msgsContentType = msgsResponse.headers.get('content-type') || '';
-        const msgsPayload = msgsContentType.includes('application/json') ? await msgsResponse.json() : await msgsResponse.text();
-
-        if (!msgsResponse.ok) {
-          if (msgsResponse.status === 403 || msgsResponse.status === 401) {
+        if (!response.ok) {
+          if (response.status === 403 || response.status === 401) {
              setIsGoogleConnected(false);
              try { sessionStorage.removeItem('google-access-token'); } catch {}
              throw new Error('Tu sesión de Google expiró o faltan permisos. Por favor reconecta.');
           }
-          throw new Error((typeof msgsPayload === 'string' ? msgsPayload : msgsPayload?.error) || 'No se pudieron obtener los mensajes.');
+          const message = typeof payload === 'string' ? payload : payload?.error;
+          throw new Error(message || 'No se pudieron obtener los mensajes.');
         }
 
-        const msgsData = typeof msgsPayload === 'string' ? {} : msgsPayload;
-        setMessages(Array.isArray(msgsData?.messages) ? msgsData.messages : []);
-
-        // Procesar miembros (si falla, no bloquea)
-        if (membersResponse.ok) {
-            const membersData = await membersResponse.json();
-            if (Array.isArray(membersData.members)) {
-                const map: Record<string, string> = {};
-                membersData.members.forEach((m: ChatMember) => {
-                    if (m.member?.name && m.member?.displayName) {
-                        map[m.member.name] = m.member.displayName;
-                    }
-                });
-                setSpaceMembers(map);
-            }
-        }
-
+        const data = typeof payload === 'string' ? {} : payload;
+        setMessages(Array.isArray(data?.messages) ? data.messages : []);
         setIsGoogleConnected(true);
       } catch (error: any) {
-        console.error('Error cargando chat:', error);
+        console.error('Error cargando mensajes:', error);
         setLastError(error?.message || 'Error al leer historial.');
       } finally {
         setIsLoadingMessages(false);
@@ -194,6 +182,7 @@ export default function ChatPage() {
     }
   }, [orderedMessages]);
 
+  // Identificar mi propio ID de chat buscando mis mensajes por email
   const myChatId = useMemo(() => {
     if (!userInfo?.email || messages.length === 0) return null;
     const myMsg = messages.find(m => m.sender?.email === userInfo.email);
@@ -256,40 +245,89 @@ export default function ChatPage() {
     }
   };
 
+  // Función para resolver nombre: Ahora con soporte para ALIAS MANUALES
   const resolveSenderName = (sender?: { displayName?: string; name?: string; email?: string }) => {
     if (!sender) return 'Desconocido';
 
-    // 1. Prioridad: Si Google ya dio el nombre en el mensaje
+    // 1. Alias manual (prioridad máxima)
+    if (sender.name && customMappings[sender.name]) {
+        return customMappings[sender.name];
+    }
+
+    // 2. Google Display Name
     if (sender.displayName) return sender.displayName;
 
-    // 2. Si tenemos email, buscar en usuarios locales
+    // 3. Email match
     if (sender.email) {
       if (userInfo?.email && sender.email === userInfo.email) return 'Yo';
       const localUser = users.find(u => u.email === sender.email);
-      if (localUser?.name) return localUser.name;
-    }
-
-    // 3. Buscar en la lista de miembros del espacio (Solución para Grupos)
-    if (sender.name && spaceMembers[sender.name]) {
-        return spaceMembers[sender.name];
-    }
-
-    // 4. Chequear si soy "Yo" por ID inferido
-    if (myChatId && sender.name === myChatId) {
-      return 'Yo';
-    }
-
-    // 5. Fallback para DMs
-    if (selectedSpace && sender.name) {
-      const mapping = chatSpaces.find(s => s.spaceId === selectedSpace);
-      if (mapping) {
-        const targetUser = users.find(u => u.id === mapping.userId);
-        if (targetUser?.name) return targetUser.name;
-        if (mapping.userEmail) return mapping.userEmail;
+      if (localUser && localUser.name) {
+        return localUser.name;
       }
     }
 
+    // 4. Fallback ID propio
+    if (myChatId && sender.name === myChatId) {
+        return 'Yo';
+    }
+
+    // 5. Fallback espacio directo
+    if (selectedSpace && sender.name) {
+        const mapping = chatSpaces.find(s => s.spaceId === selectedSpace);
+        if (mapping) {
+            const targetUser = users.find(u => u.id === mapping.userId);
+            if (targetUser?.name) return targetUser.name;
+            if (mapping.userEmail) return mapping.userEmail;
+        }
+    }
+
+    // 6. ID crudo
     return sender.name || 'Usuario';
+  };
+
+  const handleOpenMappingDialog = () => {
+    // Escanear los mensajes actuales para encontrar usuarios "desconocidos" o simplemente todos los IDs
+    const uniqueSenders: Record<string, string> = {};
+    messages.forEach(msg => {
+        if (msg.sender?.name) {
+            // Si es mi propio ID, lo ignoramos o lo marcamos como tal
+            if (msg.sender.name === myChatId) return;
+            uniqueSenders[msg.sender.name] = customMappings[msg.sender.name] || '';
+        }
+    });
+    
+    // También agregamos cualquier mapping existente que no esté en los mensajes actuales (para editar)
+    Object.keys(customMappings).forEach(key => {
+        if (!uniqueSenders[key]) {
+            uniqueSenders[key] = customMappings[key];
+        }
+    });
+
+    setPendingMappings(uniqueSenders);
+    setIsMappingDialogOpen(true);
+  };
+
+  const handleSaveMappings = async () => {
+    if (!userInfo) return;
+    setIsSavingMappings(true);
+    try {
+        // Filtrar vacíos para no guardar basura, pero permitir borrar mappings enviando string vacía? 
+        // Mejor solo guardar los que tienen valor.
+        const cleanMappings: Record<string, string> = {};
+        Object.entries(pendingMappings).forEach(([key, value]) => {
+            if (value.trim()) cleanMappings[key] = value.trim();
+        });
+
+        await saveChatUserMappings(cleanMappings, userInfo.id, userInfo.name);
+        setCustomMappings(cleanMappings);
+        toast({ title: 'Alias actualizados' });
+        setIsMappingDialogOpen(false);
+    } catch (error) {
+        console.error('Error saving mappings', error);
+        toast({ title: 'Error al guardar alias', variant: 'destructive' });
+    } finally {
+        setIsSavingMappings(false);
+    }
   };
 
   const availableSpaces = useMemo(() => chatSpaces.filter(s => !!s.spaceId), [chatSpaces]);
@@ -372,6 +410,14 @@ export default function ChatPage() {
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* Botón para gestionar alias (Solo Jefes) */}
+            {isBoss && (
+                <Button variant="outline" size="icon" onClick={handleOpenMappingDialog} title="Gestionar Alias de Usuarios">
+                    <Users className="h-4 w-4" />
+                </Button>
+            )}
+
             <Button variant="ghost" className="gap-2" onClick={() => loadMessages(selectedSpace || undefined)} disabled={isLoadingMessages}>
               {isLoadingMessages ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Recargar
@@ -425,6 +471,41 @@ export default function ChatPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Diálogo de Mapeo de Usuarios */}
+      <Dialog open={isMappingDialogOpen} onOpenChange={setIsMappingDialogOpen}>
+        <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+            <DialogHeader>
+                <DialogTitle>Gestionar Alias de Chat</DialogTitle>
+                <DialogDescription>
+                    Asigna nombres legibles a los IDs de usuarios desconocidos.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-2">
+                {Object.keys(pendingMappings).length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No se detectaron usuarios desconocidos en este chat.</p>
+                ) : (
+                    Object.entries(pendingMappings).map(([id, alias]) => (
+                        <div key={id} className="grid gap-2">
+                            <Label className="text-xs font-mono text-muted-foreground">{id}</Label>
+                            <Input 
+                                value={alias} 
+                                onChange={(e) => setPendingMappings(prev => ({ ...prev, [id]: e.target.value }))}
+                                placeholder="Nombre visible (Ej. Juan Perez)"
+                            />
+                        </div>
+                    ))
+                )}
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsMappingDialogOpen(false)}>Cancelar</Button>
+                <Button onClick={handleSaveMappings} disabled={isSavingMappings}>
+                    {isSavingMappings ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
+                    Guardar Cambios
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
