@@ -1,8 +1,8 @@
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
-import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
+import { cn } from '@/lib/utils';
 import {
   BarChart3,
   Calendar,
@@ -82,19 +82,17 @@ export function AppSidebar() {
         const permission = userInfo.permissions[item.screenName];
         return permission?.view;
       }
-      
-      // Fallback to role-based filtering (legacy support or if permissions missing)
-      // Usually permissions should be populated by getAreaPermissions or similar logic in auth
       return true; 
     });
   }, [userInfo]);
 
   return (
-    <div className="hidden border-r bg-gray-100/40 lg:block dark:bg-gray-800/40 w-[240px]">
-      <div className="flex h-full max-h-screen flex-col gap-2">
-        <div className="flex h-[60px] items-center border-b px-6">
-          <Link className="flex items-center gap-2 font-semibold" href="/">
+    <div className="hidden border-r bg-zinc-950 text-zinc-100 lg:block w-[240px] h-screen sticky top-0 overflow-hidden flex flex-col z-20">
+      <div className="flex h-full flex-col gap-2">
+        <div className="flex h-[60px] items-center border-b border-zinc-800 px-6 shrink-0">
+          <Link className="flex items-center gap-2 font-semibold text-white" href="/">
             <Logo isInSidebar={true} />
+            <span className="">Aire CRM</span>
           </Link>
         </div>
         <ScrollArea className="flex-1 px-4">
@@ -104,10 +102,10 @@ export function AppSidebar() {
                 key={index}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary",
+                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
                   pathname === item.href
-                    ? "bg-gray-100 text-primary dark:bg-gray-800 dark:text-primary"
-                    : "text-muted-foreground hover:bg-gray-100 dark:hover:bg-gray-800"
+                    ? "bg-zinc-800 text-white"
+                    : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
                 )}
               >
                 <item.icon className="h-4 w-4" />
