@@ -12,9 +12,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { getAllUsers, getChatSpaces } from '@/lib/firebase-service';
 import type { ChatSpaceMapping, User } from '@/lib/types';
+import type { ChatMember } from '@/lib/google-chat-service';
 import { Loader2, MessageSquare, RefreshCw, SendHorizontal, LogIn, AlertCircle } from 'lucide-react';
 
-// Tipos definidos fuera del componente para evitar conflictos
+// Tipos definidos localmente
 interface ChatMessage {
   name: string;
   text: string;
@@ -23,7 +24,7 @@ interface ChatMessage {
   thread?: { name?: string };
 }
 
-// Función auxiliar simple, sin dependencias externas
+// Función auxiliar simple
 const formatDate = (iso?: string) => {
   if (!iso) return '';
   try {
@@ -35,7 +36,6 @@ const formatDate = (iso?: string) => {
 
 export default function ChatPage() {
   const { toast } = useToast();
-  // Se agrega userInfo para identificar al usuario actual por email
   const { getGoogleAccessToken, userInfo } = useAuth();
   
   // Estados
@@ -43,6 +43,8 @@ export default function ChatPage() {
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [spaceMembers, setSpaceMembers] = useState<Record<string, string>>({}); // Map: "users/ID" -> "Nombre"
+
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [chatSpaces, setChatSpaces] = useState<ChatSpaceMapping[]>([]);
   const [selectedSpace, setSelectedSpace] = useState('');
@@ -100,7 +102,7 @@ export default function ChatPage() {
     }
   }, [selectedSpace, selectionHydrated]);
 
-  // 4. Función para cargar mensajes
+  // 4. Función para cargar mensajes y miembros
   const loadMessages = useCallback(
     async (space?: string, manualToken?: string) => {
       setIsLoadingMessages(true);
@@ -116,30 +118,53 @@ export default function ChatPage() {
         }
 
         const search = space ? `?space=${encodeURIComponent(space)}` : '';
-        const response = await fetch(`/api/chat${search}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+        
+        // 4a. Cargar Mensajes
+        const msgsPromise = fetch(`/api/chat${search}`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
 
-        const contentType = response.headers.get('content-type') || '';
-        const payload = contentType.includes('application/json') ? await response.json() : await response.text();
+        // 4b. Cargar Miembros del Espacio (para resolver nombres en grupos)
+        // Usamos el nuevo modo 'members'
+        const membersPromise = fetch(`/api/chat${search}${search ? '&' : '?'}mode=members`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
 
-        if (!response.ok) {
-          if (response.status === 403 || response.status === 401) {
+        const [msgsResponse, membersResponse] = await Promise.all([msgsPromise, membersPromise]);
+
+        // Procesar mensajes
+        const msgsContentType = msgsResponse.headers.get('content-type') || '';
+        const msgsPayload = msgsContentType.includes('application/json') ? await msgsResponse.json() : await msgsResponse.text();
+
+        if (!msgsResponse.ok) {
+          if (msgsResponse.status === 403 || msgsResponse.status === 401) {
              setIsGoogleConnected(false);
              try { sessionStorage.removeItem('google-access-token'); } catch {}
              throw new Error('Tu sesión de Google expiró o faltan permisos. Por favor reconecta.');
           }
-          const message = typeof payload === 'string' ? payload : payload?.error;
-          throw new Error(message || 'No se pudieron obtener los mensajes.');
+          throw new Error((typeof msgsPayload === 'string' ? msgsPayload : msgsPayload?.error) || 'No se pudieron obtener los mensajes.');
         }
 
-        const data = typeof payload === 'string' ? {} : payload;
-        setMessages(Array.isArray(data?.messages) ? data.messages : []);
+        const msgsData = typeof msgsPayload === 'string' ? {} : msgsPayload;
+        setMessages(Array.isArray(msgsData?.messages) ? msgsData.messages : []);
+
+        // Procesar miembros (si falla, no bloquea)
+        if (membersResponse.ok) {
+            const membersData = await membersResponse.json();
+            if (Array.isArray(membersData.members)) {
+                const map: Record<string, string> = {};
+                membersData.members.forEach((m: ChatMember) => {
+                    if (m.member?.name && m.member?.displayName) {
+                        map[m.member.name] = m.member.displayName;
+                    }
+                });
+                setSpaceMembers(map);
+            }
+        }
+
         setIsGoogleConnected(true);
       } catch (error: any) {
-        console.error('Error cargando mensajes:', error);
+        console.error('Error cargando chat:', error);
         setLastError(error?.message || 'Error al leer historial.');
       } finally {
         setIsLoadingMessages(false);
@@ -169,10 +194,8 @@ export default function ChatPage() {
     }
   }, [orderedMessages]);
 
-  // Identificar mi propio ID de Google Chat buscando en el historial mis mensajes por email
   const myChatId = useMemo(() => {
     if (!userInfo?.email || messages.length === 0) return null;
-    // Buscamos algún mensaje donde el sender tenga mi email
     const myMsg = messages.find(m => m.sender?.email === userInfo.email);
     return myMsg?.sender?.name || null;
   }, [messages, userInfo]);
@@ -233,39 +256,39 @@ export default function ChatPage() {
     }
   };
 
-  // Función mejorada para resolver el nombre del remitente
   const resolveSenderName = (sender?: { displayName?: string; name?: string; email?: string }) => {
     if (!sender) return 'Desconocido';
 
-    // 1. Si Google nos da el nombre, lo usamos.
+    // 1. Prioridad: Si Google ya dio el nombre en el mensaje
     if (sender.displayName) return sender.displayName;
 
-    // 2. Si hay email, intentamos matchear conmigo o con usuarios del CRM.
+    // 2. Si tenemos email, buscar en usuarios locales
     if (sender.email) {
       if (userInfo?.email && sender.email === userInfo.email) return 'Yo';
       const localUser = users.find(u => u.email === sender.email);
       if (localUser?.name) return localUser.name;
     }
 
-    // 3. Si no hay email, verificamos si el ID corresponde al "mío" identificado previamente.
+    // 3. Buscar en la lista de miembros del espacio (Solución para Grupos)
+    if (sender.name && spaceMembers[sender.name]) {
+        return spaceMembers[sender.name];
+    }
+
+    // 4. Chequear si soy "Yo" por ID inferido
     if (myChatId && sender.name === myChatId) {
       return 'Yo';
     }
 
-    // 4. Fallback contextual:
-    // Si estamos en un espacio de chat mapeado (DM) y el remitente NO soy yo (o no sé quién soy pero hay un mapeo),
-    // asumimos que es el usuario destinatario.
+    // 5. Fallback para DMs
     if (selectedSpace && sender.name) {
       const mapping = chatSpaces.find(s => s.spaceId === selectedSpace);
       if (mapping) {
-        // Intentar obtener el nombre del usuario mapeado
         const targetUser = users.find(u => u.id === mapping.userId);
         if (targetUser?.name) return targetUser.name;
         if (mapping.userEmail) return mapping.userEmail;
       }
     }
 
-    // 5. Último recurso: mostrar el ID crudo o "Usuario"
     return sender.name || 'Usuario';
   };
 
