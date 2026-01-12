@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label'; // <-- IMPORTANTE: Esta era la línea que faltaba o fallaba
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -61,7 +62,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
             loadData();
         } catch (error) {
             console.error(error);
-            toast({ title: "Error", description: "No se pudo crear la sesión. Revisa la consola por errores de permisos o índices.", variant: "destructive" });
+            toast({ title: "Error", description: "No se pudo crear la sesión.", variant: "destructive" });
         }
     };
 
@@ -112,7 +113,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
 
     return (
         <div className="space-y-6 h-full flex flex-col pt-2"> 
-            <div className="flex justify-between items-center shrink-0 pb-4">
+            <div className="flex justify-between items-center shrink-0 pb-4 pr-4">
                 <div>
                     <h2 className="text-xl font-bold flex items-center gap-2">
                         <UserCheck className="h-5 w-5 text-primary"/> 
