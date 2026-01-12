@@ -4,6 +4,7 @@ import {
   findDirectMessageSpace,
   getSpaceFromWebhook,
   listChatMessages,
+  listSpaceMembers,
   sendChatMessage,
   sendChatMessageViaApi,
 } from '@/lib/google-chat-service';
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const space = searchParams.get('space') || getSpaceFromConfig();
+  const mode = searchParams.get('mode') || 'messages';
 
   if (!space) {
     return NextResponse.json(
@@ -40,11 +42,16 @@ export async function GET(request: Request) {
   }
 
   try {
+    if (mode === 'members') {
+      const members = await listSpaceMembers(accessToken, space);
+      return NextResponse.json({ members });
+    }
+
     const messages = await listChatMessages(accessToken, space, { pageSize: 50 });
     return NextResponse.json({ messages });
   } catch (error) {
-    console.error('Error obteniendo mensajes de Google Chat', error);
-    const message = error instanceof Error ? error.message : 'No se pudieron recuperar los mensajes.';
+    console.error('Error obteniendo datos de Google Chat', error);
+    const message = error instanceof Error ? error.message : 'No se pudieron recuperar los datos.';
     const status = error instanceof ChatServiceError && error.status ? error.status : 502;
     return NextResponse.json({ error: message }, { status });
   }
