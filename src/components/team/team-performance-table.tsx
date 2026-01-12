@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
-import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getInvoices, getProspects, getObjectiveVisibilityConfig, updateObjectiveVisibilityConfig } from '@/lib/firebase-service';
-import type { Opportunity, User, Client, UserRole, Invoice, Prospect, AreaType, ObjectiveVisibilityConfig } from '@/lib/types';
+import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getProspects, getObjectiveVisibilityConfig, updateObjectiveVisibilityConfig } from '@/lib/firebase-service';
+import type { Opportunity, User, Client, UserRole, Prospect, AreaType, ObjectiveVisibilityConfig } from '@/lib/types';
 import { userRoles } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -11,8 +11,8 @@ import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/hooks/use-auth';
-import { MoreHorizontal, Trash2, Save, BarChartHorizontal, ClipboardList } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu';
+import { MoreHorizontal, Trash2, Save, BarChartHorizontal } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import {
@@ -25,15 +25,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Sheet,
-  SheetContent,
-} from "@/components/ui/sheet";
 import { addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
 import { MonthlyClosureDialog } from './monthly-closure-dialog';
 import { getObjectiveForDate, monthKey } from '@/lib/objective-utils';
 import { format } from 'date-fns';
-import { CoachingView } from './coaching-view';
 
 
 interface UserStats {
@@ -65,9 +60,6 @@ export function TeamPerformanceTable() {
   const [savingVisibility, setSavingVisibility] = useState(false);
   const [visibilityMonth, setVisibilityMonth] = useState('');
   const [visibilityDeadline, setVisibilityDeadline] = useState('');
-  
-  // Estado para el panel de Coaching
-  const [selectedAdvisorForCoaching, setSelectedAdvisorForCoaching] = useState<User | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -369,13 +361,6 @@ export function TeamPerformanceTable() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        {user.role === 'Asesor' && (
-                            <DropdownMenuItem onClick={() => setSelectedAdvisorForCoaching(user)}>
-                                <ClipboardList className="mr-2 h-4 w-4" />
-                                Seguimiento Semanal
-                            </DropdownMenuItem>
-                        )}
-                        {isBoss && <DropdownMenuSeparator />}
                         {isBoss && (
                             <DropdownMenuItem 
                                 className="text-destructive"
@@ -475,12 +460,6 @@ export function TeamPerformanceTable() {
           </AlertDialogContent>
       </AlertDialog>
       
-      <Sheet open={!!selectedAdvisorForCoaching} onOpenChange={(open) => !open && setSelectedAdvisorForCoaching(null)}>
-        <SheetContent side="right" className="sm:max-w-2xl w-full p-0">
-            {selectedAdvisorForCoaching && <CoachingView advisor={selectedAdvisorForCoaching} />}
-        </SheetContent>
-      </Sheet>
-
       <MonthlyClosureDialog
         isOpen={isClosureDialogOpen}
         onOpenChange={setIsClosureDialogOpen}
