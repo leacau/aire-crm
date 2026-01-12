@@ -3,17 +3,28 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import type { User, CoachingSession, CoachingItem } from '@/lib/types';
-import { getCoachingSessions, createCoachingSession, updateCoachingItem, addItemsToSession } from '@/lib/firebase-service';
+import { getCoachingSessions, createCoachingSession, updateCoachingItem, addItemsToSession, deleteCoachingSession, updateCoachingSession } from '@/lib/firebase-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label'; // <-- IMPORTANTE: Esta era la línea que faltaba o fallaba
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, Plus, Save, UserCheck } from 'lucide-react';
+import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function CoachingView({ advisor }: { advisor: User }) {
@@ -26,6 +37,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const [newItemEntity, setNewItemEntity] = useState('');
     const [newItemAction, setNewItemAction] = useState('');
     const [newItemType, setNewItemType] = useState<'client' | 'prospect' | 'general'>('client');
+    const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
 
     const canManage = isBoss || userInfo?.role === 'Gerencia' || userInfo?.role === 'Jefe';
 
@@ -109,6 +121,32 @@ export function CoachingView({ advisor }: { advisor: User }) {
         }
     };
 
+    const handleDeleteSession = async () => {
+        if (!sessionToDelete || !userInfo) return;
+        try {
+            await deleteCoachingSession(sessionToDelete, userInfo.id, userInfo.name);
+            setSessions(prev => prev.filter(s => s.id !== sessionToDelete));
+            toast({ title: "Sesión eliminada" });
+        } catch (error) {
+            console.error(error);
+            toast({ title: "Error al eliminar", variant: "destructive" });
+        } finally {
+            setSessionToDelete(null);
+        }
+    };
+
+    const handleToggleStatus = async (session: CoachingSession) => {
+        if (!userInfo) return;
+        const newStatus = session.status === 'Open' ? 'Closed' : 'Open';
+        try {
+            await updateCoachingSession(session.id, { status: newStatus }, userInfo.id, userInfo.name);
+            setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: newStatus } : s));
+            toast({ title: newStatus === 'Closed' ? "Sesión cerrada" : "Sesión reabierta" });
+        } catch (error) {
+            toast({ title: "Error al actualizar estado", variant: "destructive" });
+        }
+    };
+
     if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
 
     return (
@@ -139,8 +177,8 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 )}
 
                 {sessions.map((session) => (
-                    <Card key={session.id} className="overflow-hidden border-l-4 border-l-primary/50">
-                        <CardHeader className="bg-muted/30 pb-3 pt-4">
+                    <Card key={session.id} className="overflow-hidden border-l-4 border-l-primary/50 relative">
+                        <CardHeader className="bg-muted/30 pb-3 pt-4 pr-12">
                             <div className="flex justify-between items-center">
                                 <div>
                                     <CardTitle className="text-base">Reunión del {format(parseISO(session.date), "d 'de' MMMM, yyyy", { locale: es })}</CardTitle>
@@ -150,6 +188,36 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                     {session.status === 'Open' ? 'En curso' : 'Cerrada'}
                                 </Badge>
                             </div>
+                            
+                            {canManage && (
+                                <div className="absolute top-4 right-4">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" className="h-8 w-8 p-0">
+                                                <MoreVertical className="h-4 w-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                                            <DropdownMenuItem onClick={() => handleToggleStatus(session)}>
+                                                {session.status === 'Open' ? (
+                                                    <>
+                                                        <Archive className="mr-2 h-4 w-4" /> Cerrar Sesión
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <ArchiveRestore className="mr-2 h-4 w-4" /> Reabrir Sesión
+                                                    </>
+                                                )}
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem className="text-destructive" onClick={() => setSessionToDelete(session.id)}>
+                                                <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            )}
                         </CardHeader>
                         <CardContent className="pt-4 space-y-6">
                             {/* Lista de Compromisos */}
@@ -177,6 +245,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                                 <Select 
                                                     value={item.status} 
                                                     onValueChange={(val) => handleUpdateItem(session.id, item.id, { status: val })}
+                                                    disabled={session.status === 'Closed' && !canManage}
                                                 >
                                                     <SelectTrigger className={`w-full md:w-[160px] h-8 text-xs font-medium border ${
                                                         item.status === 'Completado' ? 'bg-green-50 text-green-700 border-green-200' : 
@@ -204,6 +273,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                                 className="flex-1 min-h-[80px] text-sm resize-none bg-yellow-50/50 focus:bg-background transition-colors border-yellow-100 focus:border-primary"
                                                 placeholder="Escribe aquí los avances diarios..."
                                                 defaultValue={item.advisorNotes}
+                                                disabled={session.status === 'Closed'}
                                                 onBlur={(e) => {
                                                     if (e.target.value !== item.advisorNotes) {
                                                         handleUpdateItem(session.id, item.id, { advisorNotes: e.target.value });
@@ -262,6 +332,23 @@ export function CoachingView({ advisor }: { advisor: User }) {
                     </Card>
                 ))}
             </div>
+
+            <AlertDialog open={!!sessionToDelete} onOpenChange={() => setSessionToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>¿Eliminar esta sesión?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Esta acción no se puede deshacer. Se perderán todos los compromisos y notas asociadas a esta fecha.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteSession} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Eliminar
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
