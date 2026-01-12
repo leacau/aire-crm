@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { db } from './firebase';
@@ -186,9 +184,6 @@ export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Rec
     const cachedData = getFromCache('permissions');
     if (cachedData) return cachedData;
     
-    // Assuming the super admin's UID is known or can be fetched if not available.
-    // For now, this part might need adjustment if the UID is not static.
-    // This function can't easily get the current user's ID, so it's a simplification.
     const permissionsDocRef = doc(db, 'system_config', PERMISSIONS_DOC_ID);
     const docSnap = await getDoc(permissionsDocRef);
 
@@ -2991,5 +2986,32 @@ export const upsertChatSpace = async (params: {
         entityName: 'Chat directo',
         details: `actualizó el space de chat para ${userEmail}.`,
         ownerName: updatedByName,
+    });
+};
+
+// --- Google Chat User Mappings (Manual Aliases) ---
+
+export const getChatUserMappings = async (): Promise<Record<string, string>> => {
+    const docRef = doc(collections.systemConfig, 'chat_user_mappings');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+        return snap.data().mappings || {};
+    }
+    return {};
+};
+
+export const saveChatUserMappings = async (mappings: Record<string, string>, userId: string, userName: string) => {
+    const docRef = doc(collections.systemConfig, 'chat_user_mappings');
+    await setDoc(docRef, { mappings }, { merge: true });
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'system_config', // Using existing types, closest fit
+        entityId: 'chat_user_mappings',
+        entityName: 'Alias de Chat',
+        details: 'actualizó los alias de usuarios de Google Chat.',
+        ownerName: userName,
     });
 };
