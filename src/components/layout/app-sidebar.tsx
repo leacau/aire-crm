@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Logo } from '@/components/logo';
 import { cn } from '@/lib/utils';
@@ -25,18 +26,49 @@ import {
   MessageSquare,
   Database,
   FileSpreadsheet,
-  ClipboardList
+  ClipboardList,
+  Briefcase,
+  Layers,
+  Calculator,
+  UserCog,
+  Settings2,
+  ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useMemo } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { useMemo, useState, useEffect } from 'react';
+
+// Importamos los componentes de UI (que ahora estarán restaurados en el Paso 1)
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarRail,
+  useSidebar,
+} from '@/components/ui/sidebar';
+
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
 import type { ScreenName } from '@/lib/types';
 
 interface SidebarItem {
@@ -48,13 +80,12 @@ interface SidebarItem {
 
 interface SidebarGroup {
   groupLabel: string;
+  icon: React.ElementType;
   items: SidebarItem[];
 }
 
-// Tipo unión para manejar tanto items sueltos como grupos
 type SidebarEntry = SidebarItem | SidebarGroup;
 
-// Type guard para diferenciar grupos de items
 function isSidebarGroup(entry: SidebarEntry): entry is SidebarGroup {
   return (entry as SidebarGroup).groupLabel !== undefined;
 }
@@ -62,26 +93,29 @@ function isSidebarGroup(entry: SidebarEntry): entry is SidebarGroup {
 export function AppSidebar() {
   const pathname = usePathname();
   const { userInfo } = useAuth();
+  const { state } = useSidebar();
+  
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
-  // Definimos la estructura completa requerida
   const rawSidebarEntries: SidebarEntry[] = [
     { title: 'Dashboard', href: '/', icon: LayoutDashboard, screenName: 'Dashboard' },
     {
       groupLabel: 'Comercial',
+      icon: Briefcase,
       items: [
         { title: 'Objetivos', href: '/objectives', icon: Crosshair, screenName: 'Objectives' },
+        { title: 'Oportunidades', href: '/opportunities', icon: Trophy, screenName: 'Opportunities' },
         { title: 'Prospectos', href: '/prospects', icon: Target, screenName: 'Prospects' },
         { title: 'Clientes', href: '/clients', icon: Users, screenName: 'Clients' },
-        { title: 'Oportunidades', href: '/opportunities', icon: Trophy, screenName: 'Opportunities' },
-        { title: 'Cotizador', href: '/quotes', icon: FileSpreadsheet, screenName: 'Quotes' },
-        { title: 'Seguimiento', href: '/coaching', icon: ClipboardList, screenName: 'Coaching' },
-        { title: 'Aprobaciones', href: '/approvals', icon: CheckSquare, screenName: 'Approvals' },
         { title: 'Canjes', href: '/canjes', icon: Repeat, screenName: 'Canjes' },
-
+        { title: 'Cotizador', href: '/quotes', icon: FileSpreadsheet, screenName: 'Quotes' },
+        { title: 'Aprobaciones', href: '/approvals', icon: CheckSquare, screenName: 'Approvals' },
+        { title: 'Seguimiento', href: '/coaching', icon: ClipboardList, screenName: 'Coaching' },
       ]
     },
     {
       groupLabel: 'Programación',
+      icon: Layers,
       items: [
         { title: 'Grilla', href: '/grilla', icon: Radio, screenName: 'Grilla' },
         { title: 'PNTs', href: '/pnts', icon: Megaphone, screenName: 'PNTs' },
@@ -91,6 +125,7 @@ export function AppSidebar() {
     { title: 'Chat', href: '/chat', icon: MessageSquare, screenName: 'Chat' },
     {
       groupLabel: 'Contable',
+      icon: Calculator,
       items: [
         { title: 'Cobranzas', href: '/billing', icon: DollarSign, screenName: 'Billing' },
         { title: 'Facturas', href: '/invoices', icon: FileText, screenName: 'Invoices' },
@@ -98,137 +133,173 @@ export function AppSidebar() {
     },
     {
       groupLabel: 'RRHH',
+      icon: UserCog,
       items: [
         { title: 'Licencias', href: '/licencias', icon: Palmtree, screenName: 'Licenses' },
       ]
     },
     {
       groupLabel: 'Administración',
+      icon: Settings2,
       items: [
-        { title: 'Equipo', href: '/team', icon: Users2, screenName: 'Team' },
         { title: 'Tarifas', href: '/rates', icon: BadgePercent, screenName: 'Rates' },
+        { title: 'Equipo', href: '/team', icon: Users2, screenName: 'Team' },
         { title: 'Reportes', href: '/reports', icon: BarChart3, screenName: 'Reports' },
-        { title: 'Actividad', href: '/activity', icon: Activity, screenName: 'Activity' },
         { title: 'Importar', href: '/import', icon: Upload, screenName: 'Import' },
         { title: 'Mapeo Tango', href: '/tango-mapping', icon: Database, screenName: 'TangoMapping' },
+        { title: 'Actividad', href: '/activity', icon: Activity, screenName: 'Activity' },
       ]
     },
   ];
 
-  // Filtramos los items basándonos en permisos
   const filteredEntries = useMemo(() => {
     if (!userInfo) return [];
-
     const hasPermission = (item: SidebarItem) => {
-      // Super admin ve todo
       if (userInfo.email === 'lchena@airedesantafe.com.ar') return true;
-      
-      // Chequeo de permisos standard
       if (userInfo.permissions) {
-        const permission = userInfo.permissions[item.screenName];
-        return permission?.view;
+        return userInfo.permissions[item.screenName]?.view;
       }
       return true;
     };
 
     return rawSidebarEntries.reduce<SidebarEntry[]>((acc, entry) => {
       if (isSidebarGroup(entry)) {
-        // Es un grupo: filtramos sus hijos
         const visibleItems = entry.items.filter(hasPermission);
         if (visibleItems.length > 0) {
           acc.push({ ...entry, items: visibleItems });
         }
-      } else {
-        // Es un item suelto
-        if (hasPermission(entry)) {
-          acc.push(entry);
-        }
+      } else if (hasPermission(entry)) {
+        acc.push(entry);
       }
       return acc;
     }, []);
   }, [userInfo]);
 
-  // Determinamos qué grupo debe estar abierto por defecto según la URL actual
-  const activeGroup = useMemo(() => {
-    for (const entry of filteredEntries) {
-      if (isSidebarGroup(entry)) {
-        if (entry.items.some(item => pathname === item.href)) {
-          return entry.groupLabel;
-        }
-      }
+  useEffect(() => {
+    if (state === 'collapsed') return; 
+    
+    const activeGroup = filteredEntries.find(entry => 
+      isSidebarGroup(entry) && entry.items.some(item => pathname === item.href)
+    );
+    
+    if (activeGroup && isSidebarGroup(activeGroup)) {
+      setOpenGroup(activeGroup.groupLabel);
     }
-    return undefined;
-  }, [pathname, filteredEntries]);
+  }, [pathname, filteredEntries, state]);
+
+  const handleGroupClick = (label: string) => {
+    setOpenGroup(prev => prev === label ? null : label);
+  };
 
   return (
-    <div className="hidden border-r bg-zinc-950 text-zinc-100 lg:block w-[240px] h-screen sticky top-0 overflow-hidden flex flex-col z-20">
-      <div className="flex h-full flex-col gap-2">
-        <div className="flex h-[60px] items-center border-b border-zinc-800 px-6 shrink-0">
-          <Link className="flex items-center gap-2 font-semibold text-white" href="/">
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <div className="flex h-[60px] items-center px-4 shrink-0 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center overflow-hidden">
+          <Link href="/" className="flex items-center gap-2 font-semibold transition-all">
             <Logo isInSidebar={true} />
           </Link>
         </div>
-        
-        <ScrollArea className="flex-1 px-4">
-          <nav className="grid items-start px-2 text-sm font-medium lg:px-4 space-y-1 py-4">
-            
-            <Accordion 
-              type="single" 
-              collapsible 
-              className="w-full space-y-1" 
-              defaultValue={activeGroup}
-            >
-              {filteredEntries.map((entry, index) => {
-                if (isSidebarGroup(entry)) {
-                  // Renderizar Grupo (Accordion)
-                  return (
-                    <AccordionItem value={entry.groupLabel} key={entry.groupLabel} className="border-none">
-                      <AccordionTrigger className="flex items-center gap-3 rounded-lg px-3 py-2 text-zinc-400 hover:bg-zinc-800 hover:text-white hover:no-underline transition-all [&[data-state=open]]:text-white">
-                        <span className="flex-1 text-left">{entry.groupLabel}</span>
-                      </AccordionTrigger>
-                      <AccordionContent className="pb-1 pt-1 ml-2 border-l border-zinc-800">
-                        {entry.items.map((subItem) => (
-                          <Link
-                            key={subItem.href}
-                            href={subItem.href}
-                            className={cn(
-                              "flex items-center gap-3 rounded-r-lg px-3 py-2 transition-all mb-1 text-sm",
-                              pathname === subItem.href
-                                ? "bg-zinc-800/50 text-white border-l-2 border-primary -ml-[1px]"
-                                : "text-zinc-400 hover:text-white hover:bg-zinc-800/30"
-                            )}
-                          >
-                            <subItem.icon className="h-4 w-4 shrink-0" />
-                            {subItem.title}
-                          </Link>
-                        ))}
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                } else {
-                  // Renderizar Item Suelto (Link directo)
-                  return (
-                    <Link
-                      key={entry.href}
-                      href={entry.href}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
-                        pathname === entry.href
-                          ? "bg-zinc-800 text-white"
-                          : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-                      )}
-                    >
-                      <entry.icon className="h-4 w-4 shrink-0" />
-                      {entry.title}
-                    </Link>
-                  );
-                }
-              })}
-            </Accordion>
+      </SidebarHeader>
+      
+      <SidebarContent>
+        <SidebarMenu>
+          {filteredEntries.map((entry) => {
+            if (isSidebarGroup(entry)) {
+              const isActive = entry.items.some(item => pathname === item.href);
+              const isOpen = openGroup === entry.groupLabel;
 
-          </nav>
-        </ScrollArea>
-      </div>
-    </div>
+              if (state === 'collapsed') {
+                return (
+                  <SidebarMenuItem key={entry.groupLabel}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <SidebarMenuButton 
+                          tooltip={entry.groupLabel} 
+                          isActive={isActive}
+                          className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                        >
+                          <entry.icon />
+                          <span>{entry.groupLabel}</span>
+                          <ChevronRight className="ml-auto size-4" />
+                        </SidebarMenuButton>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="right" align="start" className="min-w-56 rounded-lg bg-zinc-950 border-zinc-800 text-zinc-100">
+                        <DropdownMenuLabel className="text-zinc-400">{entry.groupLabel}</DropdownMenuLabel>
+                        <DropdownMenuSeparator className="bg-zinc-800" />
+                        {entry.items.map((subItem) => (
+                          <DropdownMenuItem key={subItem.href} asChild className="focus:bg-zinc-800 focus:text-zinc-100">
+                            <Link href={subItem.href} className="flex items-center gap-2 cursor-pointer">
+                              <subItem.icon className="size-4 text-zinc-400" />
+                              <span>{subItem.title}</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </SidebarMenuItem>
+                );
+              }
+
+              return (
+                <Collapsible
+                  key={entry.groupLabel}
+                  asChild
+                  open={isOpen}
+                  onOpenChange={() => handleGroupClick(entry.groupLabel)}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton 
+                        tooltip={entry.groupLabel} 
+                        isActive={isActive}
+                      >
+                        <entry.icon />
+                        <span>{entry.groupLabel}</span>
+                        <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {entry.items.map((subItem) => (
+                          <SidebarMenuSubItem key={subItem.href}>
+                            <SidebarMenuSubButton 
+                              asChild 
+                              isActive={pathname === subItem.href}
+                            >
+                              <Link href={subItem.href}>
+                                <subItem.icon className="size-4" />
+                                <span>{subItem.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              );
+            }
+
+            return (
+              <SidebarMenuItem key={entry.href}>
+                <SidebarMenuButton 
+                  asChild 
+                  tooltip={entry.title} 
+                  isActive={pathname === entry.href}
+                >
+                  <Link href={entry.href}>
+                    <entry.icon />
+                    <span>{entry.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarContent>
+      <SidebarFooter />
+      <SidebarRail />
+    </Sidebar>
   );
 }
