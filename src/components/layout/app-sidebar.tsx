@@ -70,13 +70,14 @@ export function AppSidebar() {
       groupLabel: 'Comercial',
       items: [
         { title: 'Objetivos', href: '/objectives', icon: Crosshair, screenName: 'Objectives' },
-        { title: 'Oportunidades', href: '/opportunities', icon: Trophy, screenName: 'Opportunities' },
         { title: 'Prospectos', href: '/prospects', icon: Target, screenName: 'Prospects' },
         { title: 'Clientes', href: '/clients', icon: Users, screenName: 'Clients' },
-        { title: 'Canjes', href: '/canjes', icon: Repeat, screenName: 'Canjes' },
+        { title: 'Oportunidades', href: '/opportunities', icon: Trophy, screenName: 'Opportunities' },
         { title: 'Cotizador', href: '/quotes', icon: FileSpreadsheet, screenName: 'Quotes' },
-        { title: 'Aprobaciones', href: '/approvals', icon: CheckSquare, screenName: 'Approvals' },
         { title: 'Seguimiento', href: '/coaching', icon: ClipboardList, screenName: 'Coaching' },
+        { title: 'Aprobaciones', href: '/approvals', icon: CheckSquare, screenName: 'Approvals' },
+        { title: 'Canjes', href: '/canjes', icon: Repeat, screenName: 'Canjes' },
+
       ]
     },
     {
@@ -91,7 +92,7 @@ export function AppSidebar() {
     {
       groupLabel: 'Contable',
       items: [
-        { title: 'Cobranzas', href: '/billing', icon: DollarSign, screenName: 'Billing' }, // Renombrado de Facturación
+        { title: 'Cobranzas', href: '/billing', icon: DollarSign, screenName: 'Billing' },
         { title: 'Facturas', href: '/invoices', icon: FileText, screenName: 'Invoices' },
       ]
     },
@@ -104,12 +105,12 @@ export function AppSidebar() {
     {
       groupLabel: 'Administración',
       items: [
-        { title: 'Tarifas', href: '/rates', icon: BadgePercent, screenName: 'Rates' },
         { title: 'Equipo', href: '/team', icon: Users2, screenName: 'Team' },
+        { title: 'Tarifas', href: '/rates', icon: BadgePercent, screenName: 'Rates' },
         { title: 'Reportes', href: '/reports', icon: BarChart3, screenName: 'Reports' },
+        { title: 'Actividad', href: '/activity', icon: Activity, screenName: 'Activity' },
         { title: 'Importar', href: '/import', icon: Upload, screenName: 'Import' },
         { title: 'Mapeo Tango', href: '/tango-mapping', icon: Database, screenName: 'TangoMapping' },
-        { title: 'Actividad', href: '/activity', icon: Activity, screenName: 'Activity' },
       ]
     },
   ];
