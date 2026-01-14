@@ -592,7 +592,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         if (selectedAdvisor === 'corporativo') {
              advisorClientIds = new Set(
                 clients
-                  .filter(c => !c.ownerId || c.ownerName?.toUpperCase() === 'CORPORATIVO')
+                  // AQUÍ AGREGAMOS LA CONDICIÓN PARA "Mario Altamirano"
+                  .filter(c => !c.ownerId || c.ownerName?.toUpperCase() === 'CORPORATIVO' || c.ownerName === 'Mario Altamirano')
                   .map(c => c.id)
              );
         } else {
@@ -707,7 +708,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         if (selectedAdvisor === 'all') {
             baseList = payments;
         } else if (selectedAdvisor === 'corporativo') {
-            baseList = payments.filter(p => !p.advisorId || p.advisorName?.toUpperCase() === 'CORPORATIVO');
+            // AQUÍ AGREGAMOS LA CONDICIÓN PARA "Mario Altamirano" en la pestaña Mora
+            baseList = payments.filter(p => !p.advisorId || p.advisorName?.toUpperCase() === 'CORPORATIVO' || p.advisorName === 'Mario Altamirano');
         } else {
             baseList = payments.filter((p) => p.advisorId === selectedAdvisor);
         }
@@ -760,7 +762,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       let advisorId = entry.advisorId;
       let advisorName = entry.advisorName || 'Sin asesor';
 
-      if (!advisorId || advisorName.toUpperCase() === 'CORPORATIVO') {
+      // AQUÍ AGRUPAMOS "Mario Altamirano" bajo Corporativo en el resumen
+      if (!advisorId || advisorName.toUpperCase() === 'CORPORATIVO' || advisorName === 'Mario Altamirano') {
           advisorId = 'corporativo';
           advisorName = 'Corporativo';
       } else if (!advisorId) {
