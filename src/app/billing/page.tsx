@@ -586,9 +586,19 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         return isWithinInterval(date, { start: dateRange.from, end: dateRange.to });
     }
 
-    const advisorClientIds = isBoss && selectedAdvisor !== 'all' 
-        ? new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id))
-        : null;
+    let advisorClientIds: Set<string> | null = null;
+    
+    if (isBoss && selectedAdvisor !== 'all') {
+        if (selectedAdvisor === 'corporativo') {
+             advisorClientIds = new Set(
+                clients
+                  .filter(c => !c.ownerId || c.ownerName?.toUpperCase() === 'CORPORATIVO')
+                  .map(c => c.id)
+             );
+        } else {
+            advisorClientIds = new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
+        }
+    }
 
     let userWonOpps = opportunities.filter(opp => {
       if (opp.stage !== 'Cerrado - Ganado') return false;
@@ -691,11 +701,19 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const filteredPayments = useMemo(() => {
     if (!userInfo) return [] as PaymentEntry[];
 
-    const baseList = isBoss
-      ? selectedAdvisor === 'all'
-        ? payments
-        : payments.filter((p) => p.advisorId === selectedAdvisor)
-      : payments.filter((p) => p.advisorId === userInfo.id);
+    let baseList: PaymentEntry[] = [];
+    
+    if (isBoss) {
+        if (selectedAdvisor === 'all') {
+            baseList = payments;
+        } else if (selectedAdvisor === 'corporativo') {
+            baseList = payments.filter(p => !p.advisorId || p.advisorName?.toUpperCase() === 'CORPORATIVO');
+        } else {
+            baseList = payments.filter((p) => p.advisorId === selectedAdvisor);
+        }
+    } else {
+        baseList = payments.filter((p) => p.advisorId === userInfo.id);
+    }
 
     const parseIssueDate = (value?: string | null) => parseFlexibleDate(value);
 
@@ -738,11 +756,21 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       if (!amount || Number.isNaN(amount)) return;
 
       const bucketKey = getBucket(daysLate);
-      const advisorId = entry.advisorId || 'sin-asesor';
+      
+      let advisorId = entry.advisorId;
+      let advisorName = entry.advisorName || 'Sin asesor';
+
+      if (!advisorId || advisorName.toUpperCase() === 'CORPORATIVO') {
+          advisorId = 'corporativo';
+          advisorName = 'Corporativo';
+      } else if (!advisorId) {
+          advisorId = 'sin-asesor';
+      }
+
       if (!buckets[advisorId]) {
         buckets[advisorId] = {
           advisorId,
-          advisorName: entry.advisorName || 'Sin asesor',
+          advisorName: advisorName,
           ranges: { '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 },
           total: 0,
         };
@@ -1461,6 +1489,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los asesores</SelectItem>
+                <SelectItem value="corporativo">Corporativo</SelectItem>
                 {advisors.map(advisor => (
                   <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
                 ))}
