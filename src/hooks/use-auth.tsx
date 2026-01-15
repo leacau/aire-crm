@@ -161,6 +161,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (auth.currentUser) {
             const provider = new GoogleAuthProvider();
+            provider.setCustomParameters({
+                  prompt: 'consent select_account',
+                  access_type: 'offline'
+              });
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
             provider.addScope('https://www.googleapis.com/auth/drive.file');
