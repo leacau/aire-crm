@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { User, Role } from '@/lib/types';
+import { User, Role, SellerCompanyConfig } from '@/lib/types';
 import { getAllUsers, updateUserProfile } from '@/lib/firebase-service';
 import {
   Table,
@@ -18,12 +18,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Check, Loader2, Save } from 'lucide-react';
+import { Loader2, Settings2, Plus, X, Trash2, Building2 } from 'lucide-react';
 
 export function PermissionsManager() {
   const [users, setUsers] = useState<User[]>([]);
@@ -38,7 +46,6 @@ export function PermissionsManager() {
     try {
       setLoading(true);
       const data = await getAllUsers();
-      // Ordenar: primero los que tienen rol asignado, luego alfabéticamente
       const sorted = data.sort((a, b) => a.name.localeCompare(b.name));
       setUsers(sorted);
     } catch (error) {
@@ -57,17 +64,14 @@ export function PermissionsManager() {
     try {
       await updateUserProfile(userId, { role: newRole });
       setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u));
-      toast({
-        title: 'Rol actualizado',
-        description: 'Los permisos del usuario han sido modificados.',
-      });
+      toast({ title: 'Rol actualizado', description: 'Permisos modificados correctamente.' });
     } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'No se pudo actualizar el rol.',
-      });
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el rol.' });
     }
+  };
+
+  const handleConfigUpdate = (userId: string, newConfig: SellerCompanyConfig[]) => {
+      setUsers(users.map(u => u.id === userId ? { ...u, sellerConfig: newConfig } : u));
   };
 
   return (
@@ -79,14 +83,14 @@ export function PermissionsManager() {
         </Button>
       </div>
 
-      <div className="rounded-md border bg-white">
+      <div className="rounded-md border bg-white shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Usuario</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Rol / Permisos</TableHead>
-              <TableHead className="w-[200px]">Cód. Vendedor (Tango)</TableHead>
+              <TableHead className="w-[300px]">Códigos Tango</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -94,16 +98,10 @@ export function PermissionsManager() {
               <UserRow 
                 key={user.id} 
                 user={user} 
-                onRoleChange={handleRoleChange} 
+                onRoleChange={handleRoleChange}
+                onConfigUpdate={handleConfigUpdate}
               />
             ))}
-            {!loading && users.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                  No se encontraron usuarios.
-                </TableCell>
-              </TableRow>
-            )}
           </TableBody>
         </Table>
       </div>
@@ -111,40 +109,17 @@ export function PermissionsManager() {
   );
 }
 
-// Subcomponente para manejar el estado de cada fila independientemente
 function UserRow({ 
   user, 
-  onRoleChange 
+  onRoleChange,
+  onConfigUpdate
 }: { 
   user: User; 
-  onRoleChange: (id: string, role: Role) => Promise<void> 
+  onRoleChange: (id: string, role: Role) => Promise<void>;
+  onConfigUpdate: (id: string, config: SellerCompanyConfig[]) => void;
 }) {
-  const [sellerCode, setSellerCode] = useState(user.sellerCode || '');
-  const [isSavingCode, setIsSavingCode] = useState(false);
-  const { toast } = useToast();
-
-  const handleSaveCode = async () => {
-    if (sellerCode === user.sellerCode) return;
-    
-    try {
-      setIsSavingCode(true);
-      await updateUserProfile(user.id, { sellerCode });
-      toast({
-        title: 'Código guardado',
-        description: `Se asignó el código "${sellerCode}" a ${user.name}`,
-      });
-      // Actualizamos el prop localmente en UI para que desaparezca el botón de guardar
-      user.sellerCode = sellerCode;
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'No se pudo guardar el código de vendedor.',
-      });
-    } finally {
-      setIsSavingCode(false);
-    }
-  };
+  const configCount = user.sellerConfig?.reduce((acc, curr) => acc + curr.codes.length, 0) || 0;
+  const companiesCount = user.sellerConfig?.length || 0;
 
   return (
     <TableRow>
@@ -175,27 +150,181 @@ function UserRow({
         </Select>
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
-          <Input
-            placeholder="Ej. VEND01"
-            className="h-8 w-24 text-sm"
-            value={sellerCode}
-            onChange={(e) => setSellerCode(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSaveCode()}
-          />
-          {sellerCode !== (user.sellerCode || '') && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-              onClick={handleSaveCode}
-              disabled={isSavingCode}
-            >
-              {isSavingCode ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            </Button>
-          )}
-        </div>
+         <SellerConfigDialog user={user} onUpdate={onConfigUpdate} />
+         <div className="mt-1 text-xs text-muted-foreground">
+             {configCount > 0 
+                ? `${configCount} códigos en ${companiesCount} empresas` 
+                : 'Sin asignar'}
+         </div>
       </TableCell>
     </TableRow>
   );
+}
+
+// --- Componente del Diálogo de Configuración ---
+
+function SellerConfigDialog({ user, onUpdate }: { user: User, onUpdate: (id: string, c: SellerCompanyConfig[]) => void }) {
+    const [open, setOpen] = useState(false);
+    const [config, setConfig] = useState<SellerCompanyConfig[]>(user.sellerConfig || []);
+    const [loading, setLoading] = useState(false);
+    const { toast } = useToast();
+
+    // Estados para inputs temporales
+    const [newCompany, setNewCompany] = useState('');
+    const [newCodeInputs, setNewCodeInputs] = useState<{[key: string]: string}>({});
+
+    // Sincronizar estado cuando se abre el diálogo
+    useEffect(() => {
+        if (open) setConfig(user.sellerConfig || []);
+    }, [open, user.sellerConfig]);
+
+    const handleAddCompany = () => {
+        if (!newCompany.trim()) return;
+        if (config.some(c => c.companyName.toLowerCase() === newCompany.trim().toLowerCase())) {
+            toast({ title: "Empresa ya existe", variant: "destructive" });
+            return;
+        }
+        setConfig([...config, { companyName: newCompany.trim(), codes: [] }]);
+        setNewCompany('');
+    };
+
+    const handleRemoveCompany = (companyName: string) => {
+        setConfig(config.filter(c => c.companyName !== companyName));
+    };
+
+    const handleAddCode = (companyName: string) => {
+        const codeToAdd = newCodeInputs[companyName]?.trim();
+        if (!codeToAdd) return;
+
+        setConfig(config.map(c => {
+            if (c.companyName === companyName) {
+                if (c.codes.includes(codeToAdd)) return c;
+                return { ...c, codes: [...c.codes, codeToAdd] };
+            }
+            return c;
+        }));
+        
+        setNewCodeInputs(prev => ({ ...prev, [companyName]: '' }));
+    };
+
+    const handleRemoveCode = (companyName: string, codeToRemove: string) => {
+        setConfig(config.map(c => {
+            if (c.companyName === companyName) {
+                return { ...c, codes: c.codes.filter(code => code !== codeToRemove) };
+            }
+            return c;
+        }));
+    };
+
+    const handleSave = async () => {
+        try {
+            setLoading(true);
+            await updateUserProfile(user.id, { sellerConfig: config });
+            onUpdate(user.id, config);
+            toast({ title: "Configuración guardada" });
+            setOpen(false);
+        } catch (error) {
+            toast({ title: "Error al guardar", variant: "destructive" });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-2">
+                    <Settings2 className="h-3.5 w-3.5" />
+                    Gestionar Códigos
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Códigos de Vendedor: {user.name}</DialogTitle>
+                </DialogHeader>
+                
+                <div className="py-4 space-y-6">
+                    {/* Lista de Empresas y sus Códigos */}
+                    <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                        {config.length === 0 && (
+                            <p className="text-center text-sm text-muted-foreground italic">
+                                No hay empresas configuradas.
+                            </p>
+                        )}
+                        
+                        {config.map((item, idx) => (
+                            <div key={idx} className="rounded-lg border p-3 space-y-3 bg-slate-50">
+                                <div className="flex items-center justify-between border-b pb-2">
+                                    <div className="flex items-center gap-2 font-medium text-sm">
+                                        <Building2 className="h-4 w-4 text-blue-600" />
+                                        {item.companyName}
+                                    </div>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-6 w-6 text-red-500 hover:bg-red-50"
+                                        onClick={() => handleRemoveCompany(item.companyName)}
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2">
+                                    {item.codes.map(code => (
+                                        <Badge key={code} variant="secondary" className="flex items-center gap-1 bg-white border">
+                                            {code}
+                                            <X 
+                                                className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-red-500" 
+                                                onClick={() => handleRemoveCode(item.companyName, code)}
+                                            />
+                                        </Badge>
+                                    ))}
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-1">
+                                    <Input 
+                                        placeholder="Nuevo código (ej. 021)" 
+                                        className="h-7 text-xs bg-white"
+                                        value={newCodeInputs[item.companyName] || ''}
+                                        onChange={(e) => setNewCodeInputs({...newCodeInputs, [item.companyName]: e.target.value})}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleAddCode(item.companyName)}
+                                    />
+                                    <Button 
+                                        size="sm" 
+                                        variant="secondary" 
+                                        className="h-7 px-2"
+                                        onClick={() => handleAddCode(item.companyName)}
+                                        disabled={!newCodeInputs[item.companyName]}
+                                    >
+                                        <Plus className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Agregar Nueva Empresa */}
+                    <div className="flex items-center gap-2 pt-2 border-t">
+                        <Input 
+                            placeholder="Nombre de Empresa (ej. Aire SRL)" 
+                            value={newCompany}
+                            onChange={(e) => setNewCompany(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAddCompany()}
+                        />
+                        <Button onClick={handleAddCompany} disabled={!newCompany.trim()}>
+                            Agregar Empresa
+                        </Button>
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+                    <Button onClick={handleSave} disabled={loading}>
+                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Guardar Cambios
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
 }
