@@ -20,15 +20,12 @@ export default function LoginPage() {
     try {
       const provider = new GoogleAuthProvider();
       
-      // --- CLAVE DEL ÉXITO: Pedir permisos AQUÍ, en el login principal ---
       provider.addScope('https://www.googleapis.com/auth/calendar.events');
       provider.addScope('https://www.googleapis.com/auth/drive.file');
       provider.addScope('https://www.googleapis.com/auth/chat.messages');
       provider.addScope('https://www.googleapis.com/auth/chat.spaces.readonly');
-      // Gmail solo para envío, evitar permisos de lectura que dan error 403
       provider.addScope('https://www.googleapis.com/auth/gmail.send'); 
 
-      // Forzar el prompt para asegurar que se guarden los refresh tokens si es necesario
       provider.setCustomParameters({
         prompt: 'select_account consent',
         access_type: 'offline'
@@ -36,15 +33,18 @@ export default function LoginPage() {
 
       const result = await signInWithPopup(auth, provider);
       
-      // Guardamos el token inmediatamente para que la app lo tenga listo
       const credential = GoogleAuthProvider.credentialFromResult(result);
       const accessToken = credential?.accessToken;
 
       if (accessToken) {
         if (typeof window !== 'undefined') {
-            sessionStorage.setItem('google-access-token', accessToken);
-            // Marcamos como validado preventivamente para evitar chequeos redundantes inmediatos
-            sessionStorage.setItem('google-access-validated', 'true');
+            // CAMBIO AQUÍ: Usamos localStorage para persistencia real
+            localStorage.setItem('google-access-token', accessToken);
+            // Opcional: Guardamos timestamp para saber cuándo caduca (aprox 1h)
+            localStorage.setItem('google-token-timestamp', Date.now().toString());
+            
+            // Limpiamos sessionStorage por si quedó basura vieja
+            sessionStorage.removeItem('google-access-token');
         }
       }
 
@@ -71,7 +71,6 @@ export default function LoginPage() {
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-4 text-center">
           <div className="flex justify-center">
-             {/* Asegúrate de que esta ruta a tu logo sea correcta */}
              <div className="relative h-16 w-40">
                 <Image src="/logo.webp" alt="Aire CRM" fill className="object-contain" priority />
              </div>
