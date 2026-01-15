@@ -355,22 +355,6 @@ export type Canje = {
 export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Admin';
 export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Import', 'Admin'];
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  photoURL?: string | null;
-  initials?: string;
-  
-  // Campo añadido para integración con Tango
-  sellerCode?: string; 
-  
-  // Otros campos que puedas tener...
-  createdAt?: string;
-  phoneNumber?: string;
-}
-
 export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción';
 export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'];
 
@@ -408,13 +392,18 @@ export type ObjectiveVisibilityConfig = {
   updatedAt?: string;
 };
 
+// --- ESTRUCTURA PARA CÓDIGOS DE VENDEDOR (NUEVO) ---
+export interface SellerCompanyConfig {
+  companyName: string;
+  codes: string[];
+}
+
 export type User = {
   id: string;
   name:string;
   email: string;
   role: UserRole;
   area?: AreaType;
-  sellerCode?: string;
   managerId?: string;
   initials?: string;
   photoURL?: string;
@@ -424,6 +413,9 @@ export type User = {
   monthlyObjectives?: Record<string, number>;
   monthlyObjective?: number;
   permissions?: Partial<Record<ScreenName, ScreenPermission>>;
+  
+  // Campo añadido para configuración de códigos de vendedor
+  sellerConfig?: SellerCompanyConfig[];
 };
 
 export type ChatSpaceMapping = {
