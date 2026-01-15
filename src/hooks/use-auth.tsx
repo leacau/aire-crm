@@ -9,7 +9,7 @@ import { getUserProfile } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
 import { validateGoogleServicesAccess } from '@/lib/google-service-check';
 import { useToast } from '@/hooks/use-toast';
-import { initializePermissions } from '@/lib/permissions'; // <--- IMPORTACIÓN AÑADIDA
+import { initializePermissions } from '@/lib/permissions';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -38,17 +38,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
         
-        // Iniciamos la carga del perfil y de los permisos en paralelo
         const [profile] = await Promise.all([
             getUserProfile(firebaseUser.uid),
-            initializePermissions() // <--- LLAMADA AÑADIDA AQUÍ
+            initializePermissions()
         ]);
         
         if (profile) {
@@ -78,6 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setUserInfo(null);
         setIsBoss(false);
+        // Limpiamos token si se cierra sesión en firebase
+        if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('google-access-token');
+            sessionStorage.removeItem('google-access-validated');
+        }
       }
       setLoading(false);
     });
@@ -97,51 +100,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
+  // Validación de servicios en segundo plano, pero menos agresiva
   useEffect(() => {
     if (loading || !user) return;
-
-    let cancelled = false;
 
     const runCheck = async () => {
       const storageKey = 'google-access-validated';
       const hasValidated = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) === 'true' : false;
-      const hasFailed = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) === 'failed' : false;
       
-      if (hasValidated || hasFailed) return;
+      if (hasValidated) return; // Si ya validamos en esta sesión, no molestamos más
 
-      const attemptValidation = async (interactive: boolean) => {
-        const token = await getGoogleAccessToken(interactive ? undefined : { silent: true });
-        if (!token) return false;
-
+      const token = await getGoogleAccessToken({ silent: true });
+      if (token) {
         try {
           await validateGoogleServicesAccess(token);
-          if (!cancelled && typeof window !== 'undefined') {
-            sessionStorage.setItem(storageKey, 'true');
-          }
-          return true;
+          if (typeof window !== 'undefined') sessionStorage.setItem(storageKey, 'true');
         } catch (error) {
-          console.error('Error verifying Google access', error);
-          if (typeof window !== 'undefined') {
-            sessionStorage.removeItem('google-access-token');
-          }
-          return false;
+          console.warn('Silent validation failed, but avoiding forced logout to preserve UX', error);
+          // No borramos el token aquí para no interrumpir al usuario, 
+          // dejaremos que el fallo ocurra solo si intenta usar una herramienta específica.
         }
-      };
-
-      const silentOk = await attemptValidation(false);
-      if (silentOk || cancelled) return;
-      
-      if (!cancelled && typeof window !== 'undefined') {
-          sessionStorage.setItem(storageKey, 'failed');
       }
     };
 
     runCheck();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loading, user, pathname, router]);
+  }, [loading, user]);
 
     const getGoogleAccessToken = async (options?: { silent?: boolean }): Promise<string | null> => {
         if (typeof window === 'undefined') return null;
@@ -150,16 +133,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             storedToken = sessionStorage.getItem('google-access-token');
         } catch (error) {
-            console.warn('Unable to access sessionStorage for Google token', error);
+            console.warn('Unable to access sessionStorage', error);
         }
 
         if (storedToken) return storedToken;
 
-        if (options?.silent) {
-            return null;
-        }
+        if (options?.silent) return null;
 
         if (auth.currentUser) {
+            // Si llegamos aquí, es porque no hay token y el usuario pidió una acción que lo requiere.
+            // Entonces sí lanzamos el popup.
             const provider = new GoogleAuthProvider();
             provider.setCustomParameters({
                   prompt: 'consent select_account',
@@ -169,7 +152,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
             provider.addScope('https://www.googleapis.com/auth/drive.file');
             provider.addScope('https://www.googleapis.com/auth/chat.messages');
-            provider.addScope('https://www.googleapis.com/auth/chat.messages.readonly');
             provider.addScope('https://www.googleapis.com/auth/chat.spaces.readonly');
             
             try {
@@ -177,12 +159,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 const token = credential?.accessToken;
                 if (token) {
-                    try {
-                        sessionStorage.setItem('google-access-token', token);
-                        sessionStorage.removeItem('google-access-validated');
-                    } catch (error) {
-                        console.warn('Unable to persist Google token in sessionStorage', error);
-                    }
+                    sessionStorage.setItem('google-access-token', token);
+                    sessionStorage.setItem('google-access-validated', 'true');
                     return token;
                 }
             } catch (error) {
@@ -196,21 +174,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const ensureGoogleAccessToken = async (): Promise<string | null> => {
         const token = await getGoogleAccessToken();
         if (!token) return null;
-
-        try {
-            await validateGoogleServicesAccess(token);
-            return token;
-        } catch (error) {
-            console.error('Google services check failed', error);
-            try {
-                sessionStorage.removeItem('google-access-token');
-            } catch (err) {
-                console.warn('Unable to clear Google token', err);
-            }
-            return null;
-        }
+        // Devolvemos el token directamente. La validación ya se hace en segundo plano 
+        // o fallará en la llamada específica a la API, no bloqueamos aquí.
+        return token;
     };
-
 
   if (loading && !publicRoutes.includes(pathname)) {
     return (
