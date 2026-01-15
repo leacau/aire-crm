@@ -1766,63 +1766,26 @@ export const createUserProfile = async (uid: string, name: string, email: string
     invalidateCache('users');
 };
 
-export const getUserProfile = async (uid: string): Promise<User | null> => {
-    const userRef = doc(db, 'users', uid);
-    const docSnap = await getDoc(userRef);
-    if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as User;
-    }
-    return null;
+export async function getUserProfile(uid: string): Promise<User | null> {
+  const docRef = doc(db, 'users', uid);
+  const docSnap = await getDoc(docRef);
+  if (docSnap.exists()) {
+    return { id: docSnap.id, ...docSnap.data() } as User;
+  }
+  return null;
 }
 
-export const updateUserProfile = async (uid: string, data: Partial<User>): Promise<void> => {
-    const userRef = doc(db, 'users', uid);
-    const originalSnap = await getDoc(userRef);
-    if (!originalSnap.exists()) return;
-    const originalData = originalSnap.data() as User;
-    
-    const dataToUpdate: {[key: string]: any} = { ...data };
-    if (data.managerId === undefined) {
-      dataToUpdate.managerId = deleteField();
-    }
-    
-    await updateDoc(userRef, {
-        ...dataToUpdate,
-        updatedAt: serverTimestamp()
-    });
-    invalidateCache('users');
-
-    if (data.role && data.role !== originalData.role) {
-        await logActivity({
-            userId: uid,
-            userName: data.name || originalData.name,
-            type: 'update',
-            entityType: 'user',
-            entityId: uid,
-            entityName: data.name || originalData.name,
-            details: `cambió el rol de <strong>${data.name || originalData.name}</strong> a <strong>${data.role}</strong>`,
-            ownerName: data.name || originalData.name,
-        });
-    }
+export async function updateUserProfile(uid: string, data: Partial<User>) {
+  const userRef = doc(db, 'users', uid);
+  // Usamos set con merge: true para crear el documento si no existe, o actualizar si existe
+  await setDoc(userRef, data, { merge: true });
 };
 
 
-export const getAllUsers = async (role?: User['role']): Promise<User[]> => {
-    const cacheKey = role ? `users_${role}` : 'users';
-    const cachedData = getFromCache(cacheKey);
-    if (cachedData) return cachedData;
-
-    let q;
-    if (role) {
-      q = query(collections.users, where("role", "==", role));
-    } else {
-      q = query(collections.users);
-    }
-    const snapshot = await getDocs(q);
-    const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-    setInCache(cacheKey, users);
-    if (!role) setInCache('users', users);
-    return users;
+export async function getAllUsers(): Promise<User[]> {
+  const usersRef = collection(db, 'users');
+  const snapshot = await getDocs(usersRef);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
 };
 
 export const getUserById = async (userId: string): Promise<User | null> => {
