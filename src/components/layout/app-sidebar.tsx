@@ -298,7 +298,26 @@ export function AppSidebar() {
           })}
         </SidebarMenu>
       </SidebarContent>
-      <SidebarFooter />
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Políticas de Privacidad" className="text-xs text-muted-foreground hover:text-foreground">
+              <Link href="/privacy-policy">
+                <ShieldCheck className="size-4" />
+                <span>Privacidad</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Términos del Servicio" className="text-xs text-muted-foreground hover:text-foreground">
+              <Link href="/terms-of-service">
+                <Scale className="size-4" />
+                <span>Términos</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   );
