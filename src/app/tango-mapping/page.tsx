@@ -503,7 +503,7 @@ export default function TangoMappingPage() {
     const filteredRows = mappedRows.filter((row) => !shouldExcludeByTangoId(row));
 
     const mappedNames = filteredRows.map((r) => r.denominacion || r.razonSocial);
-    const allowFuzzy = mappedNames.length <= 2000; // evitar uso intensivo de memoria con archivos grandes
+    const allowFuzzy = mappedNames.length > 0 && mappedNames.length <= 2000; // evitar uso intensivo de memoria con archivos grandes
     const newSuggestions: Record<string, ClientSuggestion> = {};
 
     clients.forEach((client) => {
@@ -521,8 +521,9 @@ export default function TangoMappingPage() {
         }
       }
 
-      if (!rowKey && allowFuzzy) {
-        const { bestMatch } = findBestMatch(client.denominacion || client.razonSocial, mappedNames);
+      const clientName = client.denominacion || client.razonSocial;
+      if (!rowKey && allowFuzzy && clientName) {
+        const { bestMatch } = findBestMatch(clientName, mappedNames);
         if (bestMatch.rating === 1) {
           const match = filteredRows.find(
             (r) => (r.denominacion || r.razonSocial) === bestMatch.target
