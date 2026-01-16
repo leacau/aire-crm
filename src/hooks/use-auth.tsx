@@ -28,6 +28,7 @@ const AuthContext = createContext<AuthContextType>({
   ensureGoogleAccessToken: async () => null,
 });
 
+// Definimos las rutas que no requieren autenticación
 const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service'];
 
 // Claves para LocalStorage
@@ -42,15 +43,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
 
-  // Helper para guardar token con expiración (default 1 hora - 5 min buffer)
+  // Helper para guardar token con expiración (1 hora menos un buffer de seguridad)
   const saveTokenToStorage = (token: string, expiresInSeconds: number = 3600) => {
     if (typeof window === 'undefined') return;
-    const expiryTime = Date.now() + (expiresInSeconds * 1000) - (5 * 60 * 1000); // Buffer de seguridad
+    // Buffer de 5 minutos antes de que expire realmente para renovar antes
+    const expiryTime = Date.now() + (expiresInSeconds * 1000) - (5 * 60 * 1000); 
     localStorage.setItem(STORAGE_TOKEN_KEY, token);
     localStorage.setItem(STORAGE_EXPIRY_KEY, expiryTime.toString());
   };
 
-  // Helper para obtener token si es válido
+  // Helper para recuperar el token solo si es válido
   const getStoredToken = (): string | null => {
     if (typeof window === 'undefined') return null;
     const token = localStorage.getItem(STORAGE_TOKEN_KEY);
@@ -59,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token || !expiry) return null;
 
     if (Date.now() > parseInt(expiry, 10)) {
-        // Token expirado
+        // El token ha expirado, lo limpiamos
         localStorage.removeItem(STORAGE_TOKEN_KEY);
         localStorage.removeItem(STORAGE_EXPIRY_KEY);
         return null;
@@ -104,11 +106,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setUserInfo(null);
         setIsBoss(false);
-        // Limpiamos token si se cierra sesión en firebase
+        
+        // Limpieza de seguridad al cerrar sesión
         if (typeof window !== 'undefined') {
             localStorage.removeItem(STORAGE_TOKEN_KEY);
             localStorage.removeItem(STORAGE_EXPIRY_KEY);
-            sessionStorage.removeItem('google-access-validated'); // Limpieza legacy
+            sessionStorage.removeItem('google-access-validated');
         }
       }
       setLoading(false);
@@ -117,19 +120,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
+  // Protección de rutas
   useEffect(() => {
     if (!loading) {
       const isPublicRoute = publicRoutes.includes(pathname);
       
       if (!user && !isPublicRoute) {
         router.push('/login');
-      } else if (user && isPublicRoute) {
+      } else if (user && pathname === '/login') {
         router.push('/');
       }
     }
   }, [user, loading, pathname, router]);
 
-  // Validación en segundo plano (solo si ya tenemos token válido)
+  // Validación silenciosa en segundo plano
   useEffect(() => {
     if (loading || !user) return;
 
@@ -139,7 +143,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (hasValidated) return;
 
-      // Intentamos obtener el token guardado. Si existe, validamos.
       const token = getStoredToken();
       if (token) {
         try {
@@ -157,22 +160,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const getGoogleAccessToken = async (options?: { silent?: boolean }): Promise<string | null> => {
         if (typeof window === 'undefined') return null;
 
-        // 1. Intentar recuperar de localStorage (Persistencia entre pestañas y cierres)
+        // 1. Intentar recuperar token válido de localStorage (Rápido y persistente)
         const storedToken = getStoredToken();
         if (storedToken) return storedToken;
 
-        // 2. Si es silencioso y no hay token válido, abortar para no abrir popups
+        // 2. Si se pide silencio y no hay token válido, retornamos null sin molestar
         if (options?.silent) return null;
 
-        // 3. Si no hay token y el usuario está logueado, solicitar uno nuevo
+        // 3. Si no hay token válido y el usuario está logueado, intentamos obtener uno nuevo
+        // Esto abrirá el popup si es necesario.
         if (auth.currentUser) {
             const provider = new GoogleAuthProvider();
+            // Prompt 'consent' fuerza la renovación del refresh token si es posible, 
+            // aunque para access token puro 'select_account' es más fluido.
             provider.setCustomParameters({
                   prompt: 'consent select_account',
-                  access_type: 'offline' // Importante para intentar obtener refresh tokens si Google lo permite
+                  access_type: 'offline'
               });
             
-            // Scopes acumulativos necesarios
+            // Scopes necesarios para todas las herramientas
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
             provider.addScope('https://www.googleapis.com/auth/drive.file');
@@ -180,13 +186,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             provider.addScope('https://www.googleapis.com/auth/chat.spaces.readonly');
             
             try {
-                // Esto abrirá el popup de Google si no se pudo recuperar silenciósamente
                 const result = await signInWithPopup(auth, provider);
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 const token = credential?.accessToken;
                 
-                // Intentamos obtener la expiración real de la respuesta, si no default 1 hora
-                // @ts-ignore - _tokenResponse es una propiedad interna pero útil de Firebase Auth
+                // Intentamos leer la expiración de la respuesta de Firebase (no siempre disponible standard, fallback 1h)
+                // @ts-ignore - _tokenResponse es una propiedad interna útil
                 const expiresIn = result._tokenResponse?.oauthExpiresIn ? parseInt(result._tokenResponse.oauthExpiresIn) : 3600;
 
                 if (token) {
@@ -203,12 +208,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const ensureGoogleAccessToken = async (): Promise<string | null> => {
-        // Intenta obtenerlo (esto usará el guardado si es válido)
-        const token = await getGoogleAccessToken();
+        // Primero intenta obtener el token almacenado
+        const token = await getGoogleAccessToken({ silent: true });
         if (token) return token;
         
-        // Si falló (ej: expirado), forzamos la llamada (no silenciosa) para renovarlo
-        // Nota: Esto requerirá interacción del usuario si el navegador bloquea popups automáticos
+        // Si no hay token válido (expiró o no existe), forzamos la obtención (puede abrir popup)
         return await getGoogleAccessToken({ silent: false });
     };
 
