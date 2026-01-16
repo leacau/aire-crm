@@ -1,4 +1,3 @@
-
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -40,7 +39,7 @@ export default function TermsOfServicePage() {
 
           <h2 className="text-2xl font-semibold text-foreground border-b pb-2">3. Integración con Servicios de Terceros</h2>
           <p>
-            El Servicio se integra con Google Workspace (Calendar, Drive, Gmail) para mejorar la productividad. Al autorizar estas integraciones, usted otorga permiso a la aplicación para realizar acciones en su nombre, como se describe en nuestra Política de Privacidad. Su uso de los servicios de Google está sujeto a los términos de servicio de Google.
+            El Servicio se integra con Google Workspace (Calendar, Drive, Gmail, Chat) para mejorar la productividad. Al autorizar estas integraciones, usted otorga permiso a la aplicación para realizar acciones en su nombre, como se describe en nuestra Política de Privacidad. Su uso de los servicios de Google está sujeto a los términos de servicio de Google.
           </p>
 
           <h2 className="text-2xl font-semibold text-foreground border-b pb-2">4. Confidencialidad</h2>
