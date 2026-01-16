@@ -8,7 +8,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Spinner } from '@/components/ui/spinner';
-import { PermissionsManager } from '@/components/team/permissions-manager';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { OpportunityAlertsManager } from '@/components/team/opportunity-alerts-manager';
 
