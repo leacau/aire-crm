@@ -8,7 +8,6 @@ import { Spinner } from '@/components/ui/spinner';
 import { getUserProfile } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
 import { validateGoogleServicesAccess } from '@/lib/google-service-check';
-import { useToast } from '@/hooks/use-toast';
 import { initializePermissions } from '@/lib/permissions';
 
 interface AuthContextType {
@@ -31,6 +30,10 @@ const AuthContext = createContext<AuthContextType>({
 
 const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service'];
 
+// Claves para LocalStorage
+const STORAGE_TOKEN_KEY = 'google_api_token';
+const STORAGE_EXPIRY_KEY = 'google_api_token_expiry';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userInfo, setUserInfo] = useState<User | null>(null);
@@ -38,6 +41,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
+
+  // Helper para guardar token con expiración (default 1 hora - 5 min buffer)
+  const saveTokenToStorage = (token: string, expiresInSeconds: number = 3600) => {
+    if (typeof window === 'undefined') return;
+    const expiryTime = Date.now() + (expiresInSeconds * 1000) - (5 * 60 * 1000); // Buffer de seguridad
+    localStorage.setItem(STORAGE_TOKEN_KEY, token);
+    localStorage.setItem(STORAGE_EXPIRY_KEY, expiryTime.toString());
+  };
+
+  // Helper para obtener token si es válido
+  const getStoredToken = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    const token = localStorage.getItem(STORAGE_TOKEN_KEY);
+    const expiry = localStorage.getItem(STORAGE_EXPIRY_KEY);
+
+    if (!token || !expiry) return null;
+
+    if (Date.now() > parseInt(expiry, 10)) {
+        // Token expirado
+        localStorage.removeItem(STORAGE_TOKEN_KEY);
+        localStorage.removeItem(STORAGE_EXPIRY_KEY);
+        return null;
+    }
+    return token;
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -78,8 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsBoss(false);
         // Limpiamos token si se cierra sesión en firebase
         if (typeof window !== 'undefined') {
-            sessionStorage.removeItem('google-access-token');
-            sessionStorage.removeItem('google-access-validated');
+            localStorage.removeItem(STORAGE_TOKEN_KEY);
+            localStorage.removeItem(STORAGE_EXPIRY_KEY);
+            sessionStorage.removeItem('google-access-validated'); // Limpieza legacy
         }
       }
       setLoading(false);
@@ -100,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
-  // Validación de servicios en segundo plano, pero menos agresiva
+  // Validación en segundo plano (solo si ya tenemos token válido)
   useEffect(() => {
     if (loading || !user) return;
 
@@ -108,17 +137,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storageKey = 'google-access-validated';
       const hasValidated = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) === 'true' : false;
       
-      if (hasValidated) return; // Si ya validamos en esta sesión, no molestamos más
+      if (hasValidated) return;
 
-      const token = await getGoogleAccessToken({ silent: true });
+      // Intentamos obtener el token guardado. Si existe, validamos.
+      const token = getStoredToken();
       if (token) {
         try {
           await validateGoogleServicesAccess(token);
           if (typeof window !== 'undefined') sessionStorage.setItem(storageKey, 'true');
         } catch (error) {
-          console.warn('Silent validation failed, but avoiding forced logout to preserve UX', error);
-          // No borramos el token aquí para no interrumpir al usuario, 
-          // dejaremos que el fallo ocurra solo si intenta usar una herramienta específica.
+          console.warn('Silent validation failed.', error);
         }
       }
     };
@@ -129,25 +157,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const getGoogleAccessToken = async (options?: { silent?: boolean }): Promise<string | null> => {
         if (typeof window === 'undefined') return null;
 
-        let storedToken = null;
-        try {
-            storedToken = sessionStorage.getItem('google-access-token');
-        } catch (error) {
-            console.warn('Unable to access sessionStorage', error);
-        }
-
+        // 1. Intentar recuperar de localStorage (Persistencia entre pestañas y cierres)
+        const storedToken = getStoredToken();
         if (storedToken) return storedToken;
 
+        // 2. Si es silencioso y no hay token válido, abortar para no abrir popups
         if (options?.silent) return null;
 
+        // 3. Si no hay token y el usuario está logueado, solicitar uno nuevo
         if (auth.currentUser) {
-            // Si llegamos aquí, es porque no hay token y el usuario pidió una acción que lo requiere.
-            // Entonces sí lanzamos el popup.
             const provider = new GoogleAuthProvider();
             provider.setCustomParameters({
                   prompt: 'consent select_account',
-                  access_type: 'offline'
+                  access_type: 'offline' // Importante para intentar obtener refresh tokens si Google lo permite
               });
+            
+            // Scopes acumulativos necesarios
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
             provider.addScope('https://www.googleapis.com/auth/drive.file');
@@ -155,11 +180,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             provider.addScope('https://www.googleapis.com/auth/chat.spaces.readonly');
             
             try {
+                // Esto abrirá el popup de Google si no se pudo recuperar silenciósamente
                 const result = await signInWithPopup(auth, provider);
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 const token = credential?.accessToken;
+                
+                // Intentamos obtener la expiración real de la respuesta, si no default 1 hora
+                // @ts-ignore - _tokenResponse es una propiedad interna pero útil de Firebase Auth
+                const expiresIn = result._tokenResponse?.oauthExpiresIn ? parseInt(result._tokenResponse.oauthExpiresIn) : 3600;
+
                 if (token) {
-                    sessionStorage.setItem('google-access-token', token);
+                    saveTokenToStorage(token, expiresIn);
                     sessionStorage.setItem('google-access-validated', 'true');
                     return token;
                 }
@@ -172,11 +203,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const ensureGoogleAccessToken = async (): Promise<string | null> => {
+        // Intenta obtenerlo (esto usará el guardado si es válido)
         const token = await getGoogleAccessToken();
-        if (!token) return null;
-        // Devolvemos el token directamente. La validación ya se hace en segundo plano 
-        // o fallará en la llamada específica a la API, no bloqueamos aquí.
-        return token;
+        if (token) return token;
+        
+        // Si falló (ej: expirado), forzamos la llamada (no silenciosa) para renovarlo
+        // Nota: Esto requerirá interacción del usuario si el navegador bloquea popups automáticos
+        return await getGoogleAccessToken({ silent: false });
     };
 
   if (loading && !publicRoutes.includes(pathname)) {
