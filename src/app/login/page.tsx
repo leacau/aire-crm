@@ -122,6 +122,18 @@ export default function LoginPage() {
             )}
           </Button>
         </CardContent>
+        <CardFooter className="flex flex-col gap-2 justify-center text-xs text-muted-foreground pt-4 border-t">
+          <div className="flex gap-4">
+            <Link href="/privacy-policy" className="hover:underline hover:text-primary">
+              Política de Privacidad
+            </Link>
+            <span>•</span>
+            <Link href="/terms-of-service" className="hover:underline hover:text-primary">
+              Términos del Servicio
+            </Link>
+          </div>
+          <p>© {new Date().getFullYear()} Aire de Santa Fe</p>
+        </CardFooter>
       </Card>
     </div>
   );
