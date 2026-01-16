@@ -11,7 +11,7 @@ import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/hooks/use-auth';
-import { MoreHorizontal, Trash2, Save, BarChartHorizontal, Pencil, Plus, X } from 'lucide-react';
+import { MoreHorizontal, Trash2, Save, BarChartHorizontal, Pencil, Plus, X, Filter } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -75,6 +75,10 @@ export function TeamPerformanceTable() {
   const [savingVisibility, setSavingVisibility] = useState(false);
   const [visibilityMonth, setVisibilityMonth] = useState('');
   const [visibilityDeadline, setVisibilityDeadline] = useState('');
+
+  // Estados de filtros
+  const [filterArea, setFilterArea] = useState<AreaType | 'all'>('Comercial'); // Por defecto Comercial, pero cambiable
+  const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
 
   // Estados para la edición de códigos de vendedor
   const [userForCodes, setUserForCodes] = useState<User | null>(null);
@@ -228,10 +232,14 @@ export function TeamPerformanceTable() {
     const prevMonthDate = subMonths(today, 1);
     const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
-    // FILTRO: Solo usuarios del Área Comercial
-    const commercialUsers = users.filter(u => u.area === 'Comercial');
+    // APLICAR FILTROS
+    const filteredUsers = users.filter(u => {
+        const matchesArea = filterArea === 'all' || u.area === filterArea;
+        const matchesRole = filterRole === 'all' || u.role === filterRole;
+        return matchesArea && matchesRole;
+    });
 
-    return commercialUsers.map(user => {
+    return filteredUsers.map(user => {
         const isAdvisor = user.role === 'Asesor';
         const advisorClientIds = isAdvisor ? new Set(clients.filter(c => c.ownerId === user.id).map(c => c.id)) : new Set();
         const userOpps = isAdvisor ? opportunities.filter(opp => advisorClientIds.has(opp.clientId)) : [];
@@ -263,7 +271,7 @@ export function TeamPerformanceTable() {
             previousMonthBilling
         };
     }).sort((a,b) => (b.currentMonthBilling) - (a.currentMonthBilling));
-  }, [users, opportunities, clients, prospects]);
+  }, [users, opportunities, clients, prospects, filterArea, filterRole]);
   
   const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
   const advisors = useMemo(() => users.filter(u => u.role === 'Asesor'), [users]);
@@ -542,19 +550,56 @@ export function TeamPerformanceTable() {
           </div>
         </div>
       )}
-      <div className='flex justify-end mb-4'>
+
+      {/* Controles y Filtros Superiores */}
+      <div className='flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4'>
+        <div className="flex gap-2 items-center flex-wrap">
+            <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Filtros:</span>
+            </div>
+            
+            {/* Filtro por Área */}
+            <Select value={filterArea} onValueChange={(val) => setFilterArea(val as AreaType | 'all')}>
+                <SelectTrigger className="w-[160px] h-8">
+                    <SelectValue placeholder="Todas las áreas" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Todas las áreas</SelectItem>
+                    {areaTypes.map(area => (
+                        <SelectItem key={area} value={area}>{area}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+
+            {/* Filtro por Rol */}
+            <Select value={filterRole} onValueChange={(val) => setFilterRole(val as UserRole | 'all')}>
+                <SelectTrigger className="w-[160px] h-8">
+                    <SelectValue placeholder="Todos los roles" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Todos los roles</SelectItem>
+                    {userRoles.map(role => (
+                        <SelectItem key={role} value={role}>{role}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+
         {isBoss && (
-          <Button onClick={() => setIsClosureDialogOpen(true)}>
+          <Button onClick={() => setIsClosureDialogOpen(true)} variant="outline" size="sm">
             <BarChartHorizontal className="mr-2 h-4 w-4"/>
-            Gestionar Cierres Mensuales
+            Cierres Mensuales
           </Button>
         )}
       </div>
+
       <ResizableDataTable
         columns={columns}
         data={userStats}
-        emptyStateMessage="No se encontraron usuarios del área comercial."
+        emptyStateMessage="No se encontraron usuarios con los filtros seleccionados."
       />
+
       <AlertDialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
           <AlertDialogContent>
               <AlertDialogHeader>
