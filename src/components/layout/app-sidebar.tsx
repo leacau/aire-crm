@@ -32,7 +32,9 @@ import {
   Calculator,
   UserCog,
   Settings2,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck,
+  Scale
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
