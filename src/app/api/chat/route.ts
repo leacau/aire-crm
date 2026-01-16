@@ -4,14 +4,12 @@ import {
   getSpaceFromWebhook,
   listChatMessages,
   listSpaceMembers,
+  sendChatMessageViaApi, // Importamos la función para enviar como usuario
 } from '@/lib/google-chat-service';
-// Importamos las nuevas funciones de autenticación por servidor (Service Account)
 import { sendServerMessage, findDMParent } from '@/lib/server/google-chat-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// --- Helpers para GET (Lectura con contexto de usuario) ---
 
 function getSpaceFromConfig() {
   return process.env.GOOGLE_CHAT_SPACE_ID || getSpaceFromWebhook(process.env.GOOGLE_CHAT_WEBHOOK_URL);
@@ -25,12 +23,11 @@ function extractAccessToken(request: Request) {
   return token || null;
 }
 
-// --- GET: Mantenemos la lógica de leer como Usuario ---
-// Esto es útil para que el frontend muestre lo que el usuario tiene permiso de ver.
+// --- GET: Leer mensajes ---
 export async function GET(request: Request) {
   const accessToken = extractAccessToken(request);
   if (!accessToken) {
-    return NextResponse.json({ error: 'Falta el token de acceso de Google para leer el espacio.' }, { status: 401 });
+    return NextResponse.json({ error: 'Falta el token de acceso de Google.' }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -39,7 +36,7 @@ export async function GET(request: Request) {
 
   if (!space) {
     return NextResponse.json(
-      { error: 'Define GOOGLE_CHAT_SPACE_ID o usa un webhook que incluya el espacio para leer las conversaciones.' },
+      { error: 'No se especificó un espacio de chat.' },
       { status: 400 },
     );
   }
@@ -53,57 +50,72 @@ export async function GET(request: Request) {
     const messages = await listChatMessages(accessToken, space, { pageSize: 50 });
     return NextResponse.json({ messages });
   } catch (error) {
-    console.error('Error obteniendo datos de Google Chat', error);
-    const message = error instanceof Error ? error.message : 'No se pudieron recuperar los datos.';
-    const status = error instanceof ChatServiceError && error.status ? error.status : 502;
+    console.error('Error Google Chat GET:', error);
+    const status = error instanceof ChatServiceError && error.status ? error.status : 500;
+    const message = error instanceof Error ? error.message : 'Error desconocido';
     return NextResponse.json({ error: message }, { status });
   }
 }
 
-// --- POST: Nueva lógica de envío usando Service Account (Bot) ---
-// Ya no depende del token del usuario, asegurando que las alertas lleguen siempre.
+// --- POST: Enviar mensajes (Híbrido: Usuario o Bot) ---
 export async function POST(request: Request) {
   try {
+    const accessToken = extractAccessToken(request);
     const body = await request.json().catch(() => ({}));
-    const { text, targetEmail, targetSpace, threadKey } = body;
+    const { text, targetEmail, targetSpace, threadKey, mode } = body;
 
     if (!text) {
       return NextResponse.json({ error: 'El mensaje es obligatorio.' }, { status: 400 });
     }
 
-    // Determinar el espacio de destino
     let finalSpace = targetSpace || process.env.GOOGLE_CHAT_SPACE_ID;
 
-    // Caso: Mensaje Directo (DM) a un usuario específico
+    // 1. MODO USUARIO (Prioridad si hay token y es la página de Chat)
+    // Si viene desde la UI de Chat, queremos enviar como "Yo" (Usuario)
+    if (accessToken && mode === 'api') {
+        if (!finalSpace) {
+             return NextResponse.json({ error: 'Se requiere un espacio destino.' }, { status: 400 });
+        }
+        
+        await sendChatMessageViaApi({
+            accessToken,
+            space: finalSpace,
+            text,
+            threadName: threadKey
+        });
+        
+        return NextResponse.json({ ok: true, mode: 'user' });
+    }
+
+    // 2. MODO BOT / SERVER (Fallback para notificaciones automáticas)
+    // Si no hay token de usuario, usamos la Service Account
+    
+    // Intentar resolver DM si es necesario
     if (targetEmail) {
-      // Usamos la cuenta de servicio para encontrar el chat privado con el usuario
       const dmSpace = await findDMParent(targetEmail);
-      if (!dmSpace) {
-        return NextResponse.json(
-          { error: `No se pudo encontrar o iniciar un chat directo con ${targetEmail}. Asegúrate de haber iniciado una conversación con el Bot previamente.` },
-          { status: 404 }
-        );
+      if (dmSpace) {
+        finalSpace = dmSpace;
+      } else {
+         console.warn(`No se pudo iniciar DM con ${targetEmail}, intentando espacio por defecto.`);
       }
-      finalSpace = dmSpace;
     }
 
     if (!finalSpace) {
       return NextResponse.json(
-        { error: 'No se especificó un espacio (targetSpace) ni un destinatario (targetEmail), y no hay configuración por defecto.' },
+        { error: 'No se pudo determinar el espacio de destino para el Bot.' },
         { status: 400 }
       );
     }
 
-    // Enviar el mensaje usando la identidad del Servidor (Bot)
     const result = await sendServerMessage(finalSpace, text, threadKey);
-
     return NextResponse.json({ ok: true, data: result, mode: 'service-account' });
 
   } catch (error: any) {
-    console.error('API Chat Error (Service Account):', error);
+    console.error('API Chat POST Error:', error);
+    const status = error.status || 500;
     return NextResponse.json(
-      { error: error.message || 'Error interno enviando notificación.' },
-      { status: 500 }
+      { error: error.message || 'Error interno enviando mensaje.' },
+      { status }
     );
   }
 }
