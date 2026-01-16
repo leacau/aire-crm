@@ -20,6 +20,7 @@ export default function LoginPage() {
     try {
       const provider = new GoogleAuthProvider();
       
+      // Agregamos TODOS los scopes necesarios para que al loguearse ya tenga acceso a todo
       provider.addScope('https://www.googleapis.com/auth/calendar.events');
       provider.addScope('https://www.googleapis.com/auth/drive.file');
       provider.addScope('https://www.googleapis.com/auth/chat.messages');
@@ -36,14 +37,20 @@ export default function LoginPage() {
       const credential = GoogleAuthProvider.credentialFromResult(result);
       const accessToken = credential?.accessToken;
 
+      // Guardamos el token inmediatamente con la nueva lógica de localStorage
       if (accessToken) {
         if (typeof window !== 'undefined') {
-            // CAMBIO AQUÍ: Usamos localStorage para persistencia real
-            localStorage.setItem('google-access-token', accessToken);
-            // Opcional: Guardamos timestamp para saber cuándo caduca (aprox 1h)
-            localStorage.setItem('google-token-timestamp', Date.now().toString());
+            const STORAGE_TOKEN_KEY = 'google_api_token';
+            const STORAGE_EXPIRY_KEY = 'google_api_token_expiry';
             
-            // Limpiamos sessionStorage por si quedó basura vieja
+            // Expiración por defecto 1 hora (3600s) - 5 min buffer
+            const expiresInSeconds = 3600; 
+            const expiryTime = Date.now() + (expiresInSeconds * 1000) - (5 * 60 * 1000);
+            
+            localStorage.setItem(STORAGE_TOKEN_KEY, accessToken);
+            localStorage.setItem(STORAGE_EXPIRY_KEY, expiryTime.toString());
+            
+            // Limpiamos sessionStorage antiguo por si acaso
             sessionStorage.removeItem('google-access-token');
         }
       }
