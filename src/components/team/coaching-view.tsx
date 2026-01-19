@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History } from 'lucide-react';
+import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -40,6 +40,9 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const [newItemType, setNewItemType] = useState<'client' | 'prospect' | 'general'>('client');
     const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
     const [openSessions, setOpenSessions] = useState<Record<string, boolean>>({});
+
+    // Estado local para los inputs de "Nueva Nota" y "Nueva Acción" por cada item
+    const [inputStates, setInputStates] = useState<Record<string, { action?: string, note?: string }>>({});
 
     const canManage = isBoss || userInfo?.role === 'Gerencia' || userInfo?.role === 'Jefe';
 
@@ -79,15 +82,20 @@ export function CoachingView({ advisor }: { advisor: User }) {
         
         // Recorremos desde la más antigua a la más nueva para que la versión más reciente sobrescriba
         [...sessions].reverse().forEach(session => {
+            const sessionDateStr = format(parseISO(session.date), 'dd/MM');
+
             session.items.forEach(item => {
                 if (item.status !== 'Completado' && item.status !== 'Cancelado') {
-                    // Creamos una copia limpia para la nueva sesión
+                    // CAMBIO 1: Agregamos la fecha al "pedido anterior" para mantener el historial
+                    // Si ya tiene historial, se acumula.
+                    const actionWithHistory = `[Del ${sessionDateStr}] ${item.action}`;
+
                     pendingMap.set(item.taskId, {
                         ...item,
                         id: '', // Se generará uno nuevo
-                        // Mantenemos taskId y originalCreatedAt
+                        action: actionWithHistory, // Guardamos la acción con su fecha de origen
                         status: item.status, // Mantenemos estado (Pendiente/En Proceso)
-                        advisorNotes: item.advisorNotes // Mantenemos notas previas
+                        advisorNotes: item.advisorNotes // Mantenemos notas previas tal cual
                     });
                 } else {
                     // Si se completó en algún momento, la quitamos del mapa de pendientes
@@ -105,7 +113,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 managerId: userInfo.id,
                 managerName: userInfo.name,
                 date: new Date().toISOString(),
-                items: pendingItems, // Tareas arrastradas
+                items: pendingItems, // Tareas arrastradas con historial de acción actualizado
                 generalNotes: ''
             }, userInfo.id, userInfo.name);
             
@@ -146,15 +154,15 @@ export function CoachingView({ advisor }: { advisor: User }) {
         }
     };
 
-    const handleUpdateItem = async (session: CoachingSession, item: CoachingItem, updates: { status?: string, advisorNotes?: string }) => {
+    // Actualizado para aceptar Partial<CoachingItem> (permite actualizar 'action' también)
+    const handleUpdateItem = async (session: CoachingSession, item: CoachingItem, updates: Partial<CoachingItem>) => {
         if (!userInfo) return;
         try {
             // Pasamos taskId y advisorId para la propagación
-            await updateCoachingItem(session.id, item.id, updates, userInfo.id, userInfo.name, item.taskId, session.advisorId);
+            await updateCoachingItem(session.id, item.id, updates as any, userInfo.id, userInfo.name, item.taskId, session.advisorId);
             
-            // Update local optimista (recargamos todo para ver sync pero actualizamos local rápido)
+            // Update local optimista
             setSessions(prev => prev.map(s => {
-                // Actualizar en la sesión actual
                 let newItems = s.items;
                 if (s.id === session.id) {
                     newItems = s.items.map(i => i.id === item.id ? { ...i, ...updates, lastUpdate: new Date().toISOString() } : i);
@@ -170,6 +178,40 @@ export function CoachingView({ advisor }: { advisor: User }) {
         } catch (error) {
             toast({ title: "Error al actualizar", variant: "destructive" });
         }
+    };
+
+    // CAMBIO 2: Lógica para guardar NUEVA NOTA con fecha
+    const commitNote = async (session: CoachingSession, item: CoachingItem) => {
+        const newVal = inputStates[item.id]?.note;
+        if (!newVal?.trim()) return;
+        
+        const dateStr = format(new Date(), "dd/MM HH:mm");
+        const toAppend = `[${dateStr}] ${newVal.trim()}`;
+        
+        // Mantiene lo anterior, agrega nueva línea con fecha y texto nuevo
+        const updatedNotes = item.advisorNotes 
+            ? `${item.advisorNotes}\n\n${toAppend}` 
+            : toAppend;
+        
+        await handleUpdateItem(session, item, { advisorNotes: updatedNotes });
+        // Limpiar input
+        setInputStates(prev => ({...prev, [item.id]: { ...prev[item.id], note: '' }}));
+    };
+
+    // CAMBIO 1 (Parte 2): Lógica para guardar NUEVO PEDIDO DEL JEFE con fecha
+    const commitAction = async (session: CoachingSession, item: CoachingItem) => {
+        const newVal = inputStates[item.id]?.action;
+        if (!newVal?.trim()) return;
+        
+        const dateStr = format(new Date(), "dd/MM");
+        const toAppend = `[Jefatura ${dateStr}] ${newVal.trim()}`;
+        
+        const updatedAction = item.action 
+            ? `${item.action}\n\n${toAppend}` 
+            : toAppend;
+        
+        await handleUpdateItem(session, item, { action: updatedAction });
+        setInputStates(prev => ({...prev, [item.id]: { ...prev[item.id], action: '' }}));
     };
 
     const handleDeleteSession = async () => {
@@ -209,7 +251,6 @@ export function CoachingView({ advisor }: { advisor: User }) {
             await updateCoachingSession(session.id, { status: newStatus }, userInfo.id, userInfo.name);
             setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: newStatus } : s));
             
-            // Si cerramos, colapsamos
             if (newStatus === 'Closed') {
                 setOpenSessions(prev => ({ ...prev, [session.id]: false }));
             } else {
@@ -323,9 +364,9 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                         </div>
                                     )}
                                     {session.items.map((item) => (
-                                        <div key={item.id} className="grid grid-cols-1 md:grid-cols-[40%_60%] gap-4 p-4 border rounded-lg bg-card/50 shadow-sm transition-shadow">
+                                        <div key={item.id} className="grid grid-cols-1 md:grid-cols-[45%_55%] gap-4 p-4 border rounded-lg bg-card/50 shadow-sm transition-shadow">
                                             
-                                            {/* Columna Izquierda: La Tarea (Definida por Jefe) */}
+                                            {/* Columna Izquierda: La Tarea y Pedidos (Jefatura) */}
                                             <div className="space-y-3 border-r md:pr-4 border-dashed md:border-solid border-border/50 relative">
                                                 <div className="flex flex-wrap items-center gap-2 pr-6">
                                                     <Badge variant="outline" className="capitalize bg-background text-[10px]">{item.entityType === 'general' ? 'General' : 'Cliente/Prospecto'}</Badge>
@@ -343,9 +384,26 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                                     </Button>
                                                 )}
 
-                                                <div className="bg-muted/30 p-2 rounded text-sm font-medium text-foreground/90 border">
+                                                {/* Historial de Pedidos */}
+                                                <div className="bg-muted/30 p-2 rounded text-sm font-medium text-foreground/90 border whitespace-pre-wrap max-h-[150px] overflow-y-auto">
                                                     {item.action}
                                                 </div>
+
+                                                {/* CAMBIO 1: Nuevo campo para pedido del jefe */}
+                                                {canManage && session.status === 'Open' && (
+                                                     <div className="flex gap-2 items-center">
+                                                        <Input 
+                                                            className="h-8 text-xs bg-background"
+                                                            placeholder="Nueva indicación..."
+                                                            value={inputStates[item.id]?.action || ''}
+                                                            onChange={e => setInputStates(prev => ({...prev, [item.id]: {...prev[item.id], action: e.target.value}}))}
+                                                            onKeyDown={e => e.key === 'Enter' && commitAction(session, item)}
+                                                        />
+                                                        <Button size="icon" variant="secondary" className="h-8 w-8 shrink-0" onClick={() => commitAction(session, item)}>
+                                                            <Plus className="h-4 w-4" />
+                                                        </Button>
+                                                     </div>
+                                                )}
                                                 
                                                 {/* Estado Visual */}
                                                 <div className="pt-1 flex items-center justify-between">
@@ -378,22 +436,43 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                                 </div>
                                             </div>
 
-                                            {/* Columna Derecha: Bitácora (Escribida por Asesor) */}
+                                            {/* Columna Derecha: Bitácora (Asesor) */}
                                             <div className="space-y-2 flex flex-col h-full">
                                                 <Label className="text-xs text-muted-foreground flex items-center gap-2 font-medium">
                                                     <Save className="h-3 w-3" /> Bitácora de Avance (Asesor)
                                                 </Label>
-                                                <Textarea 
-                                                    className="flex-1 min-h-[80px] text-sm resize-none bg-yellow-50/50 focus:bg-background transition-colors border-yellow-100 focus:border-primary"
-                                                    placeholder="Escribe aquí los avances diarios..."
-                                                    defaultValue={item.advisorNotes}
-                                                    disabled={session.status === 'Closed'}
-                                                    onBlur={(e) => {
-                                                        if (e.target.value !== item.advisorNotes) {
-                                                            handleUpdateItem(session, item, { advisorNotes: e.target.value });
-                                                        }
-                                                    }}
-                                                />
+                                                
+                                                {/* CAMBIO 2: Historial de solo lectura para mantener lo escrito */}
+                                                {item.advisorNotes && (
+                                                    <div className="text-xs text-muted-foreground bg-yellow-50/50 p-2 rounded border border-yellow-100 whitespace-pre-wrap max-h-[120px] overflow-y-auto">
+                                                        {item.advisorNotes}
+                                                    </div>
+                                                )}
+
+                                                {/* CAMBIO 2: Nuevo campo para guardar fecha y aclaración */}
+                                                <div className="flex-1 flex flex-col gap-2">
+                                                    <Textarea 
+                                                        className="flex-1 min-h-[60px] text-sm resize-none bg-background focus:bg-white transition-colors"
+                                                        placeholder={session.status === 'Closed' ? "Sesión cerrada" : "Agregar nuevo avance..."}
+                                                        value={inputStates[item.id]?.note || ''}
+                                                        onChange={e => setInputStates(prev => ({...prev, [item.id]: {...prev[item.id], note: e.target.value}}))}
+                                                        disabled={session.status === 'Closed'}
+                                                    />
+                                                    {session.status === 'Open' && (
+                                                        <div className="flex justify-end">
+                                                            <Button 
+                                                                size="sm" 
+                                                                variant="outline" 
+                                                                className="h-7 text-xs"
+                                                                disabled={!inputStates[item.id]?.note}
+                                                                onClick={() => commitNote(session, item)}
+                                                            >
+                                                                Guardar Avance
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </div>
+
                                                 {item.lastUpdate && (
                                                     <p className="text-[10px] text-muted-foreground text-right italic">
                                                         Última act: {format(parseISO(item.lastUpdate), "dd/MM HH:mm")}
