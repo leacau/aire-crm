@@ -532,6 +532,7 @@ export type CoachingItem = {
   status: CoachingItemStatus;
   advisorNotes?: string; 
   lastUpdate?: string; 
+  origin?: 'manager' | 'advisor'; // NUEVO CAMPO
 };
 
 export type CoachingSession = {
