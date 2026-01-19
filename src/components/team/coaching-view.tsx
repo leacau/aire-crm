@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Send } from 'lucide-react';
+import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -86,16 +86,22 @@ export function CoachingView({ advisor }: { advisor: User }) {
 
             session.items.forEach(item => {
                 if (item.status !== 'Completado' && item.status !== 'Cancelado') {
-                    // CAMBIO 1: Agregamos la fecha al "pedido anterior" para mantener el historial
-                    // Si ya tiene historial, se acumula.
-                    const actionWithHistory = `[Del ${sessionDateStr}] ${item.action}`;
+                    // CAMBIO: Si es origen jefatura, mantenemos prefijo de fecha.
+                    const isManagerOrigin = !item.origin || item.origin === 'manager';
+                    let actionWithHistory = item.action;
+                    
+                    // Solo agregamos la fecha al historial de acción si fue creado por un manager para rastrear pedidos
+                    if (isManagerOrigin) {
+                         actionWithHistory = `[Del ${sessionDateStr}] ${item.action}`;
+                    }
 
                     pendingMap.set(item.taskId, {
                         ...item,
                         id: '', // Se generará uno nuevo
-                        action: actionWithHistory, // Guardamos la acción con su fecha de origen
-                        status: item.status, // Mantenemos estado (Pendiente/En Proceso)
-                        advisorNotes: item.advisorNotes // Mantenemos notas previas tal cual
+                        action: actionWithHistory, 
+                        status: item.status, 
+                        advisorNotes: item.advisorNotes,
+                        origin: item.origin || 'manager' // Preservar origen al arrastrar
                     });
                 } else {
                     // Si se completó en algún momento, la quitamos del mapa de pendientes
@@ -132,6 +138,9 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const handleAddItem = async (sessionId: string) => {
         if (!newItemEntity.trim() || !newItemAction.trim()) return;
         
+        // CAMBIO: Determinar origen según rol
+        const origin = canManage ? 'manager' : 'advisor';
+
         const item: CoachingItem = {
             id: '', 
             taskId: '', // Se genera en backend
@@ -140,7 +149,8 @@ export function CoachingView({ advisor }: { advisor: User }) {
             entityName: newItemEntity,
             action: newItemAction,
             status: 'Pendiente',
-            advisorNotes: ''
+            advisorNotes: '',
+            origin: origin // Guardamos quién lo creó
         };
 
         try {
@@ -148,7 +158,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
             setNewItemEntity('');
             setNewItemAction('');
             loadData();
-            toast({ title: "Compromiso agregado" });
+            toast({ title: canManage ? "Tarea asignada" : "Agregado a cartera" });
         } catch (error) {
             toast({ title: "Error al agregar", variant: "destructive" });
         }
@@ -267,6 +277,127 @@ export function CoachingView({ advisor }: { advisor: User }) {
         setOpenSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
     };
 
+    // Helper para renderizar items
+    const renderItemRow = (session: CoachingSession, item: CoachingItem) => (
+        <div key={item.id} className="grid grid-cols-1 md:grid-cols-[45%_55%] gap-4 p-4 border rounded-lg bg-card/50 shadow-sm transition-shadow">
+            
+            {/* Columna Izquierda: La Tarea y Pedidos */}
+            <div className="space-y-3 border-r md:pr-4 border-dashed md:border-solid border-border/50 relative">
+                <div className="flex flex-wrap items-center gap-2 pr-6">
+                    <Badge variant="outline" className="capitalize bg-background text-[10px]">{item.entityType === 'general' ? 'General' : 'Cliente/Prospecto'}</Badge>
+                    <span className="font-semibold text-sm truncate block max-w-full" title={item.entityName}>{item.entityName}</span>
+                </div>
+                
+                {/* Botón borrar (Jefes borran todo, Asesores solo lo suyo y si está abierta) */}
+                {(canManage || (item.origin === 'advisor' && session.status === 'Open')) && (
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-6 w-6 absolute top-0 right-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDeleteItem(session.id, item.id)}
+                    >
+                        <Trash2 className="h-3 w-3" />
+                    </Button>
+                )}
+
+                {/* Historial de Pedidos */}
+                <div className="bg-muted/30 p-2 rounded text-sm font-medium text-foreground/90 border whitespace-pre-wrap max-h-[150px] overflow-y-auto">
+                    {item.action}
+                </div>
+
+                {/* Solo Jefes agregan indicaciones extra sobre lo existente */}
+                {canManage && session.status === 'Open' && (
+                     <div className="flex gap-2 items-center">
+                        <Input 
+                            className="h-8 text-xs bg-background"
+                            placeholder="Nueva indicación..."
+                            value={inputStates[item.id]?.action || ''}
+                            onChange={e => setInputStates(prev => ({...prev, [item.id]: {...prev[item.id], action: e.target.value}}))}
+                            onKeyDown={e => e.key === 'Enter' && commitAction(session, item)}
+                        />
+                        <Button size="icon" variant="secondary" className="h-8 w-8 shrink-0" onClick={() => commitAction(session, item)}>
+                            <Plus className="h-4 w-4" />
+                        </Button>
+                     </div>
+                )}
+                
+                {/* Estado Visual */}
+                <div className="pt-1 flex items-center justify-between">
+                    <Select 
+                        value={item.status} 
+                        onValueChange={(val) => handleUpdateItem(session, item, { status: val })}
+                        disabled={session.status === 'Closed' && !canManage && !(item.origin === 'advisor')}
+                    >
+                        <SelectTrigger className={`w-full md:w-[160px] h-8 text-xs font-medium border ${
+                            item.status === 'Completado' ? 'bg-green-50 text-green-700 border-green-200' : 
+                            item.status === 'En Proceso' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
+                            item.status === 'Cancelado' ? 'bg-red-50 text-red-700 border-red-200' : ''
+                        }`}>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Pendiente">Pendiente</SelectItem>
+                            <SelectItem value="En Proceso">En Proceso</SelectItem>
+                            <SelectItem value="Completado">Completado</SelectItem>
+                            <SelectItem value="Cancelado">Cancelado</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    
+                    {item.originalCreatedAt && (
+                        <div className="flex items-center text-[10px] text-muted-foreground" title={`Creada el ${format(parseISO(item.originalCreatedAt), 'dd/MM/yyyy')}`}>
+                            <History className="h-3 w-3 mr-1" />
+                            {format(parseISO(item.originalCreatedAt), 'dd/MM')}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Columna Derecha: Bitácora (Asesor) */}
+            <div className="space-y-2 flex flex-col h-full">
+                <Label className="text-xs text-muted-foreground flex items-center gap-2 font-medium">
+                    <Save className="h-3 w-3" /> Bitácora de Avance
+                </Label>
+                
+                {/* CAMBIO 2: Historial de solo lectura para mantener lo escrito */}
+                {item.advisorNotes && (
+                    <div className="text-xs text-muted-foreground bg-yellow-50/50 p-2 rounded border border-yellow-100 whitespace-pre-wrap max-h-[120px] overflow-y-auto">
+                        {item.advisorNotes}
+                    </div>
+                )}
+
+                {/* CAMBIO 2: Nuevo campo para guardar fecha y aclaración */}
+                <div className="flex-1 flex flex-col gap-2">
+                    <Textarea 
+                        className="flex-1 min-h-[60px] text-sm resize-none bg-background focus:bg-white transition-colors"
+                        placeholder={session.status === 'Closed' ? "Sesión cerrada" : "Agregar nuevo avance..."}
+                        value={inputStates[item.id]?.note || ''}
+                        onChange={e => setInputStates(prev => ({...prev, [item.id]: {...prev[item.id], note: e.target.value}}))}
+                        disabled={session.status === 'Closed'}
+                    />
+                    {session.status === 'Open' && (
+                        <div className="flex justify-end">
+                            <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="h-7 text-xs"
+                                disabled={!inputStates[item.id]?.note}
+                                onClick={() => commitNote(session, item)}
+                            >
+                                Guardar Avance
+                            </Button>
+                        </div>
+                    )}
+                </div>
+
+                {item.lastUpdate && (
+                    <p className="text-[10px] text-muted-foreground text-right italic">
+                        Última act: {format(parseISO(item.lastUpdate), "dd/MM HH:mm")}
+                    </p>
+                )}
+            </div>
+        </div>
+    );
+
     if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
 
     return (
@@ -296,7 +427,12 @@ export function CoachingView({ advisor }: { advisor: User }) {
                     </Card>
                 )}
 
-                {sessions.map((session) => (
+                {sessions.map((session) => {
+                    // CAMBIO: Filtrar items por origen
+                    const managerItems = session.items.filter(i => !i.origin || i.origin === 'manager');
+                    const advisorItems = session.items.filter(i => i.origin === 'advisor');
+
+                    return (
                     <Collapsible 
                         key={session.id} 
                         open={openSessions[session.id]} 
@@ -319,7 +455,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                         </div>
                                         {!openSessions[session.id] && (
                                             <span className="text-xs text-muted-foreground">
-                                                {session.items.length} tareas · Liderada por {session.managerName}
+                                                {session.items.length} tareas ({managerItems.length} Jefatura / {advisorItems.length} Propias)
                                             </span>
                                         )}
                                     </div>
@@ -356,136 +492,35 @@ export function CoachingView({ advisor }: { advisor: User }) {
 
                         <CollapsibleContent>
                             <div className="px-4 pb-4 pt-0 space-y-6">
-                                {/* Lista de Compromisos */}
-                                <div className="space-y-4">
-                                    {session.items.length === 0 && session.status === 'Open' && (
-                                        <div className="text-center text-sm text-muted-foreground italic py-2">
-                                            Aún no hay compromisos asignados para esta semana.
-                                        </div>
-                                    )}
-                                    {session.items.map((item) => (
-                                        <div key={item.id} className="grid grid-cols-1 md:grid-cols-[45%_55%] gap-4 p-4 border rounded-lg bg-card/50 shadow-sm transition-shadow">
-                                            
-                                            {/* Columna Izquierda: La Tarea y Pedidos (Jefatura) */}
-                                            <div className="space-y-3 border-r md:pr-4 border-dashed md:border-solid border-border/50 relative">
-                                                <div className="flex flex-wrap items-center gap-2 pr-6">
-                                                    <Badge variant="outline" className="capitalize bg-background text-[10px]">{item.entityType === 'general' ? 'General' : 'Cliente/Prospecto'}</Badge>
-                                                    <span className="font-semibold text-sm truncate block max-w-full" title={item.entityName}>{item.entityName}</span>
-                                                </div>
-                                                
-                                                {canManage && (
-                                                    <Button 
-                                                        variant="ghost" 
-                                                        size="icon" 
-                                                        className="h-6 w-6 absolute top-0 right-0 text-muted-foreground hover:text-destructive"
-                                                        onClick={() => handleDeleteItem(session.id, item.id)}
-                                                    >
-                                                        <Trash2 className="h-3 w-3" />
-                                                    </Button>
-                                                )}
+                                {/* SECCIÓN 1: SOLICITUDES DE JEFATURA */}
+                                {managerItems.length > 0 && (
+                                    <div className="space-y-3">
+                                        <h4 className="text-xs uppercase font-bold text-muted-foreground flex items-center gap-2">
+                                            <Briefcase className="h-3 w-3" /> Solicitudes de Jefatura
+                                        </h4>
+                                        {managerItems.map(item => renderItemRow(session, item))}
+                                    </div>
+                                )}
 
-                                                {/* Historial de Pedidos */}
-                                                <div className="bg-muted/30 p-2 rounded text-sm font-medium text-foreground/90 border whitespace-pre-wrap max-h-[150px] overflow-y-auto">
-                                                    {item.action}
-                                                </div>
+                                {/* SECCIÓN 2: CARTERA DEL ASESOR */}
+                                {advisorItems.length > 0 && (
+                                    <div className="space-y-3 mt-6">
+                                        <h4 className="text-xs uppercase font-bold text-primary flex items-center gap-2 border-t pt-4">
+                                            <UserCheck className="h-3 w-3" /> Cartera Autogenerada (Asesor)
+                                        </h4>
+                                        {advisorItems.map(item => renderItemRow(session, item))}
+                                    </div>
+                                )}
 
-                                                {/* CAMBIO 1: Nuevo campo para pedido del jefe */}
-                                                {canManage && session.status === 'Open' && (
-                                                     <div className="flex gap-2 items-center">
-                                                        <Input 
-                                                            className="h-8 text-xs bg-background"
-                                                            placeholder="Nueva indicación..."
-                                                            value={inputStates[item.id]?.action || ''}
-                                                            onChange={e => setInputStates(prev => ({...prev, [item.id]: {...prev[item.id], action: e.target.value}}))}
-                                                            onKeyDown={e => e.key === 'Enter' && commitAction(session, item)}
-                                                        />
-                                                        <Button size="icon" variant="secondary" className="h-8 w-8 shrink-0" onClick={() => commitAction(session, item)}>
-                                                            <Plus className="h-4 w-4" />
-                                                        </Button>
-                                                     </div>
-                                                )}
-                                                
-                                                {/* Estado Visual */}
-                                                <div className="pt-1 flex items-center justify-between">
-                                                    <Select 
-                                                        value={item.status} 
-                                                        onValueChange={(val) => handleUpdateItem(session, item, { status: val })}
-                                                        disabled={session.status === 'Closed' && !canManage}
-                                                    >
-                                                        <SelectTrigger className={`w-full md:w-[160px] h-8 text-xs font-medium border ${
-                                                            item.status === 'Completado' ? 'bg-green-50 text-green-700 border-green-200' : 
-                                                            item.status === 'En Proceso' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
-                                                            item.status === 'Cancelado' ? 'bg-red-50 text-red-700 border-red-200' : ''
-                                                        }`}>
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="Pendiente">Pendiente</SelectItem>
-                                                            <SelectItem value="En Proceso">En Proceso</SelectItem>
-                                                            <SelectItem value="Completado">Completado</SelectItem>
-                                                            <SelectItem value="Cancelado">Cancelado</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                    
-                                                    {item.originalCreatedAt && (
-                                                        <div className="flex items-center text-[10px] text-muted-foreground" title={`Creada el ${format(parseISO(item.originalCreatedAt), 'dd/MM/yyyy')}`}>
-                                                            <History className="h-3 w-3 mr-1" />
-                                                            {format(parseISO(item.originalCreatedAt), 'dd/MM')}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
+                                {session.items.length === 0 && session.status === 'Open' && (
+                                    <div className="text-center text-sm text-muted-foreground italic py-2">
+                                        Aún no hay compromisos asignados para esta semana.
+                                    </div>
+                                )}
 
-                                            {/* Columna Derecha: Bitácora (Asesor) */}
-                                            <div className="space-y-2 flex flex-col h-full">
-                                                <Label className="text-xs text-muted-foreground flex items-center gap-2 font-medium">
-                                                    <Save className="h-3 w-3" /> Bitácora de Avance (Asesor)
-                                                </Label>
-                                                
-                                                {/* CAMBIO 2: Historial de solo lectura para mantener lo escrito */}
-                                                {item.advisorNotes && (
-                                                    <div className="text-xs text-muted-foreground bg-yellow-50/50 p-2 rounded border border-yellow-100 whitespace-pre-wrap max-h-[120px] overflow-y-auto">
-                                                        {item.advisorNotes}
-                                                    </div>
-                                                )}
-
-                                                {/* CAMBIO 2: Nuevo campo para guardar fecha y aclaración */}
-                                                <div className="flex-1 flex flex-col gap-2">
-                                                    <Textarea 
-                                                        className="flex-1 min-h-[60px] text-sm resize-none bg-background focus:bg-white transition-colors"
-                                                        placeholder={session.status === 'Closed' ? "Sesión cerrada" : "Agregar nuevo avance..."}
-                                                        value={inputStates[item.id]?.note || ''}
-                                                        onChange={e => setInputStates(prev => ({...prev, [item.id]: {...prev[item.id], note: e.target.value}}))}
-                                                        disabled={session.status === 'Closed'}
-                                                    />
-                                                    {session.status === 'Open' && (
-                                                        <div className="flex justify-end">
-                                                            <Button 
-                                                                size="sm" 
-                                                                variant="outline" 
-                                                                className="h-7 text-xs"
-                                                                disabled={!inputStates[item.id]?.note}
-                                                                onClick={() => commitNote(session, item)}
-                                                            >
-                                                                Guardar Avance
-                                                            </Button>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {item.lastUpdate && (
-                                                    <p className="text-[10px] text-muted-foreground text-right italic">
-                                                        Última act: {format(parseISO(item.lastUpdate), "dd/MM HH:mm")}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Formulario para agregar items (Solo visible para jefes si está abierta) */}
-                                {canManage && session.status === 'Open' && (
-                                    <div className="bg-muted/40 p-3 rounded-lg border border-dashed flex flex-col md:flex-row gap-3 items-end mt-4">
+                                {/* Formulario para agregar items (Ahora visible para TODOS si está abierta) */}
+                                {session.status === 'Open' && (
+                                    <div className={`p-3 rounded-lg border border-dashed flex flex-col md:flex-row gap-3 items-end mt-4 ${canManage ? 'bg-muted/40' : 'bg-blue-50/50 border-blue-200'}`}>
                                         <div className="w-full md:w-[120px] space-y-1">
                                             <Label className="text-xs">Tipo</Label>
                                             <Select value={newItemType} onValueChange={(v: any) => setNewItemType(v)}>
@@ -507,24 +542,24 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                             />
                                         </div>
                                         <div className="flex-1 w-full space-y-1">
-                                            <Label className="text-xs">Acción a realizar</Label>
+                                            <Label className="text-xs">{canManage ? 'Solicitud / Pedido' : 'Propuesta / Tarea'}</Label>
                                             <Input 
                                                 className="h-8 text-xs bg-background"
-                                                placeholder="Ej: Presentar propuesta..." 
+                                                placeholder={canManage ? "Ej: Pedir propuesta..." : "Ej: Llamar para ofrecer..."}
                                                 value={newItemAction}
                                                 onChange={e => setNewItemAction(e.target.value)}
                                                 onKeyDown={e => e.key === 'Enter' && handleAddItem(session.id)}
                                             />
                                         </div>
                                         <Button size="sm" onClick={() => handleAddItem(session.id)} className="shrink-0 h-8 px-3">
-                                            <Plus className="h-4 w-4" />
+                                            <Plus className="h-4 w-4" /> {canManage ? 'Asignar' : 'Agregar'}
                                         </Button>
                                     </div>
                                 )}
                             </div>
                         </CollapsibleContent>
                     </Collapsible>
-                ))}
+                )})}
             </div>
 
             <AlertDialog open={!!sessionToDelete} onOpenChange={() => setSessionToDelete(null)}>
