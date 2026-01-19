@@ -27,6 +27,7 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <head>
         <meta name="google" content="notranslate" />
+        <meta name="google-site-verification" content="Vv-m6rWiQzmVjTmE-k_CZnJxGQhAbUxIMEgrrzq_zHw" />
       </head>
       <body className="font-body antialiased">
         <AuthProvider>
