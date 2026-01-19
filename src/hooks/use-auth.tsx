@@ -10,6 +10,8 @@ import type { User } from '@/lib/types';
 import { validateGoogleServicesAccess } from '@/lib/google-service-check';
 import { initializePermissions } from '@/lib/permissions';
 
+const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service', '/'];
+
 interface AuthContextType {
   user: FirebaseUser | null;
   userInfo: User | null;
@@ -40,6 +42,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
+
+  useEffect(() => {
+    if (!loading) {
+      const isPublicRoute = publicRoutes.includes(pathname);
+      if (!user && !isPublicRoute) {
+        router.push('/login');
+      } else if (user && pathname === '/login') {
+        // CAMBIO: Redirigir al dashboard en lugar de '/'
+        router.push('/dashboard');
+      }
+    }
+  }, [user, loading, pathname, router]);
 
   const saveTokenToStorage = (token: string, expiresInSeconds: number = 3600) => {
     if (typeof window === 'undefined') return;
