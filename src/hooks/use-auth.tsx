@@ -30,7 +30,6 @@ const AuthContext = createContext<AuthContextType>({
   ensureGoogleAccessToken: async () => null,
 });
 
-const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service'];
 
 const STORAGE_TOKEN_KEY = 'google_api_token';
 const STORAGE_EXPIRY_KEY = 'google_api_token_expiry';
