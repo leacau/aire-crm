@@ -547,3 +547,7 @@ export type CoachingSession = {
   createdAt: string;
   status: 'Open' | 'Closed'; 
 };
+
+export type SystemHolidays = {
+  dates: string[]; // Array de strings "YYYY-MM-DD"
+};
