@@ -1,311 +1,194 @@
-
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-  DialogDescription,
 } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
-import { Spinner } from '../ui/spinner';
-import type { VacationRequest, User } from '@/lib/types';
-import { getAllUsers, getVacationRequests, managerCreateOrUpdateVacationRequest, deleteVacationRequest, approveVacationRequest } from '@/lib/firebase-service';
-import { useAuth } from '@/hooks/use-auth';
-import { LicensesTable } from '../licencias/licenses-table';
-import { PlusCircle, Trash2 } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Label } from '../ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { CalendarIcon } from 'lucide-react';
-import type { DateRange } from 'react-day-picker';
-import { Calendar } from '../ui/calendar';
-import { format, eachDayOfInterval, isWeekend, addDays } from 'date-fns';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+import { Trash2, CalendarIcon, Plus } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
-import { Card } from '../ui/card';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { useAuth } from '@/hooks/use-auth';
+import { addVacationDays, getAllUsers, getSystemHolidays, saveSystemHolidays } from '@/lib/firebase-service';
+import type { User } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
-interface LicensesManagementDialogProps {
-  isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-}
-
-const getNextWorkday = (date: Date): Date => {
-    let nextDay = addDays(date, 1);
-    while (isWeekend(nextDay)) {
-        nextDay = addDays(nextDay, 1);
-    }
-    return nextDay;
-};
-
-export function LicensesManagementDialog({ isOpen, onOpenChange }: LicensesManagementDialogProps) {
-  const { userInfo, getGoogleAccessToken } = useAuth();
+export function LicensesManagementDialog({ 
+    isOpen, 
+    onOpenChange 
+}: { 
+    isOpen: boolean; 
+    onOpenChange: (isOpen: boolean) => void 
+}) {
+  const { userInfo } = useAuth();
   const { toast } = useToast();
-  
-  const [loading, setLoading] = useState(true);
-  const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [selectedUser, setSelectedUser] = useState<string>('');
+  const [daysToAdd, setDaysToAdd] = useState('');
   
-  const [isFormVisible, setIsFormVisible] = useState(false);
-  const [editingRequest, setEditingRequest] = useState<Partial<VacationRequest> | null>(null);
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [requestToDelete, setRequestToDelete] = useState<VacationRequest | null>(null);
-
-  const { daysRequested, returnDate } = useMemo(() => {
-    if (!dateRange?.from || !dateRange?.to) {
-      return { daysRequested: 0, returnDate: '' };
-    }
-    const allDays = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
-    const workdays = allDays.filter(day => !isWeekend(day));
-    const nextWorkday = getNextWorkday(dateRange.to);
-    
-    return {
-      daysRequested: workdays.length,
-      returnDate: format(nextWorkday, 'PPP', { locale: es }),
-    };
-  }, [dateRange]);
-
-  const fetchData = useCallback(async () => {
-    if (!userInfo) return;
-    setLoading(true);
-    try {
-      const [fetchedRequests, fetchedUsers] = await Promise.all([
-        getVacationRequests(userInfo.id, userInfo.role),
-        getAllUsers(),
-      ]);
-      setRequests(fetchedRequests);
-      setUsers(fetchedUsers.filter(u => u.role === 'Asesor'));
-    } catch (error) {
-      console.error("Error fetching license data for manager:", error);
-      toast({ title: "Error al cargar datos de licencias", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  }, [userInfo, toast]);
+  // Estado para feriados
+  const [holidays, setHolidays] = useState<string[]>([]);
+  const [newHolidayDate, setNewHolidayDate] = useState('');
 
   useEffect(() => {
     if (isOpen) {
-      fetchData();
+      loadData();
     }
-  }, [isOpen, fetchData]);
+  }, [isOpen]);
 
-  const handleSaveRequest = async () => {
-    if (!editingRequest?.userId || !dateRange?.from || !dateRange?.to) {
-      toast({ title: 'Datos incompletos', variant: 'destructive' });
-      return;
-    }
-    
-    const user = users.find(u => u.id === editingRequest.userId);
-    if (!user) return;
-
-    const payload: Partial<VacationRequest> = {
-      ...editingRequest,
-      startDate: format(dateRange.from, 'yyyy-MM-dd'),
-      endDate: format(dateRange.to, 'yyyy-MM-dd'),
-      daysRequested,
-      returnDate: format(getNextWorkday(dateRange.to), 'yyyy-MM-dd'),
-      userName: user.name,
-    };
-    
-    await managerCreateOrUpdateVacationRequest(payload, userInfo!.id);
-    toast({ title: `Solicitud ${editingRequest.id ? 'actualizada' : 'creada'}` });
-    setIsFormVisible(false);
-    setEditingRequest(null);
-    fetchData();
-  };
-
-  const handleUpdateRequest = async (request: VacationRequest, status: 'Aprobado' | 'Rechazado') => {
-    if (!userInfo) return;
-    const applicant = users.find((u) => u.id === request.userId);
-    try {
-      const { emailPayload } = await approveVacationRequest(request.id, status, userInfo.id, applicant?.email || null);
-      toast({ title: `Solicitud ${status === 'Aprobado' ? 'aprobada' : 'rechazada'}` });
-      if (emailPayload) {
-        const accessToken = await getGoogleAccessToken();
-        if (accessToken) {
-          sendEmail({ ...emailPayload, accessToken }).catch((err) => console.error('Error enviando email de licencia:', err));
-        }
+  const loadData = async () => {
+      try {
+          const [fetchedUsers, fetchedHolidays] = await Promise.all([
+              getAllUsers(),
+              getSystemHolidays()
+          ]);
+          setUsers(fetchedUsers.filter(u => u.role === 'Asesor'));
+          setHolidays(fetchedHolidays.sort());
+      } catch (e) {
+          console.error(e);
       }
-      fetchData();
-    } catch (error) {
-      console.error("Error approving/rejecting request:", error);
-      toast({ title: 'Error al actualizar', variant: 'destructive', description: (error as Error).message });
-    }
   };
 
-  const handleDelete = async () => {
-    if (!requestToDelete) return;
+  const handleAddDays = async () => {
+    if (!selectedUser || !daysToAdd || isNaN(Number(daysToAdd))) return;
     try {
-      await deleteVacationRequest(requestToDelete.id);
-      toast({ title: 'Solicitud Eliminada' });
-      fetchData();
+      await addVacationDays(selectedUser, Number(daysToAdd), userInfo?.id || '', userInfo?.name || '');
+      toast({ title: "Días agregados correctamente" });
+      setDaysToAdd('');
+      setSelectedUser('');
     } catch (error) {
-      console.error("Error deleting request:", error);
-      toast({ title: 'Error al eliminar', variant: 'destructive' });
-    } finally {
-      setRequestToDelete(null);
+      toast({ title: "Error al agregar días", variant: "destructive" });
     }
   };
 
-  const openForm = (request: Partial<VacationRequest> | null) => {
-    setEditingRequest(request || { status: 'Pendiente' });
-    setDateRange(request?.startDate && request?.endDate ? { from: new Date(request.startDate), to: new Date(request.endDate) } : undefined);
-    setIsFormVisible(true);
-  };
-  
-  const closeForm = () => {
-    setIsFormVisible(false);
-    setEditingRequest(null);
-  };
-
-  const buildLicenseDocument = (request: VacationRequest, logoUrl: string) => {
-    const today = new Date();
-    const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
-    const start = format(new Date(request.startDate), "d 'de' MMMM 'de' yyyy", { locale: es });
-    const end = format(new Date(request.endDate), "d 'de' MMMM 'de' yyyy", { locale: es });
-    const returnDate = format(new Date(request.returnDate), "d 'de' MMMM 'de' yyyy", { locale: es });
-
-    return `
-      <div style="font-family: Arial, sans-serif; color: #222; line-height: 1.6; max-width: 900px; margin: 0 auto; padding: 24px;">
-        <div style="margin-top:5cm; margin-bottom:32px; text-align:center;">
-          <img src="${logoUrl}" alt="Aire de Santa Fe" style="max-width:340px; width:100%; height:auto;" />
-        </div>
-        <div style="text-align:right; margin-bottom:24px;">Santa Fé, ${todayFormatted}</div>
-        <p>Estimado/a <strong>${request.userName}</strong></p>
-        <p>Mediante la presente le informamos la autorización de la solicitud de <strong>${request.daysRequested}</strong> días de vacaciones.</p>
-        <p>Del <strong>${start}</strong> al <strong>${end}</strong> de acuerdo con el período vacacional correspondiente al año actual.</p>
-        <p>La fecha de reincorporación a la actividad laboral será el día <strong>${returnDate}</strong>.</p>
-        <p>Saludos cordiales.</p>
-        <div style="display:flex; gap:64px; margin-top:48px; flex-wrap:wrap;">
-          <span>Gte. de área</span>
-          <span>Jefe de área</span>
-          <span>Área de rrhh</span>
-        </div>
-        <p style="margin-top:48px;">Notificado: ____________________</p>
-      </div>
-    `;
+  // --- Gestión de Feriados ---
+  const handleAddHoliday = async () => {
+      if (!newHolidayDate) return;
+      if (holidays.includes(newHolidayDate)) {
+          toast({ title: "Ese feriado ya existe", variant: "destructive" });
+          return;
+      }
+      
+      const newHolidays = [...holidays, newHolidayDate].sort();
+      try {
+          await saveSystemHolidays(newHolidays, userInfo?.id || '', userInfo?.name || '');
+          setHolidays(newHolidays);
+          setNewHolidayDate('');
+          toast({ title: "Feriado agregado" });
+      } catch (error) {
+          toast({ title: "Error al guardar", variant: "destructive" });
+      }
   };
 
-  const handlePrint = (request: VacationRequest) => {
-    const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/aire-logo.svg` : '/aire-logo.svg';
-    const html = buildLicenseDocument(request, logoUrl);
-    const printWindow = window.open('', '_blank', 'width=900,height=900');
-    if (printWindow) {
-      printWindow.document.write(`<!doctype html><html><head><title>Constancia de Licencia</title></head><body>${html}</body></html>`);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
-    }
+  const handleDeleteHoliday = async (dateToDelete: string) => {
+      const newHolidays = holidays.filter(d => d !== dateToDelete);
+      try {
+          await saveSystemHolidays(newHolidays, userInfo?.id || '', userInfo?.name || '');
+          setHolidays(newHolidays);
+          toast({ title: "Feriado eliminado" });
+      } catch (error) {
+          toast({ title: "Error al eliminar", variant: "destructive" });
+      }
   };
-
-  const tableColumns = useMemo<ColumnDef<VacationRequest>[]>(() => [
-    { accessorKey: 'userName', header: 'Asesor', cell: ({ row }) => <div className="font-medium">{row.original.userName}</div> },
-    { accessorKey: 'startDate', header: 'Desde', cell: ({ row }) => format(new Date(row.original.startDate), 'P', { locale: es }) },
-    { accessorKey: 'endDate', header: 'Hasta', cell: ({ row }) => format(new Date(row.original.endDate), 'P', { locale: es }) },
-    { accessorKey: 'daysRequested', header: 'Días' },
-    { accessorKey: 'returnDate', header: 'Reincorpora', cell: ({ row }) => format(new Date(row.original.returnDate), 'P', { locale: es }) },
-    { id: 'actions', cell: ({ row }) => (
-        <div className="flex items-center justify-end gap-2">
-            {row.original.status === 'Pendiente' && <Button size="sm" onClick={() => handleUpdateRequest(row.original, 'Aprobado')}>Aprobar</Button>}
-            <Button size="sm" variant="outline" onClick={() => openForm(row.original)}>Editar</Button>
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setRequestToDelete(row.original)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
-        </div>
-      )
-    },
-  ], [handleUpdateRequest]);
-
 
   return (
-    <>
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>Gestión de Licencias del Equipo</DialogTitle>
-          <DialogDescription>
-            Crea, edita y aprueba las solicitudes de licencias de tu equipo.
-          </DialogDescription>
+          <DialogTitle>Gestión de Licencias</DialogTitle>
         </DialogHeader>
         
-        {loading ? <Spinner /> : (
-            isFormVisible ? (
-                 <div className="flex-1 overflow-y-auto pr-4 space-y-4">
-                    <h3 className="font-semibold text-lg">{editingRequest?.id ? 'Editar' : 'Nueva'} Solicitud</h3>
+        <Tabs defaultValue="balance">
+            <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="balance">Saldo de Días</TabsTrigger>
+                <TabsTrigger value="holidays">Feriados</TabsTrigger>
+            </TabsList>
+
+            {/* PESTAÑA SALDO DE DÍAS (Lógica existente mejorada) */}
+            <TabsContent value="balance" className="space-y-4 py-4">
+                <div className="grid gap-4">
                     <div className="space-y-2">
-                        <Label>Asesor</Label>
-                        <Select value={editingRequest?.userId} onValueChange={(v) => setEditingRequest(p => ({...p, userId: v}))}>
-                            <SelectTrigger><SelectValue placeholder="Seleccionar asesor..." /></SelectTrigger>
+                        <Label>Seleccionar Asesor</Label>
+                        <Select value={selectedUser} onValueChange={setSelectedUser}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Buscar asesor..." />
+                            </SelectTrigger>
                             <SelectContent>
-                                {users.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                                {users.map(u => (
+                                    <SelectItem key={u.id} value={u.id}>{u.name} (Actual: {u.vacationDays || 0})</SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
-                     <div className="space-y-2">
-                        <Label>Período de Licencia</Label>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, "PPP", { locale: es })} - ${format(dateRange.to, "PPP", { locale: es })}` : format(dateRange.from, "PPP", { locale: es })) : <span>Selecciona un rango</span>}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0"><Calendar mode="range" selected={dateRange} onSelect={setDateRange} locale={es} /></PopoverContent>
-                        </Popover>
-                    </div>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Card className="p-3 text-center"><p className="text-sm text-muted-foreground">Días pedidos</p><p className="text-xl font-bold">{daysRequested}</p></Card>
-                        <Card className="p-3 text-center"><p className="text-sm text-muted-foreground">Retoma actividades</p><p className="text-base font-bold capitalize">{returnDate || '-'}</p></Card>
+                    <div className="space-y-2">
+                        <Label>Días a agregar</Label>
+                        <div className="flex gap-2">
+                            <Input 
+                                type="number" 
+                                value={daysToAdd} 
+                                onChange={e => setDaysToAdd(e.target.value)} 
+                                placeholder="Ej: 14"
+                            />
+                            <Button onClick={handleAddDays}>Agregar</Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Esto suma días al saldo actual del asesor.</p>
                     </div>
                 </div>
-            ) : (
-                    <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="flex justify-end mb-4">
-                        <Button onClick={() => openForm(null)}><PlusCircle className="mr-2 h-4 w-4" /> Nueva Solicitud</Button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                        <LicensesTable
-                          requests={requests}
-                          isManagerView={true}
-                          onUpdateRequest={handleUpdateRequest}
-                          onEdit={openForm}
-                          onDelete={setRequestToDelete}
-                          currentUserId={userInfo?.id || ''}
-                          onPrint={handlePrint}
+            </TabsContent>
+
+            {/* PESTAÑA FERIADOS (Nueva) */}
+            <TabsContent value="holidays" className="space-y-4 py-4">
+                <div className="flex gap-2 items-end">
+                    <div className="space-y-2 flex-1">
+                        <Label>Nuevo Feriado</Label>
+                        <Input 
+                            type="date" 
+                            value={newHolidayDate} 
+                            onChange={e => setNewHolidayDate(e.target.value)} 
                         />
                     </div>
+                    <Button onClick={handleAddHoliday} disabled={!newHolidayDate}>
+                        <Plus className="mr-2 h-4 w-4" /> Agregar
+                    </Button>
                 </div>
-            )
-        )}
 
-        <DialogFooter>
-            {isFormVisible ? (
-                <>
-                  <Button variant="outline" onClick={closeForm}>Cancelar</Button>
-                  <Button onClick={handleSaveRequest}>Guardar Solicitud</Button>
-                </>
-            ) : (
-                <Button variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button>
-            )}
-        </DialogFooter>
+                <div className="border rounded-md mt-4">
+                    <div className="bg-muted p-2 text-sm font-medium border-b">Feriados Configurados</div>
+                    <ScrollArea className="h-[200px] p-2">
+                        {holidays.length === 0 && <p className="text-sm text-muted-foreground p-2">No hay feriados cargados.</p>}
+                        {holidays.map(date => (
+                            <div key={date} className="flex justify-between items-center p-2 hover:bg-muted/50 rounded text-sm">
+                                <div className="flex items-center gap-2">
+                                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                                    <span>{format(parseISO(date), "PPP", { locale: es })}</span>
+                                </div>
+                                <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                                    onClick={() => handleDeleteHoliday(date)}
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        ))}
+                    </ScrollArea>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                    Estos días no se contarán al calcular la duración de las licencias solicitadas.
+                </p>
+            </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
-     <AlertDialog open={!!requestToDelete} onOpenChange={(open) => !open && setRequestToDelete(null)}>
-        <AlertDialogContent>
-            <AlertDialogHeader>
-                <AlertDialogTitle>¿Eliminar esta solicitud?</AlertDialogTitle>
-                <AlertDialogDescription>Esta acción es irreversible.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete} variant="destructive">Eliminar</AlertDialogAction>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-    </AlertDialog>
-    </>
   );
 }
