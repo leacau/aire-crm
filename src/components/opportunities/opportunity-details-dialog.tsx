@@ -29,8 +29,8 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices } from '@/lib/firebase-service';
-import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail } from 'lucide-react';
+import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession } from '@/lib/firebase-service';
+import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail, Briefcase } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Calendar } from '../ui/calendar';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
@@ -163,6 +164,10 @@ export function OpportunityDetailsDialog({
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const [unreadCommentsCount, setUnreadCommentsCount] = useState(0);
 
+  // Estado para saber si se envía al seguimiento al crear
+  const [addToCoaching, setAddToCoaching] = useState(false);
+  const [isSendingToCoaching, setIsSendingToCoaching] = useState(false);
+
   const isEditing = !!opportunity;
 
   const [newInvoiceRow, setNewInvoiceRow] = useState<{number: string, date: string, amount: string | number}>({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
@@ -273,6 +278,10 @@ export function OpportunityDetailsDialog({
         if (!initialData.createdAt && isEditing) initialData.createdAt = opportunity?.createdAt;
         setEditedOpportunity(initialData);
         
+        // Reset states
+        setAddToCoaching(false);
+        setIsSendingToCoaching(false);
+
         getAgencies()
             .then(setAgencies)
             .catch(() => toast({ title: "Error al cargar agencias", variant: "destructive" }));
@@ -290,8 +299,57 @@ export function OpportunityDetailsDialog({
     setEditedOpportunity(prev => ({...prev, agencyId: newAgency.id }));
   }
 
+  // Función para agregar a seguimiento (usada tanto en crear como en editar)
+  const sendToCoaching = async (oppTitle: string) => {
+      if (!userInfo || !client) return;
+      setIsSendingToCoaching(true);
+      try {
+          const sessions = await getCoachingSessions(userInfo.id);
+          let openSession = sessions.find(s => s.status === 'Open');
+
+          if (!openSession) {
+              const newSessionId = await createCoachingSession({
+                  advisorId: userInfo.id,
+                  advisorName: userInfo.name,
+                  managerId: userInfo.managerId || userInfo.id, 
+                  managerName: 'Jefatura',
+                  date: new Date().toISOString(),
+                  items: [],
+                  generalNotes: ''
+              }, userInfo.id, userInfo.name);
+              openSession = { id: newSessionId } as any;
+          }
+
+          if (openSession) {
+              await addItemsToSession(openSession.id, [{
+                  id: '', 
+                  taskId: '', 
+                  originalCreatedAt: new Date().toISOString(),
+                  entityType: 'client',
+                  entityId: client.id,
+                  entityName: client.name,
+                  action: `Nueva propuesta: ${oppTitle}`,
+                  status: 'Pendiente',
+                  advisorNotes: '', 
+                  origin: 'advisor'
+              }]);
+              toast({ title: "Agregado al seguimiento", description: "La propuesta se sumó a tu hoja de ruta semanal." });
+          }
+      } catch (error) {
+          console.error("Error sending to coaching:", error);
+          toast({ title: "Error", description: "No se pudo agregar al seguimiento.", variant: "destructive" });
+      } finally {
+          setIsSendingToCoaching(false);
+      }
+  };
+
 
  const handleSave = async () => {
+    if (!editedOpportunity.title) {
+        toast({ title: "Falta el título", description: "Por favor ingresa un título para la oportunidad.", variant: "destructive" });
+        return;
+    }
+
     if (isEditing && opportunity) {
         const changes: Partial<Opportunity> = Object.keys(editedOpportunity).reduce((acc, key) => {
             const oppKey = key as keyof Opportunity;
@@ -308,6 +366,11 @@ export function OpportunityDetailsDialog({
     } else if (!isEditing) {
         const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
         onCreate(newOpp, []);
+        
+        // Si es creación y seleccionó el checkbox
+        if (addToCoaching) {
+            await sendToCoaching(editedOpportunity.title!);
+        }
     }
     onOpenChange(false);
 };
@@ -514,6 +577,25 @@ export function OpportunityDetailsDialog({
             </div>
             {isEditing && opportunity && userInfo && (
               <div className="flex items-center gap-2">
+                {/* Botón para enviar a seguimiento en edición */}
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => sendToCoaching(opportunity.title)}
+                                disabled={isSendingToCoaching}
+                            >
+                                {isSendingToCoaching ? <Spinner size="small" /> : <Briefcase className="h-5 w-5 text-muted-foreground hover:text-primary" />}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Enviar a Seguimiento Semanal</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+
                 {canShowComments && (
                   <Button
                     variant="ghost"
@@ -917,9 +999,21 @@ export function OpportunityDetailsDialog({
         </Tabs>
 
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Guardar Cambios</Button>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          {!isEditing && (
+             <div className="flex items-center space-x-2 mr-auto self-start sm:self-center">
+                <Checkbox 
+                    id="addToCoaching" 
+                    checked={addToCoaching} 
+                    onCheckedChange={(checked) => setAddToCoaching(!!checked)} 
+                />
+                <Label htmlFor="addToCoaching" className="cursor-pointer">Agregar al Seguimiento Semanal</Label>
+             </div>
+          )}
+          <div className="flex gap-2 justify-end w-full sm:w-auto">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button onClick={handleSave}>Guardar Cambios</Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
