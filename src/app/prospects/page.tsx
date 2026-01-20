@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -9,7 +7,20 @@ import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search, Activity
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Prospect, User, Client, ClientActivity } from '@/lib/types';
-import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers, getActivitiesForEntity, getAllClientActivities, getOpportunityAlertsConfig, recordProspectNotifications } from '@/lib/firebase-service';
+// Importamos las funciones necesarias para coaching
+import { 
+    getProspects, 
+    createProspect, 
+    updateProspect, 
+    deleteProspect, 
+    getAllUsers, 
+    getAllClientActivities, 
+    getOpportunityAlertsConfig, 
+    recordProspectNotifications,
+    getCoachingSessions,
+    createCoachingSession,
+    addItemsToSession 
+} from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
@@ -36,6 +47,7 @@ export default function ProspectsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // ... (Estados y efectos existentes sin cambios hasta handleSaveProspect) ...
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [activities, setActivities] = useState<ClientActivity[]>([]);
@@ -123,22 +135,77 @@ export default function ProspectsPage() {
     router.replace(query ? `/prospects?${query}` : '/prospects', { scroll: false });
   }, [prospects, searchParams, router, handleOpenForm]);
 
-  const handleSaveProspect = async (prospectData: Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'>) => {
+  // Modificación aquí: nuevos parámetros addToCoaching y coachingNote
+  const handleSaveProspect = async (
+      prospectData: Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'>, 
+      addToCoaching: boolean, 
+      coachingNote: string
+  ) => {
     if (!userInfo) return;
     try {
+      let prospectId = selectedProspect?.id;
+      let prospectName = prospectData.companyName;
+
       if (selectedProspect) {
         await updateProspect(selectedProspect.id, prospectData, userInfo.id, userInfo.name);
         toast({ title: "Prospecto Actualizado" });
       } else {
-        await createProspect(prospectData, userInfo.id, userInfo.name);
+        prospectId = await createProspect(prospectData, userInfo.id, userInfo.name);
         toast({ title: "Prospecto Creado" });
       }
+
+      // Lógica para agregar al seguimiento semanal
+      if (addToCoaching && prospectId) {
+          try {
+              const sessions = await getCoachingSessions(userInfo.id);
+              let openSession = sessions.find(s => s.status === 'Open');
+
+              if (!openSession) {
+                  // Si no hay sesión abierta, crear una nueva (Asesor -> Jefatura/Sistema)
+                  // Usamos userInfo.managerId si existe, o un genérico.
+                  const newSessionId = await createCoachingSession({
+                      advisorId: userInfo.id,
+                      advisorName: userInfo.name,
+                      managerId: userInfo.managerId || userInfo.id, 
+                      managerName: 'Jefatura', // Valor por defecto si no tenemos el nombre
+                      date: new Date().toISOString(),
+                      items: [],
+                      generalNotes: ''
+                  }, userInfo.id, userInfo.name);
+                  
+                  // Mock simple para usar inmediatamente
+                  openSession = { id: newSessionId } as any;
+              }
+
+              if (openSession) {
+                  await addItemsToSession(openSession.id, [{
+                      id: '', // Se genera en backend
+                      taskId: '', // Se genera en backend
+                      originalCreatedAt: new Date().toISOString(),
+                      entityType: 'prospect',
+                      entityId: prospectId,
+                      entityName: prospectName,
+                      action: coachingNote || 'Ingreso de nuevo prospecto', // La nota del asesor
+                      status: 'Pendiente',
+                      advisorNotes: '', 
+                      origin: 'advisor' // Importante para que caiga en "Cartera del Asesor"
+                  }]);
+                  toast({ title: "Agregado al seguimiento", description: "El prospecto se sumó a tu hoja de ruta semanal." });
+              }
+          } catch (coachingError) {
+              console.error("Error adding to coaching:", coachingError);
+              toast({ title: "Error parcial", description: "Se guardó el prospecto pero falló al agregarlo al seguimiento.", variant: "destructive" });
+          }
+      }
+
       fetchData();
     } catch (error) {
       console.error("Error saving prospect:", error);
       toast({ title: "Error al guardar el prospecto", variant: "destructive" });
     }
   };
+
+  // ... (Resto del componente sin cambios) ...
 
   const handleDeleteProspect = async () => {
     if (!prospectToDelete || !userInfo) return;
