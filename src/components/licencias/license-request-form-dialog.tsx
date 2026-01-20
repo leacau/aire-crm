@@ -1,8 +1,6 @@
-
-
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,218 +11,195 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import type { DateRange } from 'react-day-picker';
-import { format, eachDayOfInterval, isWeekend, addDays, isWithinInterval, startOfDay, parseISO } from 'date-fns';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format, addDays, isSaturday, isSunday, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Loader2, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { User, VacationRequest } from '@/lib/types';
-import { Spinner } from '../ui/spinner';
-import { Card } from '../ui/card';
-import { Input } from '../ui/input';
 import { useToast } from '@/hooks/use-toast';
+import type { User, VacationRequest } from '@/lib/types';
+import { getSystemHolidays, calculateBusinessDays } from '@/lib/firebase-service'; // Importar helper
 
 interface LicenseRequestFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (requestData: Omit<VacationRequest, 'id' | 'status'>, isEditing: boolean) => Promise<boolean>;
-  request?: VacationRequest | null;
+  onSave: (requestData: Omit<VacationRequest, 'id' | 'status'>) => void;
   currentUser: User;
-  allUserRequests: VacationRequest[];
-  requestOwner?: User | null;
 }
 
-export function LicenseRequestFormDialog({ isOpen, onOpenChange, onSave, request, currentUser, allUserRequests, requestOwner }: LicenseRequestFormDialogProps) {
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [holidays, setHolidays] = useState<Date[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const isEditing = !!request?.id;
+export function LicenseRequestFormDialog({
+  isOpen,
+  onOpenChange,
+  onSave,
+  currentUser,
+}: LicenseRequestFormDialogProps) {
+  const [startDate, setStartDate] = useState<Date | undefined>();
+  const [returnDate, setReturnDate] = useState<Date | undefined>();
+  const [holidays, setHolidays] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [calculatedDays, setCalculatedDays] = useState(0);
   const { toast } = useToast();
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
-  const userForCalculations = isEditing && requestOwner ? requestOwner : currentUser;
-
+  // Cargar feriados al abrir
   useEffect(() => {
     if (isOpen) {
-      if (request) {
-        setDateRange({
-          from: request.startDate ? parseISO(request.startDate) : undefined,
-          to: request.endDate ? parseISO(request.endDate) : undefined,
-        });
-        setHolidays(request.holidays?.map(h => parseISO(h)) || []);
-      } else {
-        setDateRange(undefined);
-        setHolidays([]);
-      }
-      setIsSaving(false);
+        getSystemHolidays().then(setHolidays).catch(console.error);
+        setStartDate(undefined);
+        setReturnDate(undefined);
+        setCalculatedDays(0);
     }
-  }, [isOpen, request]);
-  
-  useEffect(() => {
-    if (!dateRange) {
-        setHolidays([]);
-    }
-  }, [dateRange]);
+  }, [isOpen]);
 
-  const handleHolidayToggle = (day: Date | undefined) => {
-    if (!day || !dateRange?.from || !dateRange?.to) return;
-    
-    if (isWeekend(day) || !isWithinInterval(day, { start: startOfDay(dateRange.from), end: startOfDay(dateRange.to) })) {
-      toast({ title: "Día no válido", description: "Solo puedes marcar días laborables dentro del rango seleccionado como feriados.", variant: "destructive" });
+  // Recalcular días cuando cambian las fechas
+  useEffect(() => {
+    if (startDate && returnDate) {
+        if (returnDate <= startDate) {
+            setCalculatedDays(0);
+            return;
+        }
+        const days = calculateBusinessDays(
+            format(startDate, 'yyyy-MM-dd'), 
+            format(returnDate, 'yyyy-MM-dd'), 
+            holidays
+        );
+        setCalculatedDays(days);
+    } else {
+        setCalculatedDays(0);
+    }
+  }, [startDate, returnDate, holidays]);
+
+  const handleSubmit = async () => {
+    if (!startDate || !returnDate) {
+      toast({ title: "Fechas requeridas", description: "Selecciona fecha de salida y de retorno.", variant: "destructive" });
       return;
     }
-
-    const dayTime = startOfDay(day).getTime();
-    setHolidays(prev => 
-        prev.some(h => startOfDay(h).getTime() === dayTime)
-            ? prev.filter(h => startOfDay(h).getTime() !== dayTime)
-            : [...prev, day]
-    );
-  };
-
-  const { daysRequested, returnDate } = useMemo(() => {
-    if (!dateRange?.from || !dateRange?.to) {
-      return { daysRequested: 0, returnDate: null };
-    }
-    const allDays = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
-    const holidayTimeStamps = new Set(holidays.map(h => startOfDay(h).getTime()));
-
-    const workdays = allDays.filter(day => {
-        const isWorkday = !isWeekend(day);
-        const isHoliday = holidayTimeStamps.has(startOfDay(day).getTime());
-        return isWorkday && !isHoliday;
-    });
     
-    let nextDay = dateRange.to;
-    let isHolidayOrWeekend = true;
-    while(isHolidayOrWeekend) {
-        nextDay = addDays(nextDay, 1);
-        const isNextDayHoliday = holidayTimeStamps.has(startOfDay(nextDay).getTime());
-        const isNextDayWeekend = isWeekend(nextDay);
-        if(!isNextDayHoliday && !isNextDayWeekend) {
-            isHolidayOrWeekend = false;
-        }
+    if (returnDate <= startDate) {
+        toast({ title: "Fechas inválidas", description: "La fecha de retorno debe ser posterior a la de salida.", variant: "destructive" });
+        return;
     }
 
-    return {
-      daysRequested: workdays.length,
-      returnDate: nextDay,
-    };
-  }, [dateRange, holidays]);
+    if (calculatedDays <= 0) {
+        toast({ title: "Sin consumo de días", description: "El rango seleccionado no consume días hábiles.", variant: "destructive" });
+        return;
+    }
 
-  const remainingDays = useMemo(() => {
-    if (!userForCalculations) return 0;
-    
-    const committedDays = allUserRequests
-      .filter(r => (r.status === 'Aprobado' || r.status === 'Pendiente') && r.id !== request?.id)
-      .reduce((acc, curr) => acc + curr.daysRequested, 0);
+    const availableDays = currentUser.vacationDays || 0;
+    if (calculatedDays > availableDays) {
+       toast({ title: "Saldo insuficiente", description: `Solicitas ${calculatedDays} días pero tienes ${availableDays}.`, variant: "destructive" });
+       return;
+    }
 
-    const availableDays = (userForCalculations.vacationDays || 0) - committedDays;
-    
-    return availableDays - daysRequested;
-  }, [userForCalculations, allUserRequests, daysRequested, request?.id]);
-
-
-  const handleSave = async () => {
-    if (!dateRange?.from || !dateRange?.to || !returnDate) return;
-
-    setIsSaving(true);
-    const success = await onSave({
-      userId: userForCalculations.id,
-      userName: userForCalculations.name,
-      startDate: format(dateRange.from, 'yyyy-MM-dd'),
-      endDate: format(dateRange.to, 'yyyy-MM-dd'),
-      daysRequested,
-      returnDate: format(returnDate, 'yyyy-MM-dd'),
-      requestDate: request?.requestDate || new Date().toISOString(),
-      holidays: holidays.map(h => h.toISOString().split('T')[0]),
-    }, isEditing);
-
-    if (success) {
+    setIsSubmitting(true);
+    try {
+      await onSave({
+        userId: currentUser.id,
+        userName: currentUser.name,
+        startDate: format(startDate, 'yyyy-MM-dd'),
+        endDate: format(addDays(returnDate, -1), 'yyyy-MM-dd'), // EndDate es visualmente el último día de vacaciones
+        returnDate: format(returnDate, 'yyyy-MM-dd'),
+        daysRequested: calculatedDays,
+        requestDate: new Date().toISOString(),
+        holidays: holidays, // Guardamos snapshot de feriados
+      } as any);
       onOpenChange(false);
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "No se pudo enviar la solicitud.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSaving(false);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>{isEditing ? `Editar Solicitud de ${userForCalculations.name}` : 'Nueva Solicitud de Licencia'}</DialogTitle>
+          <DialogTitle>Solicitar Licencia</DialogTitle>
           <DialogDescription>
-            Selecciona el período de tu licencia. Los días y la fecha de reincorporación se calcularán automáticamente.
+            Selecciona el primer día de tu licencia y el día que te reincorporas.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-4">
-            {/* Left Column: Form and Info */}
-            <div className="space-y-4">
-                 <div className="space-y-2">
-                    <Label>Días de vacaciones disponibles</Label>
-                    <Input value={userForCalculations.vacationDays || 0} disabled />
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="date-range">Fechas Solicitadas</Label>
-                    <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-                    <PopoverTrigger asChild>
-                        <Button id="date-range" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, "PPP", { locale: es })} - ${format(dateRange.to, "PPP", { locale: es })}` : format(dateRange.from, "PPP", { locale: es })) : <span>Selecciona un rango de fechas</span>}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar 
-                            initialFocus 
-                            mode="range" 
-                            defaultMonth={dateRange?.from} 
-                            selected={dateRange} 
-                            onSelect={setDateRange}
-                            numberOfMonths={2} 
-                            locale={es}
-                        />
-                         <div className="p-2 border-t flex justify-end">
-                            <Button onClick={() => setIsCalendarOpen(false)}>Aceptar</Button>
-                        </div>
-                    </PopoverContent>
-                    </Popover>
-                </div>
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                    <Card className="p-3 text-center"><p className="text-sm text-muted-foreground">Días pedidos</p><p className="text-xl font-bold">{daysRequested}</p></Card>
-                    <Card className="p-3 text-center col-span-2 lg:col-span-1"><p className="text-sm text-muted-foreground">Retoma actividades</p><p className="text-base font-bold capitalize">{returnDate ? format(returnDate, 'PPPP', {locale: es}) : '-'}</p></Card>
-                    <Card className={cn("p-3 text-center", remainingDays < 0 && "bg-destructive/10 border-destructive text-destructive-foreground")}>
-                    <p className="text-sm">Días restantes</p>
-                    <p className="text-xl font-bold">{remainingDays}</p>
-                    </Card>
-                </div>
-            </div>
-            {/* Right Column: Holiday Calendar */}
-            <div className="space-y-2">
-                <Label>Marcar Feriados / Días No Laborables</Label>
-                 <Calendar
-                    mode="multiple"
-                    min={0}
-                    selected={holidays}
-                    onSelect={(days) => setHolidays(days || [])}
-                    month={dateRange?.from}
-                    disabled={!dateRange?.from}
-                    locale={es}
-                    className="rounded-md border p-0"
-                    classNames={{
-                      caption_label: "hidden",
-                      nav_button_previous: "hidden",
-                      nav_button_next: "hidden",
-                    }}
+        
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label>Fecha de Salida (Primer día ausente)</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className={cn("w-full justify-start text-left font-normal", !startDate && "text-muted-foreground")}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {startDate ? format(startDate, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={startDate}
+                  onSelect={setStartDate}
+                  initialFocus
+                  disabled={(date) => date < new Date('1900-01-01')}
                 />
-                <p className="text-xs text-muted-foreground">
-                    Selecciona los días feriados o no laborables que caen dentro de tu período de licencia. No se contarán como días de vacaciones.
-                </p>
-            </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Fecha de Retorno (Día que vuelves a trabajar)</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className={cn("w-full justify-start text-left font-normal", !returnDate && "text-muted-foreground")}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {returnDate ? format(returnDate, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={returnDate}
+                  onSelect={setReturnDate}
+                  initialFocus
+                  disabled={(date) => startDate ? date <= startDate : false}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Resumen del cálculo */}
+          <div className="rounded-md bg-muted p-4 space-y-2">
+             <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Saldo actual:</span>
+                <span className="font-semibold">{currentUser.vacationDays || 0} días</span>
+             </div>
+             <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Días a consumir:</span>
+                <span className={cn("font-bold text-lg", calculatedDays > (currentUser.vacationDays || 0) ? "text-destructive" : "text-primary")}>
+                    {calculatedDays}
+                </span>
+             </div>
+             {calculatedDays > 0 && (
+                 <div className="flex gap-2 items-start mt-2 text-xs text-muted-foreground bg-background/50 p-2 rounded">
+                    <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                    <p>
+                        Se descontarán {calculatedDays} días provisoriamente. 
+                        No se cuentan sábados, domingos, ni el día de retorno. 
+                        {holidays.length > 0 && " Se excluyen feriados cargados en el sistema."}
+                    </p>
+                 </div>
+             )}
+          </div>
         </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave} disabled={isSaving || daysRequested <= 0}>
-            {isSaving ? <Spinner size="small" /> : isEditing ? 'Guardar Cambios' : 'Enviar Solicitud'}
+          <Button onClick={handleSubmit} disabled={isSubmitting || !startDate || !returnDate || calculatedDays <= 0}>
+            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Solicitar'}
           </Button>
         </DialogFooter>
       </DialogContent>
