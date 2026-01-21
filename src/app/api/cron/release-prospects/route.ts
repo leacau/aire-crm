@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
         const today = new Date();
         const todayStr = format(today, 'yyyy-MM-dd');
-        const INACTIVITY_LIMIT_DAYS = 7;
+        const INACTIVITY_LIMIT_DAYS = ${process.env.INACTIVITY_LIMIT_DAYS};
         const prospectIdsToRelease: string[] = [];
 
         for (const p of prospects) {
