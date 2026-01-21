@@ -457,6 +457,15 @@ export default function ProspectsPage() {
     {
       accessorKey: 'createdAt',
       header: 'Creado',
+      sortingFn: (rowA, rowB, columnId) => {
+        const a = rowA.getValue<string | null>(columnId);
+        const b = rowB.getValue<string | null>(columnId);
+        if (!a && !b) return 0;
+        if (!a) return 1;
+        if (!b) return -1;
+        return new Date(a).getTime() - new Date(b).getTime();
+      },
+      enableSorting: true,
       cell: ({ row }) => (
           <div>
             <div>{format(new Date(row.original.createdAt), 'P', { locale: es })}</div>
@@ -524,6 +533,7 @@ export default function ProspectsPage() {
     {
       accessorKey: 'companyName',
       header: 'Empresa',
+      enableSorting: true,
       cell: ({ row }) => (
         <div>
           <div className="font-medium">{row.original.companyName}</div>
@@ -542,6 +552,7 @@ export default function ProspectsPage() {
     {
         id: 'status',
         header: 'Estado Reclamo',
+        enableSorting: true,
         cell: ({ row }) => {
             const p = row.original;
             if (p.claimStatus === 'Pendiente') {
@@ -597,10 +608,12 @@ export default function ProspectsPage() {
       {
           accessorKey: 'companyName',
           header: 'Empresa',
+          enableSorting: true,
       },
       {
           header: 'Solicitante',
           accessorKey: 'claimantName',
+          enableSorting: true,
           cell: ({ row }) => <span className="font-semibold">{row.original.claimantName}</span>
       },
       {
@@ -707,6 +720,8 @@ export default function ProspectsPage() {
                         </p>
                      </div>
                      <ResizableDataTable
+                        sorting={sorting}
+                        setSorting={setSorting}
                         columns={unassignedColumns}
                         data={filteredProspects.unassigned}
                         getRowId={(row) => row.id}
@@ -722,6 +737,8 @@ export default function ProspectsPage() {
                             </p>
                          </div>
                          <ResizableDataTable
+                            sorting={sorting}
+                            setSorting={setSorting}
                             columns={approvalsColumns}
                             data={filteredProspects.pendingClaims}
                             getRowId={(row) => row.id}
@@ -738,10 +755,14 @@ export default function ProspectsPage() {
                         getRowId={(row) => row.id}
                         enableRowResizing={true}
                         emptyStateMessage="No hay prospectos en esta categoría."
+                        sorting={sorting}
+                        setSorting={setSorting}
                     />
                 </TabsContent>
                  <TabsContent value="converted">
                      <ResizableDataTable
+                        sorting={sorting}
+                        setSorting={setSorting}
                         columns={columns}
                         data={filteredProspects.converted}
                         getRowId={(row) => row.id}
