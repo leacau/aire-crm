@@ -81,6 +81,15 @@ export async function GET(request: Request) {
             }
         }
 
+        if (businessDaysPassed > INACTIVITY_LIMIT_DAYS) {
+                // CAMBIO: Agregamos companyName
+                prospectsToRelease.push({ 
+                    id: p.id, 
+                    currentOwnerId: p.ownerId,
+                    companyName: p.companyName
+                });
+            }
+
         if (prospectsToRelease.length > 0) {
             await bulkReleaseProspectsServer(prospectsToRelease, 'system-cron', 'Sistema Automático');
         }
