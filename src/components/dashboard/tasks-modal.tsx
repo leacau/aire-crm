@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -9,6 +8,7 @@ import { AlertTriangle, CalendarCheck, CalendarClock } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { useAuth } from '@/hooks/use-auth';
 
 interface TasksModalProps {
     isOpen: boolean;
@@ -16,7 +16,7 @@ interface TasksModalProps {
     overdueTasks: ClientActivity[];
     dueTodayTasks: ClientActivity[];
     dueTomorrowTasks: ClientActivity[];
-    usersMap: Record<string, User>;
+    usersMap?: Record<string, User>;
 }
 
 const TaskListSection = ({ title, tasks, icon }: { title: string, tasks: ClientActivity[], icon: React.ReactNode }) => {
@@ -34,9 +34,18 @@ const TaskListSection = ({ title, tasks, icon }: { title: string, tasks: ClientA
                     <li key={task.id} className="text-sm">
                         <p className="font-medium">{task.observation}</p>
                         <div className="flex items-center justify-between text-xs text-muted-foreground mt-0.5">
-                            <Link href={`/clients/${task.clientId}`} className="hover:underline text-primary">
-                                Cliente: {task.clientName}
-                            </Link>
+                            {task.clientId ? (
+                                <Link href={`/clients/${task.clientId}`} className="hover:underline text-primary">
+                                    Cliente: {task.clientName || 'Sin nombre'}
+                                </Link>
+                            ) : task.prospectId ? (
+                                <Link href={`/prospects?prospectId=${task.prospectId}`} className="hover:underline text-primary">
+                                    Prospecto: {task.prospectName || 'Sin nombre'}
+                                </Link>
+                            ) : (
+                                <span>Sin entidad</span>
+                            )}
+                            
                             {task.dueDate && (
                                 <span>Vence: {format(new Date(task.dueDate), 'P p', { locale: es })}</span>
                             )}
@@ -48,8 +57,15 @@ const TaskListSection = ({ title, tasks, icon }: { title: string, tasks: ClientA
     );
 };
 
-
 export function TasksModal({ isOpen, onOpenChange, overdueTasks, dueTodayTasks, dueTomorrowTasks }: TasksModalProps) {
+    const { userInfo } = useAuth();
+
+    // Lógica para ocultar el modal a Jefes/Gerentes/Admins
+    // Si el usuario tiene uno de estos roles, retornamos null para no renderizar nada.
+    if (userInfo && ['Jefe', 'Gerencia', 'Admin', 'Administracion'].includes(userInfo.role)) {
+        return null;
+    }
+
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl">
