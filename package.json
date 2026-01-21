@@ -40,6 +40,7 @@
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
     "firebase": "^11.9.1",
+    "firebase-admin": "^12.7.0",
     "genkit": "^1.0.0",
     "googleapis": "^144.0.0",
     "html2canvas": "^1.4.1",
