@@ -221,14 +221,22 @@ export type Prospect = {
   contactName?: string;
   contactPhone?: string;
   contactEmail?: string;
-  sector?: string;
+  createdAt: string;
+  creatorId?: string;
+  creatorName?: string;
+  lastProspectNotificationAt?: string;
   notes?: string;
-  status: ProspectStatus;
   ownerId: string;
   ownerName: string;
-  createdAt: string;
+  sector?: string;
   statusChangedAt?: string;
-  lastProspectNotificationAt?: string;
+  status: ProspectStatus;
+  previousOwnerId?: string;
+  unassignedAt?: string;
+  claimStatus?: 'Pendiente';
+  claimantId?: string;
+  claimantName?: string;
+  claimedAt?: string;
 };
 
 export type Agency = {
