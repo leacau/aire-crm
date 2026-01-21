@@ -754,6 +754,8 @@ export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'create
         ...prospectData,
         ownerId: userId,
         ownerName: userName,
+        creatorId: userId,
+        creatorName: userName,
         createdAt: serverTimestamp(),
     };
     const docRef = await addDoc(collections.prospects, dataToSave);
@@ -3278,5 +3280,101 @@ export const addItemsToSession = async (sessionId: string, newItems: CoachingIte
     
     await updateDoc(sessionRef, {
         items: arrayUnion(...itemsWithIds)
+    });
+};
+
+export const claimProspect = async (prospect: Prospect, userId: string, userName: string): Promise<void> => {
+    // 1. Validar regla de los 3 días si fue el dueño anterior
+    if (prospect.previousOwnerId === userId && prospect.unassignedAt) {
+        const unassignedDate = typeof prospect.unassignedAt === 'string' 
+            ? parseISO(prospect.unassignedAt) 
+            : (prospect.unassignedAt as any).toDate();
+            
+        const daysPassed = differenceInCalendarDays(new Date(), unassignedDate);
+        
+        if (daysPassed < 3) {
+            throw new Error(`Debes esperar ${3 - daysPassed} días más para volver a reclamar este prospecto.`);
+        }
+    }
+
+    const docRef = doc(db, 'prospects', prospect.id);
+    await updateDoc(docRef, {
+        claimStatus: 'Pendiente',
+        claimantId: userId,
+        claimantName: userName,
+        claimedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    });
+    
+    invalidateCache('prospects');
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'prospect',
+        entityId: prospect.id,
+        entityName: prospect.companyName,
+        details: `solicitó reclamar el prospecto <strong>${prospect.companyName}</strong>`,
+        ownerName: 'Sin Asignar'
+    });
+};
+
+export const approveProspectClaim = async (prospect: Prospect, managerId: string, managerName: string): Promise<void> => {
+    if (!prospect.claimantId || !prospect.claimantName) throw new Error("No hay reclamante válido.");
+
+    const docRef = doc(db, 'prospects', prospect.id);
+    
+    await updateDoc(docRef, {
+        ownerId: prospect.claimantId,
+        ownerName: prospect.claimantName,
+        status: 'Nuevo', 
+        statusChangedAt: serverTimestamp(),
+        
+        // Limpiar campos de reclamo
+        claimStatus: deleteField(),
+        claimantId: deleteField(),
+        claimantName: deleteField(),
+        claimedAt: deleteField(),
+        
+        updatedAt: serverTimestamp()
+    });
+    
+    invalidateCache('prospects');
+
+    await logActivity({
+        userId: managerId,
+        userName: managerName,
+        type: 'update',
+        entityType: 'prospect',
+        entityId: prospect.id,
+        entityName: prospect.companyName,
+        details: `aprobó el reclamo y asignó el prospecto a <strong>${prospect.claimantName}</strong>`,
+        ownerName: prospect.claimantName
+    });
+};
+
+export const rejectProspectClaim = async (prospect: Prospect, managerId: string, managerName: string): Promise<void> => {
+    const docRef = doc(db, 'prospects', prospect.id);
+    
+    await updateDoc(docRef, {
+        claimStatus: deleteField(),
+        claimantId: deleteField(),
+        claimantName: deleteField(),
+        claimedAt: deleteField(),
+        updatedAt: serverTimestamp()
+    });
+    
+    invalidateCache('prospects');
+
+    await logActivity({
+        userId: managerId,
+        userName: managerName,
+        type: 'update',
+        entityType: 'prospect',
+        entityId: prospect.id,
+        entityName: prospect.companyName,
+        details: `rechazó la solicitud de reclamo de <strong>${prospect.claimantName}</strong>`,
+        ownerName: 'Sin Asignar'
     });
 };
