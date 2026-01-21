@@ -106,6 +106,42 @@ export type ClientTangoUpdate = {
     observaciones?: string;
 };
 
+export const bulkReleaseProspects = async (
+    prospectIds: string[],
+    userId: string,
+    userName: string
+): Promise<void> => {
+    if (!prospectIds || prospectIds.length === 0) return;
+
+    const batch = writeBatch(db);
+
+    prospectIds.forEach((id) => {
+        const docRef = doc(db, 'prospects', id);
+        batch.update(docRef, {
+            ownerId: '',           // Desasignar ID
+            ownerName: 'Sin Asignar', // Etiqueta visual
+            updatedAt: serverTimestamp(),
+            // Opcional: Podríamos marcar una fecha de "liberación" si fuera necesario para reportes
+        });
+    });
+
+    await batch.commit();
+    invalidateCache('prospects');
+
+    // Registramos una única actividad agrupada para no saturar el historial
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'prospect',
+        entityId: 'multiple_release', // ID simbólico
+        entityName: `${prospectIds.length} prospectos`,
+        details: `liberó automáticamente <strong>${prospectIds.length}</strong> prospectos por inactividad superior a 7 días hábiles.`,
+        ownerName: 'Sistema',
+    });
+};
+}
+
 // --- Config Functions ---
 
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
