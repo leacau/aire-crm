@@ -861,6 +861,19 @@ export const completeActivityTask = async (activityId: string, userId: string, u
         updatedAt: serverTimestamp()
     });
 
+invalidateCache('client_activities');
+
+export const rescheduleActivityTask = async (activityId: string, newDate: Date, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'client-activities', activityId);
+    
+    await updateDoc(docRef, {
+        dueDate: Timestamp.fromDate(newDate),
+        updatedAt: serverTimestamp()
+    });
+    
+    invalidateCache('client_activities');
+};
+
 
 // --- Grilla Comercial Functions ---
 
