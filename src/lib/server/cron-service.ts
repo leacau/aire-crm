@@ -1,6 +1,6 @@
-import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, writeBatch, serverTimestamp, query, orderBy, Timestamp, addDoc, getDoc, where } from 'firebase/firestore';
-import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format } from 'date-fns';
+import { dbAdmin } from '@/lib/firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
+import { isSaturday, isSunday, parseISO, format } from 'date-fns';
 import type { Prospect, ClientActivity, SystemHolidays } from '@/lib/types';
 
 // --- Helpers ---
@@ -26,13 +26,22 @@ export const calculateBusinessDays = (startDateStr: string, returnDateStr: strin
     return count;
 };
 
-// --- Data Fetching ---
+// --- Data Fetching (Versión Admin SDK) ---
 
 export const getProspectsServer = async (): Promise<Prospect[]> => {
-    const snapshot = await getDocs(query(collection(db, 'prospects'), orderBy("createdAt", "desc")));
+    // Admin SDK usa .get() en lugar de getDocs()
+    const snapshot = await dbAdmin.collection('prospects').orderBy('createdAt', 'desc').get();
+    
     return snapshot.docs.map(doc => {
       const data = doc.data();
-      const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+      // Helper para convertir timestamps de Admin SDK a string
+      const convertTimestamp = (field: any) => {
+          if (field && typeof field.toDate === 'function') {
+              return field.toDate().toISOString();
+          }
+          return field;
+      };
+
       return {
           id: doc.id,
           ...data,
@@ -43,28 +52,29 @@ export const getProspectsServer = async (): Promise<Prospect[]> => {
 };
 
 export const getAllClientActivitiesServer = async (): Promise<ClientActivity[]> => {
-    const q = query(collection(db, 'client-activities'), orderBy('timestamp', 'desc'));
-    const snapshot = await getDocs(q);
+    const snapshot = await dbAdmin.collection('client-activities').orderBy('timestamp', 'desc').get();
+    
     return snapshot.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
             ...data,
-            timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
+            timestamp: data.timestamp && typeof data.timestamp.toDate === 'function' 
+                ? data.timestamp.toDate().toISOString() 
+                : data.timestamp,
         } as ClientActivity;
     });
 };
 
 export const getSystemHolidaysServer = async (): Promise<string[]> => {
-    const docRef = doc(db, 'system_config', 'holidays');
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-        return (snap.data() as SystemHolidays).dates || [];
+    const docSnap = await dbAdmin.collection('system_config').doc('holidays').get();
+    if (docSnap.exists) {
+        return (docSnap.data() as SystemHolidays).dates || [];
     }
     return [];
 };
 
-// --- Actions ---
+// --- Actions (Versión Admin SDK) ---
 
 export const bulkReleaseProspectsServer = async (
     prospectIds: string[],
@@ -73,21 +83,21 @@ export const bulkReleaseProspectsServer = async (
 ): Promise<void> => {
     if (!prospectIds || prospectIds.length === 0) return;
 
-    const batch = writeBatch(db);
+    const batch = dbAdmin.batch();
 
     prospectIds.forEach((id) => {
-        const docRef = doc(db, 'prospects', id);
+        const docRef = dbAdmin.collection('prospects').doc(id);
         batch.update(docRef, {
             ownerId: '',           
             ownerName: 'Sin Asignar', 
-            updatedAt: serverTimestamp(),
+            updatedAt: Timestamp.now(), // Timestamp de Admin SDK
         });
     });
 
     await batch.commit();
 
-    // Log activity directamente aquí para evitar dependencias de cliente
-    await addDoc(collection(db, 'activities'), {
+    // Registrar actividad (sin pasar por reglas de seguridad)
+    await dbAdmin.collection('activities').add({
         userId,
         userName,
         type: 'update',
@@ -96,6 +106,6 @@ export const bulkReleaseProspectsServer = async (
         entityName: `${prospectIds.length} prospectos`,
         details: `liberó automáticamente <strong>${prospectIds.length}</strong> prospectos por inactividad superior a 7 días hábiles.`,
         ownerName: 'Sistema',
-        timestamp: serverTimestamp()
+        timestamp: Timestamp.now()
     });
 };
