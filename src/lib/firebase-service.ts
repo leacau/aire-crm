@@ -140,7 +140,6 @@ export const bulkReleaseProspects = async (
         ownerName: 'Sistema',
     });
 };
-}
 
 // --- Config Functions ---
 
