@@ -112,31 +112,27 @@ export const bulkReleaseProspects = async (
     userName: string
 ): Promise<void> => {
     if (!prospectIds || prospectIds.length === 0) return;
-
     const batch = writeBatch(db);
-
     prospectIds.forEach((id) => {
         const docRef = doc(db, 'prospects', id);
         batch.update(docRef, {
-            ownerId: '',           // Desasignar ID
-            ownerName: 'Sin Asignar', // Etiqueta visual
+            ownerId: '',           
+            ownerName: 'Sin Asignar',
             updatedAt: serverTimestamp(),
-            // Opcional: Podríamos marcar una fecha de "liberación" si fuera necesario para reportes
         });
     });
-
     await batch.commit();
-    invalidateCache('prospects');
-
-    // Registramos una única actividad agrupada para no saturar el historial
+    // Invalida caché si usas revalidación por tags, aunque en client side no afecta mucho
+    invalidateCache('prospects'); 
+    
     await logActivity({
         userId,
         userName,
         type: 'update',
         entityType: 'prospect',
-        entityId: 'multiple_release', // ID simbólico
+        entityId: 'multiple_release',
         entityName: `${prospectIds.length} prospectos`,
-        details: `liberó automáticamente <strong>${prospectIds.length}</strong> prospectos por inactividad superior a 7 días hábiles.`,
+        details: `liberó automáticamente <strong>${prospectIds.length}</strong> prospectos por inactividad.`,
         ownerName: 'Sistema',
     });
 };
