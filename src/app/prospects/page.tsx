@@ -376,7 +376,7 @@ export default function ProspectsPage() {
       
       userProspects = userProspects.filter(textFilter);
       // Opcional: filtrar también bolsa con buscador
-      // unassigned = unassigned.filter(textFilter);
+      unassigned = unassigned.filter(textFilter);
     }
 
     const isActive = (p: Prospect) => p.status !== 'Convertido' && p.status !== 'No Próspero';
