@@ -848,6 +848,19 @@ export const recordProspectNotifications = async (
     });
 };
 
+// --- Task Functions ---
+
+export const completeActivityTask = async (activityId: string, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'client-activities', activityId);
+    
+    await updateDoc(docRef, {
+        completed: true,
+        completedAt: serverTimestamp(),
+        completedByUserId: userId,
+        completedByUserName: userName,
+        updatedAt: serverTimestamp()
+    });
+
 
 // --- Grilla Comercial Functions ---
 
