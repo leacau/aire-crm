@@ -1,7 +1,3 @@
-{
-type: file
-fileName: leacau/aire-crm/aire-crm-codex-update-next.js-to-patched-version/src/lib/server/cron-service.ts
-fullContent:
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, writeBatch, serverTimestamp, query, orderBy, Timestamp, addDoc, getDoc, where } from 'firebase/firestore';
 import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format } from 'date-fns';
@@ -103,4 +99,3 @@ export const bulkReleaseProspectsServer = async (
         timestamp: serverTimestamp()
     });
 };
-}
