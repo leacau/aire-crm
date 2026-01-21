@@ -862,6 +862,18 @@ export const completeActivityTask = async (activityId: string, userId: string, u
     });
 
 invalidateCache('client_activities');
+    // Opcional: Loguear que se completó la tarea
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'client_activity', // Asegúrate de tener este tipo o usar 'user'
+        entityId: activityId,
+        entityName: 'Tarea completada',
+        details: 'marcó la tarea como finalizada',
+        ownerName: userName
+    }); 
+};
 
 export const rescheduleActivityTask = async (activityId: string, newDate: Date, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'client-activities', activityId);
