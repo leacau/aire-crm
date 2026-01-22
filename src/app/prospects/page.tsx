@@ -19,7 +19,6 @@ import {
     getCoachingSessions,
     createCoachingSession,
     addItemsToSession,
-    // NUEVOS IMPORTS
     claimProspect, 
     approveProspectClaim, 
     rejectProspectClaim
@@ -33,6 +32,7 @@ import { es } from 'date-fns/locale';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ProspectFormDialog } from '@/components/prospects/prospect-form-dialog';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -75,6 +75,10 @@ export default function ProspectsPage() {
   const [isActivityFormOpen, setIsActivityFormOpen] = useState(false);
   const [selectedProspectForActivity, setSelectedProspectForActivity] = useState<Prospect | null>(null);
   const hasConsumedProspectQuery = useRef(false);
+
+  // Nuevo estado para la asignación manual (Jefes)
+  const [prospectToAssign, setProspectToAssign] = useState<Prospect | null>(null);
+  const [assigneeId, setAssigneeId] = useState<string>('');
   
   useEffect(() => {
     if (userInfo) {
@@ -283,6 +287,36 @@ export default function ProspectsPage() {
           console.error(error);
            toast({ title: "Error", variant: "destructive" });
       }
+  };
+
+  // Nueva función para asignación manual
+  const handleAssignProspect = async () => {
+    if (!prospectToAssign || !assigneeId || !userInfo) return;
+    const assignee = users.find(u => u.id === assigneeId);
+    if (!assignee) return;
+
+    try {
+        await updateProspect(prospectToAssign.id, {
+            ownerId: assignee.id,
+            ownerName: assignee.name,
+            status: 'Nuevo',
+            statusChangedAt: new Date().toISOString(),
+            // Limpiamos cualquier reclamo pendiente
+            claimStatus: null,
+            claimantId: null,
+            claimantName: null,
+            claimedAt: null,
+            unassignedAt: null
+        }, userInfo.id, userInfo.name);
+        
+        toast({ title: "Prospecto Asignado", description: `Asignado a ${assignee.name}` });
+        fetchData();
+    } catch (e) {
+        console.error(e);
+        toast({ title: "Error al asignar", variant: "destructive" });
+    } finally {
+        setProspectToAssign(null);
+    }
   };
 
    const handleOpenActivityForm = (prospect: Prospect) => {
@@ -588,20 +622,36 @@ export default function ProspectsPage() {
             }
 
             return (
-                <Button 
-                    size="sm" 
-                    variant={isBlocked ? "ghost" : "default"}
-                    className={isBlocked ? "text-muted-foreground opacity-50" : ""}
-                    disabled={isBlocked}
-                    onClick={(e) => { e.stopPropagation(); handleClaim(p); }}
-                >
-                    <Hand className="mr-2 h-4 w-4" />
-                    {isBlocked ? `Espera ${daysRemaining}d` : 'Reclamar'}
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button 
+                        size="sm" 
+                        variant={isBlocked ? "ghost" : "default"}
+                        className={isBlocked ? "text-muted-foreground opacity-50" : ""}
+                        disabled={isBlocked}
+                        onClick={(e) => { e.stopPropagation(); handleClaim(p); }}
+                    >
+                        <Hand className="mr-2 h-4 w-4" />
+                        {isBlocked ? `Espera ${daysRemaining}d` : 'Reclamar'}
+                    </Button>
+                    
+                    {isBoss && (
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setAssigneeId(''); 
+                                setProspectToAssign(p); 
+                            }}
+                        >
+                            Asignar
+                        </Button>
+                    )}
+                </div>
             );
         }
     }
-  ], [userInfo, handleClaim]);
+  ], [userInfo, handleClaim, isBoss]); // Agregado isBoss a las dependencias
 
 
   const approvalsColumns = useMemo<ColumnDef<Prospect>[]>(() => [
@@ -827,6 +877,35 @@ export default function ProspectsPage() {
             onActivitySaved={() => fetchData()}
         />
       )}
+
+      {/* DIÁLOGO DE ASIGNACIÓN DE PROSPECTO */}
+      <Dialog open={!!prospectToAssign} onOpenChange={(open) => !open && setProspectToAssign(null)}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Asignar Prospecto</DialogTitle>
+                <DialogDescription>
+                    Selecciona el asesor al que deseas asignar <b>{prospectToAssign?.companyName}</b>.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+                <Label>Asesor</Label>
+                <Select value={assigneeId} onValueChange={setAssigneeId}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {users.filter(u => u.role === 'Asesor').map(u => (
+                            <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setProspectToAssign(null)}>Cancelar</Button>
+                <Button onClick={handleAssignProspect} disabled={!assigneeId}>Confirmar</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!prospectToDelete} onOpenChange={(open) => !open && setProspectToDelete(null)}>
         <AlertDialogContent>
