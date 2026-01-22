@@ -24,10 +24,13 @@ export default function CoachingPage() {
       if (isBoss) {
         // Si es jefe, cargar lista de asesores
         try {
-          const users = await getAllUsers('Asesor');
-          setAdvisors(users);
-          if (users.length > 0) {
-            setSelectedAdvisorId(users[0].id);
+          // MODIFICADO: Traemos todos y filtramos explícitamente para asegurar que solo sean asesores comerciales
+          const allUsers = await getAllUsers();
+          const commercialAdvisors = allUsers.filter(u => u.role === 'Asesor' && u.area === 'Comercial');
+          
+          setAdvisors(commercialAdvisors);
+          if (commercialAdvisors.length > 0) {
+            setSelectedAdvisorId(commercialAdvisors[0].id);
           }
         } catch (error) {
           console.error('Error fetching advisors', error);
