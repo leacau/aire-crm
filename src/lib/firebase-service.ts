@@ -10,7 +10,6 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format } from 'date-fns';
 
-
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
 const OBJECTIVE_VISIBILITY_DOC_ID = 'objective_visibility';
@@ -456,11 +455,10 @@ export const createVacationRequest = async (
     managerEmail: string | null
 ): Promise<{ docId: string; emailPayload: { to: string, subject: string, body: string } | null }> => {
     
-    // 1. Obtener feriados para calcular días reales (seguridad backend)
+    // 1. Obtener feriados para calcular días reales
     const holidays = await getSystemHolidays();
     const calculatedDays = calculateBusinessDays(requestData.startDate, requestData.returnDate, holidays);
 
-    // Si el cálculo da 0 o negativo, o no coincide (opcional validación), usamos el calculado
     // Forzamos el uso del cálculo real
     const finalDaysRequested = calculatedDays;
 
@@ -489,10 +487,10 @@ export const createVacationRequest = async (
 
         const dataToSave = {
             ...requestData,
-            daysRequested: finalDaysRequested, // Guardamos el valor calculado real
+            daysRequested: finalDaysRequested,
             status: 'Pendiente',
             requestDate: serverTimestamp(),
-            holidays: holidays, // Guardamos qué feriados se consideraron (snapshot)
+            holidays: holidays,
         };
 
         transaction.set(newLicenciaRef, dataToSave);
@@ -522,6 +520,80 @@ export const createVacationRequest = async (
     return { docId: newLicenciaRef.id, emailPayload };
 };
 
+export const updateVacationRequest = async (
+    requestId: string,
+    updates: Partial<VacationRequest>
+): Promise<void> => {
+    const holidays = await getSystemHolidays();
+
+    await runTransaction(db, async (transaction) => {
+        // 1. Obtener la solicitud actual
+        const requestRef = doc(db, 'licencias', requestId);
+        const requestSnap = await transaction.get(requestRef);
+        if (!requestSnap.exists()) throw new Error("Solicitud no encontrada");
+        const oldRequest = requestSnap.data() as VacationRequest;
+
+        // 2. Obtener el usuario (dueño original de la licencia)
+        const userRef = doc(db, 'users', oldRequest.userId);
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) throw new Error("Usuario no encontrado");
+        const userData = userSnap.data() as User;
+
+        // 3. Calcular nuevos días si cambiaron las fechas
+        let newDaysRequested = oldRequest.daysRequested;
+        let datesChanged = false;
+
+        const newStartDate = updates.startDate || oldRequest.startDate;
+        const newReturnDate = updates.returnDate || oldRequest.returnDate;
+
+        if (newStartDate !== oldRequest.startDate || newReturnDate !== oldRequest.returnDate) {
+             newDaysRequested = calculateBusinessDays(newStartDate, newReturnDate, holidays);
+             datesChanged = true;
+        }
+
+        if (newDaysRequested <= 0) throw new Error("El rango no consume días hábiles.");
+
+        // 4. Calcular impacto en el saldo
+        // Asumimos que si está Pendiente o Aprobada, los días viejos ya estaban restados.
+        // Si estaba Rechazada, los días no estaban restados (estaban en el saldo).
+        
+        const currentBalance = userData.vacationDays || 0;
+        let balanceAdjustment = 0;
+
+        // Revertir consumo anterior (virtualmente)
+        let balanceBeforeThisRequest = currentBalance;
+        if (oldRequest.status === 'Pendiente' || oldRequest.status === 'Aprobado') {
+            balanceBeforeThisRequest += oldRequest.daysRequested;
+        }
+
+        // Comprobar si alcanza para la nueva solicitud
+        if (balanceBeforeThisRequest < newDaysRequested) {
+             throw new Error(`Saldo insuficiente. La nueva configuración requiere ${newDaysRequested} días, pero el usuario dispone de ${balanceBeforeThisRequest}.`);
+        }
+
+        // Aplicar nuevo consumo
+        const finalBalance = balanceBeforeThisRequest - newDaysRequested;
+
+        // 5. Actualizar Usuario
+        if (finalBalance !== currentBalance) {
+            transaction.update(userRef, {
+                vacationDays: finalBalance
+            });
+        }
+
+        // 6. Actualizar Solicitud
+        transaction.update(requestRef, {
+            ...updates,
+            daysRequested: newDaysRequested,
+            holidays: holidays, // Actualizar snapshot de feriados usados
+            updatedAt: serverTimestamp()
+        });
+    });
+    
+    invalidateCache('licenses');
+    invalidateCache('users');
+};
+
 export const approveVacationRequest = async (
     requestId: string,
     newStatus: VacationRequestStatus,
@@ -539,7 +611,6 @@ export const approveVacationRequest = async (
         }
         const requestData = requestDoc.data() as VacationRequest;
         
-        // Evitar doble procesamiento si ya está en el estado deseado
         if (requestData.status === newStatus) return;
 
         const userRef = doc(db, 'users', requestData.userId);
@@ -549,23 +620,16 @@ export const approveVacationRequest = async (
         const userData = userDoc.data() as User;
         let newVacationDays = userData.vacationDays || 0;
 
-        // LÓGICA DE REVERSIÓN O CONFIRMACIÓN
-        
-        // Caso 1: Estaba Pendiente y se RECHAZA -> Devolver días (Rollback)
+        // LÓGICA DE SALDOS AL CAMBIAR ESTADO
         if (requestData.status === 'Pendiente' && newStatus === 'Rechazado') {
             newVacationDays += requestData.daysRequested;
         }
-        // Caso 2: Estaba Aprobado y se pasa a Rechazado (Cancelación tardía) -> Devolver días
         else if (requestData.status === 'Aprobado' && newStatus === 'Rechazado') {
             newVacationDays += requestData.daysRequested;
         }
-        // Caso 3: Estaba Rechazado y se pasa a Aprobado/Pendiente -> Volver a descontar
         else if (requestData.status === 'Rechazado' && (newStatus === 'Aprobado' || newStatus === 'Pendiente')) {
             newVacationDays -= requestData.daysRequested;
         }
-        
-        // Si pasa de Pendiente a Aprobado: NO HACEMOS NADA con el saldo, 
-        // porque ya se descontó en la creación (consumo provisorio).
 
         if (newVacationDays !== (userData.vacationDays || 0)) {
             transaction.update(userRef, { vacationDays: newVacationDays });
@@ -589,32 +653,12 @@ export const approveVacationRequest = async (
             const today = new Date();
             const start = format(parseISO(requestAfterUpdate.startDate), "d 'de' MMMM 'de' yyyy", { locale: es });
             const returnDate = format(parseISO(requestAfterUpdate.returnDate), "d 'de' MMMM 'de' yyyy", { locale: es });
-            const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
             const pending = pendingDaysAfterUpdate ?? 0;
-
-            const approvalLetter = `
-                <div style="font-family: Arial, sans-serif; color: #222; line-height: 1.6;">
-                  <div style="text-align: right; margin-bottom: 16px;">Santa Fé, ${todayFormatted}</div>
-                  <p>Estimado/a <strong>${requestAfterUpdate.userName}</strong></p>
-                  <p>Mediante la presente le informamos la autorización de la solicitud de <strong>${requestAfterUpdate.daysRequested}</strong> días de vacaciones.</p>
-                  <p>Del <strong>${start}</strong> al <strong>${end}</strong> de acuerdo con el período vacacional correspondiente al año actual.</p>
-                  <p>La fecha de reincorporación a la actividad laboral será el día <strong>${returnDate}</strong>.</p>
-                  <p>Quedarán <strong>${pending}</strong> días pendientes de licencia ${today.getFullYear()}.</p>
-                  <p>Saludos cordiales.</p>
-                  <br/>
-                  <div style="display:flex; gap:48px; margin-top:32px; flex-wrap: wrap;">
-                    <span>Gte. de área</span>
-                    <span>Jefe de área</span>
-                    <span>Área de rrhh</span>
-                  </div>
-                  <p style="margin-top:32px;">Notificado: ____________________</p>
-                </div>
-            `;
 
            emailPayload = {
                 to: applicantEmail,
                 subject: `Autorización de licencia`,
-                body: `<p>Tu licencia del ${start} (retorno el ${returnDate}) ha sido aprobada.</p>`, // Simplificado para el ejemplo
+                body: `<p>Tu licencia del ${start} (retorno el ${returnDate}) ha sido aprobada.</p>`,
             };
         } else if (newStatus === 'Rechazado') {
              emailPayload = {
@@ -705,7 +749,7 @@ export const getSystemHolidays = async (): Promise<string[]> => {
     const docRef = doc(collections.systemConfig, 'holidays');
     const snap = await getDoc(docRef);
     if (snap.exists()) {
-        return (snap.data() as SystemHolidays).dates || [];
+        return (snap.data() as any).dates || [];
     }
     return [];
 };
@@ -1948,7 +1992,7 @@ export async function updateUserProfile(uid: string, data: Partial<User>) {
 };
 
 
-export async function getAllUsers(): Promise<User[]> {
+export const getAllUsers = async (): Promise<User[]> => {
   const usersRef = collection(db, 'users');
   const snapshot = await getDocs(usersRef);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
