@@ -12,31 +12,26 @@ import {
     createVacationRequest, 
     deleteVacationRequest, 
     approveVacationRequest, 
-    addVacationDays,
+    adjustVacationDays, // CAMBIADO de addVacationDays a adjustVacationDays
     updateVacationRequest,
-    annulVacationRequest,
+    annulVacationRequest // Importado para anulación
 } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
 import { LicensesTable } from '@/components/licencias/licenses-table';
 import { LicenseRequestFormDialog } from '@/components/licencias/license-request-form-dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { es } from 'date-fns/locale';
 import { format, parseISO } from 'date-fns';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
-
 
 export default function LicensesPage() {
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
-
-  const [requestToAnnul, setRequestToAnnul] = useState<VacationRequest | null>(null);
-  const [annulReason, setAnnulReason] = useState("");
-  const [isAnnulling, setIsAnnulling] = useState(false);
 
   const [users, setUsers] = useState<User[]>([]);
   const [requests, setRequests] = useState<VacationRequest[]>([]);
@@ -48,6 +43,11 @@ export default function LicensesPage() {
   const [editingRequest, setEditingRequest] = useState<VacationRequest | null>(null);
   const [requestOwner, setRequestOwner] = useState<User | null>(null);
   const [requestToDelete, setRequestToDelete] = useState<VacationRequest | null>(null);
+
+  // Estados para anulación
+  const [requestToAnnul, setRequestToAnnul] = useState<VacationRequest | null>(null);
+  const [annulReason, setAnnulReason] = useState("");
+  const [isAnnulling, setIsAnnulling] = useState(false);
 
   const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
   const directReports = useMemo(() => users.filter(u => u.managerId === userInfo?.id), [users, userInfo?.id]);
@@ -92,15 +92,12 @@ export default function LicensesPage() {
     setIsFormOpen(true);
   };
   
-  // Modificado para distinguir Creación vs Edición
   const handleSaveRequest = async (requestData: Partial<VacationRequest>, isEditing: boolean) => {
     if (!userInfo) return false;
     
-    // Identificar al dueño de la solicitud (puede no ser el usuario actual si es jefe editando)
     const ownerOfRequest = users.find(u => u.id === requestData.userId);
     const managerToNotify = managers.find(m => m.id === ownerOfRequest?.managerId);
 
-    // Validación básica solo al crear
     if (!isEditing && !managerToNotify?.email) {
       toast({ title: 'Falta información del Jefe Directo', description: 'No se pudo encontrar el email de tu jefe directo.', variant: 'destructive' });
       return false;
@@ -110,29 +107,19 @@ export default function LicensesPage() {
       let emailPayload = null;
 
       if (isEditing && requestData.id) {
-          // --- EDICIÓN ---
           await updateVacationRequest(requestData.id, requestData);
           toast({ title: 'Solicitud Actualizada', description: 'Los cambios se han guardado correctamente.' });
 
-          // Notificar al dueño si fue editada por otra persona (Jefe)
           if (userInfo.id !== requestData.userId && ownerOfRequest?.email) {
-              const startDateFormatted = requestData.startDate ? format(parseISO(requestData.startDate), 'P', { locale: es }) : '';
-              const endDateFormatted = requestData.endDate ? format(parseISO(requestData.endDate), 'P', { locale: es }) : '';
-
-              emailPayload = {
+             // Notificación de edición por jefe
+             const startDateFormatted = requestData.startDate ? format(parseISO(requestData.startDate), 'P', { locale: es }) : '';
+             emailPayload = {
                   to: ownerOfRequest.email,
                   subject: `Tu solicitud de vacaciones ha sido modificada`,
-                  htmlBody: `
-                      <p>Hola <strong>${ownerOfRequest.name}</strong>,</p>
-                      <p>Tu solicitud de vacaciones ha sido modificada por <strong>${userInfo.name}</strong>.</p>
-                      <p><strong>Nuevas fechas:</strong> ${startDateFormatted} al ${endDateFormatted}</p>
-                      <p><strong>Días descontados:</strong> ${requestData.daysRequested}</p>
-                      <p>Por favor, revisa el sistema para más detalles.</p>
-                  `
+                  htmlBody: `<p>Tu solicitud ha sido modificada por ${userInfo.name}. Nueva fecha inicio: ${startDateFormatted}.</p>`
               };
           }
       } else {
-          // --- CREACIÓN ---
           const result = await createVacationRequest(requestData as Omit<VacationRequest, 'id' | 'status'>, managerToNotify?.email || null);
           emailPayload = result.emailPayload;
           toast({ title: 'Solicitud Enviada', description: 'Tu jefe directo ha sido notificado.' });
@@ -140,9 +127,7 @@ export default function LicensesPage() {
 
       if (emailPayload) {
           getGoogleAccessToken().then(token => {
-              if (token) {
-                sendEmail({ ...emailPayload, accessToken: token }).catch(err => console.error(err));
-              }
+              if (token) sendEmail({ ...emailPayload, accessToken: token }).catch(console.error);
           });
       }
 
@@ -156,7 +141,7 @@ export default function LicensesPage() {
   };
 
   const handleUpdateRequest = async (request: VacationRequest, newStatus: 'Aprobado' | 'Rechazado') => {
-     if (!userInfo || !isBoss) return;
+    if (!userInfo || !isBoss) return;
     
     const applicant = users.find(u => u.id === request.userId);
     if (!applicant) {
@@ -166,60 +151,22 @@ export default function LicensesPage() {
     
     try {
       const { emailPayload } = await approveVacationRequest(request.id, newStatus, userInfo.id, applicant.email);
-      
       toast({ title: `Solicitud ${newStatus === 'Aprobado' ? 'aprobada' : 'rechazada'}` });
       
       if (emailPayload) {
           getGoogleAccessToken().then(token => {
-              if (token) {
-                 sendEmail({ ...emailPayload, accessToken: token }).catch(err => console.error(err));
-              }
+              if (token) sendEmail({ ...emailPayload, accessToken: token }).catch(console.error);
           });
       }
-      
       fetchData();
     } catch (error) {
-       console.error("Error updating request status:", error);
+      console.error("Error updating request status:", error);
       toast({ title: 'Error al actualizar', variant: 'destructive', description: (error as Error).message });
     }
   };
-  
-  const handleDeleteRequest = async () => {
-    if (!requestToDelete) return;
-    try {
-      await deleteVacationRequest(requestToDelete.id);
-      toast({ title: 'Solicitud Eliminada' });
-      fetchData();
-    } catch(error) {
-      console.error("Error deleting request:", error);
-      toast({ title: 'Error al eliminar', variant: 'destructive' });
-    } finally {
-      setRequestToDelete(null);
-    }
-  };
 
-  const handleAddVacationDays = async (userId: string) => {
-    if (!userInfo) return;
-    const value = Number(daysToAdd[userId]);
-    if (Number.isNaN(value) || value <= 0) {
-      toast({ title: 'Inválido', description: 'Ingresa un número mayor a cero.', variant: 'destructive' });
-      return;
-    }
-    setUpdatingDays(prev => ({ ...prev, [userId]: true }));
-    try {
-      await addVacationDays(userId, value, userInfo.id, userInfo.name);
-      toast({ title: 'Días actualizados', description: `Se agregaron ${value} días.` });
-      setDaysToAdd(prev => ({ ...prev, [userId]: '' }));
-      fetchData();
-    } catch (error) {
-      toast({ title: 'Error', description: (error as Error).message, variant: 'destructive' });
-    } finally {
-      setUpdatingDays(prev => ({ ...prev, [userId]: false }));
-    }
-  };
-
-
-    const handleAnnulRequest = async () => {
+  // Función de Anulación
+  const handleAnnulRequest = async () => {
     if (!requestToAnnul || !userInfo) return;
     if (!annulReason.trim()) {
         toast({ title: "Motivo requerido", description: "Debes ingresar un motivo para anular la licencia.", variant: "destructive" });
@@ -255,10 +202,48 @@ export default function LicensesPage() {
         setIsAnnulling(false);
     }
   };
- 
+  
+  const handleDeleteRequest = async () => {
+    if (!requestToDelete) return;
+    try {
+      await deleteVacationRequest(requestToDelete.id);
+      toast({ title: 'Solicitud Eliminada' });
+      fetchData();
+    } catch(error) {
+      console.error("Error deleting request:", error);
+      toast({ title: 'Error al eliminar', variant: 'destructive' });
+    } finally {
+      setRequestToDelete(null);
+    }
+  };
+
+  // Función modificada para Ajustar días (positivo o negativo)
+  const handleAdjustVacationDays = async (userId: string) => {
+    if (!userInfo) return;
+
+    const value = Number(daysToAdd[userId]);
+    if (Number.isNaN(value) || value === 0) {
+      toast({ title: 'Valor inválido', description: 'Ingresa un número distinto de cero.', variant: 'destructive' });
+      return;
+    }
+
+    setUpdatingDays(prev => ({ ...prev, [userId]: true }));
+    try {
+      await adjustVacationDays(userId, value, userInfo.id, userInfo.name);
+      const action = value > 0 ? 'agregaron' : 'quitaron';
+      toast({ title: 'Saldo actualizado', description: `Se ${action} ${Math.abs(value)} días de licencia.` });
+      setDaysToAdd(prev => ({ ...prev, [userId]: '' }));
+      fetchData();
+    } catch (error) {
+      console.error('Error al ajustar días:', error);
+      toast({ title: 'Error', description: (error as Error).message, variant: 'destructive' });
+    } finally {
+      setUpdatingDays(prev => ({ ...prev, [userId]: false }));
+    }
+  };
 
   const buildLicenseDocument = (request: VacationRequest, applicant: User | undefined, pendingDays: number | undefined, logoUrl: string) => {
-      // ... (Mismo código de generación HTML que antes)
+     // ... (Código HTML del documento igual que antes)
       const today = new Date();
       const todayFormatted = format(today, "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
       const start = format(parseISO(request.startDate), "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
@@ -320,7 +305,7 @@ export default function LicensesPage() {
               <section className="space-y-3">
                  <div>
                   <h2 className="text-lg font-semibold">Días pendientes de tu equipo</h2>
-                  <p className="text-sm text-muted-foreground">Visualiza y ajusta los saldos de licencias de tus subordinados directos.</p>
+                  <p className="text-sm text-muted-foreground">Visualiza y ajusta los saldos de licencias de tus subordinados directos. Usa números negativos para restar.</p>
                 </div>
                 <div className="rounded-md border overflow-hidden">
                   <Table>
@@ -329,7 +314,7 @@ export default function LicensesPage() {
                         <TableHead>Colaborador</TableHead>
                         <TableHead>Rol</TableHead>
                         <TableHead>Días pendientes</TableHead>
-                        <TableHead className="w-[260px]">Agregar días</TableHead>
+                        <TableHead className="w-[260px]">Ajustar saldo</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -343,18 +328,17 @@ export default function LicensesPage() {
                               <div className="flex items-center gap-2">
                                 <Input
                                   type="number"
-                                  min="1"
                                   value={daysToAdd[member.id] ?? ''}
                                   onChange={(e) => setDaysToAdd(prev => ({ ...prev, [member.id]: e.target.value }))}
-                                  placeholder="Cantidad"
+                                  placeholder="+ / -"
                                   className="w-28"
                                 />
                                 <Button
-                                  onClick={() => handleAddVacationDays(member.id)}
+                                  onClick={() => handleAdjustVacationDays(member.id)}
                                   disabled={updatingDays[member.id] === true}
                                   variant="outline"
                                 >
-                                  {updatingDays[member.id] ? 'Guardando...' : 'Sumar días'}
+                                  {updatingDays[member.id] ? '...' : 'Ajustar'}
                                 </Button>
                               </div>
                             </TableCell>
@@ -381,7 +365,7 @@ export default function LicensesPage() {
                 onUpdateRequest={handleUpdateRequest}
                 onPrint={handlePrintDocument}
                 currentUserId={userInfo.id}
-                onAnnul={(req) => { setRequestToAnnul(req); setAnnulReason(""); }} // Conectar evento
+                onAnnul={(req) => { setRequestToAnnul(req); setAnnulReason(""); }}
               />
             </section>
         </main>
@@ -396,33 +380,32 @@ export default function LicensesPage() {
         requestOwner={requestOwner}
       />
       
+      {/* Diálogo de Confirmación de Eliminación */}
       <AlertDialog open={!!requestToDelete} onOpenChange={(open) => !open && setRequestToDelete(null)}>
         <AlertDialogContent>
             <AlertDialogHeader>
                 <AlertDialogTitle>¿Estás seguro de eliminar esta solicitud?</AlertDialogTitle>
-                <AlertDialogDescription>
-                    Esta acción no se puede deshacer.
-                </AlertDialogDescription>
+                <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteRequest} variant="destructive">
-                    Eliminar
-                </AlertDialogAction>
+                <AlertDialogAction onClick={handleDeleteRequest} variant="destructive">Eliminar</AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Diálogo de Anulación */}
       <Dialog open={!!requestToAnnul} onOpenChange={(open) => !open && setRequestToAnnul(null)}>
         <DialogContent>
             <DialogHeader>
                 <DialogTitle>Anular Licencia Aprobada</DialogTitle>
                 <DialogDescription>
-                    Esta acción cancelará la licencia y devolverá los días al saldo del usuario. Debes indicar un motivo.
+                    Esta acción cancelará la licencia y devolverá los días al saldo del usuario.
                 </DialogDescription>
             </DialogHeader>
             <div className="py-4">
                 <Textarea 
-                    placeholder="Motivo de la anulación (Ej: Cancelado a pedido del empleado...)" 
+                    placeholder="Motivo de la anulación (Obligatorio)" 
                     value={annulReason}
                     onChange={(e) => setAnnulReason(e.target.value)}
                 />
