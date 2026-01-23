@@ -42,7 +42,7 @@ const cache: {
     }
 } = {};
 
-const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION_MS = 60 * 60 * 1000; // 60 minutes
 const CHAT_SPACES_CACHE_KEY = 'chat_spaces_cache';
 
 const getFromCache = (key: string) => {
@@ -427,11 +427,7 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
                 return field.toDate().toISOString();
             }
             if (typeof field === 'string') {
-                try {
-                    return new Date(field).toISOString();
-                } catch (e) {
-                    return undefined; 
-                }
+                return field; // Asumimos ISO string si ya es string
             }
             return undefined;
         };
@@ -441,6 +437,7 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
             ...data,
             requestDate: convertTimestamp(data.requestDate)!,
             approvedAt: convertTimestamp(data.approvedAt),
+            cancelledAt: convertTimestamp(data.cancelledAt),
         } as VacationRequest;
     });
     setInCache('licenses', requests);
@@ -454,17 +451,11 @@ export const createVacationRequest = async (
     requestData: Omit<VacationRequest, 'id' | 'status'>,
     managerEmail: string | null
 ): Promise<{ docId: string; emailPayload: { to: string, subject: string, body: string } | null }> => {
-    
-    // 1. Obtener feriados para calcular días reales
     const holidays = await getSystemHolidays();
     const calculatedDays = calculateBusinessDays(requestData.startDate, requestData.returnDate, holidays);
-
-    // Forzamos el uso del cálculo real
     const finalDaysRequested = calculatedDays;
 
-    if (finalDaysRequested <= 0) {
-        throw new Error("El rango de fechas seleccionado no consume días hábiles.");
-    }
+    if (finalDaysRequested <= 0) throw new Error("El rango de fechas seleccionado no consume días hábiles.");
 
     const userRef = doc(db, 'users', requestData.userId);
     const newLicenciaRef = doc(collections.licenses);
@@ -480,7 +471,6 @@ export const createVacationRequest = async (
             throw new Error(`No tienes suficientes días disponibles. Solicitas ${finalDaysRequested} y tienes ${currentDays}.`);
         }
 
-        // DESCUENTO PROVISORIO INMEDIATO
         transaction.update(userRef, {
             vacationDays: currentDays - finalDaysRequested
         });
@@ -499,25 +489,57 @@ export const createVacationRequest = async (
     invalidateCache('licenses');
     invalidateCache('users');
     
-    let emailPayload: { to: string, subject: string, body: string } | null = null;
-
+    let emailPayload = null;
     if (managerEmail) {
         emailPayload = {
             to: managerEmail,
             subject: `Nueva Solicitud de Licencia de ${requestData.userName}`,
-            body: `
-                <p>Hola,</p>
-                <p>Has recibido una nueva solicitud de licencia de <strong>${requestData.userName}</strong>.</p>
-                <p><strong>Salida:</strong> ${format(parseISO(requestData.startDate), 'P', { locale: es })}</p>
-                <p><strong>Retorno:</strong> ${format(parseISO(requestData.returnDate), 'P', { locale: es })}</p>
-                <p><strong>Días a consumir:</strong> ${finalDaysRequested}</p>
-                <p><em>Estos días ya han sido descontados provisoriamente del saldo del asesor.</em></p>
-                <p>Para aprobar o rechazar esta solicitud, por favor ingresa a la sección "Licencias" del CRM.</p>
-            `,
+            body: `<p>Solicitud de ${requestData.userName} por ${finalDaysRequested} días.</p>`,
         };
     }
 
     return { docId: newLicenciaRef.id, emailPayload };
+};
+
+export const adjustVacationDays = async (userId: string, days: number, updatedBy: string, updatedByName: string): Promise<void> => {
+    if (days === 0) {
+        throw new Error('La cantidad de días a ajustar debe ser distinta de cero.');
+    }
+
+    const userRef = doc(db, 'users', userId);
+
+    await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) {
+            throw new Error('Usuario no encontrado.');
+        }
+
+        const userData = userSnap.data() as User;
+        const currentDays = userData.vacationDays || 0;
+        const newVacationDays = currentDays + days;
+
+        transaction.update(userRef, {
+            vacationDays: newVacationDays,
+            updatedAt: serverTimestamp(),
+            updatedBy,
+        });
+    });
+
+    invalidateCache('users');
+
+    const updatedUser = await getDoc(userRef);
+    const action = days > 0 ? 'agregó' : 'quitó';
+    const amount = Math.abs(days);
+
+    await logActivity({
+        userId: updatedBy,
+        userName: updatedByName,
+        type: 'update',
+        entityType: 'user',
+        entityId: userId,
+        entityName: (updatedUser.data() as User)?.name || 'Usuario',
+        details: `${action} <strong>${amount}</strong> días de licencia a <strong>${(updatedUser.data() as User)?.name || 'un usuario'}</strong>`,
+    });
 };
 
 export const updateVacationRequest = async (
@@ -527,65 +549,47 @@ export const updateVacationRequest = async (
     const holidays = await getSystemHolidays();
 
     await runTransaction(db, async (transaction) => {
-        // 1. Obtener la solicitud actual
         const requestRef = doc(db, 'licencias', requestId);
         const requestSnap = await transaction.get(requestRef);
         if (!requestSnap.exists()) throw new Error("Solicitud no encontrada");
         const oldRequest = requestSnap.data() as VacationRequest;
 
-        // 2. Obtener el usuario (dueño original de la licencia)
         const userRef = doc(db, 'users', oldRequest.userId);
         const userSnap = await transaction.get(userRef);
         if (!userSnap.exists()) throw new Error("Usuario no encontrado");
         const userData = userSnap.data() as User;
 
-        // 3. Calcular nuevos días si cambiaron las fechas
         let newDaysRequested = oldRequest.daysRequested;
-        let datesChanged = false;
 
         const newStartDate = updates.startDate || oldRequest.startDate;
         const newReturnDate = updates.returnDate || oldRequest.returnDate;
 
         if (newStartDate !== oldRequest.startDate || newReturnDate !== oldRequest.returnDate) {
              newDaysRequested = calculateBusinessDays(newStartDate, newReturnDate, holidays);
-             datesChanged = true;
         }
 
         if (newDaysRequested <= 0) throw new Error("El rango no consume días hábiles.");
 
-        // 4. Calcular impacto en el saldo
-        // Asumimos que si está Pendiente o Aprobada, los días viejos ya estaban restados.
-        // Si estaba Rechazada, los días no estaban restados (estaban en el saldo).
-        
         const currentBalance = userData.vacationDays || 0;
-        let balanceAdjustment = 0;
-
-        // Revertir consumo anterior (virtualmente)
         let balanceBeforeThisRequest = currentBalance;
         if (oldRequest.status === 'Pendiente' || oldRequest.status === 'Aprobado') {
             balanceBeforeThisRequest += oldRequest.daysRequested;
         }
 
-        // Comprobar si alcanza para la nueva solicitud
         if (balanceBeforeThisRequest < newDaysRequested) {
-             throw new Error(`Saldo insuficiente. La nueva configuración requiere ${newDaysRequested} días, pero el usuario dispone de ${balanceBeforeThisRequest}.`);
+             throw new Error(`Saldo insuficiente.`);
         }
 
-        // Aplicar nuevo consumo
         const finalBalance = balanceBeforeThisRequest - newDaysRequested;
 
-        // 5. Actualizar Usuario
         if (finalBalance !== currentBalance) {
-            transaction.update(userRef, {
-                vacationDays: finalBalance
-            });
+            transaction.update(userRef, { vacationDays: finalBalance });
         }
 
-        // 6. Actualizar Solicitud
         transaction.update(requestRef, {
             ...updates,
             daysRequested: newDaysRequested,
-            holidays: holidays, // Actualizar snapshot de feriados usados
+            holidays: holidays,
             updatedAt: serverTimestamp()
         });
     });
@@ -601,14 +605,10 @@ export const approveVacationRequest = async (
     applicantEmail: string | null,
 ): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
     const requestRef = doc(db, 'licencias', requestId);
-
-    let pendingDaysAfterUpdate: number | null = null;
-
+    
     await runTransaction(db, async (transaction) => {
         const requestDoc = await transaction.get(requestRef);
-        if (!requestDoc.exists()) {
-            throw "Solicitud no encontrada.";
-        }
+        if (!requestDoc.exists()) throw "Solicitud no encontrada.";
         const requestData = requestDoc.data() as VacationRequest;
         
         if (requestData.status === newStatus) return;
@@ -620,7 +620,6 @@ export const approveVacationRequest = async (
         const userData = userDoc.data() as User;
         let newVacationDays = userData.vacationDays || 0;
 
-        // LÓGICA DE SALDOS AL CAMBIAR ESTADO
         if (requestData.status === 'Pendiente' && newStatus === 'Rechazado') {
             newVacationDays += requestData.daysRequested;
         }
@@ -635,7 +634,6 @@ export const approveVacationRequest = async (
             transaction.update(userRef, { vacationDays: newVacationDays });
             invalidateCache('users');
         }
-        pendingDaysAfterUpdate = newVacationDays;
         
         transaction.update(requestRef, {
             status: newStatus,
@@ -645,28 +643,13 @@ export const approveVacationRequest = async (
     });
 
     invalidateCache('licenses');
-    const requestAfterUpdate = (await getDoc(requestRef)).data() as VacationRequest;
     
-    let emailPayload: { to: string, subject: string, body: string } | null = null;
-    if (applicantEmail) {
-        if (newStatus === 'Aprobado') {
-            const today = new Date();
-            const start = format(parseISO(requestAfterUpdate.startDate), "d 'de' MMMM 'de' yyyy", { locale: es });
-            const returnDate = format(parseISO(requestAfterUpdate.returnDate), "d 'de' MMMM 'de' yyyy", { locale: es });
-            const pending = pendingDaysAfterUpdate ?? 0;
-
-           emailPayload = {
-                to: applicantEmail,
-                subject: `Autorización de licencia`,
-                body: `<p>Tu licencia del ${start} (retorno el ${returnDate}) ha sido aprobada.</p>`,
-            };
-        } else if (newStatus === 'Rechazado') {
-             emailPayload = {
-                to: applicantEmail,
-                subject: `Solicitud Rechazada`,
-                body: `<p>Tu solicitud de licencia ha sido rechazada. Los días se han reintegrado a tu saldo.</p>`,
-            };
-        }
+    // Simplificado payload de email
+    let emailPayload = null;
+    if (applicantEmail && newStatus === 'Aprobado') {
+        emailPayload = { to: applicantEmail, subject: 'Licencia Aprobada', body: 'Tu licencia ha sido aprobada.' };
+    } else if (applicantEmail && newStatus === 'Rechazado') {
+        emailPayload = { to: applicantEmail, subject: 'Licencia Rechazada', body: 'Tu licencia ha sido rechazada.' };
     }
     
     return { emailPayload };
@@ -686,10 +669,8 @@ export const annulVacationRequest = async (
     await runTransaction(db, async (transaction) => {
         const requestDoc = await transaction.get(requestRef);
         if (!requestDoc.exists()) throw "Solicitud no encontrada.";
-        
         const requestData = requestDoc.data() as VacationRequest;
         
-        // Solo permitir anular si estaba Aprobada (o Pendiente si se desea, pero el requerimiento dice "ya aprobada")
         if (requestData.status !== 'Aprobado') {
              throw "Solo se pueden anular licencias que ya han sido aprobadas.";
         }
@@ -699,13 +680,9 @@ export const annulVacationRequest = async (
         if (!userDoc.exists()) throw "Usuario solicitante no encontrado.";
         
         const userData = userDoc.data() as User;
-        
-        // DEVOLVER LOS DÍAS AL USUARIO
-        // Como estaba aprobada, los días ya estaban descontados. Al anular, se reintegran.
         const currentDays = userData.vacationDays || 0;
-        const newVacationDays = currentDays + requestData.daysRequested;
-
-        transaction.update(userRef, { vacationDays: newVacationDays });
+        
+        transaction.update(userRef, { vacationDays: currentDays + requestData.daysRequested });
         
         transaction.update(requestRef, {
             status: 'Anulado',
@@ -719,16 +696,12 @@ export const annulVacationRequest = async (
     invalidateCache('licenses');
     invalidateCache('users');
     
-    let emailPayload: { to: string, subject: string, body: string } | null = null;
+    let emailPayload = null;
     if (applicantEmail) {
         emailPayload = {
             to: applicantEmail,
             subject: `Anulación de licencia aprobada`,
-            body: `
-                <p>Tu licencia aprobada ha sido <strong>ANULADA</strong> por ${managerName}.</p>
-                <p><strong>Motivo:</strong> ${reason}</p>
-                <p>Los días correspondientes han sido reintegrados a tu saldo de vacaciones.</p>
-            `,
+            body: `<p>Tu licencia aprobada ha sido <strong>ANULADA</strong> por ${managerName}. Motivo: ${reason}</p>`,
         };
     }
     
@@ -959,7 +932,6 @@ export const recordProspectNotifications = async (
 
 export const completeActivityTask = async (activityId: string, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'client-activities', activityId);
-    
     await updateDoc(docRef, {
         completed: true,
         completedAt: serverTimestamp(),
@@ -967,32 +939,17 @@ export const completeActivityTask = async (activityId: string, userId: string, u
         completedByUserName: userName,
         updatedAt: serverTimestamp()
     });
-
-invalidateCache('client_activities');
-    // Opcional: Loguear que se completó la tarea
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'client_activity', // Asegúrate de tener este tipo o usar 'user'
-        entityId: activityId,
-        entityName: 'Tarea completada',
-        details: 'marcó la tarea como finalizada',
-        ownerName: userName
-    }); 
+    invalidateCache('client_activities');
 };
 
 export const rescheduleActivityTask = async (activityId: string, newDate: Date, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'client-activities', activityId);
-    
     await updateDoc(docRef, {
         dueDate: Timestamp.fromDate(newDate),
         updatedAt: serverTimestamp()
     });
-    
     invalidateCache('client_activities');
 };
-
 
 // --- Grilla Comercial Functions ---
 
@@ -2055,10 +2012,14 @@ export async function updateUserProfile(uid: string, data: Partial<User>) {
 };
 
 
-export const getAllUsers = async (): Promise<User[]> => {
+export const getAllUsers = async (role?: UserRole): Promise<User[]> => {
   const usersRef = collection(db, 'users');
   const snapshot = await getDocs(usersRef);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+  let users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+  if (role) {
+      users = users.filter(u => u.role === role);
+  }
+  return users;
 };
 
 export const getUserById = async (userId: string): Promise<User | null> => {
@@ -3096,7 +3057,16 @@ export const getAllClientActivities = async (): Promise<ClientActivity[]> => {
 
     const q = query(collections.clientActivities, orderBy('timestamp', 'desc'));
     const snapshot = await getDocs(q);
-    const activities = snapshot.docs.map(convertActivityDoc);
+    const activities = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
+            dueDate: data.dueDate instanceof Timestamp ? data.dueDate.toDate().toISOString() : data.dueDate,
+            completedAt: data.completedAt instanceof Timestamp ? data.completedAt.toDate().toISOString() : data.completedAt,
+        } as ClientActivity;
+    });
     setInCache('client_activities', activities);
     return activities;
 };
