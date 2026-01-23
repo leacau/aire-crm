@@ -9,9 +9,10 @@ import type { ClientActivity } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, isBefore, isSameDay, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { AlertCircle, Calendar, Clock, CheckCircle2, ArrowRight, CheckSquare, CalendarDays } from 'lucide-react';
+import { AlertCircle, Calendar, Clock, CheckCircle2, ArrowRight, CheckSquare, CalendarDays, Search } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input'; // Importar Input
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -33,6 +34,9 @@ export default function TasksPage() {
   const [rescheduleTask, setRescheduleTask] = useState<ClientActivity | null>(null);
   const [newDate, setNewDate] = useState<Date | undefined>(undefined);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Estado para búsqueda
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchTasks = async () => {
     if (!userInfo) return;
@@ -85,21 +89,34 @@ export default function TasksPage() {
           setRescheduleTask(null);
           fetchTasks(); // Recargar para reordenar
       } catch (error) {
-           console.error(error);
-           toast({ title: "Error", description: "No se pudo posponer la tarea.", variant: "destructive" });
+            console.error(error);
+            toast({ title: "Error", description: "No se pudo posponer la tarea.", variant: "destructive" });
       } finally {
           setIsProcessing(false);
       }
   };
 
+  // Filtrado y agrupación
   const groupedTasks = useMemo(() => {
     const today = startOfDay(new Date());
     
+    // Filtrar primero por búsqueda
+    const filteredTasks = tasks.filter(task => {
+        if (!searchQuery.trim()) return true;
+        const query = searchQuery.toLowerCase();
+        
+        const clientName = task.clientName?.toLowerCase() || '';
+        const prospectName = task.prospectName?.toLowerCase() || '';
+        const obs = task.observation?.toLowerCase() || '';
+        
+        return clientName.includes(query) || prospectName.includes(query) || obs.includes(query);
+    });
+
     const expired: ClientActivity[] = [];
     const dueToday: ClientActivity[] = [];
     const upcoming: ClientActivity[] = [];
 
-    tasks.forEach(task => {
+    filteredTasks.forEach(task => {
         if (!task.dueDate) return;
         const dueDate = parseISO(task.dueDate);
         const dueDateStart = startOfDay(dueDate);
@@ -118,7 +135,7 @@ export default function TasksPage() {
     upcoming.sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
 
     return { expired, dueToday, upcoming };
-  }, [tasks]);
+  }, [tasks, searchQuery]);
 
   if (authLoading || loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
 
@@ -177,51 +194,66 @@ export default function TasksPage() {
     <>
         <div className="flex flex-col h-full">
         <Header title="Mis Tareas Pendientes" />
-        <main className="flex-1 overflow-auto p-4 md:p-6 space-y-8">
+        <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
             
+            {/* Buscador */}
+            <div className="relative w-full max-w-sm">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder="Buscar por cliente o detalle..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8"
+                />
+            </div>
+
             {/* VENCIDAS */}
-            <section>
-                <h2 className="text-lg font-bold flex items-center gap-2 text-destructive mb-4">
-                    <AlertCircle className="h-5 w-5" /> Vencidas ({groupedTasks.expired.length})
-                </h2>
-                <div className="grid gap-2">
-                    {groupedTasks.expired.length > 0 ? (
-                        groupedTasks.expired.map(task => (
+            {groupedTasks.expired.length > 0 && (
+                <section>
+                    <h2 className="text-lg font-bold flex items-center gap-2 text-destructive mb-4">
+                        <AlertCircle className="h-5 w-5" /> Vencidas ({groupedTasks.expired.length})
+                    </h2>
+                    <div className="grid gap-2">
+                        {groupedTasks.expired.map(task => (
                             <TaskCard key={task.id} task={task} colorClass="border-l-4 border-l-destructive" />
-                        ))
-                    ) : (
-                        <p className="text-sm text-muted-foreground italic">¡Excelente! No tienes tareas vencidas.</p>
-                    )}
-                </div>
-            </section>
+                        ))}
+                    </div>
+                </section>
+            )}
 
             {/* HOY */}
-            <section>
-                <h2 className="text-lg font-bold flex items-center gap-2 text-orange-600 mb-4">
-                    <Clock className="h-5 w-5" /> Vencen Hoy ({groupedTasks.dueToday.length})
-                </h2>
-                <div className="grid gap-2">
-                    {groupedTasks.dueToday.length > 0 ? (
-                        groupedTasks.dueToday.map(task => (
+            {groupedTasks.dueToday.length > 0 && (
+                <section>
+                    <h2 className="text-lg font-bold flex items-center gap-2 text-orange-600 mb-4">
+                        <Clock className="h-5 w-5" /> Vencen Hoy ({groupedTasks.dueToday.length})
+                    </h2>
+                    <div className="grid gap-2">
+                        {groupedTasks.dueToday.map(task => (
                             <TaskCard key={task.id} task={task} colorClass="border-l-4 border-l-orange-500" />
-                        ))
-                    ) : (
-                        <p className="text-sm text-muted-foreground italic">No hay tareas programadas para hoy.</p>
-                    )}
-                </div>
-            </section>
+                        ))}
+                    </div>
+                </section>
+            )}
 
             {/* FUTURAS */}
-            <section>
-                <h2 className="text-lg font-bold flex items-center gap-2 text-primary mb-4">
-                    <CheckCircle2 className="h-5 w-5" /> A Vencer ({groupedTasks.upcoming.length})
-                </h2>
-                <div className="grid gap-2">
-                    {groupedTasks.upcoming.map(task => (
-                        <TaskCard key={task.id} task={task} colorClass="border-l-4 border-l-primary/30" />
-                    ))}
+            {groupedTasks.upcoming.length > 0 && (
+                <section>
+                    <h2 className="text-lg font-bold flex items-center gap-2 text-primary mb-4">
+                        <CheckCircle2 className="h-5 w-5" /> A Vencer ({groupedTasks.upcoming.length})
+                    </h2>
+                    <div className="grid gap-2">
+                        {groupedTasks.upcoming.map(task => (
+                            <TaskCard key={task.id} task={task} colorClass="border-l-4 border-l-primary/30" />
+                        ))}
+                    </div>
+                </section>
+            )}
+            
+            {groupedTasks.expired.length === 0 && groupedTasks.dueToday.length === 0 && groupedTasks.upcoming.length === 0 && (
+                <div className="text-center py-10 text-muted-foreground">
+                    {searchQuery ? "No se encontraron tareas con ese criterio." : "¡Estás al día! No tienes tareas pendientes."}
                 </div>
-            </section>
+            )}
 
         </main>
         </div>
