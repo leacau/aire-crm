@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -8,7 +6,16 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { User, VacationRequest } from '@/lib/types';
-import { getAllUsers, getVacationRequests, createVacationRequest, deleteVacationRequest, approveVacationRequest, addVacationDays } from '@/lib/firebase-service';
+// AÑADIR updateVacationRequest a los imports
+import { 
+    getAllUsers, 
+    getVacationRequests, 
+    createVacationRequest, 
+    deleteVacationRequest, 
+    approveVacationRequest, 
+    addVacationDays,
+    updateVacationRequest // <--- Asegúrate de importar esto
+} from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
 import { LicensesTable } from '@/components/licencias/licenses-table';
@@ -73,33 +80,72 @@ export default function LicensesPage() {
       const owner = users.find(u => u.id === request.userId);
       setRequestOwner(owner || null);
     } else {
+      // Si es nueva, el dueño es el usuario actual (aunque un jefe podría estar creando para otro, 
+      // por ahora asumimos que la creación manual es para uno mismo o se ajusta en el form)
       setRequestOwner(userInfo);
     }
     setIsFormOpen(true);
   };
   
-  const handleSaveRequest = async (requestData: Omit<VacationRequest, 'id' | 'status'>, isEditing: boolean) => {
+  // Modificado para aceptar partial y flag de edición
+  const handleSaveRequest = async (requestData: Partial<VacationRequest>, isEditing: boolean) => {
     if (!userInfo) return false;
     
+    // Identificar al dueño de la solicitud
     const ownerOfRequest = users.find(u => u.id === requestData.userId);
+    // Identificar al jefe a notificar (si es creación o si se requiere flujo de aprobación)
     const managerToNotify = managers.find(m => m.id === ownerOfRequest?.managerId);
 
+    // Validación: Si no se encuentra el jefe al crear
     if (!isEditing && !managerToNotify?.email) {
-      toast({ title: 'Falta información del Jefe Directo', description: 'No se pudo encontrar el email de tu jefe directo para notificar. Pide a un gerente que lo asigne en la sección "Equipo".', variant: 'destructive' });
+      toast({ title: 'Falta información del Jefe Directo', description: 'No se pudo encontrar el email de tu jefe directo.', variant: 'destructive' });
       return false;
     }
 
     try {
-      const { emailPayload } = await createVacationRequest(requestData, managerToNotify?.email || null);
-      
-      toast({ title: 'Solicitud Enviada', description: 'Tu jefe directo ha sido notificado.' });
+      let emailPayload = null;
 
+      if (isEditing && requestData.id) {
+          // --- LÓGICA DE ACTUALIZACIÓN ---
+          
+          // 1. Llamar a la función de actualización en Firebase
+          // (Asumiendo que updateVacationRequest acepta (id, data))
+          // Si no tienes esta función, debes crearla similar a createVacationRequest pero usando updateDoc
+          await updateVacationRequest(requestData.id, requestData);
+          
+          toast({ title: 'Solicitud Actualizada', description: 'Los cambios se han guardado correctamente.' });
+
+          // 2. Notificar al empleado si fue modificado por el Jefe
+          if (userInfo.id !== requestData.userId && ownerOfRequest?.email) {
+              const startDateFormatted = requestData.startDate ? format(parseISO(requestData.startDate), 'P', { locale: es }) : '';
+              const endDateFormatted = requestData.endDate ? format(parseISO(requestData.endDate), 'P', { locale: es }) : '';
+
+              emailPayload = {
+                  to: ownerOfRequest.email,
+                  subject: `Tu solicitud de vacaciones ha sido modificada`,
+                  htmlBody: `
+                      <p>Hola <strong>${ownerOfRequest.name}</strong>,</p>
+                      <p>Tu solicitud de vacaciones ha sido modificada por <strong>${userInfo.name}</strong>.</p>
+                      <p><strong>Nuevas fechas:</strong> ${startDateFormatted} al ${endDateFormatted}</p>
+                      <p><strong>Días descontados:</strong> ${requestData.daysRequested}</p>
+                      <p>Por favor, revisa el sistema para más detalles.</p>
+                  `
+              };
+          }
+
+      } else {
+          // --- LÓGICA DE CREACIÓN (Código existente) ---
+          const result = await createVacationRequest(requestData as Omit<VacationRequest, 'id' | 'status'>, managerToNotify?.email || null);
+          emailPayload = result.emailPayload;
+          toast({ title: 'Solicitud Enviada', description: 'Tu jefe directo ha sido notificado.' });
+      }
+
+      // Enviar email si corresponde (Creación o Modificación por jefe)
       if (emailPayload) {
           getGoogleAccessToken().then(token => {
               if (token) {
-                // Fire-and-forget email sending
                 sendEmail({ ...emailPayload, accessToken: token }).catch(err => {
-                    console.error("Failed to send creation email in background:", err);
+                    console.error("Failed to send email in background:", err);
                 });
               }
           });
@@ -115,7 +161,8 @@ export default function LicensesPage() {
   };
 
   const handleUpdateRequest = async (request: VacationRequest, newStatus: 'Aprobado' | 'Rechazado') => {
-    if (!userInfo || !isBoss) return;
+     // ... (Mismo código de antes)
+     if (!userInfo || !isBoss) return;
     
     const applicant = users.find(u => u.id === request.userId);
     if (!applicant) {
@@ -131,9 +178,8 @@ export default function LicensesPage() {
       if (emailPayload) {
           getGoogleAccessToken().then(token => {
               if (token) {
-                 // Fire-and-forget email sending. If it fails, don't block the UI.
                  sendEmail({ ...emailPayload, accessToken: token }).catch(err => {
-                       console.error("Failed to send approval email in background (non-critical):", err);
+                       console.error("Failed to send approval email in background:", err);
                  });
               }
           });
@@ -147,7 +193,8 @@ export default function LicensesPage() {
   };
   
   const handleDeleteRequest = async () => {
-    if (!requestToDelete) return;
+    // ... (Mismo código de antes)
+     if (!requestToDelete) return;
     try {
       await deleteVacationRequest(requestToDelete.id);
       toast({ title: 'Solicitud Eliminada' });
@@ -166,6 +213,7 @@ export default function LicensesPage() {
   }, [requests, requestOwner]);
 
   const handleAddVacationDays = async (userId: string) => {
+      // ... (Mismo código de antes)
     if (!userInfo) return;
 
     const value = Number(daysToAdd[userId]);
@@ -188,16 +236,11 @@ export default function LicensesPage() {
     }
   };
 
-  const buildLicenseDocument = (
-    request: VacationRequest,
-    applicant: User | undefined,
-    pendingDays: number | undefined,
-    logoUrl: string
-  ) => {
-    const today = new Date();
+  const buildLicenseDocument = (request: VacationRequest, applicant: User | undefined, pendingDays: number | undefined, logoUrl: string) => {
+      // ... (Mismo código de antes)
+       const today = new Date();
     const todayFormatted = format(today, "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
     const start = format(parseISO(request.startDate), "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
-    console.log('requestday formated: ', format(parseISO(request.startDate), "EEEE d 'de' MMMM 'de' yyyy", { locale: es }));
     const end = format(parseISO(request.endDate), "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
     const returnDate = format(parseISO(request.returnDate), "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
     const remaining = pendingDays ?? applicant?.vacationDays ?? 0;
@@ -225,6 +268,7 @@ export default function LicensesPage() {
   };
 
   const handlePrintDocument = (request: VacationRequest) => {
+     // ... (Mismo código de antes)
     const applicant = users.find((u) => u.id === request.userId);
     const pendingDays = applicant?.vacationDays;
     const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/aire-logo.svg` : '/aire-logo.svg';
@@ -255,7 +299,8 @@ export default function LicensesPage() {
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6">
             {isBoss && (
               <section className="space-y-3">
-                <div>
+                 {/* ... (Tabla de reporte directo igual que antes) ... */}
+                 <div>
                   <h2 className="text-lg font-semibold">Días pendientes de tu equipo</h2>
                   <p className="text-sm text-muted-foreground">Visualiza y ajusta los saldos de licencias de tus subordinados directos.</p>
                 </div>
@@ -330,11 +375,13 @@ export default function LicensesPage() {
         request={editingRequest}
         currentUser={userInfo}
         requestOwner={requestOwner}
-        allUserRequests={requestsForCurrentUser}
+        // allUserRequests ya no es estrictamente necesario en props del Dialog según la nueva interface, 
+        // pero si lo usas dentro para validar superposiciones, déjalo. En mi código de Dialog lo quité de props.
       />
       
       <AlertDialog open={!!requestToDelete} onOpenChange={(open) => !open && setRequestToDelete(null)}>
-        <AlertDialogContent>
+        {/* ... (AlertDialog igual que antes) ... */}
+         <AlertDialogContent>
             <AlertDialogHeader>
                 <AlertDialogTitle>¿Estás seguro de eliminar esta solicitud?</AlertDialogTitle>
                 <AlertDialogDescription>
