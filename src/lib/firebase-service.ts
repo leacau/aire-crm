@@ -672,6 +672,69 @@ export const approveVacationRequest = async (
     return { emailPayload };
 };
 
+export const annulVacationRequest = async (
+    requestId: string,
+    reason: string,
+    managerId: string,
+    managerName: string,
+    applicantEmail: string | null
+): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
+    if (!reason.trim()) throw new Error("El motivo de anulación es obligatorio.");
+
+    const requestRef = doc(db, 'licencias', requestId);
+
+    await runTransaction(db, async (transaction) => {
+        const requestDoc = await transaction.get(requestRef);
+        if (!requestDoc.exists()) throw "Solicitud no encontrada.";
+        
+        const requestData = requestDoc.data() as VacationRequest;
+        
+        // Solo permitir anular si estaba Aprobada (o Pendiente si se desea, pero el requerimiento dice "ya aprobada")
+        if (requestData.status !== 'Aprobado') {
+             throw "Solo se pueden anular licencias que ya han sido aprobadas.";
+        }
+
+        const userRef = doc(db, 'users', requestData.userId);
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw "Usuario solicitante no encontrado.";
+        
+        const userData = userDoc.data() as User;
+        
+        // DEVOLVER LOS DÍAS AL USUARIO
+        // Como estaba aprobada, los días ya estaban descontados. Al anular, se reintegran.
+        const currentDays = userData.vacationDays || 0;
+        const newVacationDays = currentDays + requestData.daysRequested;
+
+        transaction.update(userRef, { vacationDays: newVacationDays });
+        
+        transaction.update(requestRef, {
+            status: 'Anulado',
+            cancellationReason: reason,
+            cancelledBy: managerId,
+            cancelledByName: managerName,
+            cancelledAt: new Date().toISOString(),
+        });
+    });
+
+    invalidateCache('licenses');
+    invalidateCache('users');
+    
+    let emailPayload: { to: string, subject: string, body: string } | null = null;
+    if (applicantEmail) {
+        emailPayload = {
+            to: applicantEmail,
+            subject: `Anulación de licencia aprobada`,
+            body: `
+                <p>Tu licencia aprobada ha sido <strong>ANULADA</strong> por ${managerName}.</p>
+                <p><strong>Motivo:</strong> ${reason}</p>
+                <p>Los días correspondientes han sido reintegrados a tu saldo de vacaciones.</p>
+            `,
+        };
+    }
+    
+    return { emailPayload };
+};
+
 export const addVacationDays = async (userId: string, daysToAdd: number, updatedBy: string, updatedByName: string): Promise<void> => {
     if (daysToAdd <= 0) {
         throw new Error('La cantidad de días a agregar debe ser mayor a cero.');
