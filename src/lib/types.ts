@@ -435,21 +435,25 @@ export type ChatSpaceMapping = {
   updatedAt?: string;
 };
 
-export type VacationRequestStatus = 'Pendiente' | 'Aprobado' | 'Rechazado';
+export type VacationRequestStatus = 'Pendiente' | 'Aprobado' | 'Rechazado' | 'Anulado';
 
 export type VacationRequest = {
-  id: string;
+id: string;
   userId: string;
   userName: string;
-  startDate: string; // "YYYY-MM-DD"
-  endDate: string; // "YYYY-MM-DD"
+  startDate: string;
+  endDate: string;
+  returnDate: string;
   daysRequested: number;
-  returnDate: string; // "YYYY-MM-DD"
   status: VacationRequestStatus;
   requestDate: string;
+  holidays: string[];
   approvedBy?: string;
   approvedAt?: string;
-  holidays?: string[]; // Array of "YYYY-MM-DD" strings
+  cancellationReason?: string;
+  cancelledBy?: string;
+  cancelledByName?: string;
+  cancelledAt?: string;
 };
 
 
