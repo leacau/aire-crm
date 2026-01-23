@@ -13,7 +13,8 @@ import {
     deleteVacationRequest, 
     approveVacationRequest, 
     addVacationDays,
-    updateVacationRequest // Ahora sí existirá
+    updateVacationRequest,
+    annulVacationRequest,
 } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
@@ -25,10 +26,17 @@ import { format, parseISO } from 'date-fns';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+
 
 export default function LicensesPage() {
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
+
+  const [requestToAnnul, setRequestToAnnul] = useState<VacationRequest | null>(null);
+  const [annulReason, setAnnulReason] = useState("");
+  const [isAnnulling, setIsAnnulling] = useState(false);
 
   const [users, setUsers] = useState<User[]>([]);
   const [requests, setRequests] = useState<VacationRequest[]>([]);
@@ -210,6 +218,45 @@ export default function LicensesPage() {
     }
   };
 
+
+    const handleAnnulRequest = async () => {
+    if (!requestToAnnul || !userInfo) return;
+    if (!annulReason.trim()) {
+        toast({ title: "Motivo requerido", description: "Debes ingresar un motivo para anular la licencia.", variant: "destructive" });
+        return;
+    }
+
+    setIsAnnulling(true);
+    try {
+        const applicant = users.find(u => u.id === requestToAnnul.userId);
+        const { emailPayload } = await annulVacationRequest(
+            requestToAnnul.id, 
+            annulReason, 
+            userInfo.id, 
+            userInfo.name,
+            applicant?.email || null
+        );
+
+        toast({ title: 'Licencia Anulada', description: 'Se han reintegrado los días al usuario.' });
+
+        if (emailPayload) {
+            getGoogleAccessToken().then(token => {
+                if (token) sendEmail({ ...emailPayload, accessToken: token }).catch(console.error);
+            });
+        }
+        
+        setRequestToAnnul(null);
+        setAnnulReason("");
+        fetchData();
+    } catch (error) {
+        console.error("Error al anular:", error);
+        toast({ title: 'Error', description: (error as Error).message || String(error), variant: 'destructive' });
+    } finally {
+        setIsAnnulling(false);
+    }
+  };
+ 
+
   const buildLicenseDocument = (request: VacationRequest, applicant: User | undefined, pendingDays: number | undefined, logoUrl: string) => {
       // ... (Mismo código de generación HTML que antes)
       const today = new Date();
@@ -334,6 +381,7 @@ export default function LicensesPage() {
                 onUpdateRequest={handleUpdateRequest}
                 onPrint={handlePrintDocument}
                 currentUserId={userInfo.id}
+                onAnnul={(req) => { setRequestToAnnul(req); setAnnulReason(""); }} // Conectar evento
               />
             </section>
         </main>
@@ -364,6 +412,29 @@ export default function LicensesPage() {
             </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <Dialog open={!!requestToAnnul} onOpenChange={(open) => !open && setRequestToAnnul(null)}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Anular Licencia Aprobada</DialogTitle>
+                <DialogDescription>
+                    Esta acción cancelará la licencia y devolverá los días al saldo del usuario. Debes indicar un motivo.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+                <Textarea 
+                    placeholder="Motivo de la anulación (Ej: Cancelado a pedido del empleado...)" 
+                    value={annulReason}
+                    onChange={(e) => setAnnulReason(e.target.value)}
+                />
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setRequestToAnnul(null)}>Cancelar</Button>
+                <Button variant="destructive" onClick={handleAnnulRequest} disabled={isAnnulling || !annulReason.trim()}>
+                    {isAnnulling ? 'Anulando...' : 'Confirmar Anulación'}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
