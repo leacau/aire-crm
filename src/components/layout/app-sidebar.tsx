@@ -35,13 +35,14 @@ import {
   ChevronRight,
   ShieldCheck,
   Scale,
-  ListTodo
+  ListTodo,
+  StickyNote
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useMemo, useState, useEffect } from 'react';
 
-// Importamos los componentes de UI (que ahora estarán restaurados en el Paso 1)
+// Importamos los componentes de UI
 import {
   Sidebar,
   SidebarContent,
@@ -73,6 +74,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import type { ScreenName } from '@/lib/types';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 interface SidebarItem {
   title: string;
@@ -123,6 +125,7 @@ export function AppSidebar() {
       items: [
         { title: 'Grilla', href: '/grilla', icon: Radio, screenName: 'Grilla' },
         { title: 'PNTs', href: '/pnts', icon: Megaphone, screenName: 'PNTs' },
+        { title: 'Nota Comercial', href: '/notas', icon: StickyNote, screenName: 'Notas' },
       ]
     },
     { title: 'Calendario', href: '/calendar', icon: Calendar, screenName: 'Calendar' },
@@ -158,12 +161,24 @@ export function AppSidebar() {
 
   const filteredEntries = useMemo(() => {
     if (!userInfo) return [];
+
     const hasPermission = (item: SidebarItem) => {
+      // 1. Super Admin always has access
       if (userInfo.email === 'lchena@airedesantafe.com.ar') return true;
+      if (userInfo.role === 'Admin') return true;
+
+      // 2. Dashboard is typically open, but lets check permissions if present
+      if (item.screenName === 'Dashboard') return true;
+
+      // 3. Strict Permission Check
+      // If permissions object exists, checking strict match.
+      // If permissions object is missing (unlikely for established users, but possible), default to false for safety unless role implies otherwise.
       if (userInfo.permissions) {
-        return userInfo.permissions[item.screenName]?.view;
+        return !!userInfo.permissions[item.screenName]?.view;
       }
-      return true;
+      
+      // Default fallback if no permissions structure found (should be restrictive)
+      return false; 
     };
 
     return rawSidebarEntries.reduce<SidebarEntry[]>((acc, entry) => {
