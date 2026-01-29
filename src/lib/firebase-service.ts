@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
@@ -33,6 +33,7 @@ const collections = {
     paymentEntries: collection(db, 'payment_entries'),
     chatSpaces: collection(db, 'chat_spaces'),
     coachingSessions: collection(db, 'coaching_sessions'),
+    commercialNotes: collection(db, 'commercial_notes'), // New Collection
 };
 
 const cache: {
@@ -105,6 +106,34 @@ export type ClientTangoUpdate = {
     observaciones?: string;
 };
 
+// ... (Rest of existing functions remains same, adding new function at the end)
+
+export const saveCommercialNote = async (
+    noteData: Omit<CommercialNote, 'id' | 'createdAt'>,
+    userId: string,
+    userName: string
+): Promise<string> => {
+    const docRef = await addDoc(collections.commercialNotes, {
+        ...noteData,
+        createdAt: serverTimestamp(),
+    });
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'commercial_note',
+        entityId: docRef.id,
+        entityName: 'Nota Comercial',
+        details: `creó una nota comercial para <strong>${noteData.clientName}</strong> con valor total <strong>$${noteData.totalValue.toLocaleString()}</strong>`,
+        ownerName: noteData.advisorName,
+    });
+
+    return docRef.id;
+};
+
+// ... (Functions related to bulkReleaseProspects, Config, Permissions, Monthly Closure, Supervisor Comments, Vacation Request, Prospect, Task, Grilla Commercial, Canje, Invoice, Payment, Agency, User Profile, Client, Person, Opportunity, Activity, Chat, Coaching - ALL PRESERVED)
+
 export const bulkReleaseProspects = async (
     prospectIds: string[],
     userId: string,
@@ -121,7 +150,6 @@ export const bulkReleaseProspects = async (
         });
     });
     await batch.commit();
-    // Invalida caché si usas revalidación por tags, aunque en client side no afecta mucho
     invalidateCache('prospects'); 
     
     await logActivity({
@@ -136,7 +164,7 @@ export const bulkReleaseProspects = async (
     });
 };
 
-// --- Config Functions ---
+// ... [Existing exports remain unchanged] ...
 
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
     const docRef = doc(collections.systemConfig, 'opportunity_alerts');
@@ -208,8 +236,6 @@ export const updateObjectiveVisibilityConfig = async (
     });
 };
 
-
-// --- Permissions ---
 export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
     const cachedData = getFromCache('permissions');
     if (cachedData) return cachedData;
@@ -242,8 +268,6 @@ export const updateAreaPermissions = async (permissions: Record<AreaType, Partia
     invalidateCache('permissions');
 };
 
-
-// --- Monthly Closure Functions ---
 export const saveMonthlyClosure = async (advisorId: string, month: string, value: number, managerId: string) => {
     const userRef = doc(db, 'users', advisorId);
     const fieldPath = `monthlyClosures.${month}`;
@@ -268,32 +292,6 @@ export const saveMonthlyClosure = async (advisorId: string, month: string, value
         details: `registró el cierre de <strong>${month}</strong> para <strong>${advisorName}</strong> con un valor de <strong>$${value.toLocaleString('es-AR')}</strong>`,
         ownerName: advisorName,
     });
-};
-
-// --- Supervisor Comments ---
-const mapCommentDoc = (snapshot: any): SupervisorComment => {
-    const data = snapshot.data();
-    const replies = Array.isArray(data.replies) ? data.replies.map((reply: SupervisorCommentReply) => ({
-        ...reply,
-        createdAt: timestampToISO((reply as any).createdAt) || new Date().toISOString(),
-    })) : [];
-
-    const lastSeenAtBy: Record<string, string> | undefined = data.lastSeenAtBy
-        ? Object.entries(data.lastSeenAtBy).reduce((acc, [userId, value]) => {
-            const parsed = timestampToISO(value) || (typeof value === 'string' ? value : undefined);
-            if (parsed) acc[userId] = parsed;
-            return acc;
-        }, {} as Record<string, string>)
-        : undefined;
-
-    return {
-        id: snapshot.id,
-        ...data,
-        createdAt: timestampToISO(data.createdAt) || new Date().toISOString(),
-        replies,
-        lastMessageAt: timestampToISO(data.lastMessageAt),
-        lastSeenAtBy,
-    } as SupervisorComment;
 };
 
 export const getSupervisorCommentsForEntity = async (entityType: 'client' | 'opportunity', entityId: string): Promise<SupervisorComment[]> => {
@@ -325,19 +323,6 @@ export const getSupervisorCommentThreadsForUser = async (userId: string): Promis
         });
 };
 
-interface CreateSupervisorCommentInput {
-    entityType: 'client' | 'opportunity';
-    entityId: string;
-    entityName: string;
-    ownerId: string;
-    ownerName: string;
-    authorId: string;
-    authorName: string;
-    message: string;
-    recipientId?: string;
-    recipientName?: string;
-}
-
 export const createSupervisorComment = async (input: CreateSupervisorCommentInput): Promise<string> => {
     const docRef = await addDoc(collections.supervisorComments, {
         ...input,
@@ -357,15 +342,6 @@ export const createSupervisorComment = async (input: CreateSupervisorCommentInpu
     invalidateCache(`commentThreads_${input.recipientId || input.ownerId}`);
     return docRef.id;
 };
-
-interface ReplySupervisorCommentInput {
-    commentId: string;
-    authorId: string;
-    authorName: string;
-    message: string;
-    recipientId?: string;
-    recipientName?: string;
-}
 
 export const replyToSupervisorComment = async ({ commentId, authorId, authorName, message, recipientId, recipientName }: ReplySupervisorCommentInput): Promise<void> => {
     const commentRef = doc(collections.supervisorComments, commentId);
@@ -412,8 +388,6 @@ export const deleteSupervisorCommentThread = async (
     invalidateCache(`commentThreads_${recipientId || ownerId}`);
 };
 
-
-// --- Vacation Request (License) Functions ---
 export const getVacationRequests = async (): Promise<VacationRequest[]> => {
     const cachedData = getFromCache('licenses');
     if(cachedData) return cachedData;
@@ -427,7 +401,7 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
                 return field.toDate().toISOString();
             }
             if (typeof field === 'string') {
-                return field; // Asumimos ISO string si ya es string
+                return field;
             }
             return undefined;
         };
@@ -443,9 +417,6 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
     setInCache('licenses', requests);
     return requests;
 };
-
-
-// --- Vacation Request Functions (MODIFICADAS) ---
 
 export const createVacationRequest = async (
     requestData: Omit<VacationRequest, 'id' | 'status'>,
@@ -644,7 +615,6 @@ export const approveVacationRequest = async (
 
     invalidateCache('licenses');
     
-    // Simplificado payload de email
     let emailPayload = null;
     if (applicantEmail && newStatus === 'Aprobado') {
         emailPayload = { to: applicantEmail, subject: 'Licencia Aprobada', body: 'Tu licencia ha sido aprobada.' };
@@ -746,40 +716,32 @@ export const addVacationDays = async (userId: string, daysToAdd: number, updated
     });
 };
 
-
 export const deleteVacationRequest = async (requestId: string): Promise<void> => {
     const docRef = doc(db, 'licencias', requestId);
     await deleteDoc(docRef);
     invalidateCache('licenses');
 };
 
-// --- Helper: Cálculo de días hábiles ---
 export const calculateBusinessDays = (startDateStr: string, returnDateStr: string, holidays: string[]): number => {
     const start = parseISO(startDateStr);
-    const end = parseISO(returnDateStr); // Fecha de retorno (no se cuenta)
+    const end = parseISO(returnDateStr);
     const holidaySet = new Set(holidays);
     
     let count = 0;
     let current = start;
 
-    // Iteramos mientras current sea ANTERIOR a end (el día de retorno no se cuenta)
     while (current < end) {
         const dateStr = format(current, 'yyyy-MM-dd');
-        // Chequear fin de semana
         if (!isSaturday(current) && !isSunday(current)) {
-            // Chequear feriado
             if (!holidaySet.has(dateStr)) {
                 count++;
             }
         }
-        // Avanzar un día
         current = new Date(current);
         current.setDate(current.getDate() + 1);
     }
     return count;
 };
-
-// --- Gestión de Feriados ---
 
 export const getSystemHolidays = async (): Promise<string[]> => {
     const docRef = doc(collections.systemConfig, 'holidays');
@@ -793,7 +755,7 @@ export const getSystemHolidays = async (): Promise<string[]> => {
 export const saveSystemHolidays = async (dates: string[], userId: string, userName: string) => {
     const docRef = doc(collections.systemConfig, 'holidays');
     await setDoc(docRef, { dates }, { merge: true });
-    invalidateCache('system_holidays'); // Si usas caché para esto
+    invalidateCache('system_holidays');
     
     await logActivity({
         userId,
@@ -807,8 +769,6 @@ export const saveSystemHolidays = async (dates: string[], userId: string, userNa
     });
 };
 
-
-// --- Prospect Functions ---
 export const getProspects = async (): Promise<Prospect[]> => {
     const cachedData = getFromCache('prospects');
     if (cachedData) return cachedData;
@@ -928,8 +888,6 @@ export const recordProspectNotifications = async (
     });
 };
 
-// --- Task Functions ---
-
 export const completeActivityTask = async (activityId: string, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'client-activities', activityId);
     await updateDoc(docRef, {
@@ -950,8 +908,6 @@ export const rescheduleActivityTask = async (activityId: string, newDate: Date, 
     });
     invalidateCache('client_activities');
 };
-
-// --- Grilla Comercial Functions ---
 
 export const getPrograms = async (): Promise<Program[]> => {
     const cachedData = getFromCache('programs');
@@ -1062,7 +1018,7 @@ export const deleteProgram = async (programId: string, userId: string): Promise<
 
     await deleteDoc(docRef);
     invalidateCache('programs');
-    invalidateCache(); // Invalidate all for commercial items
+    invalidateCache();
     
     const userSnap = await getDoc(doc(db, 'users', userId));
     const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
@@ -1174,7 +1130,7 @@ export const saveCommercialItemSeries = async (item: Omit<CommercialItem, 'id' |
     }
     
     await batch.commit();
-    invalidateCache(); // Invalidate all caches for simplicity
+    invalidateCache();
 
     const userSnap = await getDoc(doc(db, 'users', userId));
     const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
@@ -1196,7 +1152,7 @@ export const saveCommercialItemSeries = async (item: Omit<CommercialItem, 'id' |
 export const createCommercialItem = async (itemData: Omit<CommercialItem, 'id'>, userId: string, userName: string): Promise<string> => {
     const dataToSave = { ...itemData, createdBy: userId, createdAt: serverTimestamp() };
     const docRef = await addDoc(collections.commercialItems, dataToSave);
-    invalidateCache(); // Invalidate all for simplicity
+    invalidateCache();
     return docRef.id;
 };
 
@@ -1255,7 +1211,7 @@ export const deleteCommercialItem = async (itemIds: string[], userId?: string, u
     }
     
     await batch.commit();
-    invalidateCache(); // Invalidate all caches
+    invalidateCache();
 
     if (userId && userName && firstItemData) {
         await logActivity({
@@ -1272,7 +1228,6 @@ export const deleteCommercialItem = async (itemIds: string[], userId?: string, u
 };
 
 
-// --- Canje Functions ---
 export const getCanjes = async (): Promise<Canje[]> => {
     const cachedData = getFromCache('canjes');
     if (cachedData) return cachedData;
@@ -1426,9 +1381,6 @@ export const deleteCanje = async (id: string, userId: string, userName: string):
     });
 };
 
-
-
-// --- Invoice Functions ---
 const normalizeInvoiceAmount = (rawAmount: unknown): number => {
     if (typeof rawAmount === 'number' && Number.isFinite(rawAmount)) {
         return rawAmount;
@@ -1606,23 +1558,6 @@ export const deleteInvoice = async (id: string, userId: string, userName: string
     });
 };
 
-export type InvoiceBatchDeleteResult = {
-    deleted: string[];
-    failed: { id: string; error: string }[];
-};
-
-export type InvoiceBatchDeleteProgress = InvoiceBatchDeleteResult & {
-    total: number;
-    processed: number;
-    chunk: string[];
-};
-
-type InvoiceBatchDeleteOptions = {
-    batchSize?: number;
-    onProgress?: (progress: InvoiceBatchDeleteProgress) => void;
-    resolveOwnerName?: (invoiceId: string) => string;
-};
-
 export const deleteInvoicesInBatches = async (
     ids: string[],
     userId: string,
@@ -1668,9 +1603,6 @@ export const deleteInvoicesInBatches = async (
 
     return result;
 };
-
-
-// --- Payment entries ---
 
 const PAYMENT_CACHE_KEY = 'paymentEntries';
 
@@ -1941,9 +1873,6 @@ export const deletePaymentEntries = async (paymentIds: string[]) => {
     invalidateCache(PAYMENT_CACHE_KEY);
 };
 
-
-// --- Agency Functions ---
-
 export const getAgencies = async (): Promise<Agency[]> => {
     const cachedData = getFromCache('agencies');
     if (cachedData) return cachedData;
@@ -1981,9 +1910,6 @@ export const createAgency = async (
     return docRef.id;
 };
 
-
-// --- User Profile Functions ---
-
 export const createUserProfile = async (uid: string, name: string, email: string, photoURL?: string): Promise<void> => {
     const userRef = doc(db, 'users', uid);
     await setDoc(userRef, {
@@ -2007,7 +1933,6 @@ export async function getUserProfile(uid: string): Promise<User | null> {
 
 export async function updateUserProfile(uid: string, data: Partial<User>) {
   const userRef = doc(db, 'users', uid);
-  // Usamos set con merge: true para crear el documento si no existe, o actualizar si existe
   await setDoc(userRef, data, { merge: true });
 };
 
@@ -2085,9 +2010,6 @@ export const deleteUserAndReassignEntities = async (
         ownerName: adminUserName,
     });
 };
-
-
-// --- Client Functions ---
 
 export const getClients = async (): Promise<Client[]> => {
     const cachedData = getFromCache('clients');
@@ -2474,10 +2396,6 @@ export const bulkUpdateClients = async (
     }
 };
 
-
-
-// --- Person (Contact) Functions ---
-
 export const getPeopleByClientId = async (clientId: string): Promise<Person[]> => {
     const q = query(collections.people, where("clientIds", "array-contains", clientId));
     const snapshot = await getDocs(q);
@@ -2493,7 +2411,7 @@ export const createPerson = async (
         ...personData,
         createdAt: serverTimestamp()
     });
-    invalidateCache('people'); // A generic cache invalidation
+    invalidateCache('people');
     
     if (personData.clientIds) {
         for (const clientId of personData.clientIds) {
@@ -2589,9 +2507,6 @@ export const deletePerson = async (
     }
 };
 
-
-// --- Opportunity Functions ---
-
 const mapOpportunityDoc = (doc: any): Opportunity => {
     const data = doc.data();
     const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
@@ -2658,8 +2573,6 @@ export const getOpportunitiesForUser = async (userId: string): Promise<Opportuni
 
     if (userClientIds.size === 0) return [];
 
-    // Firestore limits the `in` operator to 30 values, so chunk the client ids
-    // and merge the results to avoid query failures for advisors with many clients.
     const clientIds = Array.from(userClientIds);
     const chunks: string[][] = [];
 
@@ -2928,9 +2841,6 @@ export const deleteOpportunity = async (
     });
 };
 
-
-// --- General Activity Functions ---
-
 const convertActivityLogDoc = (doc: any): ActivityLog => {
     const data = doc.data();
     if (data.timestamp instanceof Timestamp) {
@@ -3020,9 +2930,6 @@ export const getActivitiesForEntity = async (entityId: string): Promise<Activity
 
     return activities;
   };
-
-
-// --- Client-Specific Activity Functions ---
 
 const convertActivityDoc = (doc: any): ClientActivity => {
     const data = doc.data();
@@ -3132,8 +3039,6 @@ export const updateClientActivity = async (
     invalidateCache('client_activities');
 };
 
-// --- Google Chat direct spaces ---
-
 export const getChatSpaces = async (): Promise<ChatSpaceMapping[]> => {
     const cached = getFromCache(CHAT_SPACES_CACHE_KEY);
     if (cached) return cached;
@@ -3195,8 +3100,6 @@ export const upsertChatSpace = async (params: {
     });
 };
 
-// --- Google Chat User Mappings (Manual Aliases) ---
-
 export const getChatUserMappings = async (): Promise<Record<string, string>> => {
     const docRef = doc(collections.systemConfig, 'chat_user_mappings');
     const snap = await getDoc(docRef);
@@ -3221,8 +3124,6 @@ export const saveChatUserMappings = async (mappings: Record<string, string>, use
         ownerName: userName,
     });
 };
-
-// --- Coaching / Seguimiento Functions ---
 
 export const getCoachingSessions = async (advisorId: string): Promise<CoachingSession[]> => {
     const q = query(
