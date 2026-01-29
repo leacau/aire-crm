@@ -20,7 +20,7 @@ type InvoiceRow = {
   id: number;
   invoiceNumber: string;
   date: string;
-  amount: number;
+  amount: string; // Changed to string to handle comma/dot replacement
   clientId: string;
   opportunityId: string;
 };
@@ -85,7 +85,7 @@ export default function InvoiceUploadPage() {
         id: Date.now(),
         invoiceNumber: '',
         date: new Date().toISOString().split('T')[0],
-        amount: 0,
+        amount: '',
         clientId: '',
         opportunityId: '',
       }
@@ -96,14 +96,20 @@ export default function InvoiceUploadPage() {
     setInvoiceRows(prev => prev.filter(row => row.id !== id));
   };
 
-  const handleRowChange = (id: number, field: keyof Omit<InvoiceRow, 'id'>, value: string | number) => {
+  const handleRowChange = (id: number, field: keyof Omit<InvoiceRow, 'id'>, value: string) => {
     setInvoiceRows(prev =>
       prev.map(row => {
         if (row.id === id) {
-          const normalizedValue = field === 'invoiceNumber' && typeof value === 'string'
-            ? sanitizeInvoiceNumber(value)
-            : value;
-          const updatedRow = { ...row, [field]: normalizedValue };
+          let updatedValue = value;
+
+          if (field === 'amount') {
+             // Replace dots with commas instantly
+             updatedValue = value.replace(/\./g, ',');
+          } else if (field === 'invoiceNumber') {
+             updatedValue = sanitizeInvoiceNumber(value);
+          }
+
+          const updatedRow = { ...row, [field]: updatedValue };
           // Reset opportunity if client changes
           if (field === 'clientId') {
             updatedRow.opportunityId = '';
@@ -154,12 +160,26 @@ export default function InvoiceUploadPage() {
   const handleSaveAll = async () => {
     if (!userInfo) return;
 
+    // Validate no dots in amount
+    const hasDotError = invoiceRows.some(row => row.amount.includes('.'));
+    if (hasDotError) {
+        toast({ 
+            title: "Error de formato en monto", 
+            description: "No se permiten puntos en el monto. Por favor utiliza comas para los decimales.", 
+            variant: "destructive" 
+        });
+        return;
+    }
+
     const validRows = invoiceRows.filter(
-      row => row.invoiceNumber && row.amount > 0 && row.clientId && row.opportunityId
+      row => {
+          const amountNum = parseFloat(row.amount.replace(',', '.'));
+          return row.invoiceNumber && !isNaN(amountNum) && amountNum > 0 && row.clientId && row.opportunityId;
+      }
     );
 
     if (validRows.length === 0) {
-      toast({ title: "No hay facturas válidas para guardar", description: "Completa todos los campos de al menos una fila.", variant: "destructive" });
+      toast({ title: "No hay facturas válidas para guardar", description: "Completa todos los campos de al menos una fila y asegúrate que el monto sea mayor a 0.", variant: "destructive" });
       return;
     }
     
@@ -179,7 +199,8 @@ export default function InvoiceUploadPage() {
             if (!client) throw new Error(`Cliente no encontrado para la fila con factura ${row.invoiceNumber}`);
 
             const inputRaw = sanitizeInvoiceNumber(row.invoiceNumber); // Solo dígitos
-            
+            const amountNum = parseFloat(row.amount.replace(',', '.'));
+
             if (!inputRaw) {
                 toast({
                     title: 'Número de factura inválido',
@@ -234,7 +255,7 @@ export default function InvoiceUploadPage() {
                      const clientMatch = existingClientId === row.clientId;
                      const dateMatch = existing.date === row.date;
                      // Comparación de monto con pequeña tolerancia por decimales
-                     const amountMatch = Math.abs(existing.amount - row.amount) < 0.1;
+                     const amountMatch = Math.abs(existing.amount - amountNum) < 0.1;
 
                      if (clientMatch && dateMatch && amountMatch) {
                          duplicateType = 'identical';
@@ -279,7 +300,7 @@ export default function InvoiceUploadPage() {
                 {
                     opportunityId: row.opportunityId,
                     invoiceNumber: inputRaw,
-                    amount: row.amount,
+                    amount: amountNum,
                     date: row.date,
                     status: 'Generada',
                     dateGenerated: new Date().toISOString(),
@@ -295,7 +316,7 @@ export default function InvoiceUploadPage() {
                 id: `temp-${Date.now()}-${Math.random()}`,
                 opportunityId: row.opportunityId,
                 invoiceNumber: inputRaw,
-                amount: row.amount,
+                amount: amountNum,
                 date: row.date,
                 status: 'Generada',
                 dateGenerated: new Date().toISOString(),
@@ -384,10 +405,11 @@ export default function InvoiceUploadPage() {
                       </TableCell>
                       <TableCell>
                         <Input
-                          type="number"
-                          placeholder="0.00"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0,00"
                           value={row.amount}
-                          onChange={e => handleRowChange(row.id, 'amount', Number(e.target.value))}
+                          onChange={e => handleRowChange(row.id, 'amount', e.target.value)}
                         />
                       </TableCell>
                       <TableCell>
