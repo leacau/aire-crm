@@ -347,28 +347,26 @@ export default function NotaComercialPage() {
                 if (accessToken) {
                 try {
                     const canvas = await html2canvas(pdfRef.current, { scale: 1.5, useCORS: true });
-        const imgData = canvas.toDataURL('image/jpeg', 0.8);
-        const pdf = new jsPDF('p', 'mm', 'a4');
+                    const imgData = canvas.toDataURL('image/jpeg', 0.8);
+                    const pdf = new jsPDF('p', 'mm', 'a4');
                     const pdfWidth = pdf.internal.pageSize.getWidth();
                     const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
                     
                     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
                     // 'datauristring' a veces es más compatible que output directo
-const pdfBase64 = pdf.output('datauristring').split(',')[1];
+                    const pdfBase64 = pdf.output('datauristring').split(',')[1];
                     // Enviar a la API
                     await sendEmail({
-            accessToken,
-            to: 'lchena@airedesantafe.com.ar', // Destinatario fijo o dinámico
-            subject: `Nueva Nota Comercial: ${title}`,
-            body: `<p>El asesor <strong>${userInfo.name}</strong> ha registrado una nota.</p>`,
-            attachments: [{
-                filename: `Nota_${title}.pdf`,
-                content: pdfBase64,
-                encoding: 'base64'
-            }]
-        });
-                    });
-                    
+                        accessToken,
+                        to: 'lchena@airedesantafe.com.ar', // Destinatario fijo o dinámico
+                        subject: `Nueva Nota Comercial: ${title}`,
+                        body: `<p>El asesor <strong>${userInfo.name}</strong> ha registrado una nota.</p>`,
+                        attachments: [{
+                            filename: `Nota_${title}.pdf`,
+                            content: pdfBase64,
+                            encoding: 'base64'
+                        }]
+                    });                   
                     toast({ title: 'Nota guardada y notificada por correo.' });
                 } catch (emailError) {
                     console.error("Error sending email/generating PDF", emailError);
@@ -376,7 +374,7 @@ const pdfBase64 = pdf.output('datauristring').split(',')[1];
                     toast({ title: 'Nota guardada, pero falló el envío del correo.', description: "Verifique el tamaño del adjunto o intente nuevamente.", variant: 'default' });
                 }
             } else {
-                toast({ title: 'Nota guardada exitosamente.' });
+                toast({ title: 'Sin Token' });
             }
             
             // Reset
