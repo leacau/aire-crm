@@ -154,23 +154,33 @@ export const saveCommercialNote = async (
     return noteRef.id;
 };
 
-export const getCommercialNotesByClientId = async (clientId: string): Promise<CommercialNote[]> => {
+export async function getCommercialNotesByClientId(clientId: string): Promise<CommercialNote[]> {
+  try {
+    // Referencia a la colección 'commercialNotes'
+    const notesRef = collection(db, 'commercialNotes');
+    
+    // Crear la consulta filtrando por clientId y ordenando por fecha de creación
     const q = query(
-        collections.commercialNotes, 
-        where('clientId', '==', clientId),
-        orderBy('createdAt', 'desc')
+      notesRef,
+      where('clientId', '==', clientId),
+      orderBy('createdAt', 'desc')
     );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => {
-        const data = doc.data();
-        const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
-        return { 
-            id: doc.id, 
-            ...data,
-            createdAt: convertTimestamp(data.createdAt),
-        } as CommercialNote;
-    });
-};
+
+    const querySnapshot = await getDocs(q);
+    
+    // Mapear los documentos a objetos CommercialNote incluyendo el ID
+    const notes: CommercialNote[] = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as CommercialNote));
+
+    return notes;
+  } catch (error) {
+    console.error("Error al obtener las notas comerciales del cliente:", error);
+    // Es buena práctica lanzar el error para que el componente UI pueda manejarlo (ej. mostrar un toast)
+    throw error;
+  }
+}
 
 export const bulkReleaseProspects = async (
     prospectIds: string[],
