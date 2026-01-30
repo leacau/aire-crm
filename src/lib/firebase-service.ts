@@ -202,6 +202,7 @@ export const bulkReleaseProspects = async (
     });
 };
 
+
 // --- Config Functions ---
 
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
@@ -474,6 +475,7 @@ export const deleteSupervisorCommentThread = async (
     invalidateCache(`commentThreads_${recipientId || ownerId}`);
 };
 
+
 // --- Vacation Request (License) Functions ---
 
 export const getVacationRequests = async (): Promise<VacationRequest[]> => {
@@ -489,7 +491,7 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
                 return field.toDate().toISOString();
             }
             if (typeof field === 'string') {
-                return field; 
+                return field; // Asumimos ISO string si ya es string
             }
             return undefined;
         };
@@ -506,12 +508,20 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
     return requests;
 };
 
+
+// --- Vacation Request Functions (MODIFICADAS) ---
+
 export const createVacationRequest = async (
     requestData: Omit<VacationRequest, 'id' | 'status'>,
     managerEmail: string | null
 ): Promise<{ docId: string; emailPayload: { to: string, subject: string, body: string } | null }> => {
+    
+    // 1. Obtener feriados para calcular días reales (seguridad backend)
     const holidays = await getSystemHolidays();
     const calculatedDays = calculateBusinessDays(requestData.startDate, requestData.returnDate, holidays);
+
+    // Si el cálculo da 0 o negativo, o no coincide (opcional validación), usamos el calculado
+    // Forzamos el uso del cálculo real
     const finalDaysRequested = calculatedDays;
 
     if (finalDaysRequested <= 0) {
@@ -532,16 +542,17 @@ export const createVacationRequest = async (
             throw new Error(`No tienes suficientes días disponibles. Solicitas ${finalDaysRequested} y tienes ${currentDays}.`);
         }
 
+        // DESCUENTO PROVISORIO INMEDIATO
         transaction.update(userRef, {
             vacationDays: currentDays - finalDaysRequested
         });
 
         const dataToSave = {
             ...requestData,
-            daysRequested: finalDaysRequested,
+            daysRequested: finalDaysRequested, // Guardamos el valor calculado real
             status: 'Pendiente',
             requestDate: serverTimestamp(),
-            holidays: holidays,
+            holidays: holidays, // Guardamos qué feriados se consideraron (snapshot)
         };
 
         transaction.set(newLicenciaRef, dataToSave);
@@ -551,6 +562,7 @@ export const createVacationRequest = async (
     invalidateCache('users');
     
     let emailPayload: { to: string, subject: string, body: string } | null = null;
+
     if (managerEmail) {
         emailPayload = {
             to: managerEmail,
@@ -570,103 +582,6 @@ export const createVacationRequest = async (
     return { docId: newLicenciaRef.id, emailPayload };
 };
 
-export const adjustVacationDays = async (userId: string, days: number, updatedBy: string, updatedByName: string): Promise<void> => {
-    if (days === 0) {
-        throw new Error('La cantidad de días a ajustar debe ser distinta de cero.');
-    }
-
-    const userRef = doc(db, 'users', userId);
-
-    await runTransaction(db, async (transaction) => {
-        const userSnap = await transaction.get(userRef);
-        if (!userSnap.exists()) {
-            throw new Error('Usuario no encontrado.');
-        }
-
-        const userData = userSnap.data() as User;
-        const currentDays = userData.vacationDays || 0;
-        const newVacationDays = currentDays + days;
-
-        transaction.update(userRef, {
-            vacationDays: newVacationDays,
-            updatedAt: serverTimestamp(),
-            updatedBy,
-        });
-    });
-
-    invalidateCache('users');
-
-    const updatedUser = await getDoc(userRef);
-    const action = days > 0 ? 'agregó' : 'quitó';
-    const amount = Math.abs(days);
-
-    await logActivity({
-        userId: updatedBy,
-        userName: updatedByName,
-        type: 'update',
-        entityType: 'user',
-        entityId: userId,
-        entityName: (updatedUser.data() as User)?.name || 'Usuario',
-        details: `${action} <strong>${amount}</strong> días de licencia a <strong>${(updatedUser.data() as User)?.name || 'un usuario'}</strong>`,
-    });
-};
-
-export const updateVacationRequest = async (
-    requestId: string,
-    updates: Partial<VacationRequest>
-): Promise<void> => {
-    const holidays = await getSystemHolidays();
-
-    await runTransaction(db, async (transaction) => {
-        const requestRef = doc(db, 'licencias', requestId);
-        const requestSnap = await transaction.get(requestRef);
-        if (!requestSnap.exists()) throw new Error("Solicitud no encontrada");
-        const oldRequest = requestSnap.data() as VacationRequest;
-
-        const userRef = doc(db, 'users', oldRequest.userId);
-        const userSnap = await transaction.get(userRef);
-        if (!userSnap.exists()) throw new Error("Usuario no encontrado");
-        const userData = userSnap.data() as User;
-
-        let newDaysRequested = oldRequest.daysRequested;
-
-        const newStartDate = updates.startDate || oldRequest.startDate;
-        const newReturnDate = updates.returnDate || oldRequest.returnDate;
-
-        if (newStartDate !== oldRequest.startDate || newReturnDate !== oldRequest.returnDate) {
-             newDaysRequested = calculateBusinessDays(newStartDate, newReturnDate, holidays);
-        }
-
-        if (newDaysRequested <= 0) throw new Error("El rango no consume días hábiles.");
-
-        const currentBalance = userData.vacationDays || 0;
-        let balanceBeforeThisRequest = currentBalance;
-        if (oldRequest.status === 'Pendiente' || oldRequest.status === 'Aprobado') {
-            balanceBeforeThisRequest += oldRequest.daysRequested;
-        }
-
-        if (balanceBeforeThisRequest < newDaysRequested) {
-             throw new Error(`Saldo insuficiente.`);
-        }
-
-        const finalBalance = balanceBeforeThisRequest - newDaysRequested;
-
-        if (finalBalance !== currentBalance) {
-            transaction.update(userRef, { vacationDays: finalBalance });
-        }
-
-        transaction.update(requestRef, {
-            ...updates,
-            daysRequested: newDaysRequested,
-            holidays: holidays,
-            updatedAt: serverTimestamp()
-        });
-    });
-    
-    invalidateCache('licenses');
-    invalidateCache('users');
-};
-
 export const approveVacationRequest = async (
     requestId: string,
     newStatus: VacationRequestStatus,
@@ -679,9 +594,12 @@ export const approveVacationRequest = async (
 
     await runTransaction(db, async (transaction) => {
         const requestDoc = await transaction.get(requestRef);
-        if (!requestDoc.exists()) throw "Solicitud no encontrada.";
+        if (!requestDoc.exists()) {
+            throw "Solicitud no encontrada.";
+        }
         const requestData = requestDoc.data() as VacationRequest;
         
+        // Evitar doble procesamiento si ya está en el estado deseado
         if (requestData.status === newStatus) return;
 
         const userRef = doc(db, 'users', requestData.userId);
@@ -691,16 +609,23 @@ export const approveVacationRequest = async (
         const userData = userDoc.data() as User;
         let newVacationDays = userData.vacationDays || 0;
 
-        // Lógica de reversión o confirmación de saldo
+        // LÓGICA DE REVERSIÓN O CONFIRMACIÓN
+        
+        // Caso 1: Estaba Pendiente y se RECHAZA -> Devolver días (Rollback)
         if (requestData.status === 'Pendiente' && newStatus === 'Rechazado') {
             newVacationDays += requestData.daysRequested;
         }
+        // Caso 2: Estaba Aprobado y se pasa a Rechazado (Cancelación tardía) -> Devolver días
         else if (requestData.status === 'Aprobado' && newStatus === 'Rechazado') {
             newVacationDays += requestData.daysRequested;
         }
+        // Caso 3: Estaba Rechazado y se pasa a Aprobado/Pendiente -> Volver a descontar
         else if (requestData.status === 'Rechazado' && (newStatus === 'Aprobado' || newStatus === 'Pendiente')) {
             newVacationDays -= requestData.daysRequested;
         }
+        
+        // Si pasa de Pendiente a Aprobado: NO HACEMOS NADA con el saldo, 
+        // porque ya se descontó en la creación (consumo provisorio).
 
         if (newVacationDays !== (userData.vacationDays || 0)) {
             transaction.update(userRef, { vacationDays: newVacationDays });
@@ -716,7 +641,6 @@ export const approveVacationRequest = async (
     });
 
     invalidateCache('licenses');
-    
     const requestAfterUpdate = (await getDoc(requestRef)).data() as VacationRequest;
     
     let emailPayload: { to: string, subject: string, body: string } | null = null;
@@ -727,11 +651,11 @@ export const approveVacationRequest = async (
             const returnDate = format(parseISO(requestAfterUpdate.returnDate), "d 'de' MMMM 'de' yyyy", { locale: es });
             const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
             const pending = pendingDaysAfterUpdate ?? 0;
-            // No usamos approvalLetter complejo en el objeto simple devuelto, sino el body html directo.
-            emailPayload = {
+
+           emailPayload = {
                 to: applicantEmail,
                 subject: `Autorización de licencia`,
-                body: `<p>Tu licencia del ${start} (retorno el ${returnDate}) ha sido aprobada.</p>`, 
+                body: `<p>Tu licencia del ${start} (retorno el ${returnDate}) ha sido aprobada.</p>`, // Simplificado para el ejemplo
             };
         } else if (newStatus === 'Rechazado') {
              emailPayload = {
@@ -740,59 +664,6 @@ export const approveVacationRequest = async (
                 body: `<p>Tu solicitud de licencia ha sido rechazada. Los días se han reintegrado a tu saldo.</p>`,
             };
         }
-    }
-    
-    return { emailPayload };
-};
-
-export const annulVacationRequest = async (
-    requestId: string,
-    reason: string,
-    managerId: string,
-    managerName: string,
-    applicantEmail: string | null
-): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
-    if (!reason.trim()) throw new Error("El motivo de anulación es obligatorio.");
-
-    const requestRef = doc(db, 'licencias', requestId);
-
-    await runTransaction(db, async (transaction) => {
-        const requestDoc = await transaction.get(requestRef);
-        if (!requestDoc.exists()) throw "Solicitud no encontrada.";
-        const requestData = requestDoc.data() as VacationRequest;
-        
-        if (requestData.status !== 'Aprobado') {
-             throw "Solo se pueden anular licencias que ya han sido aprobadas.";
-        }
-
-        const userRef = doc(db, 'users', requestData.userId);
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists()) throw "Usuario solicitante no encontrado.";
-        
-        const userData = userDoc.data() as User;
-        const currentDays = userData.vacationDays || 0;
-        
-        transaction.update(userRef, { vacationDays: currentDays + requestData.daysRequested });
-        
-        transaction.update(requestRef, {
-            status: 'Anulado',
-            cancellationReason: reason,
-            cancelledBy: managerId,
-            cancelledByName: managerName,
-            cancelledAt: new Date().toISOString(),
-        });
-    });
-
-    invalidateCache('licenses');
-    invalidateCache('users');
-    
-    let emailPayload = null;
-    if (applicantEmail) {
-        emailPayload = {
-            to: applicantEmail,
-            subject: `Anulación de licencia aprobada`,
-            body: `<p>Tu licencia aprobada ha sido <strong>ANULADA</strong> por ${managerName}. Motivo: ${reason}</p>`,
-        };
     }
     
     return { emailPayload };
@@ -836,6 +707,7 @@ export const addVacationDays = async (userId: string, daysToAdd: number, updated
     });
 };
 
+
 export const deleteVacationRequest = async (requestId: string): Promise<void> => {
     const docRef = doc(db, 'licencias', requestId);
     await deleteDoc(docRef);
@@ -851,6 +723,7 @@ export const calculateBusinessDays = (startDateStr: string, returnDateStr: strin
     let count = 0;
     let current = start;
 
+    // Iteramos mientras current sea ANTERIOR a end (el día de retorno no se cuenta)
     while (current < end) {
         const dateStr = format(current, 'yyyy-MM-dd');
         // Chequear fin de semana
@@ -860,6 +733,7 @@ export const calculateBusinessDays = (startDateStr: string, returnDateStr: strin
                 count++;
             }
         }
+        // Avanzar un día
         current = new Date(current);
         current.setDate(current.getDate() + 1);
     }
@@ -880,7 +754,7 @@ export const getSystemHolidays = async (): Promise<string[]> => {
 export const saveSystemHolidays = async (dates: string[], userId: string, userName: string) => {
     const docRef = doc(collections.systemConfig, 'holidays');
     await setDoc(docRef, { dates }, { merge: true });
-    invalidateCache('system_holidays');
+    invalidateCache('system_holidays'); // Si usas caché para esto
     
     await logActivity({
         userId,
@@ -1019,6 +893,7 @@ export const recordProspectNotifications = async (
 
 export const completeActivityTask = async (activityId: string, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'client-activities', activityId);
+    
     await updateDoc(docRef, {
         completed: true,
         completedAt: serverTimestamp(),
@@ -1026,7 +901,9 @@ export const completeActivityTask = async (activityId: string, userId: string, u
         completedByUserName: userName,
         updatedAt: serverTimestamp()
     });
-    invalidateCache('client_activities');
+
+invalidateCache('client_activities');
+    // Opcional: Loguear que se completó la tarea
     await logActivity({
         userId,
         userName,
@@ -1041,12 +918,15 @@ export const completeActivityTask = async (activityId: string, userId: string, u
 
 export const rescheduleActivityTask = async (activityId: string, newDate: Date, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'client-activities', activityId);
+    
     await updateDoc(docRef, {
         dueDate: Timestamp.fromDate(newDate),
         updatedAt: serverTimestamp()
     });
+    
     invalidateCache('client_activities');
 };
+
 
 // --- Grilla Comercial Functions ---
 
@@ -1271,7 +1151,7 @@ export const saveCommercialItemSeries = async (item: Omit<CommercialItem, 'id' |
     }
     
     await batch.commit();
-    invalidateCache();
+    invalidateCache(); // Invalidate all caches for simplicity
 
     const userSnap = await getDoc(doc(db, 'users', userId));
     const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
@@ -1293,7 +1173,7 @@ export const saveCommercialItemSeries = async (item: Omit<CommercialItem, 'id' |
 export const createCommercialItem = async (itemData: Omit<CommercialItem, 'id'>, userId: string, userName: string): Promise<string> => {
     const dataToSave = { ...itemData, createdBy: userId, createdAt: serverTimestamp() };
     const docRef = await addDoc(collections.commercialItems, dataToSave);
-    invalidateCache();
+    invalidateCache(); // Invalidate all for simplicity
     return docRef.id;
 };
 
@@ -1352,7 +1232,7 @@ export const deleteCommercialItem = async (itemIds: string[], userId?: string, u
     }
     
     await batch.commit();
-    invalidateCache();
+    invalidateCache(); // Invalidate all caches
 
     if (userId && userName && firstItemData) {
         await logActivity({
@@ -1367,6 +1247,7 @@ export const deleteCommercialItem = async (itemIds: string[], userId?: string, u
         });
     }
 };
+
 
 // --- Canje Functions ---
 export const getCanjes = async (): Promise<Canje[]> => {
@@ -2077,6 +1958,7 @@ export const createAgency = async (
     return docRef.id;
 };
 
+
 // --- User Profile Functions ---
 
 export const createUserProfile = async (uid: string, name: string, email: string, photoURL?: string): Promise<void> => {
@@ -2746,6 +2628,8 @@ export const getOpportunitiesForUser = async (userId: string): Promise<Opportuni
 
     if (userClientIds.size === 0) return [];
 
+    // Firestore limits the `in` operator to 30 values, so chunk the client ids
+    // and merge the results to avoid query failures for advisors with many clients.
     const clientIds = Array.from(userClientIds);
     const chunks: string[][] = [];
 
@@ -3567,3 +3451,5 @@ export const rejectProspectClaim = async (prospect: Prospect, managerId: string,
         ownerName: 'Sin Asignar'
     });
 };
+
+}
