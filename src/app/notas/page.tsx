@@ -325,30 +325,38 @@ export default function NotaComercialPage() {
             // 3. Save to DB
             await saveCommercialNote(noteData, userInfo.id, userInfo.name);
             
-            // 4. Handle Notification
+           // 4. Handle Notification
             if (notifyOnSave && pdfRef.current) {
                 try {
-                    const canvas = await html2canvas(pdfRef.current, { scale: 2 });
-                    const imgData = canvas.toDataURL('image/png');
-                    const pdf = new jsPDF({ format: 'a4' });
+                    // Usar useCORS para evitar problemas con imagenes externas si las hubiera
+                    const canvas = await html2canvas(pdfRef.current, { scale: 1.5, useCORS: true }); 
+                    // Usar JPEG y calidad 0.8 para reducir tamaño drásticamente
+                    const imgData = canvas.toDataURL('image/jpeg', 0.8); 
+                    
+                    const pdf = new jsPDF('p', 'mm', 'a4');
                     const pdfWidth = pdf.internal.pageSize.getWidth();
                     const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                    
+                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                    // 'datauristring' a veces es más compatible que output directo
                     const pdfBase64 = pdf.output('datauristring');
 
+                    // Enviar a la API
                     await fetch('/api/send-note-email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            pdfBase64,
+                            pdfBase64, // Ahora es mucho más liviano
                             noteTitle: title,
                             advisorName: userInfo.name
                         })
                     });
+                    
                     toast({ title: 'Nota guardada y notificada por correo.' });
                 } catch (emailError) {
-                    console.error("Error sending email", emailError);
-                    toast({ title: 'Nota guardada, pero falló el envío del correo.', variant: 'default' });
+                    console.error("Error sending email/generating PDF", emailError);
+                    // Importante: No fallamos la operación entera, solo avisamos que el mail falló
+                    toast({ title: 'Nota guardada, pero falló el envío del correo.', description: "Verifique el tamaño del adjunto o intente nuevamente.", variant: 'default' });
                 }
             } else {
                 toast({ title: 'Nota guardada exitosamente.' });
