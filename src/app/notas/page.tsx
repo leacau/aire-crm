@@ -16,11 +16,12 @@ import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote }
 import type { Client, Program, CommercialNote } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Save } from 'lucide-react';
+import { CalendarIcon, Save, Plus, ExternalLink, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 export default function NotaComercialPage() {
     const { userInfo } = useAuth();
@@ -34,6 +35,7 @@ export default function NotaComercialPage() {
 
     // Form State
     const [selectedClientId, setSelectedClientId] = useState<string>('');
+    const [title, setTitle] = useState('');
     const [cuit, setCuit] = useState('');
     const [razonSocial, setRazonSocial] = useState('');
     const [denominacion, setDenominacion] = useState('');
@@ -42,7 +44,15 @@ export default function NotaComercialPage() {
     const [phone, setPhone] = useState('');
     const [whatsapp, setWhatsapp] = useState('');
     const [address, setAddress] = useState('');
+    const [website, setWebsite] = useState('');
     
+    // Note details
+    const [location, setLocation] = useState<'Estudio' | 'Empresa' | 'Meet' | 'Llamada' | undefined>(undefined);
+    const [callPhone, setCallPhone] = useState('');
+    const [primaryGraf, setPrimaryGraf] = useState('');
+    const [secondaryGraf, setSecondaryGraf] = useState('');
+    const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']);
+
     // Program Selection
     const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
     // Date Selection: Map programId -> Date[]
@@ -125,6 +135,19 @@ export default function NotaComercialPage() {
         );
     };
 
+    const handleAddQuestion = () => setQuestions([...questions, '']);
+    
+    const handleQuestionChange = (index: number, value: string) => {
+        const newQ = [...questions];
+        newQ[index] = value;
+        setQuestions(newQ);
+    };
+
+    const handleRemoveQuestion = (index: number) => {
+        const newQ = questions.filter((_, i) => i !== index);
+        setQuestions(newQ);
+    };
+
     // Calculations
     const totalValue = selectedProgramIds.reduce((acc, pid) => {
         const prog = programs.find(p => p.id === pid);
@@ -141,9 +164,17 @@ export default function NotaComercialPage() {
             toast({ title: 'Datos incompletos', description: 'Seleccione un cliente', variant: 'destructive' });
             return;
         }
+        if (!title.trim()) {
+            toast({ title: 'Datos incompletos', description: 'El título de la nota es obligatorio', variant: 'destructive' });
+            return;
+        }
         if (selectedProgramIds.length === 0) {
             toast({ title: 'Datos incompletos', description: 'Seleccione al menos un programa', variant: 'destructive' });
             return;
+        }
+        if (location === 'Llamada' && !callPhone.trim()) {
+             toast({ title: 'Datos incompletos', description: 'Debe ingresar un teléfono para la llamada', variant: 'destructive' });
+             return;
         }
 
         setSaving(true);
@@ -169,6 +200,16 @@ export default function NotaComercialPage() {
                 phone,
                 whatsapp,
                 address,
+                
+                // New Fields
+                title,
+                location,
+                callPhone: location === 'Llamada' ? callPhone : undefined,
+                primaryGraf,
+                secondaryGraf,
+                questions: questions.filter(q => q.trim() !== ''),
+                website,
+
                 programIds: selectedProgramIds,
                 schedule: selectedProgramIds.reduce((acc, pid) => ({
                     ...acc,
@@ -194,6 +235,11 @@ export default function NotaComercialPage() {
             setProgramDates({});
             setSaleValue('');
             setObservations('');
+            setTitle('');
+            setQuestions(['', '', '', '', '']);
+            setPrimaryGraf('');
+            setSecondaryGraf('');
+            setLocation(undefined);
             
         } catch (error) {
             console.error(error);
@@ -250,7 +296,21 @@ export default function NotaComercialPage() {
                         </div>
                         <div className="space-y-2">
                             <Label>Instagram (Link)</Label>
-                            <Input value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="https://instagram.com/..." />
+                            <Input value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="[https://instagram.com/](https://instagram.com/)..." />
+                        </div>
+                         <div className="space-y-2">
+                            <Label>Web del Cliente</Label>
+                            <div className="flex gap-2">
+                                <Input value={website} onChange={e => setWebsite(e.target.value)} placeholder="[www.ejemplo.com](https://www.ejemplo.com)" />
+                                <Button 
+                                    size="icon" 
+                                    variant="outline" 
+                                    disabled={!website}
+                                    onClick={() => window.open(website.startsWith('http') ? website : `https://${website}`, '_blank')}
+                                >
+                                    <ExternalLink className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
                          <div className="space-y-2">
                             <Label>Teléfono Comercial</Label>
@@ -263,6 +323,95 @@ export default function NotaComercialPage() {
                          <div className="space-y-2 md:col-span-3">
                             <Label>Domicilio Comercial</Label>
                             <Input value={address} onChange={e => setAddress(e.target.value)} />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Detalles de la Nota */}
+                <Card>
+                    <CardHeader><CardTitle>Detalles de la Nota</CardTitle></CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label>Título de la Nota</Label>
+                                <Input 
+                                    value={title} 
+                                    onChange={e => setTitle(e.target.value)} 
+                                    placeholder="Ej: Lanzamiento de temporada..." 
+                                />
+                            </div>
+                            <div className="space-y-3">
+                                <Label>Nota en:</Label>
+                                <RadioGroup 
+                                    value={location} 
+                                    onValueChange={(val: any) => setLocation(val)}
+                                    className="flex flex-wrap gap-4"
+                                >
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="Estudio" id="loc-estudio" />
+                                        <Label htmlFor="loc-estudio">Estudio</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="Empresa" id="loc-empresa" />
+                                        <Label htmlFor="loc-empresa">Empresa</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="Meet" id="loc-meet" />
+                                        <Label htmlFor="loc-meet">Meet</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="Llamada" id="loc-llamada" />
+                                        <Label htmlFor="loc-llamada">Llamada</Label>
+                                    </div>
+                                </RadioGroup>
+                                {location === 'Llamada' && (
+                                    <div className="pt-2">
+                                        <Label className="text-xs text-muted-foreground">Teléfono para la llamada</Label>
+                                        <Input 
+                                            value={callPhone} 
+                                            onChange={e => setCallPhone(e.target.value)} 
+                                            placeholder="Ingrese el número..."
+                                            className="mt-1"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label>Graf Primario</Label>
+                                <Input value={primaryGraf} onChange={e => setPrimaryGraf(e.target.value)} placeholder="Texto principal en pantalla..." />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Graf Secundario</Label>
+                                <Input value={secondaryGraf} onChange={e => setSecondaryGraf(e.target.value)} placeholder="Bajada o detalle..." />
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <Label>Preguntas sugeridas</Label>
+                                <Button variant="ghost" size="sm" onClick={handleAddQuestion}>
+                                    <Plus className="mr-2 h-4 w-4" /> Agregar Pregunta
+                                </Button>
+                            </div>
+                            <div className="space-y-2">
+                                {questions.map((q, idx) => (
+                                    <div key={idx} className="flex gap-2">
+                                        <Input 
+                                            value={q} 
+                                            onChange={e => handleQuestionChange(idx, e.target.value)} 
+                                            placeholder={`Pregunta ${idx + 1}`}
+                                        />
+                                        {questions.length > 1 && (
+                                            <Button size="icon" variant="ghost" onClick={() => handleRemoveQuestion(idx)}>
+                                                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                            </Button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
@@ -328,7 +477,7 @@ export default function NotaComercialPage() {
 
                 {/* Valores y Cierre */}
                  <Card>
-                    <CardHeader><CardTitle>Valores y Detalles</CardTitle></CardHeader>
+                    <CardHeader><CardTitle>Valores y Cierre</CardTitle></CardHeader>
                     <CardContent className="grid gap-6 md:grid-cols-2">
                         <div className="space-y-4">
                              <div className="grid grid-cols-2 gap-4">
