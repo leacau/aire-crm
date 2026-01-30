@@ -3567,4 +3567,3 @@ export const rejectProspectClaim = async (prospect: Prospect, managerId: string,
         ownerName: 'Sin Asignar'
     });
 };
-}
