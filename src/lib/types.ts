@@ -1,3 +1,7 @@
+{
+type: uploaded file
+fileName: leacau/aire-crm/aire-crm-codex-update-next.js-to-patched-version/src/lib/types.ts
+fullContent:
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -566,6 +570,11 @@ export type SystemHolidays = {
 };
 
 // --- Commercial Note Types ---
+export type ScheduleItem = {
+    date: string; // ISO String
+    time?: string; // "HH:MM"
+};
+
 export type CommercialNote = {
   id: string;
   clientId: string;
@@ -582,7 +591,7 @@ export type CommercialNote = {
   replicateWeb?: boolean;
   replicateSocials?: string[]; // 'Facebook', 'Instagram', 'X'
   programIds: string[]; // IDs of selected programs
-  schedule: Record<string, string[]>; // programId -> array of ISO date strings
+  schedule: Record<string, ScheduleItem[]>; // programId -> array of {date, time}
   contactPhone?: string; // Teléfono para coordinar
   contactName?: string; // Responsable de la coordinación (cliente)
 
@@ -621,3 +630,4 @@ export type CommercialNote = {
   
   createdAt: string;
 };
+}
