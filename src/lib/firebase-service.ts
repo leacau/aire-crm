@@ -2,14 +2,13 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format } from 'date-fns';
-import type { CommercialNote } from './types';
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
@@ -34,7 +33,7 @@ const collections = {
     paymentEntries: collection(db, 'payment_entries'),
     chatSpaces: collection(db, 'chat_spaces'),
     coachingSessions: collection(db, 'coaching_sessions'),
-    commercialNotes: collection(db, 'commercial_notes'), // New Collection
+    commercialNotes: collection(db, 'commercial_notes'),
 };
 
 const cache: {
@@ -107,6 +106,7 @@ export type ClientTangoUpdate = {
     observaciones?: string;
 };
 
+// --- Commercial Notes Functions ---
 
 export const saveCommercialNote = async (
     noteData: Omit<CommercialNote, 'id' | 'createdAt'>,
@@ -201,6 +201,8 @@ export const bulkReleaseProspects = async (
         ownerName: 'Sistema',
     });
 };
+
+// --- Config Functions ---
 
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
     const docRef = doc(collections.systemConfig, 'opportunity_alerts');
@@ -330,6 +332,32 @@ export const saveMonthlyClosure = async (advisorId: string, month: string, value
     });
 };
 
+// --- Supervisor Comments ---
+const mapCommentDoc = (snapshot: any): SupervisorComment => {
+    const data = snapshot.data();
+    const replies = Array.isArray(data.replies) ? data.replies.map((reply: SupervisorCommentReply) => ({
+        ...reply,
+        createdAt: timestampToISO((reply as any).createdAt) || new Date().toISOString(),
+    })) : [];
+
+    const lastSeenAtBy: Record<string, string> | undefined = data.lastSeenAtBy
+        ? Object.entries(data.lastSeenAtBy).reduce((acc, [userId, value]) => {
+            const parsed = timestampToISO(value) || (typeof value === 'string' ? value : undefined);
+            if (parsed) acc[userId] = parsed;
+            return acc;
+        }, {} as Record<string, string>)
+        : undefined;
+
+    return {
+        id: snapshot.id,
+        ...data,
+        createdAt: timestampToISO(data.createdAt) || new Date().toISOString(),
+        replies,
+        lastMessageAt: timestampToISO(data.lastMessageAt),
+        lastSeenAtBy,
+    } as SupervisorComment;
+};
+
 export const getSupervisorCommentsForEntity = async (entityType: 'client' | 'opportunity', entityId: string): Promise<SupervisorComment[]> => {
     const q = query(
         collections.supervisorComments,
@@ -359,6 +387,19 @@ export const getSupervisorCommentThreadsForUser = async (userId: string): Promis
         });
 };
 
+interface CreateSupervisorCommentInput {
+    entityType: 'client' | 'opportunity';
+    entityId: string;
+    entityName: string;
+    ownerId: string;
+    ownerName: string;
+    authorId: string;
+    authorName: string;
+    message: string;
+    recipientId?: string;
+    recipientName?: string;
+}
+
 export const createSupervisorComment = async (input: CreateSupervisorCommentInput): Promise<string> => {
     const docRef = await addDoc(collections.supervisorComments, {
         ...input,
@@ -378,6 +419,15 @@ export const createSupervisorComment = async (input: CreateSupervisorCommentInpu
     invalidateCache(`commentThreads_${input.recipientId || input.ownerId}`);
     return docRef.id;
 };
+
+interface ReplySupervisorCommentInput {
+    commentId: string;
+    authorId: string;
+    authorName: string;
+    message: string;
+    recipientId?: string;
+    recipientName?: string;
+}
 
 export const replyToSupervisorComment = async ({ commentId, authorId, authorName, message, recipientId, recipientName }: ReplySupervisorCommentInput): Promise<void> => {
     const commentRef = doc(collections.supervisorComments, commentId);
@@ -424,6 +474,8 @@ export const deleteSupervisorCommentThread = async (
     invalidateCache(`commentThreads_${recipientId || ownerId}`);
 };
 
+// --- Vacation Request (License) Functions ---
+
 export const getVacationRequests = async (): Promise<VacationRequest[]> => {
     const cachedData = getFromCache('licenses');
     if(cachedData) return cachedData;
@@ -437,7 +489,7 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
                 return field.toDate().toISOString();
             }
             if (typeof field === 'string') {
-                return field;
+                return field; 
             }
             return undefined;
         };
@@ -462,7 +514,9 @@ export const createVacationRequest = async (
     const calculatedDays = calculateBusinessDays(requestData.startDate, requestData.returnDate, holidays);
     const finalDaysRequested = calculatedDays;
 
-    if (finalDaysRequested <= 0) throw new Error("El rango de fechas seleccionado no consume días hábiles.");
+    if (finalDaysRequested <= 0) {
+        throw new Error("El rango de fechas seleccionado no consume días hábiles.");
+    }
 
     const userRef = doc(db, 'users', requestData.userId);
     const newLicenciaRef = doc(collections.licenses);
@@ -496,12 +550,20 @@ export const createVacationRequest = async (
     invalidateCache('licenses');
     invalidateCache('users');
     
-    let emailPayload = null;
+    let emailPayload: { to: string, subject: string, body: string } | null = null;
     if (managerEmail) {
         emailPayload = {
             to: managerEmail,
             subject: `Nueva Solicitud de Licencia de ${requestData.userName}`,
-            body: `<p>Solicitud de ${requestData.userName} por ${finalDaysRequested} días.</p>`,
+            body: `
+                <p>Hola,</p>
+                <p>Has recibido una nueva solicitud de licencia de <strong>${requestData.userName}</strong>.</p>
+                <p><strong>Salida:</strong> ${format(parseISO(requestData.startDate), 'P', { locale: es })}</p>
+                <p><strong>Retorno:</strong> ${format(parseISO(requestData.returnDate), 'P', { locale: es })}</p>
+                <p><strong>Días a consumir:</strong> ${finalDaysRequested}</p>
+                <p><em>Estos días ya han sido descontados provisoriamente del saldo del asesor.</em></p>
+                <p>Para aprobar o rechazar esta solicitud, por favor ingresa a la sección "Licencias" del CRM.</p>
+            `,
         };
     }
 
@@ -612,7 +674,9 @@ export const approveVacationRequest = async (
     applicantEmail: string | null,
 ): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
     const requestRef = doc(db, 'licencias', requestId);
-    
+
+    let pendingDaysAfterUpdate: number | null = null;
+
     await runTransaction(db, async (transaction) => {
         const requestDoc = await transaction.get(requestRef);
         if (!requestDoc.exists()) throw "Solicitud no encontrada.";
@@ -627,6 +691,7 @@ export const approveVacationRequest = async (
         const userData = userDoc.data() as User;
         let newVacationDays = userData.vacationDays || 0;
 
+        // Lógica de reversión o confirmación de saldo
         if (requestData.status === 'Pendiente' && newStatus === 'Rechazado') {
             newVacationDays += requestData.daysRequested;
         }
@@ -641,6 +706,7 @@ export const approveVacationRequest = async (
             transaction.update(userRef, { vacationDays: newVacationDays });
             invalidateCache('users');
         }
+        pendingDaysAfterUpdate = newVacationDays;
         
         transaction.update(requestRef, {
             status: newStatus,
@@ -651,11 +717,29 @@ export const approveVacationRequest = async (
 
     invalidateCache('licenses');
     
-    let emailPayload = null;
-    if (applicantEmail && newStatus === 'Aprobado') {
-        emailPayload = { to: applicantEmail, subject: 'Licencia Aprobada', body: 'Tu licencia ha sido aprobada.' };
-    } else if (applicantEmail && newStatus === 'Rechazado') {
-        emailPayload = { to: applicantEmail, subject: 'Licencia Rechazada', body: 'Tu licencia ha sido rechazada.' };
+    const requestAfterUpdate = (await getDoc(requestRef)).data() as VacationRequest;
+    
+    let emailPayload: { to: string, subject: string, body: string } | null = null;
+    if (applicantEmail) {
+        if (newStatus === 'Aprobado') {
+            const today = new Date();
+            const start = format(parseISO(requestAfterUpdate.startDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+            const returnDate = format(parseISO(requestAfterUpdate.returnDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+            const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
+            const pending = pendingDaysAfterUpdate ?? 0;
+            // No usamos approvalLetter complejo en el objeto simple devuelto, sino el body html directo.
+            emailPayload = {
+                to: applicantEmail,
+                subject: `Autorización de licencia`,
+                body: `<p>Tu licencia del ${start} (retorno el ${returnDate}) ha sido aprobada.</p>`, 
+            };
+        } else if (newStatus === 'Rechazado') {
+             emailPayload = {
+                to: applicantEmail,
+                subject: `Solicitud Rechazada`,
+                body: `<p>Tu solicitud de licencia ha sido rechazada. Los días se han reintegrado a tu saldo.</p>`,
+            };
+        }
     }
     
     return { emailPayload };
@@ -758,9 +842,10 @@ export const deleteVacationRequest = async (requestId: string): Promise<void> =>
     invalidateCache('licenses');
 };
 
+// --- Helper: Cálculo de días hábiles ---
 export const calculateBusinessDays = (startDateStr: string, returnDateStr: string, holidays: string[]): number => {
     const start = parseISO(startDateStr);
-    const end = parseISO(returnDateStr);
+    const end = parseISO(returnDateStr); // Fecha de retorno (no se cuenta)
     const holidaySet = new Set(holidays);
     
     let count = 0;
@@ -768,7 +853,9 @@ export const calculateBusinessDays = (startDateStr: string, returnDateStr: strin
 
     while (current < end) {
         const dateStr = format(current, 'yyyy-MM-dd');
+        // Chequear fin de semana
         if (!isSaturday(current) && !isSunday(current)) {
+            // Chequear feriado
             if (!holidaySet.has(dateStr)) {
                 count++;
             }
@@ -779,11 +866,13 @@ export const calculateBusinessDays = (startDateStr: string, returnDateStr: strin
     return count;
 };
 
+// --- Gestión de Feriados ---
+
 export const getSystemHolidays = async (): Promise<string[]> => {
     const docRef = doc(collections.systemConfig, 'holidays');
     const snap = await getDoc(docRef);
     if (snap.exists()) {
-        return (snap.data() as any).dates || [];
+        return (snap.data() as SystemHolidays).dates || [];
     }
     return [];
 };
@@ -805,6 +894,8 @@ export const saveSystemHolidays = async (dates: string[], userId: string, userNa
     });
 };
 
+
+// --- Prospect Functions ---
 export const getProspects = async (): Promise<Prospect[]> => {
     const cachedData = getFromCache('prospects');
     if (cachedData) return cachedData;
@@ -924,6 +1015,8 @@ export const recordProspectNotifications = async (
     });
 };
 
+// --- Task Functions ---
+
 export const completeActivityTask = async (activityId: string, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'client-activities', activityId);
     await updateDoc(docRef, {
@@ -934,6 +1027,16 @@ export const completeActivityTask = async (activityId: string, userId: string, u
         updatedAt: serverTimestamp()
     });
     invalidateCache('client_activities');
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'client_activity' as any, 
+        entityId: activityId,
+        entityName: 'Tarea completada',
+        details: 'marcó la tarea como finalizada',
+        ownerName: userName
+    }); 
 };
 
 export const rescheduleActivityTask = async (activityId: string, newDate: Date, userId: string, userName: string): Promise<void> => {
@@ -944,6 +1047,8 @@ export const rescheduleActivityTask = async (activityId: string, newDate: Date, 
     });
     invalidateCache('client_activities');
 };
+
+// --- Grilla Comercial Functions ---
 
 export const getPrograms = async (): Promise<Program[]> => {
     const cachedData = getFromCache('programs');
@@ -1054,7 +1159,7 @@ export const deleteProgram = async (programId: string, userId: string): Promise<
 
     await deleteDoc(docRef);
     invalidateCache('programs');
-    invalidateCache();
+    invalidateCache(); // Invalidate all for commercial items
     
     const userSnap = await getDoc(doc(db, 'users', userId));
     const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
@@ -1263,7 +1368,7 @@ export const deleteCommercialItem = async (itemIds: string[], userId?: string, u
     }
 };
 
-
+// --- Canje Functions ---
 export const getCanjes = async (): Promise<Canje[]> => {
     const cachedData = getFromCache('canjes');
     if (cachedData) return cachedData;
@@ -1417,6 +1522,9 @@ export const deleteCanje = async (id: string, userId: string, userName: string):
     });
 };
 
+
+
+// --- Invoice Functions ---
 const normalizeInvoiceAmount = (rawAmount: unknown): number => {
     if (typeof rawAmount === 'number' && Number.isFinite(rawAmount)) {
         return rawAmount;
@@ -1594,6 +1702,23 @@ export const deleteInvoice = async (id: string, userId: string, userName: string
     });
 };
 
+export type InvoiceBatchDeleteResult = {
+    deleted: string[];
+    failed: { id: string; error: string }[];
+};
+
+export type InvoiceBatchDeleteProgress = InvoiceBatchDeleteResult & {
+    total: number;
+    processed: number;
+    chunk: string[];
+};
+
+type InvoiceBatchDeleteOptions = {
+    batchSize?: number;
+    onProgress?: (progress: InvoiceBatchDeleteProgress) => void;
+    resolveOwnerName?: (invoiceId: string) => string;
+};
+
 export const deleteInvoicesInBatches = async (
     ids: string[],
     userId: string,
@@ -1639,6 +1764,9 @@ export const deleteInvoicesInBatches = async (
 
     return result;
 };
+
+
+// --- Payment entries ---
 
 const PAYMENT_CACHE_KEY = 'paymentEntries';
 
@@ -1909,6 +2037,9 @@ export const deletePaymentEntries = async (paymentIds: string[]) => {
     invalidateCache(PAYMENT_CACHE_KEY);
 };
 
+
+// --- Agency Functions ---
+
 export const getAgencies = async (): Promise<Agency[]> => {
     const cachedData = getFromCache('agencies');
     if (cachedData) return cachedData;
@@ -1946,6 +2077,8 @@ export const createAgency = async (
     return docRef.id;
 };
 
+// --- User Profile Functions ---
+
 export const createUserProfile = async (uid: string, name: string, email: string, photoURL?: string): Promise<void> => {
     const userRef = doc(db, 'users', uid);
     await setDoc(userRef, {
@@ -1969,6 +2102,7 @@ export async function getUserProfile(uid: string): Promise<User | null> {
 
 export async function updateUserProfile(uid: string, data: Partial<User>) {
   const userRef = doc(db, 'users', uid);
+  // Usamos set con merge: true para crear el documento si no existe, o actualizar si existe
   await setDoc(userRef, data, { merge: true });
 };
 
@@ -2046,6 +2180,9 @@ export const deleteUserAndReassignEntities = async (
         ownerName: adminUserName,
     });
 };
+
+
+// --- Client Functions ---
 
 export const getClients = async (): Promise<Client[]> => {
     const cachedData = getFromCache('clients');
@@ -3430,3 +3567,4 @@ export const rejectProspectClaim = async (prospect: Prospect, managerId: string,
         ownerName: 'Sin Asignar'
     });
 };
+}
