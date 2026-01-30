@@ -25,6 +25,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { NotePdf } from '@/components/notas/note-pdf';
+import { sendEmail } from '@/lib/google-gmail-service';
 
 export default function NotaComercialPage() {
     const { userInfo } = useAuth();
@@ -342,29 +343,30 @@ export default function NotaComercialPage() {
             
            // 4. Handle Notification
             if (notifyOnSave && pdfRef.current) {
+                const accessToken = await getGoogleAccessToken();
+                if (accessToken) {
                 try {
-                    // Usar useCORS para evitar problemas con imagenes externas si las hubiera
-                    const canvas = await html2canvas(pdfRef.current, { scale: 1.5, useCORS: true }); 
-                    // Usar JPEG y calidad 0.8 para reducir tamaño drásticamente
-                    const imgData = canvas.toDataURL('image/jpeg', 0.8); 
-                    
-                    const pdf = new jsPDF('p', 'mm', 'a4');
+                    const canvas = await html2canvas(pdfRef.current, { scale: 1.5, useCORS: true });
+        const imgData = canvas.toDataURL('image/jpeg', 0.8);
+        const pdf = new jsPDF('p', 'mm', 'a4');
                     const pdfWidth = pdf.internal.pageSize.getWidth();
                     const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
                     
                     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
                     // 'datauristring' a veces es más compatible que output directo
-                    const pdfBase64 = pdf.output('datauristring');
-
+const pdfBase64 = pdf.output('datauristring').split(',')[1];
                     // Enviar a la API
-                    await fetch('/api/send-note-email', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            pdfBase64, // Ahora es mucho más liviano
-                            noteTitle: title,
-                            advisorName: userInfo.name
-                        })
+                    await sendEmail({
+            accessToken,
+            to: 'lchena@airedesantafe.com.ar', // Destinatario fijo o dinámico
+            subject: `Nueva Nota Comercial: ${title}`,
+            body: `<p>El asesor <strong>${userInfo.name}</strong> ha registrado una nota.</p>`,
+            attachments: [{
+                filename: `Nota_${title}.pdf`,
+                content: pdfBase64,
+                encoding: 'base64'
+            }]
+        });
                     });
                     
                     toast({ title: 'Nota guardada y notificada por correo.' });
@@ -402,7 +404,7 @@ export default function NotaComercialPage() {
         } finally {
             setSaving(false);
         }
-    };
+    };}
 
     if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large"/></div>;
 
