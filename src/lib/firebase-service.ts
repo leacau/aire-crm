@@ -9,6 +9,7 @@ import { defaultPermissions } from './data';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format } from 'date-fns';
+import type { CommercialNote } from './types';
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
@@ -106,7 +107,6 @@ export type ClientTangoUpdate = {
     observaciones?: string;
 };
 
-// ... (Rest of existing functions remains same, adding new function at the end)
 
 export const saveCommercialNote = async (
     noteData: Omit<CommercialNote, 'id' | 'createdAt'>,
@@ -154,7 +154,24 @@ export const saveCommercialNote = async (
     return noteRef.id;
 };
 
-// ... (Rest of the file follows, truncated for brevity, including all previous exports)
+export const getCommercialNotesByClientId = async (clientId: string): Promise<CommercialNote[]> => {
+    const q = query(
+        collections.commercialNotes, 
+        where('clientId', '==', clientId),
+        orderBy('createdAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+        return { 
+            id: doc.id, 
+            ...data,
+            createdAt: convertTimestamp(data.createdAt),
+        } as CommercialNote;
+    });
+};
+
 export const bulkReleaseProspects = async (
     prospectIds: string[],
     userId: string,
@@ -185,7 +202,6 @@ export const bulkReleaseProspects = async (
     });
 };
 
-// ... (Continue with existing exports from original file)
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
     const docRef = doc(collections.systemConfig, 'opportunity_alerts');
     const docSnap = await getDoc(docRef);
@@ -195,7 +211,6 @@ export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsCon
     return {};
 };
 
-// ... (And so on for other functions)
 export const getObjectiveVisibilityConfig = async (): Promise<ObjectiveVisibilityConfig> => {
     const cached = getFromCache(OBJECTIVE_VISIBILITY_DOC_ID);
     if (cached) return cached;
