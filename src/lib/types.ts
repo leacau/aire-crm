@@ -1,7 +1,3 @@
-{
-type: uploaded file
-fileName: leacau/aire-crm/aire-crm-codex-update-next.js-to-patched-version/src/lib/types.ts
-fullContent:
 export type OpportunityStage =
   | 'Nuevo'
   | 'Propuesta'
@@ -630,4 +626,3 @@ export type CommercialNote = {
   
   createdAt: string;
 };
-}
