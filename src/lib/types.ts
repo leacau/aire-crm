@@ -574,35 +574,50 @@ export type CommercialNote = {
   advisorId: string;
   advisorName: string;
   razonSocial: string;
-  denominacion: string;
-  rubro?: string;
-  instagram?: string;
-  phone?: string;
-  whatsapp?: string;
-  address?: string;
   
-  // New Fields
+  // -- Client Data Fields --
+  rubro?: string;
+  
+  // -- Production/Pautado Fields --
+  replicateWeb?: boolean;
+  replicateSocials?: string[]; // 'Facebook', 'Instagram', 'X'
+  programIds: string[]; // IDs of selected programs
+  schedule: Record<string, string[]>; // programId -> array of ISO date strings
+  contactPhone?: string; // Teléfono para coordinar
+  contactName?: string; // Responsable de la coordinación (cliente)
+
+  // -- Note Details Fields --
   title?: string;
   location?: 'Estudio' | 'Empresa' | 'Meet' | 'Llamada';
-  callPhone?: string;
+  callPhone?: string; // If location is Llamada
   primaryGraf?: string;
   secondaryGraf?: string;
   questions?: string[];
-  website?: string;
-
-  programIds: string[]; // IDs of selected programs
-  schedule: Record<string, string[]>; // programId -> array of ISO date strings
   
+  intervieweeName?: string;
+  intervieweeRole?: string;
+  intervieweeBio?: string;
+
+  // -- Contact Channels with "No Informar" logic --
+  instagram?: string; // Full link
+  website?: string;
+  noWeb?: boolean;
+  whatsapp?: string;
+  noWhatsapp?: boolean;
+  phone?: string; // Teléfono comercial
+  noCommercialPhone?: boolean;
+
+  graphicSupport: boolean;
+  graphicSupportLink?: string; // If GDrive link provided
+  
+  // -- Financials --
   totalValue: number;
   saleValue?: number;
   mismatch?: number;
   
-  observations?: string;
-  replicateWeb?: boolean;
-  replicateSocials?: string[]; // 'Facebook', 'Instagram', 'X'
-  
-  graphicSupport: boolean;
-  graphicSupportLink?: string; // If GDrive link provided
+  // -- Observations --
+  financialObservations?: string; // For "Comercial" section
+  noteObservations?: string; // For "Nota" section (Observaciones generales)
   
   createdAt: string;
 };
