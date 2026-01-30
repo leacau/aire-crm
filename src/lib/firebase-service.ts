@@ -250,6 +250,7 @@ export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsCon
     });
 };
 
+
 export const updateObjectiveVisibilityConfig = async (
     config: ObjectiveVisibilityConfig,
     userId: string,
@@ -582,6 +583,141 @@ export const createVacationRequest = async (
     return { docId: newLicenciaRef.id, emailPayload };
 };
 
+export const updateVacationRequest = async (
+    requestId: string,
+    updates: Partial<VacationRequest>
+): Promise<void> => {
+    const holidays = await getSystemHolidays();
+
+    await runTransaction(db, async (transaction) => {
+        const requestRef = doc(db, 'licencias', requestId);
+        const requestSnap = await transaction.get(requestRef);
+        if (!requestSnap.exists()) throw new Error("Solicitud no encontrada");
+        const oldRequest = requestSnap.data() as VacationRequest;
+
+        const userRef = doc(db, 'users', oldRequest.userId);
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) throw new Error("Usuario no encontrado");
+        const userData = userSnap.data() as User;
+
+        let newDaysRequested = oldRequest.daysRequested;
+
+        const newStartDate = updates.startDate || oldRequest.startDate;
+        const newReturnDate = updates.returnDate || oldRequest.returnDate;
+
+        if (newStartDate !== oldRequest.startDate || newReturnDate !== oldRequest.returnDate) {
+             newDaysRequested = calculateBusinessDays(newStartDate, newReturnDate, holidays);
+        }
+
+        if (newDaysRequested <= 0) throw new Error("El rango no consume días hábiles.");
+
+        const currentBalance = userData.vacationDays || 0;
+        let balanceBeforeThisRequest = currentBalance;
+        if (oldRequest.status === 'Pendiente' || oldRequest.status === 'Aprobado') {
+            balanceBeforeThisRequest += oldRequest.daysRequested;
+        }
+
+        if (balanceBeforeThisRequest < newDaysRequested) {
+             throw new Error(`Saldo insuficiente.`);
+        }
+
+        const finalBalance = balanceBeforeThisRequest - newDaysRequested;
+
+        if (finalBalance !== currentBalance) {
+            transaction.update(userRef, { vacationDays: finalBalance });
+        }
+
+        transaction.update(requestRef, {
+            ...updates,
+            daysRequested: newDaysRequested,
+            holidays: holidays,
+            updatedAt: serverTimestamp()
+        });
+    });
+    
+    invalidateCache('licenses');
+    invalidateCache('users');
+};
+
+export const adjustVacationDays = async (userId: string, days: number, updatedBy: string, updatedByName: string): Promise<void> => {
+    if (days === 0) {
+        throw new Error('La cantidad de días a ajustar debe ser distinta de cero.');
+    }
+
+    const userRef = doc(db, 'users', userId);
+
+    await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) {
+            throw new Error('Usuario no encontrado.');
+        }
+
+        const userData = userSnap.data() as User;
+        const currentDays = userData.vacationDays || 0;
+        const newVacationDays = currentDays + days;
+
+        transaction.update(userRef, {
+            vacationDays: newVacationDays,
+            updatedAt: serverTimestamp(),
+            updatedBy,
+        });
+    });
+
+    invalidateCache('users');
+
+    const updatedUser = await getDoc(userRef);
+    const action = days > 0 ? 'agregó' : 'quitó';
+    const amount = Math.abs(days);
+
+    await logActivity({
+        userId: updatedBy,
+        userName: updatedByName,
+        type: 'update',
+        entityType: 'user',
+        entityId: userId,
+        entityName: (updatedUser.data() as User)?.name || 'Usuario',
+        details: `${action} <strong>${amount}</strong> días de licencia a <strong>${(updatedUser.data() as User)?.name || 'un usuario'}</strong>`,
+    });
+};
+
+export const addVacationDays = async (userId: string, daysToAdd: number, updatedBy: string, updatedByName: string): Promise<void> => {
+    if (daysToAdd <= 0) {
+        throw new Error('La cantidad de días a agregar debe ser mayor a cero.');
+    }
+
+    const userRef = doc(db, 'users', userId);
+
+    await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) {
+            throw new Error('Usuario no encontrado.');
+        }
+
+        const userData = userSnap.data() as User;
+        const currentDays = userData.vacationDays || 0;
+        const newVacationDays = currentDays + daysToAdd;
+
+        transaction.update(userRef, {
+            vacationDays: newVacationDays,
+            updatedAt: serverTimestamp(),
+            updatedBy,
+        });
+    });
+
+    invalidateCache('users');
+
+    const updatedUser = await getDoc(userRef);
+    await logActivity({
+        userId: updatedBy,
+        userName: updatedByName,
+        type: 'update',
+        entityType: 'user',
+        entityId: userId,
+        entityName: (updatedUser.data() as User)?.name || 'Usuario',
+        details: `agregó <strong>${daysToAdd}</strong> días de licencia a <strong>${(updatedUser.data() as User)?.name || 'un usuario'}</strong>`,
+    });
+};
+
 export const approveVacationRequest = async (
     requestId: string,
     newStatus: VacationRequestStatus,
@@ -669,44 +805,58 @@ export const approveVacationRequest = async (
     return { emailPayload };
 };
 
-export const addVacationDays = async (userId: string, daysToAdd: number, updatedBy: string, updatedByName: string): Promise<void> => {
-    if (daysToAdd <= 0) {
-        throw new Error('La cantidad de días a agregar debe ser mayor a cero.');
-    }
+export const annulVacationRequest = async (
+    requestId: string,
+    reason: string,
+    managerId: string,
+    managerName: string,
+    applicantEmail: string | null
+): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
+    if (!reason.trim()) throw new Error("El motivo de anulación es obligatorio.");
 
-    const userRef = doc(db, 'users', userId);
+    const requestRef = doc(db, 'licencias', requestId);
 
     await runTransaction(db, async (transaction) => {
-        const userSnap = await transaction.get(userRef);
-        if (!userSnap.exists()) {
-            throw new Error('Usuario no encontrado.');
+        const requestDoc = await transaction.get(requestRef);
+        if (!requestDoc.exists()) throw "Solicitud no encontrada.";
+        const requestData = requestDoc.data() as VacationRequest;
+        
+        if (requestData.status !== 'Aprobado') {
+             throw "Solo se pueden anular licencias que ya han sido aprobadas.";
         }
 
-        const userData = userSnap.data() as User;
+        const userRef = doc(db, 'users', requestData.userId);
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw "Usuario solicitante no encontrado.";
+        
+        const userData = userDoc.data() as User;
         const currentDays = userData.vacationDays || 0;
-        const newVacationDays = currentDays + daysToAdd;
-
-        transaction.update(userRef, {
-            vacationDays: newVacationDays,
-            updatedAt: serverTimestamp(),
-            updatedBy,
+        
+        transaction.update(userRef, { vacationDays: currentDays + requestData.daysRequested });
+        
+        transaction.update(requestRef, {
+            status: 'Anulado',
+            cancellationReason: reason,
+            cancelledBy: managerId,
+            cancelledByName: managerName,
+            cancelledAt: new Date().toISOString(),
         });
     });
 
+    invalidateCache('licenses');
     invalidateCache('users');
-
-    const updatedUser = await getDoc(userRef);
-    await logActivity({
-        userId: updatedBy,
-        userName: updatedByName,
-        type: 'update',
-        entityType: 'user',
-        entityId: userId,
-        entityName: (updatedUser.data() as User)?.name || 'Usuario',
-        details: `agregó <strong>${daysToAdd}</strong> días de licencia a <strong>${(updatedUser.data() as User)?.name || 'un usuario'}</strong>`,
-    });
+    
+    let emailPayload = null;
+    if (applicantEmail) {
+        emailPayload = {
+            to: applicantEmail,
+            subject: `Anulación de licencia aprobada`,
+            body: `<p>Tu licencia aprobada ha sido <strong>ANULADA</strong> por ${managerName}. Motivo: ${reason}</p>`,
+        };
+    }
+    
+    return { emailPayload };
 };
-
 
 export const deleteVacationRequest = async (requestId: string): Promise<void> => {
     const docRef = doc(db, 'licencias', requestId);
