@@ -85,6 +85,21 @@ export default function NotaComercialPage() {
     
     const [notifyOnSave, setNotifyOnSave] = useState(false);
 
+    const handleDownloadPdf = async () => {
+    if (!pdfRef.current) return;
+    try {
+        const canvas = await html2canvas(pdfRef.current, { scale: 1.5, useCORS: true });
+        const imgData = canvas.toDataURL('image/jpeg', 0.8);
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`Nota_${title.replace(/ /g, "_")}.pdf`);
+    } catch (error) {
+        toast({ title: "Error al generar PDF", variant: "destructive" });
+    }
+};
+
 
     useEffect(() => {
         const loadData = async () => {
@@ -395,6 +410,12 @@ export default function NotaComercialPage() {
         <div className="flex flex-col h-full overflow-hidden">
             <Header title="Nueva Nota Comercial">
                 <div className="flex items-center gap-4">
+                     <div className="flex items-center space-x-2">
+                    <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title}>
+    <ExternalLink className="mr-2 h-4 w-4" />
+    Exportar PDF
+</Button>
+                         </div>
                     <div className="flex items-center space-x-2">
                         <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
                         <Label htmlFor="notify">Notificar al guardar</Label>
