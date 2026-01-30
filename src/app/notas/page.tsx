@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote } from '@/lib/firebase-service';
-import type { Client, Program, CommercialNote } from '@/lib/types';
+import type { Client, Program, CommercialNote, ScheduleItem } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, Save, Plus, ExternalLink, Trash2 } from 'lucide-react';
@@ -22,12 +22,16 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import { NotePdf } from '@/components/notas/note-pdf';
 
 export default function NotaComercialPage() {
     const { userInfo } = useAuth();
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const pdfRef = useRef<HTMLDivElement>(null);
 
     // Data
     const [clients, setClients] = useState<Client[]>([]);
@@ -40,24 +44,25 @@ export default function NotaComercialPage() {
     const [rubro, setRubro] = useState('');
 
     // --- SECCIÓN 2: COMERCIAL ---
-    const [saleValue, setSaleValue] = useState<string>(''); // User input
+    const [saleValue, setSaleValue] = useState<string>('');
     const [financialObservations, setFinancialObservations] = useState('');
 
     // --- SECCIÓN 3: PRODUCCIÓN/PAUTADO ---
     const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
-    const [programDates, setProgramDates] = useState<Record<string, Date[]>>({}); // Map programId -> Date[]
+    // Map programId -> ScheduleItem[]
+    const [programSchedule, setProgramSchedule] = useState<Record<string, ScheduleItem[]>>({}); 
     const [replicateWeb, setReplicateWeb] = useState(false);
     const [replicateSocials, setReplicateSocials] = useState<string[]>([]);
-    const [contactPhone, setContactPhone] = useState(''); // Teléfono para coordinar
-    const [contactName, setContactName] = useState(''); // Responsable de la coordinación
+    const [contactPhone, setContactPhone] = useState(''); 
+    const [contactName, setContactName] = useState(''); 
 
     // --- SECCIÓN 4: NOTA ---
     const [title, setTitle] = useState('');
     const [location, setLocation] = useState<'Estudio' | 'Empresa' | 'Meet' | 'Llamada' | undefined>(undefined);
-    const [callPhone, setCallPhone] = useState(''); // If location is Llamada
+    const [callPhone, setCallPhone] = useState(''); 
     const [primaryGraf, setPrimaryGraf] = useState('');
     const [secondaryGraf, setSecondaryGraf] = useState('');
-    const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']); // 5 default
+    const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']); 
     
     // Entrevistado
     const [intervieweeName, setIntervieweeName] = useState('');
@@ -77,6 +82,8 @@ export default function NotaComercialPage() {
     const [graphicSupport, setGraphicSupport] = useState(false);
     const [graphicLink, setGraphicLink] = useState('');
     const [noteObservations, setNoteObservations] = useState('');
+    
+    const [notifyOnSave, setNotifyOnSave] = useState(false);
 
 
     useEffect(() => {
@@ -87,7 +94,6 @@ export default function NotaComercialPage() {
                     getPrograms()
                 ]);
                 
-                // Filter clients for advisor if not admin
                 if (userInfo) {
                     if (userInfo.role === 'Admin' || userInfo.email === 'lchena@airedesantafe.com.ar') {
                         setClients(fetchedClients);
@@ -117,32 +123,46 @@ export default function NotaComercialPage() {
         }
     };
 
-    // --- Helpers for Arrays ---
+    // --- Helpers ---
     const toggleProgram = (programId: string) => {
         setSelectedProgramIds(prev => 
             prev.includes(programId) 
                 ? prev.filter(id => id !== programId)
                 : [...prev, programId]
         );
-        // Initialize dates if adding
-        if (!programDates[programId]) {
-            setProgramDates(prev => ({ ...prev, [programId]: [] }));
+        if (!programSchedule[programId]) {
+            setProgramSchedule(prev => ({ ...prev, [programId]: [] }));
         }
     };
 
     const handleDateSelect = (programId: string, dates: Date[] | undefined) => {
         if (!dates) return;
-        setProgramDates(prev => ({
-            ...prev,
-            [programId]: dates
-        }));
+        
+        setProgramSchedule(prev => {
+            const currentItems = prev[programId] || [];
+            // Preserve existing times for dates that persist
+            const newItems = dates.map(d => {
+                const isoDate = d.toISOString();
+                const existing = currentItems.find(item => item.date.split('T')[0] === isoDate.split('T')[0]);
+                return existing ? existing : { date: isoDate, time: '' };
+            });
+            return { ...prev, [programId]: newItems };
+        });
+    };
+
+    const handleTimeChange = (programId: string, dateIndex: number, time: string) => {
+        setProgramSchedule(prev => {
+            const items = [...(prev[programId] || [])];
+            if(items[dateIndex]) {
+                items[dateIndex] = { ...items[dateIndex], time };
+            }
+            return { ...prev, [programId]: items };
+        });
     };
 
     const toggleSocial = (social: string) => {
         setReplicateSocials(prev => 
-            prev.includes(social) 
-                ? prev.filter(s => s !== social)
-                : [...prev, social]
+            prev.includes(social) ? prev.filter(s => s !== social) : [...prev, social]
         );
     };
 
@@ -162,7 +182,7 @@ export default function NotaComercialPage() {
     // --- Calculations ---
     const totalValue = selectedProgramIds.reduce((acc, pid) => {
         const prog = programs.find(p => p.id === pid);
-        const datesCount = programDates[pid]?.length || 0;
+        const datesCount = programSchedule[pid]?.length || 0;
         const rate = prog?.rates?.notaComercial || 0;
         return acc + (rate * datesCount);
     }, 0);
@@ -172,7 +192,6 @@ export default function NotaComercialPage() {
 
     // --- Save Logic ---
     const handleSave = async () => {
-        // --- VALIDACIONES ---
         if (!selectedClientId || !userInfo) {
             toast({ title: 'Datos incompletos', description: 'Seleccione un cliente.', variant: 'destructive' });
             return;
@@ -181,28 +200,23 @@ export default function NotaComercialPage() {
             toast({ title: 'Datos incompletos', description: 'Complete todos los datos del cliente (CUIT, Razón Social, Rubro).', variant: 'destructive' });
             return;
         }
-        
         if (!saleValue) {
              toast({ title: 'Datos incompletos', description: 'Debe ingresar el Valor de Venta.', variant: 'destructive' });
              return;
         }
-
         if (selectedProgramIds.length === 0) {
             toast({ title: 'Datos incompletos', description: 'Seleccione al menos un programa.', variant: 'destructive' });
             return;
         }
-        // Validar que se hayan seleccionado fechas para cada programa
-        const missingDates = selectedProgramIds.some(pid => !programDates[pid] || programDates[pid].length === 0);
+        const missingDates = selectedProgramIds.some(pid => !programSchedule[pid] || programSchedule[pid].length === 0);
         if (missingDates) {
              toast({ title: 'Datos incompletos', description: 'Debe seleccionar fechas para todos los programas elegidos.', variant: 'destructive' });
              return;
         }
-
         if (!contactPhone.trim() || !contactName.trim()) {
              toast({ title: 'Datos incompletos', description: 'Complete los datos de coordinación (Teléfono y Responsable).', variant: 'destructive' });
              return;
         }
-
         if (!title.trim()) {
             toast({ title: 'Datos incompletos', description: 'El título de la nota es obligatorio.', variant: 'destructive' });
             return;
@@ -219,19 +233,15 @@ export default function NotaComercialPage() {
              toast({ title: 'Datos incompletos', description: 'Los grafs primario y secundario son obligatorios.', variant: 'destructive' });
              return;
         }
-        
-        // Validar las 5 primeras preguntas
         const first5Questions = questions.slice(0, 5);
         if (first5Questions.some(q => !q.trim())) {
              toast({ title: 'Datos incompletos', description: 'Las primeras 5 preguntas son obligatorias.', variant: 'destructive' });
              return;
         }
-
         if (!intervieweeName.trim() || !intervieweeRole.trim()) {
              toast({ title: 'Datos incompletos', description: 'El nombre y cargo del entrevistado son obligatorios.', variant: 'destructive' });
              return;
         }
-
         if (!noWeb && !website.trim()) {
              toast({ title: 'Datos incompletos', description: 'Complete la Web o marque "No informar".', variant: 'destructive' });
              return;
@@ -244,7 +254,6 @@ export default function NotaComercialPage() {
              toast({ title: 'Datos incompletos', description: 'Complete el Teléfono Comercial o marque "No informar".', variant: 'destructive' });
              return;
         }
-        
         if (graphicSupport && !graphicLink.trim()) {
              toast({ title: 'Datos incompletos', description: 'Si indica soporte gráfico, debe proveer un link.', variant: 'destructive' });
              return;
@@ -254,19 +263,18 @@ export default function NotaComercialPage() {
         try {
             const client = clients.find(c => c.id === selectedClientId);
             
-            // 1. Update Client if needed (CUIT/Rubro/RazonSocial)
+            // 1. Update Client info
             const updates: any = {};
             if (client) {
                 if(client.cuit !== cuit) updates.cuit = cuit;
                 if(client.rubro !== rubro) updates.rubro = rubro;
                 if(client.razonSocial !== razonSocial) updates.razonSocial = razonSocial;
-                
                 if (Object.keys(updates).length > 0) {
                     await updateClientTangoMapping(client.id, updates, userInfo.id, userInfo.name);
                 }
             }
 
-            // 2. Prepare Data Raw (can contain undefined)
+            // 2. Prepare Data Raw
             const noteDataRaw = {
                 clientId: selectedClientId,
                 clientName: client?.denominacion || 'Unknown',
@@ -274,33 +282,22 @@ export default function NotaComercialPage() {
                 advisorId: userInfo.id,
                 advisorName: userInfo.name,
                 razonSocial,
-                
                 rubro,
-                
-                // Producción
                 replicateWeb,
                 replicateSocials,
                 programIds: selectedProgramIds,
-                schedule: selectedProgramIds.reduce((acc, pid) => ({
-                    ...acc,
-                    [pid]: programDates[pid]?.map(d => d.toISOString()) || []
-                }), {}),
+                schedule: programSchedule,
                 contactPhone,
                 contactName,
-
-                // Nota
                 title,
                 location,
                 callPhone: location === 'Llamada' ? callPhone : undefined,
                 primaryGraf,
                 secondaryGraf,
                 questions: questions.filter(q => q.trim() !== ''),
-                
                 intervieweeName,
                 intervieweeRole,
                 intervieweeBio: intervieweeBio || undefined,
-
-                // Channels
                 instagram: instagramHandle ? `https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}` : undefined,
                 website: noWeb ? undefined : website,
                 noWeb,
@@ -308,21 +305,15 @@ export default function NotaComercialPage() {
                 noWhatsapp,
                 phone: noCommercialPhone ? undefined : commercialPhone,
                 noCommercialPhone,
-
                 graphicSupport,
                 graphicSupportLink: graphicSupport ? graphicLink : undefined,
-                
-                // Financials
                 totalValue,
                 saleValue: saleValueNum,
                 mismatch,
-                
-                // Observations
                 financialObservations: financialObservations || undefined,
                 noteObservations: noteObservations || undefined,
             };
 
-            // 3. Clean undefined values recursively/shallow to avoid Firebase Error
             const noteData = Object.keys(noteDataRaw).reduce((acc, key) => {
                 const value = (noteDataRaw as any)[key];
                 if (value !== undefined) {
@@ -331,14 +322,41 @@ export default function NotaComercialPage() {
                 return acc;
             }, {} as Omit<CommercialNote, 'id' | 'createdAt'>);
 
-            // 4. Save
+            // 3. Save to DB
             await saveCommercialNote(noteData, userInfo.id, userInfo.name);
             
-            toast({ title: 'Nota guardada exitosamente' });
+            // 4. Handle Notification
+            if (notifyOnSave && pdfRef.current) {
+                try {
+                    const canvas = await html2canvas(pdfRef.current, { scale: 2 });
+                    const imgData = canvas.toDataURL('image/png');
+                    const pdf = new jsPDF({ format: 'a4' });
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                    const pdfBase64 = pdf.output('datauristring');
+
+                    await fetch('/api/send-note-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            pdfBase64,
+                            noteTitle: title,
+                            advisorName: userInfo.name
+                        })
+                    });
+                    toast({ title: 'Nota guardada y notificada por correo.' });
+                } catch (emailError) {
+                    console.error("Error sending email", emailError);
+                    toast({ title: 'Nota guardada, pero falló el envío del correo.', variant: 'default' });
+                }
+            } else {
+                toast({ title: 'Nota guardada exitosamente.' });
+            }
             
-            // Reset Form
+            // Reset
             setSelectedProgramIds([]);
-            setProgramDates({});
+            setProgramSchedule({});
             setSaleValue('');
             setFinancialObservations('');
             setNoteObservations('');
@@ -368,10 +386,16 @@ export default function NotaComercialPage() {
     return (
         <div className="flex flex-col h-full overflow-hidden">
             <Header title="Nueva Nota Comercial">
-                <Button onClick={handleSave} disabled={saving}>
-                    {saving ? <Spinner size="small" className="mr-2"/> : <Save className="mr-2 h-4 w-4"/>}
-                    Guardar Nota
-                </Button>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center space-x-2">
+                        <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
+                        <Label htmlFor="notify">Notificar al guardar</Label>
+                    </div>
+                    <Button onClick={handleSave} disabled={saving}>
+                        {saving ? <Spinner size="small" className="mr-2"/> : <Save className="mr-2 h-4 w-4"/>}
+                        Guardar Nota
+                    </Button>
+                </div>
             </Header>
             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
                 
@@ -461,26 +485,44 @@ export default function NotaComercialPage() {
                                 <div className="grid gap-4 md:grid-cols-2 mt-4">
                                     {selectedProgramIds.map(pid => {
                                         const prog = programs.find(p => p.id === pid);
+                                        const items = programSchedule[pid] || [];
                                         return (
-                                            <div key={pid} className="flex items-center justify-between border p-3 rounded-md">
-                                                <span className="font-medium">{prog?.name}</span>
-                                                <Popover>
-                                                    <PopoverTrigger asChild>
-                                                        <Button variant={"outline"} size="sm" className={cn(!programDates[pid]?.length && "text-muted-foreground")}>
-                                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                                            {programDates[pid]?.length > 0 ? `${programDates[pid].length} días` : <span>Fechas</span>}
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-auto p-0" align="start">
-                                                        <Calendar
-                                                            mode="multiple"
-                                                            selected={programDates[pid]}
-                                                            onSelect={(dates) => handleDateSelect(pid, dates)}
-                                                            initialFocus
-                                                            locale={es}
-                                                        />
-                                                    </PopoverContent>
-                                                </Popover>
+                                            <div key={pid} className="border p-3 rounded-md space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="font-medium">{prog?.name}</span>
+                                                    <Popover>
+                                                        <PopoverTrigger asChild>
+                                                            <Button variant={"outline"} size="sm">
+                                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                                Elegir Fechas
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-auto p-0" align="start">
+                                                            <Calendar
+                                                                mode="multiple"
+                                                                selected={items.map(i => new Date(i.date))}
+                                                                onSelect={(dates) => handleDateSelect(pid, dates)}
+                                                                initialFocus
+                                                                locale={es}
+                                                            />
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                </div>
+                                                {items.length > 0 && (
+                                                    <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                                                        {items.map((item, idx) => (
+                                                            <div key={item.date} className="flex items-center gap-2 text-sm">
+                                                                <span className="w-24 text-muted-foreground">{format(new Date(item.date), 'dd/MM/yyyy')}</span>
+                                                                <Input 
+                                                                    type="time" 
+                                                                    className="h-8"
+                                                                    value={item.time || ''}
+                                                                    onChange={(e) => handleTimeChange(pid, idx, e.target.value)}
+                                                                />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -736,6 +778,42 @@ export default function NotaComercialPage() {
                 </Card>
 
             </main>
+
+            {/* Hidden PDF Component */}
+            <div style={{ position: 'absolute', top: -9999, left: -9999 }}>
+                <NotePdf 
+                    ref={pdfRef}
+                    programs={programs}
+                    note={{
+                        clientName: clients.find(c => c.id === selectedClientId)?.denominacion,
+                        cuit,
+                        advisorName: userInfo?.name,
+                        razonSocial,
+                        rubro,
+                        replicateWeb,
+                        replicateSocials,
+                        schedule: programSchedule,
+                        contactPhone,
+                        contactName,
+                        title,
+                        location,
+                        callPhone: location === 'Llamada' ? callPhone : undefined,
+                        primaryGraf,
+                        secondaryGraf,
+                        questions: questions.filter(q => q.trim() !== ''),
+                        intervieweeName,
+                        intervieweeRole,
+                        intervieweeBio,
+                        instagram: instagramHandle ? `https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}` : undefined,
+                        website: noWeb ? undefined : website,
+                        whatsapp: noWhatsapp ? undefined : whatsapp,
+                        phone: noCommercialPhone ? undefined : commercialPhone,
+                        noWeb, noWhatsapp, noCommercialPhone,
+                        graphicSupport,
+                        noteObservations
+                    }}
+                />
+            </div>
         </div>
     );
 }
