@@ -581,6 +581,15 @@ export type CommercialNote = {
   whatsapp?: string;
   address?: string;
   
+  // New Fields
+  title?: string;
+  location?: 'Estudio' | 'Empresa' | 'Meet' | 'Llamada';
+  callPhone?: string;
+  primaryGraf?: string;
+  secondaryGraf?: string;
+  questions?: string[];
+  website?: string;
+
   programIds: string[]; // IDs of selected programs
   schedule: Record<string, string[]>; // programId -> array of ISO date strings
   
