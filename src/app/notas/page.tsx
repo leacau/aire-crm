@@ -172,20 +172,81 @@ export default function NotaComercialPage() {
 
     // --- Save Logic ---
     const handleSave = async () => {
+        // --- VALIDACIONES ---
         if (!selectedClientId || !userInfo) {
-            toast({ title: 'Datos incompletos', description: 'Seleccione un cliente', variant: 'destructive' });
+            toast({ title: 'Datos incompletos', description: 'Seleccione un cliente.', variant: 'destructive' });
             return;
         }
-        if (!title.trim()) {
-            toast({ title: 'Datos incompletos', description: 'El título de la nota es obligatorio', variant: 'destructive' });
+        if (!cuit.trim() || !razonSocial.trim() || !rubro.trim()) {
+            toast({ title: 'Datos incompletos', description: 'Complete todos los datos del cliente (CUIT, Razón Social, Rubro).', variant: 'destructive' });
             return;
         }
+        
+        if (!saleValue) {
+             toast({ title: 'Datos incompletos', description: 'Debe ingresar el Valor de Venta.', variant: 'destructive' });
+             return;
+        }
+
         if (selectedProgramIds.length === 0) {
-            toast({ title: 'Datos incompletos', description: 'Seleccione al menos un programa', variant: 'destructive' });
+            toast({ title: 'Datos incompletos', description: 'Seleccione al menos un programa.', variant: 'destructive' });
             return;
+        }
+        // Validar que se hayan seleccionado fechas para cada programa
+        const missingDates = selectedProgramIds.some(pid => !programDates[pid] || programDates[pid].length === 0);
+        if (missingDates) {
+             toast({ title: 'Datos incompletos', description: 'Debe seleccionar fechas para todos los programas elegidos.', variant: 'destructive' });
+             return;
+        }
+
+        if (!contactPhone.trim() || !contactName.trim()) {
+             toast({ title: 'Datos incompletos', description: 'Complete los datos de coordinación (Teléfono y Responsable).', variant: 'destructive' });
+             return;
+        }
+
+        if (!title.trim()) {
+            toast({ title: 'Datos incompletos', description: 'El título de la nota es obligatorio.', variant: 'destructive' });
+            return;
+        }
+        if (!location) {
+             toast({ title: 'Datos incompletos', description: 'Seleccione dónde se realizará la nota (Estudio, Empresa, etc.).', variant: 'destructive' });
+             return;
         }
         if (location === 'Llamada' && !callPhone.trim()) {
-             toast({ title: 'Datos incompletos', description: 'Debe ingresar un teléfono para la llamada', variant: 'destructive' });
+             toast({ title: 'Datos incompletos', description: 'Debe ingresar un teléfono para la llamada.', variant: 'destructive' });
+             return;
+        }
+        if (!primaryGraf.trim() || !secondaryGraf.trim()) {
+             toast({ title: 'Datos incompletos', description: 'Los grafs primario y secundario son obligatorios.', variant: 'destructive' });
+             return;
+        }
+        
+        // Validar las 5 primeras preguntas
+        const first5Questions = questions.slice(0, 5);
+        if (first5Questions.some(q => !q.trim())) {
+             toast({ title: 'Datos incompletos', description: 'Las primeras 5 preguntas son obligatorias.', variant: 'destructive' });
+             return;
+        }
+
+        if (!intervieweeName.trim() || !intervieweeRole.trim()) {
+             toast({ title: 'Datos incompletos', description: 'El nombre y cargo del entrevistado son obligatorios.', variant: 'destructive' });
+             return;
+        }
+
+        if (!noWeb && !website.trim()) {
+             toast({ title: 'Datos incompletos', description: 'Complete la Web o marque "No informar".', variant: 'destructive' });
+             return;
+        }
+        if (!noWhatsapp && !whatsapp.trim()) {
+             toast({ title: 'Datos incompletos', description: 'Complete el WhatsApp o marque "No informar".', variant: 'destructive' });
+             return;
+        }
+        if (!noCommercialPhone && !commercialPhone.trim()) {
+             toast({ title: 'Datos incompletos', description: 'Complete el Teléfono Comercial o marque "No informar".', variant: 'destructive' });
+             return;
+        }
+        
+        if (graphicSupport && !graphicLink.trim()) {
+             toast({ title: 'Datos incompletos', description: 'Si indica soporte gráfico, debe proveer un link.', variant: 'destructive' });
              return;
         }
 
@@ -205,8 +266,8 @@ export default function NotaComercialPage() {
                 }
             }
 
-            // 2. Prepare Data
-            const noteData: Omit<CommercialNote, 'id' | 'createdAt'> = {
+            // 2. Prepare Data Raw (can contain undefined)
+            const noteDataRaw = {
                 clientId: selectedClientId,
                 clientName: client?.denominacion || 'Unknown',
                 cuit,
@@ -237,7 +298,7 @@ export default function NotaComercialPage() {
                 
                 intervieweeName,
                 intervieweeRole,
-                intervieweeBio,
+                intervieweeBio: intervieweeBio || undefined,
 
                 // Channels
                 instagram: instagramHandle ? `https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}` : undefined,
@@ -257,16 +318,25 @@ export default function NotaComercialPage() {
                 mismatch,
                 
                 // Observations
-                financialObservations,
-                noteObservations
+                financialObservations: financialObservations || undefined,
+                noteObservations: noteObservations || undefined,
             };
 
-            // 3. Save
+            // 3. Clean undefined values recursively/shallow to avoid Firebase Error
+            const noteData = Object.keys(noteDataRaw).reduce((acc, key) => {
+                const value = (noteDataRaw as any)[key];
+                if (value !== undefined) {
+                    (acc as any)[key] = value;
+                }
+                return acc;
+            }, {} as Omit<CommercialNote, 'id' | 'createdAt'>);
+
+            // 4. Save
             await saveCommercialNote(noteData, userInfo.id, userInfo.name);
             
             toast({ title: 'Nota guardada exitosamente' });
             
-            // Reset
+            // Reset Form
             setSelectedProgramIds([]);
             setProgramDates({});
             setSaleValue('');
@@ -287,7 +357,7 @@ export default function NotaComercialPage() {
             
         } catch (error) {
             console.error(error);
-            toast({ title: 'Error al guardar', variant: 'destructive' });
+            toast({ title: 'Error al guardar', description: 'Por favor revise los datos e intente nuevamente.', variant: 'destructive' });
         } finally {
             setSaving(false);
         }
@@ -310,7 +380,7 @@ export default function NotaComercialPage() {
                     <CardHeader><CardTitle>Datos de Cliente</CardTitle></CardHeader>
                     <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                          <div className="space-y-2">
-                            <Label>Cliente</Label>
+                            <Label>Cliente <span className="text-red-500">*</span></Label>
                             <Select value={selectedClientId} onValueChange={handleClientSelect}>
                                 <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                                 <SelectContent>
@@ -319,15 +389,15 @@ export default function NotaComercialPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>CUIT</Label>
+                            <Label>CUIT <span className="text-red-500">*</span></Label>
                             <Input value={cuit} onChange={e => setCuit(e.target.value)} placeholder="00-00000000-0" />
                         </div>
                         <div className="space-y-2">
-                            <Label>Razón Social</Label>
+                            <Label>Razón Social <span className="text-red-500">*</span></Label>
                             <Input value={razonSocial} onChange={e => setRazonSocial(e.target.value)} />
                         </div>
                         <div className="space-y-2">
-                            <Label>Rubro</Label>
+                            <Label>Rubro <span className="text-red-500">*</span></Label>
                             <Input value={rubro} onChange={e => setRubro(e.target.value)} />
                         </div>
                     </CardContent>
@@ -344,7 +414,7 @@ export default function NotaComercialPage() {
                                     <Input value={`$ ${totalValue.toLocaleString()}`} disabled className="font-bold bg-muted" />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Valor de Venta</Label>
+                                    <Label>Valor de Venta <span className="text-red-500">*</span></Label>
                                     <Input 
                                         type="number" 
                                         value={saleValue} 
@@ -377,7 +447,7 @@ export default function NotaComercialPage() {
                     <CardContent className="space-y-6">
                         {/* Programación */}
                         <div className="space-y-4 border p-4 rounded-md">
-                            <Label className="text-base font-semibold">Programación</Label>
+                            <Label className="text-base font-semibold">Programación <span className="text-red-500">*</span></Label>
                             <div className="flex flex-wrap gap-2">
                                 {programs.map(prog => (
                                     <div key={prog.id} className="flex items-center space-x-2 border p-2 rounded-md hover:bg-muted/50 cursor-pointer" onClick={() => toggleProgram(prog.id)}>
@@ -438,11 +508,11 @@ export default function NotaComercialPage() {
                             </div>
                             <div className="space-y-4">
                                 <div className="space-y-2">
-                                    <Label>Teléfono para coordinar</Label>
+                                    <Label>Teléfono para coordinar <span className="text-red-500">*</span></Label>
                                     <Input value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="0342-..." />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Responsable de la coordinación (cliente)</Label>
+                                    <Label>Responsable de la coordinación (cliente) <span className="text-red-500">*</span></Label>
                                     <Input value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Nombre del contacto..." />
                                 </div>
                             </div>
@@ -457,7 +527,7 @@ export default function NotaComercialPage() {
                         {/* Detalles */}
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
-                                <Label>Título de la Nota</Label>
+                                <Label>Título de la Nota <span className="text-red-500">*</span></Label>
                                 <Input 
                                     value={title} 
                                     onChange={e => setTitle(e.target.value)} 
@@ -465,7 +535,7 @@ export default function NotaComercialPage() {
                                 />
                             </div>
                             <div className="space-y-3">
-                                <Label>Nota en:</Label>
+                                <Label>Nota en: <span className="text-red-500">*</span></Label>
                                 <RadioGroup 
                                     value={location} 
                                     onValueChange={(val: any) => setLocation(val)}
@@ -490,7 +560,7 @@ export default function NotaComercialPage() {
                                 </RadioGroup>
                                 {location === 'Llamada' && (
                                     <div className="pt-2">
-                                        <Label className="text-xs text-muted-foreground">Teléfono para la llamada</Label>
+                                        <Label className="text-xs text-muted-foreground">Teléfono para la llamada <span className="text-red-500">*</span></Label>
                                         <Input 
                                             value={callPhone} 
                                             onChange={e => setCallPhone(e.target.value)} 
@@ -505,7 +575,7 @@ export default function NotaComercialPage() {
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
                                 <div className="flex justify-between">
-                                    <Label>Graf Primario</Label>
+                                    <Label>Graf Primario <span className="text-red-500">*</span></Label>
                                     <span className="text-xs text-muted-foreground">{primaryGraf.length}/80</span>
                                 </div>
                                 <Input 
@@ -517,7 +587,7 @@ export default function NotaComercialPage() {
                             </div>
                             <div className="space-y-2">
                                 <div className="flex justify-between">
-                                    <Label>Graf Secundario</Label>
+                                    <Label>Graf Secundario <span className="text-red-500">*</span></Label>
                                     <span className="text-xs text-muted-foreground">{secondaryGraf.length}/80</span>
                                 </div>
                                 <Input 
@@ -532,7 +602,7 @@ export default function NotaComercialPage() {
                         {/* Preguntas */}
                         <div className="space-y-3 border p-4 rounded-md">
                             <div className="flex items-center justify-between">
-                                <Label>Preguntas sugeridas</Label>
+                                <Label>Preguntas sugeridas (min 5) <span className="text-red-500">*</span></Label>
                                 <Button variant="ghost" size="sm" onClick={handleAddQuestion}>
                                     <Plus className="mr-2 h-4 w-4" /> Agregar Pregunta
                                 </Button>
@@ -558,11 +628,11 @@ export default function NotaComercialPage() {
                         {/* Entrevistado */}
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
-                                <Label>Nombre de entrevistado</Label>
+                                <Label>Nombre de entrevistado <span className="text-red-500">*</span></Label>
                                 <Input value={intervieweeName} onChange={e => setIntervieweeName(e.target.value)} />
                             </div>
                             <div className="space-y-2">
-                                <Label>Cargo/Título del entrevistado</Label>
+                                <Label>Cargo/Título del entrevistado <span className="text-red-500">*</span></Label>
                                 <Input value={intervieweeRole} onChange={e => setIntervieweeRole(e.target.value)} />
                             </div>
                             <div className="md:col-span-2 space-y-2">
@@ -594,7 +664,7 @@ export default function NotaComercialPage() {
                             </div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Label className={cn(noWeb && "text-muted-foreground")}>Web del Cliente</Label>
+                                    <Label className={cn(noWeb && "text-muted-foreground")}>Web del Cliente <span className="text-red-500">*</span></Label>
                                     <div className="flex items-center space-x-2">
                                         <Checkbox id="noWeb" checked={noWeb} onCheckedChange={(c) => setNoWeb(!!c)} />
                                         <Label htmlFor="noWeb" className="text-xs font-normal">No informar</Label>
@@ -609,7 +679,7 @@ export default function NotaComercialPage() {
                             </div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Label className={cn(noWhatsapp && "text-muted-foreground")}>WhatsApp</Label>
+                                    <Label className={cn(noWhatsapp && "text-muted-foreground")}>WhatsApp <span className="text-red-500">*</span></Label>
                                     <div className="flex items-center space-x-2">
                                         <Checkbox id="noWhatsapp" checked={noWhatsapp} onCheckedChange={(c) => setNoWhatsapp(!!c)} />
                                         <Label htmlFor="noWhatsapp" className="text-xs font-normal">No informar</Label>
@@ -624,7 +694,7 @@ export default function NotaComercialPage() {
                             </div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Label className={cn(noCommercialPhone && "text-muted-foreground")}>Teléfono Comercial</Label>
+                                    <Label className={cn(noCommercialPhone && "text-muted-foreground")}>Teléfono Comercial <span className="text-red-500">*</span></Label>
                                     <div className="flex items-center space-x-2">
                                         <Checkbox id="noCommercialPhone" checked={noCommercialPhone} onCheckedChange={(c) => setNoCommercialPhone(!!c)} />
                                         <Label htmlFor="noCommercialPhone" className="text-xs font-normal">No informar</Label>
