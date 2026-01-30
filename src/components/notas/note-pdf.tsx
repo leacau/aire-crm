@@ -27,11 +27,12 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
     return (
       <div ref={ref} className="bg-white p-8" style={{ width: '210mm', minHeight: '297mm', fontFamily: 'Arial, sans-serif' }}>
         <header className="flex justify-between items-center mb-8 border-b pb-4">
-            {/* Usamos img normal para evitar problemas de CORS/Loading con html2canvas */}
+            {/* CORRECCIÓN: Usamos logo.webp que existe en el proyecto */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img 
-                src="/aire-logo-red.png" 
+                src="/logo.webp" 
                 alt="AIRE Logo" 
-                style={{ width: '120px', height: 'auto', objectFit: 'contain' }} 
+                style={{ width: '100px', height: 'auto', objectFit: 'contain' }} 
             />
             <div className="text-right">
                 <h1 className="text-xl font-bold text-red-600">NOTA COMERCIAL</h1>
