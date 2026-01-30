@@ -113,27 +113,48 @@ export const saveCommercialNote = async (
     userId: string,
     userName: string
 ): Promise<string> => {
-    const docRef = await addDoc(collections.commercialNotes, {
+    const batch = writeBatch(db);
+    
+    // 1. Create the Note
+    const noteRef = doc(collections.commercialNotes);
+    batch.set(noteRef, {
         ...noteData,
         createdAt: serverTimestamp(),
     });
 
-    await logActivity({
+    // 2. Create Client Activity log
+    const activityRef = doc(collections.clientActivities);
+    batch.set(activityRef, {
+        clientId: noteData.clientId,
+        clientName: noteData.clientName,
+        userId: userId,
+        userName: userName,
+        type: 'Otra', // Using 'Otra' since 'Nota Comercial' is not in standard types but we can add description
+        observation: `Generó una Nota Comercial: "${noteData.title}" (Valor: $${noteData.totalValue.toLocaleString()})`,
+        timestamp: serverTimestamp(),
+        isTask: false,
+        createdAt: serverTimestamp(),
+    });
+
+    // 3. Log System Activity
+    const systemLogRef = doc(collections.activities);
+    batch.set(systemLogRef, {
         userId,
         userName,
         type: 'create',
         entityType: 'commercial_note',
-        entityId: docRef.id,
+        entityId: noteRef.id,
         entityName: 'Nota Comercial',
         details: `creó una nota comercial para <strong>${noteData.clientName}</strong> con valor total <strong>$${noteData.totalValue.toLocaleString()}</strong>`,
         ownerName: noteData.advisorName,
+        timestamp: serverTimestamp(),
     });
 
-    return docRef.id;
+    await batch.commit();
+    return noteRef.id;
 };
 
-// ... (Functions related to bulkReleaseProspects, Config, Permissions, Monthly Closure, Supervisor Comments, Vacation Request, Prospect, Task, Grilla Commercial, Canje, Invoice, Payment, Agency, User Profile, Client, Person, Opportunity, Activity, Chat, Coaching - ALL PRESERVED)
-
+// ... (Rest of the file follows, truncated for brevity, including all previous exports)
 export const bulkReleaseProspects = async (
     prospectIds: string[],
     userId: string,
@@ -164,8 +185,7 @@ export const bulkReleaseProspects = async (
     });
 };
 
-// ... [Existing exports remain unchanged] ...
-
+// ... (Continue with existing exports from original file)
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
     const docRef = doc(collections.systemConfig, 'opportunity_alerts');
     const docSnap = await getDoc(docRef);
@@ -175,6 +195,7 @@ export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsCon
     return {};
 };
 
+// ... (And so on for other functions)
 export const getObjectiveVisibilityConfig = async (): Promise<ObjectiveVisibilityConfig> => {
     const cached = getFromCache(OBJECTIVE_VISIBILITY_DOC_ID);
     if (cached) return cached;
