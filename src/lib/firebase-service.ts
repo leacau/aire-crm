@@ -157,11 +157,11 @@ export const saveCommercialNote = async (
 export async function getCommercialNotesByClientId(clientId: string): Promise<CommercialNote[]> {
   try {
     // Referencia a la colección 'commercialNotes'
-    const notesRef = collection(db, 'commercialNotes');
+    // const notesRef = collection(db, 'commercialNotes');
     
     // Crear la consulta filtrando por clientId y ordenando por fecha de creación
     const q = query(
-      notesRef,
+      collections.commercialNotes,
       where('clientId', '==', clientId),
       orderBy('createdAt', 'desc')
     );
@@ -169,12 +169,18 @@ export async function getCommercialNotesByClientId(clientId: string): Promise<Co
     const querySnapshot = await getDocs(q);
     
     // Mapear los documentos a objetos CommercialNote incluyendo el ID
-    const notes: CommercialNote[] = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as CommercialNote));
+    const notes: CommercialNote[] = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      // Aseguramos conversión de Timestamp a string si es necesario para evitar errores en el frontend
+      const createdAt = data.createdAt instanceof Timestamp 
+          ? data.createdAt.toDate().toISOString() 
+          : data.createdAt;
 
-    return notes;
+      return {
+        id: doc.id,
+        ...data,
+        createdAt
+      } as CommercialNote;
   } catch (error) {
     console.error("Error al obtener las notas comerciales del cliente:", error);
     // Es buena práctica lanzar el error para que el componente UI pueda manejarlo (ej. mostrar un toast)
