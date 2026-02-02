@@ -1,7 +1,5 @@
-
-
 'use client'
-import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice } from '@/lib/types';
+import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice, CommercialNote } from '@/lib/types';
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Card,
@@ -74,7 +72,7 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers, getInvoicesForClient, createInvoice } from '@/lib/firebase-service';
+import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers, getInvoicesForClient, createInvoice, getCommercialNotesByClientId } from '@/lib/firebase-service';
 import { sendEmail, createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
@@ -161,6 +159,7 @@ export function ClientDetails({
   const [clientActivities, setClientActivities] = useState<ClientActivity[]>([]);
   const [systemActivities, setSystemActivities] = useState<ActivityLog[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [notes, setNotes] = useState<CommercialNote[]>([]); // CORRECCIÓN: Estado agregado
   
   // New Activity State
   const [newActivityType, setNewActivityType] = useState<ClientActivityType | ''>('');
@@ -189,13 +188,14 @@ export function ClientDetails({
   const fetchClientData = async () => {
       if(!userInfo) return;
       try {
-        const [clientPeople, clientOpportunities, clientInvoices, activities, systemLogs, allUsers] = await Promise.all([
+        const [clientPeople, clientOpportunities, clientInvoices, activities, systemLogs, allUsers, clientNotes] = await Promise.all([
             getPeopleByClientId(client.id),
             getOpportunitiesByClientId(client.id),
             getInvoicesForClient(client.id),
             getClientActivities(client.id),
             getActivitiesForEntity(client.id),
             getAllUsers(),
+            getCommercialNotesByClientId(client.id) // CORRECCIÓN: Carga de notas
         ]);
         setPeople(clientPeople);
         setOpportunities(clientOpportunities);
@@ -203,6 +203,7 @@ export function ClientDetails({
         setClientActivities(activities);
         setSystemActivities(systemLogs);
         setUsers(allUsers);
+        setNotes(clientNotes); // CORRECCIÓN: Guardar notas en estado
       } catch (error) {
         console.error("Error fetching client data:", error);
         toast({ title: "Error al cargar los datos del cliente", variant: "destructive" });
@@ -1055,22 +1056,22 @@ export function ClientDetails({
             </Card>
         </TabsContent>
         <TabsContent value="notes">
-    <Card>
-        <CardHeader><CardTitle>Notas Comerciales Históricas</CardTitle></CardHeader>
-        <CardContent>
-            {notes.map(note => (
-                <div key={note.id} className="p-4 border-b last:border-0">
-                    <p className="font-bold">{note.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                        {format(new Date(note.createdAt), "PPP", { locale: es })} - Por: {note.advisorName}
-                    </p>
-                    <Button variant="link" size="sm" className="px-0">Ver Detalle / Descargar PDF</Button>
-                </div>
-            ))}
-            {notes.length === 0 && <p className="text-center py-4 text-muted-foreground">No hay notas registradas.</p>}
-        </CardContent>
-    </Card>
-</TabsContent>
+            <Card>
+                <CardHeader><CardTitle>Notas Comerciales Históricas</CardTitle></CardHeader>
+                <CardContent>
+                    {notes.map(note => (
+                        <div key={note.id} className="p-4 border-b last:border-0">
+                            <p className="font-bold">{note.title}</p>
+                            <p className="text-sm text-muted-foreground">
+                                {format(new Date(note.createdAt), "PPP", { locale: es })} - Por: {note.advisorName}
+                            </p>
+                            <Button variant="link" size="sm" className="px-0">Ver Detalle / Descargar PDF</Button>
+                        </div>
+                    ))}
+                    {notes.length === 0 && <p className="text-center py-4 text-muted-foreground">No hay notas registradas.</p>}
+                </CardContent>
+            </Card>
+        </TabsContent>
         <TabsContent value="history">
             <Card>
                 <CardHeader>
