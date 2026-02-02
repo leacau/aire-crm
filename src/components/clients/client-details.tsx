@@ -1,5 +1,5 @@
 'use client'
-import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice, CommercialNote } from '@/lib/types';
+import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice, CommercialNote, Program } from '@/lib/types';
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Card,
@@ -72,7 +72,7 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers, getInvoicesForClient, createInvoice, getCommercialNotesByClientId } from '@/lib/firebase-service';
+import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers, getInvoicesForClient, createInvoice, getCommercialNotesByClientId, getPrograms } from '@/lib/firebase-service';
 import { sendEmail, createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
@@ -101,6 +101,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ClientPdf } from './client-pdf';
 import { CommentThread } from '@/components/comments/comment-thread';
+import { NotePdf } from '@/components/notas/note-pdf';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'bg-blue-500',
@@ -151,6 +152,7 @@ export function ClientDetails({
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const pdfRef = useRef<HTMLDivElement>(null);
+  const notePdfRef = useRef<HTMLDivElement>(null); // Referencia para el PDF de la nota
   const hasOpenedInitialOpportunityRef = useRef(false);
   
   const [people, setPeople] = useState<Person[]>([]);
@@ -159,8 +161,13 @@ export function ClientDetails({
   const [clientActivities, setClientActivities] = useState<ClientActivity[]>([]);
   const [systemActivities, setSystemActivities] = useState<ActivityLog[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [notes, setNotes] = useState<CommercialNote[]>([]); // CORRECCIÓN: Estado agregado
+  const [notes, setNotes] = useState<CommercialNote[]>([]); 
+  const [programs, setPrograms] = useState<Program[]>([]); // Necesario para el PDF de la nota
   
+  // PDF Generation State for Notes
+  const [downloadingNoteId, setDownloadingNoteId] = useState<string | null>(null);
+  const [noteForPdf, setNoteForPdf] = useState<CommercialNote | null>(null);
+
   // New Activity State
   const [newActivityType, setNewActivityType] = useState<ClientActivityType | ''>('');
   const [newActivityObservation, setNewActivityObservation] = useState('');
@@ -188,14 +195,15 @@ export function ClientDetails({
   const fetchClientData = async () => {
       if(!userInfo) return;
       try {
-        const [clientPeople, clientOpportunities, clientInvoices, activities, systemLogs, allUsers, clientNotes] = await Promise.all([
+        const [clientPeople, clientOpportunities, clientInvoices, activities, systemLogs, allUsers, clientNotes, allPrograms] = await Promise.all([
             getPeopleByClientId(client.id),
             getOpportunitiesByClientId(client.id),
             getInvoicesForClient(client.id),
             getClientActivities(client.id),
             getActivitiesForEntity(client.id),
             getAllUsers(),
-            getCommercialNotesByClientId(client.id) // CORRECCIÓN: Carga de notas
+            getCommercialNotesByClientId(client.id),
+            getPrograms() // Traemos los programas
         ]);
         setPeople(clientPeople);
         setOpportunities(clientOpportunities);
@@ -203,7 +211,8 @@ export function ClientDetails({
         setClientActivities(activities);
         setSystemActivities(systemLogs);
         setUsers(allUsers);
-        setNotes(clientNotes); // CORRECCIÓN: Guardar notas en estado
+        setNotes(clientNotes);
+        setPrograms(allPrograms);
       } catch (error) {
         console.error("Error fetching client data:", error);
         toast({ title: "Error al cargar los datos del cliente", variant: "destructive" });
@@ -227,6 +236,7 @@ export function ClientDetails({
   const canEditOpportunity = isBoss || (userInfo?.id === client.ownerId);
   const canDelete = isBoss;
 
+  // ... (Funciones de oportunidad, contacto, actividad existentes sin cambios) ...
   const handleOpportunityUpdate = async (updatedOpp: Partial<Opportunity>) => {
     if(!selectedOpportunity || !userInfo) return;
     try {
@@ -586,6 +596,36 @@ export function ClientDetails({
     }
   };
 
+  // Función para descargar PDF de Nota
+  const handleDownloadNotePdf = async (note: CommercialNote) => {
+    setNoteForPdf(note);
+    setDownloadingNoteId(note.id);
+
+    // Esperamos un momento para que React renderice el componente oculto con los datos de la nota
+    setTimeout(async () => {
+        if (!notePdfRef.current) {
+            setDownloadingNoteId(null);
+            setNoteForPdf(null);
+            return;
+        }
+        try {
+            const canvas = await html2canvas(notePdfRef.current, { scale: 1.5, useCORS: true });
+            const imgData = canvas.toDataURL('image/jpeg', 0.8);
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`Nota_${note.title.replace(/ /g, "_")}.pdf`);
+        } catch (error) {
+            console.error(error);
+            toast({ title: "Error al generar PDF de la nota", variant: "destructive" });
+        } finally {
+            setDownloadingNoteId(null);
+            setNoteForPdf(null);
+        }
+    }, 500); // 500ms delay to ensure render
+  };
+
 
   const ConvertToTaskPopover = ({ activity }: { activity: ClientActivity }) => {
     const [popoverOpen, setPopoverOpen] = useState(false);
@@ -634,6 +674,18 @@ export function ClientDetails({
     <div style={{ position: 'fixed', left: '-200vw', top: 0, zIndex: -1 }}>
         <ClientPdf ref={pdfRef} client={client} contact={people[0] || null} />
     </div>
+    
+    {/* Hidden Note PDF Render Container */}
+    <div style={{ position: 'fixed', left: '-200vw', top: 0, zIndex: -1 }}>
+        {noteForPdf && (
+            <NotePdf 
+                ref={notePdfRef} 
+                note={noteForPdf} 
+                programs={programs} 
+            />
+        )}
+    </div>
+
     <div className="space-y-6">
       <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
         <Card className='md:col-span-2'>
@@ -1065,7 +1117,16 @@ export function ClientDetails({
                             <p className="text-sm text-muted-foreground">
                                 {format(new Date(note.createdAt), "PPP", { locale: es })} - Por: {note.advisorName}
                             </p>
-                            <Button variant="link" size="sm" className="px-0">Ver Detalle / Descargar PDF</Button>
+                            <Button 
+                                variant="link" 
+                                size="sm" 
+                                className="px-0"
+                                onClick={() => handleDownloadNotePdf(note)}
+                                disabled={downloadingNoteId === note.id}
+                            >
+                                {downloadingNoteId === note.id ? <Spinner size="small" className="mr-2"/> : null}
+                                Ver Detalle / Descargar PDF
+                            </Button>
                         </div>
                     ))}
                     {notes.length === 0 && <p className="text-center py-4 text-muted-foreground">No hay notas registradas.</p>}
