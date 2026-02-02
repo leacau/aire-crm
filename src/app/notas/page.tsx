@@ -25,7 +25,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { NotePdf } from '@/components/notas/note-pdf';
-import { sendEmail } from '@/lib/google-gmail-service';
+// CORRECCIÓN 1: Se agrega getGoogleAccessToken al import
+import { sendEmail, getGoogleAccessToken } from '@/lib/google-gmail-service';
 
 export default function NotaComercialPage() {
     const { userInfo } = useAuth();
@@ -51,20 +52,20 @@ export default function NotaComercialPage() {
     // --- SECCIÓN 3: PRODUCCIÓN/PAUTADO ---
     const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
     // Map programId -> ScheduleItem[]
-    const [programSchedule, setProgramSchedule] = useState<Record<string, ScheduleItem[]>>({}); 
+    const [programSchedule, setProgramSchedule] = useState<Record<string, ScheduleItem[]>>({});
     const [replicateWeb, setReplicateWeb] = useState(false);
     const [replicateSocials, setReplicateSocials] = useState<string[]>([]);
-    const [contactPhone, setContactPhone] = useState(''); 
-    const [contactName, setContactName] = useState(''); 
+    const [contactPhone, setContactPhone] = useState('');
+    const [contactName, setContactName] = useState('');
 
     // --- SECCIÓN 4: NOTA ---
     const [title, setTitle] = useState('');
     const [location, setLocation] = useState<'Estudio' | 'Empresa' | 'Meet' | 'Llamada' | undefined>(undefined);
-    const [callPhone, setCallPhone] = useState(''); 
+    const [callPhone, setCallPhone] = useState('');
     const [primaryGraf, setPrimaryGraf] = useState('');
     const [secondaryGraf, setSecondaryGraf] = useState('');
-    const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']); 
-    
+    const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']);
+
     // Entrevistado
     const [intervieweeName, setIntervieweeName] = useState('');
     const [intervieweeRole, setIntervieweeRole] = useState('');
@@ -83,23 +84,23 @@ export default function NotaComercialPage() {
     const [graphicSupport, setGraphicSupport] = useState(false);
     const [graphicLink, setGraphicLink] = useState('');
     const [noteObservations, setNoteObservations] = useState('');
-    
+
     const [notifyOnSave, setNotifyOnSave] = useState(false);
 
     const handleDownloadPdf = async () => {
-    if (!pdfRef.current) return;
-    try {
-        const canvas = await html2canvas(pdfRef.current, { scale: 1.5, useCORS: true });
-        const imgData = canvas.toDataURL('image/jpeg', 0.8);
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`Nota_${title.replace(/ /g, "_")}.pdf`);
-    } catch (error) {
-        toast({ title: "Error al generar PDF", variant: "destructive" });
-    }
-};
+        if (!pdfRef.current) return;
+        try {
+            const canvas = await html2canvas(pdfRef.current, { scale: 1.5, useCORS: true });
+            const imgData = canvas.toDataURL('image/jpeg', 0.8);
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`Nota_${title.replace(/ /g, "_")}.pdf`);
+        } catch (error) {
+            toast({ title: "Error al generar PDF", variant: "destructive" });
+        }
+    };
 
 
     useEffect(() => {
@@ -109,7 +110,7 @@ export default function NotaComercialPage() {
                     getClients(),
                     getPrograms()
                 ]);
-                
+
                 if (userInfo) {
                     if (userInfo.role === 'Admin' || userInfo.email === 'lchena@airedesantafe.com.ar') {
                         setClients(fetchedClients);
@@ -141,8 +142,8 @@ export default function NotaComercialPage() {
 
     // --- Helpers ---
     const toggleProgram = (programId: string) => {
-        setSelectedProgramIds(prev => 
-            prev.includes(programId) 
+        setSelectedProgramIds(prev =>
+            prev.includes(programId)
                 ? prev.filter(id => id !== programId)
                 : [...prev, programId]
         );
@@ -153,7 +154,7 @@ export default function NotaComercialPage() {
 
     const handleDateSelect = (programId: string, dates: Date[] | undefined) => {
         if (!dates) return;
-        
+
         setProgramSchedule(prev => {
             const currentItems = prev[programId] || [];
             // Preserve existing times for dates that persist
@@ -169,7 +170,7 @@ export default function NotaComercialPage() {
     const handleTimeChange = (programId: string, dateIndex: number, time: string) => {
         setProgramSchedule(prev => {
             const items = [...(prev[programId] || [])];
-            if(items[dateIndex]) {
+            if (items[dateIndex]) {
                 items[dateIndex] = { ...items[dateIndex], time };
             }
             return { ...prev, [programId]: items };
@@ -177,13 +178,13 @@ export default function NotaComercialPage() {
     };
 
     const toggleSocial = (social: string) => {
-        setReplicateSocials(prev => 
+        setReplicateSocials(prev =>
             prev.includes(social) ? prev.filter(s => s !== social) : [...prev, social]
         );
     };
 
     const handleAddQuestion = () => setQuestions([...questions, '']);
-    
+
     const handleQuestionChange = (index: number, value: string) => {
         const newQ = [...questions];
         newQ[index] = value;
@@ -217,8 +218,8 @@ export default function NotaComercialPage() {
             return;
         }
         if (!saleValue) {
-             toast({ title: 'Datos incompletos', description: 'Debe ingresar el Valor de Venta.', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'Debe ingresar el Valor de Venta.', variant: 'destructive' });
+            return;
         }
         if (selectedProgramIds.length === 0) {
             toast({ title: 'Datos incompletos', description: 'Seleccione al menos un programa.', variant: 'destructive' });
@@ -226,65 +227,65 @@ export default function NotaComercialPage() {
         }
         const missingDates = selectedProgramIds.some(pid => !programSchedule[pid] || programSchedule[pid].length === 0);
         if (missingDates) {
-             toast({ title: 'Datos incompletos', description: 'Debe seleccionar fechas para todos los programas elegidos.', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'Debe seleccionar fechas para todos los programas elegidos.', variant: 'destructive' });
+            return;
         }
         if (!contactPhone.trim() || !contactName.trim()) {
-             toast({ title: 'Datos incompletos', description: 'Complete los datos de coordinación (Teléfono y Responsable).', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'Complete los datos de coordinación (Teléfono y Responsable).', variant: 'destructive' });
+            return;
         }
         if (!title.trim()) {
             toast({ title: 'Datos incompletos', description: 'El título de la nota es obligatorio.', variant: 'destructive' });
             return;
         }
         if (!location) {
-             toast({ title: 'Datos incompletos', description: 'Seleccione dónde se realizará la nota (Estudio, Empresa, etc.).', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'Seleccione dónde se realizará la nota (Estudio, Empresa, etc.).', variant: 'destructive' });
+            return;
         }
         if (location === 'Llamada' && !callPhone.trim()) {
-             toast({ title: 'Datos incompletos', description: 'Debe ingresar un teléfono para la llamada.', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'Debe ingresar un teléfono para la llamada.', variant: 'destructive' });
+            return;
         }
         if (!primaryGraf.trim() || !secondaryGraf.trim()) {
-             toast({ title: 'Datos incompletos', description: 'Los grafs primario y secundario son obligatorios.', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'Los grafs primario y secundario son obligatorios.', variant: 'destructive' });
+            return;
         }
         const first5Questions = questions.slice(0, 5);
         if (first5Questions.some(q => !q.trim())) {
-             toast({ title: 'Datos incompletos', description: 'Las primeras 5 preguntas son obligatorias.', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'Las primeras 5 preguntas son obligatorias.', variant: 'destructive' });
+            return;
         }
         if (!intervieweeName.trim() || !intervieweeRole.trim()) {
-             toast({ title: 'Datos incompletos', description: 'El nombre y cargo del entrevistado son obligatorios.', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'El nombre y cargo del entrevistado son obligatorios.', variant: 'destructive' });
+            return;
         }
         if (!noWeb && !website.trim()) {
-             toast({ title: 'Datos incompletos', description: 'Complete la Web o marque "No informar".', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'Complete la Web o marque "No informar".', variant: 'destructive' });
+            return;
         }
         if (!noWhatsapp && !whatsapp.trim()) {
-             toast({ title: 'Datos incompletos', description: 'Complete el WhatsApp o marque "No informar".', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'Complete el WhatsApp o marque "No informar".', variant: 'destructive' });
+            return;
         }
         if (!noCommercialPhone && !commercialPhone.trim()) {
-             toast({ title: 'Datos incompletos', description: 'Complete el Teléfono Comercial o marque "No informar".', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'Complete el Teléfono Comercial o marque "No informar".', variant: 'destructive' });
+            return;
         }
         if (graphicSupport && !graphicLink.trim()) {
-             toast({ title: 'Datos incompletos', description: 'Si indica soporte gráfico, debe proveer un link.', variant: 'destructive' });
-             return;
+            toast({ title: 'Datos incompletos', description: 'Si indica soporte gráfico, debe proveer un link.', variant: 'destructive' });
+            return;
         }
 
         setSaving(true);
         try {
             const client = clients.find(c => c.id === selectedClientId);
-            
+
             // 1. Update Client info
             const updates: any = {};
             if (client) {
-                if(client.cuit !== cuit) updates.cuit = cuit;
-                if(client.rubro !== rubro) updates.rubro = rubro;
-                if(client.razonSocial !== razonSocial) updates.razonSocial = razonSocial;
+                if (client.cuit !== cuit) updates.cuit = cuit;
+                if (client.rubro !== rubro) updates.rubro = rubro;
+                if (client.razonSocial !== razonSocial) updates.razonSocial = razonSocial;
                 if (Object.keys(updates).length > 0) {
                     await updateClientTangoMapping(client.id, updates, userInfo.id, userInfo.name);
                 }
@@ -340,43 +341,44 @@ export default function NotaComercialPage() {
 
             // 3. Save to DB
             await saveCommercialNote(noteData, userInfo.id, userInfo.name);
-            
-           // 4. Handle Notification
+
+            // 4. Handle Notification
             if (notifyOnSave && pdfRef.current) {
                 const accessToken = await getGoogleAccessToken();
                 if (accessToken) {
-                try {
-                    const canvas = await html2canvas(pdfRef.current, { scale: 1.5, useCORS: true });
-                    const imgData = canvas.toDataURL('image/jpeg', 0.8);
-                    const pdf = new jsPDF('p', 'mm', 'a4');
-                    const pdfWidth = pdf.internal.pageSize.getWidth();
-                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-                    
-                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-                    // 'datauristring' a veces es más compatible que output directo
-                    const pdfBase64 = pdf.output('datauristring').split(',')[1];
-                    // Enviar a la API
-                    await sendEmail({
-                        accessToken,
-                        to: 'lchena@airedesantafe.com.ar', // Destinatario fijo o dinámico
-                        subject: `Nueva Nota Comercial: ${title}`,
-                        body: `<p>El asesor <strong>${userInfo.name}</strong> ha registrado una nota.</p>`,
-                        attachments: [{
-                            filename: `Nota_${title}.pdf`,
-                            content: pdfBase64,
-                            encoding: 'base64'
-                        }]
-                    });                   
-                    toast({ title: 'Nota guardada y notificada por correo.' });
-                } catch (emailError) {
-                    console.error("Error sending email/generating PDF", emailError);
-                    // Importante: No fallamos la operación entera, solo avisamos que el mail falló
-                    toast({ title: 'Nota guardada, pero falló el envío del correo.', description: "Verifique el tamaño del adjunto o intente nuevamente.", variant: 'default' });
+                    try {
+                        const canvas = await html2canvas(pdfRef.current, { scale: 1.5, useCORS: true });
+                        const imgData = canvas.toDataURL('image/jpeg', 0.8);
+                        const pdf = new jsPDF('p', 'mm', 'a4');
+                        const pdfWidth = pdf.internal.pageSize.getWidth();
+                        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                        // 'datauristring' a veces es más compatible que output directo
+                        const pdfBase64 = pdf.output('datauristring').split(',')[1];
+                        // Enviar a la API
+                        await sendEmail({
+                            accessToken,
+                            to: 'lchena@airedesantafe.com.ar', // Destinatario fijo o dinámico
+                            subject: `Nueva Nota Comercial: ${title}`,
+                            body: `<p>El asesor <strong>${userInfo.name}</strong> ha registrado una nota.</p>`,
+                            attachments: [{
+                                filename: `Nota_${title}.pdf`,
+                                content: pdfBase64,
+                                encoding: 'base64'
+                            }]
+                        });
+                        toast({ title: 'Nota guardada y notificada por correo.' });
+                    } catch (emailError) {
+                        console.error("Error sending email/generating PDF", emailError);
+                        // Importante: No fallamos la operación entera, solo avisamos que el mail falló
+                        toast({ title: 'Nota guardada, pero falló el envío del correo.', description: "Verifique el tamaño del adjunto o intente nuevamente.", variant: 'default' });
+                    }
+                } else {
+                    toast({ title: 'Sin Token' });
                 }
-            } else {
-                toast({ title: 'Sin Token' });
             }
-            
+
             // Reset
             setSelectedProgramIds([]);
             setProgramSchedule({});
@@ -395,44 +397,44 @@ export default function NotaComercialPage() {
             setWebsite('');
             setWhatsapp('');
             setCommercialPhone('');
-            
+
         } catch (error) {
             console.error(error);
             toast({ title: 'Error al guardar', description: 'Por favor revise los datos e intente nuevamente.', variant: 'destructive' });
         } finally {
             setSaving(false);
         }
-    };}
+    }; // CORRECCIÓN 2: Se eliminó la llave extra que cerraba el componente antes de tiempo
 
-    if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large"/></div>;
+    if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
             <Header title="Nueva Nota Comercial">
                 <div className="flex items-center gap-4">
-                     <div className="flex items-center space-x-2">
-                    <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title}>
-    <ExternalLink className="mr-2 h-4 w-4" />
-    Exportar PDF
-</Button>
-                         </div>
+                    <div className="flex items-center space-x-2">
+                        <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title}>
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            Exportar PDF
+                        </Button>
+                    </div>
                     <div className="flex items-center space-x-2">
                         <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
                         <Label htmlFor="notify">Notificar al guardar</Label>
                     </div>
                     <Button onClick={handleSave} disabled={saving}>
-                        {saving ? <Spinner size="small" className="mr-2"/> : <Save className="mr-2 h-4 w-4"/>}
+                        {saving ? <Spinner size="small" className="mr-2" /> : <Save className="mr-2 h-4 w-4" />}
                         Guardar Nota
                     </Button>
                 </div>
             </Header>
             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
-                
+
                 {/* --- SECCIÓN 1: DATOS DE CLIENTE --- */}
                 <Card>
                     <CardHeader><CardTitle>Datos de Cliente</CardTitle></CardHeader>
                     <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                         <div className="space-y-2">
+                        <div className="space-y-2">
                             <Label>Cliente <span className="text-red-500">*</span></Label>
                             <Select value={selectedClientId} onValueChange={handleClientSelect}>
                                 <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
@@ -461,17 +463,17 @@ export default function NotaComercialPage() {
                     <CardHeader><CardTitle>Comercial</CardTitle></CardHeader>
                     <CardContent className="grid gap-6 md:grid-cols-2">
                         <div className="space-y-4">
-                             <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label>Valor Total (Tarifario)</Label>
                                     <Input value={`$ ${totalValue.toLocaleString()}`} disabled className="font-bold bg-muted" />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Valor de Venta <span className="text-red-500">*</span></Label>
-                                    <Input 
-                                        type="number" 
-                                        value={saleValue} 
-                                        onChange={e => setSaleValue(e.target.value)} 
+                                    <Input
+                                        type="number"
+                                        value={saleValue}
+                                        onChange={e => setSaleValue(e.target.value)}
                                         placeholder="0"
                                     />
                                 </div>
@@ -484,9 +486,9 @@ export default function NotaComercialPage() {
                         </div>
                         <div className="space-y-2">
                             <Label>Observaciones Generales</Label>
-                            <Textarea 
-                                value={financialObservations} 
-                                onChange={e => setFinancialObservations(e.target.value)} 
+                            <Textarea
+                                value={financialObservations}
+                                onChange={e => setFinancialObservations(e.target.value)}
                                 placeholder="Indicaciones sobre el cierre comercial..."
                                 className="min-h-[100px]"
                             />
@@ -542,8 +544,8 @@ export default function NotaComercialPage() {
                                                         {items.map((item, idx) => (
                                                             <div key={item.date} className="flex items-center gap-2 text-sm">
                                                                 <span className="w-24 text-muted-foreground">{format(new Date(item.date), 'dd/MM/yyyy')}</span>
-                                                                <Input 
-                                                                    type="time" 
+                                                                <Input
+                                                                    type="time"
                                                                     className="h-8"
                                                                     value={item.time || ''}
                                                                     onChange={(e) => handleTimeChange(pid, idx, e.target.value)}
@@ -599,16 +601,16 @@ export default function NotaComercialPage() {
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
                                 <Label>Título de la Nota <span className="text-red-500">*</span></Label>
-                                <Input 
-                                    value={title} 
-                                    onChange={e => setTitle(e.target.value)} 
-                                    placeholder="Ej: Lanzamiento de temporada..." 
+                                <Input
+                                    value={title}
+                                    onChange={e => setTitle(e.target.value)}
+                                    placeholder="Ej: Lanzamiento de temporada..."
                                 />
                             </div>
                             <div className="space-y-3">
                                 <Label>Nota en: <span className="text-red-500">*</span></Label>
-                                <RadioGroup 
-                                    value={location} 
+                                <RadioGroup
+                                    value={location}
                                     onValueChange={(val: any) => setLocation(val)}
                                     className="flex flex-wrap gap-4"
                                 >
@@ -632,9 +634,9 @@ export default function NotaComercialPage() {
                                 {location === 'Llamada' && (
                                     <div className="pt-2">
                                         <Label className="text-xs text-muted-foreground">Teléfono para la llamada <span className="text-red-500">*</span></Label>
-                                        <Input 
-                                            value={callPhone} 
-                                            onChange={e => setCallPhone(e.target.value)} 
+                                        <Input
+                                            value={callPhone}
+                                            onChange={e => setCallPhone(e.target.value)}
                                             placeholder="Ingrese el número..."
                                             className="mt-1"
                                         />
@@ -649,10 +651,10 @@ export default function NotaComercialPage() {
                                     <Label>Graf Primario <span className="text-red-500">*</span></Label>
                                     <span className="text-xs text-muted-foreground">{primaryGraf.length}/80</span>
                                 </div>
-                                <Input 
-                                    value={primaryGraf} 
-                                    onChange={e => setPrimaryGraf(e.target.value)} 
-                                    placeholder="Texto principal en pantalla..." 
+                                <Input
+                                    value={primaryGraf}
+                                    onChange={e => setPrimaryGraf(e.target.value)}
+                                    placeholder="Texto principal en pantalla..."
                                     maxLength={80}
                                 />
                             </div>
@@ -661,10 +663,10 @@ export default function NotaComercialPage() {
                                     <Label>Graf Secundario <span className="text-red-500">*</span></Label>
                                     <span className="text-xs text-muted-foreground">{secondaryGraf.length}/80</span>
                                 </div>
-                                <Input 
-                                    value={secondaryGraf} 
-                                    onChange={e => setSecondaryGraf(e.target.value)} 
-                                    placeholder="Bajada o detalle..." 
+                                <Input
+                                    value={secondaryGraf}
+                                    onChange={e => setSecondaryGraf(e.target.value)}
+                                    placeholder="Bajada o detalle..."
                                     maxLength={80}
                                 />
                             </div>
@@ -681,9 +683,9 @@ export default function NotaComercialPage() {
                             <div className="space-y-2">
                                 {questions.map((q, idx) => (
                                     <div key={idx} className="flex gap-2">
-                                        <Input 
-                                            value={q} 
-                                            onChange={e => handleQuestionChange(idx, e.target.value)} 
+                                        <Input
+                                            value={q}
+                                            onChange={e => handleQuestionChange(idx, e.target.value)}
                                             placeholder={`Pregunta ${idx + 1}`}
                                         />
                                         {questions.length > 5 && (
@@ -717,14 +719,14 @@ export default function NotaComercialPage() {
                             <div className="space-y-2">
                                 <Label>Instagram</Label>
                                 <div className="flex items-center gap-2">
-                                    <Input 
-                                        value={instagramHandle} 
-                                        onChange={e => setInstagramHandle(e.target.value)} 
-                                        placeholder="@usuario" 
+                                    <Input
+                                        value={instagramHandle}
+                                        onChange={e => setInstagramHandle(e.target.value)}
+                                        placeholder="@usuario"
                                     />
                                     {instagramHandle && (
-                                        <Button 
-                                            size="icon" 
+                                        <Button
+                                            size="icon"
                                             variant="ghost"
                                             onClick={() => window.open(`https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}`, '_blank')}
                                         >
@@ -741,11 +743,11 @@ export default function NotaComercialPage() {
                                         <Label htmlFor="noWeb" className="text-xs font-normal">No informar</Label>
                                     </div>
                                 </div>
-                                <Input 
-                                    value={website} 
-                                    onChange={e => setWebsite(e.target.value)} 
+                                <Input
+                                    value={website}
+                                    onChange={e => setWebsite(e.target.value)}
                                     disabled={noWeb}
-                                    placeholder="www.sitio.com" 
+                                    placeholder="www.sitio.com"
                                 />
                             </div>
                             <div className="space-y-2">
@@ -756,11 +758,11 @@ export default function NotaComercialPage() {
                                         <Label htmlFor="noWhatsapp" className="text-xs font-normal">No informar</Label>
                                     </div>
                                 </div>
-                                <Input 
-                                    value={whatsapp} 
-                                    onChange={e => setWhatsapp(e.target.value)} 
+                                <Input
+                                    value={whatsapp}
+                                    onChange={e => setWhatsapp(e.target.value)}
                                     disabled={noWhatsapp}
-                                    placeholder="0342-..." 
+                                    placeholder="0342-..."
                                 />
                             </div>
                             <div className="space-y-2">
@@ -771,11 +773,11 @@ export default function NotaComercialPage() {
                                         <Label htmlFor="noCommercialPhone" className="text-xs font-normal">No informar</Label>
                                     </div>
                                 </div>
-                                <Input 
-                                    value={commercialPhone} 
-                                    onChange={e => setCommercialPhone(e.target.value)} 
+                                <Input
+                                    value={commercialPhone}
+                                    onChange={e => setCommercialPhone(e.target.value)}
                                     disabled={noCommercialPhone}
-                                    placeholder="0342-..." 
+                                    placeholder="0342-..."
                                 />
                             </div>
                         </div>
@@ -787,17 +789,17 @@ export default function NotaComercialPage() {
                                 <Label>Agrega Soporte Gráfico</Label>
                             </div>
                             {graphicSupport && (
-                                <Input 
-                                    value={graphicLink} 
-                                    onChange={e => setGraphicLink(e.target.value)} 
-                                    placeholder="Pegar link de Google Drive aquí..." 
+                                <Input
+                                    value={graphicLink}
+                                    onChange={e => setGraphicLink(e.target.value)}
+                                    placeholder="Pegar link de Google Drive aquí..."
                                 />
                             )}
                             <div className="space-y-2">
                                 <Label>Observaciones generales</Label>
-                                <Textarea 
-                                    value={noteObservations} 
-                                    onChange={e => setNoteObservations(e.target.value)} 
+                                <Textarea
+                                    value={noteObservations}
+                                    onChange={e => setNoteObservations(e.target.value)}
                                     placeholder="Indicaciones para producción..."
                                     className="min-h-[100px]"
                                 />
@@ -810,7 +812,7 @@ export default function NotaComercialPage() {
 
             {/* Hidden PDF Component */}
             <div style={{ position: 'absolute', top: -9999, left: -9999 }}>
-                <NotePdf 
+                <NotePdf
                     ref={pdfRef}
                     programs={programs}
                     note={{
@@ -839,6 +841,7 @@ export default function NotaComercialPage() {
                         phone: noCommercialPhone ? undefined : commercialPhone,
                         noWeb, noWhatsapp, noCommercialPhone,
                         graphicSupport,
+                        graphicSupportLink: graphicSupport ? graphicLink : undefined,
                         noteObservations
                     }}
                 />
