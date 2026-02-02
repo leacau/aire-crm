@@ -163,21 +163,34 @@ export function AppSidebar() {
     if (!userInfo) return [];
 
     const hasPermission = (item: SidebarItem) => {
-      // 1. Super Admin always has access
+      // 1. Super Admin siempre tiene acceso
       if (userInfo.email === 'lchena@airedesantafe.com.ar') return true;
       if (userInfo.role === 'Admin') return true;
 
-      // 2. Dashboard is typically open, but lets check permissions if present
+      // 2. Dashboard siempre visible
       if (item.screenName === 'Dashboard') return true;
 
-      // 3. Strict Permission Check
-      // If permissions object exists, checking strict match.
-      // If permissions object is missing (unlikely for established users, but possible), default to false for safety unless role implies otherwise.
-      if (userInfo.permissions) {
+      // 3. Chequeo de Permisos Explícitos
+      if (userInfo.permissions && Object.keys(userInfo.permissions).length > 0) {
         return !!userInfo.permissions[item.screenName]?.view;
       }
       
-      // Default fallback if no permissions structure found (should be restrictive)
+      // 4. Lógica de Respaldo (Fallback) si no hay objeto permissions
+      // Esto restaura el acceso a los Asesores que no tienen permisos configurados en la DB
+      if (userInfo.role === 'Asesor') {
+        const allowedScreens: ScreenName[] = [
+          'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
+          'Canjes', 'Quotes', 'Grilla', 'PNTs', 'Notas', 
+          'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses'
+        ];
+        return allowedScreens.includes(item.screenName);
+      }
+
+      // Si es Jefe, Gerencia o Administración y no tiene permisos, mostrar todo por defecto
+      if (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion') {
+        return true;
+      }
+
       return false; 
     };
 
