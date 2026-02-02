@@ -32,6 +32,7 @@ import {
   updateClientTangoMapping,
 } from '@/lib/firebase-service';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { getNormalizedInvoiceNumber } from '@/lib/invoice-utils';
 
 type MappingStep = 'upload' | 'map' | 'review';
 type BillingEntity = 'aire-srl' | 'aire-digital';
@@ -97,13 +98,8 @@ const BILLING_ENTITY_OPTIONS: { value: BillingEntity; label: string }[] = [
   { value: 'aire-digital', label: 'Aire Digital SAS' },
 ];
 
-const extractLastFiveDigits = (value: string) => {
-  const digits = (value.match(/\d/g) || []).join('');
-  if (!digits) return '';
-  return digits.slice(-5);
-};
-
 const extractDigits = (value?: string) => (value?.match(/\d/g) || []).join('');
+const normalizeInvoiceForDuplicateCheck = (value: string) => getNormalizedInvoiceNumber({ invoiceNumber: value });
 
 const formatCuit = (value: string) => {
   const digits = extractDigits(value);
@@ -137,6 +133,15 @@ const parseDateValue = (value: any): string | null => {
     return parsed.toISOString().slice(0, 10);
   }
   return raw;
+};
+
+// Helper for chunk processing
+const chunkArray = <T>(array: T[], size: number): T[][] => {
+  const result: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    result.push(array.slice(i, i + size));
+  }
+  return result;
 };
 
 const normalizeText = (value: string) => value?.toString().trim().toLowerCase() || '';
@@ -498,7 +503,7 @@ export default function TangoMappingPage() {
     const filteredRows = mappedRows.filter((row) => !shouldExcludeByTangoId(row));
 
     const mappedNames = filteredRows.map((r) => r.denominacion || r.razonSocial);
-    const allowFuzzy = mappedNames.length <= 2000; // evitar uso intensivo de memoria con archivos grandes
+    const allowFuzzy = mappedNames.length > 0 && mappedNames.length <= 2000; // evitar uso intensivo de memoria con archivos grandes
     const newSuggestions: Record<string, ClientSuggestion> = {};
 
     clients.forEach((client) => {
@@ -516,8 +521,9 @@ export default function TangoMappingPage() {
         }
       }
 
-      if (!rowKey && allowFuzzy) {
-        const { bestMatch } = findBestMatch(client.denominacion || client.razonSocial, mappedNames);
+      const clientName = client.denominacion || client.razonSocial;
+      if (!rowKey && allowFuzzy && clientName) {
+        const { bestMatch } = findBestMatch(clientName, mappedNames);
         if (bestMatch.rating === 1) {
           const match = filteredRows.find(
             (r) => (r.denominacion || r.razonSocial) === bestMatch.target
@@ -601,7 +607,7 @@ export default function TangoMappingPage() {
     });
   };
 
-  const applyInvoiceColumnSelection = () => {
+  const applyInvoiceColumnSelection = async () => {
     if (!billingEntity) {
       toast({
         title: 'Selecciona la empresa facturadora',
@@ -631,10 +637,11 @@ export default function TangoMappingPage() {
         const issueDateRaw = invoiceColumnSelection.issueDate ? row[invoiceColumnSelection.issueDate] : undefined;
         const dueDateRaw = invoiceColumnSelection.dueDate ? row[invoiceColumnSelection.dueDate] : undefined;
         const rowIndex = typeof row.__row === 'number' ? row.__row : index;
+        const digitsInvoiceNumber = extractDigits(String(invoiceNumber));
         return {
           index: rowIndex,
           idTango: String(idTango),
-          invoiceNumber: extractLastFiveDigits(String(invoiceNumber)) || String(invoiceNumber),
+          invoiceNumber: digitsInvoiceNumber || String(invoiceNumber),
           amount,
           issueDate: parseDateValue(issueDateRaw),
           dueDate: parseDateValue(dueDateRaw),
@@ -660,12 +667,55 @@ export default function TangoMappingPage() {
       const client = resolveClientForId(inv.idTango);
       return { ...inv, clientId: client?.id };
     });
-    setInvoiceRows(withClients);
+
     const clientIds = Array.from(new Set(withClients.map((i) => i.clientId).filter(Boolean) as string[]));
+    
+    // Fetch existing invoices to filter out duplicates with batch processing
+    const existingInvoicesMap: Record<string, Invoice[]> = {};
+    const chunks = chunkArray(clientIds, 10); // Process 10 clients at a time
+
+    // Provide some feedback if the list is long
+    if (chunks.length > 5) {
+        toast({ title: 'Procesando...', description: 'Verificando duplicados con la base de datos.' });
+    }
+
+    for (const chunk of chunks) {
+        await Promise.all(
+            chunk.map(async (clientId) => {
+                try {
+                    const invs = await getInvoicesForClient(clientId);
+                    existingInvoicesMap[clientId] = invs;
+                } catch (error) {
+                    console.error(`Error loading invoices for client ${clientId}`, error);
+                    existingInvoicesMap[clientId] = [];
+                }
+            })
+        );
+    }
+
+    // Update local cache
+    setInvoicesByClient((prev) => ({ ...prev, ...existingInvoicesMap }));
+
+    const filteredRows = withClients.filter((inv) => {
+      if (!inv.clientId) return true; // Keep unassigned to warn user
+      const existing = existingInvoicesMap[inv.clientId];
+      if (!existing) return true;
+      const targetNumber = normalizeInvoiceForDuplicateCheck(inv.invoiceNumber);
+      if (!targetNumber) return true;
+      const isDuplicate = existing.some((e) => normalizeInvoiceForDuplicateCheck(e.invoiceNumber || '') === targetNumber);
+      return !isDuplicate;
+    });
+
+    const duplicatesCount = withClients.length - filteredRows.length;
+
+    setInvoiceRows(filteredRows);
     loadOpportunitiesForClients(clientIds);
-    loadInvoicesForClients(clientIds);
     setInvoiceSelections({});
-    toast({ title: 'Archivo de facturas listo', description: `${withClients.length} facturas detectadas.` });
+    
+    toast({ 
+      title: 'Archivo de facturas listo', 
+      description: `${filteredRows.length} facturas detectadas. ${duplicatesCount} duplicadas se han ocultado.` 
+    });
   };
 
   const getOpportunityOptions = (clientId?: string) => {
@@ -676,9 +726,9 @@ export default function TangoMappingPage() {
   const isDuplicateInvoice = (inv: InvoiceRow) => {
     if (!inv.clientId) return false;
     const existing = invoicesByClient[inv.clientId] || [];
-    const targetLast5 = extractLastFiveDigits(inv.invoiceNumber);
-    if (!targetLast5) return false;
-    return existing.some((e) => extractLastFiveDigits(e.invoiceNumber || '') === targetLast5);
+    const targetNumber = normalizeInvoiceForDuplicateCheck(inv.invoiceNumber);
+    if (!targetNumber) return false;
+    return existing.some((e) => normalizeInvoiceForDuplicateCheck(e.invoiceNumber || '') === targetNumber);
   };
 
   const removeInvoiceRow = (rowIndex: number) => {
@@ -696,6 +746,9 @@ export default function TangoMappingPage() {
 
   const handleApplyInvoices = async () => {
     if (!userInfo) return;
+    
+    setIsSaving(true);
+
     let success = 0;
     let failed = 0;
     let duplicates = 0;
@@ -813,6 +866,8 @@ export default function TangoMappingPage() {
       }
     }
 
+    setIsSaving(false);
+
     toast({
       title: 'Importación de facturas',
       description: `${success} facturas cargadas${duplicates ? `, ${duplicates} duplicadas` : ''}${failed ? `, ${failed} con errores` : ''}.`,
@@ -867,8 +922,7 @@ export default function TangoMappingPage() {
     const pendingUpdates = clients
       .map((client) => {
         const selection = clientSelections[client.id] ?? suggestions[client.id]?.rowKey;
-        const manualId = (manualIdOverrides[client.id] || '').trim();
-        if (!selection && !manualId) return null;
+        if (!selection) return null;
         const row = selection ? rowMap.get(selection) : undefined;
 
         const data: {
@@ -888,7 +942,7 @@ export default function TangoMappingPage() {
           tipoEntidad?: string;
           observaciones?: string;
         } = {};
-        const idToUse = manualId || row?.idTango;
+        const idToUse = row?.idTango;
         if (row?.cuit) {
           data.cuit = formatCuit(row.cuit || '');
         }
@@ -1747,7 +1801,9 @@ export default function TangoMappingPage() {
                     </Table>
                   </div>
                   <div className="flex justify-end">
-                    <Button onClick={handleApplyInvoices}>Importar facturas</Button>
+                    <Button onClick={handleApplyInvoices} disabled={isSaving}>
+                      {isSaving ? 'Importando...' : 'Importar facturas'}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

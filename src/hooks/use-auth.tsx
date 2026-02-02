@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -7,10 +5,12 @@ import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWit
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
-import { getUserProfile, updateUserProfile } from '@/lib/firebase-service';
+import { getUserProfile } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
 import { validateGoogleServicesAccess } from '@/lib/google-service-check';
-import { useToast } from '@/hooks/use-toast';
+import { initializePermissions } from '@/lib/permissions';
+
+const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service', '/'];
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -30,7 +30,9 @@ const AuthContext = createContext<AuthContextType>({
   ensureGoogleAccessToken: async () => null,
 });
 
-const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service'];
+
+const STORAGE_TOKEN_KEY = 'google_api_token';
+const STORAGE_EXPIRY_KEY = 'google_api_token_expiry';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -39,13 +41,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
-  const { toast } = useToast();
+
+  useEffect(() => {
+    if (!loading) {
+      const isPublicRoute = publicRoutes.includes(pathname);
+      if (!user && !isPublicRoute) {
+        router.push('/login');
+      } else if (user && pathname === '/login') {
+        // CAMBIO: Redirigir al dashboard en lugar de '/'
+        router.push('/dashboard');
+      }
+    }
+  }, [user, loading, pathname, router]);
+
+  const saveTokenToStorage = (token: string, expiresInSeconds: number = 3600) => {
+    if (typeof window === 'undefined') return;
+    const expiryTime = Date.now() + (expiresInSeconds * 1000) - (5 * 60 * 1000); 
+    localStorage.setItem(STORAGE_TOKEN_KEY, token);
+    localStorage.setItem(STORAGE_EXPIRY_KEY, expiryTime.toString());
+  };
+
+  const clearStoredToken = () => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(STORAGE_TOKEN_KEY);
+    localStorage.removeItem(STORAGE_EXPIRY_KEY);
+    sessionStorage.removeItem('google-access-validated');
+  };
+
+  const getStoredToken = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    const token = localStorage.getItem(STORAGE_TOKEN_KEY);
+    const expiry = localStorage.getItem(STORAGE_EXPIRY_KEY);
+
+    if (!token || !expiry) return null;
+
+    if (Date.now() > parseInt(expiry, 10)) {
+        clearStoredToken();
+        return null;
+    }
+    return token;
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
-        const profile = await getUserProfile(firebaseUser.uid);
+        
+        const [profile] = await Promise.all([
+            getUserProfile(firebaseUser.uid),
+            initializePermissions()
+        ]);
         
         if (profile) {
           const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';
@@ -59,21 +104,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
         } else {
             const name = firebaseUser.displayName || 'Usuario';
-            const defaultProfile = {
+            setUserInfo({
                 id: firebaseUser.uid,
                 name: name,
                 email: firebaseUser.email || '',
-                role: 'Asesor' as const,
+                role: 'Asesor',
                 photoURL: firebaseUser.photoURL,
                 initials: name.substring(0, 2).toUpperCase()
-            };
-            setUserInfo(defaultProfile);
+            });
             setIsBoss(false);
         }
       } else {
         setUser(null);
         setUserInfo(null);
         setIsBoss(false);
+        clearStoredToken();
       }
       setLoading(false);
     });
@@ -84,115 +129,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loading) {
       const isPublicRoute = publicRoutes.includes(pathname);
-      
       if (!user && !isPublicRoute) {
         router.push('/login');
-      } else if (user && isPublicRoute) {
+      } else if (user && pathname === '/login') {
         router.push('/');
       }
     }
   }, [user, loading, pathname, router]);
 
+  // Validación de servicios con Auto-Limpieza
   useEffect(() => {
     if (loading || !user) return;
 
-    let cancelled = false;
-
     const runCheck = async () => {
       const storageKey = 'google-access-validated';
+      // Si ya validamos en esta sesión, no revalidar para no saturar
       const hasValidated = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) === 'true' : false;
-      const hasFailed = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) === 'failed' : false;
-      if (hasValidated || hasFailed) return;
+      if (hasValidated) return;
 
-      const attemptValidation = async (interactive: boolean) => {
-        const token = await getGoogleAccessToken(interactive ? undefined : { silent: true });
-        if (!token) return false;
-
+      const token = getStoredToken();
+      if (token) {
         try {
           await validateGoogleServicesAccess(token);
-          if (!cancelled && typeof window !== 'undefined') {
-            sessionStorage.setItem(storageKey, 'true');
+          if (typeof window !== 'undefined') sessionStorage.setItem(storageKey, 'true');
+        } catch (error: any) {
+          console.warn('Silent validation failed:', error);
+          
+          // CRÍTICO: Si el error es de permisos (403/401), el token es inútil. Lo borramos.
+          if (error.message && (error.message.includes('403') || error.message.includes('401'))) {
+             console.log('Token inválido o sin scopes. Eliminando para forzar re-login.');
+             clearStoredToken();
           }
-          return true;
-        } catch (error) {
-          console.error('Error verifying Google access', error);
-          if (typeof window !== 'undefined') {
-            sessionStorage.removeItem('google-access-token');
-          }
-          return false;
-        }
-      };
-
-      const silentOk = await attemptValidation(false);
-      if (silentOk || cancelled) return;
-
-      const interactiveOk = await attemptValidation(true);
-      if (interactiveOk || cancelled) return;
-
-      if (!cancelled) {
-        toast({
-          title: 'Acceso a Google requerido',
-          description: 'Inicia sesión nuevamente para habilitar Gmail, Calendar, Drive y Chat.',
-          variant: 'destructive',
-          duration: 8000,
-        });
-        if (typeof window !== 'undefined') {
-          sessionStorage.setItem(storageKey, 'failed');
         }
       }
     };
 
     runCheck();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loading, user, pathname, router, toast]);
+  }, [loading, user]);
 
     const getGoogleAccessToken = async (options?: { silent?: boolean }): Promise<string | null> => {
         if (typeof window === 'undefined') return null;
 
-        let storedToken = null;
-        try {
-            storedToken = sessionStorage.getItem('google-access-token');
-        } catch (error) {
-            console.warn('Unable to access sessionStorage for Google token', error);
-        }
-
-        // This is a simple check. A robust solution would check expiration.
-        // For this app's use case, re-authenticating on failure is acceptable.
+        const storedToken = getStoredToken();
         if (storedToken) return storedToken;
 
-        if (options?.silent) {
-            return null;
-        }
+        if (options?.silent) return null;
 
         if (auth.currentUser) {
             const provider = new GoogleAuthProvider();
-            // Re-request all necessary scopes to ensure the token is valid for all operations
+            provider.setCustomParameters({
+                  prompt: 'consent select_account',
+                  access_type: 'offline'
+              });
+            
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
             provider.addScope('https://www.googleapis.com/auth/drive.file');
             provider.addScope('https://www.googleapis.com/auth/chat.messages');
-            provider.addScope('https://www.googleapis.com/auth/chat.messages.readonly');
             provider.addScope('https://www.googleapis.com/auth/chat.spaces.readonly');
             
             try {
-                // Re-authenticate to get a fresh token
                 const result = await signInWithPopup(auth, provider);
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 const token = credential?.accessToken;
+                // @ts-ignore
+                const expiresIn = result._tokenResponse?.oauthExpiresIn ? parseInt(result._tokenResponse.oauthExpiresIn) : 3600;
+
                 if (token) {
-                    try {
-                        sessionStorage.setItem('google-access-token', token);
-                    } catch (error) {
-                        console.warn('Unable to persist Google token in sessionStorage', error);
-                    }
+                    saveTokenToStorage(token, expiresIn);
+                    sessionStorage.setItem('google-access-validated', 'true');
                     return token;
                 }
             } catch (error) {
                 console.error("Error getting Google access token:", error);
-                // The user may have closed the popup, which is not a critical error.
                 return null;
             }
         }
@@ -200,25 +209,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const ensureGoogleAccessToken = async (): Promise<string | null> => {
-        const token = await getGoogleAccessToken();
-        if (!token) return null;
-
-        try {
-            await validateGoogleServicesAccess(token);
-            return token;
-        } catch (error) {
-            console.error('Google services check failed, signing out', error);
-            try {
-                sessionStorage.removeItem('google-access-token');
-            } catch (err) {
-                console.warn('Unable to clear Google token from session storage', err);
-            }
-            await auth.signOut();
-            router.push('/login');
-            return null;
-        }
+        const token = await getGoogleAccessToken({ silent: true });
+        if (token) return token;
+        return await getGoogleAccessToken({ silent: false });
     };
-
 
   if (loading && !publicRoutes.includes(pathname)) {
     return (

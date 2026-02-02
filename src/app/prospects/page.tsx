@@ -1,24 +1,38 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search, Activity, Clock, Bell } from 'lucide-react';
+import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search, Activity, Clock, Bell, Hand, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Prospect, User, Client, ClientActivity } from '@/lib/types';
-import { getProspects, createProspect, updateProspect, deleteProspect, getAllUsers, getActivitiesForEntity, getAllClientActivities, getOpportunityAlertsConfig, recordProspectNotifications } from '@/lib/firebase-service';
+import { 
+    getProspects, 
+    createProspect, 
+    updateProspect, 
+    deleteProspect, 
+    getAllUsers, 
+    getAllClientActivities, 
+    getOpportunityAlertsConfig, 
+    recordProspectNotifications,
+    getCoachingSessions,
+    createCoachingSession,
+    addItemsToSession,
+    claimProspect, 
+    approveProspectClaim, 
+    rejectProspectClaim
+} from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { format, parseISO, differenceInDays, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ProspectFormDialog } from '@/components/prospects/prospect-form-dialog';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -61,6 +75,10 @@ export default function ProspectsPage() {
   const [isActivityFormOpen, setIsActivityFormOpen] = useState(false);
   const [selectedProspectForActivity, setSelectedProspectForActivity] = useState<Prospect | null>(null);
   const hasConsumedProspectQuery = useRef(false);
+
+  // Nuevo estado para la asignación manual (Jefes)
+  const [prospectToAssign, setProspectToAssign] = useState<Prospect | null>(null);
+  const [assigneeId, setAssigneeId] = useState<string>('');
   
   useEffect(() => {
     if (userInfo) {
@@ -123,16 +141,63 @@ export default function ProspectsPage() {
     router.replace(query ? `/prospects?${query}` : '/prospects', { scroll: false });
   }, [prospects, searchParams, router, handleOpenForm]);
 
-  const handleSaveProspect = async (prospectData: Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'>) => {
+  const handleSaveProspect = async (
+      prospectData: Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'>, 
+      addToCoaching: boolean, 
+      coachingNote: string
+  ) => {
     if (!userInfo) return;
     try {
+      let prospectId = selectedProspect?.id;
+      let prospectName = prospectData.companyName;
+
       if (selectedProspect) {
         await updateProspect(selectedProspect.id, prospectData, userInfo.id, userInfo.name);
         toast({ title: "Prospecto Actualizado" });
       } else {
-        await createProspect(prospectData, userInfo.id, userInfo.name);
+        prospectId = await createProspect(prospectData, userInfo.id, userInfo.name);
         toast({ title: "Prospecto Creado" });
       }
+
+      if (addToCoaching && prospectId) {
+          try {
+              const sessions = await getCoachingSessions(userInfo.id);
+              let openSession = sessions.find(s => s.status === 'Open');
+
+              if (!openSession) {
+                  const newSessionId = await createCoachingSession({
+                      advisorId: userInfo.id,
+                      advisorName: userInfo.name,
+                      managerId: userInfo.managerId || userInfo.id, 
+                      managerName: 'Jefatura', 
+                      date: new Date().toISOString(),
+                      items: [],
+                      generalNotes: ''
+                  }, userInfo.id, userInfo.name);
+                  openSession = { id: newSessionId } as any;
+              }
+
+              if (openSession) {
+                  await addItemsToSession(openSession.id, [{
+                      id: '', 
+                      taskId: '', 
+                      originalCreatedAt: new Date().toISOString(),
+                      entityType: 'prospect',
+                      entityId: prospectId,
+                      entityName: prospectName,
+                      action: coachingNote || 'Ingreso de nuevo prospecto', 
+                      status: 'Pendiente',
+                      advisorNotes: '', 
+                      origin: 'advisor' 
+                  }]);
+                  toast({ title: "Agregado al seguimiento", description: "El prospecto se sumó a tu hoja de ruta semanal." });
+              }
+          } catch (coachingError) {
+              console.error("Error adding to coaching:", coachingError);
+              toast({ title: "Error parcial", description: "Se guardó el prospecto pero falló al agregarlo al seguimiento.", variant: "destructive" });
+          }
+      }
+
       fetchData();
     } catch (error) {
       console.error("Error saving prospect:", error);
@@ -189,11 +254,75 @@ export default function ProspectsPage() {
     }
   };
 
+  const handleClaim = async (prospect: Prospect) => {
+      if (!userInfo) return;
+      try {
+          await claimProspect(prospect, userInfo.id, userInfo.name);
+          toast({ title: "Reclamo enviado", description: "Un gerente deberá aprobar tu solicitud." });
+          fetchData();
+      } catch (error) {
+          toast({ title: "No puedes reclamar aún", description: (error as Error).message, variant: "destructive" });
+      }
+  };
+
+  const handleApproveClaim = async (prospect: Prospect) => {
+      if (!userInfo) return;
+      try {
+          await approveProspectClaim(prospect, userInfo.id, userInfo.name);
+          toast({ title: "Reclamo Aprobado", description: `Prospecto asignado a ${prospect.claimantName}` });
+          fetchData();
+      } catch (error) {
+          console.error(error);
+          toast({ title: "Error", variant: "destructive" });
+      }
+  };
+
+  const handleRejectClaim = async (prospect: Prospect) => {
+      if (!userInfo) return;
+      try {
+          await rejectProspectClaim(prospect, userInfo.id, userInfo.name);
+          toast({ title: "Reclamo Rechazado" });
+          fetchData();
+      } catch (error) {
+          console.error(error);
+           toast({ title: "Error", variant: "destructive" });
+      }
+  };
+
+  // Nueva función para asignación manual
+  const handleAssignProspect = async () => {
+    if (!prospectToAssign || !assigneeId || !userInfo) return;
+    const assignee = users.find(u => u.id === assigneeId);
+    if (!assignee) return;
+
+    try {
+        await updateProspect(prospectToAssign.id, {
+            ownerId: assignee.id,
+            ownerName: assignee.name,
+            status: 'Nuevo',
+            statusChangedAt: new Date().toISOString(),
+            // Limpiamos cualquier reclamo pendiente
+            claimStatus: null,
+            claimantId: null,
+            claimantName: null,
+            claimedAt: null,
+            unassignedAt: null
+        }, userInfo.id, userInfo.name);
+        
+        toast({ title: "Prospecto Asignado", description: `Asignado a ${assignee.name}` });
+        fetchData();
+    } catch (e) {
+        console.error(e);
+        toast({ title: "Error al asignar", variant: "destructive" });
+    } finally {
+        setProspectToAssign(null);
+    }
+  };
+
    const handleOpenActivityForm = (prospect: Prospect) => {
     setSelectedProspectForActivity(prospect);
     setIsActivityFormOpen(true);
   };
-
 
   const advisorsWithProspects = useMemo(() => {
     if (!isBoss) return [];
@@ -229,7 +358,6 @@ export default function ProspectsPage() {
         try {
           result[prospect.id] = parseISO(prospect.createdAt);
         } catch (error) {
-          // ignore invalid dates
         }
       }
     });
@@ -251,154 +379,20 @@ export default function ProspectsPage() {
     }, {} as Record<string, User>);
   }, [users]);
 
-  const handleSendProspectNotifications = useCallback(async () => {
-    if (!isBoss || !userInfo) return;
-    setIsSendingNotifications(true);
-    try {
-      const now = new Date();
-      const isRecentlyNotified = (prospect: Prospect) => {
-        if (!prospect.lastProspectNotificationAt) return false;
-        try {
-          return differenceInDays(now, parseISO(prospect.lastProspectNotificationAt)) < 7;
-        } catch (error) {
-          return false;
-        }
-      };
-
-      const eligibleProspects = prospects.filter(prospect =>
-        prospect.status !== 'Convertido' &&
-        prospect.status !== 'No Próspero' &&
-        !isProspectHidden(prospect) &&
-        !isRecentlyNotified(prospect)
-      );
-
-      const listOne = eligibleProspects.filter(prospect => {
-        if (prospect.status !== 'Nuevo') return false;
-        try {
-          return differenceInDays(now, parseISO(prospect.createdAt)) >= 3;
-        } catch (error) {
-          return false;
-        }
-      });
-
-      const listOneIds = new Set(listOne.map(p => p.id));
-
-      const listTwo = eligibleProspects.filter(prospect => {
-        if (listOneIds.has(prospect.id)) return false;
-        const prospectActivities = activitiesByProspectId[prospect.id] || [];
-        if (prospectActivities.length === 0) return false;
-        try {
-          const lastActivityDate = parseISO(prospectActivities[0].timestamp);
-          return differenceInDays(now, lastActivityDate) > 7;
-        } catch (error) {
-          return false;
-        }
-      });
-
-      const listTwoIds = new Set(listTwo.map(p => p.id));
-
-      const listThree = eligibleProspects.filter(prospect => {
-        if (listOneIds.has(prospect.id) || listTwoIds.has(prospect.id)) return false;
-        if (prospect.status === 'Nuevo') return false;
-        const prospectActivities = activitiesByProspectId[prospect.id] || [];
-        return prospectActivities.length === 0;
-      });
-
-      const allTargets = [...listOne, ...listTwo, ...listThree];
-      if (allTargets.length === 0) {
-        toast({ title: 'Sin notificaciones', description: 'No hay prospectos pendientes para notificar.' });
-        return;
-      }
-
-      const notificationsByOwner = new Map<string, { owner: User; listOne: Prospect[]; listTwo: Prospect[]; listThree: Prospect[] }>();
-      const addProspectToOwner = (prospect: Prospect, bucket: 'listOne' | 'listTwo' | 'listThree') => {
-        const owner = usersById[prospect.ownerId];
-        if (!owner) return;
-        if (!notificationsByOwner.has(owner.id)) {
-          notificationsByOwner.set(owner.id, { owner, listOne: [], listTwo: [], listThree: [] });
-        }
-        const target = notificationsByOwner.get(owner.id)!;
-        target[bucket].push(prospect);
-      };
-
-      listOne.forEach(prospect => addProspectToOwner(prospect, 'listOne'));
-      listTwo.forEach(prospect => addProspectToOwner(prospect, 'listTwo'));
-      listThree.forEach(prospect => addProspectToOwner(prospect, 'listThree'));
-
-      const accessToken = await getGoogleAccessToken();
-      if (!accessToken) {
-        toast({ title: 'Autorización requerida', description: 'No pudimos enviar las notificaciones sin acceso a Gmail.', variant: 'destructive' });
-        return;
-      }
-
-      for (const [, { owner, listOne: ownerListOne, listTwo: ownerListTwo, listThree: ownerListThree }] of notificationsByOwner.entries()) {
-        if (!owner.email) continue;
-        const sections: string[] = [];
-        const formatListItems = (items: Prospect[]) =>
-          items
-            .map(item => `<li><strong>${item.companyName}</strong>${item.contactName ? ` (${item.contactName})` : ''}</li>`)
-            .join('');
-
-        if (ownerListOne.length > 0) {
-          sections.push(`
-            <h4>Prospectos nuevos sin atención (3+ días)</h4>
-            <p>Estos prospectos fueron creados hace 3 días y a la fecha no tienen atención. Trabajarlos o asentar lo trabajado.</p>
-            <ul>${formatListItems(ownerListOne)}</ul>
-          `);
-        }
-
-        if (ownerListTwo.length > 0) {
-          sections.push(`
-            <h4>Prospectos con más de 7 días sin actividad</h4>
-            <p>Estos prospecto llevan más de 7 días desde la última actividad. Volver a trabajarlos o realizar nuevas aclaraciones.</p>
-            <ul>${formatListItems(ownerListTwo)}</ul>
-          `);
-        }
-
-        if (ownerListThree.length > 0) {
-          sections.push(`
-            <h4>Prospectos sin actividades registradas</h4>
-            <p>Estos prospectos no tienen actividades detalladas, comentar lo trabajado en cada uno.</p>
-            <ul>${formatListItems(ownerListThree)}</ul>
-          `);
-        }
-
-        if (sections.length === 0) continue;
-
-        const body = `
-          <p>Hola ${owner.name},</p>
-          <p>Detectamos prospectos que requieren tu atención:</p>
-          ${sections.join('')}
-          <p>Notificación enviada el ${format(now, 'P', { locale: es })}.</p>
-        `;
-
-        await sendEmail({
-          accessToken,
-          to: owner.email,
-          subject: 'Seguimiento de prospectos pendientes',
-          body,
-        });
-      }
-
-      const notifiedProspectIds = Array.from(new Set(allTargets.map(p => p.id)));
-      await recordProspectNotifications(notifiedProspectIds, userInfo.id, userInfo.name);
-      toast({ title: 'Notificaciones enviadas', description: 'Se registraron los avisos para los prospectos pendientes.' });
-      fetchData();
-    } catch (error) {
-      console.error('Error sending prospect notifications', error);
-      toast({ title: 'Error al notificar', description: 'No se pudieron enviar las notificaciones.', variant: 'destructive' });
-    } finally {
-      setIsSendingNotifications(false);
-    }
-  }, [isBoss, userInfo, prospects, activitiesByProspectId, usersById, getGoogleAccessToken, toast, fetchData, isProspectHidden]);
-
-
+  // --- FILTRADO DE PROSPECTOS ---
   const filteredProspects = useMemo(() => {
     if (!userInfo || !userInfo.id) {
-      return { active: [], notProsperous: [], converted: [], hidden: [] };
+      return { active: [], notProsperous: [], converted: [], hidden: [], unassigned: [], pendingClaims: [] };
     }
 
-    let userProspects = prospects;
+    // 1. "Bolsa" (Sin Asignar) - Visible para todos sin filtros de asesor
+    const unassigned = prospects.filter(p => !p.ownerId && p.status !== 'Convertido' && p.status !== 'No Próspero');
+    
+    // 2. Pendientes de aprobación (Solo para jefes)
+    const pendingClaims = unassigned.filter(p => p.claimStatus === 'Pendiente');
+
+    // 3. Prospectos con dueño (Activos)
+    let userProspects = prospects.filter(p => !!p.ownerId);
 
     if (showOnlyMyProspects) {
         userProspects = userProspects.filter(p => p.ownerId === userInfo.id);
@@ -408,12 +402,15 @@ export default function ProspectsPage() {
 
     if (searchTerm.length >= 3) {
       const lowercasedFilter = searchTerm.toLowerCase();
-      userProspects = userProspects.filter(p =>
+      const textFilter = (p: Prospect) => 
         p.companyName.toLowerCase().includes(lowercasedFilter) ||
         p.contactName?.toLowerCase().includes(lowercasedFilter) ||
         p.contactPhone?.toLowerCase().includes(lowercasedFilter) ||
-        p.contactEmail?.toLowerCase().includes(lowercasedFilter)
-      );
+        p.contactEmail?.toLowerCase().includes(lowercasedFilter);
+      
+      userProspects = userProspects.filter(textFilter);
+      // Opcional: filtrar también bolsa con buscador
+      unassigned = unassigned.filter(textFilter);
     }
 
     const isActive = (p: Prospect) => p.status !== 'Convertido' && p.status !== 'No Próspero';
@@ -424,10 +421,14 @@ export default function ProspectsPage() {
       notProsperous: userProspects.filter(p => p.status === 'No Próspero'),
       converted: userProspects.filter(p => p.status === 'Convertido'),
       hidden,
+      unassigned,
+      pendingClaims
     };
   }, [prospects, userInfo, isBoss, selectedAdvisor, searchTerm, showOnlyMyProspects, isProspectHidden]);
 
 
+  // --- COLUMNAS ---
+  
   const columns = useMemo<ColumnDef<Prospect>[]>(() => [
     {
       accessorKey: 'companyName',
@@ -489,8 +490,24 @@ export default function ProspectsPage() {
     },
     {
       accessorKey: 'createdAt',
-      header: 'Fecha de Creación',
-      cell: ({ row }) => format(new Date(row.original.createdAt), 'P', { locale: es }),
+      header: 'Creado',
+      sortingFn: (rowA, rowB, columnId) => {
+        const a = rowA.getValue<string | null>(columnId);
+        const b = rowB.getValue<string | null>(columnId);
+        if (!a && !b) return 0;
+        if (!a) return 1;
+        if (!b) return -1;
+        return new Date(a).getTime() - new Date(b).getTime();
+      },
+      enableSorting: true,
+      cell: ({ row }) => (
+          <div>
+            <div>{format(new Date(row.original.createdAt), 'P', { locale: es })}</div>
+            {row.original.creatorName && (
+                <div className="text-[10px] text-muted-foreground">Por: {row.original.creatorName}</div>
+            )}
+          </div>
+      )
     },
     {
       id: 'actions',
@@ -545,6 +562,127 @@ export default function ProspectsPage() {
     },
   ], [handleOpenForm, isBoss, userInfo, activitiesByProspectId]);
 
+
+  const unassignedColumns = useMemo<ColumnDef<Prospect>[]>(() => [
+    {
+      accessorKey: 'companyName',
+      header: 'Empresa',
+      enableSorting: true,
+      cell: ({ row }) => (
+        <div>
+          <div className="font-medium">{row.original.companyName}</div>
+          {row.original.previousOwnerId && row.original.previousOwnerId === userInfo?.id && (
+             <span className="text-xs text-red-500 font-medium flex items-center gap-1">
+                 <AlertTriangle className="h-3 w-3" /> Eras el dueño
+             </span>
+          )}
+        </div>
+      )
+    },
+    {
+      accessorKey: 'sector',
+      header: 'Rubro',
+    },
+    {
+        id: 'status',
+        header: 'Estado Reclamo',
+        enableSorting: true,
+        cell: ({ row }) => {
+            const p = row.original;
+            if (p.claimStatus === 'Pendiente') {
+                return (
+                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                        Pedido por {p.claimantId === userInfo?.id ? 'Ti' : p.claimantName}
+                    </Badge>
+                );
+            }
+            return <Badge variant="secondary">Disponible</Badge>;
+        }
+    },
+    {
+        id: 'actions',
+        header: 'Acción',
+        cell: ({ row }) => {
+            const p = row.original;
+            
+            let isBlocked = false;
+            let daysRemaining = 0;
+            
+            if (p.previousOwnerId === userInfo?.id && p.unassignedAt) {
+                const unassignedDate = typeof p.unassignedAt === 'string' ? parseISO(p.unassignedAt) : new Date(p.unassignedAt as any);
+                const daysPassed = differenceInCalendarDays(new Date(), unassignedDate);
+                if (daysPassed < 3) {
+                    isBlocked = true;
+                    daysRemaining = 3 - daysPassed;
+                }
+            }
+
+            if (p.claimStatus === 'Pendiente') {
+                return <span className="text-xs text-muted-foreground">Esperando aprobación...</span>
+            }
+
+            return (
+                <div className="flex items-center gap-2">
+                    <Button 
+                        size="sm" 
+                        variant={isBlocked ? "ghost" : "default"}
+                        className={isBlocked ? "text-muted-foreground opacity-50" : ""}
+                        disabled={isBlocked}
+                        onClick={(e) => { e.stopPropagation(); handleClaim(p); }}
+                    >
+                        <Hand className="mr-2 h-4 w-4" />
+                        {isBlocked ? `Espera ${daysRemaining}d` : 'Reclamar'}
+                    </Button>
+                    
+                    {isBoss && (
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setAssigneeId(''); 
+                                setProspectToAssign(p); 
+                            }}
+                        >
+                            Asignar
+                        </Button>
+                    )}
+                </div>
+            );
+        }
+    }
+  ], [userInfo, handleClaim, isBoss]); // Agregado isBoss a las dependencias
+
+
+  const approvalsColumns = useMemo<ColumnDef<Prospect>[]>(() => [
+      {
+          accessorKey: 'companyName',
+          header: 'Empresa',
+          enableSorting: true,
+      },
+      {
+          header: 'Solicitante',
+          accessorKey: 'claimantName',
+          enableSorting: true,
+          cell: ({ row }) => <span className="font-semibold">{row.original.claimantName}</span>
+      },
+      {
+          header: 'Acciones',
+          id: 'actions',
+          cell: ({ row }) => (
+              <div className="flex gap-2">
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApproveClaim(row.original)}>
+                      <CheckCircle2 className="h-4 w-4 mr-1" /> Aprobar
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={() => handleRejectClaim(row.original)}>
+                      <XCircle className="h-4 w-4 mr-1" /> Rechazar
+                  </Button>
+              </div>
+          )
+      }
+  ], []);
+
+
   if (authLoading || loading) {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
   }
@@ -582,27 +720,35 @@ export default function ProspectsPage() {
             <Checkbox id="my-prospects" name="my-prospects" checked={showOnlyMyProspects} onCheckedChange={(checked) => setShowOnlyMyProspects(!!checked)} />
             <Label htmlFor="my-prospects" className="whitespace-nowrap text-sm font-medium">Solo mis prospectos</Label>
           </div>
-          {isBoss && (
-            <Button variant="outline" onClick={handleSendProspectNotifications} disabled={isSendingNotifications}>
-              <Bell className="mr-2 h-4 w-4" />
-              {isSendingNotifications ? 'Enviando...' : 'Notificar prospectos'}
-            </Button>
-          )}
           <Button onClick={() => handleOpenForm()}>
             <PlusCircle className="mr-2" />
             Nuevo Prospecto
           </Button>
         </Header>
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-            <Tabs defaultValue="active">
-                <TabsList className={`grid w-full ${isBoss ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <Tabs defaultValue="active" className="space-y-4">
+                <TabsList className={`grid w-full ${isBoss ? 'grid-cols-6' : 'grid-cols-4'}`}>
                     <TabsTrigger value="active">Activos ({filteredProspects.active.length})</TabsTrigger>
+                    
+                    <TabsTrigger value="unassigned" className="relative">
+                        Bolsa
+                        {filteredProspects.unassigned.length > 0 && <Badge className="ml-2 h-5 w-5 p-0 flex justify-center items-center rounded-full">{filteredProspects.unassigned.length}</Badge>}
+                    </TabsTrigger>
+                    
+                    {isBoss && (
+                        <TabsTrigger value="approvals" className="relative text-orange-600 data-[state=active]:text-orange-700">
+                            Solicitudes
+                            {filteredProspects.pendingClaims.length > 0 && <Badge variant="destructive" className="ml-2 h-5 w-5 p-0 flex justify-center items-center rounded-full animate-pulse">{filteredProspects.pendingClaims.length}</Badge>}
+                        </TabsTrigger>
+                    )}
+
                     <TabsTrigger value="not-prosperous">No Prósperos ({filteredProspects.notProsperous.length})</TabsTrigger>
                     <TabsTrigger value="converted">Convertidos ({filteredProspects.converted.length})</TabsTrigger>
                     {isBoss && (
                       <TabsTrigger value="hidden">Invisibles ({filteredProspects.hidden.length})</TabsTrigger>
                     )}
                 </TabsList>
+                
                 <TabsContent value="active">
                     <ResizableDataTable
                         columns={columns}
@@ -615,6 +761,42 @@ export default function ProspectsPage() {
                         emptyStateMessage="No se encontraron prospectos activos."
                     />
                 </TabsContent>
+                
+                <TabsContent value="unassigned">
+                     <div className="p-4 bg-muted/20 rounded-md mb-4 border border-dashed">
+                        <p className="text-sm text-muted-foreground flex items-center gap-2">
+                            <Hand className="h-4 w-4" />
+                            Estos prospectos no tienen dueño. Puedes reclamarlos para tu cartera. Si fuiste el dueño anterior, debes esperar 3 días desde su liberación.
+                        </p>
+                     </div>
+                     <ResizableDataTable
+                        sorting={sorting}
+                        setSorting={setSorting}
+                        columns={unassignedColumns}
+                        data={filteredProspects.unassigned}
+                        getRowId={(row) => row.id}
+                        emptyStateMessage="No hay prospectos disponibles en la bolsa."
+                    />
+                </TabsContent>
+
+                {isBoss && (
+                    <TabsContent value="approvals">
+                         <div className="p-4 bg-orange-50 rounded-md mb-4 border border-orange-100">
+                            <p className="text-sm text-orange-800 font-medium">
+                                Asesores solicitando recuperar o tomar prospectos libres.
+                            </p>
+                         </div>
+                         <ResizableDataTable
+                            sorting={sorting}
+                            setSorting={setSorting}
+                            columns={approvalsColumns}
+                            data={filteredProspects.pendingClaims}
+                            getRowId={(row) => row.id}
+                            emptyStateMessage="No hay solicitudes pendientes."
+                        />
+                    </TabsContent>
+                )}
+
                 <TabsContent value="not-prosperous">
                      <ResizableDataTable
                         columns={columns}
@@ -623,10 +805,14 @@ export default function ProspectsPage() {
                         getRowId={(row) => row.id}
                         enableRowResizing={true}
                         emptyStateMessage="No hay prospectos en esta categoría."
+                        sorting={sorting}
+                        setSorting={setSorting}
                     />
                 </TabsContent>
                  <TabsContent value="converted">
                      <ResizableDataTable
+                        sorting={sorting}
+                        setSorting={setSorting}
                         columns={columns}
                         data={filteredProspects.converted}
                         getRowId={(row) => row.id}
@@ -691,6 +877,35 @@ export default function ProspectsPage() {
             onActivitySaved={() => fetchData()}
         />
       )}
+
+      {/* DIÁLOGO DE ASIGNACIÓN DE PROSPECTO */}
+      <Dialog open={!!prospectToAssign} onOpenChange={(open) => !open && setProspectToAssign(null)}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Asignar Prospecto</DialogTitle>
+                <DialogDescription>
+                    Selecciona el asesor al que deseas asignar <b>{prospectToAssign?.companyName}</b>.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+                <Label>Asesor</Label>
+                <Select value={assigneeId} onValueChange={setAssigneeId}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {users.filter(u => u.role === 'Asesor').map(u => (
+                            <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setProspectToAssign(null)}>Cancelar</Button>
+                <Button onClick={handleAssignProspect} disabled={!assigneeId}>Confirmar</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!prospectToDelete} onOpenChange={(open) => !open && setProspectToDelete(null)}>
         <AlertDialogContent>

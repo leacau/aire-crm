@@ -1,112 +1,343 @@
 'use client';
+
+import * as React from 'react';
+import { useAuth } from '@/hooks/use-auth';
 import { Logo } from '@/components/logo';
+import { cn } from '@/lib/utils';
+import {
+  BarChart3,
+  Calendar,
+  CheckSquare,
+  Users,
+  FileText,
+  LayoutDashboard,
+  Megaphone,
+  Radio,
+  Repeat,
+  Target,
+  Trophy,
+  DollarSign,
+  Palmtree,
+  Activity,
+  Users2,
+  BadgePercent,
+  Upload,
+  Crosshair,
+  MessageSquare,
+  Database,
+  FileSpreadsheet,
+  ClipboardList,
+  Briefcase,
+  Layers,
+  Calculator,
+  UserCog,
+  Settings2,
+  ChevronRight,
+  ShieldCheck,
+  Scale,
+  ListTodo,
+  StickyNote
+} from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useMemo, useState, useEffect } from 'react';
+
+// Importamos los componentes de UI
 import {
   Sidebar,
-  SidebarHeader,
   SidebarContent,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
   SidebarFooter,
-  useSidebar,
-  SidebarTrigger,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarRail,
-  SidebarSeparator,
+  useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, CircleDollarSign, Users, Settings, Receipt, BarChart, LayoutList, CheckSquare, Calendar, Upload, Repeat, Banknote, Grid3X3, Megaphone, Lightbulb, ClipboardCheck, Target, MessageCircle, Building2 } from 'lucide-react';
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
-import { useAuth } from '@/hooks/use-auth';
+
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
 import type { ScreenName } from '@/lib/types';
-import { hasPermission } from '@/lib/permissions';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
-const menuItems: { href: string; label: string; icon: React.ElementType, screenName: ScreenName }[] = [
-  { href: '/', label: 'Panel', icon: Home, screenName: 'Dashboard' },
-  { href: '/objectives', label: 'Objetivos', icon: Target, screenName: 'Objectives' },
-  { href: '/opportunities', label: 'Oportunidades', icon: CircleDollarSign, screenName: 'Opportunities' },
-  { href: '/prospects', label: 'Prospectos', icon: Lightbulb, screenName: 'Prospects' },
-  { href: '/clients', label: 'Clientes', icon: Users, screenName: 'Clients' },
-  { href: '/grilla', label: 'Grilla', icon: Grid3X3, screenName: 'Grilla' },
-  { href: '/pnts', label: 'PNTs', icon: Megaphone, screenName: 'PNTs' },
-  { href: '/canjes', label: 'Canjes', icon: Repeat, screenName: 'Canjes' },
-  { href: '/invoices', label: 'Facturación', icon: Receipt, screenName: 'Invoices' },
-  { href: '/billing', label: 'Cobranzas', icon: Banknote, screenName: 'Billing' },
-  { href: '/calendar', label: 'Calendario', icon: Calendar, screenName: 'Calendar' },
-  { href: '/licencias', label: 'Licencias', icon: ClipboardCheck, screenName: 'Licenses' },
-  { href: '/approvals', label: 'Aprobaciones', icon: CheckSquare, screenName: 'Approvals' },
-  { href: '/activity', label: 'Actividad', icon: LayoutList, screenName: 'Activity' },
-  { href: '/chat', label: 'Chat', icon: MessageCircle, screenName: 'Chat' },
-  { href: '/tango-mapping', label: 'Tango', icon: Building2, screenName: 'TangoMapping' },
-  { href: '/team', label: 'Equipo', icon: Users, screenName: 'Team' },
-  { href: '/rates', label: 'Tarifas', icon: Banknote, screenName: 'Rates' },
-  { href: '/reports', label: 'Reportes', icon: BarChart, screenName: 'Reports' },
-  { href: '/import', label: 'Importar', icon: Upload, screenName: 'Import' },
-];
+interface SidebarItem {
+  title: string;
+  href: string;
+  icon: React.ElementType;
+  screenName: ScreenName;
+}
 
-function MenuLink({ item }: { item: typeof menuItems[0] }) {
+interface SidebarGroup {
+  groupLabel: string;
+  icon: React.ElementType;
+  items: SidebarItem[];
+}
+
+type SidebarEntry = SidebarItem | SidebarGroup;
+
+function isSidebarGroup(entry: SidebarEntry): entry is SidebarGroup {
+  return (entry as SidebarGroup).groupLabel !== undefined;
+}
+
+export function AppSidebar() {
   const pathname = usePathname();
-  const { setOpenMobile } = useSidebar();
+  const { userInfo } = useAuth();
+  const { state } = useSidebar();
+  
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
-  const isActive = (href: string) => {
-    if (href === '/') return pathname === '/';
-    // Exact match for specific routes, otherwise prefix match
-    const exactMatchRoutes = ['/billing', '/invoices', '/rates', '/licencias', '/objectives'];
-    if (exactMatchRoutes.includes(href)) return pathname === href;
+  const rawSidebarEntries: SidebarEntry[] = [
+    { title: 'Dashboard', href: '/', icon: LayoutDashboard, screenName: 'Dashboard' },
+    {
+      groupLabel: 'Comercial',
+      icon: Briefcase,
+      items: [
+        { title: 'Objetivos', href: '/objectives', icon: Crosshair, screenName: 'Objectives' },
+        { title: 'Clientes', href: '/clients', icon: Users, screenName: 'Clients' },
+        { title: 'Oportunidades', href: '/opportunities', icon: Trophy, screenName: 'Opportunities' },
+        { title: 'Prospectos', href: '/prospects', icon: Target, screenName: 'Prospects' },
+        { title: 'Tareas', href: '/tasks', icon: ListTodo, screenName: 'Tasks' },
+        { title: 'Canjes', href: '/canjes', icon: Repeat, screenName: 'Canjes' },
+        { title: 'Cotizador', href: '/quotes', icon: FileSpreadsheet, screenName: 'Quotes' },
+        { title: 'Aprobaciones', href: '/approvals', icon: CheckSquare, screenName: 'Approvals' },
+        { title: 'Seguimiento', href: '/coaching', icon: ClipboardList, screenName: 'Coaching' },
+      ]
+    },
+    {
+      groupLabel: 'Programación',
+      icon: Layers,
+      items: [
+        { title: 'Grilla', href: '/grilla', icon: Radio, screenName: 'Grilla' },
+        { title: 'PNTs', href: '/pnts', icon: Megaphone, screenName: 'PNTs' },
+        { title: 'Nota Comercial', href: '/notas', icon: StickyNote, screenName: 'Notas' },
+      ]
+    },
+    { title: 'Calendario', href: '/calendar', icon: Calendar, screenName: 'Calendar' },
+    { title: 'Chat', href: '/chat', icon: MessageSquare, screenName: 'Chat' },
+    {
+      groupLabel: 'Contable',
+      icon: Calculator,
+      items: [
+        { title: 'Cobranzas', href: '/billing', icon: DollarSign, screenName: 'Billing' },
+        { title: 'Facturas', href: '/invoices', icon: FileText, screenName: 'Invoices' },
+      ]
+    },
+    {
+      groupLabel: 'RRHH',
+      icon: UserCog,
+      items: [
+        { title: 'Licencias', href: '/licencias', icon: Palmtree, screenName: 'Licenses' },
+      ]
+    },
+    {
+      groupLabel: 'Administración',
+      icon: Settings2,
+      items: [
+        { title: 'Tarifas', href: '/rates', icon: BadgePercent, screenName: 'Rates' },
+        { title: 'Equipo', href: '/team', icon: Users2, screenName: 'Team' },
+        { title: 'Reportes', href: '/reports', icon: BarChart3, screenName: 'Reports' },
+        { title: 'Importar', href: '/import', icon: Upload, screenName: 'Import' },
+        { title: 'Mapeo Tango', href: '/tango-mapping', icon: Database, screenName: 'TangoMapping' },
+        { title: 'Actividad', href: '/activity', icon: Activity, screenName: 'Activity' },
+      ]
+    },
+  ];
+
+  const filteredEntries = useMemo(() => {
+    if (!userInfo) return [];
+
+    const hasPermission = (item: SidebarItem) => {
+      // 1. Super Admin always has access
+      if (userInfo.email === 'lchena@airedesantafe.com.ar') return true;
+      if (userInfo.role === 'Admin') return true;
+
+      // 2. Dashboard is typically open, but lets check permissions if present
+      if (item.screenName === 'Dashboard') return true;
+
+      // 3. Strict Permission Check
+      // If permissions object exists, checking strict match.
+      // If permissions object is missing (unlikely for established users, but possible), default to false for safety unless role implies otherwise.
+      if (userInfo.permissions) {
+        return !!userInfo.permissions[item.screenName]?.view;
+      }
+      
+      // Default fallback if no permissions structure found (should be restrictive)
+      return false; 
+    };
+
+    return rawSidebarEntries.reduce<SidebarEntry[]>((acc, entry) => {
+      if (isSidebarGroup(entry)) {
+        const visibleItems = entry.items.filter(hasPermission);
+        if (visibleItems.length > 0) {
+          acc.push({ ...entry, items: visibleItems });
+        }
+      } else if (hasPermission(entry)) {
+        acc.push(entry);
+      }
+      return acc;
+    }, []);
+  }, [userInfo]);
+
+  useEffect(() => {
+    if (state === 'collapsed') return; 
     
-    return pathname.startsWith(href) && href !== '/';
+    const activeGroup = filteredEntries.find(entry => 
+      isSidebarGroup(entry) && entry.items.some(item => pathname === item.href)
+    );
+    
+    if (activeGroup && isSidebarGroup(activeGroup)) {
+      setOpenGroup(activeGroup.groupLabel);
+    }
+  }, [pathname, filteredEntries, state]);
+
+  const handleGroupClick = (label: string) => {
+    setOpenGroup(prev => prev === label ? null : label);
   };
 
   return (
-    <SidebarMenuButton
-      asChild
-      isActive={isActive(item.href)}
-      tooltip={{ children: item.label, side: 'right' }}
-      onClick={() => setOpenMobile(false)}
-      size="lg"
-    >
-      <Link href={item.href}>
-        <item.icon />
-        <span>{item.label}</span>
-      </Link>
-    </SidebarMenuButton>
-  );
-}
-
-
-export function AppSidebar() {
-  const { userInfo } = useAuth();
-  
-  if (!userInfo) return null;
-
-  const accessibleItems = menuItems
-    .filter(item => hasPermission(userInfo, item.screenName, 'view'))
-    .filter(item => {
-      if (userInfo.role === 'Asesor' && item.href === '/objectives') {
-        return false;
-      }
-      return true;
-    });
-
-  return (
     <Sidebar collapsible="icon">
-        <SidebarRail />
       <SidebarHeader>
-        <Logo isInSidebar={true} />
-        <SidebarTrigger className="ml-auto hidden data-[state=expanded]:md:flex" />
+        <div className="flex h-[60px] items-center px-4 shrink-0 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center overflow-hidden">
+          <Link href="/" className="flex items-center gap-2 font-semibold transition-all">
+            <Logo isInSidebar={true} />
+          </Link>
+        </div>
       </SidebarHeader>
-      <SidebarSeparator />
+      
       <SidebarContent>
-        <div className="py-2" />
         <SidebarMenu>
-          {accessibleItems.map((item) => (
-            <SidebarMenuItem key={item.label}>
-              <MenuLink item={item} />
-            </SidebarMenuItem>
-          ))}
+          {filteredEntries.map((entry) => {
+            if (isSidebarGroup(entry)) {
+              const isActive = entry.items.some(item => pathname === item.href);
+              const isOpen = openGroup === entry.groupLabel;
+
+              if (state === 'collapsed') {
+                return (
+                  <SidebarMenuItem key={entry.groupLabel}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <SidebarMenuButton 
+                          tooltip={entry.groupLabel} 
+                          isActive={isActive}
+                          className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                        >
+                          <entry.icon />
+                          <span>{entry.groupLabel}</span>
+                          <ChevronRight className="ml-auto size-4" />
+                        </SidebarMenuButton>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="right" align="start" className="min-w-56 rounded-lg bg-zinc-950 border-zinc-800 text-zinc-100">
+                        <DropdownMenuLabel className="text-zinc-400">{entry.groupLabel}</DropdownMenuLabel>
+                        <DropdownMenuSeparator className="bg-zinc-800" />
+                        {entry.items.map((subItem) => (
+                          <DropdownMenuItem key={subItem.href} asChild className="focus:bg-zinc-800 focus:text-zinc-100">
+                            <Link href={subItem.href} className="flex items-center gap-2 cursor-pointer">
+                              <subItem.icon className="size-4 text-zinc-400" />
+                              <span>{subItem.title}</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </SidebarMenuItem>
+                );
+              }
+
+              return (
+                <Collapsible
+                  key={entry.groupLabel}
+                  asChild
+                  open={isOpen}
+                  onOpenChange={() => handleGroupClick(entry.groupLabel)}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton 
+                        tooltip={entry.groupLabel} 
+                        isActive={isActive}
+                      >
+                        <entry.icon />
+                        <span>{entry.groupLabel}</span>
+                        <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {entry.items.map((subItem) => (
+                          <SidebarMenuSubItem key={subItem.href}>
+                            <SidebarMenuSubButton 
+                              asChild 
+                              isActive={pathname === subItem.href}
+                            >
+                              <Link href={subItem.href}>
+                                <subItem.icon className="size-4" />
+                                <span>{subItem.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              );
+            }
+
+            return (
+              <SidebarMenuItem key={entry.href}>
+                <SidebarMenuButton 
+                  asChild 
+                  tooltip={entry.title} 
+                  isActive={pathname === entry.href}
+                >
+                  <Link href={entry.href}>
+                    <entry.icon />
+                    <span>{entry.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Políticas de Privacidad" className="text-xs text-muted-foreground hover:text-foreground">
+              <Link href="/privacy-policy">
+                <ShieldCheck className="size-4" />
+                <span>Privacidad</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Términos del Servicio" className="text-xs text-muted-foreground hover:text-foreground">
+              <Link href="/terms-of-service">
+                <Scale className="size-4" />
+                <span>Términos</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }

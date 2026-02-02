@@ -14,13 +14,13 @@ import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { useRouter } from 'next/navigation';
 import { QuickOpportunityFormDialog } from '@/components/invoices/quick-opportunity-form-dialog';
-import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
+import { sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 
 type InvoiceRow = {
   id: number;
   invoiceNumber: string;
   date: string;
-  amount: number;
+  amount: string; // Changed to string to handle comma/dot replacement
   clientId: string;
   opportunityId: string;
 };
@@ -85,7 +85,7 @@ export default function InvoiceUploadPage() {
         id: Date.now(),
         invoiceNumber: '',
         date: new Date().toISOString().split('T')[0],
-        amount: 0,
+        amount: '',
         clientId: '',
         opportunityId: '',
       }
@@ -96,14 +96,20 @@ export default function InvoiceUploadPage() {
     setInvoiceRows(prev => prev.filter(row => row.id !== id));
   };
 
-  const handleRowChange = (id: number, field: keyof Omit<InvoiceRow, 'id'>, value: string | number) => {
+  const handleRowChange = (id: number, field: keyof Omit<InvoiceRow, 'id'>, value: string) => {
     setInvoiceRows(prev =>
       prev.map(row => {
         if (row.id === id) {
-          const normalizedValue = field === 'invoiceNumber' && typeof value === 'string'
-            ? sanitizeInvoiceNumber(value)
-            : value;
-          const updatedRow = { ...row, [field]: normalizedValue };
+          let updatedValue = value;
+
+          if (field === 'amount') {
+             // Replace dots with commas instantly
+             updatedValue = value.replace(/\./g, ',');
+          } else if (field === 'invoiceNumber') {
+             updatedValue = sanitizeInvoiceNumber(value);
+          }
+
+          const updatedRow = { ...row, [field]: updatedValue };
           // Reset opportunity if client changes
           if (field === 'clientId') {
             updatedRow.opportunityId = '';
@@ -154,12 +160,26 @@ export default function InvoiceUploadPage() {
   const handleSaveAll = async () => {
     if (!userInfo) return;
 
+    // Validate no dots in amount
+    const hasDotError = invoiceRows.some(row => row.amount.includes('.'));
+    if (hasDotError) {
+        toast({ 
+            title: "Error de formato en monto", 
+            description: "No se permiten puntos en el monto. Por favor utiliza comas para los decimales.", 
+            variant: "destructive" 
+        });
+        return;
+    }
+
     const validRows = invoiceRows.filter(
-      row => row.invoiceNumber && row.amount > 0 && row.clientId && row.opportunityId
+      row => {
+          const amountNum = parseFloat(row.amount.replace(',', '.'));
+          return row.invoiceNumber && !isNaN(amountNum) && amountNum > 0 && row.clientId && row.opportunityId;
+      }
     );
 
     if (validRows.length === 0) {
-      toast({ title: "No hay facturas válidas para guardar", description: "Completa todos los campos de al menos una fila.", variant: "destructive" });
+      toast({ title: "No hay facturas válidas para guardar", description: "Completa todos los campos de al menos una fila y asegúrate que el monto sea mayor a 0.", variant: "destructive" });
       return;
     }
     
@@ -170,16 +190,18 @@ export default function InvoiceUploadPage() {
     setIsSaving(true);
     let successCount = 0;
     
-    const existingNumbers = new Set(existingInvoices.map(inv => getNormalizedInvoiceNumber(inv)));
-    const newNumbers = new Set<string>();
+    // Conjunto para evitar duplicados dentro del mismo lote de carga actual
+    const batchNumbers = new Set<string>();
 
     for (const row of validRows) {
         try {
             const client = clients.find(c => c.id === row.clientId);
             if (!client) throw new Error(`Cliente no encontrado para la fila con factura ${row.invoiceNumber}`);
 
-            const sanitizedNumber = sanitizeInvoiceNumber(row.invoiceNumber);
-            if (!sanitizedNumber) {
+            const inputRaw = sanitizeInvoiceNumber(row.invoiceNumber); // Solo dígitos
+            const amountNum = parseFloat(row.amount.replace(',', '.'));
+
+            if (!inputRaw) {
                 toast({
                     title: 'Número de factura inválido',
                     description: 'Solo se permiten dígitos en el número de factura.',
@@ -188,22 +210,97 @@ export default function InvoiceUploadPage() {
                 continue;
             }
 
-            if (existingNumbers.has(sanitizedNumber) || newNumbers.has(sanitizedNumber)) {
-                toast({
-                    title: `Factura duplicada #${row.invoiceNumber}`,
-                    description: 'Ya existe una factura con ese número. Usa un número único.',
-                    variant: 'destructive'
-                });
-                continue;
+            // --- LÓGICA DE DUPLICADOS MEJORADA ---
+            let duplicateType: 'none' | 'identical' | 'conflict' = 'none';
+            let conflictDetails = '';
+
+            // Obtiene los números significativos (sin ceros a la izquierda) para determinar longitud real
+            const getSignificant = (s: string) => s.replace(/^0+/, '');
+
+            const inputSignificant = getSignificant(inputRaw);
+            // AHORA INCLUYE 4, 5 Y 6 DÍGITOS
+            const isInputShort = inputSignificant.length >= 4 && inputSignificant.length <= 6;
+
+            for (const existing of existingInvoices) {
+                const existingRaw = sanitizeInvoiceNumber(existing.invoiceNumber);
+                const existingSignificant = getSignificant(existingRaw);
+                // AHORA INCLUYE 4, 5 Y 6 DÍGITOS
+                const isExistingShort = existingSignificant.length >= 4 && existingSignificant.length <= 6;
+                
+                let numberMatch = false;
+
+                // 1. Coincidencia exacta (todo el string de dígitos igual)
+                if (inputRaw === existingRaw) {
+                    numberMatch = true;
+                }
+                // 2. Si el INPUT es corto (4-6 dígitos) y el existente es más largo, chequear si existente TERMINA con inputRaw (o inputSignificant)
+                // Ejemplo: Input "8313", Existente "000100008313" o "100008313"
+                else if (isInputShort && existingRaw.length > inputRaw.length) {
+                    if (existingRaw.endsWith(inputRaw) || existingRaw.endsWith(inputSignificant)) {
+                        numberMatch = true;
+                    }
+                }
+                // 3. Si el EXISTENTE es corto (4-6 dígitos) y el input es más largo, chequear si input TERMINA con existingRaw
+                // Ejemplo: Input "000100008313", Existente "8313"
+                else if (isExistingShort && inputRaw.length > existingRaw.length) {
+                    if (inputRaw.endsWith(existingRaw) || inputRaw.endsWith(existingSignificant)) {
+                        numberMatch = true;
+                    }
+                }
+
+                if (numberMatch) {
+                     const existingOpp = opportunities.find(o => o.id === existing.opportunityId);
+                     const existingClientId = existingOpp?.clientId;
+
+                     const clientMatch = existingClientId === row.clientId;
+                     const dateMatch = existing.date === row.date;
+                     // Comparación de monto con pequeña tolerancia por decimales
+                     const amountMatch = Math.abs(existing.amount - amountNum) < 0.1;
+
+                     if (clientMatch && dateMatch && amountMatch) {
+                         duplicateType = 'identical';
+                         break; // Es el caso más grave, bloqueamos y salimos.
+                     } else {
+                         duplicateType = 'conflict';
+                         conflictDetails = `Coincide con FC existente #${existing.invoiceNumber} (Cliente: ${existingOpp?.clientName || 'Desconocido'}, Monto: $${existing.amount})`;
+                         // No hacemos break por si más adelante encontramos un duplicado IDÉNTICO que tiene prioridad.
+                     }
+                }
+            }
+            
+            // Verificación dentro del mismo lote (batch) para evitar subir dos veces el mismo número ahora mismo
+            if (duplicateType === 'none' && batchNumbers.has(inputRaw)) {
+                duplicateType = 'conflict';
+                conflictDetails = 'El número se repite dentro de este mismo lote de carga.';
             }
 
-            newNumbers.add(sanitizedNumber);
+            if (duplicateType === 'identical') {
+                 toast({
+                    title: `Duplicado Idéntico: #${row.invoiceNumber}`,
+                    description: 'Esta factura ya existe con el mismo cliente, fecha y monto.',
+                    variant: 'destructive'
+                });
+                continue; // Saltamos esta fila
+            }
+
+            if (duplicateType === 'conflict') {
+                toast({
+                   title: `Conflicto de Numeración: #${row.invoiceNumber}`,
+                   description: conflictDetails || 'El número coincide con los dígitos finales de otra factura existente.',
+                   variant: 'destructive' 
+               });
+               continue; // Saltamos esta fila
+           }
+
+            // --- FIN VERIFICACIONES ---
+
+            batchNumbers.add(inputRaw);
 
             await createInvoice(
                 {
                     opportunityId: row.opportunityId,
-                    invoiceNumber: sanitizedNumber,
-                    amount: row.amount,
+                    invoiceNumber: inputRaw,
+                    amount: amountNum,
                     date: row.date,
                     status: 'Generada',
                     dateGenerated: new Date().toISOString(),
@@ -212,13 +309,14 @@ export default function InvoiceUploadPage() {
                 userInfo.name,
                 client.ownerName
             );
+            
             setExistingInvoices(prev => [
               ...prev,
               {
-                id: `temp-${Date.now()}`,
+                id: `temp-${Date.now()}-${Math.random()}`,
                 opportunityId: row.opportunityId,
-                invoiceNumber: sanitizedNumber,
-                amount: row.amount,
+                invoiceNumber: inputRaw,
+                amount: amountNum,
                 date: row.date,
                 status: 'Generada',
                 dateGenerated: new Date().toISOString(),
@@ -243,7 +341,9 @@ export default function InvoiceUploadPage() {
     });
 
     if (successCount > 0) {
-        setInvoiceRows([]); // Clear the form
+        if (successCount === validRows.length) {
+             setInvoiceRows([]); 
+        }
     }
   };
 
@@ -305,10 +405,11 @@ export default function InvoiceUploadPage() {
                       </TableCell>
                       <TableCell>
                         <Input
-                          type="number"
-                          placeholder="0.00"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0,00"
                           value={row.amount}
-                          onChange={e => handleRowChange(row.id, 'amount', Number(e.target.value))}
+                          onChange={e => handleRowChange(row.id, 'amount', e.target.value)}
                         />
                       </TableCell>
                       <TableCell>

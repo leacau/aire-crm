@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
-import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getInvoices, getProspects, getObjectiveVisibilityConfig, updateObjectiveVisibilityConfig } from '@/lib/firebase-service';
-import type { Opportunity, User, Client, UserRole, Invoice, Prospect, AreaType, ObjectiveVisibilityConfig } from '@/lib/types';
+import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getProspects, getObjectiveVisibilityConfig, updateObjectiveVisibilityConfig } from '@/lib/firebase-service';
+import type { Opportunity, User, Client, UserRole, Prospect, AreaType, ObjectiveVisibilityConfig, SellerCompanyConfig } from '@/lib/types';
 import { userRoles } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -11,7 +11,7 @@ import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/hooks/use-auth';
-import { MoreHorizontal, Trash2, Save, BarChartHorizontal } from 'lucide-react';
+import { MoreHorizontal, Trash2, Save, BarChartHorizontal, Pencil, Plus, X, Filter } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -25,6 +25,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths } from 'date-fns';
 import { MonthlyClosureDialog } from './monthly-closure-dialog';
 import { getObjectiveForDate, monthKey } from '@/lib/objective-utils';
@@ -44,6 +54,11 @@ interface UserStats {
 
 const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'];
 
+const TANGO_COMPANIES = [
+    { value: 'Aire SRL', label: 'Aire SRL' },
+    { value: 'Aire Digital SAS', label: 'Aire Digital SAS' },
+];
+
 export function TeamPerformanceTable() {
   const { userInfo, isBoss } = useAuth();
   const { toast } = useToast();
@@ -60,6 +75,16 @@ export function TeamPerformanceTable() {
   const [savingVisibility, setSavingVisibility] = useState(false);
   const [visibilityMonth, setVisibilityMonth] = useState('');
   const [visibilityDeadline, setVisibilityDeadline] = useState('');
+
+  // Estados de filtros
+  const [filterArea, setFilterArea] = useState<AreaType | 'all'>('Comercial'); // Por defecto Comercial, pero cambiable
+  const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
+
+  // Estados para la edición de códigos de vendedor
+  const [userForCodes, setUserForCodes] = useState<User | null>(null);
+  const [tempSellerConfig, setTempSellerConfig] = useState<SellerCompanyConfig[]>([]);
+  const [newCodeInput, setNewCodeInput] = useState<Record<string, string>>({});
+  const [savingCodes, setSavingCodes] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -93,6 +118,14 @@ export function TeamPerformanceTable() {
     setVisibilityMonth(objectiveVisibility.activeMonthKey ?? '');
     setVisibilityDeadline(objectiveVisibility.visibleUntil ?? '');
   }, [objectiveVisibility]);
+
+  // Inicializar el estado temporal cuando se abre el diálogo de códigos
+  useEffect(() => {
+    if (userForCodes) {
+        setTempSellerConfig(userForCodes.sellerConfig || []);
+        setNewCodeInput({});
+    }
+  }, [userForCodes]);
 
   const handleUpdateUser = async (userId: string, data: Partial<User>) => {
      try {
@@ -148,6 +181,50 @@ export function TeamPerformanceTable() {
     }
   };
 
+  const handleAddCompanyToConfig = (companyName: string) => {
+      if (tempSellerConfig.some(c => c.companyName === companyName)) return;
+      setTempSellerConfig([...tempSellerConfig, { companyName, codes: [] }]);
+  };
+
+  const handleRemoveCompanyFromConfig = (companyName: string) => {
+      setTempSellerConfig(tempSellerConfig.filter(c => c.companyName !== companyName));
+  };
+
+  const handleAddCode = (companyName: string) => {
+      const code = newCodeInput[companyName]?.trim();
+      if (!code) return;
+
+      setTempSellerConfig(prev => prev.map(c => {
+          if (c.companyName === companyName && !c.codes.includes(code)) {
+              return { ...c, codes: [...c.codes, code] };
+          }
+          return c;
+      }));
+      setNewCodeInput(prev => ({ ...prev, [companyName]: '' }));
+  };
+
+  const handleRemoveCode = (companyName: string, codeToRemove: string) => {
+      setTempSellerConfig(prev => prev.map(c => {
+          if (c.companyName === companyName) {
+              return { ...c, codes: c.codes.filter(code => code !== codeToRemove) };
+          }
+          return c;
+      }));
+  };
+
+  const handleSaveSellerConfig = async () => {
+      if (!userForCodes) return;
+      setSavingCodes(true);
+      try {
+          await handleUpdateUser(userForCodes.id, { sellerConfig: tempSellerConfig });
+          setUserForCodes(null);
+      } catch (error) {
+          console.error("Error saving codes", error);
+      } finally {
+          setSavingCodes(false);
+      }
+  };
+
   const userStats = useMemo<UserStats[]>(() => {
     const today = new Date();
     const currentMonthStart = startOfMonth(today);
@@ -155,7 +232,14 @@ export function TeamPerformanceTable() {
     const prevMonthDate = subMonths(today, 1);
     const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
-    return users.map(user => {
+    // APLICAR FILTROS
+    const filteredUsers = users.filter(u => {
+        const matchesArea = filterArea === 'all' || u.area === filterArea;
+        const matchesRole = filterRole === 'all' || u.role === filterRole;
+        return matchesArea && matchesRole;
+    });
+
+    return filteredUsers.map(user => {
         const isAdvisor = user.role === 'Asesor';
         const advisorClientIds = isAdvisor ? new Set(clients.filter(c => c.ownerId === user.id).map(c => c.id)) : new Set();
         const userOpps = isAdvisor ? opportunities.filter(opp => advisorClientIds.has(opp.clientId)) : [];
@@ -187,7 +271,7 @@ export function TeamPerformanceTable() {
             previousMonthBilling
         };
     }).sort((a,b) => (b.currentMonthBilling) - (a.currentMonthBilling));
-  }, [users, opportunities, clients, prospects]);
+  }, [users, opportunities, clients, prospects, filterArea, filterRole]);
   
   const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
   const advisors = useMemo(() => users.filter(u => u.role === 'Asesor'), [users]);
@@ -216,13 +300,49 @@ export function TeamPerformanceTable() {
       minSize: 250,
     },
     {
+      id: 'sellerCodes',
+      header: 'Códigos Tango',
+      cell: ({ row }) => {
+        const { user } = row.original;
+        const configs = user.sellerConfig || [];
+        
+        return (
+            <div className="flex flex-col gap-1.5 min-w-[140px]">
+                {configs.length === 0 && <span className="text-xs text-muted-foreground italic">Sin códigos</span>}
+                {configs.map((conf, idx) => (
+                    <div key={idx} className="flex flex-col text-xs border-b border-border/50 pb-1 last:border-0 last:pb-0">
+                        <span className="font-medium text-[10px] text-muted-foreground uppercase tracking-wider">{conf.companyName}</span>
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                            {conf.codes.map(code => (
+                                <Badge key={code} variant="secondary" className="px-1 py-0 h-5 text-[10px] font-mono">
+                                    {code}
+                                </Badge>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+                {isBoss && (
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-6 w-full justify-start px-0 text-muted-foreground hover:text-primary mt-1" 
+                        onClick={() => setUserForCodes(user)}
+                    >
+                        <Pencil className="mr-2 h-3 w-3" /> {configs.length > 0 ? 'Editar' : 'Asignar códigos'}
+                    </Button>
+                )}
+            </div>
+        )
+      }
+    },
+    {
         accessorKey: 'role',
         header: 'Rol',
         cell: ({ row }) => {
             const { user } = row.original;
             return (
                 <Select value={user.role} onValueChange={(newRole: UserRole) => handleUpdateUser(user.id, { role: newRole })} disabled={!isBoss}>
-                    <SelectTrigger className="w-[150px]">
+                    <SelectTrigger className="w-[130px]">
                         <SelectValue placeholder="Seleccionar rol" />
                     </SelectTrigger>
                     <SelectContent>
@@ -241,7 +361,7 @@ export function TeamPerformanceTable() {
         const { user } = row.original;
         return (
           <Select value={user.area} onValueChange={(newArea) => handleUpdateUser(user.id, { area: newArea as AreaType })} disabled={!isBoss}>
-            <SelectTrigger className="w-[150px]">
+            <SelectTrigger className="w-[130px]">
               <SelectValue placeholder="Asignar área..." />
             </SelectTrigger>
             <SelectContent>
@@ -267,7 +387,7 @@ export function TeamPerformanceTable() {
             }
             disabled={!isBoss}
           >
-            <SelectTrigger className="w-[190px]">
+            <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Asignar jefe..." />
             </SelectTrigger>
             <SelectContent>
@@ -297,7 +417,7 @@ export function TeamPerformanceTable() {
           <div className="flex items-center gap-1 justify-end">
             <Input
               type="number"
-              className="w-28 text-right"
+              className="w-24 text-right"
               placeholder="0"
               value={currentValue ?? ''}
               onChange={(e) => setEditedValues(p => ({...p, [user.id]: { ...p[user.id], monthlyObjective: e.target.value }}))}
@@ -336,19 +456,21 @@ export function TeamPerformanceTable() {
     },
     {
       accessorKey: 'previousMonthBilling',
-      header: () => <div className="text-right">Facturación Mes Anterior</div>,
+      header: () => <div className="text-right">Fac. Mes Anterior</div>,
       cell: ({ row }) => <div className="text-right">{row.original.user.role === 'Asesor' ? (row.original.previousMonthBilling !== null ? `$${row.original.previousMonthBilling.toLocaleString('es-AR')}` : '-') : '-'}</div>,
     },
     {
       accessorKey: 'currentMonthBilling',
-      header: () => <div className="text-right">Facturación Mes Actual</div>,
+      header: () => <div className="text-right">Fac. Mes Actual</div>,
       cell: ({ row }) => <div className="text-right font-semibold">{row.original.user.role === 'Asesor' ? `$${row.original.currentMonthBilling.toLocaleString('es-AR')}` : '-'}</div>,
     },
     {
         id: 'actions',
         cell: ({ row }) => {
             const { user } = row.original;
-            if (!isBoss || user.id === userInfo?.id) return null;
+            
+            // Allow access to self or if boss
+            if (!isBoss && user.id !== userInfo?.id) return null;
 
             return (
                 <DropdownMenu>
@@ -359,13 +481,15 @@ export function TeamPerformanceTable() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                         <DropdownMenuItem 
-                            className="text-destructive"
-                            onClick={() => setUserToDelete(user)}
-                         >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Eliminar Usuario
-                        </DropdownMenuItem>
+                        {isBoss && (
+                            <DropdownMenuItem 
+                                className="text-destructive"
+                                onClick={() => setUserToDelete(user)}
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Eliminar Usuario
+                            </DropdownMenuItem>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
             )
@@ -426,19 +550,56 @@ export function TeamPerformanceTable() {
           </div>
         </div>
       )}
-      <div className='flex justify-end mb-4'>
+
+      {/* Controles y Filtros Superiores */}
+      <div className='flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4'>
+        <div className="flex gap-2 items-center flex-wrap">
+            <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Filtros:</span>
+            </div>
+            
+            {/* Filtro por Área */}
+            <Select value={filterArea} onValueChange={(val) => setFilterArea(val as AreaType | 'all')}>
+                <SelectTrigger className="w-[160px] h-8">
+                    <SelectValue placeholder="Todas las áreas" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Todas las áreas</SelectItem>
+                    {areaTypes.map(area => (
+                        <SelectItem key={area} value={area}>{area}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+
+            {/* Filtro por Rol */}
+            <Select value={filterRole} onValueChange={(val) => setFilterRole(val as UserRole | 'all')}>
+                <SelectTrigger className="w-[160px] h-8">
+                    <SelectValue placeholder="Todos los roles" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Todos los roles</SelectItem>
+                    {userRoles.map(role => (
+                        <SelectItem key={role} value={role}>{role}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+
         {isBoss && (
-          <Button onClick={() => setIsClosureDialogOpen(true)}>
+          <Button onClick={() => setIsClosureDialogOpen(true)} variant="outline" size="sm">
             <BarChartHorizontal className="mr-2 h-4 w-4"/>
-            Gestionar Cierres Mensuales
+            Cierres Mensuales
           </Button>
         )}
       </div>
+
       <ResizableDataTable
         columns={columns}
         data={userStats}
-        emptyStateMessage="No se encontraron usuarios."
+        emptyStateMessage="No se encontraron usuarios con los filtros seleccionados."
       />
+
       <AlertDialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
           <AlertDialogContent>
               <AlertDialogHeader>
@@ -455,12 +616,98 @@ export function TeamPerformanceTable() {
               </AlertDialogFooter>
           </AlertDialogContent>
       </AlertDialog>
+      
       <MonthlyClosureDialog
         isOpen={isClosureDialogOpen}
         onOpenChange={setIsClosureDialogOpen}
         advisors={advisors}
         onSaveSuccess={fetchData}
       />
+
+      {/* Dialog para edición de códigos de vendedor */}
+      <Dialog open={!!userForCodes} onOpenChange={(open) => !open && setUserForCodes(null)}>
+        <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle>Códigos de Vendedor - Tango</DialogTitle>
+                <DialogDescription>
+                    Asigna los códigos de vendedor correspondientes a {userForCodes?.name} para cada empresa.
+                </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-6 py-4">
+                <div className="flex items-end gap-2">
+                    <div className="grid w-full gap-1.5">
+                        <Label htmlFor="company-select">Agregar empresa</Label>
+                        <Select onValueChange={handleAddCompanyToConfig}>
+                            <SelectTrigger id="company-select">
+                                <SelectValue placeholder="Seleccionar empresa..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {TANGO_COMPANIES.filter(tc => !tempSellerConfig.some(sc => sc.companyName === tc.value)).map(tc => (
+                                    <SelectItem key={tc.value} value={tc.value}>{tc.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    {tempSellerConfig.map((config, index) => (
+                        <div key={index} className="rounded-lg border p-3 space-y-3 bg-muted/20">
+                            <div className="flex items-center justify-between">
+                                <h4 className="font-semibold text-sm">{config.companyName}</h4>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveCompanyFromConfig(config.companyName)}>
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                <Input 
+                                    className="h-8 text-xs" 
+                                    placeholder="Nuevo código (ej: A1)"
+                                    value={newCodeInput[config.companyName] || ''}
+                                    onChange={(e) => setNewCodeInput({...newCodeInput, [config.companyName]: e.target.value})}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleAddCode(config.companyName);
+                                        }
+                                    }}
+                                />
+                                <Button size="sm" variant="secondary" className="h-8 px-2" onClick={() => handleAddCode(config.companyName)}>
+                                    <Plus className="h-3 w-3" />
+                                </Button>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                                {config.codes.length === 0 && <span className="text-xs text-muted-foreground italic">Sin códigos asignados</span>}
+                                {config.codes.map(code => (
+                                    <Badge key={code} variant="outline" className="pl-2 pr-1 h-6 flex items-center gap-1 bg-background">
+                                        {code}
+                                        <button onClick={() => handleRemoveCode(config.companyName, code)} className="hover:bg-muted rounded-full p-0.5 ml-1">
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </Badge>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    {tempSellerConfig.length === 0 && (
+                        <div className="text-center py-4 text-sm text-muted-foreground border border-dashed rounded-lg">
+                            No hay empresas asignadas aún.
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setUserForCodes(null)}>Cancelar</Button>
+                <Button onClick={handleSaveSellerConfig} disabled={savingCodes}>
+                    {savingCodes ? <Spinner size="small" /> : 'Guardar Cambios'}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

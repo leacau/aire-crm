@@ -1,5 +1,3 @@
-
-
 import type { User, AreaType, ScreenName, ScreenPermission } from './types';
 import { getAreaPermissions } from './firebase-service';
 import { defaultPermissions } from './data';
@@ -13,8 +11,9 @@ const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Fetches permissions from Firestore or returns from cache.
+ * NOW EXPORTED to be called explicitly after auth.
  */
-async function getPermissions() {
+export async function initializePermissions() {
     const now = Date.now();
     if (permissionsCache && cacheTimestamp && (now - cacheTimestamp < CACHE_DURATION_MS)) {
         return permissionsCache;
@@ -46,8 +45,7 @@ export function invalidatePermissionsCache() {
  * Checks if a user has a specific permission for a screen.
  * This is the synchronous version for client components that relies on the cache.
  * It might show stale data for up to CACHE_DURATION_MS but avoids async logic in components.
- * 
- * @param user The user object.
+ * * @param user The user object.
  * @param screen The screen to check permission for.
  * @param permissionType The type of permission ('view' or 'edit').
  * @returns true if the user has the permission, false otherwise.
@@ -74,9 +72,13 @@ export function hasPermission(user: User, screen: ScreenName, permissionType: 'v
         return areaPerms[user.area][screen]![permissionType] === true;
     }
 
+    // Fallback to defaults when a screen is not configured in Firestore (e.g., newly added screens).
+    if (user.area && defaultPermissions[user.area] && defaultPermissions[user.area][screen]) {
+        return defaultPermissions[user.area][screen]![permissionType] === true;
+    }
+
     // Default to no permission if none of the above match.
     return false;
 }
 
-// Initial fetch to populate cache on app load.
-getPermissions();
+// SE ELIMINÓ LA LLAMADA AUTOMÁTICA getPermissions() QUE HABÍA AQUÍ

@@ -1,18 +1,14 @@
-
-
 'use client';
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays } from './types';
 import { logActivity } from './activity-logger';
-import { sendEmail, createCalendarEvent as apiCreateCalendarEvent } from './google-gmail-service';
-import { format, parseISO, differenceInCalendarDays, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-
+import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format } from 'date-fns';
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
@@ -36,6 +32,8 @@ const collections = {
     supervisorComments: collection(db, 'supervisor_comments'),
     paymentEntries: collection(db, 'payment_entries'),
     chatSpaces: collection(db, 'chat_spaces'),
+    coachingSessions: collection(db, 'coaching_sessions'),
+    commercialNotes: collection(db, 'commercial_notes'),
 };
 
 const cache: {
@@ -45,7 +43,7 @@ const cache: {
     }
 } = {};
 
-const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION_MS = 60 * 60 * 1000; // 60 minutes
 const CHAT_SPACES_CACHE_KEY = 'chat_spaces_cache';
 
 const getFromCache = (key: string) => {
@@ -108,6 +106,113 @@ export type ClientTangoUpdate = {
     observaciones?: string;
 };
 
+// --- Commercial Notes Functions ---
+
+export const saveCommercialNote = async (
+    noteData: Omit<CommercialNote, 'id' | 'createdAt'>,
+    userId: string,
+    userName: string
+): Promise<string> => {
+    const batch = writeBatch(db);
+    
+    // 1. Create the Note
+    const noteRef = doc(collections.commercialNotes);
+    batch.set(noteRef, {
+        ...noteData,
+        createdAt: serverTimestamp(),
+    });
+
+    // 2. Create Client Activity log
+    const activityRef = doc(collections.clientActivities);
+    batch.set(activityRef, {
+        clientId: noteData.clientId,
+        clientName: noteData.clientName,
+        userId: userId,
+        userName: userName,
+        type: 'Otra', // Using 'Otra' since 'Nota Comercial' is not in standard types but we can add description
+        observation: `Generó una Nota Comercial: "${noteData.title}" (Valor: $${noteData.totalValue.toLocaleString()})`,
+        timestamp: serverTimestamp(),
+        isTask: false,
+        createdAt: serverTimestamp(),
+    });
+
+    // 3. Log System Activity
+    const systemLogRef = doc(collections.activities);
+    batch.set(systemLogRef, {
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'commercial_note',
+        entityId: noteRef.id,
+        entityName: 'Nota Comercial',
+        details: `creó una nota comercial para <strong>${noteData.clientName}</strong> con valor total <strong>$${noteData.totalValue.toLocaleString()}</strong>`,
+        ownerName: noteData.advisorName,
+        timestamp: serverTimestamp(),
+    });
+
+    await batch.commit();
+    return noteRef.id;
+};
+
+export async function getCommercialNotesByClientId(clientId: string): Promise<CommercialNote[]> {
+  try {
+    // Referencia a la colección 'commercialNotes'
+    const notesRef = collection(db, 'commercialNotes');
+    
+    // Crear la consulta filtrando por clientId y ordenando por fecha de creación
+    const q = query(
+      notesRef,
+      where('clientId', '==', clientId),
+      orderBy('createdAt', 'desc')
+    );
+
+    const querySnapshot = await getDocs(q);
+    
+    // Mapear los documentos a objetos CommercialNote incluyendo el ID
+    const notes: CommercialNote[] = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as CommercialNote));
+
+    return notes;
+  } catch (error) {
+    console.error("Error al obtener las notas comerciales del cliente:", error);
+    // Es buena práctica lanzar el error para que el componente UI pueda manejarlo (ej. mostrar un toast)
+    throw error;
+  }
+}
+
+export const bulkReleaseProspects = async (
+    prospectIds: string[],
+    userId: string,
+    userName: string
+): Promise<void> => {
+    if (!prospectIds || prospectIds.length === 0) return;
+    const batch = writeBatch(db);
+    prospectIds.forEach((id) => {
+        const docRef = doc(db, 'prospects', id);
+        batch.update(docRef, {
+            ownerId: '',           
+            ownerName: 'Sin Asignar',
+            updatedAt: serverTimestamp(),
+        });
+    });
+    await batch.commit();
+    invalidateCache('prospects'); 
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'prospect',
+        entityId: 'multiple_release',
+        entityName: `${prospectIds.length} prospectos`,
+        details: `liberó automáticamente <strong>${prospectIds.length}</strong> prospectos por inactividad.`,
+        ownerName: 'Sistema',
+    });
+};
+
+
 // --- Config Functions ---
 
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
@@ -155,6 +260,7 @@ export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsCon
     });
 };
 
+
 export const updateObjectiveVisibilityConfig = async (
     config: ObjectiveVisibilityConfig,
     userId: string,
@@ -180,15 +286,10 @@ export const updateObjectiveVisibilityConfig = async (
     });
 };
 
-
-// --- Permissions ---
 export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
     const cachedData = getFromCache('permissions');
     if (cachedData) return cachedData;
     
-    // Assuming the super admin's UID is known or can be fetched if not available.
-    // For now, this part might need adjustment if the UID is not static.
-    // This function can't easily get the current user's ID, so it's a simplification.
     const permissionsDocRef = doc(db, 'system_config', PERMISSIONS_DOC_ID);
     const docSnap = await getDoc(permissionsDocRef);
 
@@ -217,8 +318,6 @@ export const updateAreaPermissions = async (permissions: Record<AreaType, Partia
     invalidateCache('permissions');
 };
 
-
-// --- Monthly Closure Functions ---
 export const saveMonthlyClosure = async (advisorId: string, month: string, value: number, managerId: string) => {
     const userRef = doc(db, 'users', advisorId);
     const fieldPath = `monthlyClosures.${month}`;
@@ -389,6 +488,7 @@ export const deleteSupervisorCommentThread = async (
 
 
 // --- Vacation Request (License) Functions ---
+
 export const getVacationRequests = async (): Promise<VacationRequest[]> => {
     const cachedData = getFromCache('licenses');
     if(cachedData) return cachedData;
@@ -402,11 +502,7 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
                 return field.toDate().toISOString();
             }
             if (typeof field === 'string') {
-                try {
-                    return new Date(field).toISOString();
-                } catch (e) {
-                    return undefined; 
-                }
+                return field; // Asumimos ISO string si ya es string
             }
             return undefined;
         };
@@ -416,6 +512,7 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
             ...data,
             requestDate: convertTimestamp(data.requestDate)!,
             approvedAt: convertTimestamp(data.approvedAt),
+            cancelledAt: convertTimestamp(data.cancelledAt),
         } as VacationRequest;
     });
     setInCache('licenses', requests);
@@ -423,23 +520,57 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
 };
 
 
+// --- Vacation Request Functions (MODIFICADAS) ---
+
 export const createVacationRequest = async (
     requestData: Omit<VacationRequest, 'id' | 'status'>,
     managerEmail: string | null
 ): Promise<{ docId: string; emailPayload: { to: string, subject: string, body: string } | null }> => {
-    const dataToSave: any = {
-        ...requestData,
-        status: 'Pendiente' as const,
-        requestDate: serverTimestamp(),
-    };
     
-    dataToSave.startDate = requestData.startDate;
-    dataToSave.endDate = requestData.endDate;
-    dataToSave.returnDate = requestData.returnDate;
+    // 1. Obtener feriados para calcular días reales (seguridad backend)
+    const holidays = await getSystemHolidays();
+    const calculatedDays = calculateBusinessDays(requestData.startDate, requestData.returnDate, holidays);
 
+    // Si el cálculo da 0 o negativo, o no coincide (opcional validación), usamos el calculado
+    // Forzamos el uso del cálculo real
+    const finalDaysRequested = calculatedDays;
 
-    const docRef = await addDoc(collections.licenses, dataToSave);
+    if (finalDaysRequested <= 0) {
+        throw new Error("El rango de fechas seleccionado no consume días hábiles.");
+    }
+
+    const userRef = doc(db, 'users', requestData.userId);
+    const newLicenciaRef = doc(collections.licenses);
+
+    await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw new Error("Usuario no encontrado.");
+        
+        const userData = userDoc.data() as User;
+        const currentDays = userData.vacationDays || 0;
+
+        if (currentDays < finalDaysRequested) {
+            throw new Error(`No tienes suficientes días disponibles. Solicitas ${finalDaysRequested} y tienes ${currentDays}.`);
+        }
+
+        // DESCUENTO PROVISORIO INMEDIATO
+        transaction.update(userRef, {
+            vacationDays: currentDays - finalDaysRequested
+        });
+
+        const dataToSave = {
+            ...requestData,
+            daysRequested: finalDaysRequested, // Guardamos el valor calculado real
+            status: 'Pendiente',
+            requestDate: serverTimestamp(),
+            holidays: holidays, // Guardamos qué feriados se consideraron (snapshot)
+        };
+
+        transaction.set(newLicenciaRef, dataToSave);
+    });
+
     invalidateCache('licenses');
+    invalidateCache('users');
     
     let emailPayload: { to: string, subject: string, body: string } | null = null;
 
@@ -450,115 +581,113 @@ export const createVacationRequest = async (
             body: `
                 <p>Hola,</p>
                 <p>Has recibido una nueva solicitud de licencia de <strong>${requestData.userName}</strong>.</p>
-                <p><strong>Período:</strong> ${format(new Date(requestData.startDate), 'P', { locale: es })} - ${format(new Date(requestData.endDate), 'P', { locale: es })}</p>
-                <p><strong>Días solicitados:</strong> ${requestData.daysRequested}</p>
+                <p><strong>Salida:</strong> ${format(parseISO(requestData.startDate), 'P', { locale: es })}</p>
+                <p><strong>Retorno:</strong> ${format(parseISO(requestData.returnDate), 'P', { locale: es })}</p>
+                <p><strong>Días a consumir:</strong> ${finalDaysRequested}</p>
+                <p><em>Estos días ya han sido descontados provisoriamente del saldo del asesor.</em></p>
                 <p>Para aprobar o rechazar esta solicitud, por favor ingresa a la sección "Licencias" del CRM.</p>
             `,
         };
     }
 
-    return { docId: docRef.id, emailPayload };
+    return { docId: newLicenciaRef.id, emailPayload };
 };
 
-export const approveVacationRequest = async (
+export const updateVacationRequest = async (
     requestId: string,
-    newStatus: VacationRequestStatus,
-    approverId: string,
-    applicantEmail: string | null,
-): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
-    const requestRef = doc(db, 'licencias', requestId);
-
-    let pendingDaysAfterUpdate: number | null = null;
+    updates: Partial<VacationRequest>
+): Promise<void> => {
+    const holidays = await getSystemHolidays();
 
     await runTransaction(db, async (transaction) => {
-        const requestDoc = await transaction.get(requestRef);
-        if (!requestDoc.exists()) {
-            throw "Solicitud no encontrada.";
-        }
-        const requestData = requestDoc.data() as VacationRequest;
-        const userRef = doc(db, 'users', requestData.userId);
-        const userDoc = await transaction.get(userRef);
+        const requestRef = doc(db, 'licencias', requestId);
+        const requestSnap = await transaction.get(requestRef);
+        if (!requestSnap.exists()) throw new Error("Solicitud no encontrada");
+        const oldRequest = requestSnap.data() as VacationRequest;
 
-        if (!userDoc.exists()) {
-            throw "Usuario solicitante no encontrado.";
-        }
-        const userData = userDoc.data() as User;
-        
-        const updatePayload: Partial<VacationRequest> = {
-            status: newStatus,
-            approvedBy: approverId,
-            approvedAt: new Date().toISOString(),
-        };
+        const userRef = doc(db, 'users', oldRequest.userId);
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) throw new Error("Usuario no encontrado");
+        const userData = userSnap.data() as User;
 
-        let newVacationDays = userData.vacationDays || 0;
+        let newDaysRequested = oldRequest.daysRequested;
 
-        if (newStatus === 'Aprobado' && requestData.status !== 'Aprobado') {
-            newVacationDays -= requestData.daysRequested;
-        } 
-        else if (newStatus !== 'Aprobado' && requestData.status === 'Aprobado') {
-            newVacationDays += requestData.daysRequested;
+        const newStartDate = updates.startDate || oldRequest.startDate;
+        const newReturnDate = updates.returnDate || oldRequest.returnDate;
+
+        if (newStartDate !== oldRequest.startDate || newReturnDate !== oldRequest.returnDate) {
+             newDaysRequested = calculateBusinessDays(newStartDate, newReturnDate, holidays);
         }
 
-        if (newVacationDays !== (userData.vacationDays || 0)) {
-            transaction.update(userRef, { vacationDays: newVacationDays });
-            invalidateCache('users');
+        if (newDaysRequested <= 0) throw new Error("El rango no consume días hábiles.");
+
+        const currentBalance = userData.vacationDays || 0;
+        let balanceBeforeThisRequest = currentBalance;
+        if (oldRequest.status === 'Pendiente' || oldRequest.status === 'Aprobado') {
+            balanceBeforeThisRequest += oldRequest.daysRequested;
         }
-        pendingDaysAfterUpdate = newVacationDays;
-        
-        transaction.update(requestRef, updatePayload);
+
+        if (balanceBeforeThisRequest < newDaysRequested) {
+             throw new Error(`Saldo insuficiente.`);
+        }
+
+        const finalBalance = balanceBeforeThisRequest - newDaysRequested;
+
+        if (finalBalance !== currentBalance) {
+            transaction.update(userRef, { vacationDays: finalBalance });
+        }
+
+        transaction.update(requestRef, {
+            ...updates,
+            daysRequested: newDaysRequested,
+            holidays: holidays,
+            updatedAt: serverTimestamp()
+        });
+    });
+    
+    invalidateCache('licenses');
+    invalidateCache('users');
+};
+
+export const adjustVacationDays = async (userId: string, days: number, updatedBy: string, updatedByName: string): Promise<void> => {
+    if (days === 0) {
+        throw new Error('La cantidad de días a ajustar debe ser distinta de cero.');
+    }
+
+    const userRef = doc(db, 'users', userId);
+
+    await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) {
+            throw new Error('Usuario no encontrado.');
+        }
+
+        const userData = userSnap.data() as User;
+        const currentDays = userData.vacationDays || 0;
+        const newVacationDays = currentDays + days;
+
+        transaction.update(userRef, {
+            vacationDays: newVacationDays,
+            updatedAt: serverTimestamp(),
+            updatedBy,
+        });
     });
 
-    invalidateCache('licenses');
-    const requestAfterUpdate = (await getDoc(requestRef)).data() as VacationRequest;
-    
-    let emailPayload: { to: string, subject: string, body: string } | null = null;
-    if (applicantEmail) {
-        if (newStatus === 'Aprobado') {
-            const today = new Date();
-            const start = format(new Date(requestAfterUpdate.startDate), "d 'de' MMMM 'de' yyyy", { locale: es });
-            const end = format(new Date(requestAfterUpdate.endDate), "d 'de' MMMM 'de' yyyy", { locale: es });
-            const returnDate = format(new Date(requestAfterUpdate.returnDate), "d 'de' MMMM 'de' yyyy", { locale: es });
-            const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
-            const pending = pendingDaysAfterUpdate ?? 0;
+    invalidateCache('users');
 
-            const approvalLetter = `
-                <div style="font-family: Arial, sans-serif; color: #222; line-height: 1.6;">
-                  <div style="text-align: right; margin-bottom: 16px;">Santa Fé, ${todayFormatted}</div>
-                  <p>Estimado/a <strong>${requestAfterUpdate.userName}</strong></p>
-                  <p>Mediante la presente le informamos la autorización de la solicitud de <strong>${requestAfterUpdate.daysRequested}</strong> días de vacaciones.</p>
-                  <p>Del <strong>${start}</strong> al <strong>${end}</strong> de acuerdo con el período vacacional correspondiente al año actual.</p>
-                  <p>La fecha de reincorporación a la actividad laboral será el día <strong>${returnDate}</strong>.</p>
-                  <p>Quedarán <strong>${pending}</strong> días pendientes de licencia ${today.getFullYear()}.</p>
-                  <p>Saludos cordiales.</p>
-                  <br/>
-                  <div style="display:flex; gap:48px; margin-top:32px; flex-wrap: wrap;">
-                    <span>Gte. de área</span>
-                    <span>Jefe de área</span>
-                    <span>Área de rrhh</span>
-                  </div>
-                  <p style="margin-top:32px;">Notificado: ____________________</p>
-                </div>
-            `;
+    const updatedUser = await getDoc(userRef);
+    const action = days > 0 ? 'agregó' : 'quitó';
+    const amount = Math.abs(days);
 
-            emailPayload = {
-                to: applicantEmail,
-                subject: `Autorización de licencia (${requestAfterUpdate.daysRequested} días)`,
-                body: approvalLetter,
-            };
-        } else {
-            emailPayload = {
-                to: applicantEmail,
-                subject: `Tu Solicitud de Licencia ha sido ${newStatus}`,
-                body: `
-                    <p>Hola ${requestAfterUpdate.userName},</p>
-                    <p>Tu solicitud de licencia para el período del <strong>${format(new Date(requestAfterUpdate.startDate), 'P', { locale: es })}</strong> al <strong>${format(new Date(requestAfterUpdate.endDate), 'P', { locale: es })}</strong> ha sido <strong>${newStatus}</strong>.</p>
-                    <p>Puedes ver el estado de tus solicitudes en el CRM.</p>
-                `,
-            };
-        }
-    }
-    
-    return { emailPayload };
+    await logActivity({
+        userId: updatedBy,
+        userName: updatedByName,
+        type: 'update',
+        entityType: 'user',
+        entityId: userId,
+        entityName: (updatedUser.data() as User)?.name || 'Usuario',
+        details: `${action} <strong>${amount}</strong> días de licencia a <strong>${(updatedUser.data() as User)?.name || 'un usuario'}</strong>`,
+    });
 };
 
 export const addVacationDays = async (userId: string, daysToAdd: number, updatedBy: string, updatedByName: string): Promise<void> => {
@@ -599,11 +728,204 @@ export const addVacationDays = async (userId: string, daysToAdd: number, updated
     });
 };
 
+export const approveVacationRequest = async (
+    requestId: string,
+    newStatus: VacationRequestStatus,
+    approverId: string,
+    applicantEmail: string | null,
+): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
+    const requestRef = doc(db, 'licencias', requestId);
+
+    let pendingDaysAfterUpdate: number | null = null;
+
+    await runTransaction(db, async (transaction) => {
+        const requestDoc = await transaction.get(requestRef);
+        if (!requestDoc.exists()) {
+            throw "Solicitud no encontrada.";
+        }
+        const requestData = requestDoc.data() as VacationRequest;
+        
+        // Evitar doble procesamiento si ya está en el estado deseado
+        if (requestData.status === newStatus) return;
+
+        const userRef = doc(db, 'users', requestData.userId);
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw "Usuario solicitante no encontrado.";
+        
+        const userData = userDoc.data() as User;
+        let newVacationDays = userData.vacationDays || 0;
+
+        // LÓGICA DE REVERSIÓN O CONFIRMACIÓN
+        
+        // Caso 1: Estaba Pendiente y se RECHAZA -> Devolver días (Rollback)
+        if (requestData.status === 'Pendiente' && newStatus === 'Rechazado') {
+            newVacationDays += requestData.daysRequested;
+        }
+        // Caso 2: Estaba Aprobado y se pasa a Rechazado (Cancelación tardía) -> Devolver días
+        else if (requestData.status === 'Aprobado' && newStatus === 'Rechazado') {
+            newVacationDays += requestData.daysRequested;
+        }
+        // Caso 3: Estaba Rechazado y se pasa a Aprobado/Pendiente -> Volver a descontar
+        else if (requestData.status === 'Rechazado' && (newStatus === 'Aprobado' || newStatus === 'Pendiente')) {
+            newVacationDays -= requestData.daysRequested;
+        }
+        
+        // Si pasa de Pendiente a Aprobado: NO HACEMOS NADA con el saldo, 
+        // porque ya se descontó en la creación (consumo provisorio).
+
+        if (newVacationDays !== (userData.vacationDays || 0)) {
+            transaction.update(userRef, { vacationDays: newVacationDays });
+            invalidateCache('users');
+        }
+        pendingDaysAfterUpdate = newVacationDays;
+        
+        transaction.update(requestRef, {
+            status: newStatus,
+            approvedBy: approverId,
+            approvedAt: new Date().toISOString(),
+        });
+    });
+
+    invalidateCache('licenses');
+    const requestAfterUpdate = (await getDoc(requestRef)).data() as VacationRequest;
+    
+    let emailPayload: { to: string, subject: string, body: string } | null = null;
+    if (applicantEmail) {
+        if (newStatus === 'Aprobado') {
+            const today = new Date();
+            const start = format(parseISO(requestAfterUpdate.startDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+            const returnDate = format(parseISO(requestAfterUpdate.returnDate), "d 'de' MMMM 'de' yyyy", { locale: es });
+            const todayFormatted = format(today, "d 'de' MMMM 'de' yyyy", { locale: es });
+            const pending = pendingDaysAfterUpdate ?? 0;
+
+           emailPayload = {
+                to: applicantEmail,
+                subject: `Autorización de licencia`,
+                body: `<p>Tu licencia del ${start} (retorno el ${returnDate}) ha sido aprobada.</p>`, // Simplificado para el ejemplo
+            };
+        } else if (newStatus === 'Rechazado') {
+             emailPayload = {
+                to: applicantEmail,
+                subject: `Solicitud Rechazada`,
+                body: `<p>Tu solicitud de licencia ha sido rechazada. Los días se han reintegrado a tu saldo.</p>`,
+            };
+        }
+    }
+    
+    return { emailPayload };
+};
+
+export const annulVacationRequest = async (
+    requestId: string,
+    reason: string,
+    managerId: string,
+    managerName: string,
+    applicantEmail: string | null
+): Promise<{ emailPayload: { to: string, subject: string, body: string } | null }> => {
+    if (!reason.trim()) throw new Error("El motivo de anulación es obligatorio.");
+
+    const requestRef = doc(db, 'licencias', requestId);
+
+    await runTransaction(db, async (transaction) => {
+        const requestDoc = await transaction.get(requestRef);
+        if (!requestDoc.exists()) throw "Solicitud no encontrada.";
+        const requestData = requestDoc.data() as VacationRequest;
+        
+        if (requestData.status !== 'Aprobado') {
+             throw "Solo se pueden anular licencias que ya han sido aprobadas.";
+        }
+
+        const userRef = doc(db, 'users', requestData.userId);
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw "Usuario solicitante no encontrado.";
+        
+        const userData = userDoc.data() as User;
+        const currentDays = userData.vacationDays || 0;
+        
+        transaction.update(userRef, { vacationDays: currentDays + requestData.daysRequested });
+        
+        transaction.update(requestRef, {
+            status: 'Anulado',
+            cancellationReason: reason,
+            cancelledBy: managerId,
+            cancelledByName: managerName,
+            cancelledAt: new Date().toISOString(),
+        });
+    });
+
+    invalidateCache('licenses');
+    invalidateCache('users');
+    
+    let emailPayload = null;
+    if (applicantEmail) {
+        emailPayload = {
+            to: applicantEmail,
+            subject: `Anulación de licencia aprobada`,
+            body: `<p>Tu licencia aprobada ha sido <strong>ANULADA</strong> por ${managerName}. Motivo: ${reason}</p>`,
+        };
+    }
+    
+    return { emailPayload };
+};
 
 export const deleteVacationRequest = async (requestId: string): Promise<void> => {
     const docRef = doc(db, 'licencias', requestId);
     await deleteDoc(docRef);
     invalidateCache('licenses');
+};
+
+// --- Helper: Cálculo de días hábiles ---
+export const calculateBusinessDays = (startDateStr: string, returnDateStr: string, holidays: string[]): number => {
+    const start = parseISO(startDateStr);
+    const end = parseISO(returnDateStr); // Fecha de retorno (no se cuenta)
+    const holidaySet = new Set(holidays);
+    
+    let count = 0;
+    let current = start;
+
+    // Iteramos mientras current sea ANTERIOR a end (el día de retorno no se cuenta)
+    while (current < end) {
+        const dateStr = format(current, 'yyyy-MM-dd');
+        // Chequear fin de semana
+        if (!isSaturday(current) && !isSunday(current)) {
+            // Chequear feriado
+            if (!holidaySet.has(dateStr)) {
+                count++;
+            }
+        }
+        // Avanzar un día
+        current = new Date(current);
+        current.setDate(current.getDate() + 1);
+    }
+    return count;
+};
+
+// --- Gestión de Feriados ---
+
+export const getSystemHolidays = async (): Promise<string[]> => {
+    const docRef = doc(collections.systemConfig, 'holidays');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+        return (snap.data() as SystemHolidays).dates || [];
+    }
+    return [];
+};
+
+export const saveSystemHolidays = async (dates: string[], userId: string, userName: string) => {
+    const docRef = doc(collections.systemConfig, 'holidays');
+    await setDoc(docRef, { dates }, { merge: true });
+    invalidateCache('system_holidays'); // Si usas caché para esto
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'system_config',
+        entityId: 'holidays',
+        entityName: 'Feriados',
+        details: `actualizó la lista de feriados del sistema.`,
+        ownerName: 'Sistema',
+    });
 };
 
 
@@ -633,6 +955,8 @@ export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'create
         ...prospectData,
         ownerId: userId,
         ownerName: userName,
+        creatorId: userId,
+        creatorName: userName,
         createdAt: serverTimestamp(),
     };
     const docRef = await addDoc(collections.prospects, dataToSave);
@@ -723,6 +1047,44 @@ export const recordProspectNotifications = async (
         details: `envió recordatorios de seguimiento para ${prospectIds.length} prospecto(s).`,
         ownerName: userName,
     });
+};
+
+// --- Task Functions ---
+
+export const completeActivityTask = async (activityId: string, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'client-activities', activityId);
+    
+    await updateDoc(docRef, {
+        completed: true,
+        completedAt: serverTimestamp(),
+        completedByUserId: userId,
+        completedByUserName: userName,
+        updatedAt: serverTimestamp()
+    });
+
+invalidateCache('client_activities');
+    // Opcional: Loguear que se completó la tarea
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'client_activity' as any, 
+        entityId: activityId,
+        entityName: 'Tarea completada',
+        details: 'marcó la tarea como finalizada',
+        ownerName: userName
+    }); 
+};
+
+export const rescheduleActivityTask = async (activityId: string, newDate: Date, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'client-activities', activityId);
+    
+    await updateDoc(docRef, {
+        dueDate: Timestamp.fromDate(newDate),
+        updatedAt: serverTimestamp()
+    });
+    
+    invalidateCache('client_activities');
 };
 
 
@@ -1236,6 +1598,12 @@ export const getInvoices = async (): Promise<Invoice[]> => {
             : typeof rawCreditNoteDate === 'string'
                 ? rawCreditNoteDate
                 : null;
+        const rawDeletionMarkAt = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkAt = rawDeletionMarkAt instanceof Timestamp
+            ? rawDeletionMarkAt.toDate().toISOString()
+            : typeof rawDeletionMarkAt === 'string'
+                ? rawDeletionMarkAt
+                : null;
 
         const rawDeletionMarkDate = (data as any).deletionMarkedAt;
         const normalizedDeletionMarkDate = rawDeletionMarkDate instanceof Timestamp
@@ -1253,7 +1621,7 @@ export const getInvoices = async (): Promise<Invoice[]> => {
             datePaid: validDatePaid ? format(validDatePaid, 'yyyy-MM-dd') : undefined,
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
-            deletionMarkedAt: normalizedDeletionMarkDate,
+            deletionMarkedAt: normalizedDeletionMarkAt,
         } as Invoice;
     });
     setInCache('invoices', invoices);
@@ -1272,11 +1640,11 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
             : typeof rawCreditNoteDate === 'string'
                 ? rawCreditNoteDate
                 : null;
-        const rawDeletionMarkDate = (data as any).deletionMarkedAt;
-        const normalizedDeletionMarkDate = rawDeletionMarkDate instanceof Timestamp
-            ? rawDeletionMarkDate.toDate().toISOString()
-            : typeof rawDeletionMarkDate === 'string'
-                ? rawDeletionMarkDate
+        const rawDeletionMarkAt = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkAt = rawDeletionMarkAt instanceof Timestamp
+            ? rawDeletionMarkAt.toDate().toISOString()
+            : typeof rawDeletionMarkAt === 'string'
+                ? rawDeletionMarkAt
                 : null;
 
         return {
@@ -1285,7 +1653,7 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
             amount: normalizeInvoiceAmount(data.amount),
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
-            deletionMarkedAt: normalizedDeletionMarkDate,
+            deletionMarkedAt: normalizedDeletionMarkAt,
         } as Invoice;
     });
     invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
@@ -1307,11 +1675,11 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
             : typeof rawCreditNoteDate === 'string'
                 ? rawCreditNoteDate
                 : null;
-        const rawDeletionMarkDate = (data as any).deletionMarkedAt;
-        const normalizedDeletionMarkDate = rawDeletionMarkDate instanceof Timestamp
-            ? rawDeletionMarkDate.toDate().toISOString()
-            : typeof rawDeletionMarkDate === 'string'
-                ? rawDeletionMarkDate
+        const rawDeletionMarkAt = (data as any).deletionMarkedAt;
+        const normalizedDeletionMarkAt = rawDeletionMarkAt instanceof Timestamp
+            ? rawDeletionMarkAt.toDate().toISOString()
+            : typeof rawDeletionMarkAt === 'string'
+                ? rawDeletionMarkAt
                 : null;
 
         return {
@@ -1320,7 +1688,7 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
             amount: normalizeInvoiceAmount(data.amount),
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
-            deletionMarkedAt: normalizedDeletionMarkDate,
+            deletionMarkedAt: normalizedDeletionMarkAt,
         } as Invoice;
     });
 };
@@ -1331,6 +1699,10 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
       dateGenerated: new Date().toISOString(),
       isCreditNote: invoiceData.isCreditNote ?? false,
       creditNoteMarkedAt: invoiceData.creditNoteMarkedAt ?? null,
+      markedForDeletion: invoiceData.markedForDeletion ?? false,
+      deletionMarkedAt: invoiceData.deletionMarkedAt ?? null,
+      deletionMarkedById: invoiceData.deletionMarkedById ?? null,
+      deletionMarkedByName: invoiceData.deletionMarkedByName ?? null,
     };
     const docRef = await addDoc(collections.invoices, dataToSave);
     invalidateCache('invoices');
@@ -1439,22 +1811,46 @@ export const deleteInvoicesInBatches = async (
 
 const PAYMENT_CACHE_KEY = 'paymentEntries';
 
-const computeDaysLate = (dueDate?: string | null) => {
-    if (!dueDate) return null;
+const PAYMENT_DATE_FORMATS = [
+    'yyyy-MM-dd',
+    'dd/MM/yyyy',
+    'd/M/yyyy',
+    'dd-MM-yyyy',
+    'd-M-yyyy',
+    'dd/MM/yy',
+    'd/M/yy',
+    'dd-MM-yy',
+    'd-M-yy',
+];
 
-    const parseDate = () => {
+const parsePaymentDate = (raw?: string | null) => {
+    if (!raw) return null;
+    const value = raw.toString().trim();
+
+    const tryParse = (parser: () => Date) => {
         try {
-            return parseISO(dueDate);
+            const parsed = parser();
+            if (!Number.isNaN(parsed.getTime())) return parsed;
         } catch (error) {
-            try {
-                return parse(dueDate, 'dd/MM/yyyy', new Date());
-            } catch (err) {
-                return null;
-            }
+            return null;
         }
+        return null;
     };
 
-    const parsed = parseDate();
+    return (
+        tryParse(() => parseISO(value)) ??
+        PAYMENT_DATE_FORMATS.reduce<Date | null>((acc, formatString) => acc ?? tryParse(() => parse(value, formatString, new Date())), null)
+    );
+};
+
+const normalizePaymentDate = (raw?: string | null) => {
+    const parsed = parsePaymentDate(raw);
+    if (parsed) return parsed.toISOString();
+    return raw ? raw.toString().trim() : null;
+};
+
+const computeDaysLate = (dueDate?: string | null) => {
+    const parsed = parsePaymentDate(dueDate);
     if (!parsed || Number.isNaN(parsed.getTime())) return null;
 
     const diff = differenceInCalendarDays(new Date(), parsed);
@@ -1522,6 +1918,11 @@ export const replacePaymentEntriesForAdvisor = async (
         };
     });
 
+    const existingMap = existingEntries.reduce((acc, entry) => {
+        if (entry.comprobanteNumber) acc.set(entry.comprobanteNumber, entry.ref);
+        return acc;
+    }, new Map<string, any>());
+
     const existingNumbers = new Set(
         existingEntries
             .map((entry) => entry.comprobanteNumber)
@@ -1546,25 +1947,43 @@ export const replacePaymentEntriesForAdvisor = async (
         return !existingNumbers.has(comprobante);
     });
 
-    rowsToInsert.forEach((row) => {
-        const docRef = doc(collections.paymentEntries);
-        batch.set(docRef, {
-            advisorId,
-            advisorName,
-            company: row.company,
-            tipo: row.tipo || null,
-            comprobanteNumber: row.comprobanteNumber,
-            razonSocial: row.razonSocial,
-            amount: row.amount ?? null,
-            pendingAmount: row.pendingAmount ?? null,
-            issueDate: row.issueDate || null,
-            dueDate: row.dueDate || null,
-            daysLate: computeDaysLate(row.dueDate),
-            status: 'Pendiente' as PaymentStatus,
-            notes: row.notes || '',
-            nextContactAt: row.nextContactAt || null,
-            createdAt: serverTimestamp(),
-        });
+    const upsertPayload = (row: typeof rows[number]) => ({
+        advisorId,
+        advisorName,
+        company: row.company,
+        tipo: row.tipo || null,
+        comprobanteNumber: row.comprobanteNumber,
+        razonSocial: row.razonSocial,
+        amount: row.amount ?? null,
+        pendingAmount: row.pendingAmount ?? null,
+        issueDate: row.issueDate || null,
+        dueDate: row.dueDate || null,
+        daysLate: computeDaysLate(row.dueDate),
+        updatedAt: serverTimestamp(),
+    });
+
+    rows.forEach((row) => {
+        const comprobante = (row.comprobanteNumber || '').trim();
+        const normalizedIssueDate = normalizePaymentDate(row.issueDate);
+        const normalizedDueDate = normalizePaymentDate(row.dueDate);
+        const payload = {
+            ...upsertPayload(row),
+            issueDate: normalizedIssueDate,
+            dueDate: normalizedDueDate,
+            daysLate: computeDaysLate(normalizedDueDate),
+        };
+        if (comprobante && existingMap.has(comprobante)) {
+            batch.update(existingMap.get(comprobante), payload);
+        } else {
+            const docRef = doc(collections.paymentEntries);
+            batch.set(docRef, {
+                ...payload,
+                status: 'Pendiente' as PaymentStatus,
+                notes: row.notes || '',
+                nextContactAt: row.nextContactAt || null,
+                createdAt: serverTimestamp(),
+            });
+        }
     });
 
     await batch.commit();
@@ -1714,63 +2133,30 @@ export const createUserProfile = async (uid: string, name: string, email: string
     invalidateCache('users');
 };
 
-export const getUserProfile = async (uid: string): Promise<User | null> => {
-    const userRef = doc(db, 'users', uid);
-    const docSnap = await getDoc(userRef);
-    if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as User;
-    }
-    return null;
+export async function getUserProfile(uid: string): Promise<User | null> {
+  const docRef = doc(db, 'users', uid);
+  const docSnap = await getDoc(docRef);
+  if (docSnap.exists()) {
+    return { id: docSnap.id, ...docSnap.data() } as User;
+  }
+  return null;
 }
 
-export const updateUserProfile = async (uid: string, data: Partial<User>): Promise<void> => {
-    const userRef = doc(db, 'users', uid);
-    const originalSnap = await getDoc(userRef);
-    if (!originalSnap.exists()) return;
-    const originalData = originalSnap.data() as User;
-    
-    const dataToUpdate: {[key: string]: any} = { ...data };
-    if (data.managerId === undefined) {
-      dataToUpdate.managerId = deleteField();
-    }
-    
-    await updateDoc(userRef, {
-        ...dataToUpdate,
-        updatedAt: serverTimestamp()
-    });
-    invalidateCache('users');
-
-    if (data.role && data.role !== originalData.role) {
-        await logActivity({
-            userId: uid,
-            userName: data.name || originalData.name,
-            type: 'update',
-            entityType: 'user',
-            entityId: uid,
-            entityName: data.name || originalData.name,
-            details: `cambió el rol de <strong>${data.name || originalData.name}</strong> a <strong>${data.role}</strong>`,
-            ownerName: data.name || originalData.name,
-        });
-    }
+export async function updateUserProfile(uid: string, data: Partial<User>) {
+  const userRef = doc(db, 'users', uid);
+  // Usamos set con merge: true para crear el documento si no existe, o actualizar si existe
+  await setDoc(userRef, data, { merge: true });
 };
 
 
-export const getAllUsers = async (role?: User['role']): Promise<User[]> => {
-    const cacheKey = role ? `users_${role}` : 'users';
-    const cachedData = getFromCache(cacheKey);
-    if (cachedData) return cachedData;
-
-    let q;
-    if (role) {
-      q = query(collections.users, where("role", "==", role));
-    } else {
-      q = query(collections.users);
-    }
-    const snapshot = await getDocs(q);
-    const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-    setInCache(cacheKey, users);
-    if (!role) setInCache('users', users);
-    return users;
+export const getAllUsers = async (role?: UserRole): Promise<User[]> => {
+  const usersRef = collection(db, 'users');
+  const snapshot = await getDocs(usersRef);
+  let users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+  if (role) {
+      users = users.filter(u => u.role === role);
+  }
+  return users;
 };
 
 export const getUserById = async (userId: string): Promise<User | null> => {
@@ -2225,10 +2611,6 @@ export const bulkUpdateClients = async (
     }
 };
 
-
-
-// --- Person (Contact) Functions ---
-
 export const getPeopleByClientId = async (clientId: string): Promise<Person[]> => {
     const q = query(collections.people, where("clientIds", "array-contains", clientId));
     const snapshot = await getDocs(q);
@@ -2244,7 +2626,7 @@ export const createPerson = async (
         ...personData,
         createdAt: serverTimestamp()
     });
-    invalidateCache('people'); // A generic cache invalidation
+    invalidateCache('people');
     
     if (personData.clientIds) {
         for (const clientId of personData.clientIds) {
@@ -2339,9 +2721,6 @@ export const deletePerson = async (
         });
     }
 };
-
-
-// --- Opportunity Functions ---
 
 const mapOpportunityDoc = (doc: any): Opportunity => {
     const data = doc.data();
@@ -2679,9 +3058,6 @@ export const deleteOpportunity = async (
     });
 };
 
-
-// --- General Activity Functions ---
-
 const convertActivityLogDoc = (doc: any): ActivityLog => {
     const data = doc.data();
     if (data.timestamp instanceof Timestamp) {
@@ -2772,9 +3148,6 @@ export const getActivitiesForEntity = async (entityId: string): Promise<Activity
     return activities;
   };
 
-
-// --- Client-Specific Activity Functions ---
-
 const convertActivityDoc = (doc: any): ClientActivity => {
     const data = doc.data();
     
@@ -2808,7 +3181,16 @@ export const getAllClientActivities = async (): Promise<ClientActivity[]> => {
 
     const q = query(collections.clientActivities, orderBy('timestamp', 'desc'));
     const snapshot = await getDocs(q);
-    const activities = snapshot.docs.map(convertActivityDoc);
+    const activities = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
+            dueDate: data.dueDate instanceof Timestamp ? data.dueDate.toDate().toISOString() : data.dueDate,
+            completedAt: data.completedAt instanceof Timestamp ? data.completedAt.toDate().toISOString() : data.completedAt,
+        } as ClientActivity;
+    });
     setInCache('client_activities', activities);
     return activities;
 };
@@ -2874,8 +3256,6 @@ export const updateClientActivity = async (
     invalidateCache('client_activities');
 };
 
-// --- Google Chat direct spaces ---
-
 export const getChatSpaces = async (): Promise<ChatSpaceMapping[]> => {
     const cached = getFromCache(CHAT_SPACES_CACHE_KEY);
     if (cached) return cached;
@@ -2934,5 +3314,300 @@ export const upsertChatSpace = async (params: {
         entityName: 'Chat directo',
         details: `actualizó el space de chat para ${userEmail}.`,
         ownerName: updatedByName,
+    });
+};
+
+export const getChatUserMappings = async (): Promise<Record<string, string>> => {
+    const docRef = doc(collections.systemConfig, 'chat_user_mappings');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+        return snap.data().mappings || {};
+    }
+    return {};
+};
+
+export const saveChatUserMappings = async (mappings: Record<string, string>, userId: string, userName: string) => {
+    const docRef = doc(collections.systemConfig, 'chat_user_mappings');
+    await setDoc(docRef, { mappings }, { merge: true });
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'system_config', // Using existing types, closest fit
+        entityId: 'chat_user_mappings',
+        entityName: 'Alias de Chat',
+        details: 'actualizó los alias de usuarios de Google Chat.',
+        ownerName: userName,
+    });
+};
+
+export const getCoachingSessions = async (advisorId: string): Promise<CoachingSession[]> => {
+    const q = query(
+        collections.coachingSessions, 
+        where('advisorId', '==', advisorId),
+        orderBy('date', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+            id: doc.id, 
+            ...data,
+            createdAt: timestampToISO(data.createdAt) || new Date().toISOString(),
+        } as CoachingSession;
+    });
+};
+
+export const createCoachingSession = async (
+    sessionData: Omit<CoachingSession, 'id' | 'createdAt' | 'status'>,
+    userId: string, 
+    userName: string
+): Promise<string> => {
+    const docRef = await addDoc(collections.coachingSessions, {
+        ...sessionData,
+        status: 'Open',
+        createdAt: serverTimestamp(),
+        // Generar IDs si no vienen (ej: al arrastrar tareas, ya vienen con ID y taskId)
+        items: sessionData.items.map(item => ({
+            ...item, 
+            id: typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+            taskId: item.taskId || (typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
+            originalCreatedAt: item.originalCreatedAt || new Date().toISOString()
+        }))
+    });
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'user', 
+        entityId: sessionData.advisorId,
+        entityName: 'Sesión de Seguimiento',
+        details: `inició una nueva sesión de seguimiento para <strong>${sessionData.advisorName}</strong>`,
+        ownerName: sessionData.advisorName
+    });
+
+    return docRef.id;
+};
+
+export const deleteCoachingSession = async (sessionId: string, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'coaching_sessions', sessionId);
+    await deleteDoc(docRef);
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'user', 
+        entityId: sessionId,
+        entityName: 'Sesión de Seguimiento',
+        details: `eliminó una sesión de seguimiento`,
+        ownerName: 'Sistema' 
+    });
+};
+
+export const updateCoachingSession = async (sessionId: string, data: Partial<CoachingSession>, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'coaching_sessions', sessionId);
+    await updateDoc(docRef, data);
+};
+
+export const updateCoachingItem = async (
+    sessionId: string,
+    itemId: string,
+    updates: { status?: string, advisorNotes?: string },
+    userId: string,
+    userName: string,
+    taskId?: string, // Para sincronización
+    advisorId?: string // Para búsqueda en historial
+): Promise<void> => {
+    // 1. Actualizar la sesión actual
+    const sessionRef = doc(db, 'coaching_sessions', sessionId);
+    const sessionSnap = await getDoc(sessionRef);
+    
+    if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
+    
+    const sessionData = sessionSnap.data() as CoachingSession;
+    const updatedItems = sessionData.items.map(item => {
+        if (item.id === itemId) {
+            return { 
+                ...item, 
+                ...updates,
+                lastUpdate: new Date().toISOString() 
+            };
+        }
+        return item;
+    });
+
+    await updateDoc(sessionRef, { items: updatedItems });
+
+    // 2. Si hay cambio de estado y tenemos taskId y advisorId, propagar a otras sesiones
+    if (updates.status && taskId && advisorId) {
+        const historyQuery = query(
+            collections.coachingSessions, 
+            where('advisorId', '==', advisorId)
+        );
+        const historySnap = await getDocs(historyQuery);
+        
+        const batch = writeBatch(db);
+        let batchCount = 0;
+
+        historySnap.forEach((docSnap) => {
+            if (docSnap.id === sessionId) return; // Ya actualizada
+
+            const sData = docSnap.data() as CoachingSession;
+            const itemsToUpdate = sData.items.map(i => {
+                if (i.taskId === taskId) {
+                    return { ...i, status: updates.status! };
+                }
+                return i;
+            });
+
+            // Solo actualizar si hubo cambios
+            if (JSON.stringify(itemsToUpdate) !== JSON.stringify(sData.items)) {
+                batch.update(docSnap.ref, { items: itemsToUpdate });
+                batchCount++;
+            }
+        });
+
+        if (batchCount > 0) {
+            await batch.commit();
+        }
+    }
+    
+    // Loguear solo si se completa
+    if (updates.status === 'Completado') {
+         await logActivity({
+            userId,
+            userName,
+            type: 'update',
+            entityType: 'user',
+            entityId: sessionId,
+            entityName: 'Tarea de Seguimiento',
+            details: `completó una tarea de la sesión de seguimiento.`,
+            ownerName: sessionData.advisorName
+        });
+    }
+};
+
+export const deleteCoachingItem = async (sessionId: string, itemId: string) => {
+    const sessionRef = doc(db, 'coaching_sessions', sessionId);
+    const sessionSnap = await getDoc(sessionRef);
+    
+    if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
+    
+    const sessionData = sessionSnap.data() as CoachingSession;
+    const updatedItems = sessionData.items.filter(item => item.id !== itemId);
+
+    await updateDoc(sessionRef, { items: updatedItems });
+};
+
+export const addItemsToSession = async (sessionId: string, newItems: CoachingItem[]) => {
+    const sessionRef = doc(db, 'coaching_sessions', sessionId);
+    const itemsWithIds = newItems.map(i => ({
+        ...i, 
+        id: typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+        taskId: i.taskId || (typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
+        originalCreatedAt: i.originalCreatedAt || new Date().toISOString()
+    }));
+    
+    await updateDoc(sessionRef, {
+        items: arrayUnion(...itemsWithIds)
+    });
+};
+
+export const claimProspect = async (prospect: Prospect, userId: string, userName: string): Promise<void> => {
+    // 1. Validar regla de los 3 días si fue el dueño anterior
+    if (prospect.previousOwnerId === userId && prospect.unassignedAt) {
+        const unassignedDate = typeof prospect.unassignedAt === 'string' 
+            ? parseISO(prospect.unassignedAt) 
+            : (prospect.unassignedAt as any).toDate();
+            
+        const daysPassed = differenceInCalendarDays(new Date(), unassignedDate);
+        
+        if (daysPassed < 3) {
+            throw new Error(`Debes esperar ${3 - daysPassed} días más para volver a reclamar este prospecto.`);
+        }
+    }
+
+    const docRef = doc(db, 'prospects', prospect.id);
+    await updateDoc(docRef, {
+        claimStatus: 'Pendiente',
+        claimantId: userId,
+        claimantName: userName,
+        claimedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    });
+    
+    invalidateCache('prospects');
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'prospect',
+        entityId: prospect.id,
+        entityName: prospect.companyName,
+        details: `solicitó reclamar el prospecto <strong>${prospect.companyName}</strong>`,
+        ownerName: 'Sin Asignar'
+    });
+};
+
+export const approveProspectClaim = async (prospect: Prospect, managerId: string, managerName: string): Promise<void> => {
+    if (!prospect.claimantId || !prospect.claimantName) throw new Error("No hay reclamante válido.");
+
+    const docRef = doc(db, 'prospects', prospect.id);
+    
+    await updateDoc(docRef, {
+        ownerId: prospect.claimantId,
+        ownerName: prospect.claimantName,
+        status: 'Nuevo', 
+        statusChangedAt: serverTimestamp(),
+        
+        // Limpiar campos de reclamo
+        claimStatus: deleteField(),
+        claimantId: deleteField(),
+        claimantName: deleteField(),
+        claimedAt: deleteField(),
+        
+        updatedAt: serverTimestamp()
+    });
+    
+    invalidateCache('prospects');
+
+    await logActivity({
+        userId: managerId,
+        userName: managerName,
+        type: 'update',
+        entityType: 'prospect',
+        entityId: prospect.id,
+        entityName: prospect.companyName,
+        details: `aprobó el reclamo y asignó el prospecto a <strong>${prospect.claimantName}</strong>`,
+        ownerName: prospect.claimantName
+    });
+};
+
+export const rejectProspectClaim = async (prospect: Prospect, managerId: string, managerName: string): Promise<void> => {
+    const docRef = doc(db, 'prospects', prospect.id);
+    
+    await updateDoc(docRef, {
+        claimStatus: deleteField(),
+        claimantId: deleteField(),
+        claimantName: deleteField(),
+        claimedAt: deleteField(),
+        updatedAt: serverTimestamp()
+    });
+    
+    invalidateCache('prospects');
+
+    await logActivity({
+        userId: managerId,
+        userName: managerName,
+        type: 'update',
+        entityType: 'prospect',
+        entityId: prospect.id,
+        entityName: prospect.companyName,
+        details: `rechazó la solicitud de reclamo de <strong>${prospect.claimantName}</strong>`,
+        ownerName: 'Sin Asignar'
     });
 };

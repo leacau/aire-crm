@@ -16,6 +16,8 @@ import {
   getFacetedRowModel,
   getFacetedUniqueValues,
   Row,
+  ColumnVisibilityState,
+  ColumnOrderState,
 } from '@tanstack/react-table';
 import {
   ArrowUpDown,
@@ -132,6 +134,10 @@ interface ResizableDataTableProps<TData, TValue> {
   setSorting?: React.Dispatch<React.SetStateAction<SortingState>>;
   rowSelection?: RowSelectionState;
   setRowSelection?: React.Dispatch<React.SetStateAction<RowSelectionState>>;
+  columnVisibility?: ColumnVisibilityState;
+  setColumnVisibility?: React.Dispatch<React.SetStateAction<ColumnVisibilityState>>;
+  columnOrder?: ColumnOrderState;
+  setColumnOrder?: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
   getRowId?: (originalRow: TData, index: number, parent?: Row<TData>) => string;
   rowClassName?: (row: Row<TData>) => string;
 }
@@ -148,11 +154,17 @@ export function ResizableDataTable<TData, TValue>({
   setSorting,
   rowSelection,
   setRowSelection,
+  columnVisibility,
+  setColumnVisibility,
+  columnOrder,
+  setColumnOrder,
   getRowId,
   rowClassName,
 }: ResizableDataTableProps<TData, TValue>) {
   const isSortingEnabled = !!sorting && !!setSorting;
   const isRowSelectionEnabled = !!rowSelection && !!setRowSelection;
+  const isColumnVisibilityControlled = typeof columnVisibility !== 'undefined' && !!setColumnVisibility;
+  const isColumnOrderControlled = typeof columnOrder !== 'undefined' && !!setColumnOrder;
 
   const table = useReactTable({
     data,
@@ -169,9 +181,17 @@ export function ResizableDataTable<TData, TValue>({
       onRowSelectionChange: setRowSelection,
       enableRowSelection: true,
     }),
+    ...(isColumnVisibilityControlled && {
+      onColumnVisibilityChange: setColumnVisibility,
+    }),
+    ...(isColumnOrderControlled && {
+      onColumnOrderChange: setColumnOrder,
+    }),
     state: {
         ...(isSortingEnabled && { sorting }),
         ...(isRowSelectionEnabled && { rowSelection }),
+        ...(isColumnVisibilityControlled && { columnVisibility }),
+        ...(isColumnOrderControlled && { columnOrder }),
     },
   });
 

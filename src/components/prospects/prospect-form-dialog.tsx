@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -20,6 +18,7 @@ import { prospectStatusOptions } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Checkbox } from '@/components/ui/checkbox'; // Importar Checkbox
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -28,7 +27,8 @@ type ProspectFormData = Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerNa
 interface ProspectFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (prospectData: ProspectFormData) => void;
+  // Actualizamos la firma de onSave
+  onSave: (prospectData: ProspectFormData, addToCoaching: boolean, coachingNote: string) => void;
   prospect?: Prospect | null;
   activities?: ClientActivity[];
   activitySectionRef?: React.RefObject<HTMLDivElement>;
@@ -54,6 +54,11 @@ export function ProspectFormDialog({
 }: ProspectFormDialogProps) {
   const [formData, setFormData] = useState<ProspectFormData>(initialFormData);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Nuevos estados para el seguimiento
+  const [addToCoaching, setAddToCoaching] = useState(false);
+  const [coachingNote, setCoachingNote] = useState('');
+
   const { toast } = useToast();
 
   const isEditing = prospect !== null;
@@ -73,12 +78,14 @@ export function ProspectFormDialog({
       } else {
         setFormData(initialFormData);
       }
+      // Resetear campos de coaching al abrir
+      setAddToCoaching(false);
+      setCoachingNote('');
       setIsSaving(false);
     }
   }, [prospect, isOpen]);
 
   useEffect(() => {
-    // Scroll to activities if the ref is provided and the section is visible
     if (isOpen && activitySectionRef?.current) {
         setTimeout(() => {
             activitySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -92,8 +99,16 @@ export function ProspectFormDialog({
       toast({ title: "Campo requerido", description: "El nombre de la empresa es obligatorio.", variant: "destructive" });
       return;
     }
+    
+    // Validar nota si se seleccionó agregar al seguimiento
+    if (addToCoaching && !coachingNote.trim()) {
+        toast({ title: "Campo requerido", description: "Si agregas al seguimiento, debes indicar una tarea o nota inicial.", variant: "destructive" });
+        return;
+    }
+
     setIsSaving(true);
-    onSave(formData);
+    // Pasamos los nuevos valores
+    onSave(formData, addToCoaching, coachingNote);
     onOpenChange(false);
   };
 
@@ -152,6 +167,31 @@ export function ProspectFormDialog({
           <div className="space-y-2">
             <Label htmlFor="notes">Notas</Label>
             <Textarea id="notes" name="notes" value={formData.notes} onChange={handleChange} />
+          </div>
+
+          {/* Nueva Sección: Agregar a Seguimiento */}
+          <div className="space-y-3 pt-2 pb-2 px-1 border-t border-b bg-muted/20 rounded-sm">
+             <div className="flex items-center space-x-2">
+                <Checkbox 
+                    id="addToCoaching" 
+                    checked={addToCoaching} 
+                    onCheckedChange={(checked) => setAddToCoaching(!!checked)} 
+                />
+                <Label htmlFor="addToCoaching" className="cursor-pointer font-medium">Sumar a mi sesión de seguimiento semanal</Label>
+             </div>
+             
+             {addToCoaching && (
+                 <div className="pl-6 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <Label htmlFor="coachingNote" className="text-xs">Tarea / Aclaración inicial</Label>
+                    <Input 
+                        id="coachingNote" 
+                        value={coachingNote} 
+                        onChange={(e) => setCoachingNote(e.target.value)} 
+                        placeholder="Ej: Contactar para primera reunión..."
+                        className="bg-background"
+                    />
+                 </div>
+             )}
           </div>
 
           {isEditing && (

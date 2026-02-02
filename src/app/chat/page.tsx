@@ -8,12 +8,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { getAllUsers, getChatSpaces } from '@/lib/firebase-service';
+import { getAllUsers, getChatSpaces, getChatUserMappings, saveChatUserMappings } from '@/lib/firebase-service';
 import type { ChatSpaceMapping, User } from '@/lib/types';
-import { Loader2, MessageSquare, RefreshCw, SendHorizontal } from 'lucide-react';
+import { Loader2, MessageSquare, RefreshCw, SendHorizontal, LogIn, AlertCircle, Users } from 'lucide-react';
 
+// Tipos definidos fuera del componente para evitar conflictos
 interface ChatMessage {
   name: string;
   text: string;
@@ -22,18 +25,25 @@ interface ChatMessage {
   thread?: { name?: string };
 }
 
-function formatDate(iso?: string) {
+// Función auxiliar simple, sin dependencias externas
+const formatDate = (iso?: string) => {
   if (!iso) return '';
   try {
     return new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
   } catch (error) {
     return iso;
   }
-}
+};
 
 export default function ChatPage() {
   const { toast } = useToast();
-  const { getGoogleAccessToken } = useAuth();
+  // Importamos isBoss y userInfo
+  const { getGoogleAccessToken, userInfo, isBoss } = useAuth();
+  
+  // Estados
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+  
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [chatSpaces, setChatSpaces] = useState<ChatSpaceMapping[]>([]);
@@ -43,44 +53,78 @@ export default function ChatPage() {
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
-
-  const selectedSpaceValue = selectedSpace || 'default';
-  const hasManyMessages = messages.length > 10;
-
-  const availableSpaces = useMemo(() => {
-    return chatSpaces.filter((space) => !!space.spaceId);
-  }, [chatSpaces]);
-
-  const spaceLabel = useCallback(
-    (space: ChatSpaceMapping) => {
-      const user = users.find((u) => u.id === space.userId);
-      return user?.name || space.userEmail || space.spaceId;
-    },
-    [users],
-  );
-
-  const orderedMessages = useMemo(() => {
-    return [...messages].sort((a, b) => {
-      if (!a.createTime || !b.createTime) return 0;
-      return new Date(a.createTime).getTime() - new Date(b.createTime).getTime();
-    });
-  }, [messages]);
+  
+  // Estado para mappings manuales
+  const [customMappings, setCustomMappings] = useState<Record<string, string>>({});
+  const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
+  const [pendingMappings, setPendingMappings] = useState<Record<string, string>>({});
+  const [isSavingMappings, setIsSavingMappings] = useState(false);
 
   const historyRef = useRef<HTMLDivElement | null>(null);
 
+  // 1. Verificación inicial de sesión Google
+  useEffect(() => {
+    let mounted = true;
+    const checkAuth = async () => {
+      try {
+        const token = await getGoogleAccessToken({ silent: true });
+        if (mounted) {
+          setIsGoogleConnected(!!token);
+        }
+      } catch (error) {
+        console.warn('Error verificando sesión de Google Chat:', error);
+      } finally {
+        if (mounted) setIsCheckingAuth(false);
+      }
+    };
+    checkAuth();
+    return () => { mounted = false; };
+  }, [getGoogleAccessToken]);
+
+  // 2. Carga de espacios, usuarios y mappings
+  useEffect(() => {
+    const loadResources = async () => {
+      try {
+        // Recuperar selección previa
+        const storedSpace = sessionStorage.getItem('chat-selected-space');
+        if (storedSpace) setSelectedSpace(storedSpace);
+        setSelectionHydrated(true);
+
+        // Cargar datos de Firebase y mappings
+        const [spaces, appUsers, mappings] = await Promise.all([
+            getChatSpaces(), 
+            getAllUsers(),
+            getChatUserMappings()
+        ]);
+        setUsers(appUsers);
+        setChatSpaces(spaces);
+        setCustomMappings(mappings);
+      } catch (error) {
+        console.error('Error cargando recursos del chat:', error);
+      }
+    };
+    loadResources();
+  }, []);
+
+  // 3. Persistir selección de espacio
+  useEffect(() => {
+    if (selectionHydrated) {
+      sessionStorage.setItem('chat-selected-space', selectedSpace);
+    }
+  }, [selectedSpace, selectionHydrated]);
+
+  // 4. Función para cargar mensajes
   const loadMessages = useCallback(
-    async (space?: string) => {
+    async (space?: string, manualToken?: string) => {
       setIsLoadingMessages(true);
       setLastError(null);
 
       try {
-        const token = await getGoogleAccessToken();
+        const token = manualToken || await getGoogleAccessToken({ silent: true });
+        
         if (!token) {
-          toast({
-            title: 'Acceso a Google requerido',
-            description: 'Inicia sesión con Google para leer el historial del espacio.',
-            variant: 'destructive',
-          });
+          setIsGoogleConnected(false);
+          setIsLoadingMessages(false);
           return;
         }
 
@@ -95,136 +139,244 @@ export default function ChatPage() {
         const payload = contentType.includes('application/json') ? await response.json() : await response.text();
 
         if (!response.ok) {
-          const message = typeof payload === 'string' ? payload : payload?.error;
-          const friendly =
-            response.status === 404
-              ? 'El endpoint /api/chat no está disponible en este despliegue. Verifica que la app se haya redeployado con la ruta de Chat.'
-              : response.status === 403
-                ? 'Tu sesión de Google no tiene habilitados los permisos de Google Chat. Vuelve a iniciar sesión aceptando los permisos solicitados.'
-                : undefined;
-
-          if (response.status === 403) {
-            try {
-              sessionStorage.removeItem('google-access-token');
-            } catch (error) {
-              console.warn('No se pudo limpiar el token de Google en sesión', error);
-            }
+          if (response.status === 403 || response.status === 401) {
+             setIsGoogleConnected(false);
+             try { sessionStorage.removeItem('google-access-token'); } catch {}
+             throw new Error('Tu sesión de Google expiró o faltan permisos. Por favor reconecta.');
           }
-
-          throw new Error(friendly || message || 'No se pudieron obtener los mensajes.');
+          const message = typeof payload === 'string' ? payload : payload?.error;
+          throw new Error(message || 'No se pudieron obtener los mensajes.');
         }
 
         const data = typeof payload === 'string' ? {} : payload;
         setMessages(Array.isArray(data?.messages) ? data.messages : []);
+        setIsGoogleConnected(true);
       } catch (error: any) {
-        console.error('Error cargando mensajes de Chat', error);
-        setLastError(error?.message || 'No se pudieron leer los mensajes de Chat.');
-        toast({
-          title: 'No se pudieron cargar los mensajes',
-          description: error?.message || 'Revisa los permisos de Chat en tu cuenta de Google.',
-          variant: 'destructive',
-        });
+        console.error('Error cargando mensajes:', error);
+        setLastError(error?.message || 'Error al leer historial.');
       } finally {
         setIsLoadingMessages(false);
       }
     },
-    [getGoogleAccessToken, toast],
+    [getGoogleAccessToken]
   );
 
-  const loadChatSpaces = useCallback(async () => {
-    try {
-      const [spaces, appUsers] = await Promise.all([getChatSpaces(), getAllUsers()]);
-      setUsers(appUsers);
-      setChatSpaces(spaces);
-    } catch (error) {
-      console.error('No se pudieron obtener los espacios de chat', error);
-      toast({
-        title: 'Error cargando espacios',
-        description: 'No pudimos leer las asociaciones de chat guardadas.',
-        variant: 'destructive',
-      });
+  // 5. Cargar mensajes automáticamente al conectar o cambiar espacio
+  useEffect(() => {
+    if (isGoogleConnected && !isCheckingAuth) {
+        loadMessages(selectedSpace || undefined);
     }
-  }, [toast]);
+  }, [isGoogleConnected, isCheckingAuth, selectedSpace, loadMessages]);
+
+  // 6. Scroll automático al fondo
+  const orderedMessages = useMemo(() => {
+    return [...messages].sort((a, b) => {
+      if (!a.createTime || !b.createTime) return 0;
+      return new Date(a.createTime).getTime() - new Date(b.createTime).getTime();
+    });
+  }, [messages]);
 
   useEffect(() => {
+    if (historyRef.current) {
+      historyRef.current.scrollTop = historyRef.current.scrollHeight;
+    }
+  }, [orderedMessages]);
+
+  // Identificar mi propio ID de chat buscando mis mensajes por email
+  const myChatId = useMemo(() => {
+    if (!userInfo?.email || messages.length === 0) return null;
+    const myMsg = messages.find(m => m.sender?.email === userInfo.email);
+    return myMsg?.sender?.name || null;
+  }, [messages, userInfo]);
+
+  const handleManualLogin = async () => {
+    setIsCheckingAuth(true);
     try {
-      const stored = sessionStorage.getItem('chat-selected-space');
-      if (stored !== null) {
-        setSelectedSpace(stored);
-      }
+        const token = await getGoogleAccessToken();
+        if (token) {
+            setIsGoogleConnected(true);
+            setLastError(null);
+            toast({ title: 'Conectado a Google Chat' });
+            loadMessages(selectedSpace || undefined, token);
+        } else {
+            toast({ title: 'No se pudo conectar', variant: 'destructive' });
+        }
     } catch (error) {
-      console.warn('No se pudo leer la selección previa de Chat', error);
+        console.error('Login error', error);
+        toast({ title: 'Error de conexión', variant: 'destructive' });
     } finally {
-      setSelectionHydrated(true);
+        setIsCheckingAuth(false);
     }
-  }, []);
+  };
 
-  useEffect(() => {
-    loadMessages(selectedSpace || undefined);
-  }, [loadMessages, selectedSpace]);
-
-  useEffect(() => {
-    if (selectionHydrated) {
-      loadChatSpaces();
-    }
-  }, [loadChatSpaces, selectionHydrated]);
-
-  useEffect(() => {
-    if (!historyRef.current) return;
-    historyRef.current.scrollTop = historyRef.current.scrollHeight;
-  }, [orderedMessages.length]);
-
-  useEffect(() => {
-    if (!selectionHydrated) return;
-    try {
-      sessionStorage.setItem('chat-selected-space', selectedSpace);
-    } catch (error) {
-      console.warn('No se pudo guardar la selección del espacio', error);
-    }
-  }, [selectedSpace, selectionHydrated]);
-
-  const handleSendMessage = useCallback(async () => {
+  const handleSendMessage = async () => {
     const text = messageText.trim();
     if (!text) return;
 
     setIsSending(true);
     try {
-      const token = await getGoogleAccessToken();
+      const token = await getGoogleAccessToken({ silent: true });
+      if (!token) throw new Error('Sesión perdida. Reconecta con Google.');
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ text, mode: 'api', targetSpace: selectedSpace || undefined }),
       });
 
-      const payload = await response.json().catch(() => ({ error: 'No se pudo enviar el mensaje a Google Chat.' }));
       if (!response.ok) {
-        throw new Error(payload?.error || 'No se pudo enviar el mensaje a Google Chat.');
+        if (response.status === 403 || response.status === 401) {
+            setIsGoogleConnected(false);
+        }
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Error enviando mensaje.');
       }
 
-      toast({ title: 'Mensaje enviado', description: 'El mensaje fue entregado en Google Chat.' });
+      toast({ title: 'Mensaje enviado' });
       setMessageText('');
-      loadMessages(selectedSpace || undefined);
+      loadMessages(selectedSpace || undefined, token);
     } catch (error: any) {
-      console.error('Error enviando mensaje de Chat', error);
-      toast({
-        title: 'No se pudo enviar el mensaje',
-        description: error?.message || 'Revisa los permisos de Chat en tu cuenta de Google.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } finally {
       setIsSending(false);
     }
-  }, [getGoogleAccessToken, loadMessages, messageText, selectedSpace, toast]);
+  };
+
+  // Función para resolver nombre: Ahora con soporte para ALIAS MANUALES
+  const resolveSenderName = (sender?: { displayName?: string; name?: string; email?: string }) => {
+    if (!sender) return 'Desconocido';
+
+    // 1. Alias manual (prioridad máxima)
+    if (sender.name && customMappings[sender.name]) {
+        return customMappings[sender.name];
+    }
+
+    // 2. Google Display Name
+    if (sender.displayName) return sender.displayName;
+
+    // 3. Email match
+    if (sender.email) {
+      if (userInfo?.email && sender.email === userInfo.email) return 'Yo';
+      const localUser = users.find(u => u.email === sender.email);
+      if (localUser && localUser.name) {
+        return localUser.name;
+      }
+    }
+
+    // 4. Fallback ID propio
+    if (myChatId && sender.name === myChatId) {
+        return 'Yo';
+    }
+
+    // 5. Fallback espacio directo
+    if (selectedSpace && sender.name) {
+        const mapping = chatSpaces.find(s => s.spaceId === selectedSpace);
+        if (mapping) {
+            const targetUser = users.find(u => u.id === mapping.userId);
+            if (targetUser?.name) return targetUser.name;
+            if (mapping.userEmail) return mapping.userEmail;
+        }
+    }
+
+    // 6. ID crudo
+    return sender.name || 'Usuario';
+  };
+
+  const handleOpenMappingDialog = () => {
+    // Escanear los mensajes actuales para encontrar usuarios "desconocidos" o simplemente todos los IDs
+    const uniqueSenders: Record<string, string> = {};
+    messages.forEach(msg => {
+        if (msg.sender?.name) {
+            // Si es mi propio ID, lo ignoramos o lo marcamos como tal
+            if (msg.sender.name === myChatId) return;
+            uniqueSenders[msg.sender.name] = customMappings[msg.sender.name] || '';
+        }
+    });
+    
+    // También agregamos cualquier mapping existente que no esté en los mensajes actuales (para editar)
+    Object.keys(customMappings).forEach(key => {
+        if (!uniqueSenders[key]) {
+            uniqueSenders[key] = customMappings[key];
+        }
+    });
+
+    setPendingMappings(uniqueSenders);
+    setIsMappingDialogOpen(true);
+  };
+
+  const handleSaveMappings = async () => {
+    if (!userInfo) return;
+    setIsSavingMappings(true);
+    try {
+        // Filtrar vacíos para no guardar basura, pero permitir borrar mappings enviando string vacía? 
+        // Mejor solo guardar los que tienen valor.
+        const cleanMappings: Record<string, string> = {};
+        Object.entries(pendingMappings).forEach(([key, value]) => {
+            if (value.trim()) cleanMappings[key] = value.trim();
+        });
+
+        await saveChatUserMappings(cleanMappings, userInfo.id, userInfo.name);
+        setCustomMappings(cleanMappings);
+        toast({ title: 'Alias actualizados' });
+        setIsMappingDialogOpen(false);
+    } catch (error) {
+        console.error('Error saving mappings', error);
+        toast({ title: 'Error al guardar alias', variant: 'destructive' });
+    } finally {
+        setIsSavingMappings(false);
+    }
+  };
+
+  const availableSpaces = useMemo(() => chatSpaces.filter(s => !!s.spaceId), [chatSpaces]);
+  const selectedSpaceValue = selectedSpace || 'default';
+
+  const getSpaceLabel = (space: ChatSpaceMapping) => {
+      const user = users.find(u => u.id === space.userId);
+      return user?.name || space.userEmail || space.spaceId;
+  };
+
+  if (isCheckingAuth) {
+      return (
+          <div className="flex h-64 w-full items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+      );
+  }
+
+  if (!isGoogleConnected) {
+      return (
+        <div className="flex flex-col gap-6">
+            <h1 className="text-3xl font-bold tracking-tight">Google Chat</h1>
+            <Card className="border-dashed">
+                <CardHeader className="text-center">
+                    <div className="mx-auto bg-muted p-4 rounded-full mb-2 w-fit">
+                        <MessageSquare className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <CardTitle>Conexión requerida</CardTitle>
+                    <CardDescription>
+                        Conecta tu cuenta para ver y enviar mensajes.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="flex justify-center pb-8">
+                    <Button onClick={handleManualLogin} size="lg" className="gap-2">
+                        <LogIn className="h-4 w-4" />
+                        Conectar con Google Chat
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
+      );
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight">Google Chat</h1>
         <p className="text-muted-foreground max-w-3xl">
-          Consulta el historial de cada espacio de Chat habilitado sin alterar otros procesos. Selecciona un espacio guardado y refresca para ver los hilos más recientes.
+          Consulta el historial de cada espacio de Chat habilitado.
         </p>
       </div>
 
@@ -234,7 +386,7 @@ export default function ChatPage() {
             <MessageSquare className="h-5 w-5" />
             <div>
               <CardTitle>Historial del espacio</CardTitle>
-              <CardDescription>Visualiza los mensajes recientes de Google Chat.</CardDescription>
+              <CardDescription>Mensajes recientes.</CardDescription>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -252,91 +404,108 @@ export default function ChatPage() {
                   <SelectItem value="default">Espacio principal</SelectItem>
                   {availableSpaces.map((space) => (
                     <SelectItem key={space.spaceId} value={space.spaceId}>
-                      {spaceLabel(space)}
+                      {getSpaceLabel(space)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* Botón para gestionar alias (Solo Jefes) */}
+            {isBoss && (
+                <Button variant="outline" size="icon" onClick={handleOpenMappingDialog} title="Gestionar Alias de Usuarios">
+                    <Users className="h-4 w-4" />
+                </Button>
+            )}
+
             <Button variant="ghost" className="gap-2" onClick={() => loadMessages(selectedSpace || undefined)} disabled={isLoadingMessages}>
-              {isLoadingMessages ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Recargar
+              {isLoadingMessages ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Recargar
             </Button>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {isLoadingMessages && messages.length === 0 ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Cargando mensajes...
-            </div>
-          ) : null}
-
           {lastError && (
             <Alert variant="destructive">
-              <AlertTitle>No se pudo cargar el historial</AlertTitle>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
               <AlertDescription>{lastError}</AlertDescription>
             </Alert>
           )}
 
-          {messages.length === 0 && !isLoadingMessages && !lastError ? (
-            <p className="text-sm text-muted-foreground">Aún no pudimos mostrar mensajes de este espacio.</p>
-          ) : null}
-
-          {hasManyMessages ? (
-            <p className="text-xs text-muted-foreground">Mostrando los últimos mensajes. Desplázate para ver el historial.</p>
-          ) : null}
-
-          <div ref={historyRef} className="flex max-h-[500px] flex-col gap-3 overflow-y-auto rounded-lg border bg-muted/40 p-3">
-            {orderedMessages.map((msg) => {
-              const senderId = msg.sender?.name?.split('/').pop();
-              const senderEmail = msg.sender?.email || (senderId && senderId.includes('@') ? senderId : undefined);
-              const displayName = msg.sender?.displayName?.trim();
-              const displayEmail = displayName && displayName.includes('@') ? displayName : undefined;
-              const senderLabel =
-                senderEmail ||
-                displayEmail ||
-                displayName ||
-                senderId?.replace('users/', '') ||
-                'Sin nombre';
-
+          <div ref={historyRef} className="flex max-h-[500px] flex-col gap-3 overflow-y-auto rounded-lg border bg-muted/40 p-3 min-h-[100px]">
+            {orderedMessages.length === 0 && !isLoadingMessages && (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    No hay mensajes recientes.
+                </div>
+            )}
+            {orderedMessages.map((msg, idx) => {
+              const senderName = resolveSenderName(msg.sender);
               return (
-                <div key={msg.name} className="flex flex-col gap-1 rounded-md bg-background p-3 shadow-sm">
+                <div key={`${msg.createTime}-${idx}`} className="flex flex-col gap-1 rounded-md bg-background p-3 shadow-sm">
                   <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground">{senderLabel}</span>
+                    <span className="font-semibold text-foreground">{senderName}</span>
                     <span>{formatDate(msg.createTime)}</span>
                   </div>
                   <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                    {msg.thread?.name ? <Badge variant="outline">Hilo: {msg.thread.name.split('/').pop()}</Badge> : null}
-                    <Badge variant="secondary" className="flex items-center gap-1">
-                      {msg.thread?.name ? 'Mensaje de hilo' : 'Mensaje'}
-                    </Badge>
-                  </div>
                 </div>
               );
             })}
           </div>
 
           <div className="flex flex-col gap-2 rounded-lg border bg-background p-3">
-            <Label htmlFor="chat-message" className="text-xs">Escribir nuevo mensaje</Label>
+            <Label htmlFor="chat-message" className="text-xs">Nuevo mensaje</Label>
             <Textarea
               id="chat-message"
-              placeholder="Escribe un mensaje para el espacio seleccionado"
+              placeholder="Escribe un mensaje..."
               value={messageText}
               onChange={(e) => setMessageText(e.target.value)}
-              rows={3}
+              rows={2}
             />
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                onClick={handleSendMessage}
-                disabled={!messageText.trim() || isSending || isLoadingMessages}
-                className="gap-2"
-              >
-                {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}Enviar
+            <div className="flex items-center justify-end">
+              <Button onClick={handleSendMessage} disabled={!messageText.trim() || isSending} size="sm">
+                {isSending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <SendHorizontal className="h-4 w-4 mr-2" />}
+                Enviar
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Diálogo de Mapeo de Usuarios */}
+      <Dialog open={isMappingDialogOpen} onOpenChange={setIsMappingDialogOpen}>
+        <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+            <DialogHeader>
+                <DialogTitle>Gestionar Alias de Chat</DialogTitle>
+                <DialogDescription>
+                    Asigna nombres legibles a los IDs de usuarios desconocidos.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-2">
+                {Object.keys(pendingMappings).length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No se detectaron usuarios desconocidos en este chat.</p>
+                ) : (
+                    Object.entries(pendingMappings).map(([id, alias]) => (
+                        <div key={id} className="grid gap-2">
+                            <Label className="text-xs font-mono text-muted-foreground">{id}</Label>
+                            <Input 
+                                value={alias} 
+                                onChange={(e) => setPendingMappings(prev => ({ ...prev, [id]: e.target.value }))}
+                                placeholder="Nombre visible (Ej. Juan Perez)"
+                            />
+                        </div>
+                    ))
+                )}
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsMappingDialogOpen(false)}>Cancelar</Button>
+                <Button onClick={handleSaveMappings} disabled={isSavingMappings}>
+                    {isSavingMappings ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
+                    Guardar Cambios
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

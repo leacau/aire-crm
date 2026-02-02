@@ -8,7 +8,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Spinner } from '@/components/ui/spinner';
-import { PermissionsManager } from '@/components/team/permissions-manager';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { OpportunityAlertsManager } from '@/components/team/opportunity-alerts-manager';
 
@@ -40,7 +39,6 @@ export default function TeamPage() {
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-8">
           <TeamPerformanceTable />
           <OpportunityAlertsManager />
-          {isSuperAdmin && <PermissionsManager />}
         </main>
       </div>
     </>

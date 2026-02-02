@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -62,7 +60,7 @@ interface GoogleCalendarProps {
 }
 
 export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
-  const { userInfo, getGoogleAccessToken } = useAuth();
+  const { userInfo, ensureGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +92,8 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
         }
     }
 
-    const token = await getGoogleAccessToken();
+    // Usamos ensureGoogleAccessToken para garantizar que hay token o pedirlo
+    const token = await ensureGoogleAccessToken();
 
     if (token) {
       try {
@@ -110,13 +109,13 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
         setEvents(formattedEvents);
       } catch (err: any) {
         console.error(err);
-        setError(`No se pudieron cargar los eventos del calendario. Es posible que no tengas permisos para ver este calendario. Detalle: ${err.message}`);
+        setError(`No se pudieron cargar los eventos del calendario. Detalle: ${err.message}`);
       }
     } else {
-      setError('No se pudo obtener el permiso para acceder a Google Calendar.');
+      setError('Se requiere acceso a Google Calendar. Por favor, recarga la página o intenta más tarde.');
     }
     setLoading(false);
-  }, [getGoogleAccessToken, userInfo, selectedUserId]);
+  }, [ensureGoogleAccessToken, userInfo, selectedUserId]);
 
   useEffect(() => {
     fetchEvents();
@@ -124,7 +123,7 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
 
   const handleSelectSlot = useCallback(({ start, end }: { start: Date; end: Date }) => {
     // Disable creating events on other people's calendars
-    if(selectedUserId !== userInfo?.id) return;
+    if(selectedUserId && selectedUserId !== userInfo?.id) return;
     
     setSelectedEvent(null);
     setIsReadOnly(false);
@@ -133,10 +132,10 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
   }, [selectedUserId, userInfo?.id]);
 
   const handleSelectEvent = useCallback((event: CalendarEvent) => {
-    const readOnly = selectedUserId !== userInfo?.id;
+    const readOnly = selectedUserId && selectedUserId !== userInfo?.id;
     
     setSelectedEvent(event);
-    setIsReadOnly(readOnly);
+    setIsReadOnly(Boolean(readOnly));
     setFormData({
       start: event.start,
       end: event.end,
@@ -147,16 +146,14 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
   }, [selectedUserId, userInfo?.id]);
   
   const handleSaveEvent = async () => {
-    const token = await getGoogleAccessToken();
+    const token = await ensureGoogleAccessToken();
     if (!token || !formData.title || !formData.start || !formData.end) {
-      toast({ title: "Datos incompletos", variant: 'destructive'});
+      toast({ title: "Datos incompletos o falta autorización", variant: 'destructive'});
       return;
     }
 
     try {
       if (selectedEvent?.id) {
-        // Update logic would go here if API supports it easily, for now we delete and create
-        // For simplicity, this example just recreates. A real app should implement PATCH.
         await deleteCalendarEvent(token, selectedEvent.id);
       }
       
@@ -186,7 +183,7 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
 
   const handleDeleteEvent = async () => {
     if (!selectedEvent?.id) return;
-    const token = await getGoogleAccessToken();
+    const token = await ensureGoogleAccessToken();
     if (!token) return;
 
     try {
@@ -212,10 +209,10 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
   if (error) {
     return (
       <Card className="max-w-xl mx-auto mt-8">
-        <CardHeader><CardTitle>Error de Calendario</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Estado del Calendario</CardTitle></CardHeader>
         <CardContent>
-          <p className="text-destructive mb-4">{error}</p>
-          <Button onClick={fetchEvents}>Reintentar</Button>
+          <p className="text-muted-foreground mb-4">{error}</p>
+          <Button onClick={fetchEvents}>Reintentar conexión</Button>
         </CardContent>
       </Card>
     );

@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -58,7 +56,12 @@ function ReassignClientDialog({
 
   useEffect(() => {
     if (clients.length === 1) {
-      setSelectedAdvisorId(clients[0].ownerId);
+      // Si el cliente ya es corporativo, setear el select en corporativo, si no en su ownerId
+      if (!clients[0].ownerId || clients[0].ownerName === 'CORPORATIVO') {
+        setSelectedAdvisorId('corporativo');
+      } else {
+        setSelectedAdvisorId(clients[0].ownerId);
+      }
     } else {
         setSelectedAdvisorId('');
     }
@@ -90,6 +93,8 @@ function ReassignClientDialog({
               <SelectValue placeholder="Seleccionar asesor..." />
             </SelectTrigger>
             <SelectContent>
+              {/* Opción Manual para Corporativo */}
+              <SelectItem value="corporativo">Corporativo</SelectItem>
               {advisors.map(advisor => (
                 <SelectItem key={advisor.id} value={advisor.id}>
                   {advisor.name}
@@ -272,7 +277,16 @@ export default function ClientsPage() {
     if (showOnlyMyClients && userInfo) {
         clientsToShow = clientsToShow.filter(client => client.ownerId === userInfo.id);
     } else if (canManage && selectedAdvisor !== 'all') {
-        clientsToShow = clientsToShow.filter(client => client.ownerId === selectedAdvisor);
+        if (selectedAdvisor === 'corporativo') {
+             // Filtrar clientes sin asesor asignado o explícitamente Corporativo
+             clientsToShow = clientsToShow.filter(client => 
+                !client.ownerId || 
+                client.ownerId === 'corporativo' || 
+                client.ownerName?.toUpperCase() === 'CORPORATIVO'
+             );
+        } else {
+             clientsToShow = clientsToShow.filter(client => client.ownerId === selectedAdvisor);
+        }
     }
 
     if (showDuplicates) {
@@ -404,21 +418,30 @@ export default function ClientsPage() {
 
     if (clientsToUpdate.length === 0 || !userInfo || !canManage) return;
     
-    const newOwner = advisors.find(a => a.id === newOwnerId);
-    if (!newOwner) {
-      toast({ title: 'Asesor no encontrado', variant: 'destructive' });
-      return;
+    let newOwnerName = '';
+    let finalOwnerId = newOwnerId;
+
+    if (newOwnerId === 'corporativo') {
+        newOwnerName = 'CORPORATIVO';
+        finalOwnerId = 'corporativo'; // Usamos este ID para persistencia clara, aunque la lógica de billing soporta null
+    } else {
+        const newOwner = advisors.find(a => a.id === newOwnerId);
+        if (!newOwner) {
+            toast({ title: 'Asesor no encontrado', variant: 'destructive' });
+            return;
+        }
+        newOwnerName = newOwner.name;
     }
     
     const updates = clientsToUpdate.map(client => ({
         id: client.id,
         denominacion: client.denominacion,
-        data: { ownerId: newOwner.id, ownerName: newOwner.name }
+        data: { ownerId: finalOwnerId, ownerName: newOwnerName }
     }));
 
     try {
       await bulkUpdateClients(updates, userInfo.id, userInfo.name);
-      toast({ title: "Clientes Reasignados", description: `${clientsToUpdate.length} cliente(s) han sido asignado(s) a ${newOwner.name}.`});
+      toast({ title: "Clientes Reasignados", description: `${clientsToUpdate.length} cliente(s) han sido asignado(s) a ${newOwnerName}.`});
       fetchData();
       setRowSelection({});
       setClientsToReassign([]);
@@ -534,7 +557,7 @@ export default function ClientsPage() {
               </div>
             </div>
           );
-        }
+        },
       },
       {
         accessorKey: 'razonSocial',
@@ -646,6 +669,8 @@ export default function ClientsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los asesores</SelectItem>
+              {/* Opción Manual para Corporativo */}
+              <SelectItem value="corporativo">Corporativo</SelectItem>
               {advisorsWithClients.map(advisor => (
                 <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
               ))}
@@ -677,14 +702,16 @@ export default function ClientsPage() {
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-2">
            <Checkbox id="my-clients" name="my-clients" checked={showOnlyMyClients} onCheckedChange={(checked) => setShowOnlyMyClients(!!checked)} />
            <Label htmlFor="my-clients" className="whitespace-nowrap text-sm font-medium">Mostrar solo mis clientes</Label>
        </div>
-        <Button variant="outline" onClick={() => setShowDuplicates(s => !s)}>
-          <CopyCheck className="mr-2 h-4 w-4" />
-          {showDuplicates ? 'Ver Todos' : 'Buscar Duplicados'}
-        </Button>
+        {canManage && (
+          <Button variant="outline" onClick={() => setShowDuplicates(s => !s)}>
+            <CopyCheck className="mr-2 h-4 w-4" />
+            {showDuplicates ? 'Ver Todos' : 'Buscar Duplicados'}
+          </Button>
+        )}
         <Button variant="outline" onClick={handleExport}>
           <FileDown className="mr-2 h-4 w-4" />
           Exportar Excel
@@ -749,5 +776,3 @@ export default function ClientsPage() {
     </>
   );
 }
-
-    

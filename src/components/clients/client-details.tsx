@@ -756,6 +756,7 @@ export function ClientDetails({
           <TabsTrigger value="opportunities">Oportunidades</TabsTrigger>
           <TabsTrigger value="contacts">Contactos</TabsTrigger>
           <TabsTrigger value="activity">Actividad</TabsTrigger>
+          <TabsTrigger value="notes">Notas Com.</TabsTrigger>
           <TabsTrigger value="history">Historial</TabsTrigger>
         </TabsList>
         <TabsContent value="opportunities">
@@ -1053,6 +1054,23 @@ export function ClientDetails({
                 </CardContent>
             </Card>
         </TabsContent>
+        <TabsContent value="notes">
+    <Card>
+        <CardHeader><CardTitle>Notas Comerciales Históricas</CardTitle></CardHeader>
+        <CardContent>
+            {notes.map(note => (
+                <div key={note.id} className="p-4 border-b last:border-0">
+                    <p className="font-bold">{note.title}</p>
+                    <p className="text-sm text-muted-foreground">
+                        {format(new Date(note.createdAt), "PPP", { locale: es })} - Por: {note.advisorName}
+                    </p>
+                    <Button variant="link" size="sm" className="px-0">Ver Detalle / Descargar PDF</Button>
+                </div>
+            ))}
+            {notes.length === 0 && <p className="text-center py-4 text-muted-foreground">No hay notas registradas.</p>}
+        </CardContent>
+    </Card>
+</TabsContent>
         <TabsContent value="history">
             <Card>
                 <CardHeader>

@@ -1,4 +1,3 @@
-
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -49,7 +48,10 @@ export default function PrivacyPolicyPage() {
               <strong>Google Drive:</strong> Solicitamos permiso para subir archivos (avatares, propuestas) a una carpeta específica en su Google Drive creada para esta aplicación. Esto nos permite almacenar y acceder a archivos relacionados con el CRM.
             </li>
             <li>
-              <strong>Gmail:</strong> Solicitamos permiso para enviar correos electrónicos en su nombre. Esta funcionalidad se utiliza exclusivamente para enviar notificaciones relacionadas con el flujo de trabajo del CRM (ej. aprobación de canjes) a otros miembros de su equipo. No leemos, eliminamos ni gestionamos sus correos electrónicos.
+              <strong>Google Chat:</strong> Solicitamos permiso para enviar mensajes y leer información básica de los espacios de chat para notificar sobre eventos importantes del CRM.
+            </li>
+            <li>
+              <strong>Gmail:</strong> Solicitamos permiso para enviar correos electrónicos en su nombre. Esta funcionalidad se utiliza exclusivamente para enviar notificaciones relacionadas con el flujo de trabajo del CRM. No leemos, eliminamos ni gestionamos sus correos electrónicos.
             </li>
           </ul>
 
@@ -63,7 +65,7 @@ export default function PrivacyPolicyPage() {
           <ul>
             <li>Proporcionar, operar y mejorar la funcionalidad principal del CRM.</li>
             <li>Gestionar el acceso y la autenticación de los usuarios.</li>
-            <li>Facilitar la comunicación interna del equipo a través de notificaciones por correo electrónico.</li>
+            <li>Facilitar la comunicación interna del equipo a través de notificaciones.</li>
             <li>Integrar recordatorios y eventos en su Google Calendar.</li>
             <li>Almacenar archivos y documentos relevantes en su Google Drive.</li>
             <li>Mantener un registro de auditoría de las acciones realizadas para la transparencia y seguridad del equipo.</li>
@@ -78,7 +80,7 @@ export default function PrivacyPolicyPage() {
               <strong>Dentro de su Organización:</strong> La información del CRM (clientes, oportunidades, etc.) es visible para otros usuarios de su organización según los roles y permisos definidos (Asesor, Jefe, Gerencia, etc.).
             </li>
             <li>
-              <strong>Servicios de Google:</strong> La información se comparte con los servicios de Google (Calendar, Drive, Gmail) solo cuando usted inicia una acción que requiere dicha integración. El uso de sus datos por parte de Google se rige por la Política de Privacidad de Google.
+              <strong>Servicios de Google:</strong> La información se comparte con los servicios de Google (Calendar, Drive, Gmail, Chat) solo cuando usted inicia una acción que requiere dicha integración. El uso de sus datos por parte de Google se rige por la Política de Privacidad de Google.
             </li>
             <li>
               <strong>Cumplimiento Legal:</strong> No compartiremos su información con terceros, excepto cuando sea requerido por ley, citación judicial u otra solicitud gubernamental.

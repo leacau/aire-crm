@@ -20,19 +20,23 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
         Team: { view: true, edit: true },
         Rates: { view: true, edit: true },
         Reports: { view: true, edit: true },
+        Quotes: { view: true, edit: true },
         Import: { view: true, edit: true },
         TangoMapping: { view: true, edit: true },
+        Coaching: { view: true, edit: true },
     },
     'Recursos Humanos': {
         Licenses: { view: true, edit: true },
         Canjes: { view: true, edit: true },
         Team: { view: true, edit: true },
+        Quotes: { view: true, edit: true },
     },
     'Pautado': {
         Clients: { view: true, edit: false },
         Opportunities: { view: true, edit: false },
         PNTs: { view: true, edit: true },
         Grilla: { view: true, edit: true },
+        Quotes: { view: true, edit: true },
     },
     'Administración': {
         Dashboard: { view: true, edit: true },
@@ -46,15 +50,19 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
         Team: { view: true, edit: true },
         Rates: { view: true, edit: true },
         Reports: { view: true, edit: true },
+        Quotes: { view: true, edit: true },
         Import: { view: true, edit: true },
         TangoMapping: { view: true, edit: true },
+        Coaching: { view: true, edit: true },
     },
     'Programación': {
         Grilla: { view: true, edit: false },
         PNTs: { view: true, edit: false },
+        Quotes: { view: true, edit: true },
     },
     'Redacción': {
          PNTs: { view: true, edit: false },
+         Quotes: { view: true, edit: true },
     }
 };
 

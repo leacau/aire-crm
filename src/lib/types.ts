@@ -221,14 +221,22 @@ export type Prospect = {
   contactName?: string;
   contactPhone?: string;
   contactEmail?: string;
-  sector?: string;
+  createdAt: string;
+  creatorId?: string;
+  creatorName?: string;
+  lastProspectNotificationAt?: string;
   notes?: string;
-  status: ProspectStatus;
   ownerId: string;
   ownerName: string;
-  createdAt: string;
+  sector?: string;
   statusChangedAt?: string;
-  lastProspectNotificationAt?: string;
+  status: ProspectStatus;
+  previousOwnerId?: string;
+  unassignedAt?: string;
+  claimStatus?: 'Pendiente';
+  claimantId?: string;
+  claimantName?: string;
+  claimedAt?: string;
 };
 
 export type Agency = {
@@ -257,7 +265,8 @@ export type ActivityLog = {
     | 'licencia'
     | 'monthly_closure'
     | 'opportunity_alerts_config'
-    | 'payment';
+    | 'payment'
+    | 'commercial_note';
   entityId: string;
   entityName: string;
   details: string; // HTML-enabled string describing the action
@@ -361,7 +370,7 @@ export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
-    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping'
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas'
 ] as const;
 export type ScreenName = typeof screenNames[number];
 
@@ -392,6 +401,12 @@ export type ObjectiveVisibilityConfig = {
   updatedAt?: string;
 };
 
+// --- ESTRUCTURA PARA CÓDIGOS DE VENDEDOR (NUEVO) ---
+export interface SellerCompanyConfig {
+  companyName: string;
+  codes: string[];
+}
+
 export type User = {
   id: string;
   name:string;
@@ -407,6 +422,9 @@ export type User = {
   monthlyObjectives?: Record<string, number>;
   monthlyObjective?: number;
   permissions?: Partial<Record<ScreenName, ScreenPermission>>;
+  
+  // Campo añadido para configuración de códigos de vendedor
+  sellerConfig?: SellerCompanyConfig[];
 };
 
 export type ChatSpaceMapping = {
@@ -418,21 +436,25 @@ export type ChatSpaceMapping = {
   updatedAt?: string;
 };
 
-export type VacationRequestStatus = 'Pendiente' | 'Aprobado' | 'Rechazado';
+export type VacationRequestStatus = 'Pendiente' | 'Aprobado' | 'Rechazado' | 'Anulado';
 
 export type VacationRequest = {
-  id: string;
+id: string;
   userId: string;
   userName: string;
-  startDate: string; // "YYYY-MM-DD"
-  endDate: string; // "YYYY-MM-DD"
+  startDate: string;
+  endDate: string;
+  returnDate: string;
   daysRequested: number;
-  returnDate: string; // "YYYY-MM-DD"
   status: VacationRequestStatus;
   requestDate: string;
+  holidays: string[];
   approvedBy?: string;
   approvedAt?: string;
-  holidays?: string[]; // Array of "YYYY-MM-DD" strings
+  cancellationReason?: string;
+  cancelledBy?: string;
+  cancelledByName?: string;
+  cancelledAt?: string;
 };
 
 
@@ -506,4 +528,101 @@ export type CommercialItem = {
 // --- System Config Types ---
 export type OpportunityAlertsConfig = Partial<Record<OpportunityStage, number>> & {
   prospectVisibilityDays?: number;
+};
+
+// --- Coaching / Seguimiento Semanal ---
+
+export type CoachingItemStatus = 'Pendiente' | 'En Proceso' | 'Completado' | 'Cancelado';
+
+export type CoachingItem = {
+  id: string;
+  taskId: string; // ID único que persiste a través de las reuniones para la misma tarea
+  originalCreatedAt: string; // Fecha en que se creó la tarea originalmente
+  entityType: 'client' | 'prospect' | 'opportunity' | 'general';
+  entityId?: string; 
+  entityName: string; 
+  action: string; 
+  status: CoachingItemStatus;
+  advisorNotes?: string; 
+  lastUpdate?: string; 
+  origin?: 'manager' | 'advisor'; // NUEVO CAMPO
+};
+
+export type CoachingSession = {
+  id: string;
+  advisorId: string;
+  advisorName: string;
+  managerId: string;
+  managerName: string;
+  date: string; // Fecha de la reunión
+  items: CoachingItem[];
+  generalNotes?: string; 
+  createdAt: string;
+  status: 'Open' | 'Closed'; 
+};
+
+export type SystemHolidays = {
+  dates: string[]; // Array de strings "YYYY-MM-DD"
+};
+
+// --- Commercial Note Types ---
+export type ScheduleItem = {
+    date: string; // ISO String
+    time?: string; // "HH:MM"
+};
+
+export type CommercialNote = {
+  id: string;
+  clientId: string;
+  clientName: string;
+  cuit?: string;
+  advisorId: string;
+  advisorName: string;
+  razonSocial: string;
+  
+  // -- Client Data Fields --
+  rubro?: string;
+  
+  // -- Production/Pautado Fields --
+  replicateWeb?: boolean;
+  replicateSocials?: string[]; // 'Facebook', 'Instagram', 'X'
+  programIds: string[]; // IDs of selected programs
+  schedule: Record<string, ScheduleItem[]>; // programId -> array of {date, time}
+  contactPhone?: string; // Teléfono para coordinar
+  contactName?: string; // Responsable de la coordinación (cliente)
+
+  // -- Note Details Fields --
+  title?: string;
+  location?: 'Estudio' | 'Empresa' | 'Meet' | 'Llamada';
+  callPhone?: string; // If location is Llamada
+  primaryGraf?: string;
+  secondaryGraf?: string;
+  questions?: string[];
+  
+  intervieweeName?: string;
+  intervieweeRole?: string;
+  intervieweeBio?: string;
+
+  // -- Contact Channels with "No Informar" logic --
+  instagram?: string; // Full link
+  website?: string;
+  noWeb?: boolean;
+  whatsapp?: string;
+  noWhatsapp?: boolean;
+  phone?: string; // Teléfono comercial
+  noCommercialPhone?: boolean;
+
+  graphicSupport: boolean;
+  graphicSupportLink?: string; // If GDrive link provided
+  
+  // -- Financials --
+  totalValue: number;
+  saleValue?: number;
+  mismatch?: number;
+  
+  // -- Observations --
+  financialObservations?: string; // For "Comercial" section
+  noteObservations?: string; // For "Nota" section (Observaciones generales)
+  
+  createdAt: string;
 };

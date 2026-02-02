@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef, ColumnOrderState, ColumnVisibilityState, RowSelectionState, SortingState } from '@tanstack/react-table';
 import { TableFooter, TableRow, TableCell } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '../ui/label';
@@ -22,8 +22,19 @@ export const BillingTable = ({
   usersMap,
   opportunitiesMap,
   onMarkAsPaid,
+  onToggleDeletionMark,
   onToggleCreditNote,
   showCreditNoteDate,
+  sorting,
+  setSorting,
+  columnVisibility,
+  setColumnVisibility,
+  columnOrder,
+  setColumnOrder,
+  isReady = true,
+  selectedInvoiceIds,
+  onToggleSelect,
+  onToggleSelectAll,
 }: {
   items: (Opportunity | Invoice)[];
   type: 'opportunities' | 'invoices';
@@ -32,8 +43,19 @@ export const BillingTable = ({
   usersMap: Record<string, User>;
   opportunitiesMap: Record<string, Opportunity>;
   onMarkAsPaid?: (invoiceId: string) => void;
+  onToggleDeletionMark?: (invoiceId: string, nextValue: boolean) => void;
   onToggleCreditNote?: (invoiceId: string, nextValue: boolean) => void;
   showCreditNoteDate?: boolean;
+  sorting?: SortingState;
+  setSorting?: React.Dispatch<React.SetStateAction<SortingState>>;
+  columnVisibility?: ColumnVisibilityState;
+  setColumnVisibility?: React.Dispatch<React.SetStateAction<ColumnVisibilityState>>;
+  columnOrder?: ColumnOrderState;
+  setColumnOrder?: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
+  isReady?: boolean;
+  selectedInvoiceIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+  onToggleSelectAll?: (checked: boolean) => void;
 }) => {
 
   const isDeletionMarked = useCallback((item: Opportunity | Invoice) => {
@@ -45,8 +67,60 @@ export const BillingTable = ({
     );
   }, []);
 
+  const selectionEnabled = useMemo(
+    () => type === 'invoices' && !!selectedInvoiceIds && !!onToggleSelect && !!onToggleSelectAll,
+    [onToggleSelect, onToggleSelectAll, selectedInvoiceIds, type]
+  );
+
+  const displayedInvoiceIds = useMemo(() => {
+    if (!selectionEnabled || !isReady) return [] as string[];
+
+    return items
+      .filter((item): item is Invoice => (item as Invoice).id !== undefined)
+      .map((invoice) => invoice.id);
+  }, [isReady, items, selectionEnabled]);
+
+  const allSelected = useMemo(
+    () => selectionEnabled && displayedInvoiceIds.length > 0 && displayedInvoiceIds.every((id) => selectedInvoiceIds?.has(id)),
+    [displayedInvoiceIds, selectedInvoiceIds, selectionEnabled]
+  );
+
+  const someSelected = useMemo(
+    () => selectionEnabled && displayedInvoiceIds.some((id) => selectedInvoiceIds?.has(id)),
+    [displayedInvoiceIds, selectedInvoiceIds, selectionEnabled]
+  );
+
   const columns = useMemo<ColumnDef<Opportunity | Invoice>[]>(() => {
-    let cols: ColumnDef<any>[] = [
+    let cols: ColumnDef<any>[] = [];
+
+    if (type === 'invoices' && selectionEnabled) {
+      cols.push({
+        id: 'select',
+        header: () => (
+          <Checkbox
+            checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+            onCheckedChange={(value) => onToggleSelectAll?.(value === true)}
+            aria-label="Seleccionar todas las facturas visibles"
+            onClick={(e) => e.stopPropagation()}
+          />
+        ),
+        cell: ({ row }) => {
+          const invoice = row.original as Invoice;
+          return (
+            <Checkbox
+              checked={selectedInvoiceIds?.has(invoice.id) ?? false}
+              onCheckedChange={() => onToggleSelect?.(invoice.id)}
+              aria-label={`Seleccionar factura ${invoice.invoiceNumber || invoice.id}`}
+              onClick={(e) => e.stopPropagation()}
+            />
+          );
+        },
+        size: 48,
+        enableResizing: false,
+      });
+    }
+
+    cols.push(
       {
         accessorKey: 'opportunityTitle',
         header: 'Oportunidad',
@@ -84,7 +158,7 @@ export const BillingTable = ({
             );
         },
       },
-    ];
+    );
 
     if (type === 'invoices') {
         cols.push({
@@ -187,6 +261,36 @@ export const BillingTable = ({
             }
           })
         }
+        if (onToggleDeletionMark) {
+          cols.push({
+            id: 'mark-for-deletion',
+            header: 'Eliminar',
+            cell: ({ row }) => {
+              const invoice = row.original as Invoice;
+              return (
+                <div className="flex items-center justify-center space-x-2">
+                  <Checkbox
+                    id={`delete-${invoice.id}`}
+                    checked={!!invoice.markedForDeletion}
+                    onCheckedChange={(value) => {
+                      const nextValue = value === true;
+                      onToggleDeletionMark(invoice.id, nextValue);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor={`delete-${invoice.id}`}>Eliminar</Label>
+                    {invoice.markedForDeletion && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {invoice.deletionMarkedByName || 'Solicitada'} {invoice.deletionMarkedAt ? `· ${format(parseISO(invoice.deletionMarkedAt), 'P', { locale: es })}` : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+          });
+        }
         if (onToggleCreditNote) {
           cols.push({
             id: 'mark-credit-note',
@@ -214,7 +318,24 @@ export const BillingTable = ({
 
     return cols;
 
-  }, [type, onRowClick, clientsMap, opportunitiesMap, onMarkAsPaid, usersMap, onToggleCreditNote, showCreditNoteDate, isDeletionMarked]);
+  }, [
+    allSelected,
+    clientsMap,
+    isDeletionMarked,
+    onMarkAsPaid,
+    onToggleDeletionMark,
+    onRowClick,
+    onToggleCreditNote,
+    onToggleSelect,
+    onToggleSelectAll,
+    opportunitiesMap,
+    selectedInvoiceIds,
+    selectionEnabled,
+    showCreditNoteDate,
+    type,
+    someSelected,
+    usersMap,
+  ]);
 
   const total = items.reduce((acc, item) => {
     if (type === 'invoices') return acc + Number((item as Invoice).amount || 0);
@@ -236,8 +357,17 @@ export const BillingTable = ({
   return (
       <ResizableDataTable
         columns={columns}
-        data={items}
+        data={isReady ? items : []}
+        sorting={sorting}
+        setSorting={setSorting}
+        columnVisibility={columnVisibility}
+        setColumnVisibility={setColumnVisibility}
+        columnOrder={columnOrder}
+        setColumnOrder={setColumnOrder}
         onRowClick={onRowClick}
+        rowSelection={selectionEnabled ? rowSelection : undefined}
+        setRowSelection={selectionEnabled ? handleRowSelectionChange : undefined}
+        getRowId={(row) => (type === 'invoices' ? (row as Invoice).id : (row as Opportunity).id)}
         emptyStateMessage="No hay items en esta sección."
         footerContent={footerContent}
         enableRowResizing={false}
