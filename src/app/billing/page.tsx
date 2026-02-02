@@ -28,6 +28,9 @@ import { Label } from '@/components/ui/label';
 import { es } from 'date-fns/locale';
 import { logActivity } from '@/lib/activity-logger';
 import { hasManagementPrivileges } from '@/lib/role-utils';
+import { AlertCircle, CheckCircle2, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 
 const getPeriodDurationInMonths = (period: string): number => {
     switch (period) {
@@ -154,10 +157,15 @@ const EMPTY_DELETE_PROGRESS: DeleteProgressState = {
   chunk: [],
 };
 
+const MARKED_ONLY_STORAGE_KEY = 'billing-marked-only-preference';
 
 function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
+  const [markedOnly, setMarkedOnly] = useState(false);
+  const [prefsReady, setPrefsReady] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
   const canManageDeletionMarks = useMemo(
     () => isBoss || userInfo?.role === 'Administracion',
     [isBoss, userInfo?.role],
@@ -194,12 +202,61 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [isRetryingFailed, setIsRetryingFailed] = useState(false);
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(() => new Set());
   
+  const [toCollectTableState, setToCollectTableState] = useState<{
+    sorting: SortingState;
+    columnVisibility: ColumnVisibilityState;
+    columnOrder: ColumnOrderState;
+    setSorting: React.Dispatch<React.SetStateAction<SortingState>>;
+    setColumnVisibility: React.Dispatch<React.SetStateAction<ColumnVisibilityState>>;
+    setColumnOrder: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
+  }>({
+    sorting: [],
+    columnVisibility: {},
+    columnOrder: [],
+    setSorting: () => {},
+    setColumnVisibility: () => {},
+    setColumnOrder: () => {}
+  });
+
+  const [paidTableState, setPaidTableState] = useState<{
+    sorting: SortingState;
+    columnVisibility: ColumnVisibilityState;
+    columnOrder: ColumnOrderState;
+    setSorting: React.Dispatch<React.SetStateAction<SortingState>>;
+    setColumnVisibility: React.Dispatch<React.SetStateAction<ColumnVisibilityState>>;
+    setColumnOrder: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
+  }>({
+    sorting: [],
+    columnVisibility: {},
+    columnOrder: [],
+    setSorting: () => {},
+    setColumnVisibility: () => {},
+    setColumnOrder: () => {}
+  });
+
+  const [creditNotesTableState, setCreditNotesTableState] = useState<{
+    sorting: SortingState;
+    columnVisibility: ColumnVisibilityState;
+    columnOrder: ColumnOrderState;
+    setSorting: React.Dispatch<React.SetStateAction<SortingState>>;
+    setColumnVisibility: React.Dispatch<React.SetStateAction<ColumnVisibilityState>>;
+    setColumnOrder: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
+  }>({
+    sorting: [],
+    columnVisibility: {},
+    columnOrder: [],
+    setSorting: () => {},
+    setColumnVisibility: () => {},
+    setColumnOrder: () => {}
+  });
+
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const canManageBillingDeletion = Boolean(
-    isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Admin',
+  
+  const canManageBillingDeletion = useMemo(
+    () => hasManagementPrivileges(userInfo) || userInfo?.role === 'Administracion',
+    [userInfo],
   );
 
-  // NUEVO: Definir permisos específicos para ver/eliminar duplicados (Jefe, Gerente, Admin)
   const canManageDuplicates = Boolean(
     isBoss || 
     userInfo?.role === 'Administracion' || 
@@ -216,10 +273,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
   const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
-  const canManageBillingDeletion = useMemo(
-    () => hasManagementPrivileges(userInfo) || userInfo?.role === 'Administracion',
-    [userInfo],
-  );
   
   const opportunitiesMap = useMemo(() => 
     opportunities.reduce((acc, opp) => {
@@ -363,6 +416,11 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
   }, [invoices, opportunitiesMap, isCreditNoteRelated]);
 
+  const hasCreditNotesInDuplicates = useMemo(
+    () => [...exactDuplicateGroups, ...numberDuplicateGroups].some((g) => g.hasCreditNote),
+    [exactDuplicateGroups, numberDuplicateGroups],
+  );
+
   const totalDuplicateInvoices = useMemo(
     () => exactDuplicateGroups.length + numberDuplicateGroups.length,
     [exactDuplicateGroups, numberDuplicateGroups],
@@ -475,7 +533,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         if (selectedAdvisor === 'corporativo') {
              advisorClientIds = new Set(
                 clients
-                  // AQUÍ AGREGAMOS LA CONDICIÓN PARA "Mario Altamirano"
                   .filter(c => !c.ownerId || c.ownerName?.toUpperCase() === 'CORPORATIVO' || c.ownerName === 'Mario Altamirano')
                   .map(c => c.id)
              );
@@ -577,6 +634,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     return { toInvoiceOpps, toCollectInvoices, paidInvoices, creditNoteInvoices };
 
   }, [opportunities, invoices, clients, selectedAdvisor, isBoss, userInfo, dateRange, markedOnly, isDeletionMarked, prefsReady]);
+  
   const visibleInvoiceIds = useMemo(
     () => new Set([...toCollectInvoices, ...paidInvoices, ...creditNoteInvoices].map((inv) => inv.id)),
     [toCollectInvoices, paidInvoices, creditNoteInvoices],
@@ -591,7 +649,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         if (selectedAdvisor === 'all') {
             baseList = payments;
         } else if (selectedAdvisor === 'corporativo') {
-            // AQUÍ AGREGAMOS LA CONDICIÓN PARA "Mario Altamirano" en la pestaña Mora
             baseList = payments.filter(p => !p.advisorId || p.advisorName?.toUpperCase() === 'CORPORATIVO' || p.advisorName === 'Mario Altamirano');
         } else {
             baseList = payments.filter((p) => p.advisorId === selectedAdvisor);
@@ -616,6 +673,51 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       });
   }, [isBoss, payments, selectedAdvisor, userInfo]);
 
+  // --- Search Logic Implementation ---
+  const filterItem = useCallback((item: Invoice | Opportunity | PaymentEntry) => {
+    if (!searchTerm) return true;
+    const lowerTerm = searchTerm.toLowerCase();
+    
+    // 1. PaymentEntry Check
+    if ('company' in item) { // Duck typing for PaymentEntry
+        const payment = item as PaymentEntry;
+        if (payment.company.toLowerCase().includes(lowerTerm)) return true;
+        if (payment.comprobanteNumber?.toLowerCase().includes(lowerTerm)) return true;
+        if (payment.razonSocial?.toLowerCase().includes(lowerTerm)) return true;
+        return false;
+    }
+
+    // 2. Invoice Check
+    if ('invoiceNumber' in item && item.invoiceNumber) {
+        if (item.invoiceNumber.toLowerCase().includes(lowerTerm)) return true;
+    }
+
+    // 3. Client Check (for Invoice and Opportunity)
+    let client: Client | undefined;
+    if ('clientId' in item) {
+        // Opportunity
+        client = clientsMap[item.clientId];
+    } else {
+        // Invoice
+        const opp = opportunitiesMap[item.opportunityId];
+        if (opp) client = clientsMap[opp.clientId];
+    }
+
+    if (client) {
+        if (client.denominacion.toLowerCase().includes(lowerTerm)) return true;
+        if (client.razonSocial?.toLowerCase().includes(lowerTerm)) return true;
+    }
+    
+    return false;
+  }, [searchTerm, clientsMap, opportunitiesMap]);
+
+  // Apply filter to all lists
+  const filteredToInvoiceOpps = useMemo(() => toInvoiceOpps.filter(filterItem), [toInvoiceOpps, filterItem]);
+  const filteredToCollectInvoices = useMemo(() => toCollectInvoices.filter(filterItem), [toCollectInvoices, filterItem]);
+  const filteredPaidInvoices = useMemo(() => paidInvoices.filter(filterItem), [paidInvoices, filterItem]);
+  const filteredCreditNoteInvoices = useMemo(() => creditNoteInvoices.filter(filterItem), [creditNoteInvoices, filterItem]);
+  const filteredPaymentsWithSearch = useMemo(() => filteredPayments.filter(filterItem), [filteredPayments, filterItem]);
+
   const paymentsSummary = useMemo<PaymentSummaryRow[]>(() => {
     const buckets: Record<string, PaymentSummaryRow> = {};
 
@@ -626,7 +728,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       return '1-30' as const;
     };
 
-    filteredPayments.forEach((entry) => {
+    filteredPaymentsWithSearch.forEach((entry) => {
       const daysLate = entry.daysLate ?? computeDaysLate(entry.dueDate || undefined);
       if (daysLate == null || daysLate <= 0) return;
       if (entry.status === 'Pagado') return;
@@ -667,11 +769,11 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     });
 
     return Object.values(buckets).sort((a, b) => a.advisorName.localeCompare(b.advisorName, 'es'));
-  }, [filteredPayments]);
+  }, [filteredPaymentsWithSearch]);
 
   useEffect(() => {
-    setSelectedPaymentIds((prev) => prev.filter((id) => filteredPayments.some((entry) => entry.id === id)));
-  }, [filteredPayments]);
+    setSelectedPaymentIds((prev) => prev.filter((id) => filteredPaymentsWithSearch.some((entry) => entry.id === id)));
+  }, [filteredPaymentsWithSearch]);
 
   useEffect(() => {
     setSelectedInvoiceIds((prev) => {
@@ -941,7 +1043,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   };
 
   const handleSelectAllPayments = (checked: boolean) => {
-    setSelectedPaymentIds(checked ? filteredPayments.map((p) => p.id) : []);
+    setSelectedPaymentIds(checked ? filteredPaymentsWithSearch.map((p) => p.id) : []);
   };
 
   const handleDeletePayments = async (ids: string[]) => {
@@ -1414,37 +1516,48 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   return (
     <div className="flex flex-col h-full">
       <Header title="Estado de Cobranzas">
-         <MonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
-          {isBoss && (
-            <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
-              <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Filtrar por asesor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los asesores</SelectItem>
-                <SelectItem value="corporativo">Corporativo</SelectItem>
-                {advisors.map(advisor => (
-                  <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {canManageDuplicates && (
-            <Button
-                variant="outline"
-                onClick={() => setIsDuplicateModalOpen(true)}
-                disabled={totalDuplicateInvoices === 0 || isDeletingDuplicates}
-            >
-                {isDeletingDuplicates ? (
-                <>
-                    <Spinner size="small" className="mr-2" />
-                    Eliminando duplicados...
-                </>
-                ) : (
-                <>Eliminar duplicados {totalDuplicateInvoices > 0 ? `(${totalDuplicateInvoices})` : ''}</>
-                )}
-            </Button>
-          )}
+        <div className="flex flex-col sm:flex-row gap-4 items-center w-full md:w-auto">
+            <div className="relative w-full sm:w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input 
+                    placeholder="Buscar factura o cliente..." 
+                    className="pl-8" 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+            </div>
+            <MonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
+            {isBoss && (
+                <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
+                <SelectTrigger className="w-full sm:w-[200px]">
+                    <SelectValue placeholder="Filtrar por asesor" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Todos los asesores</SelectItem>
+                    <SelectItem value="corporativo">Corporativo</SelectItem>
+                    {advisors.map(advisor => (
+                    <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
+                    ))}
+                </SelectContent>
+                </Select>
+            )}
+            {canManageDuplicates && (
+                <Button
+                    variant="outline"
+                    onClick={() => setIsDuplicateModalOpen(true)}
+                    disabled={totalDuplicateInvoices === 0 || isDeletingDuplicates}
+                >
+                    {isDeletingDuplicates ? (
+                    <>
+                        <Spinner size="small" className="mr-2" />
+                        Eliminando duplicados...
+                    </>
+                    ) : (
+                    <>Eliminar duplicados {totalDuplicateInvoices > 0 ? `(${totalDuplicateInvoices})` : ''}</>
+                    )}
+                </Button>
+            )}
+        </div>
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <Tabs defaultValue={initialTab}>
@@ -1488,7 +1601,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
           <TabsContent value="to-invoice">
             {renderWithPrefs(
               <ToInvoiceTable 
-                  items={toInvoiceOpps}
+                  items={filteredToInvoiceOpps}
                   clientsMap={clientsMap}
                   onCreateInvoice={handleCreateInvoice}
                   onRowClick={handleRowClick}
@@ -1496,9 +1609,9 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             )}
           </TabsContent>
           <TabsContent value="to-collect">
-            {renderDeletionMarkActions(toCollectInvoices)}
+            {renderDeletionMarkActions(filteredToCollectInvoices)}
             <BillingTable
-              items={toCollectInvoices}
+              items={filteredToCollectInvoices}
               type="invoices"
               onRowClick={handleRowClick}
               clientsMap={clientsMap}
@@ -1518,9 +1631,9 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             />
           </TabsContent>
            <TabsContent value="paid">
-            {renderDeletionMarkActions(paidInvoices)}
+            {renderDeletionMarkActions(filteredPaidInvoices)}
             <BillingTable
-              items={paidInvoices}
+              items={filteredPaidInvoices}
               type="invoices"
               onRowClick={handleRowClick}
               clientsMap={clientsMap}
@@ -1539,7 +1652,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
           </TabsContent>
           <TabsContent value="credit-notes">
             <BillingTable
-              items={creditNoteInvoices}
+              items={filteredCreditNoteInvoices}
               type="invoices"
               onRowClick={handleRowClick}
               clientsMap={clientsMap}
@@ -1583,7 +1696,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 <div className="grid gap-4">
                   <PaymentsSummary rows={paymentsSummary} />
                   <PaymentsTable
-                    entries={filteredPayments}
+                    entries={filteredPaymentsWithSearch}
                     onUpdate={handleUpdatePaymentEntry}
                     onDelete={handleDeletePayments}
                     selectedIds={selectedPaymentIds}
