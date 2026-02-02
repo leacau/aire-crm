@@ -26,119 +26,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { es } from 'date-fns/locale';
-import { Badge } from '@/components/ui/badge';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
-
-const MARKED_ONLY_STORAGE_KEY = 'billing:markedOnly';
-const TO_COLLECT_TABLE_STORAGE_KEY = 'billing:toCollect:tableState';
-const PAID_TABLE_STORAGE_KEY = 'billing:paid:tableState';
-const CREDIT_NOTES_TABLE_STORAGE_KEY = 'billing:creditNotes:tableState';
-
-type TableStateSnapshot = {
-  sorting: SortingState;
-  columnVisibility: ColumnVisibilityState;
-  columnOrder: ColumnOrderState;
-};
-
-const createDefaultTableState = (): TableStateSnapshot => ({
-  sorting: [],
-  columnVisibility: {},
-  columnOrder: [],
-});
-
-const parseStoredTableState = (raw: string | null, defaults: TableStateSnapshot) => {
-  if (!raw) {
-    return {
-      sorting: [...defaults.sorting],
-      columnVisibility: { ...defaults.columnVisibility },
-      columnOrder: [...defaults.columnOrder],
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<TableStateSnapshot>;
-    return {
-      sorting: Array.isArray(parsed.sorting) ? parsed.sorting : [...defaults.sorting],
-      columnVisibility:
-        parsed.columnVisibility && typeof parsed.columnVisibility === 'object'
-          ? (parsed.columnVisibility as ColumnVisibilityState)
-          : { ...defaults.columnVisibility },
-      columnOrder: Array.isArray(parsed.columnOrder) ? parsed.columnOrder : [...defaults.columnOrder],
-    };
-  } catch (error) {
-    console.error('Error parsing table state for billing:', error);
-    return {
-      sorting: [...defaults.sorting],
-      columnVisibility: { ...defaults.columnVisibility },
-      columnOrder: [...defaults.columnOrder],
-    };
-  }
-};
-
-const usePersistedTableState = (storageKey: string, defaults: TableStateSnapshot) => {
-  const [tableState, setTableState] = useState<TableStateSnapshot>(() => {
-    if (typeof window === 'undefined') return parseStoredTableState(null, defaults);
-    const stored = localStorage.getItem(storageKey);
-    return parseStoredTableState(stored, defaults);
-  });
-
-  const persist = useCallback(
-    (snapshot: TableStateSnapshot) => {
-      if (typeof window === 'undefined') return;
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(snapshot));
-      } catch (error) {
-        console.error('Error persisting billing table state:', error);
-      }
-    },
-    [storageKey],
-  );
-
-  const setSorting = useCallback<React.Dispatch<React.SetStateAction<SortingState>>>(
-    (updater) => {
-      setTableState((prev) => {
-        const nextSorting = typeof updater === 'function' ? updater(prev.sorting) : updater;
-        const snapshot = { ...prev, sorting: nextSorting };
-        persist(snapshot);
-        return snapshot;
-      });
-    },
-    [persist],
-  );
-
-  const setColumnVisibility = useCallback<React.Dispatch<React.SetStateAction<ColumnVisibilityState>>>(
-    (updater) => {
-      setTableState((prev) => {
-        const nextVisibility = typeof updater === 'function' ? updater(prev.columnVisibility) : updater;
-        const snapshot = { ...prev, columnVisibility: nextVisibility };
-        persist(snapshot);
-        return snapshot;
-      });
-    },
-    [persist],
-  );
-
-  const setColumnOrder = useCallback<React.Dispatch<React.SetStateAction<ColumnOrderState>>>(
-    (updater) => {
-      setTableState((prev) => {
-        const nextOrder = typeof updater === 'function' ? updater(prev.columnOrder) : updater;
-        const snapshot = { ...prev, columnOrder: nextOrder };
-        persist(snapshot);
-        return snapshot;
-      });
-    },
-    [persist],
-  );
-
-  return {
-    sorting: tableState.sorting,
-    columnVisibility: tableState.columnVisibility,
-    columnOrder: tableState.columnOrder,
-    setSorting,
-    setColumnVisibility,
-    setColumnOrder,
-  };
-};
+import { logActivity } from '@/lib/activity-logger';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 const getPeriodDurationInMonths = (period: string): number => {
     switch (period) {
@@ -327,16 +216,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all');
   const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
-  const [markedOnly, setMarkedOnly] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const stored = localStorage.getItem(MARKED_ONLY_STORAGE_KEY);
-    return stored === 'true';
-  });
-  const [prefsReady, setPrefsReady] = useState(() => typeof window === 'undefined');
-  const tableDefaults = useMemo(createDefaultTableState, []);
-  const toCollectTableState = usePersistedTableState(TO_COLLECT_TABLE_STORAGE_KEY, tableDefaults);
-  const paidTableState = usePersistedTableState(PAID_TABLE_STORAGE_KEY, tableDefaults);
-  const creditNotesTableState = usePersistedTableState(CREDIT_NOTES_TABLE_STORAGE_KEY, tableDefaults);
+  const canManageBillingDeletion = useMemo(
+    () => hasManagementPrivileges(userInfo) || userInfo?.role === 'Administracion',
+    [userInfo],
+  );
   
   const opportunitiesMap = useMemo(() => 
     opportunities.reduce((acc, opp) => {
@@ -1145,9 +1028,38 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     [clientsMap, invoices, opportunitiesMap],
   );
 
-  const hasCreditNotesInDuplicates = useMemo(
-    () => exactDuplicateGroups.some((group) => group.hasCreditNote) || numberDuplicateGroups.some((group) => group.hasCreditNote),
-    [exactDuplicateGroups, numberDuplicateGroups],
+  const ensureCanManageBillingDeletion = useCallback(
+    async ({ action, invoice }: { action: string; invoice?: Invoice }) => {
+      if (canManageBillingDeletion) return true;
+
+      toast({
+        title: 'Acceso denegado',
+        description: 'No tenés permisos para modificar o eliminar facturas.',
+        variant: 'destructive',
+      });
+
+      if (userInfo) {
+        const ownerName = invoice ? resolveOwnerNameForInvoice(invoice.id) : 'Cliente';
+        const invoiceName = invoice?.invoiceNumber
+          ? `Factura #${invoice.invoiceNumber}`
+          : invoice
+            ? `Factura ${invoice.id}`
+            : 'Factura';
+        await logActivity({
+          userId: userInfo.id,
+          userName: userInfo.name,
+          ownerName,
+          type: 'comment',
+          entityType: 'invoice',
+          entityId: invoice?.id || 'sin-id',
+          entityName: invoiceName,
+          details: `${userInfo.name} intentó ${action} sin permisos.`,
+        });
+      }
+
+      return false;
+    },
+    [canManageBillingDeletion, resolveOwnerNameForInvoice, toast, userInfo],
   );
 
   const runBatchInvoiceDeletion = useCallback(
@@ -1211,6 +1123,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         });
 
     if (uniqueIds.length === 0) return;
+
+    const canProceed = await ensureCanManageBillingDeletion({
+      action: 'eliminar facturas duplicadas',
+      invoice: selectedInvoices[0],
+    });
+    if (!canProceed) return;
 
     setIsRetryingFailed(Boolean(idsToDelete));
 
@@ -1295,6 +1213,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
     const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
     if (!invoiceToUpdate) return;
+
+    const canProceed = await ensureCanManageBillingDeletion({
+      action: 'marcar la factura como pagada',
+      invoice: invoiceToUpdate,
+    });
+    if (!canProceed) return;
     
     const opp = opportunities.find(o => o.id === invoiceToUpdate.opportunityId);
     if (!opp) return;
@@ -1324,6 +1248,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
     const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
     if (!invoiceToUpdate) return;
+
+    const canProceed = await ensureCanManageBillingDeletion({
+      action: `marcar la factura ${nextValue ? 'con' : 'sin'} nota de crédito`,
+      invoice: invoiceToUpdate,
+    });
+    if (!canProceed) return;
 
     const opp = opportunities.find(o => o.id === invoiceToUpdate.opportunityId);
     if (!opp) return;
