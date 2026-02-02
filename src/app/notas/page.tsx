@@ -25,11 +25,12 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { NotePdf } from '@/components/notas/note-pdf';
-// CORRECCIÓN 1: Se agrega getGoogleAccessToken al import
-import { sendEmail, getGoogleAccessToken } from '@/lib/google-gmail-service';
+// CORRECCIÓN: getGoogleAccessToken se obtiene de useAuth, no del servicio
+import { sendEmail } from '@/lib/google-gmail-service';
 
 export default function NotaComercialPage() {
-    const { userInfo } = useAuth();
+    // CORRECCIÓN: Destructuramos getGoogleAccessToken del hook useAuth
+    const { userInfo, getGoogleAccessToken } = useAuth();
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -344,6 +345,7 @@ export default function NotaComercialPage() {
 
             // 4. Handle Notification
             if (notifyOnSave && pdfRef.current) {
+                // Usamos la función destructurada del hook
                 const accessToken = await getGoogleAccessToken();
                 if (accessToken) {
                     try {
@@ -375,8 +377,10 @@ export default function NotaComercialPage() {
                         toast({ title: 'Nota guardada, pero falló el envío del correo.', description: "Verifique el tamaño del adjunto o intente nuevamente.", variant: 'default' });
                     }
                 } else {
-                    toast({ title: 'Sin Token' });
+                    toast({ title: 'Sin Token', description: "No se pudo obtener acceso a Google para enviar el correo.", variant: 'destructive' });
                 }
+            } else {
+                toast({ title: 'Nota guardada correctamente.' });
             }
 
             // Reset
@@ -404,7 +408,7 @@ export default function NotaComercialPage() {
         } finally {
             setSaving(false);
         }
-    }; // CORRECCIÓN 2: Se eliminó la llave extra que cerraba el componente antes de tiempo
+    }; 
 
     if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
 
