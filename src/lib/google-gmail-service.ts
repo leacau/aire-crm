@@ -1,5 +1,3 @@
-
-
 'use server';
 
 const GMAIL_API_URL = 'https://www.googleapis.com/gmail/v1/users/me/messages/send';
@@ -17,12 +15,10 @@ interface EmailParams {
 
 export async function sendEmail({ accessToken, to, subject, body }: EmailParams) {
     if (!accessToken) {
-        // This won't throw an error, but allows the calling function to know it didn't run.
         console.warn("Skipping email send because accessToken is missing.");
         return;
     }
 
-    // RFC 2822 formatted email
     const emailParts = [
         `To: ${to}`,
         `Content-Type: text/html; charset=utf-8`,
@@ -47,7 +43,6 @@ export async function sendEmail({ accessToken, to, subject, body }: EmailParams)
         if (!response.ok) {
             const error = await response.json();
             console.error('Google Gmail API Error:', error);
-            // We log the error but do not throw, to make it non-blocking
         }
     } catch (error) {
         console.error("Network or other error during email send:", error);
@@ -70,15 +65,16 @@ export async function createCalendarEvent(accessToken: string, event: object) {
     if (!response.ok) {
         const error = await response.json();
         console.error('Google Calendar API Error (Create):', error);
-        throw new Error('Failed to create calendar event: ' + error.error?.message);
+        throw new Error('Failed to create calendar event: ' + (error.error?.message || 'Unknown error'));
     }
 
     return await response.json();
 }
 
+// CORRECCIÓN: Cambiamos a PATCH para actualización parcial segura
 export async function updateCalendarEvent(accessToken: string, eventId: string, event: object) {
     const response = await fetch(`${CALENDAR_API_URL}/${eventId}`, {
-        method: 'PUT',
+        method: 'PATCH', 
         headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'
@@ -89,7 +85,7 @@ export async function updateCalendarEvent(accessToken: string, eventId: string, 
     if (!response.ok) {
         const error = await response.json();
         console.error('Google Calendar API Error (Update):', error);
-        throw new Error('Failed to update calendar event: ' + error.error?.message);
+        throw new Error('Failed to update calendar event: ' + (error.error?.message || 'Unknown error'));
     }
 
     return await response.json();
@@ -104,11 +100,12 @@ export async function deleteCalendarEvent(accessToken: string, eventId: string) 
         }
     });
 
-    if (!response.ok && response.status !== 204) { // 204 No Content is a success response for DELETE
+    if (!response.ok && response.status !== 204 && response.status !== 404 && response.status !== 410) { 
+        // Aceptamos 404 y 410 como "ya eliminado" para evitar errores en la UI
         const error = await response.json();
         console.error('Google Calendar API Error (Delete):', error);
-        throw new Error('Failed to delete calendar event: ' + error.error?.message);
+        throw new Error('Failed to delete calendar event: ' + (error.error?.message || 'Unknown error'));
     }
 
-    return; // No content to return on success
+    return; 
 }
