@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { getCalendarEvents } from '@/lib/google-calendar-service';
-import { createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
+// CORRECCIÓN: Importamos updateCalendarEvent
+import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/lib/google-gmail-service';
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -92,7 +93,6 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
         }
     }
 
-    // Usamos ensureGoogleAccessToken para garantizar que hay token o pedirlo
     const token = await ensureGoogleAccessToken();
 
     if (token) {
@@ -122,7 +122,6 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
   }, [fetchEvents]);
 
   const handleSelectSlot = useCallback(({ start, end }: { start: Date; end: Date }) => {
-    // Disable creating events on other people's calendars
     if(selectedUserId && selectedUserId !== userInfo?.id) return;
     
     setSelectedEvent(null);
@@ -153,15 +152,12 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
     }
 
     try {
-      if (selectedEvent?.id) {
-        await deleteCalendarEvent(token, selectedEvent.id);
-      }
-      
       const eventToSave = {
         summary: formData.title,
         description: formData.description || '',
         start: { dateTime: formData.start.toISOString() },
         end: { dateTime: formData.end.toISOString() },
+        // Mantenemos recordatorios solo al crear o si queremos forzarlos al editar
         reminders: {
             useDefault: false,
             overrides: [
@@ -171,10 +167,17 @@ export function GoogleCalendar({ selectedUserId }: GoogleCalendarProps) {
         }
       };
 
-      await createCalendarEvent(token, eventToSave);
-      toast({ title: 'Evento guardado correctamente'});
+      // CORRECCIÓN: Lógica para actualizar (PATCH) si existe ID, o crear (POST) si es nuevo
+      if (selectedEvent?.id) {
+        await updateCalendarEvent(token, selectedEvent.id, eventToSave);
+        toast({ title: 'Evento actualizado correctamente'});
+      } else {
+        await createCalendarEvent(token, eventToSave);
+        toast({ title: 'Evento creado correctamente'});
+      }
+
       setIsDialogOpen(false);
-      fetchEvents(); // Refresh events from google
+      fetchEvents(); 
     } catch(err: any) {
       console.error(err);
       toast({ title: 'Error al guardar el evento', description: err.message, variant: 'destructive'});
