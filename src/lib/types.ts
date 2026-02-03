@@ -586,6 +586,13 @@ export type CommercialNote = {
   // -- Production/Pautado Fields --
   replicateWeb?: boolean;
   replicateSocials?: string[]; // 'Facebook', 'Instagram', 'X'
+  
+  // NUEVOS CAMPOS: Colaboración y CTA
+  collaboration?: boolean;
+  collaborationHandle?: string;
+  ctaText?: string;
+  ctaDestination?: string;
+
   programIds: string[]; // IDs of selected programs
   schedule: Record<string, ScheduleItem[]>; // programId -> array of {date, time}
   contactPhone?: string; // Teléfono para coordinar
@@ -593,13 +600,17 @@ export type CommercialNote = {
 
   // -- Note Details Fields --
   title?: string;
-  // CAMBIO: Se reemplaza 'Empresa' por 'Móvil'
+  // CAMBIO: 'Empresa' conceptualmente es 'Móvil' ahora
   location?: 'Estudio' | 'Móvil' | 'Meet' | 'Llamada';
   callPhone?: string; // If location is Llamada
   mobileAddress?: string; // NUEVO: Si location es Móvil
+  
   primaryGraf?: string;
   secondaryGraf?: string;
+  
   questions?: string[];
+  // NUEVO: Temas a evitar
+  topicsToAvoid?: string[];
   
   intervieweeName?: string;
   intervieweeRole?: string;
@@ -614,7 +625,7 @@ export type CommercialNote = {
   phone?: string; // Teléfono comercial
   noCommercialPhone?: boolean;
   
-  // NUEVOS CAMPOS: Domicilio Comercial
+  // NUEVO: Domicilio Comercial
   commercialAddresses?: string[]; 
   noCommercialAddress?: boolean;
 
