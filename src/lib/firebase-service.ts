@@ -165,6 +165,27 @@ export const getCommercialNote = async (noteId: string): Promise<CommercialNote 
     }
 };
 
+export const deleteCommercialNote = async (noteId: string, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'commercial_notes', noteId);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) throw new Error("Nota no encontrada");
+    const noteData = docSnap.data();
+
+    await deleteDoc(docRef);
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'commercial_note' as any,
+        entityId: noteId,
+        entityName: noteData.title || 'Nota Comercial',
+        details: `eliminó la nota comercial <strong>${noteData.title}</strong>`,
+        ownerName: noteData.advisorName || 'Desconocido'
+    });
+};
+
 export const bulkReleaseProspects = async (
     prospectIds: string[],
     userId: string,
