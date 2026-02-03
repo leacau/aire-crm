@@ -596,6 +596,31 @@ export function ClientDetails({
     }
   };
 
+  // Función auxiliar para capturar y generar PDF multipágina
+  const generateMultiPagePdf = async (element: HTMLElement, title: string) => {
+    const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
+    const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
+
+    if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
+
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+
+    // Página 1
+    const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true });
+    const imgData1 = canvas1.toDataURL('image/jpeg', 0.8);
+    pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+    // Página 2
+    pdf.addPage();
+    const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true });
+    const imgData2 = canvas2.toDataURL('image/jpeg', 0.8);
+    pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+    return pdf;
+  };
+
   // Función para descargar PDF de Nota
   const handleDownloadNotePdf = async (note: CommercialNote) => {
     setNoteForPdf(note);
@@ -609,12 +634,7 @@ export function ClientDetails({
             return;
         }
         try {
-            const canvas = await html2canvas(notePdfRef.current, { scale: 1.5, useCORS: true });
-            const imgData = canvas.toDataURL('image/jpeg', 0.8);
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            const pdf = await generateMultiPagePdf(notePdfRef.current, note.title);
             pdf.save(`Nota_${note.title.replace(/ /g, "_")}.pdf`);
         } catch (error) {
             console.error(error);
@@ -1112,20 +1132,21 @@ export function ClientDetails({
                 <CardHeader><CardTitle>Notas Comerciales Históricas</CardTitle></CardHeader>
                 <CardContent>
                     {notes.map(note => (
-                        <div key={note.id} className="p-4 border-b last:border-0">
-                            <p className="font-bold">{note.title}</p>
-                            <p className="text-sm text-muted-foreground">
-                                {format(new Date(note.createdAt), "PPP", { locale: es })} - Por: {note.advisorName}
-                            </p>
+                        <div key={note.id} className="p-4 border-b last:border-0 flex justify-between items-center">
+                            <div>
+                                <p className="font-bold">{note.title}</p>
+                                <p className="text-sm text-muted-foreground">
+                                    {format(new Date(note.createdAt), "PPP", { locale: es })} - Por: {note.advisorName}
+                                </p>
+                            </div>
                             <Button 
-                                variant="link" 
+                                variant="outline" 
                                 size="sm" 
-                                className="px-0"
                                 onClick={() => handleDownloadNotePdf(note)}
                                 disabled={downloadingNoteId === note.id}
                             >
-                                {downloadingNoteId === note.id ? <Spinner size="small" className="mr-2"/> : null}
-                                Ver Detalle / Descargar PDF
+                                {downloadingNoteId === note.id ? <Spinner size="small" className="mr-2"/> : <FileDown className="mr-2 h-4 w-4" />}
+                                Descargar PDF
                             </Button>
                         </div>
                     ))}
