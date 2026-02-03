@@ -52,8 +52,6 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
 
             <div className="flex flex-col gap-6">
                 
-                {/* 3. Detalles de la Nota (Movido arriba según preferencia implícita de jerarquía) o mantener orden */}
-                
                 <div className="w-full">
                     <SectionTitle title="1. Detalles de la Nota" />
                     <Field label="Título" value={note.title} fullWidth />
@@ -74,7 +72,6 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                         </div>
                     </div>
 
-                    {/* Soporte Gráfico movido a Página 1 */}
                     {note.graphicSupport && (
                         <div className="mt-4 p-4 bg-yellow-100 border-2 border-yellow-400 text-yellow-900 font-bold text-center rounded-lg uppercase tracking-wide">
                             ⚠️ REQUIERE SOPORTE GRÁFICO ⚠️
@@ -87,7 +84,6 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     )}
                 </div>
 
-                {/* Datos del Cliente */}
                 <div className="w-full">
                     <SectionTitle title="2. Datos del Cliente" />
                     <div className="grid grid-cols-2 gap-4">
@@ -98,7 +94,6 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     </div>
                 </div>
 
-                {/* Producción y Pautado */}
                 <div className="w-full">
                     <SectionTitle title="3. Producción y Pautado" />
                     <div className="grid grid-cols-2 gap-4 mb-4">
@@ -136,7 +131,8 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                             <div className="bg-blue-50 p-2 rounded border border-blue-100 mt-1">
                                 <div className="grid grid-cols-2 gap-2">
                                     <div><span className="font-bold">Colaboración:</span> {note.collaboration ? `SÍ (${note.collaborationHandle})` : 'NO'}</div>
-                                    <div><span className="font-bold">CTA:</span> {note.ctaText || '-'} -> {note.ctaDestination || '-'}</div>
+                                    {/* CORRECCIÓN: Se usa {'->'} para escapar la flecha en JSX */}
+                                    <div><span className="font-bold">CTA:</span> {note.ctaText || '-'} {'->'} {note.ctaDestination || '-'}</div>
                                 </div>
                             </div>
                         )}
@@ -160,7 +156,6 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
 
             <div className="flex flex-col gap-6">
                 
-                {/* 4. Entrevistado */}
                 <div className="w-full">
                     <SectionTitle title="4. Entrevistado" />
                     <div className="grid grid-cols-2 gap-4">
@@ -175,7 +170,6 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     )}
                 </div>
 
-                {/* 5. Canales de Contacto */}
                 <div className="w-full">
                     <SectionTitle title="5. Canales de Contacto (A mostrar)" />
                     <div className="grid grid-cols-2 gap-y-2 gap-x-8 mb-3">
@@ -201,7 +195,6 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     )}
                 </div>
 
-                {/* 6. Preguntas y Temas a Evitar */}
                 <div className="w-full">
                     <SectionTitle title="6. Contenido" />
                     
@@ -226,7 +219,6 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     )}
                 </div>
 
-                {/* 7. Observaciones Generales */}
                 <div className="w-full">
                     <SectionTitle title="7. Observaciones Generales" />
                     <div className="p-4 border border-gray-200 rounded min-h-[100px] bg-yellow-50/30">
