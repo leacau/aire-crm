@@ -16,7 +16,7 @@ import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote }
 import type { Client, Program, CommercialNote, ScheduleItem } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Save, Plus, ExternalLink, Trash2 } from 'lucide-react';
+import { CalendarIcon, Save, Plus, ExternalLink, Trash2, MapPin, Minus } from 'lucide-react'; // Agregamos MapPin y Minus
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -59,8 +59,11 @@ export default function NotaComercialPage() {
 
     // --- SECCIÓN 4: NOTA ---
     const [title, setTitle] = useState('');
-    const [location, setLocation] = useState<'Estudio' | 'Empresa' | 'Meet' | 'Llamada' | undefined>(undefined);
+    // CAMBIO: location actualizado a 'Móvil'
+    const [location, setLocation] = useState<'Estudio' | 'Móvil' | 'Meet' | 'Llamada' | undefined>(undefined);
     const [callPhone, setCallPhone] = useState('');
+    // NUEVO: Estado para dirección del móvil
+    const [mobileAddress, setMobileAddress] = useState('');
     const [primaryGraf, setPrimaryGraf] = useState('');
     const [secondaryGraf, setSecondaryGraf] = useState('');
     const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']);
@@ -78,6 +81,10 @@ export default function NotaComercialPage() {
     const [noWhatsapp, setNoWhatsapp] = useState(false);
     const [commercialPhone, setCommercialPhone] = useState('');
     const [noCommercialPhone, setNoCommercialPhone] = useState(false);
+    
+    // NUEVO: Domicilios Comerciales
+    const [commercialAddresses, setCommercialAddresses] = useState<string[]>(['']);
+    const [noCommercialAddress, setNoCommercialAddress] = useState(false);
 
     // Otros Nota
     const [graphicSupport, setGraphicSupport] = useState(false);
@@ -86,7 +93,7 @@ export default function NotaComercialPage() {
 
     const [notifyOnSave, setNotifyOnSave] = useState(false);
 
-    // Función auxiliar para capturar y generar PDF multipágina
+    // ... (funciones generateMultiPagePdf y handleDownloadPdf se mantienen igual) ...
     const generateMultiPagePdf = async (element: HTMLElement) => {
         const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
         const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
@@ -122,7 +129,7 @@ export default function NotaComercialPage() {
         }
     };
 
-
+    // ... (useEffect loadData y handleClientSelect se mantienen igual) ...
     useEffect(() => {
         const loadData = async () => {
             try {
@@ -160,7 +167,7 @@ export default function NotaComercialPage() {
         }
     };
 
-    // --- Helpers ---
+    // --- Helpers existentes ...
     const toggleProgram = (programId: string) => {
         setSelectedProgramIds(prev =>
             prev.includes(programId)
@@ -177,7 +184,6 @@ export default function NotaComercialPage() {
 
         setProgramSchedule(prev => {
             const currentItems = prev[programId] || [];
-            // Preserve existing times for dates that persist
             const newItems = dates.map(d => {
                 const isoDate = d.toISOString();
                 const existing = currentItems.find(item => item.date.split('T')[0] === isoDate.split('T')[0]);
@@ -214,6 +220,20 @@ export default function NotaComercialPage() {
     const handleRemoveQuestion = (index: number) => {
         const newQ = questions.filter((_, i) => i !== index);
         setQuestions(newQ);
+    };
+
+    // --- NUEVO: Helpers para Domicilios Comerciales ---
+    const handleAddAddress = () => setCommercialAddresses([...commercialAddresses, '']);
+    
+    const handleAddressChange = (index: number, value: string) => {
+        const newAddr = [...commercialAddresses];
+        newAddr[index] = value;
+        setCommercialAddresses(newAddr);
+    };
+
+    const handleRemoveAddress = (index: number) => {
+        const newAddr = commercialAddresses.filter((_, i) => i !== index);
+        setCommercialAddresses(newAddr.length ? newAddr : ['']); // Mantiene al menos 1
     };
 
     // --- Calculations ---
@@ -259,11 +279,16 @@ export default function NotaComercialPage() {
             return;
         }
         if (!location) {
-            toast({ title: 'Datos incompletos', description: 'Seleccione dónde se realizará la nota (Estudio, Empresa, etc.).', variant: 'destructive' });
+            toast({ title: 'Datos incompletos', description: 'Seleccione dónde se realizará la nota (Estudio, Móvil, etc.).', variant: 'destructive' });
             return;
         }
         if (location === 'Llamada' && !callPhone.trim()) {
             toast({ title: 'Datos incompletos', description: 'Debe ingresar un teléfono para la llamada.', variant: 'destructive' });
+            return;
+        }
+        // NUEVO: Validación de Móvil
+        if (location === 'Móvil' && !mobileAddress.trim()) {
+            toast({ title: 'Datos incompletos', description: 'Debe ingresar el domicilio donde se realizará el móvil.', variant: 'destructive' });
             return;
         }
         if (!primaryGraf.trim() || !secondaryGraf.trim()) {
@@ -291,6 +316,13 @@ export default function NotaComercialPage() {
             toast({ title: 'Datos incompletos', description: 'Complete el Teléfono Comercial o marque "No informar".', variant: 'destructive' });
             return;
         }
+        // NUEVO: Validación de Domicilio Comercial
+        const validAddresses = commercialAddresses.filter(a => a.trim() !== '');
+        if (!noCommercialAddress && validAddresses.length === 0) {
+            toast({ title: 'Datos incompletos', description: 'Ingrese al menos un Domicilio Comercial o marque "No informar".', variant: 'destructive' });
+            return;
+        }
+
         if (graphicSupport && !graphicLink.trim()) {
             toast({ title: 'Datos incompletos', description: 'Si indica soporte gráfico, debe proveer un link.', variant: 'destructive' });
             return;
@@ -329,19 +361,23 @@ export default function NotaComercialPage() {
                 title,
                 location,
                 callPhone: location === 'Llamada' ? callPhone : undefined,
+                mobileAddress: location === 'Móvil' ? mobileAddress : undefined, // NUEVO
                 primaryGraf,
                 secondaryGraf,
                 questions: questions.filter(q => q.trim() !== ''),
                 intervieweeName,
                 intervieweeRole,
                 intervieweeBio: intervieweeBio || undefined,
-                instagram: instagramHandle ? instagramHandle : undefined,
+                instagram: instagramHandle ? `https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}` : undefined,
                 website: noWeb ? undefined : website,
                 noWeb,
                 whatsapp: noWhatsapp ? undefined : whatsapp,
                 noWhatsapp,
                 phone: noCommercialPhone ? undefined : commercialPhone,
                 noCommercialPhone,
+                // NUEVO: Datos de domicilio
+                commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim() !== ''),
+                noCommercialAddress,
                 graphicSupport,
                 graphicSupportLink: graphicSupport ? graphicLink : undefined,
                 totalValue,
@@ -364,18 +400,15 @@ export default function NotaComercialPage() {
 
             // 4. Handle Notification
             if (notifyOnSave && pdfRef.current) {
-                // Usamos la función destructurada del hook
                 const accessToken = await getGoogleAccessToken();
                 if (accessToken) {
                     try {
                         const pdf = await generateMultiPagePdf(pdfRef.current);
                         const pdfBase64 = pdf.output('datauristring').split(',')[1];
 
-                        // Preparar datos para el cuerpo del mail
                         const baseUrl = window.location.origin;
                         const detailLink = `${baseUrl}/clients/${selectedClientId}?tab=notes`;
                         
-                        // Extraer info de cronograma para el mail
                         let scheduleSummary = '';
                         Object.entries(programSchedule).forEach(([progId, items]) => {
                             const progName = programs.find(p => p.id === progId)?.name || 'Programa';
@@ -406,7 +439,6 @@ export default function NotaComercialPage() {
                             </div>
                         `;
 
-                        // Enviar a la API
                         await sendEmail({
                             accessToken,
                             to: 'lchena@airedesantafe.com.ar', 
@@ -448,6 +480,8 @@ export default function NotaComercialPage() {
             setWebsite('');
             setWhatsapp('');
             setCommercialPhone('');
+            setCommercialAddresses(['']); // Reset Addresses
+            setMobileAddress(''); // Reset Mobile Address
 
         } catch (error) {
             console.error(error);
@@ -481,7 +515,7 @@ export default function NotaComercialPage() {
             </Header>
             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
 
-                {/* --- SECCIÓN 1: DATOS DE CLIENTE --- */}
+                {/* --- SECCIÓN 1 Y 2 Y 3: (SIN CAMBIOS VISUALES) --- */}
                 <Card>
                     <CardHeader><CardTitle>Datos de Cliente</CardTitle></CardHeader>
                     <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -509,7 +543,6 @@ export default function NotaComercialPage() {
                     </CardContent>
                 </Card>
 
-                {/* --- SECCIÓN 2: COMERCIAL --- */}
                 <Card>
                     <CardHeader><CardTitle>Comercial</CardTitle></CardHeader>
                     <CardContent className="grid gap-6 md:grid-cols-2">
@@ -547,11 +580,9 @@ export default function NotaComercialPage() {
                     </CardContent>
                 </Card>
 
-                {/* --- SECCIÓN 3: PRODUCCIÓN/PAUTADO --- */}
                 <Card>
                     <CardHeader><CardTitle>Producción / Pautado</CardTitle></CardHeader>
                     <CardContent className="space-y-6">
-                        {/* Programación */}
                         <div className="space-y-4 border p-4 rounded-md">
                             <Label className="text-base font-semibold">Programación <span className="text-red-500">*</span></Label>
                             <div className="flex flex-wrap gap-2">
@@ -670,8 +701,9 @@ export default function NotaComercialPage() {
                                         <Label htmlFor="loc-estudio">Estudio</Label>
                                     </div>
                                     <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="Empresa" id="loc-empresa" />
-                                        <Label htmlFor="loc-empresa">Empresa</Label>
+                                        {/* CAMBIO: Renombrado a Móvil */}
+                                        <RadioGroupItem value="Móvil" id="loc-movil" />
+                                        <Label htmlFor="loc-movil">Móvil</Label>
                                     </div>
                                     <div className="flex items-center space-x-2">
                                         <RadioGroupItem value="Meet" id="loc-meet" />
@@ -689,6 +721,18 @@ export default function NotaComercialPage() {
                                             value={callPhone}
                                             onChange={e => setCallPhone(e.target.value)}
                                             placeholder="Ingrese el número..."
+                                            className="mt-1"
+                                        />
+                                    </div>
+                                )}
+                                {/* NUEVO: Input para dirección del móvil */}
+                                {location === 'Móvil' && (
+                                    <div className="pt-2">
+                                        <Label className="text-xs text-muted-foreground">Dirección del móvil <span className="text-red-500">*</span></Label>
+                                        <Input
+                                            value={mobileAddress}
+                                            onChange={e => setMobileAddress(e.target.value)}
+                                            placeholder="Ej: Bv. Pellegrini 2700..."
                                             className="mt-1"
                                         />
                                     </div>
@@ -794,21 +838,27 @@ export default function NotaComercialPage() {
                                         <Label htmlFor="noWeb" className="text-xs font-normal">No informar</Label>
                                     </div>
                                 </div>
-                                <Input
-                                    value={website}
-                                    onChange={e => setWebsite(e.target.value)}
-                                    disabled={noWeb}
-                                    placeholder="www.sitio.com"
-                                />
-                                {website && (
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        value={website}
+                                        onChange={e => setWebsite(e.target.value)}
+                                        disabled={noWeb}
+                                        placeholder="www.sitio.com"
+                                    />
+                                    {/* NUEVO: Botón de link para Web */}
+                                    {website && !noWeb && (
                                         <Button
                                             size="icon"
                                             variant="ghost"
-                                            onClick={() => window.open(website, '_blank')}
+                                            onClick={() => {
+                                                const url = website.startsWith('http') ? website : `https://${website}`;
+                                                window.open(url, '_blank');
+                                            }}
                                         >
                                             <ExternalLink className="h-4 w-4" />
                                         </Button>
                                     )}
+                                </div>
                             </div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
@@ -839,6 +889,43 @@ export default function NotaComercialPage() {
                                     disabled={noCommercialPhone}
                                     placeholder="0342-..."
                                 />
+                            </div>
+                            {/* NUEVO: Domicilios Comerciales */}
+                            <div className="space-y-2 md:col-span-2 border-t pt-4 mt-2">
+                                <div className="flex items-center justify-between mb-2">
+                                    <Label className={cn(noCommercialAddress && "text-muted-foreground")}>Domicilio Comercial <span className="text-red-500">*</span></Label>
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox id="noCommercialAddress" checked={noCommercialAddress} onCheckedChange={(c) => setNoCommercialAddress(!!c)} />
+                                        <Label htmlFor="noCommercialAddress" className="text-xs font-normal">No informar</Label>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    {!noCommercialAddress && commercialAddresses.map((address, idx) => (
+                                        <div key={idx} className="flex gap-2">
+                                            <Input
+                                                value={address}
+                                                onChange={e => handleAddressChange(idx, e.target.value)}
+                                                placeholder={`Domicilio ${idx + 1}`}
+                                                className="flex-1"
+                                            />
+                                            <div className="flex gap-1">
+                                                {commercialAddresses.length > 1 && (
+                                                    <Button size="icon" variant="ghost" onClick={() => handleRemoveAddress(idx)}>
+                                                        <Minus className="h-4 w-4" />
+                                                    </Button>
+                                                )}
+                                                {idx === commercialAddresses.length - 1 && (
+                                                    <Button size="icon" variant="outline" onClick={handleAddAddress}>
+                                                        <Plus className="h-4 w-4" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {noCommercialAddress && (
+                                        <Input disabled placeholder="No se informan domicilios" />
+                                    )}
+                                </div>
                             </div>
                         </div>
 
@@ -889,17 +976,21 @@ export default function NotaComercialPage() {
                         title,
                         location,
                         callPhone: location === 'Llamada' ? callPhone : undefined,
+                        mobileAddress: location === 'Móvil' ? mobileAddress : undefined, // NUEVO
                         primaryGraf,
                         secondaryGraf,
                         questions: questions.filter(q => q.trim() !== ''),
                         intervieweeName,
                         intervieweeRole,
                         intervieweeBio,
-                        instagram: instagramHandle ? instagramHandle : undefined,
+                        instagram: instagramHandle ? `https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}` : undefined,
                         website: noWeb ? undefined : website,
                         whatsapp: noWhatsapp ? undefined : whatsapp,
                         phone: noCommercialPhone ? undefined : commercialPhone,
                         noWeb, noWhatsapp, noCommercialPhone,
+                        // NUEVO
+                        commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim() !== ''),
+                        noCommercialAddress,
                         graphicSupport,
                         graphicSupportLink: graphicSupport ? graphicLink : undefined,
                         noteObservations
