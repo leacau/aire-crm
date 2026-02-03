@@ -895,7 +895,7 @@ export default function NotaComercialPage() {
                         intervieweeName,
                         intervieweeRole,
                         intervieweeBio,
-                        instagram: noInstagram ? undefined : instagramHandle,
+                        instagram: instagramHandle ? instagramHandle : undefined,
                         website: noWeb ? undefined : website,
                         whatsapp: noWhatsapp ? undefined : whatsapp,
                         phone: noCommercialPhone ? undefined : commercialPhone,
