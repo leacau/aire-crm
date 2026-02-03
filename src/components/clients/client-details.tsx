@@ -1,7 +1,7 @@
 'use client'
 import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice, CommercialNote, Program } from '@/lib/types';
 import React, { useEffect, useState, useRef } from 'react';
-import Link from 'next/link'; // Importar Link
+import Link from 'next/link';
 import {
   Card,
   CardContent,
@@ -74,7 +74,7 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers, getInvoicesForClient, createInvoice, getCommercialNotesByClientId, getPrograms } from '@/lib/firebase-service';
+import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers, getInvoicesForClient, createInvoice, getCommercialNotesByClientId, getPrograms, deleteCommercialNote } from '@/lib/firebase-service';
 import { sendEmail, createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
@@ -519,13 +519,25 @@ export function ClientDetails({
     onUpdate(clientData);
   };
 
-  const openDeleteDialog = (item: Opportunity | Person, type: 'opportunity' | 'person') => {
-    const onConfirm = type === 'opportunity' 
-        ? () => confirmDeleteOpportunity(item as Opportunity) 
-        : () => confirmDeletePerson(item as Person);
+  const openDeleteDialog = (item: Opportunity | Person | CommercialNote, type: 'opportunity' | 'person' | 'note') => {
+    let onConfirm: () => void;
+    let title: string;
+    let description: string;
 
-    const title = type === 'opportunity' ? '¿Eliminar oportunidad?' : '¿Eliminar contacto?';
-    const description = `Esta acción es irreversible. Se eliminará permanentemente <strong>${(item as any).title || (item as any).name}</strong>.`;
+    if (type === 'opportunity') {
+        onConfirm = () => confirmDeleteOpportunity(item as Opportunity);
+        title = '¿Eliminar oportunidad?';
+        description = `Esta acción es irreversible. Se eliminará permanentemente <strong>${(item as Opportunity).title}</strong>.`;
+    } else if (type === 'person') {
+        onConfirm = () => confirmDeletePerson(item as Person);
+        title = '¿Eliminar contacto?';
+        description = `Esta acción es irreversible. Se eliminará permanentemente <strong>${(item as Person).name}</strong>.`;
+    } else {
+        // NOTE deletion
+        onConfirm = () => confirmDeleteNote(item as CommercialNote);
+        title = '¿Eliminar nota comercial?';
+        description = `Esta acción es irreversible. Se eliminará permanentemente la nota <strong>${(item as CommercialNote).title}</strong>.`;
+    }
 
     setAlertConfig({ title, description, onConfirm });
     setIsAlertOpen(true);
@@ -557,6 +569,22 @@ export function ClientDetails({
     } finally {
       setIsAlertOpen(false);
       setAlertConfig(null);
+    }
+  };
+  
+  // NUEVO: Función para confirmar borrado de nota
+  const confirmDeleteNote = async (note: CommercialNote) => {
+    if (!userInfo) return;
+    try {
+        await deleteCommercialNote(note.id, userInfo.id, userInfo.name);
+        toast({ title: "Nota Comercial Eliminada" });
+        fetchClientData();
+    } catch (error) {
+        console.error("Error deleting note:", error);
+        toast({ title: "Error al eliminar la nota", variant: "destructive" });
+    } finally {
+        setIsAlertOpen(false);
+        setAlertConfig(null);
     }
   };
 
@@ -1142,14 +1170,12 @@ export function ClientDetails({
                                 </p>
                             </div>
                             <div className="flex gap-2">
-                                {/* Botón Ver Detalle */}
                                 <Button variant="outline" size="sm" asChild>
                                     <Link href={`/notas/${note.id}`} target="_blank">
                                         <Eye className="mr-2 h-4 w-4" />
                                         Ver Detalle
                                     </Link>
                                 </Button>
-                                {/* Botón Descargar PDF */}
                                 <Button 
                                     variant="ghost" 
                                     size="sm" 
@@ -1159,6 +1185,16 @@ export function ClientDetails({
                                     {downloadingNoteId === note.id ? <Spinner size="small" className="mr-2"/> : <FileDown className="mr-2 h-4 w-4" />}
                                     PDF
                                 </Button>
+                                {isBoss && (
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        onClick={() => openDeleteDialog(note, 'note')}
+                                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     ))}
