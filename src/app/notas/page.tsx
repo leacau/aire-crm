@@ -25,11 +25,9 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { NotePdf } from '@/components/notas/note-pdf';
-// CORRECCIÓN: getGoogleAccessToken se obtiene de useAuth, no del servicio
 import { sendEmail } from '@/lib/google-gmail-service';
 
 export default function NotaComercialPage() {
-    // CORRECCIÓN: Destructuramos getGoogleAccessToken del hook useAuth
     const { userInfo, getGoogleAccessToken } = useAuth();
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
@@ -88,17 +86,38 @@ export default function NotaComercialPage() {
 
     const [notifyOnSave, setNotifyOnSave] = useState(false);
 
+    // Función auxiliar para capturar y generar PDF multipágina
+    const generateMultiPagePdf = async (element: HTMLElement) => {
+        const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
+        const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
+
+        if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
+
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        // Página 1
+        const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true });
+        const imgData1 = canvas1.toDataURL('image/jpeg', 0.8);
+        pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+        // Página 2
+        pdf.addPage();
+        const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true });
+        const imgData2 = canvas2.toDataURL('image/jpeg', 0.8);
+        pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+        return pdf;
+    };
+
     const handleDownloadPdf = async () => {
         if (!pdfRef.current) return;
         try {
-            const canvas = await html2canvas(pdfRef.current, { scale: 1.5, useCORS: true });
-            const imgData = canvas.toDataURL('image/jpeg', 0.8);
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            const pdf = await generateMultiPagePdf(pdfRef.current);
             pdf.save(`Nota_${title.replace(/ /g, "_")}.pdf`);
         } catch (error) {
+            console.error(error);
             toast({ title: "Error al generar PDF", variant: "destructive" });
         }
     };
@@ -349,23 +368,52 @@ export default function NotaComercialPage() {
                 const accessToken = await getGoogleAccessToken();
                 if (accessToken) {
                     try {
-                        const canvas = await html2canvas(pdfRef.current, { scale: 1.5, useCORS: true });
-                        const imgData = canvas.toDataURL('image/jpeg', 0.8);
-                        const pdf = new jsPDF('p', 'mm', 'a4');
-                        const pdfWidth = pdf.internal.pageSize.getWidth();
-                        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-                        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-                        // 'datauristring' a veces es más compatible que output directo
+                        const pdf = await generateMultiPagePdf(pdfRef.current);
                         const pdfBase64 = pdf.output('datauristring').split(',')[1];
+
+                        // Preparar datos para el cuerpo del mail
+                        const baseUrl = window.location.origin;
+                        const detailLink = `${baseUrl}/clients/${selectedClientId}?tab=notes`;
+                        
+                        // Extraer info de cronograma para el mail
+                        let scheduleSummary = '';
+                        Object.entries(programSchedule).forEach(([progId, items]) => {
+                            const progName = programs.find(p => p.id === progId)?.name || 'Programa';
+                            items.forEach(item => {
+                                scheduleSummary += `<li><strong>${progName}</strong>: ${format(new Date(item.date), 'dd/MM/yyyy')} ${item.time}hs</li>`;
+                            });
+                        });
+
+                        const emailBody = `
+                            <div style="font-family: Arial, sans-serif; color: #333;">
+                                <h2 style="color: #cc0000;">Nueva Nota Comercial Registrada</h2>
+                                <p>El asesor <strong>${userInfo.name}</strong> ha cargado una nueva nota.</p>
+                                
+                                <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #cc0000; margin: 20px 0;">
+                                    <p><strong>Cliente:</strong> ${client?.denominacion || 'Desconocido'}</p>
+                                    <p><strong>Título:</strong> ${title}</p>
+                                    <p><strong>Cronograma:</strong></p>
+                                    <ul>${scheduleSummary || '<li>Sin fecha definida</li>'}</ul>
+                                </div>
+
+                                <p>Puede ver el detalle completo y descargar el PDF ingresando al siguiente enlace:</p>
+                                <p>
+                                    <a href="${detailLink}" style="background-color: #cc0000; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                                        Ver Detalle de la Nota
+                                    </a>
+                                </p>
+                                <p style="font-size: 12px; color: #666; margin-top: 20px;">O ingrese manualmente a: <a href="${detailLink}">${detailLink}</a></p>
+                            </div>
+                        `;
+
                         // Enviar a la API
                         await sendEmail({
                             accessToken,
-                            to: 'lchena@airedesantafe.com.ar', // Destinatario fijo o dinámico
-                            subject: `Nueva Nota Comercial: ${title}`,
-                            body: `<p>El asesor <strong>${userInfo.name}</strong> ha registrado una nota.</p>`,
+                            to: 'lchena@airedesantafe.com.ar', 
+                            subject: `Nueva Nota Comercial: ${title} - ${client?.denominacion}`,
+                            body: emailBody,
                             attachments: [{
-                                filename: `Nota_${title}.pdf`,
+                                filename: `Nota_${title.replace(/ /g, "_")}.pdf`,
                                 content: pdfBase64,
                                 encoding: 'base64'
                             }]
@@ -373,7 +421,6 @@ export default function NotaComercialPage() {
                         toast({ title: 'Nota guardada y notificada por correo.' });
                     } catch (emailError) {
                         console.error("Error sending email/generating PDF", emailError);
-                        // Importante: No fallamos la operación entera, solo avisamos que el mail falló
                         toast({ title: 'Nota guardada, pero falló el envío del correo.', description: "Verifique el tamaño del adjunto o intente nuevamente.", variant: 'default' });
                     }
                 } else {
