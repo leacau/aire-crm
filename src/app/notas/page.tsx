@@ -16,7 +16,7 @@ import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote }
 import type { Client, Program, CommercialNote, ScheduleItem } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Save, Plus, ExternalLink, Trash2, MapPin, Minus } from 'lucide-react'; // Agregamos MapPin y Minus
+import { CalendarIcon, Save, Plus, ExternalLink, Trash2, MapPin, Minus } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -26,6 +26,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { NotePdf } from '@/components/notas/note-pdf';
 import { sendEmail } from '@/lib/google-gmail-service';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 export default function NotaComercialPage() {
     const { userInfo, getGoogleAccessToken } = useAuth();
@@ -50,23 +51,31 @@ export default function NotaComercialPage() {
 
     // --- SECCIÓN 3: PRODUCCIÓN/PAUTADO ---
     const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
-    // Map programId -> ScheduleItem[]
     const [programSchedule, setProgramSchedule] = useState<Record<string, ScheduleItem[]>>({});
     const [replicateWeb, setReplicateWeb] = useState(false);
     const [replicateSocials, setReplicateSocials] = useState<string[]>([]);
+    
+    // NUEVO: Colaboración y CTA
+    const [collaboration, setCollaboration] = useState(false);
+    const [collaborationHandle, setCollaborationHandle] = useState('');
+    const [ctaText, setCtaText] = useState('');
+    const [ctaDestination, setCtaDestination] = useState('');
+
     const [contactPhone, setContactPhone] = useState('');
     const [contactName, setContactName] = useState('');
 
     // --- SECCIÓN 4: NOTA ---
     const [title, setTitle] = useState('');
-    // CAMBIO: location actualizado a 'Móvil'
     const [location, setLocation] = useState<'Estudio' | 'Móvil' | 'Meet' | 'Llamada' | undefined>(undefined);
     const [callPhone, setCallPhone] = useState('');
-    // NUEVO: Estado para dirección del móvil
-    const [mobileAddress, setMobileAddress] = useState('');
+    const [mobileAddress, setMobileAddress] = useState(''); // NUEVO: Dirección del móvil
+    
     const [primaryGraf, setPrimaryGraf] = useState('');
     const [secondaryGraf, setSecondaryGraf] = useState('');
+    
     const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']);
+    // NUEVO: Temas a evitar
+    const [topicsToAvoid, setTopicsToAvoid] = useState<string[]>(['']);
 
     // Entrevistado
     const [intervieweeName, setIntervieweeName] = useState('');
@@ -91,9 +100,8 @@ export default function NotaComercialPage() {
     const [graphicLink, setGraphicLink] = useState('');
     const [noteObservations, setNoteObservations] = useState('');
 
-    const [notifyOnSave, setNotifyOnSave] = useState(false);
+    const [notifyOnSave, setNotifyOnSave] = useState(true);
 
-    // ... (funciones generateMultiPagePdf y handleDownloadPdf se mantienen igual) ...
     const generateMultiPagePdf = async (element: HTMLElement) => {
         const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
         const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
@@ -129,7 +137,6 @@ export default function NotaComercialPage() {
         }
     };
 
-    // ... (useEffect loadData y handleClientSelect se mantienen igual) ...
     useEffect(() => {
         const loadData = async () => {
             try {
@@ -139,7 +146,7 @@ export default function NotaComercialPage() {
                 ]);
 
                 if (userInfo) {
-                    if (userInfo.role === 'Admin' || userInfo.email === 'lchena@airedesantafe.com.ar') {
+                    if (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion') {
                         setClients(fetchedClients);
                     } else {
                         setClients(fetchedClients.filter(c => c.ownerId === userInfo.id));
@@ -167,7 +174,7 @@ export default function NotaComercialPage() {
         }
     };
 
-    // --- Helpers existentes ...
+    // --- Helpers ---
     const toggleProgram = (programId: string) => {
         setSelectedProgramIds(prev =>
             prev.includes(programId)
@@ -181,7 +188,6 @@ export default function NotaComercialPage() {
 
     const handleDateSelect = (programId: string, dates: Date[] | undefined) => {
         if (!dates) return;
-
         setProgramSchedule(prev => {
             const currentItems = prev[programId] || [];
             const newItems = dates.map(d => {
@@ -210,30 +216,38 @@ export default function NotaComercialPage() {
     };
 
     const handleAddQuestion = () => setQuestions([...questions, '']);
-
     const handleQuestionChange = (index: number, value: string) => {
         const newQ = [...questions];
         newQ[index] = value;
         setQuestions(newQ);
     };
-
     const handleRemoveQuestion = (index: number) => {
         const newQ = questions.filter((_, i) => i !== index);
         setQuestions(newQ);
     };
 
-    // --- NUEVO: Helpers para Domicilios Comerciales ---
+    // NUEVO: Manejo de Temas a Evitar
+    const handleAddTopic = () => setTopicsToAvoid([...topicsToAvoid, '']);
+    const handleTopicChange = (index: number, value: string) => {
+        const newT = [...topicsToAvoid];
+        newT[index] = value;
+        setTopicsToAvoid(newT);
+    };
+    const handleRemoveTopic = (index: number) => {
+        const newT = topicsToAvoid.filter((_, i) => i !== index);
+        setTopicsToAvoid(newT.length ? newT : ['']);
+    };
+
+    // NUEVO: Manejo de Domicilios Comerciales
     const handleAddAddress = () => setCommercialAddresses([...commercialAddresses, '']);
-    
     const handleAddressChange = (index: number, value: string) => {
         const newAddr = [...commercialAddresses];
         newAddr[index] = value;
         setCommercialAddresses(newAddr);
     };
-
     const handleRemoveAddress = (index: number) => {
         const newAddr = commercialAddresses.filter((_, i) => i !== index);
-        setCommercialAddresses(newAddr.length ? newAddr : ['']); // Mantiene al menos 1
+        setCommercialAddresses(newAddr.length ? newAddr : ['']);
     };
 
     // --- Calculations ---
@@ -286,7 +300,6 @@ export default function NotaComercialPage() {
             toast({ title: 'Datos incompletos', description: 'Debe ingresar un teléfono para la llamada.', variant: 'destructive' });
             return;
         }
-        // NUEVO: Validación de Móvil
         if (location === 'Móvil' && !mobileAddress.trim()) {
             toast({ title: 'Datos incompletos', description: 'Debe ingresar el domicilio donde se realizará el móvil.', variant: 'destructive' });
             return;
@@ -316,7 +329,6 @@ export default function NotaComercialPage() {
             toast({ title: 'Datos incompletos', description: 'Complete el Teléfono Comercial o marque "No informar".', variant: 'destructive' });
             return;
         }
-        // NUEVO: Validación de Domicilio Comercial
         const validAddresses = commercialAddresses.filter(a => a.trim() !== '');
         if (!noCommercialAddress && validAddresses.length === 0) {
             toast({ title: 'Datos incompletos', description: 'Ingrese al menos un Domicilio Comercial o marque "No informar".', variant: 'destructive' });
@@ -344,7 +356,7 @@ export default function NotaComercialPage() {
             }
 
             // 2. Prepare Data Raw
-            const noteDataRaw = {
+            const noteDataRaw: any = {
                 clientId: selectedClientId,
                 clientName: client?.denominacion || 'Unknown',
                 cuit,
@@ -354,6 +366,10 @@ export default function NotaComercialPage() {
                 rubro,
                 replicateWeb,
                 replicateSocials,
+                collaboration,
+                collaborationHandle: collaboration ? collaborationHandle : undefined,
+                ctaText,
+                ctaDestination,
                 programIds: selectedProgramIds,
                 schedule: programSchedule,
                 contactPhone,
@@ -361,10 +377,11 @@ export default function NotaComercialPage() {
                 title,
                 location,
                 callPhone: location === 'Llamada' ? callPhone : undefined,
-                mobileAddress: location === 'Móvil' ? mobileAddress : undefined, // NUEVO
+                mobileAddress: location === 'Móvil' ? mobileAddress : undefined,
                 primaryGraf,
                 secondaryGraf,
                 questions: questions.filter(q => q.trim() !== ''),
+                topicsToAvoid: topicsToAvoid.filter(t => t.trim() !== ''),
                 intervieweeName,
                 intervieweeRole,
                 intervieweeBio: intervieweeBio || undefined,
@@ -375,7 +392,6 @@ export default function NotaComercialPage() {
                 noWhatsapp,
                 phone: noCommercialPhone ? undefined : commercialPhone,
                 noCommercialPhone,
-                // NUEVO: Datos de domicilio
                 commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim() !== ''),
                 noCommercialAddress,
                 graphicSupport,
@@ -388,15 +404,13 @@ export default function NotaComercialPage() {
             };
 
             const noteData = Object.keys(noteDataRaw).reduce((acc, key) => {
-                const value = (noteDataRaw as any)[key];
-                if (value !== undefined) {
-                    (acc as any)[key] = value;
-                }
+                const value = noteDataRaw[key];
+                if (value !== undefined) (acc as any)[key] = value;
                 return acc;
             }, {} as Omit<CommercialNote, 'id' | 'createdAt'>);
 
             // 3. Save to DB
-            await saveCommercialNote(noteData, userInfo.id, userInfo.name);
+            const newNoteId = await saveCommercialNote(noteData, userInfo.id, userInfo.name);
 
             // 4. Handle Notification
             if (notifyOnSave && pdfRef.current) {
@@ -407,7 +421,7 @@ export default function NotaComercialPage() {
                         const pdfBase64 = pdf.output('datauristring').split(',')[1];
 
                         const baseUrl = window.location.origin;
-                        const detailLink = `${baseUrl}/clients/${selectedClientId}?tab=notes`;
+                        const detailLink = `${baseUrl}/notas/${newNoteId}`;
                         
                         let scheduleSummary = '';
                         Object.entries(programSchedule).forEach(([progId, items]) => {
@@ -452,11 +466,9 @@ export default function NotaComercialPage() {
                         });
                         toast({ title: 'Nota guardada y notificada por correo.' });
                     } catch (emailError) {
-                        console.error("Error sending email/generating PDF", emailError);
-                        toast({ title: 'Nota guardada, pero falló el envío del correo.', description: "Verifique el tamaño del adjunto o intente nuevamente.", variant: 'default' });
+                        console.error("Error sending email", emailError);
+                        toast({ title: 'Nota guardada, pero falló el envío del correo.', variant: 'default' });
                     }
-                } else {
-                    toast({ title: 'Sin Token', description: "No se pudo obtener acceso a Google para enviar el correo.", variant: 'destructive' });
                 }
             } else {
                 toast({ title: 'Nota guardada correctamente.' });
@@ -470,6 +482,7 @@ export default function NotaComercialPage() {
             setNoteObservations('');
             setTitle('');
             setQuestions(['', '', '', '', '']);
+            setTopicsToAvoid(['']);
             setPrimaryGraf('');
             setSecondaryGraf('');
             setLocation(undefined);
@@ -480,12 +493,16 @@ export default function NotaComercialPage() {
             setWebsite('');
             setWhatsapp('');
             setCommercialPhone('');
-            setCommercialAddresses(['']); // Reset Addresses
-            setMobileAddress(''); // Reset Mobile Address
+            setCommercialAddresses(['']); 
+            setMobileAddress(''); 
+            setCollaboration(false);
+            setCollaborationHandle('');
+            setCtaText('');
+            setCtaDestination('');
 
         } catch (error) {
             console.error(error);
-            toast({ title: 'Error al guardar', description: 'Por favor revise los datos e intente nuevamente.', variant: 'destructive' });
+            toast({ title: 'Error al guardar', variant: 'destructive' });
         } finally {
             setSaving(false);
         }
@@ -515,7 +532,7 @@ export default function NotaComercialPage() {
             </Header>
             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
 
-                {/* --- SECCIÓN 1 Y 2 Y 3: (SIN CAMBIOS VISUALES) --- */}
+                {/* --- SECCIÓN 1: DATOS DE CLIENTE --- */}
                 <Card>
                     <CardHeader><CardTitle>Datos de Cliente</CardTitle></CardHeader>
                     <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -529,20 +546,21 @@ export default function NotaComercialPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>CUIT <span className="text-red-500">*</span></Label>
-                            <Input value={cuit} onChange={e => setCuit(e.target.value)} placeholder="00-00000000-0" />
+                            <Label>CUIT</Label>
+                            <Input value={cuit} onChange={e => setCuit(e.target.value)} />
                         </div>
                         <div className="space-y-2">
-                            <Label>Razón Social <span className="text-red-500">*</span></Label>
+                            <Label>Razón Social</Label>
                             <Input value={razonSocial} onChange={e => setRazonSocial(e.target.value)} />
                         </div>
                         <div className="space-y-2">
-                            <Label>Rubro <span className="text-red-500">*</span></Label>
+                            <Label>Rubro</Label>
                             <Input value={rubro} onChange={e => setRubro(e.target.value)} />
                         </div>
                     </CardContent>
                 </Card>
 
+                {/* --- SECCIÓN 2: COMERCIAL --- */}
                 <Card>
                     <CardHeader><CardTitle>Comercial</CardTitle></CardHeader>
                     <CardContent className="grid gap-6 md:grid-cols-2">
@@ -554,32 +572,23 @@ export default function NotaComercialPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Valor de Venta <span className="text-red-500">*</span></Label>
-                                    <Input
-                                        type="number"
-                                        value={saleValue}
-                                        onChange={e => setSaleValue(e.target.value)}
-                                        placeholder="0"
-                                    />
+                                    <Input type="number" value={saleValue} onChange={e => setSaleValue(e.target.value)} />
                                 </div>
                             </div>
                             {mismatch !== 0 && (
                                 <div className="p-3 rounded-md bg-yellow-50 text-yellow-800 border border-yellow-200 text-sm">
-                                    <strong>Desajuste:</strong> ${mismatch.toLocaleString()} (Diferencia entre tarifario y venta)
+                                    <strong>Desajuste:</strong> ${mismatch.toLocaleString()}
                                 </div>
                             )}
                         </div>
                         <div className="space-y-2">
                             <Label>Observaciones Generales</Label>
-                            <Textarea
-                                value={financialObservations}
-                                onChange={e => setFinancialObservations(e.target.value)}
-                                placeholder="Indicaciones sobre el cierre comercial..."
-                                className="min-h-[100px]"
-                            />
+                            <Textarea value={financialObservations} onChange={e => setFinancialObservations(e.target.value)} className="min-h-[100px]"/>
                         </div>
                     </CardContent>
                 </Card>
 
+                {/* --- SECCIÓN 3: PRODUCCIÓN/PAUTADO --- */}
                 <Card>
                     <CardHeader><CardTitle>Producción / Pautado</CardTitle></CardHeader>
                     <CardContent className="space-y-6">
@@ -649,9 +658,10 @@ export default function NotaComercialPage() {
                                     <Switch checked={replicateWeb} onCheckedChange={setReplicateWeb} />
                                     <Label>Replica Nota Web</Label>
                                 </div>
-                                <div className="space-y-2">
+                                
+                                <div className="space-y-2 border p-3 rounded-md">
                                     <Label>Replica Redes Sociales</Label>
-                                    <div className="flex gap-4">
+                                    <div className="flex gap-4 mt-2">
                                         {['Facebook', 'Instagram', 'X'].map(social => (
                                             <div key={social} className="flex items-center space-x-2">
                                                 <Checkbox checked={replicateSocials.includes(social)} onCheckedChange={() => toggleSocial(social)} />
@@ -659,6 +669,32 @@ export default function NotaComercialPage() {
                                             </div>
                                         ))}
                                     </div>
+                                    
+                                    {replicateSocials.length > 0 && (
+                                        <div className="mt-4 pt-4 border-t space-y-3">
+                                            <div className="flex items-center space-x-2">
+                                                <Checkbox id="collab" checked={collaboration} onCheckedChange={(c) => setCollaboration(!!c)} />
+                                                <Label htmlFor="collab">¿Colaboración?</Label>
+                                            </div>
+                                            {collaboration && (
+                                                <Input 
+                                                    placeholder="@usuario_colaborador" 
+                                                    value={collaborationHandle}
+                                                    onChange={e => setCollaborationHandle(e.target.value)}
+                                                />
+                                            )}
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <Label className="text-xs">Texto CTA</Label>
+                                                    <Input placeholder="Ej: Link en Bio" value={ctaText} onChange={e => setCtaText(e.target.value)} />
+                                                </div>
+                                                <div>
+                                                    <Label className="text-xs">Destino CTA</Label>
+                                                    <Input placeholder="Web, WhatsApp, etc." value={ctaDestination} onChange={e => setCtaDestination(e.target.value)} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div className="space-y-4">
@@ -667,8 +703,8 @@ export default function NotaComercialPage() {
                                     <Input value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="0342-..." />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Responsable de la coordinación (cliente) <span className="text-red-500">*</span></Label>
-                                    <Input value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Nombre del contacto..." />
+                                    <Label>Responsable de la coordinación <span className="text-red-500">*</span></Label>
+                                    <Input value={contactName} onChange={e => setContactName(e.target.value)} />
                                 </div>
                             </div>
                         </div>
@@ -679,29 +715,19 @@ export default function NotaComercialPage() {
                 <Card>
                     <CardHeader><CardTitle>Nota</CardTitle></CardHeader>
                     <CardContent className="space-y-6">
-                        {/* Detalles */}
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
                                 <Label>Título de la Nota <span className="text-red-500">*</span></Label>
-                                <Input
-                                    value={title}
-                                    onChange={e => setTitle(e.target.value)}
-                                    placeholder="Ej: Lanzamiento de temporada..."
-                                />
+                                <Input value={title} onChange={e => setTitle(e.target.value)} />
                             </div>
                             <div className="space-y-3">
                                 <Label>Nota en: <span className="text-red-500">*</span></Label>
-                                <RadioGroup
-                                    value={location}
-                                    onValueChange={(val: any) => setLocation(val)}
-                                    className="flex flex-wrap gap-4"
-                                >
+                                <RadioGroup value={location} onValueChange={(val: any) => setLocation(val)} className="flex flex-wrap gap-4">
                                     <div className="flex items-center space-x-2">
                                         <RadioGroupItem value="Estudio" id="loc-estudio" />
                                         <Label htmlFor="loc-estudio">Estudio</Label>
                                     </div>
                                     <div className="flex items-center space-x-2">
-                                        {/* CAMBIO: Renombrado a Móvil */}
                                         <RadioGroupItem value="Móvil" id="loc-movil" />
                                         <Label htmlFor="loc-movil">Móvil</Label>
                                     </div>
@@ -715,27 +741,10 @@ export default function NotaComercialPage() {
                                     </div>
                                 </RadioGroup>
                                 {location === 'Llamada' && (
-                                    <div className="pt-2">
-                                        <Label className="text-xs text-muted-foreground">Teléfono para la llamada <span className="text-red-500">*</span></Label>
-                                        <Input
-                                            value={callPhone}
-                                            onChange={e => setCallPhone(e.target.value)}
-                                            placeholder="Ingrese el número..."
-                                            className="mt-1"
-                                        />
-                                    </div>
+                                    <Input className="mt-2" value={callPhone} onChange={e => setCallPhone(e.target.value)} placeholder="Teléfono..." />
                                 )}
-                                {/* NUEVO: Input para dirección del móvil */}
                                 {location === 'Móvil' && (
-                                    <div className="pt-2">
-                                        <Label className="text-xs text-muted-foreground">Dirección del móvil <span className="text-red-500">*</span></Label>
-                                        <Input
-                                            value={mobileAddress}
-                                            onChange={e => setMobileAddress(e.target.value)}
-                                            placeholder="Ej: Bv. Pellegrini 2700..."
-                                            className="mt-1"
-                                        />
-                                    </div>
+                                    <Input className="mt-2" value={mobileAddress} onChange={e => setMobileAddress(e.target.value)} placeholder="Dirección del móvil..." />
                                 )}
                             </div>
                         </div>
@@ -744,50 +753,43 @@ export default function NotaComercialPage() {
                             <div className="space-y-2">
                                 <div className="flex justify-between">
                                     <Label>Graf Primario <span className="text-red-500">*</span></Label>
-                                    <span className="text-xs text-muted-foreground">{primaryGraf.length}/80</span>
+                                    <span className="text-xs text-muted-foreground">{primaryGraf.length}/84</span>
                                 </div>
-                                <Input
-                                    value={primaryGraf}
-                                    onChange={e => setPrimaryGraf(e.target.value)}
-                                    placeholder="Texto principal en pantalla..."
-                                    maxLength={80}
-                                />
+                                <Input value={primaryGraf} onChange={e => setPrimaryGraf(e.target.value)} maxLength={84} />
                             </div>
                             <div className="space-y-2">
                                 <div className="flex justify-between">
                                     <Label>Graf Secundario <span className="text-red-500">*</span></Label>
-                                    <span className="text-xs text-muted-foreground">{secondaryGraf.length}/80</span>
+                                    <span className="text-xs text-muted-foreground">{secondaryGraf.length}/55</span>
                                 </div>
-                                <Input
-                                    value={secondaryGraf}
-                                    onChange={e => setSecondaryGraf(e.target.value)}
-                                    placeholder="Bajada o detalle..."
-                                    maxLength={80}
-                                />
+                                <Input value={secondaryGraf} onChange={e => setSecondaryGraf(e.target.value)} maxLength={55} />
                             </div>
                         </div>
 
-                        {/* Preguntas */}
-                        <div className="space-y-3 border p-4 rounded-md">
-                            <div className="flex items-center justify-between">
-                                <Label>Preguntas sugeridas (min 5) <span className="text-red-500">*</span></Label>
-                                <Button variant="ghost" size="sm" onClick={handleAddQuestion}>
-                                    <Plus className="mr-2 h-4 w-4" /> Agregar Pregunta
-                                </Button>
-                            </div>
-                            <div className="space-y-2">
+                        {/* Preguntas y Temas a evitar */}
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-3 border p-4 rounded-md">
+                                <div className="flex items-center justify-between">
+                                    <Label>Preguntas (min 5)</Label>
+                                    <Button variant="ghost" size="sm" onClick={handleAddQuestion}><Plus className="h-4 w-4" /></Button>
+                                </div>
                                 {questions.map((q, idx) => (
                                     <div key={idx} className="flex gap-2">
-                                        <Input
-                                            value={q}
-                                            onChange={e => handleQuestionChange(idx, e.target.value)}
-                                            placeholder={`Pregunta ${idx + 1}`}
-                                        />
-                                        {questions.length > 5 && (
-                                            <Button size="icon" variant="ghost" onClick={() => handleRemoveQuestion(idx)}>
-                                                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                                            </Button>
-                                        )}
+                                        <Input value={q} onChange={e => handleQuestionChange(idx, e.target.value)} placeholder={`P ${idx + 1}`} />
+                                        {questions.length > 5 && <Button size="icon" variant="ghost" onClick={() => handleRemoveQuestion(idx)}><Trash2 className="h-4 w-4" /></Button>}
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            <div className="space-y-3 border p-4 rounded-md bg-red-50/50">
+                                <div className="flex items-center justify-between">
+                                    <Label>Temas a EVITAR</Label>
+                                    <Button variant="ghost" size="sm" onClick={handleAddTopic}><Plus className="h-4 w-4" /></Button>
+                                </div>
+                                {topicsToAvoid.map((t, idx) => (
+                                    <div key={idx} className="flex gap-2">
+                                        <Input value={t} onChange={e => handleTopicChange(idx, e.target.value)} placeholder={`Tema ${idx + 1}`} />
+                                        {topicsToAvoid.length > 1 && <Button size="icon" variant="ghost" onClick={() => handleRemoveTopic(idx)}><Trash2 className="h-4 w-4" /></Button>}
                                     </div>
                                 ))}
                             </div>
@@ -800,11 +802,11 @@ export default function NotaComercialPage() {
                                 <Input value={intervieweeName} onChange={e => setIntervieweeName(e.target.value)} />
                             </div>
                             <div className="space-y-2">
-                                <Label>Cargo/Título del entrevistado <span className="text-red-500">*</span></Label>
+                                <Label>Cargo/Título <span className="text-red-500">*</span></Label>
                                 <Input value={intervieweeRole} onChange={e => setIntervieweeRole(e.target.value)} />
                             </div>
                             <div className="md:col-span-2 space-y-2">
-                                <Label>Bio de entrevistado (opcional)</Label>
+                                <Label>Bio (opcional)</Label>
                                 <Textarea value={intervieweeBio} onChange={e => setIntervieweeBio(e.target.value)} className="min-h-[80px]" />
                             </div>
                         </div>
@@ -814,17 +816,9 @@ export default function NotaComercialPage() {
                             <div className="space-y-2">
                                 <Label>Instagram</Label>
                                 <div className="flex items-center gap-2">
-                                    <Input
-                                        value={instagramHandle}
-                                        onChange={e => setInstagramHandle(e.target.value)}
-                                        placeholder="@usuario"
-                                    />
+                                    <Input value={instagramHandle} onChange={e => setInstagramHandle(e.target.value)} placeholder="@usuario" />
                                     {instagramHandle && (
-                                        <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            onClick={() => window.open(`https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}`, '_blank')}
-                                        >
+                                        <Button size="icon" variant="ghost" onClick={() => window.open(`https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}`, '_blank')}>
                                             <ExternalLink className="h-4 w-4" />
                                         </Button>
                                     )}
@@ -832,29 +826,16 @@ export default function NotaComercialPage() {
                             </div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Label className={cn(noWeb && "text-muted-foreground")}>Web del Cliente <span className="text-red-500">*</span></Label>
+                                    <Label className={cn(noWeb && "text-muted-foreground")}>Web</Label>
                                     <div className="flex items-center space-x-2">
                                         <Checkbox id="noWeb" checked={noWeb} onCheckedChange={(c) => setNoWeb(!!c)} />
-                                        <Label htmlFor="noWeb" className="text-xs font-normal">No informar</Label>
+                                        <Label htmlFor="noWeb" className="text-xs">No informar</Label>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <Input
-                                        value={website}
-                                        onChange={e => setWebsite(e.target.value)}
-                                        disabled={noWeb}
-                                        placeholder="www.sitio.com"
-                                    />
-                                    {/* NUEVO: Botón de link para Web */}
+                                    <Input value={website} onChange={e => setWebsite(e.target.value)} disabled={noWeb} placeholder="www.sitio.com" />
                                     {website && !noWeb && (
-                                        <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            onClick={() => {
-                                                const url = website.startsWith('http') ? website : `https://${website}`;
-                                                window.open(url, '_blank');
-                                            }}
-                                        >
+                                        <Button size="icon" variant="ghost" onClick={() => window.open(website.startsWith('http') ? website : `https://${website}`, '_blank')}>
                                             <ExternalLink className="h-4 w-4" />
                                         </Button>
                                     )}
@@ -890,66 +871,38 @@ export default function NotaComercialPage() {
                                     placeholder="0342-..."
                                 />
                             </div>
-                            {/* NUEVO: Domicilios Comerciales */}
-                            <div className="space-y-2 md:col-span-2 border-t pt-4 mt-2">
+                            
+                            <div className="space-y-2 md:col-span-2 border-t pt-4">
                                 <div className="flex items-center justify-between mb-2">
-                                    <Label className={cn(noCommercialAddress && "text-muted-foreground")}>Domicilio Comercial <span className="text-red-500">*</span></Label>
+                                    <Label className={cn(noCommercialAddress && "text-muted-foreground")}>Domicilio Comercial</Label>
                                     <div className="flex items-center space-x-2">
-                                        <Checkbox id="noCommercialAddress" checked={noCommercialAddress} onCheckedChange={(c) => setNoCommercialAddress(!!c)} />
-                                        <Label htmlFor="noCommercialAddress" className="text-xs font-normal">No informar</Label>
+                                        <Checkbox id="noAddr" checked={noCommercialAddress} onCheckedChange={(c) => setNoCommercialAddress(!!c)} />
+                                        <Label htmlFor="noAddr" className="text-xs">No informar</Label>
                                     </div>
                                 </div>
-                                <div className="space-y-2">
-                                    {!noCommercialAddress && commercialAddresses.map((address, idx) => (
-                                        <div key={idx} className="flex gap-2">
-                                            <Input
-                                                value={address}
-                                                onChange={e => handleAddressChange(idx, e.target.value)}
-                                                placeholder={`Domicilio ${idx + 1}`}
-                                                className="flex-1"
-                                            />
-                                            <div className="flex gap-1">
-                                                {commercialAddresses.length > 1 && (
-                                                    <Button size="icon" variant="ghost" onClick={() => handleRemoveAddress(idx)}>
-                                                        <Minus className="h-4 w-4" />
-                                                    </Button>
-                                                )}
-                                                {idx === commercialAddresses.length - 1 && (
-                                                    <Button size="icon" variant="outline" onClick={handleAddAddress}>
-                                                        <Plus className="h-4 w-4" />
-                                                    </Button>
-                                                )}
-                                            </div>
+                                {!noCommercialAddress && commercialAddresses.map((addr, idx) => (
+                                    <div key={idx} className="flex gap-2 mb-2">
+                                        <Input value={addr} onChange={e => handleAddressChange(idx, e.target.value)} placeholder="Dirección..." />
+                                        <div className="flex">
+                                            {commercialAddresses.length > 1 && <Button size="icon" variant="ghost" onClick={() => handleRemoveAddress(idx)}><Minus className="h-4 w-4" /></Button>}
+                                            {idx === commercialAddresses.length - 1 && <Button size="icon" variant="outline" onClick={handleAddAddress}><Plus className="h-4 w-4" /></Button>}
                                         </div>
-                                    ))}
-                                    {noCommercialAddress && (
-                                        <Input disabled placeholder="No se informan domicilios" />
-                                    )}
-                                </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
-                        {/* Extra */}
                         <div className="space-y-4 border-t pt-4">
                             <div className="flex items-center space-x-2">
                                 <Switch checked={graphicSupport} onCheckedChange={setGraphicSupport} />
                                 <Label>Agrega Soporte Gráfico</Label>
                             </div>
                             {graphicSupport && (
-                                <Input
-                                    value={graphicLink}
-                                    onChange={e => setGraphicLink(e.target.value)}
-                                    placeholder="Pegar link de Google Drive aquí..."
-                                />
+                                <Input value={graphicLink} onChange={e => setGraphicLink(e.target.value)} placeholder="Pegar link de Google Drive aquí..." />
                             )}
                             <div className="space-y-2">
                                 <Label>Observaciones generales</Label>
-                                <Textarea
-                                    value={noteObservations}
-                                    onChange={e => setNoteObservations(e.target.value)}
-                                    placeholder="Indicaciones para producción..."
-                                    className="min-h-[100px]"
-                                />
+                                <Textarea value={noteObservations} onChange={e => setNoteObservations(e.target.value)} placeholder="Indicaciones para producción..." className="min-h-[100px]" />
                             </div>
                         </div>
                     </CardContent>
@@ -970,26 +923,30 @@ export default function NotaComercialPage() {
                         rubro,
                         replicateWeb,
                         replicateSocials,
+                        collaboration,
+                        collaborationHandle,
+                        ctaText,
+                        ctaDestination,
                         schedule: programSchedule,
                         contactPhone,
                         contactName,
                         title,
                         location,
                         callPhone: location === 'Llamada' ? callPhone : undefined,
-                        mobileAddress: location === 'Móvil' ? mobileAddress : undefined, // NUEVO
+                        mobileAddress: location === 'Móvil' ? mobileAddress : undefined,
                         primaryGraf,
                         secondaryGraf,
                         questions: questions.filter(q => q.trim() !== ''),
+                        topicsToAvoid: topicsToAvoid.filter(t => t.trim() !== ''),
                         intervieweeName,
                         intervieweeRole,
                         intervieweeBio,
-                        instagram: instagramHandle ? `https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}` : undefined,
-                        website: noWeb ? undefined : website,
-                        whatsapp: noWhatsapp ? undefined : whatsapp,
-                        phone: noCommercialPhone ? undefined : commercialPhone,
+                        instagram: instagramHandle,
+                        website,
+                        whatsapp,
+                        phone: commercialPhone,
                         noWeb, noWhatsapp, noCommercialPhone,
-                        // NUEVO
-                        commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim() !== ''),
+                        commercialAddresses,
                         noCommercialAddress,
                         graphicSupport,
                         graphicSupportLink: graphicSupport ? graphicLink : undefined,
