@@ -38,7 +38,6 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
     return (
       <div ref={ref}>
         
-        {/* --- PÁGINA 1 --- */}
         <div id="note-pdf-page-1" style={pageStyle}>
             <header className="flex justify-between items-center mb-6 border-b pb-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -131,8 +130,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                             <div className="bg-blue-50 p-2 rounded border border-blue-100 mt-1">
                                 <div className="grid grid-cols-2 gap-2">
                                     <div><span className="font-bold">Colaboración:</span> {note.collaboration ? `SÍ (${note.collaborationHandle})` : 'NO'}</div>
-                                    {/* CORRECCIÓN: Se usa {'->'} para escapar la flecha en JSX */}
-                                    <div><span className="font-bold">CTA:</span> {note.ctaText || '-'} {'->'} {note.ctaDestination || '-'}</div>
+                                    <div><span className="font-bold">CTA:</span> {note.ctaText || '-'} &rarr; {note.ctaDestination || '-'}</div>
                                 </div>
                             </div>
                         )}
