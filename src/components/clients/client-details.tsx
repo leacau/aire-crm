@@ -1,6 +1,7 @@
 'use client'
 import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice, CommercialNote, Program } from '@/lib/types';
 import React, { useEffect, useState, useRef } from 'react';
+import Link from 'next/link'; // Importar Link
 import {
   Card,
   CardContent,
@@ -41,6 +42,7 @@ import {
   Linkedin,
   ClipboardList,
   FileDown,
+  Eye,
 } from 'lucide-react';
 import {
   Table,
@@ -1132,22 +1134,32 @@ export function ClientDetails({
                 <CardHeader><CardTitle>Notas Comerciales Históricas</CardTitle></CardHeader>
                 <CardContent>
                     {notes.map(note => (
-                        <div key={note.id} className="p-4 border-b last:border-0 flex justify-between items-center">
+                        <div key={note.id} className="p-4 border-b last:border-0 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <div>
-                                <p className="font-bold">{note.title}</p>
+                                <p className="font-bold text-lg">{note.title}</p>
                                 <p className="text-sm text-muted-foreground">
                                     {format(new Date(note.createdAt), "PPP", { locale: es })} - Por: {note.advisorName}
                                 </p>
                             </div>
-                            <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={() => handleDownloadNotePdf(note)}
-                                disabled={downloadingNoteId === note.id}
-                            >
-                                {downloadingNoteId === note.id ? <Spinner size="small" className="mr-2"/> : <FileDown className="mr-2 h-4 w-4" />}
-                                Descargar PDF
-                            </Button>
+                            <div className="flex gap-2">
+                                {/* Botón Ver Detalle */}
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link href={`/notas/${note.id}`} target="_blank">
+                                        <Eye className="mr-2 h-4 w-4" />
+                                        Ver Detalle
+                                    </Link>
+                                </Button>
+                                {/* Botón Descargar PDF */}
+                                <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    onClick={() => handleDownloadNotePdf(note)}
+                                    disabled={downloadingNoteId === note.id}
+                                >
+                                    {downloadingNoteId === note.id ? <Spinner size="small" className="mr-2"/> : <FileDown className="mr-2 h-4 w-4" />}
+                                    PDF
+                                </Button>
+                            </div>
                         </div>
                     ))}
                     {notes.length === 0 && <p className="text-center py-4 text-muted-foreground">No hay notas registradas.</p>}
