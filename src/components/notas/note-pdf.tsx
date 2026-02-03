@@ -51,9 +51,45 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
             </header>
 
             <div className="flex flex-col gap-6">
-                {/* 1. Datos del Cliente */}
+                
+                {/* 3. Detalles de la Nota (Movido arriba según preferencia implícita de jerarquía) o mantener orden */}
+                
                 <div className="w-full">
-                    <SectionTitle title="1. Datos del Cliente" />
+                    <SectionTitle title="1. Detalles de la Nota" />
+                    <Field label="Título" value={note.title} fullWidth />
+                    <div className="grid grid-cols-2 gap-4 mt-2">
+                        <Field label="Ubicación" value={note.location} />
+                        {note.location === 'Llamada' && <Field label="Teléfono Llamada" value={note.callPhone} />}
+                        {note.location === 'Móvil' && <Field label="Dirección Móvil" value={note.mobileAddress} />}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-3 mt-3">
+                        <div className="p-3 border border-gray-300 rounded bg-gray-50">
+                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">GRAF PRIMARIO (Max 84)</p>
+                            <p className="text-base font-medium">{note.primaryGraf}</p>
+                        </div>
+                        <div className="p-3 border border-gray-300 rounded bg-gray-50">
+                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">GRAF SECUNDARIO (Max 55)</p>
+                            <p className="text-base font-medium">{note.secondaryGraf}</p>
+                        </div>
+                    </div>
+
+                    {/* Soporte Gráfico movido a Página 1 */}
+                    {note.graphicSupport && (
+                        <div className="mt-4 p-4 bg-yellow-100 border-2 border-yellow-400 text-yellow-900 font-bold text-center rounded-lg uppercase tracking-wide">
+                            ⚠️ REQUIERE SOPORTE GRÁFICO ⚠️
+                            {note.graphicSupportLink && (
+                                <div className="mt-2 text-sm font-normal normal-case break-all">
+                                    {note.graphicSupportLink}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Datos del Cliente */}
+                <div className="w-full">
+                    <SectionTitle title="2. Datos del Cliente" />
                     <div className="grid grid-cols-2 gap-4">
                         <Field label="Cliente" value={note.clientName} />
                         <Field label="Razón Social" value={note.razonSocial} />
@@ -62,9 +98,9 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     </div>
                 </div>
 
-                {/* 2. Producción y Pautado */}
+                {/* Producción y Pautado */}
                 <div className="w-full">
-                    <SectionTitle title="2. Producción y Pautado" />
+                    <SectionTitle title="3. Producción y Pautado" />
                     <div className="grid grid-cols-2 gap-4 mb-4">
                         <Field label="Coordinación (Cliente)" value={note.contactName} />
                         <Field label="Teléfono Coord." value={note.contactPhone} />
@@ -91,32 +127,19 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                         </ul>
                     </div>
 
-                    <div className="flex gap-8 text-sm">
-                        <div><span className="font-bold">Replica Web:</span> {note.replicateWeb ? 'SÍ' : 'NO'}</div>
-                        <div><span className="font-bold">Replica Redes:</span> {note.replicateSocials && note.replicateSocials.length > 0 ? note.replicateSocials.join(', ') : 'Ninguna'}</div>
-                    </div>
-                </div>
-
-                {/* 3. Detalles de la Nota */}
-                <div className="w-full">
-                    <SectionTitle title="3. Detalles de la Nota" />
-                    <Field label="Título" value={note.title} fullWidth />
-                    <div className="grid grid-cols-2 gap-4 mt-2">
-                        <Field label="Ubicación" value={note.location} />
-                        {note.location === 'Llamada' && <Field label="Teléfono Llamada" value={note.callPhone} />}
-                        {/* NUEVO: Mostrar dirección si es Móvil */}
-                        {note.location === 'Móvil' && <Field label="Dirección Móvil" value={note.mobileAddress} />}
-                    </div>
-                    
-                    <div className="grid grid-cols-1 gap-3 mt-3">
-                        <div className="p-3 border border-gray-300 rounded bg-gray-50">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">GRAF PRIMARIO</p>
-                            <p className="text-base font-medium">{note.primaryGraf}</p>
+                    <div className="flex flex-col gap-2 text-sm border-t pt-2">
+                        <div className="flex gap-8">
+                            <div><span className="font-bold">Replica Web:</span> {note.replicateWeb ? 'SÍ' : 'NO'}</div>
+                            <div><span className="font-bold">Replica Redes:</span> {note.replicateSocials && note.replicateSocials.length > 0 ? note.replicateSocials.join(', ') : 'Ninguna'}</div>
                         </div>
-                        <div className="p-3 border border-gray-300 rounded bg-gray-50">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">GRAF SECUNDARIO</p>
-                            <p className="text-base font-medium">{note.secondaryGraf}</p>
-                        </div>
+                        {note.replicateSocials && note.replicateSocials.length > 0 && (
+                            <div className="bg-blue-50 p-2 rounded border border-blue-100 mt-1">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div><span className="font-bold">Colaboración:</span> {note.collaboration ? `SÍ (${note.collaborationHandle})` : 'NO'}</div>
+                                    <div><span className="font-bold">CTA:</span> {note.ctaText || '-'} -> {note.ctaDestination || '-'}</div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -161,9 +184,9 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                         {!note.noCommercialPhone && <Field label="Tel. Comercial" value={note.phone} />}
                         {note.instagram && <Field label="Instagram" value={note.instagram} />}
                     </div>
-                    {/* NUEVO: Domicilios Comerciales en PDF */}
+                    
                     {!note.noCommercialAddress && note.commercialAddresses && note.commercialAddresses.length > 0 && (
-                        <div className="mt-2">
+                        <div className="mt-2 border-t pt-2">
                             <span className="font-bold text-sm block mb-1">Domicilio(s) Comercial(es):</span>
                             <ul className="list-disc list-inside text-sm pl-2">
                                 {note.commercialAddresses.map((addr, i) => (
@@ -172,19 +195,35 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                             </ul>
                         </div>
                     )}
+
                     {(note.noWeb && note.noWhatsapp && note.noCommercialPhone && !note.instagram && note.noCommercialAddress) && (
                         <p className="text-sm text-gray-500 italic">No se mostrarán canales de contacto.</p>
                     )}
                 </div>
 
-                {/* 6. Preguntas Sugeridas */}
+                {/* 6. Preguntas y Temas a Evitar */}
                 <div className="w-full">
-                    <SectionTitle title="6. Preguntas Sugeridas" />
-                    <ul className="list-decimal list-inside text-sm space-y-2 mt-2">
-                        {note.questions?.map((q, i) => (
-                            <li key={i} className="pl-2 py-1 border-b border-gray-100 last:border-0">{q}</li>
-                        ))}
-                    </ul>
+                    <SectionTitle title="6. Contenido" />
+                    
+                    <div className="mb-4">
+                        <span className="font-bold text-sm block mb-2 underline">Preguntas Sugeridas:</span>
+                        <ul className="list-decimal list-inside text-sm space-y-2">
+                            {note.questions?.map((q, i) => (
+                                <li key={i} className="pl-2 py-1 border-b border-gray-100 last:border-0">{q}</li>
+                            ))}
+                        </ul>
+                    </div>
+
+                    {note.topicsToAvoid && note.topicsToAvoid.length > 0 && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded">
+                            <span className="font-bold text-sm block mb-2 text-red-700 underline">⚠️ TEMAS A EVITAR:</span>
+                            <ul className="list-disc list-inside text-sm space-y-1 text-red-900">
+                                {note.topicsToAvoid.map((t, i) => (
+                                    <li key={i}>{t}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </div>
 
                 {/* 7. Observaciones Generales */}
@@ -193,17 +232,6 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     <div className="p-4 border border-gray-200 rounded min-h-[100px] bg-yellow-50/30">
                         <p className="text-sm whitespace-pre-wrap">{note.noteObservations || 'Sin observaciones adicionales.'}</p>
                     </div>
-                    
-                    {note.graphicSupport && (
-                        <div className="mt-6 p-4 bg-yellow-100 border-2 border-yellow-400 text-yellow-900 font-bold text-center rounded-lg uppercase tracking-wide">
-                            ⚠️ REQUIERE SOPORTE GRÁFICO ⚠️
-                            {note.graphicSupportLink && (
-                                <a href={note.graphicSupportLink} target="_blank" rel="noreferrer" className="block mt-2 text-blue-600 underline normal-case text-sm">
-                                    Ver Material en Drive
-                                </a>
-                            )}
-                        </div>
-                    )}
                 </div>
             </div>
             <div className="absolute bottom-8 right-8 text-xs text-gray-400">Página 2 de 2</div>
