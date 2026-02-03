@@ -154,38 +154,24 @@ export const saveCommercialNote = async (
     return noteRef.id;
 };
 
-export async function getCommercialNotesByClientId(clientId: string): Promise<CommercialNote[]> {
-  try {
-    // CORRECCIÓN: Usamos 'collections.commercialNotes' que apunta a 'commercial_notes'
-    // en lugar de escribir manualmente 'commercialNotes'
-    const q = query(
-      collections.commercialNotes,
-      where('clientId', '==', clientId),
-      orderBy('createdAt', 'desc')
-    );
-
-    const querySnapshot = await getDocs(q);
+export const getCommercialNote = async (noteId: string): Promise<CommercialNote | null> => {
+    const docRef = doc(db, 'commercial_notes', noteId);
+    const docSnap = await getDoc(docRef);
     
-    const notes: CommercialNote[] = querySnapshot.docs.map(doc => {
-      const data = doc.data();
-      // Aseguramos conversión de Timestamp a string si es necesario para evitar errores en el frontend
-      const createdAt = data.createdAt instanceof Timestamp 
-          ? data.createdAt.toDate().toISOString() 
-          : data.createdAt;
-
-      return {
-        id: doc.id,
-        ...data,
-        createdAt
-      } as CommercialNote;
-    });
-
-    return notes;
-  } catch (error) {
-    console.error("Error al obtener las notas comerciales del cliente:", error);
-    throw error;
-  }
-}
+    if (docSnap.exists()) {
+        const data = docSnap.data();
+        const createdAt = data.createdAt instanceof Timestamp 
+            ? data.createdAt.toDate().toISOString() 
+            : data.createdAt;
+            
+        return {
+            id: docSnap.id,
+            ...data,
+            createdAt
+        } as CommercialNote;
+    }
+    return null;
+};
 
 export const bulkReleaseProspects = async (
     prospectIds: string[],
