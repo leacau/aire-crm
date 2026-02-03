@@ -258,7 +258,7 @@ export const saveCommercialNote = async (
     return noteRef.id;
 };
 
-// ESTA ES LA FUNCIÓN QUE FALTABA O DABA ERROR
+// ESTA ES LA FUNCIÓN QUE TE FALTABA
 export async function getCommercialNotesByClientId(clientId: string): Promise<CommercialNote[]> {
   try {
     const q = query(
@@ -511,7 +511,6 @@ export const getCoachingSessions = async (): Promise<CoachingSession[]> => {
     return snap.docs.map(d => ({ id: d.id, ...d.data() } as CoachingSession));
 };
 
-// Helpers vacíos para completar imports si faltan (Canjes, Licencias completas en su propio módulo si es necesario, pero aquí lo esencial está cubierto)
 export const getCanjes = async () => [];
 export const createCanje = async () => '';
 export const updateCanje = async () => {};
@@ -523,3 +522,10 @@ export const deleteVacationRequest = async () => {};
 export const getSystemHolidays = async () => [];
 export const getObjectiveVisibilityConfig = async () => ({});
 export const getOpportunityAlertsConfig = async () => ({});
+export const getCommercialItems = async () => [];
+export const createCommercialItem = async () => {};
+export const updateCommercialItem = async () => {};
+export const deleteCommercialItem = async () => {};
+export const saveProgram = async () => {};
+export const updateProgram = async () => {};
+export const deleteProgram = async () => {};
