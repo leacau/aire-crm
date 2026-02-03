@@ -25,7 +25,6 @@ const Field = ({ label, value, fullWidth = false }: { label: string, value?: str
 
 export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, programs }, ref) => {
     
-    // Estilos comunes para una página A4
     const pageStyle: React.CSSProperties = {
         width: '210mm',
         minHeight: '297mm',
@@ -105,6 +104,8 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     <div className="grid grid-cols-2 gap-4 mt-2">
                         <Field label="Ubicación" value={note.location} />
                         {note.location === 'Llamada' && <Field label="Teléfono Llamada" value={note.callPhone} />}
+                        {/* NUEVO: Mostrar dirección si es Móvil */}
+                        {note.location === 'Móvil' && <Field label="Dirección Móvil" value={note.mobileAddress} />}
                     </div>
                     
                     <div className="grid grid-cols-1 gap-3 mt-3">
@@ -154,13 +155,24 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                 {/* 5. Canales de Contacto */}
                 <div className="w-full">
                     <SectionTitle title="5. Canales de Contacto (A mostrar)" />
-                    <div className="grid grid-cols-2 gap-y-2 gap-x-8">
+                    <div className="grid grid-cols-2 gap-y-2 gap-x-8 mb-3">
                         {!note.noWeb && <Field label="Web" value={note.website} />}
                         {!note.noWhatsapp && <Field label="WhatsApp" value={note.whatsapp} />}
                         {!note.noCommercialPhone && <Field label="Tel. Comercial" value={note.phone} />}
                         {note.instagram && <Field label="Instagram" value={note.instagram} />}
                     </div>
-                    {(note.noWeb && note.noWhatsapp && note.noCommercialPhone && !note.instagram) && (
+                    {/* NUEVO: Domicilios Comerciales en PDF */}
+                    {!note.noCommercialAddress && note.commercialAddresses && note.commercialAddresses.length > 0 && (
+                        <div className="mt-2">
+                            <span className="font-bold text-sm block mb-1">Domicilio(s) Comercial(es):</span>
+                            <ul className="list-disc list-inside text-sm pl-2">
+                                {note.commercialAddresses.map((addr, i) => (
+                                    <li key={i}>{addr}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                    {(note.noWeb && note.noWhatsapp && note.noCommercialPhone && !note.instagram && note.noCommercialAddress) && (
                         <p className="text-sm text-gray-500 italic">No se mostrarán canales de contacto.</p>
                     )}
                 </div>
