@@ -800,6 +800,15 @@ export default function NotaComercialPage() {
                                     disabled={noWeb}
                                     placeholder="www.sitio.com"
                                 />
+                                {website && (
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            onClick={() => window.open(website, '_blank')}
+                                        >
+                                            <ExternalLink className="h-4 w-4" />
+                                        </Button>
+                                    )}
                             </div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
@@ -886,7 +895,7 @@ export default function NotaComercialPage() {
                         intervieweeName,
                         intervieweeRole,
                         intervieweeBio,
-                        instagram: instagramHandle ? `https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}` : undefined,
+                        instagram: instagramHandle : undefined,
                         website: noWeb ? undefined : website,
                         whatsapp: noWhatsapp ? undefined : whatsapp,
                         phone: noCommercialPhone ? undefined : commercialPhone,
