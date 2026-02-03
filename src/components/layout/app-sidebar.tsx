@@ -180,7 +180,7 @@ export function AppSidebar() {
       if (userInfo.role === 'Asesor') {
         const allowedScreens: ScreenName[] = [
           'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
-          'Canjes', 'Quotes', 'Grilla', 'PNTs', 'Notas', 
+          'Canjes', 'Quotes', 'Approvals', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
           'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses'
         ];
         return allowedScreens.includes(item.screenName);
