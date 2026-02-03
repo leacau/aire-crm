@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { getCommercialNote, getPrograms } from '@/lib/firebase-service';
 import type { CommercialNote, Program } from '@/lib/types';
@@ -11,13 +11,22 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, FileDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { NotePdf } from '@/components/notas/note-pdf';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import { useToast } from '@/hooks/use-toast';
 
 export default function NoteDetailPage() {
     const { id } = useParams();
+    const { toast } = useToast();
     const [note, setNote] = useState<CommercialNote | null>(null);
     const [programs, setPrograms] = useState<Program[]>([]);
     const [loading, setLoading] = useState(true);
+    
+    // Ref para el componente PDF oculto
+    const pdfRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const load = async () => {
@@ -33,6 +42,37 @@ export default function NoteDetailPage() {
         };
         load();
     }, [id]);
+
+    const handleDownloadPdf = async () => {
+        if (!pdfRef.current || !note) return;
+        try {
+            const page1 = pdfRef.current.querySelector('#note-pdf-page-1') as HTMLElement;
+            const page2 = pdfRef.current.querySelector('#note-pdf-page-2') as HTMLElement;
+
+            if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
+
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+
+            // Página 1
+            const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true });
+            const imgData1 = canvas1.toDataURL('image/jpeg', 0.8);
+            pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+            // Página 2
+            pdf.addPage();
+            const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true });
+            const imgData2 = canvas2.toDataURL('image/jpeg', 0.8);
+            pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+            pdf.save(`Nota_${note.title?.replace(/ /g, "_") || 'SinTitulo'}.pdf`);
+            toast({ title: "PDF exportado correctamente" });
+        } catch (error) {
+            console.error(error);
+            toast({ title: "Error al generar PDF", variant: "destructive" });
+        }
+    };
 
     if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
     if (!note) return <div className="p-8 text-center">Nota no encontrada</div>;
@@ -53,7 +93,12 @@ export default function NoteDetailPage() {
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-gray-50/50">
-            <Header title={`Detalle de Nota: ${note.title}`} />
+            <Header title={`Detalle de Nota: ${note.title}`}>
+                <Button variant="outline" onClick={handleDownloadPdf}>
+                    <FileDown className="mr-2 h-4 w-4" />
+                    Exportar PDF
+                </Button>
+            </Header>
             <main className="flex-1 overflow-auto p-4 md:p-8 max-w-5xl mx-auto w-full">
                 <div className="grid gap-6 md:grid-cols-3">
                     
@@ -215,6 +260,15 @@ export default function NoteDetailPage() {
                     </div>
                 </div>
             </main>
+
+            {/* Componente PDF Oculto para Generación */}
+            <div style={{ position: 'absolute', top: -9999, left: -9999 }}>
+                <NotePdf
+                    ref={pdfRef}
+                    programs={programs}
+                    note={note}
+                />
+            </div>
         </div>
     );
 }
