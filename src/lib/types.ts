@@ -593,8 +593,10 @@ export type CommercialNote = {
 
   // -- Note Details Fields --
   title?: string;
-  location?: 'Estudio' | 'Empresa' | 'Meet' | 'Llamada';
+  // CAMBIO: Se reemplaza 'Empresa' por 'Móvil'
+  location?: 'Estudio' | 'Móvil' | 'Meet' | 'Llamada';
   callPhone?: string; // If location is Llamada
+  mobileAddress?: string; // NUEVO: Si location es Móvil
   primaryGraf?: string;
   secondaryGraf?: string;
   questions?: string[];
@@ -611,6 +613,10 @@ export type CommercialNote = {
   noWhatsapp?: boolean;
   phone?: string; // Teléfono comercial
   noCommercialPhone?: boolean;
+  
+  // NUEVOS CAMPOS: Domicilio Comercial
+  commercialAddresses?: string[]; 
+  noCommercialAddress?: boolean;
 
   graphicSupport: boolean;
   graphicSupportLink?: string; // If GDrive link provided
