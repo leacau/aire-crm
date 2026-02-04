@@ -66,8 +66,8 @@ export default function NotaComercialPage() {
     const [location, setLocation] = useState<'Estudio' | 'Móvil' | 'Meet' | 'Llamada' | undefined>(undefined);
     const [callPhone, setCallPhone] = useState('');
     const [mobileAddress, setMobileAddress] = useState('');
-    const [primaryGraf, setPrimaryGraf] = useState('');
-    const [secondaryGraf, setSecondaryGraf] = useState('');
+    const [primaryGrafs, setPrimaryGrafs] = useState<string[]>(['']);
+    const [secondaryGrafs, setSecondaryGrafs] = useState<string[]>(['']);
     const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']);
     const [topicsToAvoid, setTopicsToAvoid] = useState<string[]>(['']);
     
@@ -97,8 +97,8 @@ export default function NotaComercialPage() {
     // Validaciones visuales
     const primaryGrafError = primaryGraf.length > 84;
     const secondaryGrafError = secondaryGraf.length > 55;
-    const hasGrafErrors = primaryGrafError || secondaryGrafError;
-
+    const hasGrafErrors = primaryGrafs.some(g => g.length > 84) || secondaryGrafs.some(g => g.length > 55);
+    
     const generateMultiPagePdf = async (element: HTMLElement) => {
         const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
         const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
@@ -205,6 +205,15 @@ export default function NotaComercialPage() {
     const handleAddressChange = (index: number, value: string) => { const newAddr = [...commercialAddresses]; newAddr[index] = value; setCommercialAddresses(newAddr); };
     const handleRemoveAddress = (index: number) => { const newAddr = commercialAddresses.filter((_, i) => i !== index); setCommercialAddresses(newAddr.length ? newAddr : ['']); };
 
+    // Helpers Grafs
+    const handleAddPrimary = () => setPrimaryGrafs([...primaryGrafs, '']);
+    const handlePrimaryChange = (index: number, value: string) => { const n = [...primaryGrafs]; n[index] = value; setPrimaryGrafs(n); };
+    const handleRemovePrimary = (index: number) => { const n = primaryGrafs.filter((_, i) => i !== index); setPrimaryGrafs(n.length ? n : ['']); };
+
+    const handleAddSecondary = () => setSecondaryGrafs([...secondaryGrafs, '']);
+    const handleSecondaryChange = (index: number, value: string) => { const n = [...secondaryGrafs]; n[index] = value; setSecondaryGrafs(n); };
+    const handleRemoveSecondary = (index: number) => { const n = secondaryGrafs.filter((_, i) => i !== index); setSecondaryGrafs(n.length ? n : ['']); };
+
     const totalValue = selectedProgramIds.reduce((acc, pid) => {
         const prog = programs.find(p => p.id === pid);
         const datesCount = programSchedule[pid]?.length || 0;
@@ -233,8 +242,9 @@ export default function NotaComercialPage() {
         if (!location) { toast({ title: 'Seleccione ubicación', variant: 'destructive' }); return; }
         if (location === 'Llamada' && !callPhone.trim()) { toast({ title: 'Falta teléfono de llamada', variant: 'destructive' }); return; }
         if (location === 'Móvil' && !mobileAddress.trim()) { toast({ title: 'Falta dirección del móvil', variant: 'destructive' }); return; }
-        if (!primaryGraf.trim() || !secondaryGraf.trim()) { toast({ title: 'Faltan grafs', variant: 'destructive' }); return; }
-        
+        if (primaryGrafs.filter(g => g.trim() !== '').length === 0) { toast({ title: 'Falta TITULAR.Text', variant: 'destructive' }); return; }
+        if (secondaryGrafs.filter(g => g.trim() !== '').length === 0) { toast({ title: 'Falta NOMBRE/FUNCION.Text', variant: 'destructive' }); return; }
+        if (hasGrafErrors) { toast({ title: 'Error en Grafs', description: 'El texto excede el límite permitido.', variant: 'destructive' }); return; }        
         const first5Questions = questions.slice(0, 5);
         if (first5Questions.some(q => !q.trim())) { toast({ title: 'Datos incompletos', description: 'Las primeras 5 preguntas son obligatorias.', variant: 'destructive' }); return; }
         if (!intervieweeName.trim() || !intervieweeRole.trim()) { toast({ title: 'Datos incompletos', description: 'Nombre y cargo del entrevistado requeridos.', variant: 'destructive' }); return; }
@@ -277,8 +287,8 @@ export default function NotaComercialPage() {
                 location,
                 callPhone: location === 'Llamada' ? callPhone : undefined,
                 mobileAddress: location === 'Móvil' ? mobileAddress : undefined,
-                primaryGraf,
-                secondaryGraf,
+                primaryGrafs: primaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
+                secondaryGrafs: secondaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
                 questions: questions.filter(q => q.trim() !== ''),
                 topicsToAvoid: topicsToAvoid.filter(t => t.trim() !== ''),
                 intervieweeName,
@@ -365,7 +375,7 @@ export default function NotaComercialPage() {
                  toast({ title: 'Nota guardada correctamente.' });
             }
 
-            setSelectedProgramIds([]); setProgramSchedule({}); setSaleValue(''); setFinancialObservations(''); setNoteObservations(''); setTitle(''); setQuestions(['', '', '', '', '']); setTopicsToAvoid(['']); setPrimaryGraf(''); setSecondaryGraf(''); setLocation(undefined); setIntervieweeName(''); setIntervieweeRole(''); setIntervieweeBio(''); setInstagramHandle(''); setWebsite(''); setWhatsapp(''); setCommercialPhone(''); setCommercialAddresses(['']); setMobileAddress(''); setCollaboration(false); setCollaborationHandle(''); setCtaText(''); setCtaDestination('');
+            setSelectedProgramIds([]); setProgramSchedule({}); setSaleValue(''); setFinancialObservations(''); setNoteObservations(''); setTitle(''); setQuestions(['', '', '', '', '']); setTopicsToAvoid(['']); setPrimaryGrafs(['']); setSecondaryGrafs(['']); setLocation(undefined); setIntervieweeName(''); setIntervieweeRole(''); setIntervieweeBio(''); setInstagramHandle(''); setWebsite(''); setWhatsapp(''); setCommercialPhone(''); setCommercialAddresses(['']); setMobileAddress(''); setCollaboration(false); setCollaborationHandle(''); setCtaText(''); setCtaDestination('');
 
         } catch (error) {
             console.error(error);
@@ -515,14 +525,33 @@ export default function NotaComercialPage() {
                             </div>
                         </div>
 
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <div className="flex justify-between"><Label className={primaryGrafError ? "text-destructive" : ""}>Graf Primario</Label><span className={primaryGrafError ? "text-destructive" : ""}>{primaryGraf.length}/84</span></div>
-                                <Input value={primaryGraf} onChange={e => setPrimaryGraf(e.target.value)} className={primaryGrafError ? "border-destructive" : ""} />
+                       <div className="grid gap-4 md:grid-cols-2">
+                            {/* Primary Grafs Multiples */}
+                            <div className="space-y-2 border p-3 rounded-md">
+                                <div className="flex justify-between mb-2"><Label>TITULAR.Text (Max 84)</Label><Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
+                                {primaryGrafs.map((g, idx) => (
+                                    <div key={idx} className="space-y-1 mb-2">
+                                        <div className="flex gap-2">
+                                            <Input value={g} onChange={e => handlePrimaryChange(idx, e.target.value)} className={g.length > 84 ? "border-destructive" : ""} placeholder={`Titular ${idx+1}`} />
+                                            {primaryGrafs.length > 1 && <Button size="icon" variant="ghost" onClick={() => handleRemovePrimary(idx)}><Trash2 className="h-4 w-4"/></Button>}
+                                        </div>
+                                        {g.length > 84 && <span className="text-xs text-destructive">{g.length}/84 caracteres</span>}
+                                    </div>
+                                ))}
                             </div>
-                            <div className="space-y-2">
-                                <div className="flex justify-between"><Label className={secondaryGrafError ? "text-destructive" : ""}>Graf Secundario</Label><span className={secondaryGrafError ? "text-destructive" : ""}>{secondaryGraf.length}/55</span></div>
-                                <Input value={secondaryGraf} onChange={e => setSecondaryGraf(e.target.value)} className={secondaryGrafError ? "border-destructive" : ""} />
+                            
+                            {/* Secondary Grafs Multiples */}
+                            <div className="space-y-2 border p-3 rounded-md">
+                                <div className="flex justify-between mb-2"><Label>NOMBRE/FUNCION.Text (Max 55)</Label><Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddSecondary}><Plus className="h-4 w-4"/></Button></div>
+                                {secondaryGrafs.map((g, idx) => (
+                                    <div key={idx} className="space-y-1 mb-2">
+                                        <div className="flex gap-2">
+                                            <Input value={g} onChange={e => handleSecondaryChange(idx, e.target.value)} className={g.length > 55 ? "border-destructive" : ""} placeholder={`Nombre/Función ${idx+1}`} />
+                                            {secondaryGrafs.length > 1 && <Button size="icon" variant="ghost" onClick={() => handleRemoveSecondary(idx)}><Trash2 className="h-4 w-4"/></Button>}
+                                        </div>
+                                        {g.length > 55 && <span className="text-xs text-destructive">{g.length}/55 caracteres</span>}
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
@@ -609,8 +638,8 @@ export default function NotaComercialPage() {
                         location,
                         callPhone: location === 'Llamada' ? callPhone : undefined,
                         mobileAddress: location === 'Móvil' ? mobileAddress : undefined,
-                        primaryGraf,
-                        secondaryGraf,
+                        primaryGrafs: primaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
+                        secondaryGrafs: secondaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
                         questions: questions.filter(q => q.trim() !== ''),
                         topicsToAvoid: topicsToAvoid.filter(t => t.trim() !== ''),
                         intervieweeName,
