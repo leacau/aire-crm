@@ -558,7 +558,11 @@ export default function NotaComercialPage() {
                             </div>
                             <div className="space-y-2">
                                 <div className="flex justify-between"><Label className={noWhatsapp ? "text-muted-foreground" : ""}>Whatsapp</Label><div className="flex items-center space-x-2"><Checkbox checked={noWhatsapp} onCheckedChange={(c) => setNoWhatsapp(!!c)} /><Label className="text-xs">No informar</Label></div></div>
-                                <div className="flex gap-2"><Input value={website} onChange={e => setWhatsapp(e.target.value)} disabled={noWhatsapp} /></div>
+                                <div className="flex gap-2"><Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} disabled={noWhatsapp} /></div>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between"><Label className={noCommercialPhone ? "text-muted-foreground" : ""}>Teléfono Comercial</Label><div className="flex items-center space-x-2"><Checkbox checked={noCommercialPhone} onCheckedChange={(c) => setNoCommercialPhone(!!c)} /><Label className="text-xs">No informar</Label></div></div>
+                                <div className="flex gap-2"><Input value={commercialPhone} onChange={e => setCommercialPhone(e.target.value)} disabled={noWhatsapp} /></div>
                             </div>
                             <div className="space-y-2 md:col-span-2 border-t pt-4">
                                 <div className="flex justify-between mb-2"><Label className={noCommercialAddress ? "text-muted-foreground" : ""}>Domicilio Comercial</Label><div className="flex items-center space-x-2"><Checkbox checked={noCommercialAddress} onCheckedChange={(c) => setNoCommercialAddress(!!c)} /><Label className="text-xs">No informar</Label></div></div>
