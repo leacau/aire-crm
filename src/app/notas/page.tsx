@@ -478,11 +478,12 @@ export default function NotaComercialPage() {
                                     {replicateSocials.length > 0 && (
                                         <div className="mt-4 pt-4 border-t space-y-3">
                                             <div className="flex items-center space-x-2"><Checkbox checked={collaboration} onCheckedChange={(c) => setCollaboration(!!c)} /><Label>¿Colaboración?</Label></div>
-                                            {collaboration && <Input placeholder="@usuario" value={collaborationHandle} onChange={e => setCollaborationHandle(e.target.value)} />
-                                            <div className="grid grid-cols-2 gap-2">
+                                            {collaboration && 
+                                            (<div className="grid grid-cols-2 gap-2">
+                                                <Input placeholder="@usuario" value={collaborationHandle} onChange={e => setCollaborationHandle(e.target.value)} />
                                                 <div><Label className="text-xs">Texto CTA</Label><Input placeholder="Link en Bio" value={ctaText} onChange={e => setCtaText(e.target.value)} /></div>
                                                 <div><Label className="text-xs">Destino CTA</Label><Input placeholder="Web/WhatsApp" value={ctaDestination} onChange={e => setCtaDestination(e.target.value)} /></div>
-                                            </div>}
+                                            </div>)}
                                         </div>
                                     )}
                                 </div>
