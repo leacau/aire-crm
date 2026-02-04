@@ -78,6 +78,7 @@ export default function NotaComercialPage() {
     
     // Canales de Contacto
     const [instagramHandle, setInstagramHandle] = useState('');
+    const [noInstagram, setNoInstagram] = useState(false);
     const [website, setWebsite] = useState('');
     const [noWeb, setNoWeb] = useState(false);
     const [whatsapp, setWhatsapp] = useState('');
@@ -547,10 +548,17 @@ export default function NotaComercialPage() {
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2"><Label>Instagram</Label><Input value={instagramHandle} onChange={e => setInstagramHandle(e.target.value)} /></div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between"><Label className={noInstagram ? "text-muted-foreground" : ""}>Instagram</Label><div className="flex items-center space-x-2"><Checkbox checked={noInstagram} onCheckedChange={(c) => setNoInstagram(!!c)} /><Label className="text-xs">No informar</Label></div></div>
+                                <div className="flex gap-2"><Input value={instagramHandle} onChange={e => setInstagramHandle(e.target.value)} disabled={noInstagram} />{instagram && !noInstagram && <Button size="icon" variant="ghost" onClick={() => window.open(website.startsWith('http') ? website : `https://${website}`, '_blank')}><ExternalLink className="h-4 w-4" /></Button>}</div>
+                            </div>
                             <div className="space-y-2">
                                 <div className="flex justify-between"><Label className={noWeb ? "text-muted-foreground" : ""}>Web</Label><div className="flex items-center space-x-2"><Checkbox checked={noWeb} onCheckedChange={(c) => setNoWeb(!!c)} /><Label className="text-xs">No informar</Label></div></div>
                                 <div className="flex gap-2"><Input value={website} onChange={e => setWebsite(e.target.value)} disabled={noWeb} />{website && !noWeb && <Button size="icon" variant="ghost" onClick={() => window.open(website.startsWith('http') ? website : `https://${website}`, '_blank')}><ExternalLink className="h-4 w-4" /></Button>}</div>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between"><Label className={noWhatsapp ? "text-muted-foreground" : ""}>Whatsapp</Label><div className="flex items-center space-x-2"><Checkbox checked={noWhatsapp} onCheckedChange={(c) => setNoWhatsapp(!!c)} /><Label className="text-xs">No informar</Label></div></div>
+                                <div className="flex gap-2"><Input value={website} onChange={e => setWhatsapp(e.target.value)} disabled={noWhatsapp} /></div>
                             </div>
                             <div className="space-y-2 md:col-span-2 border-t pt-4">
                                 <div className="flex justify-between mb-2"><Label className={noCommercialAddress ? "text-muted-foreground" : ""}>Domicilio Comercial</Label><div className="flex items-center space-x-2"><Checkbox checked={noCommercialAddress} onCheckedChange={(c) => setNoCommercialAddress(!!c)} /><Label className="text-xs">No informar</Label></div></div>
