@@ -64,15 +64,19 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                         {note.location === 'Móvil' && <Field label="Dirección Móvil" value={note.mobileAddress} />}
                     </div>
                     
-                    <div className="grid grid-cols-1 gap-3 mt-3">
-                        <div className="p-3 border border-gray-300 rounded bg-gray-50">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">GRAF PRIMARIO (Max 84)</p>
-                            <p className="text-base font-medium">{note.primaryGraf}</p>
-                        </div>
-                        <div className="p-3 border border-gray-300 rounded bg-gray-50">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">GRAF SECUNDARIO (Max 55)</p>
-                            <p className="text-base font-medium">{note.secondaryGraf}</p>
-                        </div>
+                    <div className="mt-3 space-y-3">
+                        {pGrafs.map((g, i) => (
+                            <div key={`p-${i}`} className="p-3 border border-gray-300 rounded bg-gray-50">
+                                <p className="text-xs font-bold text-gray-500 uppercase mb-1">TITULAR.Text (Max 84)</p>
+                                <p className="text-base font-medium uppercase">{g}</p>
+                            </div>
+                        ))}
+                        {sGrafs.map((g, i) => (
+                            <div key={`s-${i}`} className="p-3 border border-gray-300 rounded bg-gray-50">
+                                <p className="text-xs font-bold text-gray-500 uppercase mb-1">NOMBRE/FUNCION.Text (Max 55)</p>
+                                <p className="text-base font-medium uppercase">{g}</p>
+                            </div>
+                        ))}
                     </div>
 
                     {note.graphicSupport && (
