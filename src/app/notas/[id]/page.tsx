@@ -76,6 +76,8 @@ export default function NoteDetailPage() {
 
     if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
     if (!note) return <div className="p-8 text-center">Nota no encontrada</div>;
+    const pGrafs = note.primaryGrafs && note.primaryGrafs.length > 0 ? note.primaryGrafs : (note.primaryGraf ? [note.primaryGraf] : []);
+    const sGrafs = note.secondaryGrafs && note.secondaryGrafs.length > 0 ? note.secondaryGrafs : (note.secondaryGraf ? [note.secondaryGraf] : []);
 
     const Section = ({ title, children }: { title: string, children: React.ReactNode }) => (
         <div className="space-y-3 mb-6">
