@@ -283,7 +283,7 @@ export default function NotaComercialPage() {
                 intervieweeName,
                 intervieweeRole,
                 intervieweeBio: intervieweeBio || undefined,
-                instagram: instagramHandle ? `https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}` : undefined,
+                instagram: instagramHandle ? instagramHandle : undefined,
                 website: noWeb ? undefined : website,
                 noWeb,
                 whatsapp: noWhatsapp ? undefined : whatsapp,
