@@ -579,57 +579,61 @@ export type CommercialNote = {
   advisorId: string;
   advisorName: string;
   razonSocial: string;
+  
   rubro?: string;
   
   replicateWeb?: boolean;
   replicateSocials?: string[]; 
   
-  // NUEVOS CAMPOS
   collaboration?: boolean;
   collaborationHandle?: string;
   ctaText?: string;
   ctaDestination?: string;
 
-  programIds: string[];
-  schedule: Record<string, ScheduleItem[]>;
-  contactPhone?: string;
-  contactName?: string;
+  programIds: string[]; 
+  schedule: Record<string, ScheduleItem[]>; 
+  contactPhone?: string; 
+  contactName?: string; 
 
   title?: string;
   location?: 'Estudio' | 'Móvil' | 'Meet' | 'Llamada';
-  callPhone?: string;
-  mobileAddress?: string; // NUEVO
+  callPhone?: string; 
+  mobileAddress?: string; 
   
-  primaryGraf?: string;
-  secondaryGraf?: string;
+  primaryGraf?: string; // Legacy
+  secondaryGraf?: string; // Legacy
+  
+  // NUEVOS CAMPOS (Arrays)
+  primaryGrafs?: string[];
+  secondaryGrafs?: string[];
   
   questions?: string[];
-  topicsToAvoid?: string[]; // NUEVO
+  topicsToAvoid?: string[];
   
   intervieweeName?: string;
   intervieweeRole?: string;
   intervieweeBio?: string;
 
-  instagram?: string;
+  instagram?: string; 
   website?: string;
   noWeb?: boolean;
   whatsapp?: string;
   noWhatsapp?: boolean;
-  phone?: string;
+  phone?: string; 
   noCommercialPhone?: boolean;
   
-  commercialAddresses?: string[]; // NUEVO
-  noCommercialAddress?: boolean; // NUEVO
+  commercialAddresses?: string[]; 
+  noCommercialAddress?: boolean;
 
   graphicSupport: boolean;
-  graphicSupportLink?: string;
+  graphicSupportLink?: string; 
   
   totalValue: number;
   saleValue?: number;
   mismatch?: number;
   
-  financialObservations?: string;
-  noteObservations?: string;
+  financialObservations?: string; 
+  noteObservations?: string; 
   
   createdAt: string;
 };
