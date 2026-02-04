@@ -34,7 +34,11 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
         position: 'relative',
         boxSizing: 'border-box'
     };
-
+  
+    // Helper para obtener arrays (legacy compatibility)
+    const pGrafs = note.primaryGrafs && note.primaryGrafs.length > 0 ? note.primaryGrafs : (note.primaryGraf ? [note.primaryGraf] : []);
+    const sGrafs = note.secondaryGrafs && note.secondaryGrafs.length > 0 ? note.secondaryGrafs : (note.secondaryGraf ? [note.secondaryGraf] : []);
+  
     return (
       <div ref={ref}>
         
