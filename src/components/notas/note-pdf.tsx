@@ -82,11 +82,11 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     {note.graphicSupport && (
                         <div className="mt-4 p-4 bg-yellow-100 border-2 border-yellow-400 text-yellow-900 font-bold text-center rounded-lg uppercase tracking-wide">
                             ⚠️ REQUIERE SOPORTE GRÁFICO ⚠️
-                            {note.graphicSupportLink && (
-                                <div className="mt-2 text-sm font-normal normal-case break-all">
-                                    {note.graphicSupportLink}
-                                </div>
-                            )}
+                           {note.graphicSupport && (
+                <div className="mt-4 p-2 bg-yellow-100 border border-yellow-300 text-yellow-800 font-bold text-center rounded">
+                    REQUIERE SOPORTE GRÁFICO {note.graphicSupportLink ? `(Ver Contenido)` : ''}
+                </div>
+            )}
                         </div>
                     )}
                 </div>
