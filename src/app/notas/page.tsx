@@ -453,7 +453,7 @@ export default function NotaComercialPage() {
                                         return (
                                             <div key={pid} className="border p-3 rounded-md space-y-3">
                                                 <div className="flex justify-between items-center"><span className="font-medium">{prog?.name}</span><Popover><PopoverTrigger asChild><Button variant="outline" size="sm"><CalendarIcon className="mr-2 h-4 w-4"/>Fechas</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="multiple" selected={items.map(i => new Date(i.date))} onSelect={(d) => handleDateSelect(pid, d)} initialFocus locale={es}/></PopoverContent></Popover></div>
-                                                {items.length > 0 && <div className="max-h-40 overflow-y-auto space-y-2">{items.map((it, idx) => (<div key={it.date} className="flex gap-2 text-sm"><span className="w-24 text-muted">{format(new Date(it.date), 'dd/MM/yyyy')}</span><Input type="time" className="h-8" value={it.time||''} onChange={(e) => handleTimeChange(pid, idx, e.target.value)} /></div>))}</div>}
+                                                {items.length > 0 && <div className="max-h-40 overflow-y-auto space-y-2">{items.map((it, idx) => (<div key={it.date} className="flex gap-2 text-sm"><span className="w-24">{format(new Date(it.date), 'dd/MM/yyyy')}</span><Input type="time" className="h-8" value={it.time||''} onChange={(e) => handleTimeChange(pid, idx, e.target.value)} /></div>))}</div>}
                                             </div>
                                         );
                                     })}
