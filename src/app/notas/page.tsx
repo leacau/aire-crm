@@ -16,7 +16,7 @@ import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote }
 import type { Client, Program, CommercialNote, ScheduleItem } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Save, Plus, ExternalLink, Trash2, MapPin, Minus } from 'lucide-react'; 
+import { CalendarIcon, Save, Plus, ExternalLink, Trash2, MapPin, Minus } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -66,8 +66,11 @@ export default function NotaComercialPage() {
     const [location, setLocation] = useState<'Estudio' | 'Móvil' | 'Meet' | 'Llamada' | undefined>(undefined);
     const [callPhone, setCallPhone] = useState('');
     const [mobileAddress, setMobileAddress] = useState('');
+    
+    // Grafs Multiples (Variables de estado corregidas)
     const [primaryGrafs, setPrimaryGrafs] = useState<string[]>(['']);
     const [secondaryGrafs, setSecondaryGrafs] = useState<string[]>(['']);
+    
     const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']);
     const [topicsToAvoid, setTopicsToAvoid] = useState<string[]>(['']);
     
@@ -78,7 +81,6 @@ export default function NotaComercialPage() {
     
     // Canales de Contacto
     const [instagramHandle, setInstagramHandle] = useState('');
-    const [noInstagram, setNoInstagram] = useState(false);
     const [website, setWebsite] = useState('');
     const [noWeb, setNoWeb] = useState(false);
     const [whatsapp, setWhatsapp] = useState('');
@@ -95,10 +97,10 @@ export default function NotaComercialPage() {
     const [notifyOnSave, setNotifyOnSave] = useState(true);
 
     // Validaciones visuales
-    const primaryGrafError = primaryGraf.length > 84;
-    const secondaryGrafError = secondaryGraf.length > 55;
-    const hasGrafErrors = primaryGrafs.some(g => g.length > 84) || secondaryGrafs.some(g => g.length > 55);
-    
+    const primaryGrafError = primaryGrafs.some(g => g.length > 84);
+    const secondaryGrafError = secondaryGrafs.some(g => g.length > 55);
+    const hasGrafErrors = primaryGrafError || secondaryGrafError;
+
     const generateMultiPagePdf = async (element: HTMLElement) => {
         const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
         const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
@@ -205,7 +207,7 @@ export default function NotaComercialPage() {
     const handleAddressChange = (index: number, value: string) => { const newAddr = [...commercialAddresses]; newAddr[index] = value; setCommercialAddresses(newAddr); };
     const handleRemoveAddress = (index: number) => { const newAddr = commercialAddresses.filter((_, i) => i !== index); setCommercialAddresses(newAddr.length ? newAddr : ['']); };
 
-    // Helpers Grafs
+    // Helpers Grafs (Arrays)
     const handleAddPrimary = () => setPrimaryGrafs([...primaryGrafs, '']);
     const handlePrimaryChange = (index: number, value: string) => { const n = [...primaryGrafs]; n[index] = value; setPrimaryGrafs(n); };
     const handleRemovePrimary = (index: number) => { const n = primaryGrafs.filter((_, i) => i !== index); setPrimaryGrafs(n.length ? n : ['']); };
@@ -213,6 +215,7 @@ export default function NotaComercialPage() {
     const handleAddSecondary = () => setSecondaryGrafs([...secondaryGrafs, '']);
     const handleSecondaryChange = (index: number, value: string) => { const n = [...secondaryGrafs]; n[index] = value; setSecondaryGrafs(n); };
     const handleRemoveSecondary = (index: number) => { const n = secondaryGrafs.filter((_, i) => i !== index); setSecondaryGrafs(n.length ? n : ['']); };
+
 
     const totalValue = selectedProgramIds.reduce((acc, pid) => {
         const prog = programs.find(p => p.id === pid);
@@ -223,54 +226,39 @@ export default function NotaComercialPage() {
     const saleValueNum = parseFloat(saleValue) || 0;
     const mismatch = saleValueNum > 0 ? (totalValue - saleValueNum) : 0;
 
-
     const handleSave = async () => {
-        if (!selectedClientId) { toast({ title: 'Datos incompletos', description: 'Seleccione un cliente.', variant: 'destructive' }); return; }
-        if (!cuit.trim() || !razonSocial.trim() || !rubro.trim()) { toast({ title: 'Datos incompletos', description: 'Complete todos los datos del cliente.', variant: 'destructive' }); return; }
-        if (!saleValue) { toast({ title: 'Datos incompletos', description: 'Debe ingresar el Valor de Venta.', variant: 'destructive' }); return; }
-        if (selectedProgramIds.length === 0) { toast({ title: 'Datos incompletos', description: 'Seleccione al menos un programa.', variant: 'destructive' }); return; }
-        const missingDates = selectedProgramIds.some(pid => !programSchedule[pid] || programSchedule[pid].length === 0);
-        if (missingDates) { toast({ title: 'Datos incompletos', description: 'Debe seleccionar fechas para todos los programas.', variant: 'destructive' }); return; }
-        if (!contactPhone.trim() || !contactName.trim()) { toast({ title: 'Datos incompletos', description: 'Complete los datos de coordinación.', variant: 'destructive' }); return; }
+        if (!selectedClientId || !userInfo) { toast({ title: 'Datos incompletos', description: 'Seleccione un cliente.', variant: 'destructive' }); return; }
         if (!title.trim()) { toast({ title: 'Falta título', variant: 'destructive' }); return; }
-        
-        if (hasGrafErrors) {
-            toast({ title: 'Error en Grafs', description: 'El texto de los grafs excede el límite permitido. Por favor corríjalos.', variant: 'destructive' });
-            return;
-        }
-
         if (!location) { toast({ title: 'Seleccione ubicación', variant: 'destructive' }); return; }
-        if (location === 'Llamada' && !callPhone.trim()) { toast({ title: 'Falta teléfono de llamada', variant: 'destructive' }); return; }
         if (location === 'Móvil' && !mobileAddress.trim()) { toast({ title: 'Falta dirección del móvil', variant: 'destructive' }); return; }
+        
+        // Validation Grafs Multiples (Checking Arrays)
         if (primaryGrafs.filter(g => g.trim() !== '').length === 0) { toast({ title: 'Falta TITULAR.Text', variant: 'destructive' }); return; }
         if (secondaryGrafs.filter(g => g.trim() !== '').length === 0) { toast({ title: 'Falta NOMBRE/FUNCION.Text', variant: 'destructive' }); return; }
-        if (hasGrafErrors) { toast({ title: 'Error en Grafs', description: 'El texto excede el límite permitido.', variant: 'destructive' }); return; }        
-        const first5Questions = questions.slice(0, 5);
-        if (first5Questions.some(q => !q.trim())) { toast({ title: 'Datos incompletos', description: 'Las primeras 5 preguntas son obligatorias.', variant: 'destructive' }); return; }
-        if (!intervieweeName.trim() || !intervieweeRole.trim()) { toast({ title: 'Datos incompletos', description: 'Nombre y cargo del entrevistado requeridos.', variant: 'destructive' }); return; }
-
-        const validAddresses = commercialAddresses.filter(a => a.trim() !== '');
-        if (!noCommercialAddress && validAddresses.length === 0) { toast({ title: 'Datos incompletos', description: 'Ingrese Domicilio Comercial o marque "No informar".', variant: 'destructive' }); return; }
+        if (hasGrafErrors) { toast({ title: 'Error en Grafs', description: 'El texto excede el límite permitido.', variant: 'destructive' }); return; }
 
         setSaving(true);
         try {
             const client = clients.find(c => c.id === selectedClientId);
+
+            // 1. Update Client info
             const updates: any = {};
             if (client) {
                 if (client.cuit !== cuit) updates.cuit = cuit;
                 if (client.rubro !== rubro) updates.rubro = rubro;
                 if (client.razonSocial !== razonSocial) updates.razonSocial = razonSocial;
                 if (Object.keys(updates).length > 0) {
-                    await updateClientTangoMapping(client.id, updates, userInfo!.id, userInfo!.name);
+                    await updateClientTangoMapping(client.id, updates, userInfo.id, userInfo.name);
                 }
             }
 
-             const noteDataRaw: any = {
+            // 2. Prepare Data (Uppercasing grafs)
+            const noteDataRaw: any = {
                 clientId: selectedClientId,
                 clientName: client?.denominacion || 'Unknown',
                 cuit,
-                advisorId: userInfo!.id,
-                advisorName: userInfo!.name,
+                advisorId: userInfo.id,
+                advisorName: userInfo.name,
                 razonSocial,
                 rubro,
                 replicateWeb,
@@ -287,14 +275,21 @@ export default function NotaComercialPage() {
                 location,
                 callPhone: location === 'Llamada' ? callPhone : undefined,
                 mobileAddress: location === 'Móvil' ? mobileAddress : undefined,
+                
+                // GUARDAR EN MAYÚSCULAS
                 primaryGrafs: primaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
                 secondaryGrafs: secondaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
+                
+                // CORRECCIÓN FINAL: Proporcionar valores por defecto para legacy fields (si fuera necesario) usando el primer elemento del array
+                primaryGraf: primaryGrafs.length > 0 ? primaryGrafs[0].toUpperCase() : '',
+                secondaryGraf: secondaryGrafs.length > 0 ? secondaryGrafs[0].toUpperCase() : '',
+
                 questions: questions.filter(q => q.trim() !== ''),
                 topicsToAvoid: topicsToAvoid.filter(t => t.trim() !== ''),
                 intervieweeName,
                 intervieweeRole,
                 intervieweeBio: intervieweeBio || undefined,
-                instagram: instagramHandle ? instagramHandle : undefined,
+                instagram: instagramHandle ? `https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}` : undefined,
                 website: noWeb ? undefined : website,
                 noWeb,
                 whatsapp: noWhatsapp ? undefined : whatsapp,
@@ -318,7 +313,7 @@ export default function NotaComercialPage() {
                 return acc;
             }, {} as Omit<CommercialNote, 'id' | 'createdAt'>);
 
-            const newNoteId = await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
+            const newNoteId = await saveCommercialNote(noteData, userInfo.id, userInfo.name);
 
             if (notifyOnSave && pdfRef.current) {
                 const accessToken = await getGoogleAccessToken();
@@ -337,10 +332,10 @@ export default function NotaComercialPage() {
                             });
                         });
 
-                         const emailBody = `
+                        const emailBody = `
                             <div style="font-family: Arial, sans-serif; color: #333;">
                                 <h2 style="color: #cc0000;">Nueva Nota Comercial Registrada</h2>
-                                <p>El asesor <strong>${userInfo!.name}</strong> ha cargado una nueva nota.</p>
+                                <p>El asesor <strong>${userInfo.name}</strong> ha cargado una nueva nota.</p>
                                 <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #cc0000; margin: 20px 0;">
                                     <p><strong>Cliente:</strong> ${client?.denominacion || 'Desconocido'}</p>
                                     <p><strong>Título:</strong> ${title}</p>
@@ -348,18 +343,13 @@ export default function NotaComercialPage() {
                                     <ul>${scheduleSummary || '<li>Sin fecha definida</li>'}</ul>
                                 </div>
                                 <p>Puede ver el detalle completo y descargar el PDF ingresando al siguiente enlace:</p>
-                                <p>
-                                    <a href="${detailLink}" style="background-color: #cc0000; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                                        Ver Detalle de la Nota
-                                    </a>
-                                </p>
-                                <p style="font-size: 12px; color: #666; margin-top: 20px;">O ingrese manualmente a: <a href="${detailLink}">${detailLink}</a></p>
+                                <p><a href="${detailLink}">Ver Detalle de la Nota</a></p>
                             </div>
                         `;
 
                         await sendEmail({
                             accessToken,
-                            to: 'lchena@airedesantafe.com.ar; alucca@airedesantafe.com.ar; materiales@airedesantafe.com.ar',
+                            to: 'lchena@airedesantafe.com.ar', 
                             subject: `Nueva Nota Comercial: ${title} - ${client?.denominacion}`,
                             body: emailBody,
                             attachments: [{
@@ -368,14 +358,20 @@ export default function NotaComercialPage() {
                                 encoding: 'base64'
                             }]
                         });
-                         toast({ title: 'Nota guardada y notificada por correo.' });
-                    } catch (e) { console.error(e); }
+                        toast({ title: 'Nota guardada y notificada por correo.' });
+                    } catch (emailError) {
+                        console.error("Error sending email", emailError);
+                        toast({ title: 'Nota guardada, pero falló el envío del correo.', variant: 'default' });
+                    }
                 }
             } else {
-                 toast({ title: 'Nota guardada correctamente.' });
+                toast({ title: 'Nota guardada correctamente.' });
             }
 
-            setSelectedProgramIds([]); setProgramSchedule({}); setSaleValue(''); setFinancialObservations(''); setNoteObservations(''); setTitle(''); setQuestions(['', '', '', '', '']); setTopicsToAvoid(['']); setPrimaryGrafs(['']); setSecondaryGrafs(['']); setLocation(undefined); setIntervieweeName(''); setIntervieweeRole(''); setIntervieweeBio(''); setInstagramHandle(''); setWebsite(''); setWhatsapp(''); setCommercialPhone(''); setCommercialAddresses(['']); setMobileAddress(''); setCollaboration(false); setCollaborationHandle(''); setCtaText(''); setCtaDestination('');
+            // Reset
+            setSelectedProgramIds([]); setProgramSchedule({}); setSaleValue(''); setFinancialObservations(''); setNoteObservations(''); setTitle(''); setQuestions(['', '', '', '', '']); setTopicsToAvoid(['']); 
+            setPrimaryGrafs(['']); setSecondaryGrafs(['']); 
+            setLocation(undefined); setIntervieweeName(''); setIntervieweeRole(''); setIntervieweeBio(''); setInstagramHandle(''); setWebsite(''); setWhatsapp(''); setCommercialPhone(''); setCommercialAddresses(['']); setMobileAddress(''); setCollaboration(false); setCollaborationHandle(''); setCtaText(''); setCtaDestination('');
 
         } catch (error) {
             console.error(error);
@@ -383,13 +379,13 @@ export default function NotaComercialPage() {
         } finally {
             setSaving(false);
         }
-    };
+    }; 
 
     if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
-             <Header title="Nueva Nota Comercial">
+            <Header title="Nueva Nota Comercial">
                 <div className="flex items-center gap-4">
                     <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title || hasGrafErrors}>
                         <ExternalLink className="mr-2 h-4 w-4" /> Exportar PDF
@@ -402,9 +398,9 @@ export default function NotaComercialPage() {
                         {saving ? <Spinner size="small" /> : <Save className="mr-2 h-4 w-4" />} Guardar
                     </Button>
                 </div>
-             </Header>
-             
-             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
+            </Header>
+            <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
+                {/* 1. Cliente */}
                 <Card>
                     <CardHeader><CardTitle>Datos de Cliente</CardTitle></CardHeader>
                     <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -421,6 +417,7 @@ export default function NotaComercialPage() {
                     </CardContent>
                 </Card>
 
+                {/* 2. Comercial */}
                 <Card>
                     <CardHeader><CardTitle>Comercial</CardTitle></CardHeader>
                     <CardContent className="grid gap-6 md:grid-cols-2">
@@ -429,17 +426,18 @@ export default function NotaComercialPage() {
                                 <div className="space-y-2"><Label>Valor Total</Label><Input value={`$ ${totalValue.toLocaleString()}`} disabled className="bg-muted" /></div>
                                 <div className="space-y-2"><Label>Valor Venta</Label><Input type="number" value={saleValue} onChange={e => setSaleValue(e.target.value)} /></div>
                             </div>
-                            {mismatch !== 0 && <div className="p-3 bg-yellow-50 text-sm">Desajuste: ${mismatch.toLocaleString()}</div>}
+                            {mismatch !== 0 && <div className="p-3 bg-yellow-50 text-sm border-yellow-200">Desajuste: ${mismatch.toLocaleString()}</div>}
                         </div>
-                        <div className="space-y-2"><Label>Obs. Comerciales</Label><Textarea value={financialObservations} onChange={e => setFinancialObservations(e.target.value)} /></div>
+                        <div className="space-y-2"><Label>Obs. Comerciales</Label><Textarea value={financialObservations} onChange={e => setFinancialObservations(e.target.value)} className="min-h-[100px]"/></div>
                     </CardContent>
                 </Card>
 
+                {/* 3. Producción */}
                 <Card>
                     <CardHeader><CardTitle>Producción / Pautado</CardTitle></CardHeader>
                     <CardContent className="space-y-6">
                         <div className="space-y-4 border p-4 rounded-md">
-                            <Label className="font-semibold">Programación</Label>
+                            <Label>Programación</Label>
                             <div className="flex flex-wrap gap-2">
                                 {programs.map(p => (
                                     <div key={p.id} className="flex items-center space-x-2 border p-2 rounded-md hover:bg-muted/50 cursor-pointer" onClick={() => toggleProgram(p.id)}>
@@ -454,23 +452,8 @@ export default function NotaComercialPage() {
                                         const items = programSchedule[pid] || [];
                                         return (
                                             <div key={pid} className="border p-3 rounded-md space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="font-medium">{prog?.name}</span>
-                                                    <Popover>
-                                                        <PopoverTrigger asChild><Button variant={"outline"} size="sm"><CalendarIcon className="mr-2 h-4 w-4" />Elegir Fechas</Button></PopoverTrigger>
-                                                        <PopoverContent className="w-auto p-0" align="start"><Calendar mode="multiple" selected={items.map(i => new Date(i.date))} onSelect={(dates) => handleDateSelect(pid, dates)} initialFocus locale={es} /></PopoverContent>
-                                                    </Popover>
-                                                </div>
-                                                {items.length > 0 && (
-                                                    <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-                                                        {items.map((item, idx) => (
-                                                            <div key={item.date} className="flex items-center gap-2 text-sm">
-                                                                <span className="w-24 text-muted-foreground">{format(new Date(item.date), 'dd/MM/yyyy')}</span>
-                                                                <Input type="time" className="h-8" value={item.time || ''} onChange={(e) => handleTimeChange(pid, idx, e.target.value)} />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
+                                                <div className="flex justify-between items-center"><span className="font-medium">{prog?.name}</span><Popover><PopoverTrigger asChild><Button variant="outline" size="sm"><CalendarIcon className="mr-2 h-4 w-4"/>Fechas</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="multiple" selected={items.map(i => new Date(i.date))} onSelect={(d) => handleDateSelect(pid, d)} initialFocus locale={es}/></PopoverContent></Popover></div>
+                                                {items.length > 0 && <div className="max-h-40 overflow-y-auto space-y-2">{items.map((it, idx) => (<div key={it.date} className="flex gap-2 text-sm"><span className="w-24 text-muted">{format(new Date(it.date), 'dd/MM/yyyy')}</span><Input type="time" className="h-8" value={it.time||''} onChange={(e) => handleTimeChange(pid, idx, e.target.value)} /></div>))}</div>}
                                             </div>
                                         );
                                     })}
@@ -489,46 +472,30 @@ export default function NotaComercialPage() {
                                     {replicateSocials.length > 0 && (
                                         <div className="mt-4 pt-4 border-t space-y-3">
                                             <div className="flex items-center space-x-2"><Checkbox checked={collaboration} onCheckedChange={(c) => setCollaboration(!!c)} /><Label>¿Colaboración?</Label></div>
-                                            {collaboration && 
-                                            (<div className="grid grid-cols-2 gap-2">
-                                                <Input placeholder="@usuario" value={collaborationHandle} onChange={e => setCollaborationHandle(e.target.value)} />
-                                                <div><Label className="text-xs">Texto CTA</Label><Input placeholder="Link en Bio" value={ctaText} onChange={e => setCtaText(e.target.value)} /></div>
-                                                <div><Label className="text-xs">Destino CTA</Label><Input placeholder="Web/WhatsApp" value={ctaDestination} onChange={e => setCtaDestination(e.target.value)} /></div>
-                                            </div>)}
+                                            {collaboration && <Input placeholder="@usuario" value={collaborationHandle} onChange={e => setCollaborationHandle(e.target.value)} />}
+                                            <div className="grid grid-cols-2 gap-2"><div><Label className="text-xs">Texto CTA</Label><Input value={ctaText} onChange={e => setCtaText(e.target.value)} /></div><div><Label className="text-xs">Destino CTA</Label><Input value={ctaDestination} onChange={e => setCtaDestination(e.target.value)} /></div></div>
                                         </div>
                                     )}
                                 </div>
                             </div>
-                            <div className="space-y-4">
-                                <div className="space-y-2"><Label>Tel. Coordinar</Label><Input value={contactPhone} onChange={e => setContactPhone(e.target.value)} /></div>
-                                <div className="space-y-2"><Label>Resp. Coordinación</Label><Input value={contactName} onChange={e => setContactName(e.target.value)} /></div>
-                            </div>
+                            <div className="space-y-4"><div className="space-y-2"><Label>Tel. Coordinar</Label><Input value={contactPhone} onChange={e => setContactPhone(e.target.value)} /></div><div className="space-y-2"><Label>Resp. Coordinación</Label><Input value={contactName} onChange={e => setContactName(e.target.value)} /></div></div>
                         </div>
                     </CardContent>
                 </Card>
 
+                {/* 4. Nota */}
                 <Card>
                     <CardHeader><CardTitle>Nota</CardTitle></CardHeader>
                     <CardContent className="space-y-6">
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2"><Label>Título</Label><Input value={title} onChange={e => setTitle(e.target.value)} /></div>
-                            <div className="space-y-3">
-                                <Label>Ubicación</Label>
-                                <RadioGroup value={location} onValueChange={(v: any) => setLocation(v)} className="flex flex-wrap gap-4">
-                                    <div className="flex items-center space-x-2"><RadioGroupItem value="Estudio" id="re" /><Label htmlFor="re">Estudio</Label></div>
-                                    <div className="flex items-center space-x-2"><RadioGroupItem value="Móvil" id="rm" /><Label htmlFor="rm">Móvil</Label></div>
-                                    <div className="flex items-center space-x-2"><RadioGroupItem value="Meet" id="rmt" /><Label htmlFor="rmt">Meet</Label></div>
-                                    <div className="flex items-center space-x-2"><RadioGroupItem value="Llamada" id="rl" /><Label htmlFor="rl">Llamada</Label></div>
-                                </RadioGroup>
-                                {location === 'Llamada' && <Input className="mt-2" value={callPhone} onChange={e => setCallPhone(e.target.value)} placeholder="Teléfono..." />}
-                                {location === 'Móvil' && <Input className="mt-2" value={mobileAddress} onChange={e => setMobileAddress(e.target.value)} placeholder="Dirección del móvil..." />}
-                            </div>
+                            <div className="space-y-3"><Label>Ubicación</Label><RadioGroup value={location} onValueChange={(v:any) => setLocation(v)} className="flex flex-wrap gap-4"><div className="flex items-center space-x-2"><RadioGroupItem value="Estudio" id="re" /><Label htmlFor="re">Estudio</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Móvil" id="rm" /><Label htmlFor="rm">Móvil</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Meet" id="mt" /><Label htmlFor="mt">Meet</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Llamada" id="rl" /><Label htmlFor="rl">Llamada</Label></div></RadioGroup>{location === 'Llamada' && <Input className="mt-2" value={callPhone} onChange={e => setCallPhone(e.target.value)} placeholder="Teléfono..." />}{location === 'Móvil' && <Input className="mt-2" value={mobileAddress} onChange={e => setMobileAddress(e.target.value)} placeholder="Dirección del móvil..." />}</div>
                         </div>
 
-                       <div className="grid gap-4 md:grid-cols-2">
+                        <div className="grid gap-4 md:grid-cols-2">
                             {/* Primary Grafs Multiples */}
                             <div className="space-y-2 border p-3 rounded-md">
-                                <div className="flex justify-between mb-2"><Label>TITULAR.Text (Max 84)</Label><Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
+                                <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84)</Label><Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
                                 {primaryGrafs.map((g, idx) => (
                                     <div key={idx} className="space-y-1 mb-2">
                                         <div className="flex gap-2">
@@ -542,7 +509,7 @@ export default function NotaComercialPage() {
                             
                             {/* Secondary Grafs Multiples */}
                             <div className="space-y-2 border p-3 rounded-md">
-                                <div className="flex justify-between mb-2"><Label>NOMBRE/FUNCION.Text (Max 55)</Label><Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddSecondary}><Plus className="h-4 w-4"/></Button></div>
+                                <div className="flex justify-between mb-2"><Label className={secondaryGrafError ? "text-destructive" : ""}>NOMBRE/FUNCION.Text (Max 55)</Label><Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddSecondary}><Plus className="h-4 w-4"/></Button></div>
                                 {secondaryGrafs.map((g, idx) => (
                                     <div key={idx} className="space-y-1 mb-2">
                                         <div className="flex gap-2">
@@ -556,18 +523,8 @@ export default function NotaComercialPage() {
                         </div>
 
                         <div className="grid md:grid-cols-2 gap-6">
-                            <div className="space-y-3 border p-4 rounded-md">
-                                <div className="flex justify-between"><Label>Preguntas (min 5)</Label><Button variant="ghost" size="sm" onClick={handleAddQuestion}><Plus className="h-4 w-4" /></Button></div>
-                                {questions.map((q, idx) => (
-                                    <div key={idx} className="flex gap-2"><Input value={q} onChange={e => handleQuestionChange(idx, e.target.value)} placeholder={`P ${idx+1}`} />{questions.length>5 && <Button size="icon" variant="ghost" onClick={() => handleRemoveQuestion(idx)}><Trash2 className="h-4 w-4" /></Button>}</div>
-                                ))}
-                            </div>
-                            <div className="space-y-3 border p-4 rounded-md bg-red-50/50">
-                                <div className="flex justify-between"><Label>Temas a EVITAR</Label><Button variant="ghost" size="sm" onClick={handleAddTopic}><Plus className="h-4 w-4" /></Button></div>
-                                {topicsToAvoid.map((t, idx) => (
-                                    <div key={idx} className="flex gap-2"><Input value={t} onChange={e => handleTopicChange(idx, e.target.value)} placeholder={`Tema ${idx+1}`} />{topicsToAvoid.length>1 && <Button size="icon" variant="ghost" onClick={() => handleRemoveTopic(idx)}><Trash2 className="h-4 w-4" /></Button>}</div>
-                                ))}
-                            </div>
+                            <div className="space-y-3 border p-4 rounded-md"><div className="flex justify-between"><Label>Preguntas (min 5)</Label><Button variant="ghost" size="sm" onClick={handleAddQuestion}><Plus className="h-4 w-4"/></Button></div>{questions.map((q, idx) => (<div key={idx} className="flex gap-2"><Input value={q} onChange={e => handleQuestionChange(idx, e.target.value)} placeholder={`P ${idx+1}`} />{questions.length > 5 && <Button size="icon" variant="ghost" onClick={() => handleRemoveQuestion(idx)}><Trash2 className="h-4 w-4"/></Button>}</div>))}</div>
+                            <div className="space-y-3 border p-4 rounded-md bg-red-50/50"><div className="flex justify-between"><Label>Temas a EVITAR</Label><Button variant="ghost" size="sm" onClick={handleAddTopic}><Plus className="h-4 w-4"/></Button></div>{topicsToAvoid.map((t, idx) => (<div key={idx} className="flex gap-2"><Input value={t} onChange={e => handleTopicChange(idx, e.target.value)} placeholder={`Tema ${idx+1}`} />{topicsToAvoid.length > 1 && <Button size="icon" variant="ghost" onClick={() => handleRemoveTopic(idx)}><Trash2 className="h-4 w-4"/></Button>}</div>))}</div>
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">
@@ -577,42 +534,25 @@ export default function NotaComercialPage() {
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <div className="flex justify-between"><Label className={noInstagram ? "text-muted-foreground" : ""}>Instagram</Label><div className="flex items-center space-x-2"><Checkbox checked={noInstagram} onCheckedChange={(c) => setNoInstagram(!!c)} /><Label className="text-xs">No informar</Label></div></div>
-                                <div className="flex gap-2"><Input value={instagramHandle} onChange={e => setInstagramHandle(e.target.value)} disabled={noInstagram} /> {instagramHandle && (
-                                        <Button size="icon" variant="ghost" onClick={() => window.open(`https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}`, '_blank')}>
-                                            <ExternalLink className="h-4 w-4" />
-                                        </Button>)}
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <div className="flex justify-between"><Label className={noWeb ? "text-muted-foreground" : ""}>Web</Label><div className="flex items-center space-x-2"><Checkbox checked={noWeb} onCheckedChange={(c) => setNoWeb(!!c)} /><Label className="text-xs">No informar</Label></div></div>
-                                <div className="flex gap-2"><Input value={website} onChange={e => setWebsite(e.target.value)} disabled={noWeb} />{website && !noWeb && <Button size="icon" variant="ghost" onClick={() => window.open(website.startsWith('http') ? website : `https://${website}`, '_blank')}><ExternalLink className="h-4 w-4" /></Button>}</div>
-                            </div>
-                            <div className="space-y-2">
-                                <div className="flex justify-between"><Label className={noWhatsapp ? "text-muted-foreground" : ""}>Whatsapp</Label><div className="flex items-center space-x-2"><Checkbox checked={noWhatsapp} onCheckedChange={(c) => setNoWhatsapp(!!c)} /><Label className="text-xs">No informar</Label></div></div>
-                                <div className="flex gap-2"><Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} disabled={noWhatsapp} /></div>
-                            </div>
-                            <div className="space-y-2">
-                                <div className="flex justify-between"><Label className={noCommercialPhone ? "text-muted-foreground" : ""}>Teléfono Comercial</Label><div className="flex items-center space-x-2"><Checkbox checked={noCommercialPhone} onCheckedChange={(c) => setNoCommercialPhone(!!c)} /><Label className="text-xs">No informar</Label></div></div>
-                                <div className="flex gap-2"><Input value={commercialPhone} onChange={e => setCommercialPhone(e.target.value)} disabled={noWhatsapp} /></div>
-                            </div>
-                            <div className="space-y-2 md:col-span-2 border-t pt-4">
-                                <div className="flex justify-between mb-2"><Label className={noCommercialAddress ? "text-muted-foreground" : ""}>Domicilio Comercial</Label><div className="flex items-center space-x-2"><Checkbox checked={noCommercialAddress} onCheckedChange={(c) => setNoCommercialAddress(!!c)} /><Label className="text-xs">No informar</Label></div></div>
-                                {!noCommercialAddress && commercialAddresses.map((addr, idx) => (
-                                    <div key={idx} className="flex gap-2 mb-2"><Input value={addr} onChange={e => handleAddressChange(idx, e.target.value)} placeholder="Dirección..." /><div className="flex">{commercialAddresses.length > 1 && <Button size="icon" variant="ghost" onClick={() => handleRemoveAddress(idx)}><Minus className="h-4 w-4" /></Button>}{idx === commercialAddresses.length - 1 && <Button size="icon" variant="outline" onClick={handleAddAddress}><Plus className="h-4 w-4" /></Button>}</div></div>
+                             <div className="space-y-2"><Label>Instagram</Label><Input value={instagramHandle} onChange={e => setInstagramHandle(e.target.value)} /></div>
+                             <div className="space-y-2"><div className="flex justify-between"><Label className={noWeb?"text-muted-foreground":""}>Web</Label><div className="flex items-center space-x-2"><Checkbox checked={noWeb} onCheckedChange={(c)=>setNoWeb(!!c)} /><Label className="text-xs">No informar</Label></div></div><div className="flex gap-2"><Input value={website} onChange={e=>setWebsite(e.target.value)} disabled={noWeb} />{website && !noWeb && <Button size="icon" variant="ghost" onClick={()=>window.open(website.startsWith('http')?website:`https://${website}`,'_blank')}><ExternalLink className="h-4 w-4"/></Button>}</div></div>
+                             
+                             <div className="space-y-2 md:col-span-2 border-t pt-4">
+                                <div className="flex justify-between mb-2"><Label className={noCommercialAddress?"text-muted-foreground":""}>Domicilio Comercial</Label><div className="flex items-center space-x-2"><Checkbox checked={noCommercialAddress} onCheckedChange={(c)=>setNoCommercialAddress(!!c)} /><Label className="text-xs">No informar</Label></div></div>
+                                {!noCommercialAddress && commercialAddresses.map((a, i) => (
+                                    <div key={i} className="flex gap-2 mb-2"><Input value={a} onChange={e => handleAddressChange(i, e.target.value)} /><div className="flex">{commercialAddresses.length>1 && <Button size="icon" variant="ghost" onClick={()=>handleRemoveAddress(i)}><Minus className="h-4 w-4"/></Button>}{i===commercialAddresses.length-1 && <Button size="icon" variant="outline" onClick={handleAddAddress}><Plus className="h-4 w-4"/></Button>}</div></div>
                                 ))}
-                            </div>
+                             </div>
                         </div>
 
                         <div className="space-y-4 border-t pt-4">
-                            <div className="flex items-center space-x-2"><Switch checked={graphicSupport} onCheckedChange={setGraphicSupport} /><Label>Agrega Soporte Gráfico</Label></div>
-                            {graphicSupport && <Input value={graphicLink} onChange={e => setGraphicLink(e.target.value)} placeholder="Link Drive..." />}
-                            <div className="space-y-2"><Label>Observaciones Generales</Label><Textarea value={noteObservations} onChange={e => setNoteObservations(e.target.value)} /></div>
+                             <div className="flex items-center space-x-2"><Switch checked={graphicSupport} onCheckedChange={setGraphicSupport} /><Label>Agrega Soporte Gráfico</Label></div>
+                             {graphicSupport && <Input value={graphicLink} onChange={e => setGraphicLink(e.target.value)} placeholder="Link Drive..." />}
+                             <div className="space-y-2"><Label>Observaciones Generales</Label><Textarea value={noteObservations} onChange={e => setNoteObservations(e.target.value)} /></div>
                         </div>
                     </CardContent>
                 </Card>
-             </main>
+            </main>
 
             {/* Hidden PDF Component */}
             <div style={{ position: 'absolute', top: -9999, left: -9999 }}>
@@ -621,40 +561,12 @@ export default function NotaComercialPage() {
                     programs={programs}
                     note={{
                         clientName: clients.find(c => c.id === selectedClientId)?.denominacion,
-                        cuit,
-                        advisorName: userInfo?.name,
-                        razonSocial,
-                        rubro,
-                        replicateWeb,
-                        replicateSocials,
-                        collaboration,
-                        collaborationHandle,
-                        ctaText,
-                        ctaDestination,
-                        schedule: programSchedule,
-                        contactPhone,
-                        contactName,
-                        title,
-                        location,
-                        callPhone: location === 'Llamada' ? callPhone : undefined,
-                        mobileAddress: location === 'Móvil' ? mobileAddress : undefined,
+                        cuit, advisorName: userInfo?.name, razonSocial, rubro, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, schedule: programSchedule, contactPhone, contactName, title, location, callPhone: location === 'Llamada' ? callPhone : undefined, mobileAddress: location === 'Móvil' ? mobileAddress : undefined,
                         primaryGrafs: primaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
                         secondaryGrafs: secondaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
-                        questions: questions.filter(q => q.trim() !== ''),
-                        topicsToAvoid: topicsToAvoid.filter(t => t.trim() !== ''),
-                        intervieweeName,
-                        intervieweeRole,
-                        intervieweeBio,
-                        instagram: instagramHandle,
-                        website,
-                        whatsapp,
-                        phone: commercialPhone,
-                        noWeb, noWhatsapp, noCommercialPhone,
-                        commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim() !== ''),
-                        noCommercialAddress,
-                        graphicSupport,
-                        graphicSupportLink: graphicSupport ? graphicLink : undefined,
-                        noteObservations
+                        primaryGraf: primaryGrafs[0]?.toUpperCase() || '', 
+                        secondaryGraf: secondaryGrafs[0]?.toUpperCase() || '',
+                        questions: questions.filter(q => q.trim()), topicsToAvoid: topicsToAvoid.filter(t => t.trim()), intervieweeName, intervieweeRole, intervieweeBio, instagram: instagramHandle, website, whatsapp, phone: commercialPhone, noWeb, noWhatsapp, noCommercialPhone, commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim()), noCommercialAddress, graphicSupport, graphicSupportLink: graphicSupport ? graphicLink : undefined, noteObservations
                     }}
                 />
             </div>
