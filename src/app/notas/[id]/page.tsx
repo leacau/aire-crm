@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { getCommercialNote, getPrograms } from '@/lib/firebase-service';
 import type { CommercialNote, Program } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
@@ -24,6 +24,8 @@ export default function NoteDetailPage() {
     const [note, setNote] = useState<CommercialNote | null>(null);
     const [programs, setPrograms] = useState<Program[]>([]);
     const [loading, setLoading] = useState(true);
+    const router = useRouter();
+
     
     // Ref para el componente PDF oculto
     const pdfRef = useRef<HTMLDivElement>(null);
@@ -96,6 +98,9 @@ export default function NoteDetailPage() {
     return (
         <div className="flex flex-col h-full overflow-hidden bg-gray-50/50">
             <Header title={`Detalle de Nota: ${note.title}`}>
+                <Button variant="ghost" onClick={() => router.back()}>
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Volver
+                    </Button>
                 <Button variant="outline" onClick={handleDownloadPdf}>
                     <FileDown className="mr-2 h-4 w-4" />
                     Exportar PDF
