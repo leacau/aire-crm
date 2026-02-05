@@ -82,14 +82,14 @@ export default function NewCommercialNotePage() {
     const [intervieweeRole, setIntervieweeRole] = useState('');
     const [intervieweeBio, setIntervieweeBio] = useState('');
 
-    const [instagramHandle, setInstagramHandle] = useState('');
+     const [instagramHandle, setInstagramHandle] = useState('');
+    const [noInstagram, setNoInstagram] = useState(false);
     const [website, setWebsite] = useState('');
     const [noWeb, setNoWeb] = useState(false);
     const [whatsapp, setWhatsapp] = useState('');
     const [noWhatsapp, setNoWhatsapp] = useState(false);
     const [commercialPhone, setCommercialPhone] = useState('');
     const [noCommercialPhone, setNoCommercialPhone] = useState(false);
-    
     const [commercialAddresses, setCommercialAddresses] = useState<string[]>(['']);
     const [noCommercialAddress, setNoCommercialAddress] = useState(false);
 
