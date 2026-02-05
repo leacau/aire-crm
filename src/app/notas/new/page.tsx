@@ -16,7 +16,7 @@ import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote }
 import type { Client, Program, CommercialNote, ScheduleItem } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Save, Plus, ExternalLink, Trash2, MapPin, Minus } from 'lucide-react';
+import { CalendarIcon, Save, Plus, ExternalLink, Trash2, MapPin, Minus, ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -27,10 +27,13 @@ import jsPDF from 'jspdf';
 import { NotePdf } from '@/components/notas/note-pdf';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
-export default function NotaComercialPage() {
+export default function NewCommercialNotePage() {
     const { userInfo, getGoogleAccessToken } = useAuth();
     const { toast } = useToast();
+    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const pdfRef = useRef<HTMLDivElement>(null);
@@ -54,32 +57,31 @@ export default function NotaComercialPage() {
     const [programSchedule, setProgramSchedule] = useState<Record<string, ScheduleItem[]>>({});
     const [replicateWeb, setReplicateWeb] = useState(false);
     const [replicateSocials, setReplicateSocials] = useState<string[]>([]);
-    const [contactPhone, setContactPhone] = useState('');
-    const [contactName, setContactName] = useState('');
+    
     const [collaboration, setCollaboration] = useState(false);
     const [collaborationHandle, setCollaborationHandle] = useState('');
     const [ctaText, setCtaText] = useState('');
     const [ctaDestination, setCtaDestination] = useState('');
-    
+
+    const [contactPhone, setContactPhone] = useState('');
+    const [contactName, setContactName] = useState('');
+
     // --- SECCIÓN 4: NOTA ---
     const [title, setTitle] = useState('');
     const [location, setLocation] = useState<'Estudio' | 'Móvil' | 'Meet' | 'Llamada' | undefined>(undefined);
     const [callPhone, setCallPhone] = useState('');
-    const [mobileAddress, setMobileAddress] = useState('');
+    const [mobileAddress, setMobileAddress] = useState(''); 
     
-    // Grafs Multiples (Variables de estado corregidas)
     const [primaryGrafs, setPrimaryGrafs] = useState<string[]>(['']);
     const [secondaryGrafs, setSecondaryGrafs] = useState<string[]>(['']);
     
     const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']);
     const [topicsToAvoid, setTopicsToAvoid] = useState<string[]>(['']);
-    
-    // Entrevistado
+
     const [intervieweeName, setIntervieweeName] = useState('');
     const [intervieweeRole, setIntervieweeRole] = useState('');
     const [intervieweeBio, setIntervieweeBio] = useState('');
-    
-    // Canales de Contacto
+
     const [instagramHandle, setInstagramHandle] = useState('');
     const [website, setWebsite] = useState('');
     const [noWeb, setNoWeb] = useState(false);
@@ -87,16 +89,16 @@ export default function NotaComercialPage() {
     const [noWhatsapp, setNoWhatsapp] = useState(false);
     const [commercialPhone, setCommercialPhone] = useState('');
     const [noCommercialPhone, setNoCommercialPhone] = useState(false);
+    
     const [commercialAddresses, setCommercialAddresses] = useState<string[]>(['']);
     const [noCommercialAddress, setNoCommercialAddress] = useState(false);
-    
-    // Otros Nota
+
     const [graphicSupport, setGraphicSupport] = useState(false);
     const [graphicLink, setGraphicLink] = useState('');
     const [noteObservations, setNoteObservations] = useState('');
+
     const [notifyOnSave, setNotifyOnSave] = useState(true);
 
-    // Validaciones visuales
     const primaryGrafError = primaryGrafs.some(g => g.length > 84);
     const secondaryGrafError = secondaryGrafs.some(g => g.length > 55);
     const hasGrafErrors = primaryGrafError || secondaryGrafError;
@@ -207,7 +209,6 @@ export default function NotaComercialPage() {
     const handleAddressChange = (index: number, value: string) => { const newAddr = [...commercialAddresses]; newAddr[index] = value; setCommercialAddresses(newAddr); };
     const handleRemoveAddress = (index: number) => { const newAddr = commercialAddresses.filter((_, i) => i !== index); setCommercialAddresses(newAddr.length ? newAddr : ['']); };
 
-    // Helpers Grafs (Arrays)
     const handleAddPrimary = () => setPrimaryGrafs([...primaryGrafs, '']);
     const handlePrimaryChange = (index: number, value: string) => { const n = [...primaryGrafs]; n[index] = value; setPrimaryGrafs(n); };
     const handleRemovePrimary = (index: number) => { const n = primaryGrafs.filter((_, i) => i !== index); setPrimaryGrafs(n.length ? n : ['']); };
@@ -215,7 +216,6 @@ export default function NotaComercialPage() {
     const handleAddSecondary = () => setSecondaryGrafs([...secondaryGrafs, '']);
     const handleSecondaryChange = (index: number, value: string) => { const n = [...secondaryGrafs]; n[index] = value; setSecondaryGrafs(n); };
     const handleRemoveSecondary = (index: number) => { const n = secondaryGrafs.filter((_, i) => i !== index); setSecondaryGrafs(n.length ? n : ['']); };
-
 
     const totalValue = selectedProgramIds.reduce((acc, pid) => {
         const prog = programs.find(p => p.id === pid);
@@ -226,13 +226,13 @@ export default function NotaComercialPage() {
     const saleValueNum = parseFloat(saleValue) || 0;
     const mismatch = saleValueNum > 0 ? (totalValue - saleValueNum) : 0;
 
+
     const handleSave = async () => {
         if (!selectedClientId || !userInfo) { toast({ title: 'Datos incompletos', description: 'Seleccione un cliente.', variant: 'destructive' }); return; }
         if (!title.trim()) { toast({ title: 'Falta título', variant: 'destructive' }); return; }
         if (!location) { toast({ title: 'Seleccione ubicación', variant: 'destructive' }); return; }
         if (location === 'Móvil' && !mobileAddress.trim()) { toast({ title: 'Falta dirección del móvil', variant: 'destructive' }); return; }
         
-        // Validation Grafs Multiples (Checking Arrays)
         if (primaryGrafs.filter(g => g.trim() !== '').length === 0) { toast({ title: 'Falta TITULAR.Text', variant: 'destructive' }); return; }
         if (secondaryGrafs.filter(g => g.trim() !== '').length === 0) { toast({ title: 'Falta NOMBRE/FUNCION.Text', variant: 'destructive' }); return; }
         if (hasGrafErrors) { toast({ title: 'Error en Grafs', description: 'El texto excede el límite permitido.', variant: 'destructive' }); return; }
@@ -240,25 +240,22 @@ export default function NotaComercialPage() {
         setSaving(true);
         try {
             const client = clients.find(c => c.id === selectedClientId);
-
-            // 1. Update Client info
             const updates: any = {};
             if (client) {
                 if (client.cuit !== cuit) updates.cuit = cuit;
                 if (client.rubro !== rubro) updates.rubro = rubro;
                 if (client.razonSocial !== razonSocial) updates.razonSocial = razonSocial;
                 if (Object.keys(updates).length > 0) {
-                    await updateClientTangoMapping(client.id, updates, userInfo.id, userInfo.name);
+                    await updateClientTangoMapping(client.id, updates, userInfo!.id, userInfo!.name);
                 }
             }
 
-            // 2. Prepare Data (Uppercasing grafs)
-            const noteDataRaw: any = {
+             const noteDataRaw: any = {
                 clientId: selectedClientId,
                 clientName: client?.denominacion || 'Unknown',
                 cuit,
-                advisorId: userInfo.id,
-                advisorName: userInfo.name,
+                advisorId: userInfo!.id,
+                advisorName: userInfo!.name,
                 razonSocial,
                 rubro,
                 replicateWeb,
@@ -276,20 +273,18 @@ export default function NotaComercialPage() {
                 callPhone: location === 'Llamada' ? callPhone : undefined,
                 mobileAddress: location === 'Móvil' ? mobileAddress : undefined,
                 
-                // GUARDAR EN MAYÚSCULAS
                 primaryGrafs: primaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
                 secondaryGrafs: secondaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
                 
-                // CORRECCIÓN FINAL: Proporcionar valores por defecto para legacy fields (si fuera necesario) usando el primer elemento del array
-                primaryGraf: primaryGrafs.length > 0 ? primaryGrafs[0].toUpperCase() : '',
-                secondaryGraf: secondaryGrafs.length > 0 ? secondaryGrafs[0].toUpperCase() : '',
+                primaryGraf: primaryGrafs[0]?.toUpperCase() || '', 
+                secondaryGraf: secondaryGrafs[0]?.toUpperCase() || '',
 
                 questions: questions.filter(q => q.trim() !== ''),
                 topicsToAvoid: topicsToAvoid.filter(t => t.trim() !== ''),
                 intervieweeName,
                 intervieweeRole,
                 intervieweeBio: intervieweeBio || undefined,
-                instagram: instagramHandle ? `https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}` : undefined,
+                instagram: instagramHandle ? instagramHandle : undefined,
                 website: noWeb ? undefined : website,
                 noWeb,
                 whatsapp: noWhatsapp ? undefined : whatsapp,
@@ -313,7 +308,7 @@ export default function NotaComercialPage() {
                 return acc;
             }, {} as Omit<CommercialNote, 'id' | 'createdAt'>);
 
-            const newNoteId = await saveCommercialNote(noteData, userInfo.id, userInfo.name);
+            const newNoteId = await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
 
             if (notifyOnSave && pdfRef.current) {
                 const accessToken = await getGoogleAccessToken();
@@ -335,7 +330,7 @@ export default function NotaComercialPage() {
                         const emailBody = `
                             <div style="font-family: Arial, sans-serif; color: #333;">
                                 <h2 style="color: #cc0000;">Nueva Nota Comercial Registrada</h2>
-                                <p>El asesor <strong>${userInfo.name}</strong> ha cargado una nueva nota.</p>
+                                <p>El asesor <strong>${userInfo!.name}</strong> ha cargado una nueva nota.</p>
                                 <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #cc0000; margin: 20px 0;">
                                     <p><strong>Cliente:</strong> ${client?.denominacion || 'Desconocido'}</p>
                                     <p><strong>Título:</strong> ${title}</p>
@@ -367,11 +362,9 @@ export default function NotaComercialPage() {
             } else {
                 toast({ title: 'Nota guardada correctamente.' });
             }
-
-            // Reset
-            setSelectedProgramIds([]); setProgramSchedule({}); setSaleValue(''); setFinancialObservations(''); setNoteObservations(''); setTitle(''); setQuestions(['', '', '', '', '']); setTopicsToAvoid(['']); 
-            setPrimaryGrafs(['']); setSecondaryGrafs(['']); 
-            setLocation(undefined); setIntervieweeName(''); setIntervieweeRole(''); setIntervieweeBio(''); setInstagramHandle(''); setWebsite(''); setWhatsapp(''); setCommercialPhone(''); setCommercialAddresses(['']); setMobileAddress(''); setCollaboration(false); setCollaborationHandle(''); setCtaText(''); setCtaDestination('');
+            
+            // Redirección después de guardar
+            router.push('/notas');
 
         } catch (error) {
             console.error(error);
@@ -387,6 +380,9 @@ export default function NotaComercialPage() {
         <div className="flex flex-col h-full overflow-hidden">
             <Header title="Nueva Nota Comercial">
                 <div className="flex items-center gap-4">
+                     <Button variant="ghost" onClick={() => router.back()}>
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Volver
+                    </Button>
                     <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title || hasGrafErrors}>
                         <ExternalLink className="mr-2 h-4 w-4" /> Exportar PDF
                     </Button>
@@ -400,7 +396,6 @@ export default function NotaComercialPage() {
                 </div>
             </Header>
             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
-                {/* 1. Cliente */}
                 <Card>
                     <CardHeader><CardTitle>Datos de Cliente</CardTitle></CardHeader>
                     <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -417,7 +412,6 @@ export default function NotaComercialPage() {
                     </CardContent>
                 </Card>
 
-                {/* 2. Comercial */}
                 <Card>
                     <CardHeader><CardTitle>Comercial</CardTitle></CardHeader>
                     <CardContent className="grid gap-6 md:grid-cols-2">
@@ -432,7 +426,6 @@ export default function NotaComercialPage() {
                     </CardContent>
                 </Card>
 
-                {/* 3. Producción */}
                 <Card>
                     <CardHeader><CardTitle>Producción / Pautado</CardTitle></CardHeader>
                     <CardContent className="space-y-6">
@@ -453,22 +446,19 @@ export default function NotaComercialPage() {
                                         return (
                                             <div key={pid} className="border p-3 rounded-md space-y-3">
                                                 <div className="flex justify-between items-center"><span className="font-medium">{prog?.name}</span><Popover><PopoverTrigger asChild><Button variant="outline" size="sm"><CalendarIcon className="mr-2 h-4 w-4"/>Fechas</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="multiple" selected={items.map(i => new Date(i.date))} onSelect={(d) => handleDateSelect(pid, d)} initialFocus locale={es}/></PopoverContent></Popover></div>
-                                                {items.length > 0 && <div className="max-h-40 overflow-y-auto space-y-2">{items.map((it, idx) => (<div key={it.date} className="flex gap-2 text-sm"><span className="w-24">{format(new Date(it.date), 'dd/MM/yyyy')}</span><Input type="time" className="h-8" value={it.time||''} onChange={(e) => handleTimeChange(pid, idx, e.target.value)} /></div>))}</div>}
+                                                {items.length > 0 && <div className="max-h-40 overflow-y-auto space-y-2">{items.map((it, idx) => (<div key={it.date} className="flex gap-2 text-sm"><span className="w-24 text-muted">{format(new Date(it.date), 'dd/MM/yyyy')}</span><Input type="time" className="h-8" value={it.time||''} onChange={(e) => handleTimeChange(pid, idx, e.target.value)} /></div>))}</div>}
                                             </div>
                                         );
                                     })}
                                 </div>
                             )}
                         </div>
-
                         <div className="grid gap-6 md:grid-cols-2">
                             <div className="space-y-4">
                                 <div className="flex items-center space-x-2"><Switch checked={replicateWeb} onCheckedChange={setReplicateWeb} /><Label>Replica Nota Web</Label></div>
                                 <div className="space-y-2 border p-3 rounded-md">
                                     <Label>Redes Sociales</Label>
-                                    <div className="flex gap-4 mt-2">
-                                        {['Facebook', 'Instagram', 'X'].map(s => (<div key={s} className="flex items-center space-x-2"><Checkbox checked={replicateSocials.includes(s)} onCheckedChange={() => toggleSocial(s)} /><span>{s}</span></div>))}
-                                    </div>
+                                    <div className="flex gap-4 mt-2">{['Facebook', 'Instagram', 'X'].map(s => (<div key={s} className="flex items-center space-x-2"><Checkbox checked={replicateSocials.includes(s)} onCheckedChange={() => toggleSocial(s)} /><span>{s}</span></div>))}</div>
                                     {replicateSocials.length > 0 && (
                                         <div className="mt-4 pt-4 border-t space-y-3">
                                             <div className="flex items-center space-x-2"><Checkbox checked={collaboration} onCheckedChange={(c) => setCollaboration(!!c)} /><Label>¿Colaboración?</Label></div>
@@ -483,7 +473,6 @@ export default function NotaComercialPage() {
                     </CardContent>
                 </Card>
 
-                {/* 4. Nota */}
                 <Card>
                     <CardHeader><CardTitle>Nota</CardTitle></CardHeader>
                     <CardContent className="space-y-6">
@@ -493,7 +482,6 @@ export default function NotaComercialPage() {
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">
-                            {/* Primary Grafs Multiples */}
                             <div className="space-y-2 border p-3 rounded-md">
                                 <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84)</Label><Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
                                 {primaryGrafs.map((g, idx) => (
@@ -507,7 +495,6 @@ export default function NotaComercialPage() {
                                 ))}
                             </div>
                             
-                            {/* Secondary Grafs Multiples */}
                             <div className="space-y-2 border p-3 rounded-md">
                                 <div className="flex justify-between mb-2"><Label className={secondaryGrafError ? "text-destructive" : ""}>NOMBRE/FUNCION.Text (Max 55)</Label><Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddSecondary}><Plus className="h-4 w-4"/></Button></div>
                                 {secondaryGrafs.map((g, idx) => (
@@ -554,7 +541,6 @@ export default function NotaComercialPage() {
                 </Card>
             </main>
 
-            {/* Hidden PDF Component */}
             <div style={{ position: 'absolute', top: -9999, left: -9999 }}>
                 <NotePdf
                     ref={pdfRef}
