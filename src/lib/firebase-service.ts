@@ -141,6 +141,47 @@ export async function getCommercialNotesByClientId(clientId: string): Promise<Co
   }
 }
 
+// Obtener notas de un asesor específico
+export const getCommercialNotesForAdvisor = async (advisorId: string): Promise<CommercialNote[]> => {
+    try {
+        const q = query(
+            collections.commercialNotes, 
+            where('advisorId', '==', advisorId),
+            orderBy('createdAt', 'desc')
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                createdAt: timestampToISO(data.createdAt) || new Date().toISOString()
+            } as CommercialNote;
+        });
+    } catch (error) {
+        console.error("Error getting advisor notes:", error);
+        return [];
+    }
+};
+
+export const getAllCommercialNotes = async (): Promise<CommercialNote[]> => {
+    try {
+        const q = query(collections.commercialNotes, orderBy('createdAt', 'desc'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                createdAt: timestampToISO(data.createdAt) || new Date().toISOString()
+            } as CommercialNote;
+        });
+    } catch (error) {
+        console.error("Error getting all notes:", error);
+        return [];
+    }
+};
+
 export const getCommercialNote = async (noteId: string): Promise<CommercialNote | null> => {
     try {
         const docRef = doc(db, 'commercial_notes', noteId);
