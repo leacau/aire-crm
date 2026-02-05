@@ -103,15 +103,17 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                       <div className="mt-4 p-2 bg-yellow-100 border border-yellow-300 text-yellow-800 font-bold text-center rounded">
                           ⚠️ REQUIERE SOPORTE GRÁFICO 
                           {note.graphicSupportLink && (
-                             <br> <a 
-                                  href={note.graphicSupportLink.startsWith('http') ? note.graphicSupportLink : `https://${note.graphicSupportLink}`} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="ml-2 underline text-red-700 inline-block px-1"
-                                  style={{ cursor: 'pointer' }}
-                              >
-                                 👉 Ver contenido 👈
-                              </a>
+                            <div>
+                               <a 
+                                    href={note.graphicSupportLink.startsWith('http') ? note.graphicSupportLink : `https://${note.graphicSupportLink}`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="ml-2 underline text-red-700 inline-block px-1"
+                                    style={{ cursor: 'pointer' }}
+                                >
+                                   👉 Ver contenido 👈
+                                </a>
+                            </div>
                           )}
                       </div>
                     )}
