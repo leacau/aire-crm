@@ -16,12 +16,32 @@ const SectionTitle = ({ title }: { title: string }) => (
     </div>
 );
 
-const Field = ({ label, value, fullWidth = false }: { label: string, value?: string | number | null, fullWidth?: boolean }) => (
-    <div className={`mb-2 ${fullWidth ? 'w-full' : ''}`}>
-        <span className="font-bold text-sm">{label}: </span>
-        <span className="text-sm break-words whitespace-pre-wrap">{value || '-'}</span>
-    </div>
-);
+const Field = ({ label, value, fullWidth = false }: { label: string, value?: string | number | null, fullWidth?: boolean }) => {
+    // Detectamos si el valor es una URL
+    const isUrl = typeof value === 'string' && (value.startsWith('http') || value.startsWith('www.'));
+    const displayValue = isUrl ? (value.startsWith('http') ? value : `https://${value}`) : value;
+
+    return (
+        <div className={`mb-2 ${fullWidth ? 'w-full' : ''}`}>
+            <span className="font-bold text-sm">{label}: </span>
+            <span className="text-sm break-words whitespace-pre-wrap">
+                {isUrl ? (
+                    <a 
+                        href={displayValue as string} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-red-600 underline font-bold"
+                        style={{ display: 'inline-block', minWidth: '10px' }} // Asegura área de clic
+                    >
+                        VER CONTENIDO
+                    </a>
+                ) : (
+                    value || '-'
+                )}
+            </span>
+        </div>
+    );
+};
 
 export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, programs }, ref) => {
     
@@ -79,20 +99,22 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                         ))}
                     </div>
 
-                    {note.graphicSupport && (
-    <div className="mt-4 p-2 bg-yellow-100 border border-yellow-300 text-yellow-800 font-bold text-center rounded">
-        REQUIERE SOPORTE GRÁFICO 
-        {note.graphicSupportLink && (
-            <a 
-                href={note.graphicSupportLink} 
-                target="_blank" 
-                className="ml-2 underline text-red-700"
-            >
-                (Ver contenido)
-            </a>
-        )}
-    </div>
-)}
+                   {note.graphicSupport && (
+                      <div className="mt-4 p-2 bg-yellow-100 border border-yellow-300 text-yellow-800 font-bold text-center rounded">
+                          REQUIERE SOPORTE GRÁFICO 
+                          {note.graphicSupportLink && (
+                              <a 
+                                  href={note.graphicSupportLink.startsWith('http') ? note.graphicSupportLink : `https://${note.graphicSupportLink}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="ml-2 underline text-red-700 inline-block px-1"
+                                  style={{ cursor: 'pointer' }}
+                              >
+                                  (VER CONTENIDO)
+                              </a>
+                          )}
+                      </div>
+                    )}
                 </div>
 
                 <div className="w-full">
