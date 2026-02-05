@@ -104,21 +104,46 @@ export default function NewCommercialNotePage() {
     const hasGrafErrors = primaryGrafError || secondaryGrafError;
 
     const generateMultiPagePdf = async (element: HTMLElement) => {
-        const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
-        const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
-        if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-        const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true });
-        const imgData1 = canvas1.toDataURL('image/jpeg', 0.8);
-        pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-        pdf.addPage();
-        const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true });
-        const imgData2 = canvas2.toDataURL('image/jpeg', 0.8);
-        pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-        return pdf;
+    const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
+    const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
+    if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
+
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+
+    // Función auxiliar para procesar cada página
+    const processPage = async (pageElement: HTMLElement, pageNum: number) => {
+        const canvas = await html2canvas(pageElement, { scale: 2, useCORS: true });
+        const imgData = canvas.toDataURL('image/jpeg', 0.8);
+        
+        if (pageNum > 1) pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+        // --- TRUCO MÁGICO PARA LOS LINKS ---
+        // Buscamos todos los <a> dentro de la página actual
+        const links = pageElement.querySelectorAll('a');
+        const elementRect = pageElement.getBoundingClientRect();
+
+        links.forEach((link) => {
+            const linkRect = link.getBoundingClientRect();
+            
+            // Calculamos la posición relativa del link dentro de la página
+            const top = ((linkRect.top - elementRect.top) * pdfHeight) / elementRect.height;
+            const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
+            const width = (linkRect.width * pdfWidth) / elementRect.width;
+            const height = (linkRect.height * pdfHeight) / elementRect.height;
+
+            // Añadimos el enlace interactivo manualmente sobre la imagen
+            pdf.link(left, top, width, height, { url: link.href });
+        });
     };
+
+    await processPage(page1, 1);
+    await processPage(page2, 2);
+
+    return pdf;
+};
 
     const handleDownloadPdf = async () => {
         if (hasGrafErrors) {
