@@ -18,7 +18,7 @@ const SectionTitle = ({ title }: { title: string }) => (
 
 const Field = ({ label, value, fullWidth = false }: { label: string, value?: string | number | null, fullWidth?: boolean }) => {
     // Detectamos si el valor es una URL
-    const isUrl = typeof value === 'string' && (value.startsWith('http') || value.startsWith('www.'));
+    const isUrl = typeof value === 'string' && (value.startsWith('http') || value.startsWith('www.')) && label !== 'Web' ;
     const displayValue = isUrl ? (value.startsWith('http') ? value : `https://${value}`) : value;
 
     return (
