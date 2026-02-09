@@ -1347,6 +1347,42 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         fetchData(); // Revierte el cambio optimista en caso de error
     }
   };
+
+  const handleToggleCreditNote = async (invoiceId: string, nextValue: boolean) => {
+    if (!userInfo) return;
+
+    const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
+    if (!invoiceToUpdate) return;
+
+    const canProceed = await ensureCanManageBillingDeletion({
+      action: `marcar la factura ${nextValue ? 'con' : 'sin'} nota de crédito`,
+      invoice: invoiceToUpdate,
+    });
+    if (!canProceed) return;
+
+    const opp = opportunities.find(o => o.id === invoiceToUpdate.opportunityId);
+    if (!opp) return;
+
+    const client = clients.find(c => c.id === opp.clientId);
+    if (!client) return;
+
+    const updatePayload: Partial<Invoice> = {
+      isCreditNote: nextValue,
+      creditNoteMarkedAt: nextValue ? new Date().toISOString() : null,
+    };
+
+    setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, ...updatePayload } : inv));
+
+    try {
+      await updateInvoice(invoiceId, updatePayload, userInfo.id, userInfo.name, client.ownerName);
+      toast({ title: `Factura #${invoiceToUpdate.invoiceNumber} ${nextValue ? 'marcada como NC' : 'sin NC'}` });
+      setTimeout(fetchData, 300);
+    } catch (error) {
+      console.error('Error updating credit note state:', error);
+      toast({ title: 'Error al actualizar la factura', variant: 'destructive' });
+      fetchData();
+    }
+  };
   
   const handleRowClick = (item: Opportunity | Invoice) => {
       const oppId = 'clientId' in item ? item.id.split('_')[0] : (opportunitiesMap[item.opportunityId] ? item.opportunityId : null);
