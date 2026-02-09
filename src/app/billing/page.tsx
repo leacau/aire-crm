@@ -1311,52 +1311,40 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
 
   const handleMarkAsPaid = async (invoiceId: string) => {
-  if (!userInfo) return;
-
-  const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
-  if (!invoiceToUpdate) return;
-
-  // CAMBIO: Permitir si es el dueño (asesor) O si tiene privilegios administrativos
-  const isOwner = resolveOwnerNameForInvoice(invoiceId) === userInfo.name;
-  const canProceed = isOwner || await ensureCanManageBillingDeletion({
-    action: 'marcar la factura como pagada',
-    invoice: invoiceToUpdate,
-  });
-  
-  if (!canProceed) return;
-  const handleToggleCreditNote = async (invoiceId: string, nextValue: boolean) => {
     if (!userInfo) return;
 
     const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
     if (!invoiceToUpdate) return;
 
-    const canProceed = await ensureCanManageBillingDeletion({
-      action: `marcar la factura ${nextValue ? 'con' : 'sin'} nota de crédito`,
+    // VALIDACIÓN CORREGIDA:
+    // Permite si es el dueño (el nombre del asesor coincide) O si tiene privilegios de gestión
+    const isOwner = resolveOwnerNameForInvoice(invoiceId) === userInfo.name;
+    const canProceed = isOwner || await ensureCanManageBillingDeletion({
+      action: 'marcar la factura como pagada',
       invoice: invoiceToUpdate,
     });
+    
     if (!canProceed) return;
 
+    // LÓGICA DE EJECUCIÓN (Faltaba en tu versión):
     const opp = opportunities.find(o => o.id === invoiceToUpdate.opportunityId);
     if (!opp) return;
-
+    
     const client = clients.find(c => c.id === opp.clientId);
     if (!client) return;
-
-    const updatePayload: Partial<Invoice> = {
-      isCreditNote: nextValue,
-      creditNoteMarkedAt: nextValue ? new Date().toISOString() : null,
-    };
-
-    setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, ...updatePayload } : inv));
-
+    
     try {
-      await updateInvoice(invoiceId, updatePayload, userInfo.id, userInfo.name, client.ownerName);
-      toast({ title: `Factura #${invoiceToUpdate.invoiceNumber} ${nextValue ? 'marcada como NC' : 'sin NC'}` });
+      setInvoices(prev => prev.map(inv => inv.id === invoiceId ? {...inv, status: 'Pagada'} : inv));
+      
+      await updateInvoice(invoiceId, { status: 'Pagada' }, userInfo.id, userInfo.name, client.ownerName);
+
+      toast({ title: `Factura #${invoiceToUpdate.invoiceNumber} marcada como pagada.`});
       setTimeout(fetchData, 300);
-    } catch (error) {
-      console.error('Error updating credit note state:', error);
-      toast({ title: 'Error al actualizar la factura', variant: 'destructive' });
-      fetchData();
+
+    } catch(error) {
+        console.error("Error marking invoice as paid:", error);
+        toast({ title: "Error al actualizar la factura", variant: "destructive"});
+        fetchData(); // Revierte el cambio optimista en caso de error
     }
   };
   
