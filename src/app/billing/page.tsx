@@ -1354,12 +1354,16 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
     if (!invoiceToUpdate) return;
 
-    const canProceed = await ensureCanManageBillingDeletion({
+    // NUEVA VALIDACIÓN: Permitir si es el dueño (asesor) O si tiene privilegios administrativos
+    const isOwner = resolveOwnerNameForInvoice(invoiceId) === userInfo.name;
+    const canProceed = isOwner || await ensureCanManageBillingDeletion({
       action: `marcar la factura ${nextValue ? 'con' : 'sin'} nota de crédito`,
       invoice: invoiceToUpdate,
     });
+    
     if (!canProceed) return;
 
+    // El resto del proceso se mantiene igual para asegurar la integridad de los datos
     const opp = opportunities.find(o => o.id === invoiceToUpdate.opportunityId);
     if (!opp) return;
 
@@ -1371,6 +1375,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       creditNoteMarkedAt: nextValue ? new Date().toISOString() : null,
     };
 
+    // Actualización optimista de la UI
     setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, ...updatePayload } : inv));
 
     try {
@@ -1380,7 +1385,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     } catch (error) {
       console.error('Error updating credit note state:', error);
       toast({ title: 'Error al actualizar la factura', variant: 'destructive' });
-      fetchData();
+      fetchData(); // Revertir en caso de error
     }
   };
   
