@@ -1311,40 +1311,19 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
 
   const handleMarkAsPaid = async (invoiceId: string) => {
-    if (!userInfo) return;
+  if (!userInfo) return;
 
-    const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
-    if (!invoiceToUpdate) return;
+  const invoiceToUpdate = invoices.find(inv => inv.id === invoiceId);
+  if (!invoiceToUpdate) return;
 
-    const canProceed = await ensureCanManageBillingDeletion({
-      action: 'marcar la factura como pagada',
-      invoice: invoiceToUpdate,
-    });
-    if (!canProceed) return;
-    
-    const opp = opportunities.find(o => o.id === invoiceToUpdate.opportunityId);
-    if (!opp) return;
-    
-    const client = clients.find(c => c.id === opp.clientId);
-    if (!client) return;
-    
-    try {
-      setInvoices(prev => prev.map(inv => inv.id === invoiceId ? {...inv, status: 'Pagada'} : inv));
-      
-      await updateInvoice(invoiceId, { status: 'Pagada' }, userInfo.id, userInfo.name, client.ownerName);
-
-      toast({ title: `Factura #${invoiceToUpdate.invoiceNumber} marcada como pagada.`});
-
-      // Refetch data to ensure UI is fully consistent after the update
-      setTimeout(fetchData, 300);
-
-    } catch(error) {
-        console.error("Error marking invoice as paid:", error);
-        toast({ title: "Error al actualizar la factura", variant: "destructive"});
-        fetchData(); // Revert optimistic update
-    }
-  }
-
+  // CAMBIO: Permitir si es el dueño (asesor) O si tiene privilegios administrativos
+  const isOwner = resolveOwnerNameForInvoice(invoiceId) === userInfo.name;
+  const canProceed = isOwner || await ensureCanManageBillingDeletion({
+    action: 'marcar la factura como pagada',
+    invoice: invoiceToUpdate,
+  });
+  
+  if (!canProceed) return;
   const handleToggleCreditNote = async (invoiceId: string, nextValue: boolean) => {
     if (!userInfo) return;
 
