@@ -2887,6 +2887,21 @@ export const createOpportunity = async (
     return docRef.id;
 };
 
+// Crear Oportunidad Rápida (para cuando el usuario escribe una nueva)
+export const createQuickOpportunity = async (title: string, clientId: string, clientName: string, userId: string) => {
+    // Implementación básica para crear la oportunidad contenedora
+    const docRef = await addDoc(collection(db, "opportunities"), {
+        title,
+        clientId,
+        clientName,
+        stage: "Propuesta",
+        value: 0,
+        createdAt: new Date().toISOString(),
+        ownerId: userId
+    });
+    return docRef.id;
+}
+
 const createCommercialItemsFromOpportunity = async (opportunity: Opportunity, userId: string, userName: string) => {
     if (!opportunity.ordenesPautado || opportunity.ordenesPautado.length === 0) {
         return;
