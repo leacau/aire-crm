@@ -1,133 +1,184 @@
 "use client";
 
-import { useFieldArray, UseFormReturn } from "react-hook-form";
+import { useFieldArray, UseFormReturn, useWatch } from "react-hook-form";
 import { format, eachMonthOfInterval, endOfMonth, eachDayOfInterval, startOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
 import { Plus, Trash2 } from "lucide-react";
+import { useEffect } from "react";
 
-// --- AGREGAR ESTA LÍNEA ---
 import { cn } from "@/lib/utils";
-// ---------------------------
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FormControl, FormField } from "@/components/ui/form"; // Ajusté imports de form
+import { FormControl, FormField } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
 import { srlAdTypes, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
-// Importar lista de programas desde tus datos (mock)
-const PROGRAMS = [
-  { id: "p1", name: "Ahora Vengo" },
-  { id: "p2", name: "Creo" },
-  { id: "p3", name: "Pasan Cosas" },
-  { id: "p4", name: "Dale Tomá Aire" },
-];
+// Tipos para props
+interface Program {
+    id: string;
+    name: string;
+    rates?: {
+        spotRadio?: number;
+        spotTv?: number;
+        pnt?: number;
+        pntMasBarrida?: number;
+        auspicio?: number;
+        notaComercial?: number;
+        [key: string]: number | undefined;
+    }
+}
 
 interface SrlSectionProps {
   form: UseFormReturn<AdvertisingOrderFormValues>;
   startDate: Date;
   endDate: Date;
+  programs: Program[]; // Recibimos programas con tarifas
 }
 
-export function SrlSection({ form, startDate, endDate }: SrlSectionProps) {
+export function SrlSection({ form, startDate, endDate, programs }: SrlSectionProps) {
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "srlItems",
   });
 
-  // Si no hay fechas válidas, evitar errores en date-fns
+  // Watch global items para cálculos y renderizado
+  const items = useWatch({
+      control: form.control,
+      name: "srlItems"
+  });
+
+  // LOGICA DE TARIFAS AUTOMÁTICAS
+  // Escuchamos cambios en items para actualizar tarifas si cambian programa, tipo o check TV
+  useEffect(() => {
+     items?.forEach((item, index) => {
+         if (!item.programId || !item.adType) return;
+         
+         const program = programs.find(p => p.id === item.programId);
+         if (!program || !program.rates) return;
+
+         let rate = 0;
+         const hasTv = item.hasTv;
+
+         // Lógica de Tarifas según pedido
+         if (item.adType === "Spot") {
+             rate = hasTv ? (program.rates.spotTv || 0) : (program.rates.spotRadio || 0);
+         } else if (item.adType === "PNT") {
+             rate = hasTv ? (program.rates.pntMasBarrida || 0) : (program.rates.pnt || 0);
+         } else {
+             // Mapeo simple para otros tipos (ajustar según tu modelo exacto de datos)
+             // Ejemplo: Auspicio -> program.rates.auspicio
+             const keyMap: Record<string, string> = {
+                 "Auspicio": "auspicio",
+                 "Nota Comercial": "notaComercial"
+             };
+             const rateKey = keyMap[item.adType];
+             if (rateKey) rate = program.rates[rateKey] || 0;
+         }
+
+         // Solo actualizamos si el valor es diferente para evitar loops infinitos, 
+         // y si el usuario no lo ha modificado manualmente (opcional, aquí forzamos la tarifa)
+         const currentRate = form.getValues(`srlItems.${index}.unitRate`);
+         if (currentRate !== rate && rate > 0) {
+             form.setValue(`srlItems.${index}.unitRate`, rate);
+         }
+     });
+  }, [items, programs, form]);
+
+
   if (!startDate || !endDate) return null;
 
   const months = eachMonthOfInterval({ start: startDate, end: endDate });
 
-  // Cálculos de Totales
-  const items = form.watch("srlItems");
-  const subtotal = items.reduce((acc, item) => {
+  // Cálculos de Totales Globales
+  const subtotal = items?.reduce((acc, item) => {
     const dailySpots = item.dailySpots || {};
     const totalAds = Object.values(dailySpots).reduce((sum, val) => sum + (val || 0), 0);
     const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
     const net = (item.unitRate || 0) * totalAds * multiplier;
     return acc + net;
-  }, 0);
+  }, 0) || 0;
 
   const adjustment = form.watch("adjustmentSrl") || 0;
   const totalToInvoice = subtotal - adjustment;
-  
   const agencyCommissionPct = form.watch("commissionSrl") || 0;
   const agencyAmount = form.watch("agencySale") ? (totalToInvoice * (agencyCommissionPct / 100)) : 0;
   const netAction = totalToInvoice - agencyAmount;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-12">
       
-      {/* Botón para agregar renglones (Programas) */}
-      <div className="flex justify-end">
-        <Button 
-            type="button" 
-            variant="secondary" 
-            onClick={() => append({ 
-                programId: "", 
-                adType: "Spot", 
-                unitRate: 0, 
-                seconds: 0, 
-                dailySpots: {} 
-            })}
-        >
-          <Plus className="mr-2 h-4 w-4" /> Agregar Programa
-        </Button>
-      </div>
-
-      {/* Renderizado de Tablas por Mes */}
       {months.map((monthDate) => {
+        const monthKey = format(monthDate, "yyyy-MM"); // Clave única del mes
         const monthStart = startOfMonth(monthDate);
         const monthEnd = endOfMonth(monthDate);
-        
-        // Ajustar el rango del mes para no exceder las fechas globales seleccionadas
         const effectiveStart = monthStart < startDate ? startDate : monthStart;
         const effectiveEnd = monthEnd > endDate ? endDate : monthEnd;
-
         const days = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
 
         return (
-          <div key={monthDate.toString()} className="border rounded-md shadow-sm overflow-hidden bg-white">
-            <div className="bg-slate-200 px-4 py-2 font-bold text-slate-700">
-              {format(monthDate, "MMMM yyyy", { locale: es }).toUpperCase()}
+          <div key={monthKey} className="border rounded-md shadow-sm overflow-hidden bg-white mb-6">
+            <div className="bg-slate-200 px-4 py-2 flex justify-between items-center">
+                <span className="font-bold text-slate-700">
+                    {format(monthDate, "MMMM yyyy", { locale: es }).toUpperCase()}
+                </span>
+                <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    className="bg-white hover:bg-slate-100 text-slate-700 border-slate-300"
+                    onClick={() => append({ 
+                        month: monthKey, // IMPORTANTE: Asignamos el mes al item
+                        programId: "", 
+                        adType: "Spot", 
+                        hasTv: false,
+                        unitRate: 0, 
+                        seconds: 0, 
+                        dailySpots: {} 
+                    })}
+                >
+                <Plus className="mr-2 h-4 w-4" /> Agregar a {format(monthDate, "MMMM", { locale: es })}
+                </Button>
             </div>
+            
             <div className="overflow-x-auto">
               <Table className="min-w-[1200px]">
                 <TableHeader>
                   <TableRow className="bg-slate-50">
                     <TableHead className="w-[200px]">Programa</TableHead>
                     <TableHead className="w-[150px]">Tipo Aviso</TableHead>
+                    <TableHead className="w-[50px] text-center" title="Lleva Barrida TV">TV</TableHead>
                     <TableHead className="w-[80px]"># Seg</TableHead>
-                    
-                    {/* Días del mes */}
                     {days.map(day => (
-                      <TableHead key={day.toISOString()} className="w-[40px] p-1 text-center text-xs">
-                        <div className="font-bold">{format(day, "d")}</div>
-                        <div className="text-[10px] text-muted-foreground">{format(day, "EEEEE", { locale: es })}</div>
+                      <TableHead key={day.toISOString()} className="w-[35px] p-0 text-center">
+                        <div className="flex flex-col items-center justify-center h-full py-1">
+                             <span className="text-[10px] font-bold text-slate-700 leading-none">{format(day, "d")}</span>
+                             <span className="text-[9px] text-muted-foreground leading-none">{format(day, "EEEEE", { locale: es })}</span>
+                        </div>
                       </TableHead>
                     ))}
-
-                    <TableHead className="w-[80px] text-center font-bold">Tot. Avisos</TableHead>
-                    <TableHead className="w-[80px] text-center font-bold">Tot. Seg</TableHead>
-                    <TableHead className="w-[100px] text-right">Tarifa Un.</TableHead>
-                    <TableHead className="w-[120px] text-right font-bold">Importe Neto</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
+                    <TableHead className="w-[60px] text-center font-bold text-xs">Cant.</TableHead>
+                    <TableHead className="w-[60px] text-center font-bold text-xs">Segs</TableHead>
+                    <TableHead className="w-[100px] text-right">Tarifa</TableHead>
+                    <TableHead className="w-[110px] text-right font-bold">Neto</TableHead>
+                    <TableHead className="w-[40px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {fields.map((field, index) => {
-                    const adType = items[index]?.adType;
-                    // const seconds = items[index]?.seconds || 0; // variable no usada directamente en render, pero sí en lógica
-                    // const unitRate = items[index]?.unitRate || 0; // variable no usada directamente
+                    // FILTRO CRÍTICO: Solo mostrar filas que pertenecen a este mes
+                    const itemValues = items?.[index];
+                    if (!itemValues || itemValues.month !== monthKey) return null;
 
-                    // Recálculos visuales por fila
-                    const currentItem = items[index] || {};
-                    const currentDailySpots = currentItem.dailySpots || {};
-                    const currentSeconds = currentItem.seconds || 0;
-                    const currentUnitRate = currentItem.unitRate || 0;
+                    const adType = itemValues.adType;
+                    // Habilitar check TV solo para Spot y PNT
+                    const enableTv = adType === "Spot" || adType === "PNT";
+                    const hasTv = itemValues.hasTv;
+
+                    const currentDailySpots = itemValues.dailySpots || {};
+                    const currentSeconds = itemValues.seconds || 0;
+                    const currentUnitRate = itemValues.unitRate || 0;
 
                     const totalAdsGlobal = Object.values(currentDailySpots).reduce((sum, val) => sum + (val || 0), 0);
                     const totalSecondsGlobal = adType === "Spot" ? (totalAdsGlobal * currentSeconds) : 0;
@@ -135,32 +186,30 @@ export function SrlSection({ form, startDate, endDate }: SrlSectionProps) {
 
                     return (
                       <TableRow key={field.id}>
-                        {/* Programa */}
                         <TableCell className="p-2">
                            <FormField
                             control={form.control}
                             name={`srlItems.${index}.programId`}
                             render={({ field }) => (
                                 <Select onValueChange={field.onChange} value={field.value}>
-                                    <SelectTrigger className="h-8">
+                                    <SelectTrigger className="h-8 text-xs">
                                         <SelectValue placeholder="Prog." />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {PROGRAMS.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                                        {programs.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             )}
                           />
                         </TableCell>
 
-                        {/* Tipo Aviso */}
                         <TableCell className="p-2">
                            <FormField
                             control={form.control}
                             name={`srlItems.${index}.adType`}
                             render={({ field }) => (
                                 <Select onValueChange={field.onChange} value={field.value}>
-                                    <SelectTrigger className="h-8">
+                                    <SelectTrigger className="h-8 text-xs">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -170,8 +219,23 @@ export function SrlSection({ form, startDate, endDate }: SrlSectionProps) {
                             )}
                           />
                         </TableCell>
+                        
+                        {/* Checkbox TV */}
+                        <TableCell className="p-2 text-center">
+                            <FormField
+                                control={form.control}
+                                name={`srlItems.${index}.hasTv`}
+                                render={({ field }) => (
+                                    <Checkbox 
+                                        checked={field.value} 
+                                        onCheckedChange={field.onChange} 
+                                        disabled={!enableTv}
+                                        className="h-4 w-4"
+                                    />
+                                )}
+                            />
+                        </TableCell>
 
-                        {/* Segundos (Condicional) */}
                         <TableCell className="p-2">
                            {adType === "Spot" && (
                             <FormField
@@ -180,7 +244,7 @@ export function SrlSection({ form, startDate, endDate }: SrlSectionProps) {
                                 render={({ field }) => (
                                 <Input 
                                     type="number" 
-                                    className="h-8 w-16 text-center" 
+                                    className="h-8 w-full text-center px-1 text-xs" 
                                     {...field} 
                                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                                 />
@@ -189,11 +253,10 @@ export function SrlSection({ form, startDate, endDate }: SrlSectionProps) {
                            )}
                         </TableCell>
 
-                        {/* Días Inputs */}
                         {days.map(day => {
                             const dateKey = format(day, "yyyy-MM-dd");
                             return (
-                                <TableCell key={dateKey} className="p-1">
+                                <TableCell key={dateKey} className="p-0 border-x border-slate-100">
                                     <FormField
                                         control={form.control}
                                         name={`srlItems.${index}.dailySpots.${dateKey}`}
@@ -201,8 +264,8 @@ export function SrlSection({ form, startDate, endDate }: SrlSectionProps) {
                                             <Input 
                                                 type="text"
                                                 className={cn(
-                                                    "h-8 w-8 px-1 text-center transition-colors",
-                                                    field.value ? "bg-blue-50 font-bold border-blue-200" : "text-gray-400"
+                                                    "h-8 w-full px-0 text-center border-none focus-visible:ring-1 focus-visible:ring-inset text-xs",
+                                                    field.value ? "bg-blue-100 font-bold text-blue-800" : "text-gray-300 hover:bg-slate-50"
                                                 )}
                                                 value={field.value || ""} 
                                                 onChange={e => {
@@ -216,9 +279,8 @@ export function SrlSection({ form, startDate, endDate }: SrlSectionProps) {
                             );
                         })}
 
-                        {/* Totales Row */}
-                        <TableCell className="text-center font-medium">{totalAdsGlobal}</TableCell>
-                        <TableCell className="text-center text-muted-foreground">{totalSecondsGlobal > 0 ? totalSecondsGlobal : "-"}</TableCell>
+                        <TableCell className="text-center font-bold text-xs">{totalAdsGlobal}</TableCell>
+                        <TableCell className="text-center text-xs text-muted-foreground">{totalSecondsGlobal > 0 ? totalSecondsGlobal : "-"}</TableCell>
                         <TableCell className="p-2">
                             <FormField
                                 control={form.control}
@@ -226,14 +288,15 @@ export function SrlSection({ form, startDate, endDate }: SrlSectionProps) {
                                 render={({ field }) => (
                                 <Input 
                                     type="number" 
-                                    className="h-8 text-right" 
+                                    className="h-8 text-right px-2 text-xs" 
+                                    readOnly // Tarifa automática preferentemente
                                     {...field} 
                                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                                 />
                                 )}
                             />
                         </TableCell>
-                        <TableCell className="text-right font-bold text-slate-700">
+                        <TableCell className="text-right font-bold text-slate-700 text-xs">
                              ${netAmountGlobal.toLocaleString("es-AR")}
                         </TableCell>
                         <TableCell>
