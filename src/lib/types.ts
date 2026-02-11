@@ -640,10 +640,12 @@ export type CommercialNote = {
 
 // --- Publicidades ---
 export type AdvertisingOrderItemSrl = {
+  month: string; // "YYYY-MM" -> Nuevo campo clave
   programId: string;
   adType: string;
+  hasTv: boolean; // Nuevo check TV
   seconds?: number;
-  dailySpots: Record<string, number>; // "YYYY-MM-DD": cantidad
+  dailySpots: Record<string, number>;
   unitRate: number;
 };
 
@@ -670,7 +672,9 @@ export type AdvertisingOrder = {
   product: string;
   accountExecutive: string;
   createdAt: string; // ISO Date
-  createdBy: string;
+  createdBy: string;  
+  opportunityId?: string; // Nuevo: ID de la oportunidad vinculada
+  opportunityTitle?: string;
   
   // SRL Fields
   tangoOrderNo?: string;
