@@ -25,7 +25,7 @@ import {
     getClients, 
     getAgencies, 
     getPrograms, 
-    getOpportunitiesByClient, 
+    getOpportunitiesByClientId, 
     createQuickOpportunity 
 } from "@/lib/firebase-service";
 import { Client, Agency } from "@/lib/types";
@@ -109,7 +109,7 @@ export function AdvertisingForm() {
     }
     
     const fetchOpps = async () => {
-        const opps = await getOpportunitiesByClient(selectedClientId);
+        const opps = await getOpportunitiesByClientId(selectedClientId);
         setOpportunities(opps);
     };
     fetchOpps();
