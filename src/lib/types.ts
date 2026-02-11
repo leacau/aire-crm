@@ -637,3 +637,59 @@ export type CommercialNote = {
   
   createdAt: string;
 };
+
+// --- Publicidades ---
+export type AdvertisingOrderItemSrl = {
+  programId: string;
+  adType: string;
+  seconds?: number;
+  dailySpots: Record<string, number>; // "YYYY-MM-DD": cantidad
+  unitRate: number;
+};
+
+export type AdvertisingOrderItemSas = {
+  format: string;
+  type?: string;
+  detail?: string;
+  observations?: string;
+  desktop: boolean;
+  mobile: boolean;
+  home: boolean;
+  interiores: boolean;
+  cpm?: number;
+  url?: string;
+  unitRate: number;
+};
+
+export type AdvertisingOrder = {
+  id?: string;
+  clientId: string;
+  clientName?: string; // Para visualización rápida
+  agencyId?: string;
+  agencyName?: string;
+  product: string;
+  accountExecutive: string;
+  createdAt: string; // ISO Date
+  createdBy: string;
+  
+  // SRL Fields
+  tangoOrderNo?: string;
+  startDate: string; // ISO Date
+  endDate: string; // ISO Date
+  materialSent: boolean;
+  observations?: string;
+  certReq: boolean;
+  agencySale: boolean;
+  commissionSrl: number;
+  srlItems: AdvertisingOrderItemSrl[];
+  adjustmentSrl: number;
+  
+  // SAS Fields
+  sasItems: AdvertisingOrderItemSas[];
+  adjustmentSas: number;
+  
+  // Totales Calculados (Opcional, para reportes rápidos)
+  totalSrl?: number;
+  totalSas?: number;
+  totalOrder?: number;
+};
