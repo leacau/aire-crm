@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays, AdvertisingOrder } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
@@ -3654,4 +3654,30 @@ export const rejectProspectClaim = async (prospect: Prospect, managerId: string,
         details: `rechazó la solicitud de reclamo de <strong>${prospect.claimantName}</strong>`,
         ownerName: 'Sin Asignar'
     });
+};
+
+export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, 'id' | 'createdAt'>) => {
+  try {
+    const docRef = await addDoc(collection(db, 'advertising_orders'), {
+      ...orderData,
+      createdAt: new Date().toISOString(),
+    });
+    
+    // Opcional: Registrar actividad en el cliente
+    await logActivity({
+      userId: orderData.createdBy, // Asumiendo que pasamos el ID del usuario creador
+      userName: orderData.accountExecutive,
+      entityType: 'client',
+      entityId: orderData.clientId,
+      entityName: orderData.clientName || 'Cliente',
+      type: 'create', // Puedes definir un tipo 'order' si lo prefieres
+      details: `Creó un nuevo pedido de publicidad para el producto: ${orderData.product}`,
+      timestamp: new Date().toISOString(),
+    });
+
+    return docRef.id;
+  } catch (error) {
+    console.error("Error creating advertising order:", error);
+    throw error;
+  }
 };
