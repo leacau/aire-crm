@@ -1,3 +1,4 @@
+// src/lib/validators/advertising.ts
 import { z } from "zod";
 
 export const srlAdTypes = [
@@ -21,8 +22,8 @@ export const sasFormats = [
 export const srlItemSchema = z.object({
   programId: z.string().min(1, "Seleccione un programa"),
   adType: z.enum(srlAdTypes),
-  seconds: z.number().optional(), // Solo para Spot
-  dailySpots: z.record(z.string(), z.number()), // Key: YYYY-MM-DD, Value: Cantidad
+  seconds: z.number().optional(),
+  dailySpots: z.record(z.string(), z.number()), 
   unitRate: z.number().min(0),
 });
 
@@ -35,8 +36,8 @@ export const sasItemSchema = z.object({
   mobile: z.boolean().default(false),
   home: z.boolean().default(false),
   interiores: z.boolean().default(false),
-  cpm: z.number().optional(), // Solo para Banner
-  url: z.string().url().optional().or(z.literal("")),
+  cpm: z.number().optional(),
+  url: z.string().optional().or(z.literal("")),
   unitRate: z.number().min(0),
 });
 
@@ -61,13 +62,9 @@ export const advertisingOrderSchema = z.object({
   srlItems: z.array(srlItemSchema).default([]),
   sasItems: z.array(sasItemSchema).default([]),
   
-  // Financials SRL
+  // Financials
   adjustmentSrl: z.number().default(0),
-  
-  // Financials SAS
   adjustmentSas: z.number().default(0),
 });
 
 export type AdvertisingOrderFormValues = z.infer<typeof advertisingOrderSchema>;
-export type SrlItem = z.infer<typeof srlItemSchema>;
-export type SasItem = z.infer<typeof sasItemSchema>;
