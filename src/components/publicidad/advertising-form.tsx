@@ -1,11 +1,11 @@
-
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays } from "date-fns";
 import { CalendarIcon, Save } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -36,22 +36,30 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { advertisingOrderSchema, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
+// Services & Types
+import { createAdvertisingOrder, getClients, getAgencies } from "@/lib/firebase-service";
+import { Client, Agency } from "@/lib/types";
+import { useAuth } from "@/hooks/use-auth";
+
 // Sub-components
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
 
-// Mock Data (Replace with your actual hooks)
-import { useAuth } from "@/hooks/use-auth";
-
 export function AdvertisingForm() {
   const { toast } = useToast();
   const { userInfo } = useAuth();
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Estado para listas desplegables
+  const [clients, setClients] = useState<Client[]>([]);
+  const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   const form = useForm<AdvertisingOrderFormValues>({
     resolver: zodResolver(advertisingOrderSchema),
     defaultValues: {
-      accountExecutive: userInfo?.name || "",
+      accountExecutive: "", // Se llenará con useEffect cuando userInfo esté listo
       materialSent: false,
       certReq: false,
       agencySale: false,
@@ -68,21 +76,96 @@ export function AdvertisingForm() {
   const endDate = watch("endDate");
   const agencySale = watch("agencySale");
 
-  // Auto-calculate days count
+  // Cargar datos iniciales
+  useEffect(() => {
+    if (userInfo?.name) {
+      setValue("accountExecutive", userInfo.name);
+    }
+
+    const loadData = async () => {
+      try {
+        const [clientsData, agenciesData] = await Promise.all([
+          getClients(), // Nota: getClients paginado devuelve { clients, lastVisible }. 
+          getAgencies()
+        ]);
+        
+        // Ajuste si getClients devuelve objeto paginado o array directo
+        // Asumo que tu getClients actual devuelve { clients: [...] }
+        // Si devuelve array directo, ajusta esto a: setClients(clientsData)
+        if ('clients' in clientsData) {
+            setClients(clientsData.clients);
+        } else if (Array.isArray(clientsData)) {
+             setClients(clientsData as Client[]);
+        }
+
+        setAgencies(agenciesData);
+      } catch (error) {
+        console.error("Error loading form data:", error);
+        toast({
+          title: "Error de carga",
+          description: "No se pudieron cargar clientes o agencias.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+
+    loadData();
+  }, [userInfo, setValue, toast]);
+
   const daysCount = startDate && endDate 
-    ? Math.max(0, differenceInDays(endDate, startDate) + 1) // +1 includes extremes
+    ? Math.max(0, differenceInDays(endDate, startDate) + 1)
     : 0;
 
   async function onSubmit(data: AdvertisingOrderFormValues) {
+    if (!userInfo) return;
     setIsSubmitting(true);
+    
     try {
-      console.log("Form Data:", data);
-      // Aquí iría la llamada a createAdvertisingOrder(data)
+      // Buscar nombre del cliente seleccionado para guardar redundancia
+      const selectedClient = clients.find(c => c.id === data.clientId);
+      const selectedAgency = agencies.find(a => a.id === data.agencyId);
+
+      // Preparar objeto para Firebase
+      const orderPayload = {
+        clientId: data.clientId,
+        clientName: selectedClient?.denominacion || "Desconocido",
+        agencyId: data.agencyId,
+        agencyName: selectedAgency?.name,
+        product: data.product,
+        accountExecutive: data.accountExecutive || userInfo.name,
+        createdBy: userInfo.id,
+        
+        tangoOrderNo: data.tangoOrderNo,
+        startDate: data.startDate.toISOString(),
+        endDate: data.endDate.toISOString(),
+        materialSent: data.materialSent,
+        observations: data.observations,
+        certReq: data.certReq,
+        agencySale: data.agencySale,
+        commissionSrl: data.commissionSrl,
+        
+        srlItems: data.srlItems,
+        sasItems: data.sasItems,
+        
+        adjustmentSrl: data.adjustmentSrl,
+        adjustmentSas: data.adjustmentSas,
+      };
+
+      await createAdvertisingOrder(orderPayload);
+      
       toast({
         title: "Pedido creado",
         description: "El pedido de publicidad se ha guardado correctamente.",
       });
+
+      // Opcional: Redirigir a la lista o limpiar formulario
+      // router.push("/publicidad"); 
+      // form.reset();
+
     } catch (error) {
+      console.error(error);
       toast({
         title: "Error",
         description: "Hubo un problema al guardar el pedido.",
@@ -91,6 +174,10 @@ export function AdvertisingForm() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (isLoadingData) {
+    return <div className="p-8 text-center text-muted-foreground">Cargando datos...</div>;
   }
 
   return (
@@ -105,7 +192,6 @@ export function AdvertisingForm() {
             render={({ field }) => (
               <FormItem className="col-span-1">
                 <FormLabel>Anunciante (Cliente)</FormLabel>
-                {/* Aquí deberías usar tu componente de selección de clientes real */}
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger>
@@ -113,8 +199,11 @@ export function AdvertisingForm() {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="client-1">Cliente Ejemplo SRL</SelectItem>
-                    <SelectItem value="client-2">Comercio Local</SelectItem>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.denominacion}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -135,8 +224,12 @@ export function AdvertisingForm() {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="agency-1">Agencia Publicidad 1</SelectItem>
-                    <SelectItem value="agency-2">Media Group</SelectItem>
+                    <SelectItem value="none">Ninguna</SelectItem>
+                    {agencies.map((agency) => (
+                      <SelectItem key={agency.id} value={agency.id}>
+                        {agency.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -223,6 +316,7 @@ export function AdvertisingForm() {
                         />
                       </PopoverContent>
                     </Popover>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -255,6 +349,7 @@ export function AdvertisingForm() {
                         />
                       </PopoverContent>
                     </Popover>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -273,7 +368,7 @@ export function AdvertisingForm() {
                 control={form.control}
                 name="materialSent"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 col-span-2 bg-white">
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 col-span-2 bg-white h-full">
                     <FormControl>
                       <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
@@ -288,7 +383,7 @@ export function AdvertisingForm() {
                 control={form.control}
                 name="certReq"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 col-span-2 bg-white">
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 col-span-2 bg-white h-full">
                     <FormControl>
                       <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
@@ -303,7 +398,7 @@ export function AdvertisingForm() {
                 control={form.control}
                 name="agencySale"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 col-span-2 bg-white">
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 col-span-2 bg-white h-full">
                     <FormControl>
                       <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
@@ -342,7 +437,7 @@ export function AdvertisingForm() {
                   <FormItem className={cn("col-span-4", !agencySale && "col-span-6")}>
                     <FormLabel>Observaciones SRL</FormLabel>
                     <FormControl>
-                      <Textarea className="h-10 min-h-[40px] resize-none" {...field} />
+                      <Textarea className="h-full min-h-[50px] resize-none" {...field} />
                     </FormControl>
                   </FormItem>
                 )}
