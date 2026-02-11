@@ -1,15 +1,19 @@
 "use client";
 
 import { useFieldArray, UseFormReturn } from "react-hook-form";
-import { format, eachMonthOfInterval, endOfMonth, eachDayOfInterval, startOfMonth, isSameMonth } from "date-fns";
+import { format, eachMonthOfInterval, endOfMonth, eachDayOfInterval, startOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
 import { Plus, Trash2 } from "lucide-react";
+
+// --- AGREGAR ESTA LÍNEA ---
+import { cn } from "@/lib/utils";
+// ---------------------------
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FormControl, FormField, FormItem } from "@/components/ui/form";
+import { FormControl, FormField } from "@/components/ui/form"; // Ajusté imports de form
 import { srlAdTypes, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
 // Importar lista de programas desde tus datos (mock)
@@ -32,14 +36,14 @@ export function SrlSection({ form, startDate, endDate }: SrlSectionProps) {
     name: "srlItems",
   });
 
+  // Si no hay fechas válidas, evitar errores en date-fns
+  if (!startDate || !endDate) return null;
+
   const months = eachMonthOfInterval({ start: startDate, end: endDate });
 
   // Cálculos de Totales
   const items = form.watch("srlItems");
   const subtotal = items.reduce((acc, item) => {
-    // Calculo Neto por item
-    // Spot: unitRate * totalAds * seconds
-    // Otro: unitRate * totalAds
     const dailySpots = item.dailySpots || {};
     const totalAds = Object.values(dailySpots).reduce((sum, val) => sum + (val || 0), 0);
     const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
@@ -115,22 +119,19 @@ export function SrlSection({ form, startDate, endDate }: SrlSectionProps) {
                 </TableHeader>
                 <TableBody>
                   {fields.map((field, index) => {
-                    // Watch values for conditional rendering per row
                     const adType = items[index]?.adType;
-                    const seconds = items[index]?.seconds || 0;
-                    const unitRate = items[index]?.unitRate || 0;
-                    const dailySpots = items[index]?.dailySpots || {};
-                    
-                    // Calculate row totals (Specific to THIS month range? Usually totals are global or per row? 
-                    // Based on "Total de avisos: recuento de los números colocados en los días" 
-                    // and usually users want to see the total order value. 
-                    // I will show totals for the WHOLE order on the row, or just for this month?
-                    // Given the design splits by month, usually the "Importe Neto" row is the sum of the line.
-                    // Let's assume the row represents the whole line item, so we show cumulative totals).
-                    
-                    const totalAdsGlobal = Object.values(dailySpots).reduce((sum, val) => sum + (val || 0), 0);
-                    const totalSecondsGlobal = adType === "Spot" ? (totalAdsGlobal * seconds) : 0;
-                    const netAmountGlobal = unitRate * totalAdsGlobal * (adType === "Spot" ? seconds : 1);
+                    // const seconds = items[index]?.seconds || 0; // variable no usada directamente en render, pero sí en lógica
+                    // const unitRate = items[index]?.unitRate || 0; // variable no usada directamente
+
+                    // Recálculos visuales por fila
+                    const currentItem = items[index] || {};
+                    const currentDailySpots = currentItem.dailySpots || {};
+                    const currentSeconds = currentItem.seconds || 0;
+                    const currentUnitRate = currentItem.unitRate || 0;
+
+                    const totalAdsGlobal = Object.values(currentDailySpots).reduce((sum, val) => sum + (val || 0), 0);
+                    const totalSecondsGlobal = adType === "Spot" ? (totalAdsGlobal * currentSeconds) : 0;
+                    const netAmountGlobal = currentUnitRate * totalAdsGlobal * (adType === "Spot" ? currentSeconds : 1);
 
                     return (
                       <TableRow key={field.id}>
@@ -198,7 +199,7 @@ export function SrlSection({ form, startDate, endDate }: SrlSectionProps) {
                                         name={`srlItems.${index}.dailySpots.${dateKey}`}
                                         render={({ field }) => (
                                             <Input 
-                                                type="text" // text to allow empty
+                                                type="text"
                                                 className={cn(
                                                     "h-8 w-8 px-1 text-center transition-colors",
                                                     field.value ? "bg-blue-50 font-bold border-blue-200" : "text-gray-400"
