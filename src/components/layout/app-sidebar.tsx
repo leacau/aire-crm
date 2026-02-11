@@ -36,7 +36,8 @@ import {
   ShieldCheck,
   Scale,
   ListTodo,
-  StickyNote
+  StickyNote,
+  ScrollText
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -126,6 +127,7 @@ export function AppSidebar() {
         { title: 'Grilla', href: '/grilla', icon: Radio, screenName: 'Grilla' },
         { title: 'PNTs', href: '/pnts', icon: Megaphone, screenName: 'PNTs' },
         { title: 'Nota Comercial', href: '/notas', icon: StickyNote, screenName: 'Notas' },
+        { title: 'Orden de Publicidad', href: '/publicidad/new', icon: ScrollText, screenName: 'Publicidad' }, 
       ]
     },
     { title: 'Calendario', href: '/calendar', icon: Calendar, screenName: 'Calendar' },
