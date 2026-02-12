@@ -1,11 +1,13 @@
+// src/components/publicidad/advertising-form.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays } from "date-fns";
-import { CalendarIcon, Save } from "lucide-react";
+import { CalendarIcon, Save, FileDown } from "lucide-react"; // Agregué FileDown
 import { useRouter } from "next/navigation";
+import { PDFDownloadLink } from "@react-pdf/renderer"; // Import necesario
 
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -28,24 +30,25 @@ import {
     getOpportunitiesByClientId, 
     createQuickOpportunity 
 } from "@/lib/firebase-service";
-import { Client, Agency } from "@/lib/types";
+import { Client, Agency, AdvertisingOrder } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 
 // Sub-components
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
+import { AdvertisingOrderPdf } from "./advertising-pdf"; // Import del PDF
 
 export function AdvertisingForm() {
   const { toast } = useToast();
   const { userInfo } = useAuth();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isClient, setIsClient] = useState(false); // Para evitar errores de hidratación con el PDF
   
   const [clients, setClients] = useState<Client[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
-  const [programs, setPrograms] = useState<any[]>([]); // Programas con tarifas
+  const [programs, setPrograms] = useState<any[]>([]); 
   
-  // Estado para oportunidades dinámicas
   const [opportunities, setOpportunities] = useState<any[]>([]);
   const [isNewOpp, setIsNewOpp] = useState(false);
 
@@ -67,10 +70,16 @@ export function AdvertisingForm() {
   });
 
   const { watch, setValue } = form;
+  const values = watch(); // Observar todos los valores para el PDF
   const startDate = watch("startDate");
   const endDate = watch("endDate");
   const agencySale = watch("agencySale");
   const selectedClientId = watch("clientId");
+
+  // Evitar renderizado del PDF en servidor
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -117,6 +126,67 @@ export function AdvertisingForm() {
 
   const daysCount = startDate && endDate ? Math.max(0, differenceInDays(endDate, startDate) + 1) : 0;
 
+  // --- LÓGICA PARA GENERAR OBJETO PREVIEW DEL PDF ---
+  const getPreviewOrder = (): AdvertisingOrder => {
+      const selectedClient = clients.find(c => c.id === values.clientId);
+      const selectedAgency = agencies.find(a => a.id === values.agencyId);
+      const selectedOpp = opportunities.find(o => o.id === values.opportunityId);
+      const oppTitle = values.opportunityId === 'new_custom_opportunity' ? values.newOpportunityTitle : selectedOpp?.title;
+
+      // Calcular Totales SRL
+      const srlSubtotal = values.srlItems?.reduce((acc, item) => {
+        const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (val || 0), 0);
+        const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
+        return acc + ((item.unitRate || 0) * totalAds * multiplier);
+      }, 0) || 0;
+      const srlTotal = srlSubtotal - (values.adjustmentSrl || 0);
+
+      // Calcular Totales SAS
+      const sasSubtotal = values.sasItems?.reduce((acc, item) => {
+        let net = 0;
+        if (item.format === "Banner") {
+            net = (item.cpm || 0) * (item.unitRate || 0);
+        } else {
+            net = (item.unitRate || 0);
+        }
+        return acc + net;
+      }, 0) || 0;
+      const sasTotal = (sasSubtotal - (values.adjustmentSas || 0)) * 1.05; // + IVA 5%
+
+      return {
+          id: "preview",
+          clientId: values.clientId || "",
+          clientName: selectedClient?.denominacion || "",
+          agencyId: values.agencyId,
+          agencyName: selectedAgency?.name,
+          product: "", 
+          opportunityId: values.opportunityId,
+          opportunityTitle: oppTitle || "",
+          accountExecutive: values.accountExecutive || "",
+          createdAt: new Date().toISOString(),
+          createdBy: userInfo?.id || "",
+          
+          tangoOrderNo: values.tangoOrderNo,
+          startDate: values.startDate?.toISOString() || new Date().toISOString(),
+          endDate: values.endDate?.toISOString() || new Date().toISOString(),
+          materialSent: values.materialSent,
+          observations: values.observations,
+          certReq: values.certReq,
+          agencySale: values.agencySale,
+          commissionSrl: values.commissionSrl,
+          
+          srlItems: values.srlItems || [],
+          sasItems: values.sasItems || [],
+          
+          adjustmentSrl: values.adjustmentSrl,
+          adjustmentSas: values.adjustmentSas,
+          
+          totalSrl: srlTotal,
+          totalSas: sasTotal,
+          totalOrder: srlTotal + sasTotal
+      };
+  };
+
   async function onSubmit(data: AdvertisingOrderFormValues) {
     if (!userInfo) return;
     setIsSubmitting(true);
@@ -128,14 +198,12 @@ export function AdvertisingForm() {
       let finalOppId = data.opportunityId;
       let oppTitle = "";
 
-      // Si eligió crear nueva oportunidad (lógica simple)
       if (data.opportunityId === "new_custom_opportunity") {
           if (!data.newOpportunityTitle) {
               toast({ title: "Error", description: "Ingrese nombre para la nueva oportunidad", variant: "destructive"});
               setIsSubmitting(false);
               return;
           }
-          // Crear la oportunidad primero
           finalOppId = await createQuickOpportunity(
               data.newOpportunityTitle, 
               data.clientId, 
@@ -144,41 +212,32 @@ export function AdvertisingForm() {
           );
           oppTitle = data.newOpportunityTitle;
       } else {
-          // Buscamos el nombre de la existente
           const existingOpp = opportunities.find(o => o.id === finalOppId);
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      // Preparar objeto para Firebase
+      // Preparar objeto para Firebase (Incluyendo totales calculados si se desea)
+      const preview = getPreviewOrder(); // Reutilizar lógica de totales
+      
       const orderPayload = {
+        ...preview,
         clientId: data.clientId,
         clientName: selectedClient?.denominacion || "Desconocido",
         agencyId: data.agencyId,
         agencyName: selectedAgency?.name,
-        
         opportunityId: finalOppId,
-        opportunityTitle: oppTitle, // Guardamos el nombre "Producto" aquí
-
-        accountExecutive: data.accountExecutive || userInfo.name,
-        createdBy: userInfo.id,
-        tangoOrderNo: data.tangoOrderNo,
-        startDate: data.startDate.toISOString(),
-        endDate: data.endDate.toISOString(),
-        materialSent: data.materialSent,
-        observations: data.observations,
-        certReq: data.certReq,
-        agencySale: data.agencySale,
-        commissionSrl: data.commissionSrl,
-        srlItems: data.srlItems,
-        sasItems: data.sasItems,
-        adjustmentSrl: data.adjustmentSrl,
-        adjustmentSas: data.adjustmentSas,
+        opportunityTitle: oppTitle,
+        // Asegurarse de quitar campos que no van a la BD si el type preview tenía extras
+        id: undefined 
       };
+      
+      // Eliminar id 'preview' antes de guardar
+      delete orderPayload.id;
 
       await createAdvertisingOrder(orderPayload);
       
       toast({ title: "Pedido creado", description: "Se guardó correctamente." });
-      router.push(`/clients/${data.clientId}`); // Volver al cliente
+      router.push(`/clients/${data.clientId}`);
 
     } catch (error) {
       console.error(error);
@@ -204,7 +263,7 @@ export function AdvertisingForm() {
                 <FormLabel>Anunciante (Cliente)</FormLabel>
                 <Select onValueChange={(val) => {
                     field.onChange(val);
-                    setValue("opportunityId", ""); // Reset opp
+                    setValue("opportunityId", ""); 
                 }} defaultValue={field.value}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
                   <SelectContent>
@@ -287,7 +346,7 @@ export function AdvertisingForm() {
           />
         </div>
 
-        {/* AIRE SRL (Pasamos programas para tarifas) */}
+        {/* AIRE SRL */}
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
           <div className="bg-slate-100 px-4 py-2 border-b"><h3 className="text-lg font-semibold text-slate-800">AIRE SRL</h3></div>
           <div className="p-4 grid gap-6">
@@ -312,7 +371,6 @@ export function AdvertisingForm() {
                <FormItem><FormLabel>Días</FormLabel><FormControl><Input value={daysCount} readOnly className="bg-slate-50" /></FormControl></FormItem>
             </div>
 
-            {/* Checks y Observaciones */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center border p-3 rounded-md bg-slate-50">
                <FormField control={form.control} name="materialSent" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Envía mat.</FormLabel></FormItem>)} />
                <FormField control={form.control} name="certReq" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Solicita Cert.</FormLabel></FormItem>)} />
@@ -321,7 +379,6 @@ export function AdvertisingForm() {
                <FormField control={form.control} name="observations" render={({ field }) => (<FormItem className={cn("col-span-4", !agencySale && "col-span-6")}><FormLabel>Observaciones</FormLabel><FormControl><Textarea className="h-10 resize-none" {...field} /></FormControl></FormItem>)} />
             </div>
 
-            {/* Grilla SRL */}
             <div className="mt-4">
                {startDate && endDate ? (
                   <SrlSection form={form} startDate={startDate} endDate={endDate} programs={programs} />
@@ -338,7 +395,23 @@ export function AdvertisingForm() {
           <div className="p-4"><SasSection form={form} /></div>
         </div>
 
-        <div className="flex justify-end pt-6">
+        <div className="flex justify-end pt-6 gap-4">
+          {/* BOTÓN EXPORTAR PDF */}
+          {isClient && startDate && endDate && (
+              <PDFDownloadLink 
+                document={<AdvertisingOrderPdf order={getPreviewOrder()} />} 
+                fileName="Orden_Publicidad_Preview.pdf"
+                className="no-underline"
+              >
+                {({ loading }) => (
+                    <Button type="button" variant="outline" size="lg" disabled={loading}>
+                        <FileDown className="mr-2 h-4 w-4" /> 
+                        {loading ? 'Generando PDF...' : 'Exportar PDF'}
+                    </Button>
+                )}
+              </PDFDownloadLink>
+          )}
+
           <Button type="submit" size="lg" disabled={isSubmitting}>
             {isSubmitting ? "Guardando..." : <><Save className="mr-2 h-4 w-4" /> Guardar Pedido</>}
           </Button>
