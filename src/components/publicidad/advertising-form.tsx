@@ -2,13 +2,16 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid } from "date-fns";
-import { CalendarIcon, Save, FileDown, Eye } from "lucide-react";
+import { CalendarIcon, Save, FileDown, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { PDFDownloadLink } from "@react-pdf/renderer";
+
+// Librerías para PDF
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -18,7 +21,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"; // Importamos Dialog
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { advertisingOrderSchema, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
@@ -38,14 +40,14 @@ import { useAuth } from "@/hooks/use-auth";
 // Sub-components
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
-import { AdvertisingOrderPdf } from "./advertising-pdf";
+import { AdvertisingOrderPdf } from "./advertising-pdf"; // Importamos el componente HTML
 
 export function AdvertisingForm() {
   const { toast } = useToast();
   const { userInfo } = useAuth();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isClient, setIsClient] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   
   const [clients, setClients] = useState<Client[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
@@ -53,6 +55,9 @@ export function AdvertisingForm() {
   const [opportunities, setOpportunities] = useState<any[]>([]);
   const [isNewOpp, setIsNewOpp] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
+
+  // Referencia para el PDF oculto
+  const pdfRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<AdvertisingOrderFormValues>({
     resolver: zodResolver(advertisingOrderSchema),
@@ -77,8 +82,6 @@ export function AdvertisingForm() {
   const endDate = watch("endDate");
   const agencySale = watch("agencySale");
   const selectedClientId = watch("clientId");
-
-  useEffect(() => { setIsClient(true); }, []);
 
   useEffect(() => {
     if (userInfo?.name) setValue("accountExecutive", userInfo.name);
@@ -116,6 +119,7 @@ export function AdvertisingForm() {
 
   const showSrlSection = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
 
+  // --- PREPARAR OBJETO PARA VISTA PREVIA ---
   const getPreviewOrder = (): AdvertisingOrder => {
       const selectedClient = clients.find(c => c.id === values.clientId);
       const selectedAgency = agencies.find(a => a.id === values.agencyId);
@@ -171,6 +175,34 @@ export function AdvertisingForm() {
           totalSas: sasTotal,
           totalOrder: srlTotal + sasTotal
       };
+  };
+
+  // --- FUNCIÓN DE DESCARGA PDF (Estilo Nota Comercial) ---
+  const handleExportPdf = async () => {
+      if (!pdfRef.current) return;
+      setIsExporting(true);
+      try {
+          const canvas = await html2canvas(pdfRef.current, {
+              scale: 2, // Mejor resolución
+              useCORS: true,
+              logging: false
+          });
+          
+          const imgData = canvas.toDataURL('image/png');
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          pdf.save(`OP-${format(new Date(), 'yyyyMMdd')}.pdf`);
+          
+          toast({ title: "PDF Exportado", description: "El archivo se ha descargado correctamente." });
+      } catch (err) {
+          console.error("Error exportando PDF:", err);
+          toast({ title: "Error", description: "No se pudo generar el PDF.", variant: "destructive" });
+      } finally {
+          setIsExporting(false);
+      }
   };
 
   const onInvalid = (errors: any) => {
@@ -234,6 +266,11 @@ export function AdvertisingForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8 pb-10">
         
+        {/* COMPONENTE PDF OCULTO (Renderizado fuera de pantalla) */}
+        <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
+            <AdvertisingOrderPdf ref={pdfRef} order={getPreviewOrder()} />
+        </div>
+
         {/* HEADER */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 p-4 border rounded-md bg-white shadow-sm">
           <FormField control={form.control} name="clientId" render={({ field }) => (
@@ -322,39 +359,19 @@ export function AdvertisingForm() {
           <div className="p-4"><SasSection form={form} /></div>
         </div>
 
-        {/* FOOTER ACCIONES - CON MODAL PREVIEW SEGURO */}
+        {/* FOOTER ACCIONES */}
         <div className="flex justify-end pt-6 gap-4">
           
-          {isClient && showSrlSection && (
-             <Dialog>
-               <DialogTrigger asChild>
-                 <Button type="button" variant="outline" size="lg">
-                    <Eye className="mr-2 h-4 w-4" /> Previsualizar / Exportar
-                 </Button>
-               </DialogTrigger>
-               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                 <DialogHeader>
-                   <DialogTitle>Previsualización de Orden</DialogTitle>
-                   <DialogDescription>Revisa los datos antes de exportar o guardar.</DialogDescription>
-                 </DialogHeader>
-                 
-                 <div className="flex flex-col items-center justify-center p-8 space-y-4 border rounded-md bg-slate-50">
-                    <p className="text-sm text-muted-foreground">La orden está lista para exportar.</p>
-                    <PDFDownloadLink 
-                        document={<AdvertisingOrderPdf order={getPreviewOrder()} />} 
-                        fileName={`OP-Preview-${format(new Date(), 'yyyyMMdd')}.pdf`}
-                    >
-                        {({ loading }) => (
-                            <Button size="lg" disabled={loading}>
-                                <FileDown className="mr-2 h-4 w-4" />
-                                {loading ? 'Generando Documento...' : 'Descargar PDF Ahora'}
-                            </Button>
-                        )}
-                    </PDFDownloadLink>
-                 </div>
-               </DialogContent>
-             </Dialog>
-          )}
+          <Button 
+            type="button" 
+            variant="outline" 
+            size="lg" 
+            onClick={handleExportPdf}
+            disabled={isExporting || !showSrlSection}
+          >
+             {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
+             {isExporting ? "Generando..." : "Exportar PDF"}
+          </Button>
 
           <Button type="submit" size="lg" disabled={isSubmitting}>
             {isSubmitting ? "Guardando..." : <><Save className="mr-2 h-4 w-4" /> Guardar Pedido</>}
