@@ -5,7 +5,6 @@ import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import { AdvertisingOrder } from '@/lib/types';
 import { format } from 'date-fns';
 
-// Estilos definidos explícitamente para evitar errores de compilación del PDF
 const styles = StyleSheet.create({
   page: { 
     padding: 30, 
@@ -46,7 +45,6 @@ const styles = StyleSheet.create({
   value: { 
     flex: 1 
   },
-  // Tabla
   tableHeader: {
     flexDirection: 'row',
     backgroundColor: '#eee',
@@ -125,8 +123,8 @@ export const AdvertisingOrderPdf = ({ order }: { order: AdvertisingOrder }) => {
           <View style={styles.row}><Text style={styles.label}>Orden Tango:</Text><Text style={styles.value}>{tangoOrder}</Text></View>
         </View>
 
-        {/* DETALLE SRL */}
-        {srlItems.length > 0 && (
+        {/* DETALLE SRL (Usando ternario en lugar de &&) */}
+        {srlItems.length > 0 ? (
             <View style={styles.section}>
                <Text style={styles.sectionTitle}>PAUTA AIRE SRL</Text>
                
@@ -155,10 +153,10 @@ export const AdvertisingOrderPdf = ({ order }: { order: AdvertisingOrder }) => {
                    );
                })}
             </View>
-        )}
+        ) : null}
 
-        {/* DETALLE SAS (DIGITAL) */}
-        {sasItems.length > 0 && (
+        {/* DETALLE SAS (Usando ternario en lugar de &&) */}
+        {sasItems.length > 0 ? (
             <View style={styles.section}>
                <Text style={styles.sectionTitle}>PAUTA DIGITAL (SAS)</Text>
                
@@ -178,7 +176,6 @@ export const AdvertisingOrderPdf = ({ order }: { order: AdvertisingOrder }) => {
                        net = (item.unitRate || 0);
                    }
 
-                   // Generar string de ubicaciones marcadas
                    const locations = [];
                    if (item.desktop) locations.push("D");
                    if (item.mobile) locations.push("M");
@@ -187,7 +184,7 @@ export const AdvertisingOrderPdf = ({ order }: { order: AdvertisingOrder }) => {
 
                    return (
                        <View key={i} style={styles.tableRow}>
-                           <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{item.format}</Text></View>
+                           <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{item.format || "-"}</Text></View>
                            <View style={[styles.tableCol, { width: '25%' }]}><Text style={styles.tableCell}>{item.detail || item.type || "-"}</Text></View>
                            <View style={[styles.tableCol, { width: '15%' }]}><Text style={styles.tableCell}>{locations.join(", ") || "-"}</Text></View>
                            <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{item.observations || "-"}</Text></View>
@@ -196,7 +193,7 @@ export const AdvertisingOrderPdf = ({ order }: { order: AdvertisingOrder }) => {
                    );
                })}
             </View>
-        )}
+        ) : null}
 
         {/* TOTALES */}
         <View style={styles.totals}>
