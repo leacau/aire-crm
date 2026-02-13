@@ -17,13 +17,12 @@ import { FormControl, FormField } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { srlAdTypes, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
-// Tipos para props
+// Tipos para props (asegurando compatibilidad con tu estructura)
 interface Program {
     id: string;
     name: string;
-    // La estructura de horarios de tu sistema
     schedules?: {
-        daysOfWeek: number[]; // Array de números (ej: [1,2,3,4,5] para L-V)
+        daysOfWeek: number[]; // Array [1,2,3,4,5]
         startTime: string;
         endTime: string;
     }[];
@@ -171,7 +170,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     const itemValues = items?.[index];
                     if (!itemValues || itemValues.month !== monthKey) return null;
 
-                    // --- LOGICA DE BLOQUEO DE DÍAS ---
+                    // --- DETECCIÓN DE DÍAS HABILITADOS ---
                     const currentProgram = programs.find(p => p.id === itemValues.programId);
                     
                     // Unir todos los daysOfWeek de todos los schedules del programa
@@ -181,7 +180,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                             schedule.daysOfWeek.forEach(day => validDays.add(day));
                         });
                     }
-                    // Si el programa no tiene horarios definidos, asumimos todos los días (o ninguno, según prefieras. Aquí dejo libre si no hay config)
                     const hasRestrictions = validDays.size > 0;
 
                     const adType = itemValues.adType;
@@ -266,8 +264,8 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                         {days.map(day => {
                             const dateKey = format(day, "yyyy-MM-dd");
                             
-                            // Conversión de día JS (0-6) a formato ISO/Tango (1-7, Lunes=1)
-                            const jsDay = getDay(day); // 0=Dom, 1=Lun
+                            // Convertir día JS (0=Dom, 1=Lun) a formato 1-7 (1=Lun ... 7=Dom)
+                            const jsDay = getDay(day);
                             const isoDay = jsDay === 0 ? 7 : jsDay; 
 
                             // Si hay restricciones y el día NO está en la lista -> Bloqueado
@@ -287,7 +285,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                                                     field.value ? "bg-blue-100 font-bold text-blue-800" : "text-gray-300 hover:bg-slate-50",
                                                     isBlocked && "cursor-not-allowed bg-transparent text-transparent hover:bg-transparent placeholder:text-transparent"
                                                 )}
-                                                title={isBlocked ? "Programa no se emite este día" : ""}
                                                 value={field.value || ""} 
                                                 onChange={e => {
                                                     const val = parseInt(e.target.value);
