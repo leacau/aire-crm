@@ -1,8 +1,9 @@
 // src/components/publicidad/srl-section.tsx
+
 "use client";
 
 import { useFieldArray, UseFormReturn, useWatch } from "react-hook-form";
-import { format, eachMonthOfInterval, endOfMonth, eachDayOfInterval, startOfMonth, isValid } from "date-fns";
+import { format, eachMonthOfInterval, endOfMonth, eachDayOfInterval, startOfMonth, getDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect } from "react";
@@ -16,9 +17,16 @@ import { FormControl, FormField } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { srlAdTypes, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
+// Tipos para props
 interface Program {
     id: string;
     name: string;
+    // Agregamos schedules para saber los días
+    schedules?: {
+        daysOfWeek: number[]; // Array de números (ej: [1,2,3,4,5] para L-V)
+        startTime: string;
+        endTime: string;
+    }[];
     rates?: {
         spotRadio?: number;
         spotTv?: number;
@@ -34,7 +42,7 @@ interface SrlSectionProps {
   form: UseFormReturn<AdvertisingOrderFormValues>;
   startDate: Date;
   endDate: Date;
-  programs: Program[];
+  programs: Program[]; 
 }
 
 export function SrlSection({ form, startDate, endDate, programs }: SrlSectionProps) {
@@ -48,6 +56,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
       name: "srlItems"
   });
 
+  // LOGICA DE TARIFAS AUTOMÁTICAS
   useEffect(() => {
      items?.forEach((item, index) => {
          if (!item.programId || !item.adType) return;
@@ -78,16 +87,15 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
      });
   }, [items, programs, form]);
 
-  // VALIDACIÓN ROBUSTA: Si las fechas no son válidas o el rango es incorrecto, no renderizar
-  if (!startDate || !endDate || !isValid(startDate) || !isValid(endDate) || endDate < startDate) {
-      return null;
-  }
+
+  if (!startDate || !endDate) return null;
 
   const months = eachMonthOfInterval({ start: startDate, end: endDate });
 
+  // Cálculos de Totales Globales (Protegidos)
   const subtotal = items?.reduce((acc, item) => {
     const dailySpots = item.dailySpots || {};
-    const totalAds = Object.values(dailySpots).reduce((sum, val) => sum + (val || 0), 0);
+    const totalAds = Object.values(dailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
     const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
     const net = (item.unitRate || 0) * totalAds * multiplier;
     return acc + net;
@@ -163,6 +171,15 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     const itemValues = items?.[index];
                     if (!itemValues || itemValues.month !== monthKey) return null;
 
+                    // --- VALIDACIÓN DE DÍAS ---
+                    const currentProgram = programs.find(p => p.id === itemValues.programId);
+                    // Obtenemos todos los días habilitados del programa (si tiene múltiples horarios, los combinamos)
+                    // Asumimos formato 1-7 (Lun-Dom)
+                    const allowedDays = new Set(
+                        currentProgram?.schedules?.flatMap(s => s.daysOfWeek) || []
+                    );
+                    const hasScheduleRestrictions = allowedDays.size > 0;
+
                     const adType = itemValues.adType;
                     const enableTv = adType === "Spot" || adType === "PNT";
                     
@@ -170,7 +187,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     const currentSeconds = itemValues.seconds || 0;
                     const currentUnitRate = itemValues.unitRate || 0;
 
-                    const totalAdsGlobal = Object.values(currentDailySpots).reduce((sum, val) => sum + (val || 0), 0);
+                    const totalAdsGlobal = Object.values(currentDailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
                     const totalSecondsGlobal = adType === "Spot" ? (totalAdsGlobal * currentSeconds) : 0;
                     const netAmountGlobal = currentUnitRate * totalAdsGlobal * (adType === "Spot" ? currentSeconds : 1);
 
@@ -244,17 +261,29 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
 
                         {days.map(day => {
                             const dateKey = format(day, "yyyy-MM-dd");
+                            
+                            // Lógica de Bloqueo de Días
+                            // getDay: 0=Dom, 1=Lun ... 6=Sab
+                            const jsDay = getDay(day);
+                            // Convertir a formato 1-7 (1=Lun ... 7=Dom)
+                            const isoDay = jsDay === 0 ? 7 : jsDay;
+                            
+                            // Si el programa tiene restricciones y este día no está en la lista, se bloquea
+                            const isDayDisabled = hasScheduleRestrictions && !allowedDays.has(isoDay);
+
                             return (
-                                <TableCell key={dateKey} className="p-0 border-x border-slate-100">
+                                <TableCell key={dateKey} className={cn("p-0 border-x border-slate-100", isDayDisabled && "bg-slate-100")}>
                                     <FormField
                                         control={form.control}
                                         name={`srlItems.${index}.dailySpots.${dateKey}`}
                                         render={({ field }) => (
                                             <Input 
                                                 type="text"
+                                                disabled={isDayDisabled}
                                                 className={cn(
                                                     "h-8 w-full px-0 text-center border-none focus-visible:ring-1 focus-visible:ring-inset text-xs",
-                                                    field.value ? "bg-blue-100 font-bold text-blue-800" : "text-gray-300 hover:bg-slate-50"
+                                                    field.value ? "bg-blue-100 font-bold text-blue-800" : "text-gray-300 hover:bg-slate-50",
+                                                    isDayDisabled && "cursor-not-allowed bg-transparent hover:bg-transparent placeholder:text-transparent text-transparent"
                                                 )}
                                                 value={field.value || ""} 
                                                 onChange={e => {
@@ -303,6 +332,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
         );
       })}
 
+      {/* FOOTER TOTALES SRL */}
       <div className="flex justify-end mt-4">
         <div className="w-full max-w-2xl bg-slate-50 p-4 rounded-lg border grid grid-cols-2 gap-x-8 gap-y-2">
             <div className="flex justify-between items-center text-sm">
