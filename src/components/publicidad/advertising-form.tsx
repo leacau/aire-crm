@@ -9,7 +9,7 @@ import { format, differenceInDays, isValid } from "date-fns";
 import { CalendarIcon, Save, FileDown, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-// Librerías para PDF
+// Librerías PDF
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -37,10 +37,9 @@ import {
 import { Client, Agency, AdvertisingOrder } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 
-// Sub-components
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
-import { AdvertisingOrderPdf } from "./advertising-pdf"; // Importamos el componente HTML
+import { AdvertisingOrderPdf } from "./advertising-pdf";
 
 export function AdvertisingForm() {
   const { toast } = useToast();
@@ -56,7 +55,6 @@ export function AdvertisingForm() {
   const [isNewOpp, setIsNewOpp] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
-  // Referencia para el PDF oculto
   const pdfRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<AdvertisingOrderFormValues>({
@@ -119,7 +117,6 @@ export function AdvertisingForm() {
 
   const showSrlSection = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
 
-  // --- PREPARAR OBJETO PARA VISTA PREVIA ---
   const getPreviewOrder = (): AdvertisingOrder => {
       const selectedClient = clients.find(c => c.id === values.clientId);
       const selectedAgency = agencies.find(a => a.id === values.agencyId);
@@ -177,25 +174,17 @@ export function AdvertisingForm() {
       };
   };
 
-  // --- FUNCIÓN DE DESCARGA PDF (Estilo Nota Comercial) ---
   const handleExportPdf = async () => {
       if (!pdfRef.current) return;
       setIsExporting(true);
       try {
-          const canvas = await html2canvas(pdfRef.current, {
-              scale: 2, // Mejor resolución
-              useCORS: true,
-              logging: false
-          });
-          
+          const canvas = await html2canvas(pdfRef.current, { scale: 2, useCORS: true, logging: false });
           const imgData = canvas.toDataURL('image/png');
           const pdf = new jsPDF('p', 'mm', 'a4');
           const pdfWidth = pdf.internal.pageSize.getWidth();
           const pdfHeight = pdf.internal.pageSize.getHeight();
-          
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
           pdf.save(`OP-${format(new Date(), 'yyyyMMdd')}.pdf`);
-          
           toast({ title: "PDF Exportado", description: "El archivo se ha descargado correctamente." });
       } catch (err) {
           console.error("Error exportando PDF:", err);
@@ -206,10 +195,17 @@ export function AdvertisingForm() {
   };
 
   const onInvalid = (errors: any) => {
-      let errorMsg = "Revisa los campos obligatorios.";
-      if (errors.clientId) errorMsg = "Falta seleccionar el Cliente.";
-      else if (errors.startDate || errors.endDate) errorMsg = "Faltan fechas de vigencia.";
-      toast({ title: "Datos incompletos", description: errorMsg, variant: "destructive" });
+      const missingFields = [];
+      if (errors.clientId) missingFields.push("Cliente");
+      if (errors.startDate || errors.endDate) missingFields.push("Fechas de Vigencia");
+      // Si el validador nuevo se aplicó, 'product' no debería fallar, pero si falla:
+      if (errors.product) missingFields.push("Producto (Interno)");
+      
+      toast({ 
+          title: "Faltan datos obligatorios", 
+          description: `Por favor completa: ${missingFields.join(", ")}`, 
+          variant: "destructive" 
+      });
   };
 
   async function onSubmit(data: AdvertisingOrderFormValues) {
@@ -222,13 +218,17 @@ export function AdvertisingForm() {
       let finalOppId = data.opportunityId;
       let oppTitle = "";
 
+      // Validación manual de Oportunidad (porque es compleja en Zod)
       if (data.opportunityId === "new_custom_opportunity") {
           if (!data.newOpportunityTitle) {
-              toast({ title: "Error", description: "Falta nombre de oportunidad", variant: "destructive"});
+              toast({ title: "Falta Nombre", description: "Ingrese nombre para la nueva oportunidad", variant: "destructive"});
               setIsSubmitting(false); return;
           }
           finalOppId = await createQuickOpportunity(data.newOpportunityTitle, data.clientId, selectedClient?.denominacion || "Cliente", userInfo.id);
           oppTitle = data.newOpportunityTitle;
+      } else if (!data.opportunityId) {
+          toast({ title: "Falta Producto", description: "Seleccione una oportunidad o cree una nueva", variant: "destructive"});
+          setIsSubmitting(false); return;
       } else {
           const existingOpp = opportunities.find(o => o.id === finalOppId);
           oppTitle = existingOpp?.title || "Sin Asignar";
@@ -266,17 +266,13 @@ export function AdvertisingForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8 pb-10">
         
-       {/* COMPONENTE PDF OCULTO (Renderizado fuera de pantalla) */}
-        {/* Usamos 'display: none' no funciona bien con html2canvas a veces, mejor posicionamiento absoluto off-screen */}
         <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
-            {/* AQUÍ PASAMOS LA PROP 'programs' */}
             <AdvertisingOrderPdf ref={pdfRef} order={getPreviewOrder()} programs={programs} />
         </div>
 
-        {/* HEADER */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 p-4 border rounded-md bg-white shadow-sm">
           <FormField control={form.control} name="clientId" render={({ field }) => (
-              <FormItem><FormLabel>Anunciante (Cliente) *</FormLabel>
+              <FormItem><FormLabel>Anunciante (Cliente) <span className="text-red-500">*</span></FormLabel>
                 <Select onValueChange={(val) => { field.onChange(val); setValue("opportunityId", ""); }} defaultValue={field.value}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
                   <SelectContent>{clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>))}</SelectContent>
@@ -293,7 +289,7 @@ export function AdvertisingForm() {
             )} />
           <div className="col-span-1">
              <FormField control={form.control} name="opportunityId" render={({ field }) => (
-                  <FormItem><FormLabel>Producto (Oportunidad)</FormLabel>
+                  <FormItem><FormLabel>Producto (Oportunidad) <span className="text-red-500">*</span></FormLabel>
                     <Select onValueChange={(val) => { field.onChange(val); setIsNewOpp(val === "new_custom_opportunity"); }} value={field.value}>
                       <FormControl><SelectTrigger><SelectValue placeholder={opportunities.length === 0 ? "Sin oportunidades" : "Seleccionar"} /></SelectTrigger></FormControl>
                       <SelectContent>
@@ -303,7 +299,7 @@ export function AdvertisingForm() {
                     </Select>
                   </FormItem>
                 )} />
-              {isNewOpp && (<FormField control={form.control} name="newOpportunityTitle" render={({ field }) => (<div className="mt-2"><Input placeholder="Nombre del producto" {...field} /></div>)} />)}
+              {isNewOpp && (<FormField control={form.control} name="newOpportunityTitle" render={({ field }) => (<div className="mt-2"><Input placeholder="Nombre del producto *" {...field} /></div>)} />)}
           </div>
           <FormField control={form.control} name="accountExecutive" render={({ field }) => (<FormItem><FormLabel>Ejecutivo</FormLabel><FormControl><Input {...field} readOnly /></FormControl></FormItem>)} />
         </div>
@@ -315,7 +311,7 @@ export function AdvertisingForm() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                <FormField control={form.control} name="tangoOrderNo" render={({ field }) => (<FormItem><FormLabel>Orden Tango</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
                <FormField control={form.control} name="startDate" render={({ field }) => (
-                  <FormItem className="flex flex-col"><FormLabel>Inicio *</FormLabel>
+                  <FormItem className="flex flex-col"><FormLabel>Inicio <span className="text-red-500">*</span></FormLabel>
                     <Popover>
                       <PopoverTrigger asChild><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "dd/MM/yyyy") : <span>Fecha</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></PopoverTrigger>
                       <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent>
@@ -324,7 +320,7 @@ export function AdvertisingForm() {
                   </FormItem>
                 )} />
                <FormField control={form.control} name="endDate" render={({ field }) => (
-                  <FormItem className="flex flex-col"><FormLabel>Fin *</FormLabel>
+                  <FormItem className="flex flex-col"><FormLabel>Fin <span className="text-red-500">*</span></FormLabel>
                     <Popover>
                       <PopoverTrigger asChild><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "dd/MM/yyyy") : <span>Fecha</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></PopoverTrigger>
                       <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent>
@@ -355,15 +351,12 @@ export function AdvertisingForm() {
           </div>
         </div>
 
-        {/* AIRE SAS */}
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
           <div className="bg-slate-100 px-4 py-2 border-b"><h3 className="text-lg font-semibold text-slate-800">AIRE SAS</h3></div>
           <div className="p-4"><SasSection form={form} /></div>
         </div>
 
-        {/* FOOTER ACCIONES */}
         <div className="flex justify-end pt-6 gap-4">
-          
           <Button 
             type="button" 
             variant="outline" 
