@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid } from "date-fns";
-import { CalendarIcon, Save, FileDown } from "lucide-react";
+import { CalendarIcon, Save, FileDown, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 
@@ -43,7 +43,7 @@ export function AdvertisingForm() {
   const { userInfo } = useAuth();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isClient, setIsClient] = useState(false); // Control para PDF
+  const [isClient, setIsClient] = useState(false);
   
   const [clients, setClients] = useState<Client[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
@@ -66,20 +66,19 @@ export function AdvertisingForm() {
       adjustmentSas: 0,
       srlItems: [],
       sasItems: [],
-      // Inicializamos undefined para obligar selección, pero controlamos el render
       startDate: undefined,
       endDate: undefined,
     },
   });
 
   const { watch, setValue } = form;
-  const values = watch(); // Observamos todo para el PDF
+  const values = watch();
   const startDate = watch("startDate");
   const endDate = watch("endDate");
   const agencySale = watch("agencySale");
   const selectedClientId = watch("clientId");
 
-  // Activar renderizado de cliente para habilitar PDF
+  // Activar renderizado de cliente
   useEffect(() => {
     setIsClient(true);
   }, []);
@@ -139,13 +138,11 @@ export function AdvertisingForm() {
 
   // --- LÓGICA DE PDF SEGURA ---
   const getPreviewOrder = (): AdvertisingOrder => {
-      // Usamos datos seguros (defaults) si el usuario aún no completa campos para que el PDF no explote
       const selectedClient = clients.find(c => c.id === values.clientId);
       const selectedAgency = agencies.find(a => a.id === values.agencyId);
       const selectedOpp = opportunities.find(o => o.id === values.opportunityId);
       const oppTitle = values.opportunityId === 'new_custom_opportunity' ? values.newOpportunityTitle : selectedOpp?.title;
 
-      // Fechas seguras: Si no hay fecha válida seleccionada, usamos HOY para la preview del PDF
       const safeStartDate = (values.startDate && isValid(values.startDate)) ? values.startDate.toISOString() : new Date().toISOString();
       const safeEndDate = (values.endDate && isValid(values.endDate)) ? values.endDate.toISOString() : new Date().toISOString();
 
@@ -200,13 +197,12 @@ export function AdvertisingForm() {
   // --- MANEJO DE ERRORES AL GUARDAR ---
   const onInvalid = (errors: any) => {
       console.log("Errores de validación:", errors);
-      let errorMsg = "Revisa los campos obligatorios.";
-      if (errors.clientId) errorMsg = "Debes seleccionar un Cliente.";
-      else if (errors.startDate || errors.endDate) errorMsg = "Debes seleccionar Fecha de Inicio y Fin.";
-      else if (errors.product) errorMsg = "Falta el nombre del producto.";
+      let errorMsg = "Revisa los campos obligatorios marcados en rojo.";
+      if (errors.clientId) errorMsg = "Falta seleccionar el Anunciante (Cliente).";
+      else if (errors.startDate || errors.endDate) errorMsg = "Faltan las fechas de Inicio o Fin.";
       
       toast({
-          title: "Faltan datos",
+          title: "No se puede guardar",
           description: errorMsg,
           variant: "destructive"
       });
@@ -241,19 +237,17 @@ export function AdvertisingForm() {
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      // Preparar objeto final (usamos la lógica de preview pero con datos finales validados)
       const preview = getPreviewOrder();
       
       const orderPayload = {
-        ...preview, // Copia los cálculos
-        // Sobreescribe con datos firmes del submit
+        ...preview,
         clientId: data.clientId,
         clientName: selectedClient?.denominacion || "Desconocido",
         agencyId: data.agencyId,
         agencyName: selectedAgency?.name,
         opportunityId: finalOppId,
         opportunityTitle: oppTitle,
-        startDate: data.startDate.toISOString(), // Aquí sí usamos las fechas reales validadas
+        startDate: data.startDate.toISOString(),
         endDate: data.endDate.toISOString(),
         id: undefined 
       };
@@ -429,8 +423,9 @@ export function AdvertisingForm() {
 
         {/* FOOTER ACCIONES */}
         <div className="flex justify-end pt-6 gap-4">
-          {/* BOTÓN PDF - Renderizado condicional seguro */}
-          {isClient && (
+          
+          {/* BOTÓN PDF PROTEGIDO: Solo se renderiza el real si hay datos */}
+          {isClient && showSrlSection ? (
               <PDFDownloadLink 
                 document={<AdvertisingOrderPdf order={getPreviewOrder()} />} 
                 fileName="Orden_Publicidad_Preview.pdf"
@@ -443,6 +438,11 @@ export function AdvertisingForm() {
                     </Button>
                 )}
               </PDFDownloadLink>
+          ) : (
+              // Botón "dummy" deshabilitado para que el usuario sepa que existe pero requiere datos
+              <Button type="button" variant="outline" size="lg" disabled title="Complete fechas para exportar">
+                  <FileDown className="mr-2 h-4 w-4" /> Exportar PDF
+              </Button>
           )}
 
           <Button type="submit" size="lg" disabled={isSubmitting}>
