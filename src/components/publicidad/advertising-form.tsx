@@ -1,11 +1,13 @@
+// src/components/publicidad/advertising-form.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid } from "date-fns";
-import { CalendarIcon, Save } from "lucide-react";
+import { CalendarIcon, Save, FileDown } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { PDFDownloadLink } from "@react-pdf/renderer";
 
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -28,18 +30,20 @@ import {
     getOpportunitiesByClientId, 
     createQuickOpportunity 
 } from "@/lib/firebase-service";
-import { Client, Agency } from "@/lib/types";
+import { Client, Agency, AdvertisingOrder } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 
 // Sub-components
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
+import { AdvertisingOrderPdf } from "./advertising-pdf";
 
 export function AdvertisingForm() {
   const { toast } = useToast();
   const { userInfo } = useAuth();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isClient, setIsClient] = useState(false); // Control para PDF
   
   const [clients, setClients] = useState<Client[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
@@ -62,17 +66,23 @@ export function AdvertisingForm() {
       adjustmentSas: 0,
       srlItems: [],
       sasItems: [],
-      // Dejar undefined explícitamente para que el selector de fecha funcione en modo "vacío" inicial
+      // Inicializamos undefined para obligar selección, pero controlamos el render
       startDate: undefined,
       endDate: undefined,
     },
   });
 
   const { watch, setValue } = form;
+  const values = watch(); // Observamos todo para el PDF
   const startDate = watch("startDate");
   const endDate = watch("endDate");
   const agencySale = watch("agencySale");
   const selectedClientId = watch("clientId");
+
+  // Activar renderizado de cliente para habilitar PDF
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -103,31 +113,104 @@ export function AdvertisingForm() {
     loadData();
   }, [userInfo, setValue, toast]);
 
-  // Cargar Oportunidades cuando cambia el cliente
+  // Cargar Oportunidades
   useEffect(() => {
     if (!selectedClientId) {
         setOpportunities([]);
         return;
     }
-    
     const fetchOpps = async () => {
         try {
             const opps = await getOpportunitiesByClientId(selectedClientId);
             setOpportunities(opps);
         } catch (error) {
-            console.error("Error fetching opportunities:", error);
+            console.error(error);
         }
     };
     fetchOpps();
   }, [selectedClientId]);
 
-  // Validación segura de días
+  // Validaciones visuales
   const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
     ? Math.max(0, differenceInDays(endDate, startDate) + 1) 
     : 0;
 
-  // Validación para mostrar SrlSection: Ambas fechas existen, son válidas y Fin >= Inicio
   const showSrlSection = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
+
+  // --- LÓGICA DE PDF SEGURA ---
+  const getPreviewOrder = (): AdvertisingOrder => {
+      // Usamos datos seguros (defaults) si el usuario aún no completa campos para que el PDF no explote
+      const selectedClient = clients.find(c => c.id === values.clientId);
+      const selectedAgency = agencies.find(a => a.id === values.agencyId);
+      const selectedOpp = opportunities.find(o => o.id === values.opportunityId);
+      const oppTitle = values.opportunityId === 'new_custom_opportunity' ? values.newOpportunityTitle : selectedOpp?.title;
+
+      // Fechas seguras: Si no hay fecha válida seleccionada, usamos HOY para la preview del PDF
+      const safeStartDate = (values.startDate && isValid(values.startDate)) ? values.startDate.toISOString() : new Date().toISOString();
+      const safeEndDate = (values.endDate && isValid(values.endDate)) ? values.endDate.toISOString() : new Date().toISOString();
+
+      const srlSubtotal = values.srlItems?.reduce((acc, item) => {
+        const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (val || 0), 0);
+        const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
+        return acc + ((item.unitRate || 0) * totalAds * multiplier);
+      }, 0) || 0;
+      const srlTotal = srlSubtotal - (values.adjustmentSrl || 0);
+
+      const sasSubtotal = values.sasItems?.reduce((acc, item) => {
+        let net = 0;
+        if (item.format === "Banner") {
+            net = (item.cpm || 0) * (item.unitRate || 0);
+        } else {
+            net = (item.unitRate || 0);
+        }
+        return acc + net;
+      }, 0) || 0;
+      const sasTotal = (sasSubtotal - (values.adjustmentSas || 0)) * 1.05;
+
+      return {
+          id: "preview",
+          clientId: values.clientId || "",
+          clientName: selectedClient?.denominacion || "Cliente (Vista Previa)",
+          agencyId: values.agencyId,
+          agencyName: selectedAgency?.name,
+          product: "", 
+          opportunityId: values.opportunityId,
+          opportunityTitle: oppTitle || "Campaña",
+          accountExecutive: values.accountExecutive || userInfo?.name || "",
+          createdAt: new Date().toISOString(),
+          createdBy: userInfo?.id || "",
+          tangoOrderNo: values.tangoOrderNo,
+          startDate: safeStartDate,
+          endDate: safeEndDate,
+          materialSent: values.materialSent || false,
+          observations: values.observations,
+          certReq: values.certReq || false,
+          agencySale: values.agencySale || false,
+          commissionSrl: values.commissionSrl || 0,
+          srlItems: values.srlItems || [],
+          sasItems: values.sasItems || [],
+          adjustmentSrl: values.adjustmentSrl || 0,
+          adjustmentSas: values.adjustmentSas || 0,
+          totalSrl: srlTotal,
+          totalSas: sasTotal,
+          totalOrder: srlTotal + sasTotal
+      };
+  };
+
+  // --- MANEJO DE ERRORES AL GUARDAR ---
+  const onInvalid = (errors: any) => {
+      console.log("Errores de validación:", errors);
+      let errorMsg = "Revisa los campos obligatorios.";
+      if (errors.clientId) errorMsg = "Debes seleccionar un Cliente.";
+      else if (errors.startDate || errors.endDate) errorMsg = "Debes seleccionar Fecha de Inicio y Fin.";
+      else if (errors.product) errorMsg = "Falta el nombre del producto.";
+      
+      toast({
+          title: "Faltan datos",
+          description: errorMsg,
+          variant: "destructive"
+      });
+  };
 
   async function onSubmit(data: AdvertisingOrderFormValues) {
     if (!userInfo) return;
@@ -158,37 +241,28 @@ export function AdvertisingForm() {
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      // Preparar objeto para Firebase
+      // Preparar objeto final (usamos la lógica de preview pero con datos finales validados)
+      const preview = getPreviewOrder();
+      
       const orderPayload = {
+        ...preview, // Copia los cálculos
+        // Sobreescribe con datos firmes del submit
         clientId: data.clientId,
         clientName: selectedClient?.denominacion || "Desconocido",
         agencyId: data.agencyId,
         agencyName: selectedAgency?.name,
-        
         opportunityId: finalOppId,
         opportunityTitle: oppTitle,
-
-        accountExecutive: data.accountExecutive || userInfo.name,
-        createdBy: userInfo.id,
-        tangoOrderNo: data.tangoOrderNo,
-        startDate: data.startDate.toISOString(),
+        startDate: data.startDate.toISOString(), // Aquí sí usamos las fechas reales validadas
         endDate: data.endDate.toISOString(),
-        materialSent: data.materialSent,
-        observations: data.observations,
-        certReq: data.certReq,
-        agencySale: data.agencySale,
-        commissionSrl: data.commissionSrl,
-        srlItems: data.srlItems,
-        sasItems: data.sasItems,
-        adjustmentSrl: data.adjustmentSrl,
-        adjustmentSas: data.adjustmentSas,
+        id: undefined 
       };
+      
+      delete orderPayload.id;
 
       await createAdvertisingOrder(orderPayload);
       
       toast({ title: "Pedido creado", description: "Se guardó correctamente." });
-      
-      // Redirigir al cliente donde podrán ver y descargar el PDF desde el detalle
       router.push(`/clients/${data.clientId}`);
 
     } catch (error) {
@@ -203,16 +277,16 @@ export function AdvertisingForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 pb-10">
+      <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8 pb-10">
         
-        {/* CLIENTE Y PRODUCTO */}
+        {/* HEADER */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 p-4 border rounded-md bg-white shadow-sm">
           <FormField
             control={form.control}
             name="clientId"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Anunciante (Cliente)</FormLabel>
+                <FormLabel>Anunciante (Cliente) *</FormLabel>
                 <Select onValueChange={(val) => {
                     field.onChange(val);
                     setValue("opportunityId", ""); 
@@ -244,7 +318,6 @@ export function AdvertisingForm() {
             )}
           />
 
-          {/* SELECTOR DE OPORTUNIDAD (PRODUCTO) */}
           <div className="col-span-1">
              <FormField
                 control={form.control}
@@ -306,20 +379,22 @@ export function AdvertisingForm() {
                <FormField control={form.control} name="tangoOrderNo" render={({ field }) => (<FormItem><FormLabel>Orden Tango</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
                
                <FormField control={form.control} name="startDate" render={({ field }) => (
-                  <FormItem className="flex flex-col"><FormLabel>Inicio</FormLabel>
+                  <FormItem className="flex flex-col"><FormLabel>Inicio *</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "dd/MM/yyyy") : <span>Fecha</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></PopoverTrigger>
                       <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent>
                     </Popover>
+                    <FormMessage />
                   </FormItem>
                 )} />
                
                <FormField control={form.control} name="endDate" render={({ field }) => (
-                  <FormItem className="flex flex-col"><FormLabel>Fin</FormLabel>
+                  <FormItem className="flex flex-col"><FormLabel>Fin *</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "dd/MM/yyyy") : <span>Fecha</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></PopoverTrigger>
                       <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent>
                     </Popover>
+                    <FormMessage />
                   </FormItem>
                 )} />
                
@@ -352,7 +427,24 @@ export function AdvertisingForm() {
           <div className="p-4"><SasSection form={form} /></div>
         </div>
 
-        <div className="flex justify-end pt-6">
+        {/* FOOTER ACCIONES */}
+        <div className="flex justify-end pt-6 gap-4">
+          {/* BOTÓN PDF - Renderizado condicional seguro */}
+          {isClient && (
+              <PDFDownloadLink 
+                document={<AdvertisingOrderPdf order={getPreviewOrder()} />} 
+                fileName="Orden_Publicidad_Preview.pdf"
+                className="no-underline"
+              >
+                {({ loading }) => (
+                    <Button type="button" variant="outline" size="lg" disabled={loading}>
+                        <FileDown className="mr-2 h-4 w-4" /> 
+                        {loading ? 'Generando...' : 'Exportar PDF'}
+                    </Button>
+                )}
+              </PDFDownloadLink>
+          )}
+
           <Button type="submit" size="lg" disabled={isSubmitting}>
             {isSubmitting ? "Guardando..." : <><Save className="mr-2 h-4 w-4" /> Guardar Pedido</>}
           </Button>
