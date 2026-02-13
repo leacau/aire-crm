@@ -1,13 +1,11 @@
-// src/components/publicidad/advertising-form.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format, differenceInDays, isValid } from "date-fns"; // Importar isValid
-import { CalendarIcon, Save, FileDown } from "lucide-react";
+import { format, differenceInDays, isValid } from "date-fns";
+import { CalendarIcon, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { PDFDownloadLink } from "@react-pdf/renderer";
 
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -21,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { advertisingOrderSchema, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
+// Services & Types
 import { 
     createAdvertisingOrder, 
     getClients, 
@@ -29,19 +28,18 @@ import {
     getOpportunitiesByClientId, 
     createQuickOpportunity 
 } from "@/lib/firebase-service";
-import { Client, Agency, AdvertisingOrder } from "@/lib/types";
+import { Client, Agency } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 
+// Sub-components
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
-import { AdvertisingOrderPdf } from "./advertising-pdf";
 
 export function AdvertisingForm() {
   const { toast } = useToast();
   const { userInfo } = useAuth();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isClient, setIsClient] = useState(false);
   
   const [clients, setClients] = useState<Client[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
@@ -64,23 +62,19 @@ export function AdvertisingForm() {
       adjustmentSas: 0,
       srlItems: [],
       sasItems: [],
-      // Inicializar explícitamente las fechas como undefined para evitar errores de uncontrolled/controlled
+      // Dejar undefined explícitamente para que el selector de fecha funcione en modo "vacío" inicial
       startDate: undefined,
       endDate: undefined,
-    } as any, // Cast necesario si el tipo espera Date estricto pero inicia undefined
+    },
   });
 
   const { watch, setValue } = form;
-  const values = watch();
   const startDate = watch("startDate");
   const endDate = watch("endDate");
   const agencySale = watch("agencySale");
   const selectedClientId = watch("clientId");
 
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
+  // Cargar datos iniciales
   useEffect(() => {
     if (userInfo?.name) setValue("accountExecutive", userInfo.name);
 
@@ -109,6 +103,7 @@ export function AdvertisingForm() {
     loadData();
   }, [userInfo, setValue, toast]);
 
+  // Cargar Oportunidades cuando cambia el cliente
   useEffect(() => {
     if (!selectedClientId) {
         setOpportunities([]);
@@ -116,8 +111,12 @@ export function AdvertisingForm() {
     }
     
     const fetchOpps = async () => {
-        const opps = await getOpportunitiesByClientId(selectedClientId);
-        setOpportunities(opps);
+        try {
+            const opps = await getOpportunitiesByClientId(selectedClientId);
+            setOpportunities(opps);
+        } catch (error) {
+            console.error("Error fetching opportunities:", error);
+        }
     };
     fetchOpps();
   }, [selectedClientId]);
@@ -127,60 +126,8 @@ export function AdvertisingForm() {
     ? Math.max(0, differenceInDays(endDate, startDate) + 1) 
     : 0;
 
-  // Lógica de totales para PDF...
-  const getPreviewOrder = (): AdvertisingOrder => {
-      const selectedClient = clients.find(c => c.id === values.clientId);
-      const selectedAgency = agencies.find(a => a.id === values.agencyId);
-      const selectedOpp = opportunities.find(o => o.id === values.opportunityId);
-      const oppTitle = values.opportunityId === 'new_custom_opportunity' ? values.newOpportunityTitle : selectedOpp?.title;
-
-      const srlSubtotal = values.srlItems?.reduce((acc, item) => {
-        const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (val || 0), 0);
-        const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
-        return acc + ((item.unitRate || 0) * totalAds * multiplier);
-      }, 0) || 0;
-      const srlTotal = srlSubtotal - (values.adjustmentSrl || 0);
-
-      const sasSubtotal = values.sasItems?.reduce((acc, item) => {
-        let net = 0;
-        if (item.format === "Banner") {
-            net = (item.cpm || 0) * (item.unitRate || 0);
-        } else {
-            net = (item.unitRate || 0);
-        }
-        return acc + net;
-      }, 0) || 0;
-      const sasTotal = (sasSubtotal - (values.adjustmentSas || 0)) * 1.05;
-
-      return {
-          id: "preview",
-          clientId: values.clientId || "",
-          clientName: selectedClient?.denominacion || "",
-          agencyId: values.agencyId,
-          agencyName: selectedAgency?.name,
-          product: "", 
-          opportunityId: values.opportunityId,
-          opportunityTitle: oppTitle || "",
-          accountExecutive: values.accountExecutive || "",
-          createdAt: new Date().toISOString(),
-          createdBy: userInfo?.id || "",
-          tangoOrderNo: values.tangoOrderNo,
-          startDate: values.startDate?.toISOString() || new Date().toISOString(),
-          endDate: values.endDate?.toISOString() || new Date().toISOString(),
-          materialSent: values.materialSent,
-          observations: values.observations,
-          certReq: values.certReq,
-          agencySale: values.agencySale,
-          commissionSrl: values.commissionSrl,
-          srlItems: values.srlItems || [],
-          sasItems: values.sasItems || [],
-          adjustmentSrl: values.adjustmentSrl,
-          adjustmentSas: values.adjustmentSas,
-          totalSrl: srlTotal,
-          totalSas: sasTotal,
-          totalOrder: srlTotal + sasTotal
-      };
-  };
+  // Validación para mostrar SrlSection: Ambas fechas existen, son válidas y Fin >= Inicio
+  const showSrlSection = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
 
   async function onSubmit(data: AdvertisingOrderFormValues) {
     if (!userInfo) return;
@@ -211,24 +158,37 @@ export function AdvertisingForm() {
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      const preview = getPreviewOrder();
-      
+      // Preparar objeto para Firebase
       const orderPayload = {
-        ...preview,
         clientId: data.clientId,
         clientName: selectedClient?.denominacion || "Desconocido",
         agencyId: data.agencyId,
         agencyName: selectedAgency?.name,
+        
         opportunityId: finalOppId,
         opportunityTitle: oppTitle,
-        id: undefined 
+
+        accountExecutive: data.accountExecutive || userInfo.name,
+        createdBy: userInfo.id,
+        tangoOrderNo: data.tangoOrderNo,
+        startDate: data.startDate.toISOString(),
+        endDate: data.endDate.toISOString(),
+        materialSent: data.materialSent,
+        observations: data.observations,
+        certReq: data.certReq,
+        agencySale: data.agencySale,
+        commissionSrl: data.commissionSrl,
+        srlItems: data.srlItems,
+        sasItems: data.sasItems,
+        adjustmentSrl: data.adjustmentSrl,
+        adjustmentSas: data.adjustmentSas,
       };
-      
-      delete orderPayload.id;
 
       await createAdvertisingOrder(orderPayload);
       
       toast({ title: "Pedido creado", description: "Se guardó correctamente." });
+      
+      // Redirigir al cliente donde podrán ver y descargar el PDF desde el detalle
       router.push(`/clients/${data.clientId}`);
 
     } catch (error) {
@@ -239,10 +199,7 @@ export function AdvertisingForm() {
     }
   }
 
-  if (isLoadingData) return <div>Cargando...</div>;
-
-  // Validación para mostrar SrlSection: Ambas fechas existen, son válidas y Fin >= Inicio
-  const showSrlSection = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
+  if (isLoadingData) return <div className="p-8 text-center text-muted-foreground">Cargando datos...</div>;
 
   return (
     <Form {...form}>
@@ -287,6 +244,7 @@ export function AdvertisingForm() {
             )}
           />
 
+          {/* SELECTOR DE OPORTUNIDAD (PRODUCTO) */}
           <div className="col-span-1">
              <FormField
                 control={form.control}
@@ -394,22 +352,7 @@ export function AdvertisingForm() {
           <div className="p-4"><SasSection form={form} /></div>
         </div>
 
-        <div className="flex justify-end pt-6 gap-4">
-          {isClient && showSrlSection && (
-              <PDFDownloadLink 
-                document={<AdvertisingOrderPdf order={getPreviewOrder()} />} 
-                fileName="Orden_Publicidad_Preview.pdf"
-                className="no-underline"
-              >
-                {({ loading }) => (
-                    <Button type="button" variant="outline" size="lg" disabled={loading}>
-                        <FileDown className="mr-2 h-4 w-4" /> 
-                        {loading ? 'Generando PDF...' : 'Exportar PDF'}
-                    </Button>
-                )}
-              </PDFDownloadLink>
-          )}
-
+        <div className="flex justify-end pt-6">
           <Button type="submit" size="lg" disabled={isSubmitting}>
             {isSubmitting ? "Guardando..." : <><Save className="mr-2 h-4 w-4" /> Guardar Pedido</>}
           </Button>
