@@ -1,8 +1,9 @@
+//src/components/publicidad/advertising-pdf.tsx
+
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import { AdvertisingOrder } from '@/lib/types';
 import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 
 // Estilos básicos para el PDF
 const styles = StyleSheet.create({
@@ -14,83 +15,97 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', marginBottom: 2 },
   label: { width: 100, fontWeight: 'bold' },
   value: { flex: 1 },
-  table: { display: "flex", width: "auto", borderStyle: "solid", borderRightWidth: 0, borderBottomWidth: 0 }, 
+  // Eliminamos 'display: flex' explícito ya que es el default y a veces causa conflictos en versiones viejas
+  table: { width: "auto", borderStyle: "solid", borderRightWidth: 0, borderBottomWidth: 0 }, 
   tableRow: { margin: "auto", flexDirection: "row" }, 
   tableCol: { borderStyle: "solid", borderLeftWidth: 1, borderTopWidth: 1, padding: 3 }, 
   tableCell: { margin: "auto", fontSize: 8 },
   totals: { marginTop: 10, alignSelf: 'flex-end', width: 200 }
 });
 
-export const AdvertisingOrderPdf = ({ order }: { order: AdvertisingOrder }) => (
-  <Document>
-    <Page size="A4" style={styles.page}>
-      
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View>
-             {/* Reemplazar con URL de logo válida o path local si se configura en next.config */}
-            <Text style={styles.title}>ORDEN DE PUBLICIDAD</Text>
-            <Text>Aire de Santa Fe</Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-            <Text>Fecha Emisión: {format(new Date(), "dd/MM/yyyy")}</Text>
-            <Text>Ejecutivo: {order.accountExecutive}</Text>
-        </View>
-      </View>
+export const AdvertisingOrderPdf = ({ order }: { order: AdvertisingOrder }) => {
+  // Protección contra fechas inválidas
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return "-";
+    try {
+        return format(new Date(dateString), "dd/MM/yyyy");
+    } catch (e) {
+        return "-";
+    }
+  };
 
-      {/* DATOS GENERALES */}
-      <View style={styles.section}>
-        <View style={styles.row}><Text style={styles.label}>Cliente:</Text><Text style={styles.value}>{order.clientName}</Text></View>
-        <View style={styles.row}><Text style={styles.label}>Agencia:</Text><Text style={styles.value}>{order.agencyName || "-"}</Text></View>
-        <View style={styles.row}><Text style={styles.label}>Producto:</Text><Text style={styles.value}>{order.opportunityTitle || order.product}</Text></View>
-        <View style={styles.row}>
-            <Text style={styles.label}>Vigencia:</Text>
-            <Text style={styles.value}>
-                {format(new Date(order.startDate), "dd/MM/yyyy")} al {format(new Date(order.endDate), "dd/MM/yyyy")}
-            </Text>
-        </View>
-        <View style={styles.row}><Text style={styles.label}>Orden Tango:</Text><Text style={styles.value}>{order.tangoOrderNo || "-"}</Text></View>
-      </View>
-
-      {/* DETALLE SRL */}
-      {order.srlItems && order.srlItems.length > 0 && (
-          <View style={styles.section}>
-             <Text style={styles.sectionTitle}>PAUTA AIRE SRL</Text>
-             {/* Nota: Renderizar tablas complejas en react-pdf es tedioso. Haremos un resumen simplificado */}
-             <View style={[styles.tableRow, { backgroundColor: '#eee' }]}>
-                 <View style={[styles.tableCol, { width: '30%' }]}><Text style={styles.tableCell}>Programa</Text></View>
-                 <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Tipo</Text></View>
-                 <View style={[styles.tableCol, { width: '10%' }]}><Text style={styles.tableCell}>TV</Text></View>
-                 <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Mes</Text></View>
-                 <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Total Neto</Text></View>
-             </View>
-             {order.srlItems.map((item, i) => {
-                 // Calculo rápido
-                 const totalAds = Object.values(item.dailySpots).reduce((a, b) => a + (b || 0), 0);
-                 const mult = item.adType === 'Spot' ? (item.seconds || 0) : 1;
-                 const net = item.unitRate * totalAds * mult;
-                 return (
-                     <View key={i} style={styles.tableRow}>
-                         <View style={[styles.tableCol, { width: '30%' }]}><Text style={styles.tableCell}>{item.programId}</Text></View>
-                         <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{item.adType}</Text></View>
-                         <View style={[styles.tableCol, { width: '10%' }]}><Text style={styles.tableCell}>{item.hasTv ? 'SI' : 'NO'}</Text></View>
-                         <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{item.month}</Text></View>
-                         <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>${net.toLocaleString('es-AR')}</Text></View>
-                     </View>
-                 );
-             })}
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        
+        {/* HEADER */}
+        <View style={styles.header}>
+          <View>
+              <Text style={styles.title}>ORDEN DE PUBLICIDAD</Text>
+              <Text>Aire de Santa Fe</Text>
           </View>
-      )}
+          <View style={{ alignItems: 'flex-end' }}>
+              <Text>Fecha Emisión: {format(new Date(), "dd/MM/yyyy")}</Text>
+              <Text>Ejecutivo: {order?.accountExecutive || "-"}</Text>
+          </View>
+        </View>
 
-      {/* TOTALES */}
-      <View style={styles.totals}>
-          <Text style={{ fontSize: 12, fontWeight: 'bold' }}>Total Pedido: $ {(order.totalOrder || 0).toLocaleString('es-AR')}</Text>
-      </View>
-      
-      <View style={{ marginTop: 30, borderTop: '1 solid #000', width: 200 }}>
-          <Text style={{ textAlign: 'center', marginTop: 5 }}>Firma Cliente</Text>
-      </View>
+        {/* DATOS GENERALES */}
+        <View style={styles.section}>
+          <View style={styles.row}><Text style={styles.label}>Cliente:</Text><Text style={styles.value}>{order?.clientName || "-"}</Text></View>
+          <View style={styles.row}><Text style={styles.label}>Agencia:</Text><Text style={styles.value}>{order?.agencyName || "-"}</Text></View>
+          <View style={styles.row}><Text style={styles.label}>Producto:</Text><Text style={styles.value}>{order?.opportunityTitle || order?.product || "-"}</Text></View>
+          <View style={styles.row}>
+              <Text style={styles.label}>Vigencia:</Text>
+              <Text style={styles.value}>
+                  {formatDate(order?.startDate)} al {formatDate(order?.endDate)}
+              </Text>
+          </View>
+          <View style={styles.row}><Text style={styles.label}>Orden Tango:</Text><Text style={styles.value}>{order?.tangoOrderNo || "-"}</Text></View>
+        </View>
 
-    </Page>
-  </Document>
-);
+        {/* DETALLE SRL */}
+        {order?.srlItems && order.srlItems.length > 0 && (
+            <View style={styles.section}>
+               <Text style={styles.sectionTitle}>PAUTA AIRE SRL</Text>
+               <View style={[styles.tableRow, { backgroundColor: '#eee' }]}>
+                   <View style={[styles.tableCol, { width: '30%' }]}><Text style={styles.tableCell}>Programa</Text></View>
+                   <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Tipo</Text></View>
+                   <View style={[styles.tableCol, { width: '10%' }]}><Text style={styles.tableCell}>TV</Text></View>
+                   <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Mes</Text></View>
+                   <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Total Neto</Text></View>
+               </View>
+               {order.srlItems.map((item, i) => {
+                   // PROTECCIÓN CRÍTICA: dailySpots puede ser undefined en previews
+                   const dailySpots = item.dailySpots || {}; 
+                   const totalAds = Object.values(dailySpots).reduce((a, b) => a + (Number(b) || 0), 0);
+                   const mult = item.adType === 'Spot' ? (item.seconds || 0) : 1;
+                   const net = (item.unitRate || 0) * totalAds * mult;
+                   
+                   return (
+                       <View key={i} style={styles.tableRow}>
+                           {/* Aseguramos que cada hijo Text reciba un string válido, nunca null/undefined */}
+                           <View style={[styles.tableCol, { width: '30%' }]}><Text style={styles.tableCell}>{item.programId || "-"}</Text></View>
+                           <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{item.adType || "-"}</Text></View>
+                           <View style={[styles.tableCol, { width: '10%' }]}><Text style={styles.tableCell}>{item.hasTv ? 'SI' : 'NO'}</Text></View>
+                           <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{item.month || "-"}</Text></View>
+                           <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>${net.toLocaleString('es-AR')}</Text></View>
+                       </View>
+                   );
+               })}
+            </View>
+        )}
+
+        {/* TOTALES */}
+        <View style={styles.totals}>
+            <Text style={{ fontSize: 12, fontWeight: 'bold' }}>Total Pedido: $ {(order?.totalOrder || 0).toLocaleString('es-AR')}</Text>
+        </View>
+        
+        <View style={{ marginTop: 30, borderTop: '1 solid #000', width: 200 }}>
+            <Text style={{ textAlign: 'center', marginTop: 5 }}>Firma Cliente</Text>
+        </View>
+
+      </Page>
+    </Document>
+  );
+};
