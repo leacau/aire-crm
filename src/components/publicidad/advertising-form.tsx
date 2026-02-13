@@ -1,11 +1,12 @@
 // src/components/publicidad/advertising-form.tsx
+
 "use client";
 
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid } from "date-fns";
-import { CalendarIcon, Save, FileDown, AlertCircle } from "lucide-react";
+import { CalendarIcon, Save, FileDown, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 
@@ -17,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"; // Importamos Dialog
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { advertisingOrderSchema, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
@@ -48,10 +50,8 @@ export function AdvertisingForm() {
   const [clients, setClients] = useState<Client[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [programs, setPrograms] = useState<any[]>([]); 
-  
   const [opportunities, setOpportunities] = useState<any[]>([]);
   const [isNewOpp, setIsNewOpp] = useState(false);
-
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const form = useForm<AdvertisingOrderFormValues>({
@@ -78,65 +78,44 @@ export function AdvertisingForm() {
   const agencySale = watch("agencySale");
   const selectedClientId = watch("clientId");
 
-  // Activar renderizado de cliente
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+  useEffect(() => { setIsClient(true); }, []);
 
-  // Cargar datos iniciales
   useEffect(() => {
     if (userInfo?.name) setValue("accountExecutive", userInfo.name);
-
     const loadData = async () => {
       try {
         const [clientsData, agenciesData, programsData] = await Promise.all([
-          getClients(),
-          getAgencies(),
-          getPrograms()
+          getClients(), getAgencies(), getPrograms()
         ]);
-        
-        if ('clients' in clientsData) {
-            setClients(clientsData.clients);
-        } else if (Array.isArray(clientsData)) {
-             setClients(clientsData as Client[]);
-        }
+        if ('clients' in clientsData) setClients(clientsData.clients);
+        else if (Array.isArray(clientsData)) setClients(clientsData as Client[]);
         setAgencies(agenciesData);
         setPrograms(programsData);
       } catch (error) {
-        console.error("Error loading form data:", error);
-        toast({ title: "Error", description: "Fallo carga de datos.", variant: "destructive" });
+        console.error("Error loading data:", error);
       } finally {
         setIsLoadingData(false);
       }
     };
     loadData();
-  }, [userInfo, setValue, toast]);
+  }, [userInfo, setValue]);
 
-  // Cargar Oportunidades
   useEffect(() => {
-    if (!selectedClientId) {
-        setOpportunities([]);
-        return;
-    }
+    if (!selectedClientId) { setOpportunities([]); return; }
     const fetchOpps = async () => {
         try {
             const opps = await getOpportunitiesByClientId(selectedClientId);
             setOpportunities(opps);
-        } catch (error) {
-            console.error(error);
-        }
+        } catch (error) { console.error(error); }
     };
     fetchOpps();
   }, [selectedClientId]);
 
-  // Validaciones visuales
   const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
-    ? Math.max(0, differenceInDays(endDate, startDate) + 1) 
-    : 0;
+    ? Math.max(0, differenceInDays(endDate, startDate) + 1) : 0;
 
   const showSrlSection = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
 
-  // --- LÓGICA DE PDF SEGURA ---
   const getPreviewOrder = (): AdvertisingOrder => {
       const selectedClient = clients.find(c => c.id === values.clientId);
       const selectedAgency = agencies.find(a => a.id === values.agencyId);
@@ -194,24 +173,16 @@ export function AdvertisingForm() {
       };
   };
 
-  // --- MANEJO DE ERRORES AL GUARDAR ---
   const onInvalid = (errors: any) => {
-      console.log("Errores de validación:", errors);
-      let errorMsg = "Revisa los campos obligatorios marcados en rojo.";
-      if (errors.clientId) errorMsg = "Falta seleccionar el Anunciante (Cliente).";
-      else if (errors.startDate || errors.endDate) errorMsg = "Faltan las fechas de Inicio o Fin.";
-      
-      toast({
-          title: "No se puede guardar",
-          description: errorMsg,
-          variant: "destructive"
-      });
+      let errorMsg = "Revisa los campos obligatorios.";
+      if (errors.clientId) errorMsg = "Falta seleccionar el Cliente.";
+      else if (errors.startDate || errors.endDate) errorMsg = "Faltan fechas de vigencia.";
+      toast({ title: "Datos incompletos", description: errorMsg, variant: "destructive" });
   };
 
   async function onSubmit(data: AdvertisingOrderFormValues) {
     if (!userInfo) return;
     setIsSubmitting(true);
-    
     try {
       const selectedClient = clients.find(c => c.id === data.clientId);
       const selectedAgency = agencies.find(a => a.id === data.agencyId);
@@ -221,16 +192,10 @@ export function AdvertisingForm() {
 
       if (data.opportunityId === "new_custom_opportunity") {
           if (!data.newOpportunityTitle) {
-              toast({ title: "Error", description: "Ingrese nombre para la nueva oportunidad", variant: "destructive"});
-              setIsSubmitting(false);
-              return;
+              toast({ title: "Error", description: "Falta nombre de oportunidad", variant: "destructive"});
+              setIsSubmitting(false); return;
           }
-          finalOppId = await createQuickOpportunity(
-              data.newOpportunityTitle, 
-              data.clientId, 
-              selectedClient?.denominacion || "Cliente", 
-              userInfo.id
-          );
+          finalOppId = await createQuickOpportunity(data.newOpportunityTitle, data.clientId, selectedClient?.denominacion || "Cliente", userInfo.id);
           oppTitle = data.newOpportunityTitle;
       } else {
           const existingOpp = opportunities.find(o => o.id === finalOppId);
@@ -238,7 +203,6 @@ export function AdvertisingForm() {
       }
 
       const preview = getPreviewOrder();
-      
       const orderPayload = {
         ...preview,
         clientId: data.clientId,
@@ -251,23 +215,20 @@ export function AdvertisingForm() {
         endDate: data.endDate.toISOString(),
         id: undefined 
       };
-      
       delete orderPayload.id;
 
       await createAdvertisingOrder(orderPayload);
-      
-      toast({ title: "Pedido creado", description: "Se guardó correctamente." });
+      toast({ title: "Guardado", description: "Orden creada exitosamente." });
       router.push(`/clients/${data.clientId}`);
-
     } catch (error) {
       console.error(error);
-      toast({ title: "Error", description: "Error al guardar.", variant: "destructive" });
+      toast({ title: "Error", description: "No se pudo guardar.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  if (isLoadingData) return <div className="p-8 text-center text-muted-foreground">Cargando datos...</div>;
+  if (isLoadingData) return <div className="p-8 text-center">Cargando...</div>;
 
   return (
     <Form {...form}>
@@ -275,94 +236,37 @@ export function AdvertisingForm() {
         
         {/* HEADER */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 p-4 border rounded-md bg-white shadow-sm">
-          <FormField
-            control={form.control}
-            name="clientId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Anunciante (Cliente) *</FormLabel>
-                <Select onValueChange={(val) => {
-                    field.onChange(val);
-                    setValue("opportunityId", ""); 
-                }} defaultValue={field.value}>
+          <FormField control={form.control} name="clientId" render={({ field }) => (
+              <FormItem><FormLabel>Anunciante (Cliente) *</FormLabel>
+                <Select onValueChange={(val) => { field.onChange(val); setValue("opportunityId", ""); }} defaultValue={field.value}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    {clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>))}
-                  </SelectContent>
+                  <SelectContent>{clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>))}</SelectContent>
                 </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="agencyId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Agencia</FormLabel>
+              <FormMessage /></FormItem>
+            )} />
+          <FormField control={form.control} name="agencyId" render={({ field }) => (
+              <FormItem><FormLabel>Agencia</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="none">Ninguna</SelectItem>
-                    {agencies.map((a) => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}
-                  </SelectContent>
+                  <SelectContent><SelectItem value="none">Ninguna</SelectItem>{agencies.map((a) => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
                 </Select>
               </FormItem>
-            )}
-          />
-
+            )} />
           <div className="col-span-1">
-             <FormField
-                control={form.control}
-                name="opportunityId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Producto (Oportunidad)</FormLabel>
-                    <Select onValueChange={(val) => {
-                        field.onChange(val);
-                        setIsNewOpp(val === "new_custom_opportunity");
-                    }} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                           <SelectValue placeholder={opportunities.length === 0 ? "Sin oportunidades" : "Seleccionar Propuesta"} />
-                        </SelectTrigger>
-                      </FormControl>
+             <FormField control={form.control} name="opportunityId" render={({ field }) => (
+                  <FormItem><FormLabel>Producto (Oportunidad)</FormLabel>
+                    <Select onValueChange={(val) => { field.onChange(val); setIsNewOpp(val === "new_custom_opportunity"); }} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder={opportunities.length === 0 ? "Sin oportunidades" : "Seleccionar"} /></SelectTrigger></FormControl>
                       <SelectContent>
-                         {opportunities.map(opp => (
-                             <SelectItem key={opp.id} value={opp.id}>{opp.title} ({opp.stage})</SelectItem>
-                         ))}
-                         <SelectItem value="new_custom_opportunity" className="font-bold text-blue-600">
-                             + Crear Nueva Oportunidad
-                         </SelectItem>
+                         {opportunities.map(opp => (<SelectItem key={opp.id} value={opp.id}>{opp.title} ({opp.stage})</SelectItem>))}
+                         <SelectItem value="new_custom_opportunity" className="font-bold text-blue-600">+ Crear Nueva</SelectItem>
                       </SelectContent>
                     </Select>
                   </FormItem>
-                )}
-              />
-              {isNewOpp && (
-                  <FormField
-                    control={form.control}
-                    name="newOpportunityTitle"
-                    render={({ field }) => (
-                        <div className="mt-2">
-                             <Input placeholder="Nombre del nuevo producto/campaña" {...field} />
-                        </div>
-                    )}
-                  />
-              )}
+                )} />
+              {isNewOpp && (<FormField control={form.control} name="newOpportunityTitle" render={({ field }) => (<div className="mt-2"><Input placeholder="Nombre del producto" {...field} /></div>)} />)}
           </div>
-
-          <FormField
-            control={form.control}
-            name="accountExecutive"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Ejecutivo</FormLabel>
-                <FormControl><Input {...field} readOnly /></FormControl>
-              </FormItem>
-            )}
-          />
+          <FormField control={form.control} name="accountExecutive" render={({ field }) => (<FormItem><FormLabel>Ejecutivo</FormLabel><FormControl><Input {...field} readOnly /></FormControl></FormItem>)} />
         </div>
 
         {/* AIRE SRL */}
@@ -371,7 +275,6 @@ export function AdvertisingForm() {
           <div className="p-4 grid gap-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                <FormField control={form.control} name="tangoOrderNo" render={({ field }) => (<FormItem><FormLabel>Orden Tango</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
-               
                <FormField control={form.control} name="startDate" render={({ field }) => (
                   <FormItem className="flex flex-col"><FormLabel>Inicio *</FormLabel>
                     <Popover>
@@ -381,7 +284,6 @@ export function AdvertisingForm() {
                     <FormMessage />
                   </FormItem>
                 )} />
-               
                <FormField control={form.control} name="endDate" render={({ field }) => (
                   <FormItem className="flex flex-col"><FormLabel>Fin *</FormLabel>
                     <Popover>
@@ -391,7 +293,6 @@ export function AdvertisingForm() {
                     <FormMessage />
                   </FormItem>
                 )} />
-               
                <FormItem><FormLabel>Días</FormLabel><FormControl><Input value={daysCount} readOnly className="bg-slate-50" /></FormControl></FormItem>
             </div>
 
@@ -421,28 +322,38 @@ export function AdvertisingForm() {
           <div className="p-4"><SasSection form={form} /></div>
         </div>
 
-        {/* FOOTER ACCIONES */}
+        {/* FOOTER ACCIONES - CON MODAL PREVIEW SEGURO */}
         <div className="flex justify-end pt-6 gap-4">
           
-          {/* BOTÓN PDF PROTEGIDO: Solo se renderiza el real si hay datos */}
-          {isClient && showSrlSection ? (
-              <PDFDownloadLink 
-                document={<AdvertisingOrderPdf order={getPreviewOrder()} />} 
-                fileName="Orden_Publicidad_Preview.pdf"
-                className="no-underline"
-              >
-                {({ loading }) => (
-                    <Button type="button" variant="outline" size="lg" disabled={loading}>
-                        <FileDown className="mr-2 h-4 w-4" /> 
-                        {loading ? 'Generando...' : 'Exportar PDF'}
-                    </Button>
-                )}
-              </PDFDownloadLink>
-          ) : (
-              // Botón "dummy" deshabilitado para que el usuario sepa que existe pero requiere datos
-              <Button type="button" variant="outline" size="lg" disabled title="Complete fechas para exportar">
-                  <FileDown className="mr-2 h-4 w-4" /> Exportar PDF
-              </Button>
+          {isClient && showSrlSection && (
+             <Dialog>
+               <DialogTrigger asChild>
+                 <Button type="button" variant="outline" size="lg">
+                    <Eye className="mr-2 h-4 w-4" /> Previsualizar / Exportar
+                 </Button>
+               </DialogTrigger>
+               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                 <DialogHeader>
+                   <DialogTitle>Previsualización de Orden</DialogTitle>
+                   <DialogDescription>Revisa los datos antes de exportar o guardar.</DialogDescription>
+                 </DialogHeader>
+                 
+                 <div className="flex flex-col items-center justify-center p-8 space-y-4 border rounded-md bg-slate-50">
+                    <p className="text-sm text-muted-foreground">La orden está lista para exportar.</p>
+                    <PDFDownloadLink 
+                        document={<AdvertisingOrderPdf order={getPreviewOrder()} />} 
+                        fileName={`OP-Preview-${format(new Date(), 'yyyyMMdd')}.pdf`}
+                    >
+                        {({ loading }) => (
+                            <Button size="lg" disabled={loading}>
+                                <FileDown className="mr-2 h-4 w-4" />
+                                {loading ? 'Generando Documento...' : 'Descargar PDF Ahora'}
+                            </Button>
+                        )}
+                    </PDFDownloadLink>
+                 </div>
+               </DialogContent>
+             </Dialog>
           )}
 
           <Button type="submit" size="lg" disabled={isSubmitting}>
