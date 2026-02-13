@@ -17,12 +17,11 @@ import { FormControl, FormField } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { srlAdTypes, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
-// Tipos para props (asegurando compatibilidad con tu estructura)
 interface Program {
     id: string;
     name: string;
     schedules?: {
-        daysOfWeek: number[]; // Array [1,2,3,4,5]
+        daysOfWeek: number[]; // Formato esperado: [1,2,3,4,5] para Lun-Vie
         startTime: string;
         endTime: string;
     }[];
@@ -170,16 +169,16 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     const itemValues = items?.[index];
                     if (!itemValues || itemValues.month !== monthKey) return null;
 
-                    // --- DETECCIÓN DE DÍAS HABILITADOS ---
+                    // --- DETECCIÓN DE DÍAS BLOQUEADOS ---
                     const currentProgram = programs.find(p => p.id === itemValues.programId);
                     
-                    // Unir todos los daysOfWeek de todos los schedules del programa
                     const validDays = new Set<number>();
                     if (currentProgram?.schedules) {
                         currentProgram.schedules.forEach(schedule => {
                             schedule.daysOfWeek.forEach(day => validDays.add(day));
                         });
                     }
+                    // Si el programa tiene horarios definidos, activamos el bloqueo
                     const hasRestrictions = validDays.size > 0;
 
                     const adType = itemValues.adType;
@@ -264,7 +263,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                         {days.map(day => {
                             const dateKey = format(day, "yyyy-MM-dd");
                             
-                            // Convertir día JS (0=Dom, 1=Lun) a formato 1-7 (1=Lun ... 7=Dom)
+                            // Conversión de día JS (0=Dom, 1=Lun) a formato ISO/Tango (1=Lun ... 7=Dom)
                             const jsDay = getDay(day);
                             const isoDay = jsDay === 0 ? 7 : jsDay; 
 
