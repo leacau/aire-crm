@@ -1,7 +1,8 @@
+// src/components/publicidad/srl-section.tsx
 "use client";
 
 import { useFieldArray, UseFormReturn, useWatch } from "react-hook-form";
-import { format, eachMonthOfInterval, endOfMonth, eachDayOfInterval, startOfMonth } from "date-fns";
+import { format, eachMonthOfInterval, endOfMonth, eachDayOfInterval, startOfMonth, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect } from "react";
@@ -15,7 +16,6 @@ import { FormControl, FormField } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { srlAdTypes, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
-// Tipos para props
 interface Program {
     id: string;
     name: string;
@@ -34,7 +34,7 @@ interface SrlSectionProps {
   form: UseFormReturn<AdvertisingOrderFormValues>;
   startDate: Date;
   endDate: Date;
-  programs: Program[]; // Recibimos programas con tarifas
+  programs: Program[];
 }
 
 export function SrlSection({ form, startDate, endDate, programs }: SrlSectionProps) {
@@ -43,14 +43,11 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
     name: "srlItems",
   });
 
-  // Watch global items para cálculos y renderizado
   const items = useWatch({
       control: form.control,
       name: "srlItems"
   });
 
-  // LOGICA DE TARIFAS AUTOMÁTICAS
-  // Escuchamos cambios en items para actualizar tarifas si cambian programa, tipo o check TV
   useEffect(() => {
      items?.forEach((item, index) => {
          if (!item.programId || !item.adType) return;
@@ -61,14 +58,11 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
          let rate = 0;
          const hasTv = item.hasTv;
 
-         // Lógica de Tarifas según pedido
          if (item.adType === "Spot") {
              rate = hasTv ? (program.rates.spotTv || 0) : (program.rates.spotRadio || 0);
          } else if (item.adType === "PNT") {
              rate = hasTv ? (program.rates.pntMasBarrida || 0) : (program.rates.pnt || 0);
          } else {
-             // Mapeo simple para otros tipos (ajustar según tu modelo exacto de datos)
-             // Ejemplo: Auspicio -> program.rates.auspicio
              const keyMap: Record<string, string> = {
                  "Auspicio": "auspicio",
                  "Nota Comercial": "notaComercial"
@@ -77,8 +71,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
              if (rateKey) rate = program.rates[rateKey] || 0;
          }
 
-         // Solo actualizamos si el valor es diferente para evitar loops infinitos, 
-         // y si el usuario no lo ha modificado manualmente (opcional, aquí forzamos la tarifa)
          const currentRate = form.getValues(`srlItems.${index}.unitRate`);
          if (currentRate !== rate && rate > 0) {
              form.setValue(`srlItems.${index}.unitRate`, rate);
@@ -86,12 +78,13 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
      });
   }, [items, programs, form]);
 
-
-  if (!startDate || !endDate) return null;
+  // VALIDACIÓN ROBUSTA: Si las fechas no son válidas o el rango es incorrecto, no renderizar
+  if (!startDate || !endDate || !isValid(startDate) || !isValid(endDate) || endDate < startDate) {
+      return null;
+  }
 
   const months = eachMonthOfInterval({ start: startDate, end: endDate });
 
-  // Cálculos de Totales Globales
   const subtotal = items?.reduce((acc, item) => {
     const dailySpots = item.dailySpots || {};
     const totalAds = Object.values(dailySpots).reduce((sum, val) => sum + (val || 0), 0);
@@ -110,7 +103,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
     <div className="space-y-12">
       
       {months.map((monthDate) => {
-        const monthKey = format(monthDate, "yyyy-MM"); // Clave única del mes
+        const monthKey = format(monthDate, "yyyy-MM");
         const monthStart = startOfMonth(monthDate);
         const monthEnd = endOfMonth(monthDate);
         const effectiveStart = monthStart < startDate ? startDate : monthStart;
@@ -129,7 +122,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     size="sm"
                     className="bg-white hover:bg-slate-100 text-slate-700 border-slate-300"
                     onClick={() => append({ 
-                        month: monthKey, // IMPORTANTE: Asignamos el mes al item
+                        month: monthKey,
                         programId: "", 
                         adType: "Spot", 
                         hasTv: false,
@@ -167,15 +160,12 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                 </TableHeader>
                 <TableBody>
                   {fields.map((field, index) => {
-                    // FILTRO CRÍTICO: Solo mostrar filas que pertenecen a este mes
                     const itemValues = items?.[index];
                     if (!itemValues || itemValues.month !== monthKey) return null;
 
                     const adType = itemValues.adType;
-                    // Habilitar check TV solo para Spot y PNT
                     const enableTv = adType === "Spot" || adType === "PNT";
-                    const hasTv = itemValues.hasTv;
-
+                    
                     const currentDailySpots = itemValues.dailySpots || {};
                     const currentSeconds = itemValues.seconds || 0;
                     const currentUnitRate = itemValues.unitRate || 0;
@@ -220,7 +210,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                           />
                         </TableCell>
                         
-                        {/* Checkbox TV */}
                         <TableCell className="p-2 text-center">
                             <FormField
                                 control={form.control}
@@ -289,7 +278,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                                 <Input 
                                     type="number" 
                                     className="h-8 text-right px-2 text-xs" 
-                                    readOnly // Tarifa automática preferentemente
+                                    readOnly 
                                     {...field} 
                                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                                 />
@@ -314,7 +303,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
         );
       })}
 
-      {/* FOOTER TOTALES SRL */}
       <div className="flex justify-end mt-4">
         <div className="w-full max-w-2xl bg-slate-50 p-4 rounded-lg border grid grid-cols-2 gap-x-8 gap-y-2">
             <div className="flex justify-between items-center text-sm">
