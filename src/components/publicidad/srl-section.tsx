@@ -21,7 +21,7 @@ import { srlAdTypes, AdvertisingOrderFormValues } from "@/lib/validators/adverti
 interface Program {
     id: string;
     name: string;
-    // Agregamos schedules para saber los días
+    // La estructura de horarios de tu sistema
     schedules?: {
         daysOfWeek: number[]; // Array de números (ej: [1,2,3,4,5] para L-V)
         startTime: string;
@@ -92,7 +92,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
 
   const months = eachMonthOfInterval({ start: startDate, end: endDate });
 
-  // Cálculos de Totales Globales (Protegidos)
+  // Cálculos de Totales Globales
   const subtotal = items?.reduce((acc, item) => {
     const dailySpots = item.dailySpots || {};
     const totalAds = Object.values(dailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
@@ -171,14 +171,18 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     const itemValues = items?.[index];
                     if (!itemValues || itemValues.month !== monthKey) return null;
 
-                    // --- VALIDACIÓN DE DÍAS ---
+                    // --- LOGICA DE BLOQUEO DE DÍAS ---
                     const currentProgram = programs.find(p => p.id === itemValues.programId);
-                    // Obtenemos todos los días habilitados del programa (si tiene múltiples horarios, los combinamos)
-                    // Asumimos formato 1-7 (Lun-Dom)
-                    const allowedDays = new Set(
-                        currentProgram?.schedules?.flatMap(s => s.daysOfWeek) || []
-                    );
-                    const hasScheduleRestrictions = allowedDays.size > 0;
+                    
+                    // Unir todos los daysOfWeek de todos los schedules del programa
+                    const validDays = new Set<number>();
+                    if (currentProgram?.schedules) {
+                        currentProgram.schedules.forEach(schedule => {
+                            schedule.daysOfWeek.forEach(day => validDays.add(day));
+                        });
+                    }
+                    // Si el programa no tiene horarios definidos, asumimos todos los días (o ninguno, según prefieras. Aquí dejo libre si no hay config)
+                    const hasRestrictions = validDays.size > 0;
 
                     const adType = itemValues.adType;
                     const enableTv = adType === "Spot" || adType === "PNT";
@@ -262,29 +266,28 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                         {days.map(day => {
                             const dateKey = format(day, "yyyy-MM-dd");
                             
-                            // Lógica de Bloqueo de Días
-                            // getDay: 0=Dom, 1=Lun ... 6=Sab
-                            const jsDay = getDay(day);
-                            // Convertir a formato 1-7 (1=Lun ... 7=Dom)
-                            const isoDay = jsDay === 0 ? 7 : jsDay;
-                            
-                            // Si el programa tiene restricciones y este día no está en la lista, se bloquea
-                            const isDayDisabled = hasScheduleRestrictions && !allowedDays.has(isoDay);
+                            // Conversión de día JS (0-6) a formato ISO/Tango (1-7, Lunes=1)
+                            const jsDay = getDay(day); // 0=Dom, 1=Lun
+                            const isoDay = jsDay === 0 ? 7 : jsDay; 
+
+                            // Si hay restricciones y el día NO está en la lista -> Bloqueado
+                            const isBlocked = hasRestrictions && !validDays.has(isoDay);
 
                             return (
-                                <TableCell key={dateKey} className={cn("p-0 border-x border-slate-100", isDayDisabled && "bg-slate-100")}>
+                                <TableCell key={dateKey} className={cn("p-0 border-x border-slate-100", isBlocked && "bg-slate-100/50")}>
                                     <FormField
                                         control={form.control}
                                         name={`srlItems.${index}.dailySpots.${dateKey}`}
                                         render={({ field }) => (
                                             <Input 
                                                 type="text"
-                                                disabled={isDayDisabled}
+                                                disabled={isBlocked}
                                                 className={cn(
                                                     "h-8 w-full px-0 text-center border-none focus-visible:ring-1 focus-visible:ring-inset text-xs",
                                                     field.value ? "bg-blue-100 font-bold text-blue-800" : "text-gray-300 hover:bg-slate-50",
-                                                    isDayDisabled && "cursor-not-allowed bg-transparent hover:bg-transparent placeholder:text-transparent text-transparent"
+                                                    isBlocked && "cursor-not-allowed bg-transparent text-transparent hover:bg-transparent placeholder:text-transparent"
                                                 )}
+                                                title={isBlocked ? "Programa no se emite este día" : ""}
                                                 value={field.value || ""} 
                                                 onChange={e => {
                                                     const val = parseInt(e.target.value);
