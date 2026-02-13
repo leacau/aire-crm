@@ -21,7 +21,7 @@ interface Program {
     id: string;
     name: string;
     schedules?: {
-        daysOfWeek: number[]; // Formato esperado: [1,2,3,4,5] para Lun-Vie
+        daysOfWeek: number[]; // [1..7]
         startTime: string;
         endTime: string;
     }[];
@@ -54,49 +54,38 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
       name: "srlItems"
   });
 
-  // LOGICA DE TARIFAS AUTOMÁTICAS
   useEffect(() => {
      items?.forEach((item, index) => {
          if (!item.programId || !item.adType) return;
-         
          const program = programs.find(p => p.id === item.programId);
          if (!program || !program.rates) return;
 
          let rate = 0;
          const hasTv = item.hasTv;
 
-         if (item.adType === "Spot") {
-             rate = hasTv ? (program.rates.spotTv || 0) : (program.rates.spotRadio || 0);
-         } else if (item.adType === "PNT") {
-             rate = hasTv ? (program.rates.pntMasBarrida || 0) : (program.rates.pnt || 0);
-         } else {
-             const keyMap: Record<string, string> = {
-                 "Auspicio": "auspicio",
-                 "Nota Comercial": "notaComercial"
-             };
+         if (item.adType === "Spot") rate = hasTv ? (program.rates.spotTv || 0) : (program.rates.spotRadio || 0);
+         else if (item.adType === "PNT") rate = hasTv ? (program.rates.pntMasBarrida || 0) : (program.rates.pnt || 0);
+         else {
+             const keyMap: Record<string, string> = { "Auspicio": "auspicio", "Nota Comercial": "notaComercial" };
              const rateKey = keyMap[item.adType];
              if (rateKey) rate = program.rates[rateKey] || 0;
          }
 
-         const currentRate = form.getValues(`srlItems.${index}.unitRate`);
-         if (currentRate !== rate && rate > 0) {
+         if (form.getValues(`srlItems.${index}.unitRate`) !== rate && rate > 0) {
              form.setValue(`srlItems.${index}.unitRate`, rate);
          }
      });
   }, [items, programs, form]);
 
-
   if (!startDate || !endDate) return null;
 
   const months = eachMonthOfInterval({ start: startDate, end: endDate });
 
-  // Cálculos de Totales Globales
   const subtotal = items?.reduce((acc, item) => {
     const dailySpots = item.dailySpots || {};
     const totalAds = Object.values(dailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
     const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
-    const net = (item.unitRate || 0) * totalAds * multiplier;
-    return acc + net;
+    return acc + ((item.unitRate || 0) * totalAds * multiplier);
   }, 0) || 0;
 
   const adjustment = form.watch("adjustmentSrl") || 0;
@@ -107,7 +96,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
 
   return (
     <div className="space-y-12">
-      
       {months.map((monthDate) => {
         const monthKey = format(monthDate, "yyyy-MM");
         const monthStart = startOfMonth(monthDate);
@@ -119,28 +107,11 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
         return (
           <div key={monthKey} className="border rounded-md shadow-sm overflow-hidden bg-white mb-6">
             <div className="bg-slate-200 px-4 py-2 flex justify-between items-center">
-                <span className="font-bold text-slate-700">
-                    {format(monthDate, "MMMM yyyy", { locale: es }).toUpperCase()}
-                </span>
-                <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm"
-                    className="bg-white hover:bg-slate-100 text-slate-700 border-slate-300"
-                    onClick={() => append({ 
-                        month: monthKey,
-                        programId: "", 
-                        adType: "Spot", 
-                        hasTv: false,
-                        unitRate: 0, 
-                        seconds: 0, 
-                        dailySpots: {} 
-                    })}
-                >
-                <Plus className="mr-2 h-4 w-4" /> Agregar a {format(monthDate, "MMMM", { locale: es })}
+                <span className="font-bold text-slate-700">{format(monthDate, "MMMM yyyy", { locale: es }).toUpperCase()}</span>
+                <Button type="button" variant="outline" size="sm" onClick={() => append({ month: monthKey, programId: "", adType: "Spot", hasTv: false, unitRate: 0, seconds: 0, dailySpots: {} })}>
+                    <Plus className="mr-2 h-4 w-4" /> Agregar
                 </Button>
             </div>
-            
             <div className="overflow-x-auto">
               <Table className="min-w-[1200px]">
                 <TableHeader>
@@ -169,158 +140,48 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     const itemValues = items?.[index];
                     if (!itemValues || itemValues.month !== monthKey) return null;
 
-                    // --- DETECCIÓN DE DÍAS BLOQUEADOS ---
                     const currentProgram = programs.find(p => p.id === itemValues.programId);
-                    
                     const validDays = new Set<number>();
                     if (currentProgram?.schedules) {
                         currentProgram.schedules.forEach(schedule => {
                             schedule.daysOfWeek.forEach(day => validDays.add(day));
                         });
                     }
-                    // Si el programa tiene horarios definidos, activamos el bloqueo
                     const hasRestrictions = validDays.size > 0;
 
                     const adType = itemValues.adType;
                     const enableTv = adType === "Spot" || adType === "PNT";
-                    
                     const currentDailySpots = itemValues.dailySpots || {};
                     const currentSeconds = itemValues.seconds || 0;
                     const currentUnitRate = itemValues.unitRate || 0;
-
                     const totalAdsGlobal = Object.values(currentDailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
                     const totalSecondsGlobal = adType === "Spot" ? (totalAdsGlobal * currentSeconds) : 0;
                     const netAmountGlobal = currentUnitRate * totalAdsGlobal * (adType === "Spot" ? currentSeconds : 1);
 
                     return (
                       <TableRow key={field.id}>
-                        <TableCell className="p-2">
-                           <FormField
-                            control={form.control}
-                            name={`srlItems.${index}.programId`}
-                            render={({ field }) => (
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                    <SelectTrigger className="h-8 text-xs">
-                                        <SelectValue placeholder="Prog." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {programs.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            )}
-                          />
-                        </TableCell>
-
-                        <TableCell className="p-2">
-                           <FormField
-                            control={form.control}
-                            name={`srlItems.${index}.adType`}
-                            render={({ field }) => (
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                    <SelectTrigger className="h-8 text-xs">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {srlAdTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            )}
-                          />
-                        </TableCell>
-                        
-                        <TableCell className="p-2 text-center">
-                            <FormField
-                                control={form.control}
-                                name={`srlItems.${index}.hasTv`}
-                                render={({ field }) => (
-                                    <Checkbox 
-                                        checked={field.value} 
-                                        onCheckedChange={field.onChange} 
-                                        disabled={!enableTv}
-                                        className="h-4 w-4"
-                                    />
-                                )}
-                            />
-                        </TableCell>
-
-                        <TableCell className="p-2">
-                           {adType === "Spot" && (
-                            <FormField
-                                control={form.control}
-                                name={`srlItems.${index}.seconds`}
-                                render={({ field }) => (
-                                <Input 
-                                    type="number" 
-                                    className="h-8 w-full text-center px-1 text-xs" 
-                                    {...field} 
-                                    onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                                />
-                                )}
-                            />
-                           )}
-                        </TableCell>
-
+                        <TableCell className="p-2"><FormField control={form.control} name={`srlItems.${index}.programId`} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Prog." /></SelectTrigger><SelectContent>{programs.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select>)} /></TableCell>
+                        <TableCell className="p-2"><FormField control={form.control} name={`srlItems.${index}.adType`} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent>{srlAdTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select>)} /></TableCell>
+                        <TableCell className="p-2 text-center"><FormField control={form.control} name={`srlItems.${index}.hasTv`} render={({ field }) => (<Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!enableTv} className="h-4 w-4" />)} /></TableCell>
+                        <TableCell className="p-2">{adType === "Spot" && (<FormField control={form.control} name={`srlItems.${index}.seconds`} render={({ field }) => (<Input type="number" className="h-8 w-full text-center px-1 text-xs" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />)} />)}</TableCell>
                         {days.map(day => {
                             const dateKey = format(day, "yyyy-MM-dd");
-                            
-                            // Conversión de día JS (0=Dom, 1=Lun) a formato ISO/Tango (1=Lun ... 7=Dom)
                             const jsDay = getDay(day);
                             const isoDay = jsDay === 0 ? 7 : jsDay; 
-
-                            // Si hay restricciones y el día NO está en la lista -> Bloqueado
                             const isBlocked = hasRestrictions && !validDays.has(isoDay);
-
                             return (
                                 <TableCell key={dateKey} className={cn("p-0 border-x border-slate-100", isBlocked && "bg-slate-100/50")}>
-                                    <FormField
-                                        control={form.control}
-                                        name={`srlItems.${index}.dailySpots.${dateKey}`}
-                                        render={({ field }) => (
-                                            <Input 
-                                                type="text"
-                                                disabled={isBlocked}
-                                                className={cn(
-                                                    "h-8 w-full px-0 text-center border-none focus-visible:ring-1 focus-visible:ring-inset text-xs",
-                                                    field.value ? "bg-blue-100 font-bold text-blue-800" : "text-gray-300 hover:bg-slate-50",
-                                                    isBlocked && "cursor-not-allowed bg-transparent text-transparent hover:bg-transparent placeholder:text-transparent"
-                                                )}
-                                                value={field.value || ""} 
-                                                onChange={e => {
-                                                    const val = parseInt(e.target.value);
-                                                    field.onChange(isNaN(val) ? 0 : val);
-                                                }}
-                                            />
-                                        )}
-                                    />
+                                    <FormField control={form.control} name={`srlItems.${index}.dailySpots.${dateKey}`} render={({ field }) => (
+                                            <Input type="text" disabled={isBlocked} className={cn("h-8 w-full px-0 text-center border-none focus-visible:ring-1 focus-visible:ring-inset text-xs", field.value ? "bg-blue-100 font-bold text-blue-800" : "text-gray-300 hover:bg-slate-50", isBlocked && "cursor-not-allowed bg-transparent text-transparent hover:bg-transparent placeholder:text-transparent")} value={field.value || ""} onChange={e => { const val = parseInt(e.target.value); field.onChange(isNaN(val) ? 0 : val); }} />
+                                    )} />
                                 </TableCell>
                             );
                         })}
-
                         <TableCell className="text-center font-bold text-xs">{totalAdsGlobal}</TableCell>
                         <TableCell className="text-center text-xs text-muted-foreground">{totalSecondsGlobal > 0 ? totalSecondsGlobal : "-"}</TableCell>
-                        <TableCell className="p-2">
-                            <FormField
-                                control={form.control}
-                                name={`srlItems.${index}.unitRate`}
-                                render={({ field }) => (
-                                <Input 
-                                    type="number" 
-                                    className="h-8 text-right px-2 text-xs" 
-                                    readOnly 
-                                    {...field} 
-                                    onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                                />
-                                )}
-                            />
-                        </TableCell>
-                        <TableCell className="text-right font-bold text-slate-700 text-xs">
-                             ${netAmountGlobal.toLocaleString("es-AR")}
-                        </TableCell>
-                        <TableCell>
-                           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => remove(index)}>
-                             <Trash2 className="h-4 w-4" />
-                           </Button>
-                        </TableCell>
+                        <TableCell className="p-2"><FormField control={form.control} name={`srlItems.${index}.unitRate`} render={({ field }) => (<Input type="number" className="h-8 text-right px-2 text-xs" readOnly {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />)} /></TableCell>
+                        <TableCell className="text-right font-bold text-slate-700 text-xs">${netAmountGlobal.toLocaleString("es-AR")}</TableCell>
+                        <TableCell><Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => remove(index)}><Trash2 className="h-4 w-4" /></Button></TableCell>
                       </TableRow>
                     );
                   })}
@@ -330,49 +191,15 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
           </div>
         );
       })}
-
-      {/* FOOTER TOTALES SRL */}
+      
+      {/* Footer con totales... */}
       <div className="flex justify-end mt-4">
         <div className="w-full max-w-2xl bg-slate-50 p-4 rounded-lg border grid grid-cols-2 gap-x-8 gap-y-2">
-            <div className="flex justify-between items-center text-sm">
-                <span className="font-bold">Subtotal:</span>
-                <span className="bg-red-600 text-white px-2 py-1 rounded font-mono font-bold">
-                    ${subtotal.toLocaleString("es-AR")}
-                </span>
-            </div>
-             <div className="flex justify-between items-center text-sm">
-                <span className="font-bold">Desajuste:</span>
-                <div className="w-32">
-                     <FormField
-                        control={form.control}
-                        name="adjustmentSrl"
-                        render={({ field }) => (
-                            <Input 
-                                type="number" 
-                                className="h-8 text-right"
-                                {...field} 
-                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                            />
-                        )}
-                    />
-                </div>
-            </div>
-             <div className="flex justify-between items-center text-sm col-span-2 border-t pt-2 mt-2">
-                <span className="font-bold">Total a Facturar:</span>
-                <span className="bg-yellow-400 text-black px-2 py-1 rounded font-mono font-bold text-lg">
-                    ${totalToInvoice.toLocaleString("es-AR")}
-                </span>
-            </div>
-             <div className="flex justify-between items-center text-sm text-muted-foreground">
-                <span>Agencia ({agencyCommissionPct}%):</span>
-                <span>${agencyAmount.toLocaleString("es-AR")}</span>
-            </div>
-             <div className="flex justify-between items-center text-sm">
-                <span className="font-bold">Neto de Acción:</span>
-                <span className="bg-green-600 text-white px-2 py-1 rounded font-mono font-bold">
-                    ${netAction.toLocaleString("es-AR")}
-                </span>
-            </div>
+            <div className="flex justify-between items-center text-sm"><span className="font-bold">Subtotal:</span><span className="bg-red-600 text-white px-2 py-1 rounded font-mono font-bold">${subtotal.toLocaleString("es-AR")}</span></div>
+             <div className="flex justify-between items-center text-sm"><span className="font-bold">Desajuste:</span><div className="w-32"><FormField control={form.control} name="adjustmentSrl" render={({ field }) => (<Input type="number" className="h-8 text-right" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />)} /></div></div>
+             <div className="flex justify-between items-center text-sm col-span-2 border-t pt-2 mt-2"><span className="font-bold">Total a Facturar:</span><span className="bg-yellow-400 text-black px-2 py-1 rounded font-mono font-bold text-lg">${totalToInvoice.toLocaleString("es-AR")}</span></div>
+             <div className="flex justify-between items-center text-sm text-muted-foreground"><span>Agencia ({agencyCommissionPct}%):</span><span>${agencyAmount.toLocaleString("es-AR")}</span></div>
+             <div className="flex justify-between items-center text-sm"><span className="font-bold">Neto de Acción:</span><span className="bg-green-600 text-white px-2 py-1 rounded font-mono font-bold">${netAction.toLocaleString("es-AR")}</span></div>
         </div>
       </div>
     </div>
