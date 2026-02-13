@@ -4,10 +4,10 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format, differenceInDays } from "date-fns";
-import { CalendarIcon, Save, FileDown } from "lucide-react"; // Agregué FileDown
+import { format, differenceInDays, isValid } from "date-fns"; // Importar isValid
+import { CalendarIcon, Save, FileDown } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { PDFDownloadLink } from "@react-pdf/renderer"; // Import necesario
+import { PDFDownloadLink } from "@react-pdf/renderer";
 
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -21,7 +21,6 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { advertisingOrderSchema, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
-// Services & Types
 import { 
     createAdvertisingOrder, 
     getClients, 
@@ -33,17 +32,16 @@ import {
 import { Client, Agency, AdvertisingOrder } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 
-// Sub-components
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
-import { AdvertisingOrderPdf } from "./advertising-pdf"; // Import del PDF
+import { AdvertisingOrderPdf } from "./advertising-pdf";
 
 export function AdvertisingForm() {
   const { toast } = useToast();
   const { userInfo } = useAuth();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isClient, setIsClient] = useState(false); // Para evitar errores de hidratación con el PDF
+  const [isClient, setIsClient] = useState(false);
   
   const [clients, setClients] = useState<Client[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
@@ -66,22 +64,23 @@ export function AdvertisingForm() {
       adjustmentSas: 0,
       srlItems: [],
       sasItems: [],
-    },
+      // Inicializar explícitamente las fechas como undefined para evitar errores de uncontrolled/controlled
+      startDate: undefined,
+      endDate: undefined,
+    } as any, // Cast necesario si el tipo espera Date estricto pero inicia undefined
   });
 
   const { watch, setValue } = form;
-  const values = watch(); // Observar todos los valores para el PDF
+  const values = watch();
   const startDate = watch("startDate");
   const endDate = watch("endDate");
   const agencySale = watch("agencySale");
   const selectedClientId = watch("clientId");
 
-  // Evitar renderizado del PDF en servidor
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Cargar datos iniciales
   useEffect(() => {
     if (userInfo?.name) setValue("accountExecutive", userInfo.name);
 
@@ -110,7 +109,6 @@ export function AdvertisingForm() {
     loadData();
   }, [userInfo, setValue, toast]);
 
-  // Cargar Oportunidades cuando cambia el cliente
   useEffect(() => {
     if (!selectedClientId) {
         setOpportunities([]);
@@ -124,16 +122,18 @@ export function AdvertisingForm() {
     fetchOpps();
   }, [selectedClientId]);
 
-  const daysCount = startDate && endDate ? Math.max(0, differenceInDays(endDate, startDate) + 1) : 0;
+  // Validación segura de días
+  const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
+    ? Math.max(0, differenceInDays(endDate, startDate) + 1) 
+    : 0;
 
-  // --- LÓGICA PARA GENERAR OBJETO PREVIEW DEL PDF ---
+  // Lógica de totales para PDF...
   const getPreviewOrder = (): AdvertisingOrder => {
       const selectedClient = clients.find(c => c.id === values.clientId);
       const selectedAgency = agencies.find(a => a.id === values.agencyId);
       const selectedOpp = opportunities.find(o => o.id === values.opportunityId);
       const oppTitle = values.opportunityId === 'new_custom_opportunity' ? values.newOpportunityTitle : selectedOpp?.title;
 
-      // Calcular Totales SRL
       const srlSubtotal = values.srlItems?.reduce((acc, item) => {
         const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (val || 0), 0);
         const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
@@ -141,7 +141,6 @@ export function AdvertisingForm() {
       }, 0) || 0;
       const srlTotal = srlSubtotal - (values.adjustmentSrl || 0);
 
-      // Calcular Totales SAS
       const sasSubtotal = values.sasItems?.reduce((acc, item) => {
         let net = 0;
         if (item.format === "Banner") {
@@ -151,7 +150,7 @@ export function AdvertisingForm() {
         }
         return acc + net;
       }, 0) || 0;
-      const sasTotal = (sasSubtotal - (values.adjustmentSas || 0)) * 1.05; // + IVA 5%
+      const sasTotal = (sasSubtotal - (values.adjustmentSas || 0)) * 1.05;
 
       return {
           id: "preview",
@@ -165,7 +164,6 @@ export function AdvertisingForm() {
           accountExecutive: values.accountExecutive || "",
           createdAt: new Date().toISOString(),
           createdBy: userInfo?.id || "",
-          
           tangoOrderNo: values.tangoOrderNo,
           startDate: values.startDate?.toISOString() || new Date().toISOString(),
           endDate: values.endDate?.toISOString() || new Date().toISOString(),
@@ -174,13 +172,10 @@ export function AdvertisingForm() {
           certReq: values.certReq,
           agencySale: values.agencySale,
           commissionSrl: values.commissionSrl,
-          
           srlItems: values.srlItems || [],
           sasItems: values.sasItems || [],
-          
           adjustmentSrl: values.adjustmentSrl,
           adjustmentSas: values.adjustmentSas,
-          
           totalSrl: srlTotal,
           totalSas: sasTotal,
           totalOrder: srlTotal + sasTotal
@@ -216,8 +211,7 @@ export function AdvertisingForm() {
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      // Preparar objeto para Firebase (Incluyendo totales calculados si se desea)
-      const preview = getPreviewOrder(); // Reutilizar lógica de totales
+      const preview = getPreviewOrder();
       
       const orderPayload = {
         ...preview,
@@ -227,11 +221,9 @@ export function AdvertisingForm() {
         agencyName: selectedAgency?.name,
         opportunityId: finalOppId,
         opportunityTitle: oppTitle,
-        // Asegurarse de quitar campos que no van a la BD si el type preview tenía extras
         id: undefined 
       };
       
-      // Eliminar id 'preview' antes de guardar
       delete orderPayload.id;
 
       await createAdvertisingOrder(orderPayload);
@@ -248,6 +240,9 @@ export function AdvertisingForm() {
   }
 
   if (isLoadingData) return <div>Cargando...</div>;
+
+  // Validación para mostrar SrlSection: Ambas fechas existen, son válidas y Fin >= Inicio
+  const showSrlSection = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
 
   return (
     <Form {...form}>
@@ -292,7 +287,6 @@ export function AdvertisingForm() {
             )}
           />
 
-          {/* SELECTOR DE OPORTUNIDAD (PRODUCTO) */}
           <div className="col-span-1">
              <FormField
                 control={form.control}
@@ -352,6 +346,7 @@ export function AdvertisingForm() {
           <div className="p-4 grid gap-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                <FormField control={form.control} name="tangoOrderNo" render={({ field }) => (<FormItem><FormLabel>Orden Tango</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
+               
                <FormField control={form.control} name="startDate" render={({ field }) => (
                   <FormItem className="flex flex-col"><FormLabel>Inicio</FormLabel>
                     <Popover>
@@ -360,6 +355,7 @@ export function AdvertisingForm() {
                     </Popover>
                   </FormItem>
                 )} />
+               
                <FormField control={form.control} name="endDate" render={({ field }) => (
                   <FormItem className="flex flex-col"><FormLabel>Fin</FormLabel>
                     <Popover>
@@ -368,6 +364,7 @@ export function AdvertisingForm() {
                     </Popover>
                   </FormItem>
                 )} />
+               
                <FormItem><FormLabel>Días</FormLabel><FormControl><Input value={daysCount} readOnly className="bg-slate-50" /></FormControl></FormItem>
             </div>
 
@@ -380,10 +377,12 @@ export function AdvertisingForm() {
             </div>
 
             <div className="mt-4">
-               {startDate && endDate ? (
+               {showSrlSection ? (
                   <SrlSection form={form} startDate={startDate} endDate={endDate} programs={programs} />
                ) : (
-                 <div className="text-center py-10 text-muted-foreground border-2 border-dashed rounded-md">Seleccione fechas.</div>
+                 <div className="text-center py-10 text-muted-foreground border-2 border-dashed rounded-md">
+                    {(!startDate || !endDate) ? "Seleccione fechas de Inicio y Fin." : "La fecha de Fin debe ser posterior a la de Inicio."}
+                 </div>
                )}
             </div>
           </div>
@@ -396,8 +395,7 @@ export function AdvertisingForm() {
         </div>
 
         <div className="flex justify-end pt-6 gap-4">
-          {/* BOTÓN EXPORTAR PDF */}
-          {isClient && startDate && endDate && (
+          {isClient && showSrlSection && (
               <PDFDownloadLink 
                 document={<AdvertisingOrderPdf order={getPreviewOrder()} />} 
                 fileName="Orden_Publicidad_Preview.pdf"
