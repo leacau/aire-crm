@@ -266,9 +266,11 @@ export function AdvertisingForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8 pb-10">
         
-        {/* COMPONENTE PDF OCULTO (Renderizado fuera de pantalla) */}
-        <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-            <AdvertisingOrderPdf ref={pdfRef} order={getPreviewOrder()} />
+       {/* COMPONENTE PDF OCULTO (Renderizado fuera de pantalla) */}
+        {/* Usamos 'display: none' no funciona bien con html2canvas a veces, mejor posicionamiento absoluto off-screen */}
+        <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
+            {/* AQUÍ PASAMOS LA PROP 'programs' */}
+            <AdvertisingOrderPdf ref={pdfRef} order={getPreviewOrder()} programs={programs} />
         </div>
 
         {/* HEADER */}
