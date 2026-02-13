@@ -1,80 +1,17 @@
 //src/components/publicidad/advertising-pdf.tsx
 
-import React from 'react';
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import React, { forwardRef } from 'react';
 import { AdvertisingOrder } from '@/lib/types';
 import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
-const styles = StyleSheet.create({
-  page: { 
-    padding: 30, 
-    fontSize: 10, 
-    fontFamily: 'Helvetica' 
-  },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginBottom: 20, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#ccc', 
-    borderBottomStyle: 'solid',
-    paddingBottom: 10 
-  },
-  title: { 
-    fontSize: 18, 
-    fontWeight: 'bold' 
-  },
-  section: { 
-    marginBottom: 15 
-  },
-  sectionTitle: { 
-    fontSize: 12, 
-    fontWeight: 'bold', 
-    marginBottom: 5, 
-    backgroundColor: '#f0f0f0', 
-    padding: 4 
-  },
-  row: { 
-    flexDirection: 'row', 
-    marginBottom: 2 
-  },
-  label: { 
-    width: 100, 
-    fontWeight: 'bold' 
-  },
-  value: { 
-    flex: 1 
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#eee',
-    borderBottomWidth: 1,
-    borderBottomColor: '#000',
-    borderBottomStyle: 'solid',
-    alignItems: 'center',
-  },
-  tableRow: { 
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    borderBottomStyle: 'solid',
-    alignItems: 'center',
-    minHeight: 20,
-  }, 
-  tableCol: { 
-    padding: 4,
-  }, 
-  tableCell: { 
-    fontSize: 8 
-  },
-  totals: { 
-    marginTop: 10, 
-    alignSelf: 'flex-end', 
-    width: 200 
-  }
-});
+interface AdvertisingOrderPdfProps {
+  order: AdvertisingOrder;
+}
 
-export const AdvertisingOrderPdf = ({ order }: { order: AdvertisingOrder }) => {
+export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPdfProps>(({ order }, ref) => {
+  if (!order) return null;
+
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "-";
     try {
@@ -84,127 +21,162 @@ export const AdvertisingOrderPdf = ({ order }: { order: AdvertisingOrder }) => {
     }
   };
 
-  const clientName = order?.clientName || "-";
-  const agencyName = order?.agencyName || "-";
-  const product = order?.opportunityTitle || order?.product || "-";
-  const executive = order?.accountExecutive || "-";
-  const tangoOrder = order?.tangoOrderNo || "-";
-  const srlItems = order?.srlItems || [];
-  const sasItems = order?.sasItems || [];
-  const totalOrder = order?.totalOrder || 0;
+  const srlItems = order.srlItems || [];
+  const sasItems = order.sasItems || [];
+  
+  // Estilos fijos para hoja A4
+  const pageStyle: React.CSSProperties = {
+    width: '210mm',
+    minHeight: '297mm',
+    padding: '15mm', // Un poco menos de margen para que entre la tabla
+    backgroundColor: 'white',
+    fontFamily: 'Arial, sans-serif',
+    color: '#000',
+    position: 'relative',
+    boxSizing: 'border-box'
+  };
 
   return (
-    <Document>
-      <Page size="A4" style={styles.page}>
-        
-        {/* HEADER */}
-        <View style={styles.header}>
-          <View>
-              <Text style={styles.title}>ORDEN DE PUBLICIDAD</Text>
-              <Text>Aire de Santa Fe</Text>
-          </View>
-          <View style={{ alignItems: 'flex-end' }}>
-              <Text>Fecha: {format(new Date(), "dd/MM/yyyy")}</Text>
-              <Text>Ejecutivo: {executive}</Text>
-          </View>
-        </View>
+    <div ref={ref} style={pageStyle} className="text-sm">
+      
+      {/* HEADER */}
+      <header className="flex justify-between items-center mb-6 border-b-2 border-slate-300 pb-4">
+        <div>
+           {/* Logo placeholder o texto */}
+           <h1 className="text-2xl font-bold text-red-600">ORDEN DE PUBLICIDAD</h1>
+           <p className="text-gray-500 font-bold">Aire de Santa Fe</p>
+        </div>
+        <div className="text-right text-xs">
+            <p><span className="font-bold">Fecha Emisión:</span> {format(new Date(), "dd/MM/yyyy")}</p>
+            <p><span className="font-bold">Ejecutivo:</span> {order.accountExecutive}</p>
+        </div>
+      </header>
 
-        {/* DATOS GENERALES */}
-        <View style={styles.section}>
-          <View style={styles.row}><Text style={styles.label}>Cliente:</Text><Text style={styles.value}>{clientName}</Text></View>
-          <View style={styles.row}><Text style={styles.label}>Agencia:</Text><Text style={styles.value}>{agencyName}</Text></View>
-          <View style={styles.row}><Text style={styles.label}>Producto:</Text><Text style={styles.value}>{product}</Text></View>
-          <View style={styles.row}>
-              <Text style={styles.label}>Vigencia:</Text>
-              <Text style={styles.value}>
-                  {formatDate(order?.startDate)} al {formatDate(order?.endDate)}
-              </Text>
-          </View>
-          <View style={styles.row}><Text style={styles.label}>Orden Tango:</Text><Text style={styles.value}>{tangoOrder}</Text></View>
-        </View>
+      {/* DATOS GENERALES */}
+      <div className="mb-6 bg-slate-50 p-4 rounded border border-slate-200">
+        <div className="grid grid-cols-2 gap-y-2 gap-x-8">
+            <div className="flex border-b border-slate-200 pb-1">
+                <span className="font-bold w-24">Cliente:</span>
+                <span className="flex-1">{order.clientName}</span>
+            </div>
+            <div className="flex border-b border-slate-200 pb-1">
+                <span className="font-bold w-24">Agencia:</span>
+                <span className="flex-1">{order.agencyName || "-"}</span>
+            </div>
+            <div className="flex border-b border-slate-200 pb-1">
+                <span className="font-bold w-24">Producto:</span>
+                <span className="flex-1">{order.opportunityTitle || order.product || "-"}</span>
+            </div>
+            <div className="flex border-b border-slate-200 pb-1">
+                <span className="font-bold w-24">Orden Tango:</span>
+                <span className="flex-1">{order.tangoOrderNo || "-"}</span>
+            </div>
+            <div className="col-span-2 flex border-b border-slate-200 pb-1">
+                <span className="font-bold w-24">Vigencia:</span>
+                <span className="flex-1 font-semibold text-blue-900">
+                    {formatDate(order.startDate)} al {formatDate(order.endDate)}
+                </span>
+            </div>
+        </div>
+      </div>
 
-        {/* DETALLE SRL (Usando ternario en lugar de &&) */}
-        {srlItems.length > 0 ? (
-            <View style={styles.section}>
-               <Text style={styles.sectionTitle}>PAUTA AIRE SRL</Text>
-               
-               <View style={styles.tableHeader}>
-                   <View style={[styles.tableCol, { width: '30%' }]}><Text style={styles.tableCell}>Programa</Text></View>
-                   <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Tipo</Text></View>
-                   <View style={[styles.tableCol, { width: '10%' }]}><Text style={styles.tableCell}>TV</Text></View>
-                   <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Mes</Text></View>
-                   <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Total Neto</Text></View>
-               </View>
+      {/* PAUTA SRL */}
+      {srlItems.length > 0 && (
+        <div className="mb-8">
+            <h3 className="bg-gray-200 p-2 font-bold uppercase mb-2 text-xs border-b-2 border-red-600">
+                PAUTA AIRE SRL
+            </h3>
+            <table className="w-full text-xs border-collapse">
+                <thead>
+                    <tr className="bg-gray-100 border-b border-gray-300">
+                        <th className="p-2 text-left w-1/3">Programa</th>
+                        <th className="p-2 text-left">Tipo</th>
+                        <th className="p-2 text-center">TV</th>
+                        <th className="p-2 text-center">Mes</th>
+                        <th className="p-2 text-right">Total Neto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {srlItems.map((item, i) => {
+                        const dailySpots = item.dailySpots || {}; 
+                        const totalAds = Object.values(dailySpots).reduce((a, b) => a + (Number(b) || 0), 0);
+                        const mult = item.adType === 'Spot' ? (item.seconds || 0) : 1;
+                        const net = (item.unitRate || 0) * totalAds * mult;
+                        
+                        return (
+                            <tr key={i} className="border-b border-gray-100">
+                                <td className="p-2">{item.programId}</td>
+                                <td className="p-2">{item.adType}</td>
+                                <td className="p-2 text-center">{item.hasTv ? 'SI' : 'NO'}</td>
+                                <td className="p-2 text-center">{item.month}</td>
+                                <td className="p-2 text-right font-medium">${net.toLocaleString('es-AR')}</td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
+      )}
 
-               {srlItems.map((item, i) => {
-                   const dailySpots = item.dailySpots || {}; 
-                   const totalAds = Object.values(dailySpots).reduce((a, b) => a + (Number(b) || 0), 0);
-                   const mult = item.adType === 'Spot' ? (item.seconds || 0) : 1;
-                   const net = (item.unitRate || 0) * totalAds * mult;
-                   
-                   return (
-                       <View key={i} style={styles.tableRow}>
-                           <View style={[styles.tableCol, { width: '30%' }]}><Text style={styles.tableCell}>{item.programId || "-"}</Text></View>
-                           <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{item.adType || "-"}</Text></View>
-                           <View style={[styles.tableCol, { width: '10%' }]}><Text style={styles.tableCell}>{item.hasTv ? 'SI' : 'NO'}</Text></View>
-                           <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{item.month || "-"}</Text></View>
-                           <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>${net.toLocaleString('es-AR')}</Text></View>
-                       </View>
-                   );
-               })}
-            </View>
-        ) : null}
+      {/* PAUTA SAS */}
+      {sasItems.length > 0 && (
+        <div className="mb-8">
+            <h3 className="bg-gray-200 p-2 font-bold uppercase mb-2 text-xs border-b-2 border-red-600">
+                PAUTA DIGITAL (SAS)
+            </h3>
+            <table className="w-full text-xs border-collapse">
+                <thead>
+                    <tr className="bg-gray-100 border-b border-gray-300">
+                        <th className="p-2 text-left">Formato</th>
+                        <th className="p-2 text-left">Detalle</th>
+                        <th className="p-2 text-center">Ubicación</th>
+                        <th className="p-2 text-left">Obs</th>
+                        <th className="p-2 text-right">Total Neto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {sasItems.map((item, i) => {
+                        let net = 0;
+                        if (item.format === "Banner") {
+                            net = (item.cpm || 0) * (item.unitRate || 0);
+                        } else {
+                            net = (item.unitRate || 0);
+                        }
 
-        {/* DETALLE SAS (Usando ternario en lugar de &&) */}
-        {sasItems.length > 0 ? (
-            <View style={styles.section}>
-               <Text style={styles.sectionTitle}>PAUTA DIGITAL (SAS)</Text>
-               
-               <View style={styles.tableHeader}>
-                   <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Formato</Text></View>
-                   <View style={[styles.tableCol, { width: '25%' }]}><Text style={styles.tableCell}>Detalle</Text></View>
-                   <View style={[styles.tableCol, { width: '15%' }]}><Text style={styles.tableCell}>Ubicación</Text></View>
-                   <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Observaciones</Text></View>
-                   <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>Total Neto</Text></View>
-               </View>
+                        const locs = [];
+                        if(item.desktop) locs.push("D");
+                        if(item.mobile) locs.push("M");
+                        if(item.home) locs.push("H");
+                        if(item.interiores) locs.push("I");
 
-               {sasItems.map((item, i) => {
-                   let net = 0;
-                   if (item.format === "Banner") {
-                       net = (item.cpm || 0) * (item.unitRate || 0);
-                   } else {
-                       net = (item.unitRate || 0);
-                   }
+                        return (
+                            <tr key={i} className="border-b border-gray-100">
+                                <td className="p-2">{item.format}</td>
+                                <td className="p-2">{item.detail || item.type || "-"}</td>
+                                <td className="p-2 text-center">{locs.join(", ") || "-"}</td>
+                                <td className="p-2 italic text-gray-500 max-w-[150px] truncate">{item.observations}</td>
+                                <td className="p-2 text-right font-medium">${net.toLocaleString('es-AR')}</td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
+      )}
 
-                   const locations = [];
-                   if (item.desktop) locations.push("D");
-                   if (item.mobile) locations.push("M");
-                   if (item.home) locations.push("H");
-                   if (item.interiores) locations.push("I");
+      {/* TOTALES */}
+      <div className="flex justify-end mt-4 pt-4 border-t-2 border-black">
+          <div className="text-right">
+              <p className="text-xl font-bold">Total Pedido: ${ (order.totalOrder || 0).toLocaleString('es-AR') }</p>
+          </div>
+      </div>
 
-                   return (
-                       <View key={i} style={styles.tableRow}>
-                           <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{item.format || "-"}</Text></View>
-                           <View style={[styles.tableCol, { width: '25%' }]}><Text style={styles.tableCell}>{item.detail || item.type || "-"}</Text></View>
-                           <View style={[styles.tableCol, { width: '15%' }]}><Text style={styles.tableCell}>{locations.join(", ") || "-"}</Text></View>
-                           <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{item.observations || "-"}</Text></View>
-                           <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>${net.toLocaleString('es-AR')}</Text></View>
-                       </View>
-                   );
-               })}
-            </View>
-        ) : null}
+      <div className="mt-20 border-t border-black w-64 text-center text-xs pt-2">
+          Firma Cliente
+      </div>
 
-        {/* TOTALES */}
-        <View style={styles.totals}>
-            <Text style={{ fontSize: 12, fontWeight: 'bold' }}>Total Pedido: $ {totalOrder.toLocaleString('es-AR')}</Text>
-        </View>
-        
-        <View style={{ marginTop: 30, borderTopWidth: 1, borderTopColor: '#000', borderTopStyle: 'solid', width: 200 }}>
-            <Text style={{ textAlign: 'center', marginTop: 5 }}>Firma Cliente</Text>
-        </View>
-
-      </Page>
-    </Document>
+    </div>
   );
-};
+});
+
+AdvertisingOrderPdf.displayName = 'AdvertisingOrderPdf';
