@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote } from '@/lib/firebase-service';
+import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote, getCommercialNote } from '@/lib/firebase-service'; // <-- AÑADIDO getCommercialNote
 import type { Client, Program, CommercialNote, ScheduleItem } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -38,21 +38,17 @@ export default function NewCommercialNotePage() {
     const [saving, setSaving] = useState(false);
     const pdfRef = useRef<HTMLDivElement>(null);
     
-    // Data
     const [clients, setClients] = useState<Client[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
     
-    // --- SECCIÓN 1: DATOS DE CLIENTE ---
     const [selectedClientId, setSelectedClientId] = useState<string>('');
     const [cuit, setCuit] = useState('');
     const [razonSocial, setRazonSocial] = useState('');
     const [rubro, setRubro] = useState('');
     
-    // --- SECCIÓN 2: COMERCIAL ---
     const [saleValue, setSaleValue] = useState<string>('');
     const [financialObservations, setFinancialObservations] = useState('');
     
-    // --- SECCIÓN 3: PRODUCCIÓN/PAUTADO ---
     const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
     const [programSchedule, setProgramSchedule] = useState<Record<string, ScheduleItem[]>>({});
     const [replicateWeb, setReplicateWeb] = useState(false);
@@ -66,7 +62,6 @@ export default function NewCommercialNotePage() {
     const [contactPhone, setContactPhone] = useState('');
     const [contactName, setContactName] = useState('');
 
-    // --- SECCIÓN 4: NOTA ---
     const [title, setTitle] = useState('');
     const [location, setLocation] = useState<'Estudio' | 'Móvil' | 'Meet' | 'Llamada' | undefined>(undefined);
     const [callPhone, setCallPhone] = useState('');
@@ -82,7 +77,7 @@ export default function NewCommercialNotePage() {
     const [intervieweeRole, setIntervieweeRole] = useState('');
     const [intervieweeBio, setIntervieweeBio] = useState('');
 
-     const [instagramHandle, setInstagramHandle] = useState('');
+    const [instagramHandle, setInstagramHandle] = useState('');
     const [noInstagram, setNoInstagram] = useState(false);
     const [website, setWebsite] = useState('');
     const [noWeb, setNoWeb] = useState(false);
@@ -104,46 +99,39 @@ export default function NewCommercialNotePage() {
     const hasGrafErrors = primaryGrafError || secondaryGrafError;
 
     const generateMultiPagePdf = async (element: HTMLElement) => {
-    const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
-    const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
-    if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
+        const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
+        const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
+        if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
 
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
 
-    // Función auxiliar para procesar cada página
-    const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-        const canvas = await html2canvas(pageElement, { scale: 2, useCORS: true });
-        const imgData = canvas.toDataURL('image/jpeg', 0.8);
-        
-        if (pageNum > 1) pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-
-        // --- TRUCO MÁGICO PARA LOS LINKS ---
-        // Buscamos todos los <a> dentro de la página actual
-        const links = pageElement.querySelectorAll('a');
-        const elementRect = pageElement.getBoundingClientRect();
-
-        links.forEach((link) => {
-            const linkRect = link.getBoundingClientRect();
+        const processPage = async (pageElement: HTMLElement, pageNum: number) => {
+            const canvas = await html2canvas(pageElement, { scale: 2, useCORS: true });
+            const imgData = canvas.toDataURL('image/jpeg', 0.8);
             
-            // Calculamos la posición relativa del link dentro de la página
-            const top = ((linkRect.top - elementRect.top) * pdfHeight) / elementRect.height;
-            const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
-            const width = (linkRect.width * pdfWidth) / elementRect.width;
-            const height = (linkRect.height * pdfHeight) / elementRect.height;
+            if (pageNum > 1) pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
 
-            // Añadimos el enlace interactivo manualmente sobre la imagen
-            pdf.link(left, top, width, height, { url: link.href });
-        });
+            const links = pageElement.querySelectorAll('a');
+            const elementRect = pageElement.getBoundingClientRect();
+
+            links.forEach((link) => {
+                const linkRect = link.getBoundingClientRect();
+                const top = ((linkRect.top - elementRect.top) * pdfHeight) / elementRect.height;
+                const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
+                const width = (linkRect.width * pdfWidth) / elementRect.width;
+                const height = (linkRect.height * pdfHeight) / elementRect.height;
+                pdf.link(left, top, width, height, { url: link.href });
+            });
+        };
+
+        await processPage(page1, 1);
+        await processPage(page2, 2);
+
+        return pdf;
     };
-
-    await processPage(page1, 1);
-    await processPage(page2, 2);
-
-    return pdf;
-};
 
     const handleDownloadPdf = async () => {
         if (hasGrafErrors) {
@@ -160,6 +148,62 @@ export default function NewCommercialNotePage() {
         }
     };
     
+    // 🟢 NUEVO: LÓGICA DE CLONACIÓN DE NOTA COMERCIAL
+    useEffect(() => {
+        const search = window.location.search;
+        const params = new URLSearchParams(search);
+        const cloneId = params.get('cloneId');
+
+        if (cloneId) {
+            getCommercialNote(cloneId).then(note => {
+                if (note) {
+                    setSelectedClientId(note.clientId);
+                    setCuit(note.cuit || '');
+                    setRazonSocial(note.razonSocial || '');
+                    setRubro(note.rubro || '');
+                    setSaleValue(note.saleValue?.toString() || '');
+                    setFinancialObservations(note.financialObservations || '');
+                    setSelectedProgramIds(note.programIds || []);
+                    setProgramSchedule(note.schedule || {});
+                    setReplicateWeb(note.replicateWeb || false);
+                    setReplicateSocials(note.replicateSocials || []);
+                    setCollaboration(note.collaboration || false);
+                    setCollaborationHandle(note.collaborationHandle || '');
+                    setCtaText(note.ctaText || '');
+                    setCtaDestination(note.ctaDestination || '');
+                    setContactPhone(note.contactPhone || '');
+                    setContactName(note.contactName || '');
+                    
+                    setTitle(note.title ? `${note.title} (Copia)` : ''); 
+                    
+                    setLocation(note.location);
+                    setCallPhone(note.callPhone || '');
+                    setMobileAddress(note.mobileAddress || '');
+                    setPrimaryGrafs(note.primaryGrafs?.length ? note.primaryGrafs : ['']);
+                    setSecondaryGrafs(note.secondaryGrafs?.length ? note.secondaryGrafs : ['']);
+                    setQuestions(note.questions?.length ? note.questions : ['', '', '', '', '']);
+                    setTopicsToAvoid(note.topicsToAvoid?.length ? note.topicsToAvoid : ['']);
+                    setIntervieweeName(note.intervieweeName || '');
+                    setIntervieweeRole(note.intervieweeRole || '');
+                    setIntervieweeBio(note.intervieweeBio || '');
+                    setInstagramHandle(note.instagram || '');
+                    setNoInstagram(!!note.noInstagram);
+                    setWebsite(note.website || '');
+                    setNoWeb(!!note.noWeb);
+                    setWhatsapp(note.whatsapp || '');
+                    setNoWhatsapp(!!note.noWhatsapp);
+                    setCommercialPhone(note.phone || '');
+                    setNoCommercialPhone(!!note.noCommercialPhone);
+                    setCommercialAddresses(note.commercialAddresses?.length ? note.commercialAddresses : ['']);
+                    setNoCommercialAddress(!!note.noCommercialAddress);
+                    setGraphicSupport(!!note.graphicSupport);
+                    setGraphicLink(note.graphicSupportLink || '');
+                    setNoteObservations(note.noteObservations || '');
+                }
+            });
+        }
+    }, []);
+
     useEffect(() => {
         const loadData = async () => {
             try {
@@ -388,7 +432,6 @@ export default function NewCommercialNotePage() {
                 toast({ title: 'Nota guardada correctamente.' });
             }
             
-            // Redirección después de guardar
             router.push('/notas');
 
         } catch (error) {
