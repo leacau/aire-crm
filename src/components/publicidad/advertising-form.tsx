@@ -30,12 +30,12 @@ import {
     getAgencies, 
     getPrograms, 
     getOpportunitiesByClientId, 
-    createQuickOpportunity 
+    createQuickOpportunity,
+    getAdvertisingOrder // <-- IMPORTANTE AÑADIR ESTO
 } from "@/lib/firebase-service";
 import { Client, Agency, AdvertisingOrder } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 
-// Sub-components
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
 import { AdvertisingOrderPdf } from "./advertising-pdf";
@@ -73,7 +73,7 @@ export function AdvertisingForm() {
     },
   });
 
-  const { watch, setValue } = form;
+  const { watch, setValue, getValues } = form;
   const values = watch();
   const startDate = watch("startDate");
   const endDate = watch("endDate");
@@ -100,6 +100,50 @@ export function AdvertisingForm() {
     loadData();
   }, [userInfo, setValue]);
 
+  // 🟢 NUEVA LÓGICA DE CLONACIÓN
+  useEffect(() => {
+      const search = window.location.search;
+      const params = new URLSearchParams(search);
+      const cloneId = params.get('cloneId');
+      const urlClientId = params.get('clientId');
+      const urlOppId = params.get('opportunityId');
+
+      if (cloneId) {
+          getAdvertisingOrder(cloneId).then(order => {
+              if (order) {
+                  form.reset({
+                      clientId: order.clientId,
+                      agencyId: order.agencyId || "none",
+                      opportunityId: order.opportunityId,
+                      newOpportunityTitle: "",
+                      product: order.product || "",
+                      accountExecutive: order.accountExecutive,
+                      tangoOrderNo: "", // Lo limpiamos para evitar duplicados en Tango
+                      startDate: new Date(order.startDate),
+                      endDate: new Date(order.endDate),
+                      materialSent: order.materialSent || false,
+                      observations: order.observations || "",
+                      certReq: order.certReq || false,
+                      agencySale: order.agencySale || false,
+                      commissionSrl: order.commissionSrl || 0,
+                      srlItems: order.srlItems || [],
+                      sasItems: order.sasItems || [],
+                      adjustmentSrl: order.adjustmentSrl || 0,
+                      adjustmentSas: order.adjustmentSas || 0,
+                  });
+                  if (order.clientId) {
+                      getOpportunitiesByClientId(order.clientId).then(setOpportunities);
+                  }
+              }
+          });
+      } else if (urlClientId) {
+           form.setValue("clientId", urlClientId);
+           if (urlOppId) form.setValue("opportunityId", urlOppId);
+           getOpportunitiesByClientId(urlClientId).then(setOpportunities);
+      }
+  }, [form]);
+
+
   useEffect(() => {
     if (!selectedClientId) { setOpportunities([]); return; }
     const fetchOpps = async () => {
@@ -110,6 +154,28 @@ export function AdvertisingForm() {
     };
     fetchOpps();
   }, [selectedClientId]);
+
+  useEffect(() => {
+      if (!startDate || !endDate) return;
+      const currentSrlItems = getValues("srlItems") || [];
+      if (currentSrlItems.length === 0) return;
+
+      const validStart = startOfMonth(startDate);
+      const validEnd = endOfMonth(endDate);
+      let hasChanges = false;
+
+      const cleanedItems = currentSrlItems.filter(item => {
+          if (!item.month) return false;
+          const itemMonthDate = new Date(`${item.month}-15`); 
+          const isValid = isWithinInterval(itemMonthDate, { start: validStart, end: validEnd });
+          if (!isValid) hasChanges = true;
+          return isValid;
+      });
+
+      if (hasChanges) {
+          setValue("srlItems", cleanedItems, { shouldValidate: true });
+      }
+  }, [startDate, endDate, setValue, getValues]);
 
   const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
     ? Math.max(0, differenceInDays(endDate, startDate) + 1) : 0;
@@ -125,7 +191,12 @@ export function AdvertisingForm() {
       const safeStartDate = (values.startDate && isValid(values.startDate)) ? values.startDate.toISOString() : new Date().toISOString();
       const safeEndDate = (values.endDate && isValid(values.endDate)) ? values.endDate.toISOString() : new Date().toISOString();
 
-      const srlSubtotal = values.srlItems?.reduce((acc, item) => {
+      const srlItemsValid = values.srlItems?.filter(item => {
+          if (!item.month) return false;
+          return true; 
+      }) || [];
+
+      const srlSubtotal = srlItemsValid.reduce((acc, item) => {
         const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (val || 0), 0);
         const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
         return acc + ((item.unitRate || 0) * totalAds * multiplier);
@@ -147,23 +218,23 @@ export function AdvertisingForm() {
           id: "preview",
           clientId: values.clientId || "",
           clientName: selectedClient?.denominacion || "Cliente (Vista Previa)",
-          agencyId: values.agencyId === "none" ? "" : values.agencyId,
-          agencyName: selectedAgency?.name || "",
+          agencyId: values.agencyId === "none" ? undefined : values.agencyId,
+          agencyName: values.agencyId === "none" ? undefined : selectedAgency?.name,
           product: "", 
           opportunityId: values.opportunityId,
           opportunityTitle: oppTitle || "Campaña",
           accountExecutive: values.accountExecutive || userInfo?.name || "",
           createdAt: new Date().toISOString(),
           createdBy: userInfo?.id || "",
-          tangoOrderNo: values.tangoOrderNo || "",
+          tangoOrderNo: values.tangoOrderNo,
           startDate: safeStartDate,
           endDate: safeEndDate,
           materialSent: values.materialSent || false,
-          observations: values.observations || "",
+          observations: values.observations,
           certReq: values.certReq || false,
           agencySale: values.agencySale || false,
           commissionSrl: values.commissionSrl || 0,
-          srlItems: values.srlItems || [],
+          srlItems: srlItemsValid,
           sasItems: values.sasItems || [],
           adjustmentSrl: values.adjustmentSrl || 0,
           adjustmentSas: values.adjustmentSas || 0,
@@ -194,34 +265,15 @@ export function AdvertisingForm() {
   };
 
   const onInvalid = (errors: any) => {
-      console.log("🛑 ERRORES INTERNOS DEL FORMULARIO:", errors);
-      const detalles = [];
-      
-      if (errors.clientId) detalles.push("Falta Cliente");
-      if (errors.startDate) detalles.push("Falta Fecha Inicio");
-      if (errors.endDate) detalles.push("Falta Fecha Fin");
-      
-      if (errors.srlItems && Array.isArray(errors.srlItems)) {
-          errors.srlItems.forEach((err, idx) => {
-              if (err) {
-                  const camposFallidos = Object.keys(err).join(", ");
-                  detalles.push(`En fila ${idx + 1} de SRL falta: ${camposFallidos}`);
-              }
-          });
-      }
-
-      if (errors.sasItems && Array.isArray(errors.sasItems)) {
-          errors.sasItems.forEach((err, idx) => {
-              if (err) {
-                  const camposFallidos = Object.keys(err).join(", ");
-                  detalles.push(`En fila ${idx + 1} de SAS falta: ${camposFallidos}`);
-              }
-          });
-      }
+      const missing = [];
+      if (errors.clientId) missing.push("Cliente");
+      if (errors.startDate || errors.endDate) missing.push("Fechas de Vigencia");
+      if (errors.srlItems) missing.push("Falta seleccionar Programa en la tabla SRL");
+      if (errors.sasItems) missing.push("Falta formato en tabla SAS");
       
       toast({ 
-          title: "Detalle de datos faltantes", 
-          description: detalles.length > 0 ? detalles.join(" | ") : "Revisa los campos obligatorios.", 
+          title: "Faltan datos obligatorios", 
+          description: `Por favor completa: ${missing.join(", ")}`, 
           variant: "destructive" 
       });
   };
@@ -260,13 +312,10 @@ export function AdvertisingForm() {
       });
 
       const preview = getPreviewOrder();
-      
-      // Armamos el payload crudo
       const orderPayload = {
         ...preview,
         clientId: data.clientId,
         clientName: selectedClient?.denominacion || "Desconocido",
-        // Si no hay agencia, pasamos undefined para que se elimine luego
         agencyId: data.agencyId === "none" ? undefined : data.agencyId,
         agencyName: data.agencyId === "none" ? undefined : selectedAgency?.name,
         opportunityId: finalOppId,
@@ -277,20 +326,14 @@ export function AdvertisingForm() {
         id: undefined 
       };
 
-      // ======================================================================
-      // 🟢 SOLUCIÓN AL FIREBASE ERROR: Limpieza profunda de "undefined"
-      // Convertir a JSON y volver a objeto purga todas las keys con undefined
-      // en todos los niveles, haciendo que Firebase lo acepte perfectamente.
-      // ======================================================================
       const cleanPayload = JSON.parse(JSON.stringify(orderPayload));
 
       await createAdvertisingOrder(cleanPayload);
-      
       toast({ title: "Guardado", description: "Orden creada exitosamente." });
       router.push(`/clients/${data.clientId}`);
     } catch (error) {
       console.error(error);
-      toast({ title: "Error", description: "No se pudo guardar. Revisa la consola.", variant: "destructive" });
+      toast({ title: "Error", description: "No se pudo guardar.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
