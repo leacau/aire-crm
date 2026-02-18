@@ -3696,3 +3696,25 @@ export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, '
     throw error;
   }
 };
+
+export const getAdvertisingOrdersByOpportunity = async (opportunityId: string): Promise<AdvertisingOrder[]> => {
+    try {
+        const q = query(collection(db, 'advertising_orders'), where('opportunityId', '==', opportunityId));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AdvertisingOrder));
+    } catch (error) {
+        console.error("Error fetching ad orders:", error);
+        return [];
+    }
+};
+
+export const getAdvertisingOrder = async (id: string): Promise<AdvertisingOrder | null> => {
+    try {
+        const docRef = doc(db, 'advertising_orders', id);
+        const snap = await getDoc(docRef);
+        return snap.exists() ? { id: snap.id, ...snap.data() } as AdvertisingOrder : null;
+    } catch (error) {
+        console.error("Error fetching ad order:", error);
+        return null;
+    }
+};
