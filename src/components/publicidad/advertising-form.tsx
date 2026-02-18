@@ -8,6 +8,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
 import { CalendarIcon, Save, FileDown, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+
+// Librerías PDF
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -35,7 +37,6 @@ import {
 import { Client, Agency, AdvertisingOrder } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 
-// Sub-components
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
 import { AdvertisingOrderPdf } from "./advertising-pdf";
@@ -101,31 +102,6 @@ export function AdvertisingForm() {
   }, [userInfo, setValue]);
 
   useEffect(() => {
-      if (!startDate || !endDate) return;
-      
-      const currentSrlItems = form.getValues("srlItems") || [];
-      if (currentSrlItems.length === 0) return;
-
-      const validStart = startOfMonth(startDate);
-      const validEnd = endOfMonth(endDate);
-      let hasChanges = false;
-
-      // Filtramos para dejar solo los meses visibles
-      const cleanedItems = currentSrlItems.filter(item => {
-          if (!item.month) return false;
-          const itemMonthDate = new Date(`${item.month}-15`); 
-          const isValid = isWithinInterval(itemMonthDate, { start: validStart, end: validEnd });
-          if (!isValid) hasChanges = true;
-          return isValid;
-      });
-
-      // Si encontramos filas fantasma, actualizamos el formulario en tiempo real
-      if (hasChanges) {
-          form.setValue("srlItems", cleanedItems, { shouldValidate: true });
-      }
-  }, [startDate, endDate, form]);
-
-  useEffect(() => {
     if (!selectedClientId) { setOpportunities([]); return; }
     const fetchOpps = async () => {
         try {
@@ -150,14 +126,7 @@ export function AdvertisingForm() {
       const safeStartDate = (values.startDate && isValid(values.startDate)) ? values.startDate.toISOString() : new Date().toISOString();
       const safeEndDate = (values.endDate && isValid(values.endDate)) ? values.endDate.toISOString() : new Date().toISOString();
 
-      // Filtrar items visuales solamente dentro del rango
-      const srlItemsValid = values.srlItems?.filter(item => {
-          if (!item.month) return false;
-          // Lógica simple: Si está en la lista, asumimos que es válido para preview
-          return true; 
-      }) || [];
-
-      const srlSubtotal = srlItemsValid.reduce((acc, item) => {
+      const srlSubtotal = values.srlItems?.reduce((acc, item) => {
         const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (val || 0), 0);
         const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
         return acc + ((item.unitRate || 0) * totalAds * multiplier);
@@ -195,7 +164,7 @@ export function AdvertisingForm() {
           certReq: values.certReq || false,
           agencySale: values.agencySale || false,
           commissionSrl: values.commissionSrl || 0,
-          srlItems: srlItemsValid,
+          srlItems: values.srlItems || [],
           sasItems: values.sasItems || [],
           adjustmentSrl: values.adjustmentSrl || 0,
           adjustmentSas: values.adjustmentSas || 0,
@@ -225,23 +194,41 @@ export function AdvertisingForm() {
       }
   };
 
+  // ==========================================
+  // 🟢 DIAGNÓSTICO EXTREMO DE ERRORES ZOD
+  // ==========================================
   const onInvalid = (errors: any) => {
-      console.error("Errores de validación:", errors);
-      const missing = [];
-      if (errors.clientId) missing.push("Cliente");
-      if (errors.startDate || errors.endDate) missing.push("Fechas de Vigencia");
+      console.log("🛑 ERRORES INTERNOS DEL FORMULARIO:", errors);
+      const detalles = [];
       
-      if (errors.srlItems) {
-          // Detectar si el error es en una fila oculta
-          const rowsWithErrors = Array.isArray(errors.srlItems) ? errors.srlItems.length : 0;
-          if (rowsWithErrors > 0) {
-              missing.push(`Datos incompletos en ${rowsWithErrors} fila(s) de la Grilla SRL (Revise programas seleccionados)`);
-          }
+      if (errors.clientId) detalles.push("Falta Cliente");
+      if (errors.startDate) detalles.push("Falta Fecha Inicio");
+      if (errors.endDate) detalles.push("Falta Fecha Fin");
+      
+      // Escaneo de filas de SRL
+      if (errors.srlItems && Array.isArray(errors.srlItems)) {
+          errors.srlItems.forEach((err, idx) => {
+              if (err) {
+                  // Sacamos qué campo exacto falló (ej: "programId", "unitRate")
+                  const camposFallidos = Object.keys(err).join(", ");
+                  detalles.push(`En fila ${idx + 1} de SRL falta: ${camposFallidos}`);
+              }
+          });
+      }
+
+      // Escaneo de filas de SAS
+      if (errors.sasItems && Array.isArray(errors.sasItems)) {
+          errors.sasItems.forEach((err, idx) => {
+              if (err) {
+                  const camposFallidos = Object.keys(err).join(", ");
+                  detalles.push(`En fila ${idx + 1} de SAS falta: ${camposFallidos}`);
+              }
+          });
       }
       
       toast({ 
-          title: "No se puede guardar", 
-          description: missing.length > 0 ? `Revise: ${missing.join(", ")}` : "Revise los campos marcados en rojo.", 
+          title: "Detalle de datos faltantes", 
+          description: detalles.length > 0 ? detalles.join(" | ") : "Revisa los campos marcados en rojo.", 
           variant: "destructive" 
       });
   };
@@ -271,14 +258,10 @@ export function AdvertisingForm() {
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      // --- LIMPIEZA DE DATOS FANTASMA ANTES DE GUARDAR ---
-      // Filtramos items de SRL que puedan haber quedado "huérfanos" por cambios de fecha
+      // Limpieza de datos fantasma
       const validSrlItems = data.srlItems.filter(item => {
-          // Chequear si el mes del item está dentro del rango de fechas actual
-          // (Esto previene guardar items de meses que quedaron fuera tras editar fechas)
           if (!item.month) return false;
-          // Parseamos "YYYY-MM" a fecha real para comparar
-          const itemDate = new Date(`${item.month}-02`); // Día 2 para evitar problemas de zona horaria con día 1
+          const itemDate = new Date(`${item.month}-02`); 
           const start = startOfMonth(data.startDate);
           const end = endOfMonth(data.endDate);
           return isWithinInterval(itemDate, { start, end });
@@ -295,7 +278,7 @@ export function AdvertisingForm() {
         opportunityTitle: oppTitle,
         startDate: data.startDate.toISOString(),
         endDate: data.endDate.toISOString(),
-        srlItems: validSrlItems, // Usamos la lista limpia
+        srlItems: validSrlItems,
         id: undefined 
       };
       delete orderPayload.id;
@@ -317,7 +300,6 @@ export function AdvertisingForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8 pb-10">
         
-        {/* PDF OCULTO PERO ACCESIBLE PARA HTML2CANVAS */}
         <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
             <AdvertisingOrderPdf ref={pdfRef} order={getPreviewOrder()} programs={programs} />
         </div>
