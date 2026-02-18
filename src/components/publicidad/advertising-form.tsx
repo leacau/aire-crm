@@ -8,8 +8,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
 import { CalendarIcon, Save, FileDown, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-
-// Librerías PDF
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -37,6 +35,7 @@ import {
 import { Client, Agency, AdvertisingOrder } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 
+// Sub-components
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
 import { AdvertisingOrderPdf } from "./advertising-pdf";
@@ -148,19 +147,19 @@ export function AdvertisingForm() {
           id: "preview",
           clientId: values.clientId || "",
           clientName: selectedClient?.denominacion || "Cliente (Vista Previa)",
-          agencyId: values.agencyId,
-          agencyName: selectedAgency?.name,
+          agencyId: values.agencyId === "none" ? "" : values.agencyId,
+          agencyName: selectedAgency?.name || "",
           product: "", 
           opportunityId: values.opportunityId,
           opportunityTitle: oppTitle || "Campaña",
           accountExecutive: values.accountExecutive || userInfo?.name || "",
           createdAt: new Date().toISOString(),
           createdBy: userInfo?.id || "",
-          tangoOrderNo: values.tangoOrderNo,
+          tangoOrderNo: values.tangoOrderNo || "",
           startDate: safeStartDate,
           endDate: safeEndDate,
           materialSent: values.materialSent || false,
-          observations: values.observations,
+          observations: values.observations || "",
           certReq: values.certReq || false,
           agencySale: values.agencySale || false,
           commissionSrl: values.commissionSrl || 0,
@@ -194,9 +193,6 @@ export function AdvertisingForm() {
       }
   };
 
-  // ==========================================
-  // 🟢 DIAGNÓSTICO EXTREMO DE ERRORES ZOD
-  // ==========================================
   const onInvalid = (errors: any) => {
       console.log("🛑 ERRORES INTERNOS DEL FORMULARIO:", errors);
       const detalles = [];
@@ -205,18 +201,15 @@ export function AdvertisingForm() {
       if (errors.startDate) detalles.push("Falta Fecha Inicio");
       if (errors.endDate) detalles.push("Falta Fecha Fin");
       
-      // Escaneo de filas de SRL
       if (errors.srlItems && Array.isArray(errors.srlItems)) {
           errors.srlItems.forEach((err, idx) => {
               if (err) {
-                  // Sacamos qué campo exacto falló (ej: "programId", "unitRate")
                   const camposFallidos = Object.keys(err).join(", ");
                   detalles.push(`En fila ${idx + 1} de SRL falta: ${camposFallidos}`);
               }
           });
       }
 
-      // Escaneo de filas de SAS
       if (errors.sasItems && Array.isArray(errors.sasItems)) {
           errors.sasItems.forEach((err, idx) => {
               if (err) {
@@ -228,7 +221,7 @@ export function AdvertisingForm() {
       
       toast({ 
           title: "Detalle de datos faltantes", 
-          description: detalles.length > 0 ? detalles.join(" | ") : "Revisa los campos marcados en rojo.", 
+          description: detalles.length > 0 ? detalles.join(" | ") : "Revisa los campos obligatorios.", 
           variant: "destructive" 
       });
   };
@@ -258,7 +251,6 @@ export function AdvertisingForm() {
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      // Limpieza de datos fantasma
       const validSrlItems = data.srlItems.filter(item => {
           if (!item.month) return false;
           const itemDate = new Date(`${item.month}-02`); 
@@ -268,12 +260,15 @@ export function AdvertisingForm() {
       });
 
       const preview = getPreviewOrder();
+      
+      // Armamos el payload crudo
       const orderPayload = {
         ...preview,
         clientId: data.clientId,
         clientName: selectedClient?.denominacion || "Desconocido",
-        agencyId: data.agencyId,
-        agencyName: selectedAgency?.name,
+        // Si no hay agencia, pasamos undefined para que se elimine luego
+        agencyId: data.agencyId === "none" ? undefined : data.agencyId,
+        agencyName: data.agencyId === "none" ? undefined : selectedAgency?.name,
         opportunityId: finalOppId,
         opportunityTitle: oppTitle,
         startDate: data.startDate.toISOString(),
@@ -281,14 +276,21 @@ export function AdvertisingForm() {
         srlItems: validSrlItems,
         id: undefined 
       };
-      delete orderPayload.id;
 
-      await createAdvertisingOrder(orderPayload);
+      // ======================================================================
+      // 🟢 SOLUCIÓN AL FIREBASE ERROR: Limpieza profunda de "undefined"
+      // Convertir a JSON y volver a objeto purga todas las keys con undefined
+      // en todos los niveles, haciendo que Firebase lo acepte perfectamente.
+      // ======================================================================
+      const cleanPayload = JSON.parse(JSON.stringify(orderPayload));
+
+      await createAdvertisingOrder(cleanPayload);
+      
       toast({ title: "Guardado", description: "Orden creada exitosamente." });
       router.push(`/clients/${data.clientId}`);
     } catch (error) {
       console.error(error);
-      toast({ title: "Error", description: "No se pudo guardar.", variant: "destructive" });
+      toast({ title: "Error", description: "No se pudo guardar. Revisa la consola.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
