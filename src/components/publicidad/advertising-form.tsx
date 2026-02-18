@@ -101,6 +101,31 @@ export function AdvertisingForm() {
   }, [userInfo, setValue]);
 
   useEffect(() => {
+      if (!startDate || !endDate) return;
+      
+      const currentSrlItems = form.getValues("srlItems") || [];
+      if (currentSrlItems.length === 0) return;
+
+      const validStart = startOfMonth(startDate);
+      const validEnd = endOfMonth(endDate);
+      let hasChanges = false;
+
+      // Filtramos para dejar solo los meses visibles
+      const cleanedItems = currentSrlItems.filter(item => {
+          if (!item.month) return false;
+          const itemMonthDate = new Date(`${item.month}-15`); 
+          const isValid = isWithinInterval(itemMonthDate, { start: validStart, end: validEnd });
+          if (!isValid) hasChanges = true;
+          return isValid;
+      });
+
+      // Si encontramos filas fantasma, actualizamos el formulario en tiempo real
+      if (hasChanges) {
+          form.setValue("srlItems", cleanedItems, { shouldValidate: true });
+      }
+  }, [startDate, endDate, form]);
+
+  useEffect(() => {
     if (!selectedClientId) { setOpportunities([]); return; }
     const fetchOpps = async () => {
         try {
