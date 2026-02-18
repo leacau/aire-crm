@@ -1,74 +1,69 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FileText, Download } from "lucide-react";
+import { FileText, Download, Copy, Loader2 } from "lucide-react"; // <-- Importamos Copy y Loader2
 import { AdvertisingOrder } from "@/lib/types";
-import { PDFDownloadLink } from "@react-pdf/renderer";
 import { AdvertisingOrderPdf } from "./advertising-pdf";
 import { format } from "date-fns";
+import { useRouter } from "next/navigation"; // <-- Para redirigir
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import { useToast } from "@/hooks/use-toast";
 
 export function AdvertisingOrderViewer({ order }: { order: AdvertisingOrder }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const router = useRouter();
+  const pdfRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+
+  const handleExportPdf = async () => {
+      if (!pdfRef.current) return;
+      setIsExporting(true);
+      try {
+          const canvas = await html2canvas(pdfRef.current, { scale: 2, useCORS: true, logging: false });
+          const imgData = canvas.toDataURL('image/png');
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          pdf.save(`OP-${order.clientName}-${format(new Date(), 'yyyyMMdd')}.pdf`);
+          toast({ title: "PDF Exportado correctamente." });
+      } catch (err) {
+          console.error(err);
+          toast({ title: "Error al generar PDF", variant: "destructive" });
+      } finally {
+          setIsExporting(false);
+      }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-           <FileText className="h-4 w-4" /> Ver Orden Publicidad
+        <Button variant="outline" size="sm" className="gap-2 bg-white hover:bg-slate-100 text-slate-700">
+           <FileText className="h-4 w-4" /> Ver y Exportar
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-         <div className="flex justify-between items-center mb-4 border-b pb-2">
-             <h2 className="text-2xl font-bold">Orden de Publicidad</h2>
-             <PDFDownloadLink document={<AdvertisingOrderPdf order={order} />} fileName={`OP-${order.clientName}-${format(new Date(), 'yyyyMMdd')}.pdf`}>
-                {({ loading }) => (
-                    <Button disabled={loading}>
-                        <Download className="mr-2 h-4 w-4" /> {loading ? 'Generando...' : 'Descargar PDF'}
-                    </Button>
-                )}
-             </PDFDownloadLink>
+      <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto bg-slate-100">
+         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-slate-300 pb-4 gap-4 sticky top-0 bg-slate-100 z-10 pt-4">
+             <h2 className="text-2xl font-bold text-slate-800">Orden de Publicidad</h2>
+             <div className="flex gap-2">
+                 {/* 🟢 BOTÓN DUPLICAR */}
+                 <Button variant="outline" onClick={() => { setIsOpen(false); router.push(`/publicidad/new?cloneId=${order.id}`); }} className="bg-white">
+                    <Copy className="mr-2 h-4 w-4" /> Duplicar Orden
+                 </Button>
+                 <Button onClick={handleExportPdf} disabled={isExporting}>
+                    {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} 
+                    {isExporting ? 'Generando...' : 'Descargar PDF'}
+                 </Button>
+             </div>
          </div>
 
-         <div className="space-y-6">
-             {/* Aquí replicamos la vista de solo lectura del formulario */}
-             <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded">
-                 <div><strong>Cliente:</strong> {order.clientName}</div>
-                 <div><strong>Campaña/Producto:</strong> {order.opportunityTitle || order.product}</div>
-                 <div><strong>Vigencia:</strong> {format(new Date(order.startDate), "dd/MM/yyyy")} - {format(new Date(order.endDate), "dd/MM/yyyy")}</div>
-                 <div><strong>Ejecutivo:</strong> {order.accountExecutive}</div>
-             </div>
-             
-             {/* Resumen SRL Items */}
-             <div>
-                 <h3 className="font-bold mb-2">Pauta SRL</h3>
-                 <div className="border rounded">
-                     {/* Tabla simple de solo lectura */}
-                     <table className="w-full text-sm text-left">
-                         <thead className="bg-slate-100">
-                             <tr>
-                                 <th className="p-2">Mes</th>
-                                 <th className="p-2">Programa</th>
-                                 <th className="p-2">Tipo</th>
-                                 <th className="p-2">TV</th>
-                                 <th className="p-2 text-right">Tarifa</th>
-                             </tr>
-                         </thead>
-                         <tbody>
-                             {order.srlItems.map((item, idx) => (
-                                 <tr key={idx} className="border-t">
-                                     <td className="p-2">{item.month}</td>
-                                     <td className="p-2">{item.programId}</td>
-                                     <td className="p-2">{item.adType}</td>
-                                     <td className="p-2">{item.hasTv ? 'SI' : 'NO'}</td>
-                                     <td className="p-2 text-right">${item.unitRate}</td>
-                                 </tr>
-                             ))}
-                         </tbody>
-                     </table>
-                 </div>
-             </div>
+         {/* Contenedor visible y exportable */}
+         <div className="flex justify-center overflow-x-auto rounded-lg shadow-xl border border-slate-200 bg-white">
+            <AdvertisingOrderPdf ref={pdfRef} order={order} programs={[]} />
          </div>
       </DialogContent>
     </Dialog>
