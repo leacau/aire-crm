@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation'; // <-- Importamos useRouter
 import {
   Dialog,
   DialogContent,
@@ -21,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, SupervisorComment } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, SupervisorComment, AdvertisingOrder } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions, invoiceStatusOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
@@ -29,7 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession } from '@/lib/firebase-service';
+import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession, getAdvertisingOrdersByOpportunity } from '@/lib/firebase-service';
 import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail, Briefcase } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
@@ -38,6 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { CommentThread } from '@/components/comments/comment-thread';
+import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer'; // <-- Importamos el visor
 
 import {
   AlertDialog,
@@ -154,9 +156,13 @@ export function OpportunityDetailsDialog({
 }: OpportunityDetailsDialogProps) {
   const { userInfo, isBoss, getGoogleAccessToken, ensureGoogleAccessToken } = useAuth();
   const { toast } = useToast();
+  const router = useRouter(); // <-- Usamos router
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   
+  // <-- ESTADO PARA ÓRDENES DE PUBLICIDAD
+  const [advertisingOrders, setAdvertisingOrders] = useState<AdvertisingOrder[]>([]);
+
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isOrdenPautadoFormOpen, setIsOrdenPautadoFormOpen] = useState(false);
   const [selectedOrden, setSelectedOrden] = useState<OrdenPautado | null>(null);
@@ -164,7 +170,6 @@ export function OpportunityDetailsDialog({
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const [unreadCommentsCount, setUnreadCommentsCount] = useState(0);
 
-  // Estado para saber si se envía al seguimiento al crear
   const [addToCoaching, setAddToCoaching] = useState(false);
   const [isSendingToCoaching, setIsSendingToCoaching] = useState(false);
 
@@ -269,6 +274,13 @@ export function OpportunityDetailsDialog({
     }
   }, [opportunity]);
 
+  // <-- NUEVO: BUSCAR ÓRDENES DE PUBLICIDAD
+  const fetchAdOrders = useCallback(async () => {
+      if (opportunity) {
+          const orders = await getAdvertisingOrdersByOpportunity(opportunity.id);
+          setAdvertisingOrders(orders);
+      }
+  }, [opportunity]);
 
   useEffect(() => {
     if (isOpen) {
@@ -278,7 +290,6 @@ export function OpportunityDetailsDialog({
         if (!initialData.createdAt && isEditing) initialData.createdAt = opportunity?.createdAt;
         setEditedOpportunity(initialData);
         
-        // Reset states
         setAddToCoaching(false);
         setIsSendingToCoaching(false);
 
@@ -288,18 +299,19 @@ export function OpportunityDetailsDialog({
 
         if (isEditing) {
             fetchInvoices();
+            fetchAdOrders(); // <-- DISPARAMOS LA BÚSQUEDA
         } else {
             setInvoices([]);
+            setAdvertisingOrders([]);
         }
     }
-  }, [opportunity, isOpen, client, toast, fetchInvoices, isEditing]);
+  }, [opportunity, isOpen, client, toast, fetchInvoices, fetchAdOrders, isEditing]);
   
   const handleAgencyCreated = (newAgency: Agency) => {
     setAgencies(prev => [...prev, newAgency].sort((a,b) => a.name.localeCompare(b.name)));
     setEditedOpportunity(prev => ({...prev, agencyId: newAgency.id }));
   }
 
-  // Función para agregar a seguimiento (usada tanto en crear como en editar)
   const sendToCoaching = async (oppTitle: string) => {
       if (!userInfo || !client) return;
       setIsSendingToCoaching(true);
@@ -367,7 +379,6 @@ export function OpportunityDetailsDialog({
         const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
         onCreate(newOpp, []);
         
-        // Si es creación y seleccionó el checkbox
         if (addToCoaching) {
             await sendToCoaching(editedOpportunity.title!);
         }
@@ -477,10 +488,7 @@ export function OpportunityDetailsDialog({
     setIsSavingInvoice(true);
 
     try {
-        // 2. Obtener TODAS las facturas del sistema para validar globalmente
         const allExistingInvoices = await getInvoices();
-
-        // 3. Lógica de comparación de sufijos (4-6 dígitos)
         const getSignificant = (s: string) => s.replace(/^0+/, '');
         const inputSignificant = getSignificant(inputRaw);
         const isInputShort = inputSignificant.length >= 4 && inputSignificant.length <= 6;
@@ -490,15 +498,10 @@ export function OpportunityDetailsDialog({
             const existingSignificant = getSignificant(existingRaw);
             const isExistingShort = existingSignificant.length >= 4 && existingSignificant.length <= 6;
 
-            // Coincidencia exacta
             if (inputRaw === existingRaw) return true;
-            
-            // Input es corto (4-6), Existente es largo -> Chequear si Existente termina con Input
             if (isInputShort && existingRaw.length > inputRaw.length) {
                 if (existingRaw.endsWith(inputRaw) || existingRaw.endsWith(inputSignificant)) return true;
             }
-            
-            // Existente es corto (4-6), Input es largo -> Chequear si Input termina con Existente
             if (isExistingShort && inputRaw.length > existingRaw.length) {
                 if (inputRaw.endsWith(existingRaw) || inputRaw.endsWith(existingSignificant)) return true;
             }
@@ -506,7 +509,7 @@ export function OpportunityDetailsDialog({
         });
 
         if (hasDuplicate) {
-            toast({ title: `Factura duplicada #${newInvoiceRow.number}`, description: 'El número coincide con una factura existente en el sistema (posiblemente de otro cliente).', variant: 'destructive' });
+            toast({ title: `Factura duplicada #${newInvoiceRow.number}`, description: 'El número coincide con una factura existente en el sistema.', variant: 'destructive' });
             return;
         }
 
@@ -545,7 +548,6 @@ export function OpportunityDetailsDialog({
     }
   }
 
-  
   const canEditBonus = isEditing && (editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar');
   const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
   const canEditCreationDate = isBoss;
@@ -577,7 +579,6 @@ export function OpportunityDetailsDialog({
             </div>
             {isEditing && opportunity && userInfo && (
               <div className="flex items-center gap-2">
-                {/* Botón para enviar a seguimiento en edición */}
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -711,11 +712,6 @@ export function OpportunityDetailsDialog({
                     >
                         Registrar hoy
                     </Button>
-                    <p className="text-xs text-muted-foreground">
-                        {canEditManualUpdateDate
-                            ? 'Esta fecha se guardará en el historial cada vez que registres una actualización manual.'
-                            : 'Solo el asesor asignado o un perfil de gestión puede modificar esta fecha.'}
-                    </p>
                 </div>
                 <div className="space-y-2">
                     <Label>Historial de actualizaciones</Label>
@@ -855,35 +851,72 @@ export function OpportunityDetailsDialog({
                 )}
           </TabsContent>
           
-          <TabsContent value="pautado" className="py-4">
-             <div className="flex justify-end mb-4">
-                <Button onClick={() => { setSelectedOrden(null); setIsOrdenPautadoFormOpen(true); }}>
-                  <PlusCircle className="mr-2 h-4 w-4"/>
-                  Añadir Orden de Pauta
-                </Button>
-            </div>
-            <div className="space-y-3">
-              {(editedOpportunity.ordenesPautado || []).map(orden => (
-                  <div key={orden.id} className="p-3 border rounded-md">
-                      <div className="flex items-center justify-between">
-                        <p className="font-semibold">{orden.tipoPauta}</p>
-                        <div className="flex items-center gap-2">
-                           <Button variant="ghost" size="sm" onClick={() => handleEditOrdenPautado(orden)}>Editar</Button>
-                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteOrdenPautado(orden.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+          <TabsContent value="pautado" className="py-4 space-y-6">
+             {/* 🟢 NUEVO: SECCIÓN DE ÓRDENES DE PUBLICIDAD (SRL / SAS) */}
+             <div className="border rounded-lg bg-slate-50/50 p-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                    <div>
+                        <h3 className="font-bold text-lg text-primary">Órdenes de Publicidad (SRL / SAS)</h3>
+                        <p className="text-xs text-muted-foreground">Listado de órdenes vinculadas a este producto.</p>
+                    </div>
+                    <Button onClick={() => {
+                        onOpenChange(false); // Cerramos modal y redirigimos
+                        router.push(`/publicidad/new?clientId=${opportunity?.clientId || client?.id}&opportunityId=${opportunity?.id}`);
+                    }}>
+                        <PlusCircle className="mr-2 h-4 w-4"/>
+                        Crear Orden
+                    </Button>
+                </div>
+                
+                <div className="space-y-3">
+                    {advertisingOrders.map(order => (
+                        <div key={order.id} className="p-3 border rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white shadow-sm gap-2">
+                            <div>
+                                <p className="font-bold text-slate-800">{order.product || order.opportunityTitle || 'Campaña'}</p>
+                                <p className="text-sm text-slate-600">
+                                    Vigencia: {format(new Date(order.startDate), 'dd/MM/yyyy')} al {format(new Date(order.endDate), 'dd/MM/yyyy')}
+                                </p>
+                            </div>
+                            <AdvertisingOrderViewer order={order} />
                         </div>
-                      </div>
-                      <div className="text-sm text-muted-foreground mt-2 space-y-1">
-                        <p><strong>Programas:</strong> {orden.programas?.join(', ')}</p>
-                        <p><strong>Vigencia:</strong> {orden.fechaInicio ? format(new Date(orden.fechaInicio), 'P', {locale: es}) : ''} - {orden.fechaFin ? format(new Date(orden.fechaFin), 'P', {locale: es}) : ''}</p>
-                        <p><strong>Repeticiones:</strong> {orden.repeticiones} por día</p>
-                        {orden.tipoPauta === 'Spot' && <p><strong>Segundos:</strong> {orden.segundos}</p>}
-                        {orden.textoPNT && <p className="mt-2 pt-2 border-t"><strong>Texto PNT:</strong> {orden.textoPNT}</p>}
-                      </div>
-                  </div>
-              ))}
-               {(editedOpportunity.ordenesPautado || []).length === 0 && (
-                <p className="text-center text-muted-foreground py-8">No hay órdenes de pautado cargadas.</p>
-               )}
+                    ))}
+                    {advertisingOrders.length === 0 && (
+                        <p className="text-center text-muted-foreground py-6 bg-white rounded border border-dashed text-sm">
+                            No hay órdenes de publicidad creadas para esta oportunidad.
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {/* SECCIÓN LEGACY: PAUTADO ANTIGUO */}
+             <div className="pt-4 border-t">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-md text-gray-500">Pautado Histórico (Obsoleto)</h3>
+                    <Button variant="outline" size="sm" onClick={() => { setSelectedOrden(null); setIsOrdenPautadoFormOpen(true); }}>
+                        <PlusCircle className="mr-2 h-4 w-4"/>
+                        Añadir Antigua
+                    </Button>
+                </div>
+                <div className="space-y-3">
+                {(editedOpportunity.ordenesPautado || []).map(orden => (
+                    <div key={orden.id} className="p-3 border rounded-md bg-gray-50 opacity-80">
+                        <div className="flex items-center justify-between">
+                            <p className="font-semibold">{orden.tipoPauta}</p>
+                            <div className="flex items-center gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => handleEditOrdenPautado(orden)}>Editar</Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteOrdenPautado(orden.id)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                            </div>
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-2 space-y-1">
+                            <p><strong>Programas:</strong> {orden.programas?.join(', ')}</p>
+                            <p><strong>Vigencia:</strong> {orden.fechaInicio ? format(new Date(orden.fechaInicio), 'P', {locale: es}) : ''} - {orden.fechaFin ? format(new Date(orden.fechaFin), 'P', {locale: es}) : ''}</p>
+                            <p><strong>Repeticiones:</strong> {orden.repeticiones} por día</p>
+                            {orden.tipoPauta === 'Spot' && <p><strong>Segundos:</strong> {orden.segundos}</p>}
+                            {orden.textoPNT && <p className="mt-2 pt-2 border-t"><strong>Texto PNT:</strong> {orden.textoPNT}</p>}
+                        </div>
+                    </div>
+                ))}
+                </div>
             </div>
           </TabsContent>
           
@@ -957,7 +990,6 @@ export function OpportunityDetailsDialog({
                                 <TableCell colSpan={isEditing ? 5 : 4} className="h-24 text-center">No hay facturas para esta oportunidad.</TableCell>
                             </TableRow>
                         )}
-                        {/* New Invoice Row */}
                          <TableRow>
                               <TableCell>
                                   <Input
