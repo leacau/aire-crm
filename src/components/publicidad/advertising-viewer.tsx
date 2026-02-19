@@ -3,16 +3,16 @@
 import { useState, useRef } from "react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Copy, Loader2 } from "lucide-react"; // <-- Importamos Copy y Loader2
-import { AdvertisingOrder } from "@/lib/types";
+import { FileText, Download, Copy, Loader2 } from "lucide-react";
+import { AdvertisingOrder, Program } from "@/lib/types";
 import { AdvertisingOrderPdf } from "./advertising-pdf";
 import { format } from "date-fns";
-import { useRouter } from "next/navigation"; // <-- Para redirigir
+import { useRouter } from "next/navigation";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 
-export function AdvertisingOrderViewer({ order }: { order: AdvertisingOrder }) {
+export function AdvertisingOrderViewer({ order, programs = [] }: { order: AdvertisingOrder, programs?: Program[] }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const router = useRouter();
@@ -25,10 +25,17 @@ export function AdvertisingOrderViewer({ order }: { order: AdvertisingOrder }) {
       try {
           const canvas = await html2canvas(pdfRef.current, { scale: 2, useCORS: true, logging: false });
           const imgData = canvas.toDataURL('image/png');
-          const pdf = new jsPDF('p', 'mm', 'a4');
+          
+          // 🟢 CAMBIADO A 'l' (Landscape)
+          const pdf = new jsPDF('l', 'mm', 'a4');
+          
           const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = pdf.internal.pageSize.getHeight();
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          
+          const imgProps = pdf.getImageProperties(imgData);
+          const ratio = imgProps.width / imgProps.height;
+          const heightCalculated = pdfWidth / ratio;
+
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, heightCalculated);
           pdf.save(`OP-${order.clientName}-${format(new Date(), 'yyyyMMdd')}.pdf`);
           toast({ title: "PDF Exportado correctamente." });
       } catch (err) {
@@ -50,7 +57,6 @@ export function AdvertisingOrderViewer({ order }: { order: AdvertisingOrder }) {
          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-slate-300 pb-4 gap-4 sticky top-0 bg-slate-100 z-10 pt-4">
              <h2 className="text-2xl font-bold text-slate-800">Orden de Publicidad</h2>
              <div className="flex gap-2">
-                 {/* 🟢 BOTÓN DUPLICAR */}
                  <Button variant="outline" onClick={() => { setIsOpen(false); router.push(`/publicidad/new?cloneId=${order.id}`); }} className="bg-white">
                     <Copy className="mr-2 h-4 w-4" /> Duplicar Orden
                  </Button>
@@ -61,9 +67,9 @@ export function AdvertisingOrderViewer({ order }: { order: AdvertisingOrder }) {
              </div>
          </div>
 
-         {/* Contenedor visible y exportable */}
+         {/* Contenedor visible */}
          <div className="flex justify-center overflow-x-auto rounded-lg shadow-xl border border-slate-200 bg-white">
-            <AdvertisingOrderPdf ref={pdfRef} order={order} programs={[]} />
+            <AdvertisingOrderPdf ref={pdfRef} order={order} programs={programs} />
          </div>
       </DialogContent>
     </Dialog>
