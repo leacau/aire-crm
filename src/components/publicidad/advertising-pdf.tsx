@@ -1,4 +1,4 @@
-//src/components/publicidad/advertising-pdf.tsx
+// src/components/publicidad/advertising-pdf.tsx
 
 import React, { forwardRef } from 'react';
 import { AdvertisingOrder, Program } from '@/lib/types';
@@ -10,7 +10,7 @@ interface AdvertisingOrderPdfProps {
   programs: Program[];
 }
 
-export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPdfProps>(({ order, programs }, ref) => {
+export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPdfProps>(({ order, programs = [] }, ref) => {
   if (!order) return null;
 
   const formatDate = (dateStr?: string) => {
@@ -37,7 +37,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       months = [new Date()];
   }
 
-  // --- CÁLCULOS SRL ---
   const srlSubtotal = srlItems.reduce((acc, item) => {
       const dailySpots = item.dailySpots || {};
       const totalAds = Object.values(dailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
@@ -50,7 +49,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const srlAgencyAmount = srlTotalToInvoice * (srlCommissionPct / 100);
   const srlNetAction = srlTotalToInvoice - srlAgencyAmount;
 
-  // --- CÁLCULOS SAS ---
   const sasSubtotal = sasItems.reduce((acc, item) => {
       let net = 0;
       if (item.format === "Banner") {
@@ -62,75 +60,57 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   }, 0);
   const sasAdjustment = order.adjustmentSas || 0;
   const sasBase = sasSubtotal - sasAdjustment;
-  const sasIva = sasBase * 0.05; // 5% IVA Digital
+  const sasIva = sasBase * 0.05; 
   const sasTotalToInvoice = sasBase + sasIva;
-  // Asumimos misma comisión de agencia que SRL si aplica, o 0
   const sasCommissionPct = order.agencySale ? (order.commissionSrl || 0) : 0;
   const sasAgencyAmount = sasTotalToInvoice * (sasCommissionPct / 100);
   const sasNetAction = sasTotalToInvoice - sasAgencyAmount;
 
-
-  // Estilos fijos A4
-  const pageStyle: React.CSSProperties = {
-    width: '210mm',
-    minHeight: '297mm',
-    padding: '10mm',
-    backgroundColor: 'white',
-    fontFamily: 'Arial, sans-serif',
-    color: '#000',
-    position: 'relative',
-    boxSizing: 'border-box',
-    fontSize: '10px',
-  };
-
-  const totalBoxStyle: React.CSSProperties = {
-      width: '300px', // Ancho fijo para el cuadro de totales
-      marginLeft: 'auto',
-      marginTop: '10px',
-      border: '1px solid #ccc',
-      padding: '5px',
-      backgroundColor: '#f9f9f9'
-  };
-
-  const totalRowStyle: React.CSSProperties = {
-      display: 'flex',
-      justifyContent: 'space-between',
-      marginBottom: '3px',
-      fontSize: '10px'
+  // 🟢 ESTILOS APAISADOS (LANDSCAPE: 297mm x 210mm)
+  const styles = {
+      page: { width: '297mm', minHeight: '210mm', padding: '15mm', backgroundColor: 'white', fontFamily: 'Arial, sans-serif', color: '#000', boxSizing: 'border-box' as const, fontSize: '11px' },
+      header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #ccc', paddingBottom: '10px' },
+      sectionTitle: { backgroundColor: '#e5e7eb', padding: '5px', fontWeight: 'bold', textTransform: 'uppercase' as const, fontSize: '12px', borderBottom: '2px solid #dc2626', marginBottom: '10px' },
+      dataRow: { display: 'flex', borderBottom: '1px solid #e5e7eb', padding: '4px 0' },
+      label: { fontWeight: 'bold', width: '100px' },
+      table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '10px', marginBottom: '10px' },
+      th: { border: '1px solid #9ca3af', padding: '5px 2px', backgroundColor: '#f3f4f6', textAlign: 'center' as const, fontWeight: 'bold' },
+      td: { border: '1px solid #9ca3af', padding: '5px 2px', textAlign: 'center' as const },
+      totalBox: { width: '280px', marginLeft: 'auto', marginTop: '10px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#f9fafb' },
+      totalRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '11px' }
   };
 
   return (
-    <div ref={ref} style={pageStyle}>
+    <div ref={ref} style={styles.page}>
       
-      {/* HEADER */}
-      <header className="flex justify-between items-center mb-4 border-b-2 border-slate-300 pb-2">
+      <div style={styles.header}>
         <div>
-           <h1 className="text-xl font-bold text-red-600">ORDEN DE PUBLICIDAD</h1>
-           <p className="text-gray-500 font-bold text-xs">Aire de Santa Fe</p>
+           <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#dc2626', margin: 0 }}>ORDEN DE PUBLICIDAD</h1>
+           <p style={{ color: '#6b7280', fontWeight: 'bold', margin: 0 }}>Aire de Santa Fe</p>
         </div>
-        <div className="text-right text-xs">
-            <p><span className="font-bold">Emisión:</span> {format(new Date(), "dd/MM/yyyy")}</p>
-            <p><span className="font-bold">Ejecutivo:</span> {order.accountExecutive}</p>
-        </div>
-      </header>
-
-      {/* DATOS GENERALES */}
-      <div className="mb-4 bg-slate-50 p-2 rounded border border-slate-200 text-xs">
-        <div className="grid grid-cols-2 gap-x-4">
-            <div className="flex border-b border-slate-200 py-1"><span className="font-bold w-20">Cliente:</span><span className="flex-1">{order.clientName}</span></div>
-            <div className="flex border-b border-slate-200 py-1"><span className="font-bold w-20">Agencia:</span><span className="flex-1">{order.agencyName || "-"}</span></div>
-            <div className="flex border-b border-slate-200 py-1"><span className="font-bold w-20">Producto:</span><span className="flex-1">{order.opportunityTitle || order.product || "-"}</span></div>
-            <div className="flex border-b border-slate-200 py-1"><span className="font-bold w-20">Orden Tango:</span><span className="flex-1">{order.tangoOrderNo || "-"}</span></div>
-            <div className="col-span-2 flex py-1"><span className="font-bold w-20">Vigencia:</span><span className="flex-1 font-semibold text-blue-900">{formatDate(order.startDate)} al {formatDate(order.endDate)}</span></div>
+        <div style={{ textAlign: 'right' }}>
+            <p style={{ margin: 0 }}><strong>Emisión:</strong> {format(new Date(), "dd/MM/yyyy")}</p>
+            <p style={{ margin: 0 }}><strong>Ejecutivo:</strong> {order.accountExecutive}</p>
         </div>
       </div>
 
-      {/* PAUTA SRL */}
+      <div style={{ marginBottom: '20px', backgroundColor: '#f9fafb', padding: '10px', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div style={styles.dataRow}><span style={styles.label}>Cliente:</span><span>{order.clientName}</span></div>
+            <div style={styles.dataRow}><span style={styles.label}>Agencia:</span><span>{order.agencyName || "-"}</span></div>
+            <div style={styles.dataRow}><span style={styles.label}>Producto:</span><span>{order.opportunityTitle || order.product || "-"}</span></div>
+            <div style={styles.dataRow}><span style={styles.label}>Orden Tango:</span><span>{order.tangoOrderNo || "-"}</span></div>
+            <div style={{ ...styles.dataRow, gridColumn: 'span 2' }}>
+                <span style={styles.label}>Vigencia:</span>
+                <span style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{formatDate(order.startDate)} al {formatDate(order.endDate)}</span>
+            </div>
+        </div>
+      </div>
+
       {srlItems.length > 0 && (
-        <div className="mb-8">
-            <h3 className="bg-gray-200 p-1 font-bold uppercase mb-2 text-xs border-b-2 border-red-600">PAUTA AIRE SRL</h3>
+        <div style={{ marginBottom: '30px' }}>
+            <div style={styles.sectionTitle}>PAUTA AIRE SRL</div>
             
-            {/* GRILLAS MENSUALES */}
             {months.map((monthDate) => {
                 const monthKey = format(monthDate, "yyyy-MM");
                 const itemsInMonth = srlItems.filter(item => item.month === monthKey);
@@ -143,20 +123,21 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                 const days = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
 
                 return (
-                    <div key={monthKey} className="mb-2 break-inside-avoid">
-                        <div className="bg-slate-100 px-2 py-1 font-bold text-[10px] border border-slate-300 border-b-0">
+                    <div key={monthKey} style={{ marginBottom: '15px', pageBreakInside: 'avoid' }}>
+                        <div style={{ backgroundColor: '#e5e7eb', padding: '4px 8px', fontWeight: 'bold', fontSize: '11px', border: '1px solid #9ca3af', borderBottom: 'none' }}>
                             {format(monthDate, "MMMM yyyy", { locale: es }).toUpperCase()}
                         </div>
-                        <table className="w-full border-collapse text-[8px] border border-slate-300">
+                        <table style={styles.table}>
                             <thead>
-                                <tr className="bg-gray-50 text-center">
-                                    <th className="border border-slate-300 p-1 text-left w-24">Programa</th>
-                                    <th className="border border-slate-300 p-1 w-12">Tipo</th>
-                                    <th className="border border-slate-300 p-1 w-4">TV</th>
-                                    <th className="border border-slate-300 p-1 w-6">Seg</th>
-                                    {days.map(d => (<th key={d.toISOString()} className="border border-slate-300 w-3 bg-gray-100">{format(d, "d")}</th>))}
-                                    <th className="border border-slate-300 p-1 w-8">Cant.</th>
-                                    <th className="border border-slate-300 p-1 w-14">Neto</th>
+                                <tr>
+                                    {/* 🟢 TAMAÑOS AJUSTADOS PARA LLENAR A LO ANCHO */}
+                                    <th style={{ ...styles.th, textAlign: 'left', width: 'auto' }}>Programa</th>
+                                    <th style={{ ...styles.th, width: '80px' }}>Tipo</th>
+                                    <th style={{ ...styles.th, width: '30px' }}>TV</th>
+                                    <th style={{ ...styles.th, width: '35px' }}>Seg</th>
+                                    {days.map(d => (<th key={d.toISOString()} style={{ ...styles.th, width: '22px', fontSize: '9px' }}>{format(d, "d")}</th>))}
+                                    <th style={{ ...styles.th, width: '40px' }}>Tot</th>
+                                    <th style={{ ...styles.th, width: '90px' }}>Neto</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -168,17 +149,17 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                                     const net = (item.unitRate || 0) * totalAds * mult;
 
                                     return (
-                                        <tr key={idx} className="text-center">
-                                            <td className="border border-slate-300 p-1 text-left truncate max-w-[100px]">{progName}</td>
-                                            <td className="border border-slate-300 p-1 truncate max-w-[50px]">{item.adType}</td>
-                                            <td className="border border-slate-300 p-1">{item.hasTv ? 'SI' : ''}</td>
-                                            <td className="border border-slate-300 p-1">{item.adType === 'Spot' ? item.seconds : '-'}</td>
+                                        <tr key={idx}>
+                                            <td style={{ ...styles.td, textAlign: 'left', fontWeight: 'bold' }}>{progName}</td>
+                                            <td style={styles.td}>{item.adType}</td>
+                                            <td style={styles.td}>{item.hasTv ? 'SI' : ''}</td>
+                                            <td style={styles.td}>{item.adType === 'Spot' ? item.seconds : '-'}</td>
                                             {days.map(d => {
                                                 const val = dailySpots[format(d, "yyyy-MM-dd")];
-                                                return (<td key={d.toISOString()} className={`border border-slate-300 ${val ? 'bg-blue-100 font-bold' : ''}`}>{val || ''}</td>);
+                                                return (<td key={d.toISOString()} style={{ ...styles.td, backgroundColor: val ? '#dbeafe' : 'transparent', fontWeight: val ? 'bold' : 'normal' }}>{val || ''}</td>);
                                             })}
-                                            <td className="border border-slate-300 p-1 font-bold">{totalAds}</td>
-                                            <td className="border border-slate-300 p-1 text-right">${net.toLocaleString('es-AR')}</td>
+                                            <td style={{ ...styles.td, fontWeight: 'bold' }}>{totalAds}</td>
+                                            <td style={{ ...styles.td, textAlign: 'right' }}>${net.toLocaleString('es-AR')}</td>
                                         </tr>
                                     );
                                 })}
@@ -188,33 +169,31 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                 );
             })}
 
-            {/* TOTALES SRL */}
-            <div style={totalBoxStyle}>
-                <div style={totalRowStyle}><span>Subtotal:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
-                <div style={totalRowStyle}><span>Desajuste:</span><span>${srlAdjustment.toLocaleString('es-AR')}</span></div>
-                <div style={{...totalRowStyle, fontWeight: 'bold', borderTop: '1px solid #ddd', paddingTop: '2px'}}>
+            <div style={styles.totalBox}>
+                <div style={styles.totalRow}><span>Subtotal:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
+                <div style={styles.totalRow}><span>Desajuste:</span><span>${srlAdjustment.toLocaleString('es-AR')}</span></div>
+                <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
                     <span>Total a Facturar:</span><span>${srlTotalToInvoice.toLocaleString('es-AR')}</span>
                 </div>
-                <div style={{...totalRowStyle, color: '#666'}}><span>Agencia ({srlCommissionPct}%):</span><span>${srlAgencyAmount.toLocaleString('es-AR')}</span></div>
-                <div style={{...totalRowStyle, fontWeight: 'bold', color: 'green'}}>
+                <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({srlCommissionPct}%):</span><span>${srlAgencyAmount.toLocaleString('es-AR')}</span></div>
+                <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
                     <span>Neto de Acción:</span><span>${srlNetAction.toLocaleString('es-AR')}</span>
                 </div>
             </div>
         </div>
       )}
 
-      {/* PAUTA SAS */}
       {sasItems.length > 0 && (
-        <div className="mb-4">
-            <h3 className="bg-gray-200 p-1 font-bold uppercase mb-2 text-xs border-b-2 border-red-600">PAUTA DIGITAL (SAS)</h3>
-            <table className="w-full text-[9px] border-collapse border border-slate-300">
+        <div style={{ marginBottom: '20px', pageBreakInside: 'avoid' }}>
+            <div style={styles.sectionTitle}>PAUTA DIGITAL (SAS)</div>
+            <table style={styles.table}>
                 <thead>
-                    <tr className="bg-gray-100 border-b border-slate-300">
-                        <th className="p-1 text-left border-r border-slate-300">Formato</th>
-                        <th className="p-1 text-left border-r border-slate-300">Detalle</th>
-                        <th className="p-1 text-center border-r border-slate-300">Ubicación</th>
-                        <th className="p-1 text-left border-r border-slate-300">Observaciones</th>
-                        <th className="p-1 text-right">Total Neto</th>
+                    <tr>
+                        <th style={{ ...styles.th, textAlign: 'left', width: '20%' }}>Formato</th>
+                        <th style={{ ...styles.th, textAlign: 'left', width: '30%' }}>Detalle</th>
+                        <th style={{ ...styles.th, width: '15%' }}>Ubicación</th>
+                        <th style={{ ...styles.th, textAlign: 'left', width: '20%' }}>Obs</th>
+                        <th style={{ ...styles.th, textAlign: 'right', width: '15%' }}>Neto</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -225,42 +204,41 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                         if(item.desktop) locs.push("D"); if(item.mobile) locs.push("M"); if(item.home) locs.push("H"); if(item.interiores) locs.push("I");
 
                         return (
-                            <tr key={i} className="border-b border-slate-200">
-                                <td className="p-1 border-r border-slate-300">{item.format}</td>
-                                <td className="p-1 border-r border-slate-300">{item.detail || item.type || "-"}</td>
-                                <td className="p-1 text-center border-r border-slate-300">{locs.join(", ") || "-"}</td>
-                                <td className="p-1 italic text-gray-500 max-w-[200px] truncate border-r border-slate-300">{item.observations}</td>
-                                <td className="p-1 text-right font-medium">${net.toLocaleString('es-AR')}</td>
+                            <tr key={i}>
+                                <td style={{ ...styles.td, textAlign: 'left' }}>{item.format}</td>
+                                <td style={{ ...styles.td, textAlign: 'left' }}>{item.detail || item.type || "-"}</td>
+                                <td style={styles.td}>{locs.join(", ") || "-"}</td>
+                                <td style={{ ...styles.td, textAlign: 'left', fontStyle: 'italic', color: '#6b7280' }}>{item.observations}</td>
+                                <td style={{ ...styles.td, textAlign: 'right' }}>${net.toLocaleString('es-AR')}</td>
                             </tr>
                         );
                     })}
                 </tbody>
             </table>
 
-            {/* TOTALES SAS */}
-            <div style={totalBoxStyle}>
-                <div style={totalRowStyle}><span>Subtotal:</span><span>${sasSubtotal.toLocaleString('es-AR')}</span></div>
-                <div style={totalRowStyle}><span>Desajuste:</span><span>${sasAdjustment.toLocaleString('es-AR')}</span></div>
-                <div style={totalRowStyle}><span>IVA 5%:</span><span>${sasIva.toLocaleString('es-AR')}</span></div>
-                <div style={{...totalRowStyle, fontWeight: 'bold', borderTop: '1px solid #ddd', paddingTop: '2px'}}>
+            <div style={styles.totalBox}>
+                <div style={styles.totalRow}><span>Subtotal:</span><span>${sasSubtotal.toLocaleString('es-AR')}</span></div>
+                <div style={styles.totalRow}><span>Desajuste:</span><span>${sasAdjustment.toLocaleString('es-AR')}</span></div>
+                <div style={styles.totalRow}><span>IVA 5%:</span><span>${sasIva.toLocaleString('es-AR')}</span></div>
+                <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
                     <span>Total a Facturar:</span><span>${sasTotalToInvoice.toLocaleString('es-AR')}</span>
                 </div>
-                <div style={{...totalRowStyle, color: '#666'}}><span>Agencia ({sasCommissionPct}%):</span><span>${sasAgencyAmount.toLocaleString('es-AR')}</span></div>
-                <div style={{...totalRowStyle, fontWeight: 'bold', color: 'green'}}>
+                <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({sasCommissionPct}%):</span><span>${sasAgencyAmount.toLocaleString('es-AR')}</span></div>
+                <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
                     <span>Neto de Acción:</span><span>${sasNetAction.toLocaleString('es-AR')}</span>
                 </div>
             </div>
         </div>
       )}
 
-      {/* TOTAL GENERAL */}
-      <div className="flex justify-end mt-4 pt-2 border-t-2 border-black">
-          <div className="text-right text-xs">
-              <p className="font-bold text-lg">Total Pedido: ${ (order.totalOrder || 0).toLocaleString('es-AR') }</p>
-          </div>
+      <div style={{ marginTop: '30px', borderTop: '2px solid #000', paddingTop: '10px', textAlign: 'right', pageBreakInside: 'avoid' }}>
+          <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>Total Pedido: ${ (order.totalOrder || 0).toLocaleString('es-AR') }</p>
       </div>
 
-      <div className="mt-8 border-t border-black w-64 text-center text-[10px] pt-2">Firma Cliente</div>
+      <div style={{ marginTop: '60px', borderTop: '1px solid #000', width: '250px', textAlign: 'center', fontSize: '11px', paddingTop: '5px', pageBreakInside: 'avoid' }}>
+          Firma Cliente
+      </div>
+
     </div>
   );
 });
