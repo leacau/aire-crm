@@ -31,7 +31,7 @@ import {
     getPrograms, 
     getOpportunitiesByClientId, 
     createQuickOpportunity,
-    getAdvertisingOrder // <-- IMPORTANTE AÑADIR ESTO
+    getAdvertisingOrder
 } from "@/lib/firebase-service";
 import { Client, Agency, AdvertisingOrder } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
@@ -100,7 +100,6 @@ export function AdvertisingForm() {
     loadData();
   }, [userInfo, setValue]);
 
-  // 🟢 NUEVA LÓGICA DE CLONACIÓN
   useEffect(() => {
       const search = window.location.search;
       const params = new URLSearchParams(search);
@@ -118,7 +117,7 @@ export function AdvertisingForm() {
                       newOpportunityTitle: "",
                       product: order.product || "",
                       accountExecutive: order.accountExecutive,
-                      tangoOrderNo: "", // Lo limpiamos para evitar duplicados en Tango
+                      tangoOrderNo: "", 
                       startDate: new Date(order.startDate),
                       endDate: new Date(order.endDate),
                       materialSent: order.materialSent || false,
@@ -191,10 +190,7 @@ export function AdvertisingForm() {
       const safeStartDate = (values.startDate && isValid(values.startDate)) ? values.startDate.toISOString() : new Date().toISOString();
       const safeEndDate = (values.endDate && isValid(values.endDate)) ? values.endDate.toISOString() : new Date().toISOString();
 
-      const srlItemsValid = values.srlItems?.filter(item => {
-          if (!item.month) return false;
-          return true; 
-      }) || [];
+      const srlItemsValid = values.srlItems?.filter(item => item.month) || [];
 
       const srlSubtotal = srlItemsValid.reduce((acc, item) => {
         const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (val || 0), 0);
@@ -205,11 +201,8 @@ export function AdvertisingForm() {
 
       const sasSubtotal = values.sasItems?.reduce((acc, item) => {
         let net = 0;
-        if (item.format === "Banner") {
-            net = (item.cpm || 0) * (item.unitRate || 0);
-        } else {
-            net = (item.unitRate || 0);
-        }
+        if (item.format === "Banner") net = (item.cpm || 0) * (item.unitRate || 0);
+        else net = (item.unitRate || 0);
         return acc + net;
       }, 0) || 0;
       const sasTotal = (sasSubtotal - (values.adjustmentSas || 0)) * 1.05;
@@ -244,25 +237,36 @@ export function AdvertisingForm() {
       };
   };
 
+  // 🟢 FUNCIÓN EXPORTAR ADAPTADA A MÚLTIPLES PÁGINAS (APAISADAS)
   const handleExportPdf = async () => {
       if (!pdfRef.current) return;
       setIsExporting(true);
       try {
-          const canvas = await html2canvas(pdfRef.current, { scale: 2, useCORS: true, logging: false });
-          const imgData = canvas.toDataURL('image/png');
-          
-          // 🟢 CAMBIADO A 'l' (Landscape)
-          const pdf = new jsPDF('l', 'mm', 'a4');
-          
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = pdf.internal.pageSize.getHeight();
-          
-          // Para asegurar que la imagen entre completa (ya que dibujamos a 297x210)
-          const imgProps = pdf.getImageProperties(imgData);
-          const ratio = imgProps.width / imgProps.height;
-          const heightCalculated = pdfWidth / ratio;
+          const page1 = pdfRef.current.querySelector('#ad-pdf-page-1') as HTMLElement;
+          const page2 = pdfRef.current.querySelector('#ad-pdf-page-2') as HTMLElement;
 
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, heightCalculated);
+          if (!page1) throw new Error("No se encontró la página del PDF");
+
+          const pdf = new jsPDF('l', 'mm', 'a4'); // 'l' = Landscape
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+
+          // 1️⃣ PÁGINA 1
+          const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true, logging: false });
+          const imgData1 = canvas1.toDataURL('image/png');
+          const ratio1 = canvas1.width / canvas1.height;
+          const height1 = pdfWidth / ratio1;
+          pdf.addImage(imgData1, 'PNG', 0, 0, pdfWidth, height1);
+
+          // 2️⃣ PÁGINA 2 (Condicional)
+          if (page2) {
+              pdf.addPage();
+              const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true, logging: false });
+              const imgData2 = canvas2.toDataURL('image/png');
+              const ratio2 = canvas2.width / canvas2.height;
+              const height2 = pdfWidth / ratio2;
+              pdf.addImage(imgData2, 'PNG', 0, 0, pdfWidth, height2);
+          }
+
           pdf.save(`OP-${format(new Date(), 'yyyyMMdd')}.pdf`);
           toast({ title: "PDF Exportado", description: "El archivo se ha descargado correctamente." });
       } catch (err) {
