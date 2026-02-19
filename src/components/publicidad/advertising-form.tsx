@@ -250,10 +250,19 @@ export function AdvertisingForm() {
       try {
           const canvas = await html2canvas(pdfRef.current, { scale: 2, useCORS: true, logging: false });
           const imgData = canvas.toDataURL('image/png');
-          const pdf = new jsPDF('p', 'mm', 'a4');
+          
+          // 🟢 CAMBIADO A 'l' (Landscape)
+          const pdf = new jsPDF('l', 'mm', 'a4');
+          
           const pdfWidth = pdf.internal.pageSize.getWidth();
           const pdfHeight = pdf.internal.pageSize.getHeight();
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          
+          // Para asegurar que la imagen entre completa (ya que dibujamos a 297x210)
+          const imgProps = pdf.getImageProperties(imgData);
+          const ratio = imgProps.width / imgProps.height;
+          const heightCalculated = pdfWidth / ratio;
+
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, heightCalculated);
           pdf.save(`OP-${format(new Date(), 'yyyyMMdd')}.pdf`);
           toast({ title: "PDF Exportado", description: "El archivo se ha descargado correctamente." });
       } catch (err) {
