@@ -35,6 +35,7 @@ export default function CommercialNotesListPage() {
             setLoading(true);
             try {
                 let fetchedNotes: CommercialNote[] = [];
+                // 🟢 LÓGICA DE PERMISOS: Si es jefe/gerencia ve todo, sino solo sus notas.
                 if (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion') {
                     fetchedNotes = await getAllCommercialNotes();
                 } else {
