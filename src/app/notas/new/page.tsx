@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote, getCommercialNote } from '@/lib/firebase-service'; // <-- AÑADIDO getCommercialNote
+import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote, getCommercialNote } from '@/lib/firebase-service'; 
 import type { Client, Program, CommercialNote, ScheduleItem } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -38,17 +38,21 @@ export default function NewCommercialNotePage() {
     const [saving, setSaving] = useState(false);
     const pdfRef = useRef<HTMLDivElement>(null);
     
+    // Data
     const [clients, setClients] = useState<Client[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
     
+    // --- SECCIÓN 1: DATOS DE CLIENTE ---
     const [selectedClientId, setSelectedClientId] = useState<string>('');
     const [cuit, setCuit] = useState('');
     const [razonSocial, setRazonSocial] = useState('');
     const [rubro, setRubro] = useState('');
     
+    // --- SECCIÓN 2: COMERCIAL ---
     const [saleValue, setSaleValue] = useState<string>('');
     const [financialObservations, setFinancialObservations] = useState('');
     
+    // --- SECCIÓN 3: PRODUCCIÓN/PAUTADO ---
     const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
     const [programSchedule, setProgramSchedule] = useState<Record<string, ScheduleItem[]>>({});
     const [replicateWeb, setReplicateWeb] = useState(false);
@@ -62,6 +66,7 @@ export default function NewCommercialNotePage() {
     const [contactPhone, setContactPhone] = useState('');
     const [contactName, setContactName] = useState('');
 
+    // --- SECCIÓN 4: NOTA ---
     const [title, setTitle] = useState('');
     const [location, setLocation] = useState<'Estudio' | 'Móvil' | 'Meet' | 'Llamada' | undefined>(undefined);
     const [callPhone, setCallPhone] = useState('');
@@ -94,6 +99,9 @@ export default function NewCommercialNotePage() {
 
     const [notifyOnSave, setNotifyOnSave] = useState(true);
 
+    // 🟢 Flag para no sobreescribir el borrador al cargar
+    const [isRestored, setIsRestored] = useState(false);
+
     const primaryGrafError = primaryGrafs.some(g => g.length > 84);
     const secondaryGrafError = secondaryGrafs.some(g => g.length > 55);
     const hasGrafErrors = primaryGrafError || secondaryGrafError;
@@ -119,10 +127,12 @@ export default function NewCommercialNotePage() {
 
             links.forEach((link) => {
                 const linkRect = link.getBoundingClientRect();
+                
                 const top = ((linkRect.top - elementRect.top) * pdfHeight) / elementRect.height;
                 const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
                 const width = (linkRect.width * pdfWidth) / elementRect.width;
                 const height = (linkRect.height * pdfHeight) / elementRect.height;
+
                 pdf.link(left, top, width, height, { url: link.href });
             });
         };
@@ -148,7 +158,7 @@ export default function NewCommercialNotePage() {
         }
     };
     
-    // 🟢 NUEVO: LÓGICA DE CLONACIÓN DE NOTA COMERCIAL
+    // 🟢 CARGA INICIAL: Revisa si hay que Clonar o cargar el Borrador
     useEffect(() => {
         const search = window.location.search;
         const params = new URLSearchParams(search);
@@ -200,9 +210,84 @@ export default function NewCommercialNotePage() {
                     setGraphicLink(note.graphicSupportLink || '');
                     setNoteObservations(note.noteObservations || '');
                 }
+                setIsRestored(true);
             });
+        } else {
+            // 🟢 LÓGICA DE RECUPERACIÓN DE BORRADOR
+            const draft = localStorage.getItem('commercial_note_draft');
+            if (draft) {
+                try {
+                    const parsed = JSON.parse(draft);
+                    setSelectedClientId(parsed.selectedClientId || '');
+                    setCuit(parsed.cuit || '');
+                    setRazonSocial(parsed.razonSocial || '');
+                    setRubro(parsed.rubro || '');
+                    setSaleValue(parsed.saleValue || '');
+                    setFinancialObservations(parsed.financialObservations || '');
+                    setSelectedProgramIds(parsed.selectedProgramIds || []);
+                    setProgramSchedule(parsed.programSchedule || {});
+                    setReplicateWeb(parsed.replicateWeb || false);
+                    setReplicateSocials(parsed.replicateSocials || []);
+                    setCollaboration(parsed.collaboration || false);
+                    setCollaborationHandle(parsed.collaborationHandle || '');
+                    setCtaText(parsed.ctaText || '');
+                    setCtaDestination(parsed.ctaDestination || '');
+                    setContactPhone(parsed.contactPhone || '');
+                    setContactName(parsed.contactName || '');
+                    setTitle(parsed.title || '');
+                    setLocation(parsed.location);
+                    setCallPhone(parsed.callPhone || '');
+                    setMobileAddress(parsed.mobileAddress || '');
+                    setPrimaryGrafs(parsed.primaryGrafs || ['']);
+                    setSecondaryGrafs(parsed.secondaryGrafs || ['']);
+                    setQuestions(parsed.questions || ['', '', '', '', '']);
+                    setTopicsToAvoid(parsed.topicsToAvoid || ['']);
+                    setIntervieweeName(parsed.intervieweeName || '');
+                    setIntervieweeRole(parsed.intervieweeRole || '');
+                    setIntervieweeBio(parsed.intervieweeBio || '');
+                    setInstagramHandle(parsed.instagramHandle || '');
+                    setNoInstagram(parsed.noInstagram || false);
+                    setWebsite(parsed.website || '');
+                    setNoWeb(parsed.noWeb || false);
+                    setWhatsapp(parsed.whatsapp || '');
+                    setNoWhatsapp(parsed.noWhatsapp || false);
+                    setCommercialPhone(parsed.commercialPhone || '');
+                    setNoCommercialPhone(parsed.noCommercialPhone || false);
+                    setCommercialAddresses(parsed.commercialAddresses || ['']);
+                    setNoCommercialAddress(parsed.noCommercialAddress || false);
+                    setGraphicSupport(parsed.graphicSupport || false);
+                    setGraphicLink(parsed.graphicLink || '');
+                    setNoteObservations(parsed.noteObservations || '');
+                    
+                    if (parsed.selectedClientId || parsed.title) {
+                        toast({ title: "Borrador recuperado", description: "Se han restaurado los datos que estabas cargando." });
+                    }
+                } catch (e) {
+                    console.error("Error recuperando el borrador", e);
+                }
+            }
+            setIsRestored(true);
         }
-    }, []);
+    }, [toast]);
+
+    // 🟢 AUTOGUARDADO EN LOCALSTORAGE (Funciona en tiempo real)
+    useEffect(() => {
+        if (!isRestored) return; // Evitar que guarde el estado vacío antes de cargar el borrador
+
+        const draftData = {
+            selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations,
+            selectedProgramIds, programSchedule, replicateWeb, replicateSocials,
+            collaboration, collaborationHandle, ctaText, ctaDestination,
+            contactPhone, contactName, title, location, callPhone, mobileAddress,
+            primaryGrafs, secondaryGrafs, questions, topicsToAvoid,
+            intervieweeName, intervieweeRole, intervieweeBio,
+            instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp,
+            commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress,
+            graphicSupport, graphicLink, noteObservations
+        };
+        localStorage.setItem('commercial_note_draft', JSON.stringify(draftData));
+
+    }, [isRestored, selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations, selectedProgramIds, programSchedule, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, contactPhone, contactName, title, location, callPhone, mobileAddress, primaryGrafs, secondaryGrafs, questions, topicsToAvoid, intervieweeName, intervieweeRole, intervieweeBio, instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp, commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress, graphicSupport, graphicLink, noteObservations]);
 
     useEffect(() => {
         const loadData = async () => {
@@ -432,6 +517,9 @@ export default function NewCommercialNotePage() {
                 toast({ title: 'Nota guardada correctamente.' });
             }
             
+            // 🟢 LÓGICA DE LIMPIEZA DEL BORRADOR TRAS GUARDAR CON ÉXITO
+            localStorage.removeItem('commercial_note_draft');
+
             router.push('/notas');
 
         } catch (error) {
