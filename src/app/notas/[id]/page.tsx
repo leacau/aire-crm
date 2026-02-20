@@ -11,19 +11,23 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, FileDown, ArrowLeft, Copy } from 'lucide-react'; // <-- Importamos Copy
+import { ExternalLink, FileDown, ArrowLeft, Copy, Mail } from 'lucide-react'; // <-- Importamos Mail
 import { Button } from '@/components/ui/button';
 import { NotePdf } from '@/components/notas/note-pdf';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
+import { sendEmail } from '@/lib/google-gmail-service';
 
 export default function NoteDetailPage() {
     const { id } = useParams();
     const { toast } = useToast();
+    const { getGoogleAccessToken } = useAuth(); // Necesario para el email
     const [note, setNote] = useState<CommercialNote | null>(null);
     const [programs, setPrograms] = useState<Program[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isResending, setIsResending] = useState(false); // 🟢 Estado para el botón Reinformar
     const router = useRouter();
 
     const pdfRef = useRef<HTMLDivElement>(null);
@@ -43,32 +47,100 @@ export default function NoteDetailPage() {
         load();
     }, [id]);
 
+    const generateMultiPagePdf = async (element: HTMLElement) => {
+        const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
+        const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
+
+        if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
+
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true });
+        const imgData1 = canvas1.toDataURL('image/jpeg', 0.8);
+        pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+        pdf.addPage();
+        const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true });
+        const imgData2 = canvas2.toDataURL('image/jpeg', 0.8);
+        pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+        return pdf;
+    };
+
     const handleDownloadPdf = async () => {
         if (!pdfRef.current || !note) return;
         try {
-            const page1 = pdfRef.current.querySelector('#note-pdf-page-1') as HTMLElement;
-            const page2 = pdfRef.current.querySelector('#note-pdf-page-2') as HTMLElement;
-
-            if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
-
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-
-            const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true });
-            const imgData1 = canvas1.toDataURL('image/jpeg', 0.8);
-            pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-
-            pdf.addPage();
-            const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true });
-            const imgData2 = canvas2.toDataURL('image/jpeg', 0.8);
-            pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-
+            const pdf = await generateMultiPagePdf(pdfRef.current);
             pdf.save(`Nota_${note.title?.replace(/ /g, "_") || 'SinTitulo'}.pdf`);
             toast({ title: "PDF exportado correctamente" });
         } catch (error) {
             console.error(error);
             toast({ title: "Error al generar PDF", variant: "destructive" });
+        }
+    };
+
+    // 🟢 NUEVO: LÓGICA PARA REINFORMAR
+    const handleReinformar = async () => {
+        if (!pdfRef.current || !note) return;
+        setIsResending(true);
+        try {
+            const accessToken = await getGoogleAccessToken();
+            if (!accessToken) {
+                toast({ title: "Error", description: "No se pudo obtener acceso a Gmail.", variant: "destructive" });
+                setIsResending(false);
+                return;
+            }
+
+            // Generamos el PDF
+            const pdf = await generateMultiPagePdf(pdfRef.current);
+            const pdfBase64 = pdf.output('datauristring').split(',')[1];
+            const baseUrl = window.location.origin;
+            const detailLink = `${baseUrl}/notas/${note.id}`;
+
+            // Armamos el resumen de horarios
+            let scheduleSummary = '';
+            Object.entries(note.schedule || {}).forEach(([progId, items]) => {
+                const progName = programs.find(p => p.id === progId)?.name || 'Programa';
+                (items as any[]).forEach(item => {
+                    scheduleSummary += `<li><strong>${progName}</strong>: ${format(new Date(item.date), 'dd/MM/yyyy')} ${item.time}hs</li>`;
+                });
+            });
+
+            const emailBody = `
+                <div style="font-family: Arial, sans-serif; color: #333;">
+                    <h2 style="color: #cc0000;">Nota Comercial Reinformada</h2>
+                    <p>El asesor <strong>${note.advisorName}</strong> ha vuelto a notificar esta nota comercial.</p>
+                    <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #cc0000; margin: 20px 0;">
+                        <p><strong>Cliente:</strong> ${note.clientName || 'Desconocido'}</p>
+                        <p><strong>Título:</strong> ${note.title}</p>
+                        <p><strong>Cronograma:</strong></p>
+                        <ul>${scheduleSummary || '<li>Sin fecha definida</li>'}</ul>
+                    </div>
+                    <p>Puede ver el detalle completo y descargar el PDF actualizado ingresando al siguiente enlace:</p>
+                    <p><a href="${detailLink}">Ver Detalle de la Nota</a></p>
+                </div>
+            `;
+
+            await sendEmail({
+                accessToken,
+                to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
+                subject: `Reinforme - Nota Comercial: ${note.title} - ${note.clientName}`,
+                body: emailBody,
+                attachments: [{
+                    filename: `Nota_${note.title?.replace(/ /g, "_") || 'SinTitulo'}.pdf`,
+                    content: pdfBase64,
+                    encoding: 'base64'
+                }]
+            });
+            
+            toast({ title: 'Nota reinformada exitosamente.' });
+        } catch (error) {
+            console.error("Error al reinformar", error);
+            toast({ title: 'Error al enviar el correo.', variant: 'destructive' });
+        } finally {
+            setIsResending(false);
         }
     };
 
@@ -98,7 +170,11 @@ export default function NoteDetailPage() {
                 <Button variant="ghost" onClick={() => router.back()}>
                     <ArrowLeft className="mr-2 h-4 w-4" /> Volver
                 </Button>
-                {/* 🟢 BOTÓN DUPLICAR NOTA */}
+                {/* 🟢 BOTÓN REINFORMAR */}
+                <Button variant="outline" onClick={handleReinformar} disabled={isResending}>
+                    {isResending ? <Spinner size="small" className="mr-2"/> : <Mail className="mr-2 h-4 w-4" />}
+                    Reinformar
+                </Button>
                 <Button variant="outline" onClick={() => router.push(`/notas/new?cloneId=${note.id}`)}>
                     <Copy className="mr-2 h-4 w-4" /> Duplicar Nota
                 </Button>
