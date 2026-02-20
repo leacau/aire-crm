@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation'; // <-- Importamos useRouter
+import { useRouter } from 'next/navigation';
 import {
   Dialog,
   DialogContent,
@@ -30,7 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession, getAdvertisingOrdersByOpportunity } from '@/lib/firebase-service';
+import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession, getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder } from '@/lib/firebase-service';
 import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail, Briefcase } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
@@ -39,7 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { CommentThread } from '@/components/comments/comment-thread';
-import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer'; // <-- Importamos el visor
+import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer'; 
 
 import {
   AlertDialog,
@@ -156,11 +156,10 @@ export function OpportunityDetailsDialog({
 }: OpportunityDetailsDialogProps) {
   const { userInfo, isBoss, getGoogleAccessToken, ensureGoogleAccessToken } = useAuth();
   const { toast } = useToast();
-  const router = useRouter(); // <-- Usamos router
+  const router = useRouter(); 
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   
-  // <-- ESTADO PARA ÓRDENES DE PUBLICIDAD
   const [advertisingOrders, setAdvertisingOrders] = useState<AdvertisingOrder[]>([]);
 
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
@@ -274,7 +273,6 @@ export function OpportunityDetailsDialog({
     }
   }, [opportunity]);
 
-  // <-- NUEVO: BUSCAR ÓRDENES DE PUBLICIDAD
   const fetchAdOrders = useCallback(async () => {
       if (opportunity) {
           const orders = await getAdvertisingOrdersByOpportunity(opportunity.id);
@@ -299,7 +297,7 @@ export function OpportunityDetailsDialog({
 
         if (isEditing) {
             fetchInvoices();
-            fetchAdOrders(); // <-- DISPARAMOS LA BÚSQUEDA
+            fetchAdOrders(); 
         } else {
             setInvoices([]);
             setAdvertisingOrders([]);
@@ -385,6 +383,22 @@ export function OpportunityDetailsDialog({
     }
     onOpenChange(false);
 };
+
+  // 🟢 NUEVO: Lógica para eliminar Órdenes de Publicidad (Solo Jefes)
+  const handleDeleteAdOrder = async (orderId: string) => {
+      if (!userInfo) return;
+      if (!window.confirm("¿Estás seguro de eliminar esta Orden de Publicidad? Esta acción no se puede deshacer.")) return;
+      
+      try {
+          await deleteAdvertisingOrder(orderId, userInfo.id, userInfo.name, opportunity?.clientName || client?.name || 'Cliente');
+          toast({ title: "Orden Eliminada" });
+          fetchAdOrders(); // Refrescar lista visual
+      } catch (error) {
+          console.error("Error al eliminar la orden:", error);
+          toast({ title: "Error al eliminar", variant: "destructive" });
+      }
+  };
+
 
   const handleBonusDecision = (decision: 'Autorizado' | 'Rechazado') => {
     if (!userInfo) return;
@@ -852,7 +866,6 @@ export function OpportunityDetailsDialog({
           </TabsContent>
           
           <TabsContent value="pautado" className="py-4 space-y-6">
-             {/* 🟢 NUEVO: SECCIÓN DE ÓRDENES DE PUBLICIDAD (SRL / SAS) */}
              <div className="border rounded-lg bg-slate-50/50 p-4">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
                     <div>
@@ -860,7 +873,7 @@ export function OpportunityDetailsDialog({
                         <p className="text-xs text-muted-foreground">Listado de órdenes vinculadas a este producto.</p>
                     </div>
                     <Button onClick={() => {
-                        onOpenChange(false); // Cerramos modal y redirigimos
+                        onOpenChange(false);
                         router.push(`/publicidad/new?clientId=${opportunity?.clientId || client?.id}&opportunityId=${opportunity?.id}`);
                     }}>
                         <PlusCircle className="mr-2 h-4 w-4"/>
@@ -870,14 +883,22 @@ export function OpportunityDetailsDialog({
                 
                 <div className="space-y-3">
                     {advertisingOrders.map(order => (
-                        <div key={order.id} className="p-3 border rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white shadow-sm gap-2">
+                        <div key={order.id} className="p-3 border rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white shadow-sm gap-2 hover:shadow transition-shadow">
                             <div>
                                 <p className="font-bold text-slate-800">{order.product || order.opportunityTitle || 'Campaña'}</p>
                                 <p className="text-sm text-slate-600">
                                     Vigencia: {format(new Date(order.startDate), 'dd/MM/yyyy')} al {format(new Date(order.endDate), 'dd/MM/yyyy')}
                                 </p>
                             </div>
-                            <AdvertisingOrderViewer order={order} />
+                            {/* 🟢 Pasamos los programas y validamos isBoss para el tachito */}
+                            <div className="flex gap-2">
+                                <AdvertisingOrderViewer order={order} programs={programs} />
+                                {isBoss && (
+                                    <Button variant="ghost" size="icon" onClick={() => handleDeleteAdOrder(order.id)}>
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     ))}
                     {advertisingOrders.length === 0 && (
@@ -888,7 +909,6 @@ export function OpportunityDetailsDialog({
                 </div>
             </div>
 
-            {/* SECCIÓN LEGACY: PAUTADO ANTIGUO */}
              <div className="pt-4 border-t">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-md text-gray-500">Pautado Histórico (Obsoleto)</h3>
