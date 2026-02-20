@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllCommercialNotes, getCommercialNotesForAdvisor } from '@/lib/firebase-service';
+import { getAllCommercialNotes, getClients } from '@/lib/firebase-service'; // <-- Cambiamos la importación
 import type { CommercialNote } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -34,14 +34,25 @@ export default function CommercialNotesListPage() {
             if (!userInfo) return;
             setLoading(true);
             try {
-                let fetchedNotes: CommercialNote[] = [];
-                // 🟢 LÓGICA DE PERMISOS: Si es jefe/gerencia ve todo, sino solo sus notas.
+                // 1. Obtenemos TODAS las notas (evita el error de índices faltantes en Firebase)
+                const allNotes = await getAllCommercialNotes();
+                
+                // 2. Filtramos según los permisos
                 if (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion') {
-                    fetchedNotes = await getAllCommercialNotes();
+                    setNotes(allNotes);
                 } else {
-                    fetchedNotes = await getCommercialNotesForAdvisor(userInfo.id);
+                    // Para los asesores: buscamos cuáles son SUS clientes
+                    const allClients = await getClients();
+                    const myClientIds = new Set(
+                        allClients.filter(c => c.ownerId === userInfo.id).map(c => c.id)
+                    );
+                    
+                    // Mostramos la nota si el asesor la creó ÉL MISMO, o si es de UNO DE SUS CLIENTES
+                    const myNotes = allNotes.filter(note => 
+                        note.advisorId === userInfo.id || myClientIds.has(note.clientId)
+                    );
+                    setNotes(myNotes);
                 }
-                setNotes(fetchedNotes);
             } catch (error) {
                 console.error("Error fetching notes:", error);
             } finally {
