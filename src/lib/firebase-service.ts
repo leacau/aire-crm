@@ -3718,3 +3718,24 @@ export const getAdvertisingOrder = async (id: string): Promise<AdvertisingOrder 
         return null;
     }
 };
+
+export const deleteAdvertisingOrder = async (id: string, userId: string, userName: string, clientName: string): Promise<void> => {
+    try {
+        const docRef = doc(db, 'advertising_orders', id);
+        await deleteDoc(docRef);
+
+        await logActivity({
+            userId,
+            userName,
+            type: 'delete',
+            entityType: 'opportunity' as any, // Vinculado para que salga en el historial
+            entityId: id,
+            entityName: 'Orden de Publicidad',
+            details: `eliminó una orden de publicidad del cliente <strong>${clientName}</strong>`,
+            ownerName: 'Sistema'
+        });
+    } catch (error) {
+        console.error("Error deleting ad order:", error);
+        throw error;
+    }
+};
