@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, FileDown, ArrowLeft, Copy, Mail } from 'lucide-react'; // <-- Importamos Mail
+import { ExternalLink, FileDown, ArrowLeft, Copy, Mail } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { NotePdf } from '@/components/notas/note-pdf';
 import html2canvas from 'html2canvas';
@@ -23,11 +23,11 @@ import { sendEmail } from '@/lib/google-gmail-service';
 export default function NoteDetailPage() {
     const { id } = useParams();
     const { toast } = useToast();
-    const { getGoogleAccessToken } = useAuth(); // Necesario para el email
+    const { getGoogleAccessToken } = useAuth();
     const [note, setNote] = useState<CommercialNote | null>(null);
     const [programs, setPrograms] = useState<Program[]>([]);
     const [loading, setLoading] = useState(true);
-    const [isResending, setIsResending] = useState(false); // 🟢 Estado para el botón Reinformar
+    const [isResending, setIsResending] = useState(false);
     const router = useRouter();
 
     const pdfRef = useRef<HTMLDivElement>(null);
@@ -57,14 +57,33 @@ export default function NoteDetailPage() {
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
 
-        const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true });
-        const imgData1 = canvas1.toDataURL('image/jpeg', 0.8);
-        pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        const processPage = async (pageElement: HTMLElement, pageNum: number) => {
+            const canvas = await html2canvas(pageElement, { scale: 2, useCORS: true });
+            const imgData = canvas.toDataURL('image/jpeg', 0.8);
+            
+            if (pageNum > 1) pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
 
-        pdf.addPage();
-        const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true });
-        const imgData2 = canvas2.toDataURL('image/jpeg', 0.8);
-        pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            const links = pageElement.querySelectorAll('a');
+            const elementRect = pageElement.getBoundingClientRect();
+
+            links.forEach((link) => {
+                const linkRect = link.getBoundingClientRect();
+                
+                // 🟢 FIX: Si el enlace está invisible o no tiene tamaño real, lo ignoramos
+                if (linkRect.width === 0 || linkRect.height === 0) return;
+                
+                const top = ((linkRect.top - elementRect.top) * pdfHeight) / elementRect.height;
+                const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
+                const width = (linkRect.width * pdfWidth) / elementRect.width;
+                const height = (linkRect.height * pdfHeight) / elementRect.height;
+
+                pdf.link(left, top, width, height, { url: link.href });
+            });
+        };
+
+        await processPage(page1, 1);
+        await processPage(page2, 2);
 
         return pdf;
     };
@@ -81,7 +100,6 @@ export default function NoteDetailPage() {
         }
     };
 
-    // 🟢 NUEVO: LÓGICA PARA REINFORMAR
     const handleReinformar = async () => {
         if (!pdfRef.current || !note) return;
         setIsResending(true);
@@ -93,13 +111,11 @@ export default function NoteDetailPage() {
                 return;
             }
 
-            // Generamos el PDF
             const pdf = await generateMultiPagePdf(pdfRef.current);
             const pdfBase64 = pdf.output('datauristring').split(',')[1];
             const baseUrl = window.location.origin;
             const detailLink = `${baseUrl}/notas/${note.id}`;
 
-            // Armamos el resumen de horarios
             let scheduleSummary = '';
             Object.entries(note.schedule || {}).forEach(([progId, items]) => {
                 const progName = programs.find(p => p.id === progId)?.name || 'Programa';
@@ -170,7 +186,6 @@ export default function NoteDetailPage() {
                 <Button variant="ghost" onClick={() => router.back()}>
                     <ArrowLeft className="mr-2 h-4 w-4" /> Volver
                 </Button>
-                {/* 🟢 BOTÓN REINFORMAR */}
                 <Button variant="outline" onClick={handleReinformar} disabled={isResending}>
                     {isResending ? <Spinner size="small" className="mr-2"/> : <Mail className="mr-2 h-4 w-4" />}
                     Reinformar
