@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, SupervisorComment, AdvertisingOrder } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, SupervisorComment, AdvertisingOrder, Program } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions, invoiceStatusOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
@@ -30,7 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession, getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder } from '@/lib/firebase-service';
+import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession, getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder, getPrograms } from '@/lib/firebase-service';
 import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail, Briefcase } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
@@ -157,9 +157,10 @@ export function OpportunityDetailsDialog({
   const { userInfo, isBoss, getGoogleAccessToken, ensureGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const router = useRouter(); 
+  
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  
+  const [programs, setPrograms] = useState<Program[]>([]); 
   const [advertisingOrders, setAdvertisingOrders] = useState<AdvertisingOrder[]>([]);
 
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
@@ -294,6 +295,10 @@ export function OpportunityDetailsDialog({
         getAgencies()
             .then(setAgencies)
             .catch(() => toast({ title: "Error al cargar agencias", variant: "destructive" }));
+            
+        getPrograms()
+            .then(setPrograms)
+            .catch(console.error);
 
         if (isEditing) {
             fetchInvoices();
@@ -384,7 +389,6 @@ export function OpportunityDetailsDialog({
     onOpenChange(false);
 };
 
-  // 🟢 NUEVO: Lógica para eliminar Órdenes de Publicidad (Solo Jefes)
   const handleDeleteAdOrder = async (orderId: string) => {
       if (!userInfo) return;
       if (!window.confirm("¿Estás seguro de eliminar esta Orden de Publicidad? Esta acción no se puede deshacer.")) return;
@@ -392,7 +396,7 @@ export function OpportunityDetailsDialog({
       try {
           await deleteAdvertisingOrder(orderId, userInfo.id, userInfo.name, opportunity?.clientName || client?.name || 'Cliente');
           toast({ title: "Orden Eliminada" });
-          fetchAdOrders(); // Refrescar lista visual
+          fetchAdOrders(); 
       } catch (error) {
           console.error("Error al eliminar la orden:", error);
           toast({ title: "Error al eliminar", variant: "destructive" });
@@ -491,7 +495,6 @@ export function OpportunityDetailsDialog({
   const handleSaveNewInvoice = async () => {
     if (!opportunity || !userInfo) return;
     
-    // 1. Sanear entrada
     const inputRaw = sanitizeInvoiceNumber(newInvoiceRow.number);
     
     if (!inputRaw || !newInvoiceRow.amount || Number(newInvoiceRow.amount) <= 0) {
@@ -765,7 +768,7 @@ export function OpportunityDetailsDialog({
                   </div>
               </div>
               <div className="space-y-2">
-                <Label>Forma de Pago</Label>
+                <Label>Forma de Payment</Label>
                 <div className="flex flex-wrap gap-x-4 gap-y-2">
                     {formaDePagoOptions.map(option => (
                         <div key={option} className="flex items-center space-x-2">
@@ -890,7 +893,6 @@ export function OpportunityDetailsDialog({
                                     Vigencia: {format(new Date(order.startDate), 'dd/MM/yyyy')} al {format(new Date(order.endDate), 'dd/MM/yyyy')}
                                 </p>
                             </div>
-                            {/* 🟢 Pasamos los programas y validamos isBoss para el tachito */}
                             <div className="flex gap-2">
                                 <AdvertisingOrderViewer order={order} programs={programs} />
                                 {isBoss && (
