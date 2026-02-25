@@ -24,22 +24,20 @@ const Field = ({ label, value, fullWidth = false }: { label: string, value?: str
     return (
         <div className={`mb-2 ${fullWidth ? 'w-full' : ''}`}>
             <span className="font-bold text-sm">{label}: </span>
-            <span className="text-sm break-words whitespace-pre-wrap">
-                {isUrl ? (
-                    // 🟢 REFORMULACIÓN: Se muestra texto corto para evitar saltos de línea y pérdida del clic
-                    <a 
-                        href={displayValue as string} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-600 underline font-bold"
-                        style={{ display: 'block', padding: '4px 0' }}
-                    >
-                        👉 ABRIR ENLACE 👈
-                    </a>
-                ) : (
-                    value || '-'
-                )}
-            </span>
+            {isUrl ? (
+                // 🟢 REFORMULACIÓN: Quitamos el <span> contenedor para evitar ruptura del bounding box
+                <a 
+                    href={displayValue as string} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-700 underline font-bold"
+                    style={{ display: 'inline-block', padding: '2px 8px', backgroundColor: '#eff6ff', borderRadius: '4px', border: '1px solid #bfdbfe' }}
+                >
+                    👉 ABRIR ENLACE 👈
+                </a>
+            ) : (
+                <span className="text-sm break-words whitespace-pre-wrap">{value || '-'}</span>
+            )}
         </div>
     );
 };
@@ -104,15 +102,15 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                       <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded">
                           <p className="text-yellow-900 font-bold text-center mb-2">⚠️ REQUIERE SOPORTE GRÁFICO</p>
                           {note.graphicSupportLink && (
-                            <div className="bg-white p-3 border border-yellow-200 rounded text-center">
-                                <span className="text-xs text-gray-500 font-bold block mb-1">ENLACE AL MATERIAL:</span>
-                                {/* 🟢 REFORMULACIÓN: Texto estático para asegurar que el área de clic sea rectangular y perfecta */}
+                            <div className="bg-white p-4 border border-yellow-200 rounded text-center">
+                                <span className="text-xs text-gray-500 font-bold block mb-2">ENLACE AL MATERIAL:</span>
+                                {/* 🟢 REFORMULACIÓN: Un botón con display inline-block para que jspdf lo detecte bien */}
                                 <a 
                                     href={note.graphicSupportLink.startsWith('http') ? note.graphicSupportLink : `https://${note.graphicSupportLink}`} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
-                                    className="text-blue-600 underline font-bold text-base block"
-                                    style={{ padding: '8px', cursor: 'pointer', display: 'block' }}
+                                    className="text-blue-700 underline font-bold text-base"
+                                    style={{ display: 'inline-block', padding: '8px 16px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px' }}
                                 >
                                     👉 IR A MATERIAL 👈
                                 </a>
