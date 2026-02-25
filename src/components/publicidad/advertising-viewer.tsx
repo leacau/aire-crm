@@ -28,25 +28,36 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
           if (!page1) throw new Error("No se encontró la página del PDF");
 
-          const pdf = new jsPDF('l', 'mm', 'a4'); // 'l' = Landscape
+          const pdf = new jsPDF('l', 'mm', 'a4'); 
           const pdfWidth = pdf.internal.pageSize.getWidth();
 
-          // 1️⃣ PÁGINA 1
-          const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true, logging: false });
-          const imgData1 = canvas1.toDataURL('image/png');
-          const ratio1 = canvas1.width / canvas1.height;
-          const height1 = pdfWidth / ratio1;
-          pdf.addImage(imgData1, 'PNG', 0, 0, pdfWidth, height1);
+          const processPage = async (pageElement: HTMLElement, pageNum: number) => {
+              const canvas = await html2canvas(pageElement, { scale: 2, useCORS: true, logging: false });
+              const imgData = canvas.toDataURL('image/png');
+              const ratio = canvas.width / canvas.height;
+              const height = pdfWidth / ratio;
 
-          // 2️⃣ PÁGINA 2 (Condicional)
-          if (page2) {
-              pdf.addPage();
-              const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true, logging: false });
-              const imgData2 = canvas2.toDataURL('image/png');
-              const ratio2 = canvas2.width / canvas2.height;
-              const height2 = pdfWidth / ratio2;
-              pdf.addImage(imgData2, 'PNG', 0, 0, pdfWidth, height2);
-          }
+              if (pageNum > 1) pdf.addPage();
+              pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, height);
+
+              const links = pageElement.querySelectorAll('a');
+              const elementRect = pageElement.getBoundingClientRect();
+
+              links.forEach((link) => {
+                  const linkRect = link.getBoundingClientRect();
+                  if (linkRect.width === 0 || linkRect.height === 0) return;
+                  
+                  const top = ((linkRect.top - elementRect.top) * height) / elementRect.height;
+                  const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
+                  const width = (linkRect.width * pdfWidth) / elementRect.width;
+                  const linkH = (linkRect.height * height) / elementRect.height;
+
+                  pdf.link(left, top, width, linkH, { url: link.href });
+              });
+          };
+
+          await processPage(page1, 1);
+          if (page2) await processPage(page2, 2);
 
           pdf.save(`OP-${order.clientName}-${format(new Date(), 'yyyyMMdd')}.pdf`);
           toast({ title: "PDF Exportado correctamente." });
@@ -61,11 +72,12 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2 bg-white hover:bg-slate-100 text-slate-700">
+        <Button variant="outline" size="sm" className="gap-2 bg-white hover:bg-slate-100 text-slate-700 w-full sm:w-auto">
            <FileText className="h-4 w-4" /> Ver y Exportar
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto bg-slate-100">
+      {/* 🟢 SE AJUSTÓ max-w-[100vw] PARA QUE DEJE VER LA HOJA APAISADA COMPLETA */}
+      <DialogContent className="max-w-[100vw] w-[95vw] md:max-w-5xl max-h-[95vh] overflow-y-auto bg-slate-100">
          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-slate-300 pb-4 gap-4 sticky top-0 bg-slate-100 z-10 pt-4">
              <h2 className="text-2xl font-bold text-slate-800">Orden de Publicidad</h2>
              <div className="flex gap-2">
@@ -79,7 +91,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
              </div>
          </div>
 
-         {/* 🟢 Contenedor gris simulando el fondo de visor para ver las hojas blancas */}
+         {/* Contenedor gris simulando el fondo de visor para ver las hojas blancas */}
          <div className="flex justify-center overflow-x-auto rounded-lg shadow-inner bg-slate-200 border border-slate-300 p-4">
             <AdvertisingOrderPdf ref={pdfRef} order={order} programs={programs} />
          </div>
