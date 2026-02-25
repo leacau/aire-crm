@@ -26,15 +26,15 @@ const Field = ({ label, value, fullWidth = false }: { label: string, value?: str
             <span className="font-bold text-sm">{label}: </span>
             <span className="text-sm break-words whitespace-pre-wrap">
                 {isUrl ? (
-                    // 🟢 REFORMULACIÓN: Se muestra la URL completa y se vuelve un bloque para garantizar mapeo exacto
+                    // 🟢 REFORMULACIÓN: Se muestra texto corto para evitar saltos de línea y pérdida del clic
                     <a 
                         href={displayValue as string} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="text-blue-600 underline font-bold break-all"
+                        className="text-blue-600 underline font-bold"
                         style={{ display: 'block', padding: '4px 0' }}
                     >
-                        {displayValue}
+                        👉 ABRIR ENLACE 👈
                     </a>
                 ) : (
                     value || '-'
@@ -100,21 +100,21 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                         ))}
                     </div>
 
-                    {/* 🟢 REFORMULACIÓN DEL LINK DE SOPORTE GRÁFICO */}
                    {note.graphicSupport && (
                       <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded">
                           <p className="text-yellow-900 font-bold text-center mb-2">⚠️ REQUIERE SOPORTE GRÁFICO</p>
                           {note.graphicSupportLink && (
                             <div className="bg-white p-3 border border-yellow-200 rounded text-center">
                                 <span className="text-xs text-gray-500 font-bold block mb-1">ENLACE AL MATERIAL:</span>
+                                {/* 🟢 REFORMULACIÓN: Texto estático para asegurar que el área de clic sea rectangular y perfecta */}
                                 <a 
                                     href={note.graphicSupportLink.startsWith('http') ? note.graphicSupportLink : `https://${note.graphicSupportLink}`} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
-                                    className="text-blue-600 underline font-mono text-sm break-all block"
+                                    className="text-blue-600 underline font-bold text-base block"
                                     style={{ padding: '8px', cursor: 'pointer', display: 'block' }}
                                 >
-                                    {note.graphicSupportLink}
+                                    👉 IR A MATERIAL 👈
                                 </a>
                             </div>
                           )}
