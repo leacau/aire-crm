@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Copy, Loader2, Mail } from "lucide-react";
+import { FileText, Download, Copy, Loader2, Mail, Send } from "lucide-react";
 import { AdvertisingOrder, Program } from "@/lib/types";
 import { AdvertisingOrderPdf } from "./advertising-pdf";
 import { format } from "date-fns";
@@ -18,14 +18,17 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
   const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [isSendingToRedaccion, setIsSendingToRedaccion] = useState(false);
   const router = useRouter();
+  
   const pdfRef = useRef<HTMLDivElement>(null);
+  const hiddenPdfRef = useRef<HTMLDivElement>(null); // 🟢 Para el PDF de Redacción
   const { toast } = useToast();
   const { getGoogleAccessToken } = useAuth();
 
-  const generatePdf = async () => {
-        const page1 = pdfRef.current?.querySelector('#ad-pdf-page-1') as HTMLElement;
-        const page2 = pdfRef.current?.querySelector('#ad-pdf-page-2') as HTMLElement;
+  const generatePdf = async (element: HTMLElement) => {
+        const page1 = element.querySelector('#ad-pdf-page-1') as HTMLElement;
+        const page2 = element.querySelector('#ad-pdf-page-2') as HTMLElement;
 
         if (!page1) throw new Error("No se encontró la página del PDF");
 
@@ -33,7 +36,6 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
         const pdfWidth = pdf.internal.pageSize.getWidth();
 
         const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-            // 🟢 REDUCIDO A SCALE 1.5 Y FORMATO JPEG
             const canvas = await html2canvas(pageElement, { scale: 1.5, useCORS: true, logging: false });
             const imgData = canvas.toDataURL('image/jpeg', 0.7);
             const ratio = canvas.width / canvas.height;
@@ -68,7 +70,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
       if (!pdfRef.current) return;
       setIsExporting(true);
       try {
-          const pdf = await generatePdf();
+          const pdf = await generatePdf(pdfRef.current);
           pdf.save(`OP-${order.clientName}-${format(new Date(), 'yyyyMMdd')}.pdf`);
           toast({ title: "PDF Exportado correctamente." });
       } catch (err) {
@@ -90,10 +92,12 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
                 return;
             }
 
-            const pdf = await generatePdf();
+            const pdf = await generatePdf(pdfRef.current);
             const pdfBase64 = pdf.output('datauristring').split(',')[1];
             
             const oppTitle = order.opportunityTitle || order.product || 'Sin Asignar';
+            const baseUrl = window.location.origin;
+            const detailLink = `${baseUrl}/publicidad`;
             
             const emailBody = `
                 <div style="font-family: Arial, sans-serif; color: #333;">
@@ -104,6 +108,8 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
                         <p><strong>Producto:</strong> ${oppTitle}</p>
                         <p><strong>Vigencia:</strong> ${format(new Date(order.startDate), "dd/MM/yyyy")} al ${format(new Date(order.endDate), "dd/MM/yyyy")}</p>
                     </div>
+                    <p>Puede ver el listado de órdenes y buscar el detalle ingresando al siguiente enlace:</p>
+                    <p><a href="${detailLink}">Ver Órdenes de Publicidad</a></p>
                 </div>
             `;
 
@@ -126,7 +132,49 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
         } finally {
             setIsResending(false);
         }
-    };
+  };
+
+  // 🟢 LÓGICA DE ENVÍO A REDACCIÓN MOVIDA AQUÍ
+  const handleSendToRedaccion = async () => {
+      if (!hiddenPdfRef.current) return;
+      setIsSendingToRedaccion(true);
+      try {
+          const accessToken = await getGoogleAccessToken();
+          if (!accessToken) throw new Error("Sin acceso a Gmail");
+
+          const pdf = await generatePdf(hiddenPdfRef.current);
+          const pdfBase64 = pdf.output('datauristring').split(',')[1];
+
+          const emailBody = `
+              <div style="font-family: Arial, sans-serif; color: #333;">
+                  <h2 style="color: #ea580c;">Nueva Gacetilla de Prensa</h2>
+                  <p>Se solicita publicación para el cliente <strong>${order.clientName}</strong>.</p>
+                  <p>Por favor revise el PDF adjunto con las instrucciones y el link a los materiales.</p>
+              </div>
+          `;
+
+          await sendEmail({
+              accessToken,
+              to: ['lchena@airedesantafe.com.ar'], // Redacción
+              subject: `Gacetilla de Prensa: ${order.clientName}`,
+              body: emailBody,
+              attachments: [{
+                  filename: `Gacetilla_${order.clientName?.replace(/ /g, "_")}.pdf`,
+                  content: pdfBase64,
+                  encoding: 'base64'
+              }]
+          });
+
+          toast({ title: 'Enviado a Redacción exitosamente.' });
+      } catch (error) {
+          console.error(error);
+          toast({ title: 'Error al enviar a redacción.', variant: 'destructive' });
+      } finally {
+          setIsSendingToRedaccion(false);
+      }
+  };
+
+  const hasGacetilla = order.sasItems?.some(s => s.format === 'Gacetilla de prensa');
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -142,6 +190,15 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-slate-300 pb-4 gap-4 sticky top-0 bg-slate-100 z-10 pt-4">
              <h2 className="text-2xl font-bold text-slate-800">Orden de Publicidad</h2>
              <div className="flex flex-wrap gap-2">
+                 
+                 {/* 🟢 BOTÓN DE REDACCIÓN TRASLADADO AL VISOR */}
+                 {hasGacetilla && (
+                    <Button variant="outline" onClick={handleSendToRedaccion} disabled={isSendingToRedaccion} className="bg-white text-orange-600 border-orange-200 hover:bg-orange-50">
+                        {isSendingToRedaccion ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />} 
+                        {isSendingToRedaccion ? 'Enviando...' : 'A Redacción'}
+                    </Button>
+                 )}
+
                  <Button variant="outline" onClick={handleReinformar} disabled={isResending} className="bg-white">
                     {isResending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />} 
                     {isResending ? 'Enviando...' : 'Reinformar'}
@@ -159,6 +216,11 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
          {/* Contenedor gris simulando el fondo de visor para ver las hojas blancas */}
          <div className="flex justify-center overflow-x-auto rounded-lg shadow-inner bg-slate-200 border border-slate-300 p-4">
             <AdvertisingOrderPdf ref={pdfRef} order={order} programs={programs} />
+         </div>
+
+         {/* 🟢 DIV OCULTO PARA EL PDF DE REDACCIÓN SIN PRECIOS */}
+         <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
+             <AdvertisingOrderPdf ref={hiddenPdfRef} order={order} programs={programs} hidePrices={true} />
          </div>
       </DialogContent>
     </Dialog>
