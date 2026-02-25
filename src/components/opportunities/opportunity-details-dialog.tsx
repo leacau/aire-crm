@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import html2canvas from 'html2canvas'; // 🟢
-import jsPDF from 'jspdf'; // 🟢
+import html2canvas from 'html2canvas'; 
+import jsPDF from 'jspdf'; 
 import {
   Dialog,
   DialogContent,
@@ -33,7 +33,7 @@ import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession, getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder, getPrograms } from '@/lib/firebase-service';
-import { sendEmail } from '@/lib/google-gmail-service'; // 🟢
+import { sendEmail } from '@/lib/google-gmail-service'; 
 import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail, Briefcase, Send, Loader2 } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
@@ -43,7 +43,7 @@ import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { CommentThread } from '@/components/comments/comment-thread';
 import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer'; 
-import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf'; // 🟢
+import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf'; 
 
 import {
   AlertDialog,
@@ -177,7 +177,6 @@ export function OpportunityDetailsDialog({
   const [addToCoaching, setAddToCoaching] = useState(false);
   const [isSendingToCoaching, setIsSendingToCoaching] = useState(false);
   
-  // 🟢 ESTADO PARA ENVÍO A REDACCIÓN
   const [isSendingToRedaccion, setIsSendingToRedaccion] = useState<string | null>(null);
   const hiddenPdfRef = useRef<HTMLDivElement>(null);
   const [orderToPrint, setOrderToPrint] = useState<AdvertisingOrder | null>(null);
@@ -412,12 +411,10 @@ export function OpportunityDetailsDialog({
       }
   };
 
-  // 🟢 NUEVO: LÓGICA PARA ENVIAR A REDACCIÓN (PDF SIN PRECIOS)
   const handleSendToRedaccion = async (order: AdvertisingOrder) => {
       setIsSendingToRedaccion(order.id!);
-      setOrderToPrint(order); // Carga la orden en el div oculto para dibujar el PDF
+      setOrderToPrint(order); 
       
-      // Esperar un ciclo para que se renderice el HTML oculto
       setTimeout(async () => {
           try {
               const accessToken = await getGoogleAccessToken();
@@ -432,13 +429,14 @@ export function OpportunityDetailsDialog({
               const pdfWidth = pdf.internal.pageSize.getWidth();
 
               const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-                  const canvas = await html2canvas(pageElement, { scale: 2, useCORS: true, logging: false });
-                  const imgData = canvas.toDataURL('image/png');
+                  // 🟢 REDUCIDO A SCALE 1.5 Y FORMATO JPEG (Previene el error 413)
+                  const canvas = await html2canvas(pageElement, { scale: 1.5, useCORS: true, logging: false });
+                  const imgData = canvas.toDataURL('image/jpeg', 0.7);
                   const ratio = canvas.width / canvas.height;
                   const height = pdfWidth / ratio;
 
                   if (pageNum > 1) pdf.addPage();
-                  pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, height);
+                  pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, height);
 
                   const links = pageElement.querySelectorAll('a');
                   const elementRect = pageElement.getBoundingClientRect();
@@ -469,7 +467,7 @@ export function OpportunityDetailsDialog({
 
               await sendEmail({
                   accessToken,
-                  to: ['lchena@airedesantafe.com.ar'], // Redacción
+                  to: ['lchena@airedesantafe.com.ar'], 
                   subject: `Gacetilla de Prensa: ${order.clientName}`,
                   body: emailBody,
                   attachments: [{
@@ -487,7 +485,7 @@ export function OpportunityDetailsDialog({
               setIsSendingToRedaccion(null);
               setOrderToPrint(null);
           }
-      }, 500); // 500ms para asegurar el DOM
+      }, 500); 
   };
 
   const handleBonusDecision = (decision: 'Autorizado' | 'Rechazado') => {
@@ -972,7 +970,6 @@ export function OpportunityDetailsDialog({
                 
                 <div className="space-y-3">
                     {advertisingOrders.map(order => {
-                        // 🟢 LÓGICA BOTÓN "A REDACCIÓN"
                         const hasGacetilla = order.sasItems?.some(s => s.format === 'Gacetilla de prensa');
 
                         return (
