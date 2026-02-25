@@ -249,7 +249,6 @@ export function AdvertisingForm() {
         const pdfHeight = pdf.internal.pageSize.getHeight();
 
         const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-            // 🟢 REDUCIDO A SCALE 1.5 Y FORMATO JPEG (Previene el error 413)
             const canvas = await html2canvas(pageElement, { scale: 1.5, useCORS: true, logging: false });
             const imgData = canvas.toDataURL('image/jpeg', 0.7);
             const ratio = canvas.width / canvas.height;
@@ -355,13 +354,15 @@ export function AdvertisingForm() {
 
       await createAdvertisingOrder(cleanPayload);
 
-      // ENVÍO DE MAIL AL GUARDAR LA ORDEN
+      // 🟢 ENVÍO DE MAIL AL GUARDAR LA ORDEN
       if (pdfRef.current) {
           const accessToken = await getGoogleAccessToken();
           if (accessToken) {
               try {
                   const pdf = await generatePdfBase64(pdfRef.current);
                   const pdfBase64 = pdf.output('datauristring').split(',')[1];
+                  const baseUrl = window.location.origin;
+                  const detailLink = `${baseUrl}/publicidad`;
                   
                   const emailBody = `
                       <div style="font-family: Arial, sans-serif; color: #333;">
@@ -372,6 +373,8 @@ export function AdvertisingForm() {
                               <p><strong>Producto:</strong> ${oppTitle}</p>
                               <p><strong>Vigencia:</strong> ${format(new Date(data.startDate), "dd/MM/yyyy")} al ${format(new Date(data.endDate), "dd/MM/yyyy")}</p>
                           </div>
+                          <p>Puede ver el listado de órdenes y su detalle ingresando al siguiente enlace:</p>
+                          <p><a href="${detailLink}">Ver Órdenes de Publicidad</a></p>
                       </div>
                   `;
 
