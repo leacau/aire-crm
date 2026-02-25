@@ -106,17 +106,14 @@ export type OrdenPautado = {
     id: string;
     tipoPauta: PautaType;
     programas?: string[];
-    dias?: number[]; // 1-7 for Mon-Sun
+    dias?: number[]; 
     fechaInicio?: string;
     fechaFin?: string;
-    // Spot specific
     segundos?: number;
-    // PNT/Sorteo/Nota specific
     repeticiones?: number;
     textoPNT?: string;
     textoPNTaprobado?: boolean;
 };
-
 
 export type ProposalItem = {
   id: string;
@@ -126,18 +123,17 @@ export type ProposalItem = {
   label: string;
   cantidadDia: number;
   cantidadMes: number;
-  duracionSegundos?: number; // Only for spots
+  duracionSegundos?: number; 
   valorUnitario: number;
   subtotal: number;
 };
-
 
 export type Opportunity = {
   id: string;
   title: string;
   clientName: string;
   clientId: string;
-  value: number; // Valor final de la propuesta
+  value: number; 
   stage: OpportunityStage;
   closeDate: string;
   details?: string;
@@ -147,26 +143,21 @@ export type Opportunity = {
   manualUpdateDate?: string;
   manualUpdateHistory?: string[];
   stageChangedAt?: string;
-
   bonificacionDetalle?: string;
   bonificacionEstado?: BonificacionEstado;
   bonificacionAutorizadoPorId?: string;
   bonificacionAutorizadoPorNombre?: string;
   bonificacionFechaAutorizacion?: string;
   bonificacionObservaciones?: string;
-  
   periodicidad?: Periodicidad[];
   facturaPorAgencia?: boolean;
   agencyId?: string;
   formaDePago?: FormaDePago[];
   fechaFacturacion?: string; 
-  
   proposalFiles?: ProposalFile[];
   ordenesPautado?: OrdenPautado[];
-  
-  // New proposal fields
   proposalItems?: ProposalItem[];
-  valorTarifario?: number; // Calculated value from rates
+  valorTarifario?: number; 
   finalizationDate?: string;
 };
 
@@ -182,7 +173,6 @@ export type Person = {
 
 export type TipoEntidad = 'Pública' | 'Privada' | 'Mixta';
 export type CondicionIVA = 'Responsable Inscripto' | 'Monotributista' | 'Exento' | 'Consumidor Final';
-
 
 export type Client = {
   id: string;
@@ -269,7 +259,7 @@ export type ActivityLog = {
     | 'commercial_note';
   entityId: string;
   entityName: string;
-  details: string; // HTML-enabled string describing the action
+  details: string; 
   timestamp: string;
 };
 
@@ -316,14 +306,12 @@ export type HistorialMensualEstado = 'Pendiente' | 'Aprobado' | 'Rechazado';
 export const historialMensualEstados: HistorialMensualEstado[] = ['Pendiente', 'Aprobado', 'Rechazado'];
 
 export type HistorialMensualItem = {
-    mes: string; // "YYYY-MM"
+    mes: string; 
     estado: HistorialMensualEstado;
     fechaEstado: string;
     responsableId?: string;
     responsableName?: string;
     comentario?: string;
-
-    // Campos de negociación y aprobación para este mes
     valorCanje?: number;
     observaciones?: string;
     estadoFinal?: CanjeEstadoFinal;
@@ -332,7 +320,6 @@ export type HistorialMensualItem = {
     culminadoPorId?: string;
     culminadoPorName?: string;
 };
-
 
 export type Canje = {
   id: string;
@@ -350,13 +337,11 @@ export type Canje = {
   tipo: CanjeTipo;
   observaciones?: string;
   fechaCreacion: string;
-  
   estadoFinal?: CanjeEstadoFinal;
   comentarioFinal?: string;
   fechaCulminacion?: string;
   culminadoPorId?: string;
   culminadoPorName?: string;
-  
   historialMensual?: HistorialMensualItem[];
 };
 
@@ -388,20 +373,16 @@ export type Area = {
 };
 
 export type MonthlyClosure = {
-  // Key is "YYYY-MM"
   [key: string]: number;
 };
 
 export type ObjectiveVisibilityConfig = {
-  /** Month key in format YYYY-MM representing the objective period to keep visible. */
   activeMonthKey?: string;
-  /** ISO date string (YYYY-MM-DD) until which the active month should stay visible. */
   visibleUntil?: string;
   updatedByName?: string;
   updatedAt?: string;
 };
 
-// --- ESTRUCTURA PARA CÓDIGOS DE VENDEDOR (NUEVO) ---
 export interface SellerCompanyConfig {
   companyName: string;
   codes: string[];
@@ -422,8 +403,6 @@ export type User = {
   monthlyObjectives?: Record<string, number>;
   monthlyObjective?: number;
   permissions?: Partial<Record<ScreenName, ScreenPermission>>;
-  
-  // Campo añadido para configuración de códigos de vendedor
   sellerConfig?: SellerCompanyConfig[];
 };
 
@@ -457,21 +436,15 @@ id: string;
   cancelledAt?: string;
 };
 
-
-// This type is used for mapping columns during import.
-// It includes client fields and the ownerName for assignment.
 export type ClientImportMapping = Partial<Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName'>> & {
   ownerName?: string;
 };
 
-
-// --- Grilla Comercial Types ---
-
 export type ProgramSchedule = {
   id: string;
   daysOfWeek: number[];
-  startTime: string; // "HH:MM"
-  endTime: string;   // "HH:MM"
+  startTime: string; 
+  endTime: string;   
 }
 
 export type ProgramRates = {
@@ -488,11 +461,10 @@ export type Program = {
   name: string;
   description?: string;
   schedules: ProgramSchedule[];
-  color: string; // e.g., 'bg-blue-200'
+  color: string; 
   conductores?: string;
   productores?: string;
   rates?: ProgramRates;
-  // DEPRECATED
   startTime?: string;
   endTime?: string;
   daysOfWeek?: number[];
@@ -507,7 +479,7 @@ export type CommercialItemStatus = typeof commercialItemStatus[number];
 export type CommercialItem = {
   id: string;
   programId: string;
-  date: string; // YYYY-MM-DD
+  date: string; 
   type: CommercialItemType;
   title: string;
   description: string;
@@ -525,19 +497,16 @@ export type CommercialItem = {
   updatedAt?: string;
 };
 
-// --- System Config Types ---
 export type OpportunityAlertsConfig = Partial<Record<OpportunityStage, number>> & {
   prospectVisibilityDays?: number;
 };
-
-// --- Coaching / Seguimiento Semanal ---
 
 export type CoachingItemStatus = 'Pendiente' | 'En Proceso' | 'Completado' | 'Cancelado';
 
 export type CoachingItem = {
   id: string;
-  taskId: string; // ID único que persiste a través de las reuniones para la misma tarea
-  originalCreatedAt: string; // Fecha en que se creó la tarea originalmente
+  taskId: string; 
+  originalCreatedAt: string; 
   entityType: 'client' | 'prospect' | 'opportunity' | 'general';
   entityId?: string; 
   entityName: string; 
@@ -545,7 +514,7 @@ export type CoachingItem = {
   status: CoachingItemStatus;
   advisorNotes?: string; 
   lastUpdate?: string; 
-  origin?: 'manager' | 'advisor'; // NUEVO CAMPO
+  origin?: 'manager' | 'advisor'; 
 };
 
 export type CoachingSession = {
@@ -554,7 +523,7 @@ export type CoachingSession = {
   advisorName: string;
   managerId: string;
   managerName: string;
-  date: string; // Fecha de la reunión
+  date: string; 
   items: CoachingItem[];
   generalNotes?: string; 
   createdAt: string;
@@ -562,13 +531,12 @@ export type CoachingSession = {
 };
 
 export type SystemHolidays = {
-  dates: string[]; // Array de strings "YYYY-MM-DD"
+  dates: string[]; 
 };
 
-// --- Commercial Note Types ---
 export type ScheduleItem = {
-    date: string; // ISO String
-    time?: string; // "HH:MM"
+    date: string; 
+    time?: string; 
 };
 
 export type CommercialNote = {
@@ -579,41 +547,30 @@ export type CommercialNote = {
   advisorId: string;
   advisorName: string;
   razonSocial: string;
-  
   rubro?: string;
-  
   replicateWeb?: boolean;
   replicateSocials?: string[]; 
-  
   collaboration?: boolean;
   collaborationHandle?: string;
   ctaText?: string;
   ctaDestination?: string;
-
   programIds: string[]; 
   schedule: Record<string, ScheduleItem[]>; 
   contactPhone?: string; 
   contactName?: string; 
-
   title?: string;
   location?: 'Estudio' | 'Móvil' | 'Meet' | 'Llamada';
   callPhone?: string; 
   mobileAddress?: string; 
-  
-  primaryGraf?: string; // Legacy
-  secondaryGraf?: string; // Legacy
-  
-  // NUEVOS CAMPOS (Arrays)
+  primaryGraf?: string; 
+  secondaryGraf?: string; 
   primaryGrafs?: string[];
   secondaryGrafs?: string[];
-  
   questions?: string[];
   topicsToAvoid?: string[];
-  
   intervieweeName?: string;
   intervieweeRole?: string;
   intervieweeBio?: string;
-
   instagram?: string; 
   website?: string;
   noWeb?: boolean;
@@ -621,36 +578,31 @@ export type CommercialNote = {
   noWhatsapp?: boolean;
   phone?: string; 
   noCommercialPhone?: boolean;
-  
   commercialAddresses?: string[]; 
   noCommercialAddress?: boolean;
-
   graphicSupport: boolean;
   graphicSupportLink?: string; 
-  
   totalValue: number;
   saleValue?: number;
   mismatch?: number;
-  
   financialObservations?: string; 
   noteObservations?: string; 
-  
   createdAt: string;
 };
 
-// --- Publicidades ---
+// 🟢 PUBLICIDADES: AGREGADO DE URL Y NUEVO FORMATO
 export type AdvertisingOrderItemSrl = {
-  month: string; // "YYYY-MM" -> Nuevo campo clave
+  month: string; 
   programId: string;
   adType: string;
-  hasTv: boolean; // Nuevo check TV
+  hasTv: boolean; 
   seconds?: number;
   dailySpots: Record<string, number>;
   unitRate: number;
 };
 
 export type AdvertisingOrderItemSas = {
-  format: string;
+  format: string; // <-- "Gacetilla de prensa" ahora es un formato válido
   type?: string;
   detail?: string;
   observations?: string;
@@ -666,33 +618,28 @@ export type AdvertisingOrderItemSas = {
 export type AdvertisingOrder = {
   id?: string;
   clientId: string;
-  clientName?: string; // Para visualización rápida
+  clientName?: string; 
   agencyId?: string;
   agencyName?: string;
   product: string;
   accountExecutive: string;
-  createdAt: string; // ISO Date
+  createdAt: string; 
   createdBy: string;  
-  opportunityId?: string; // Nuevo: ID de la oportunidad vinculada
+  opportunityId?: string; 
   opportunityTitle?: string;
-  
-  // SRL Fields
   tangoOrderNo?: string;
-  startDate: string; // ISO Date
-  endDate: string; // ISO Date
+  startDate: string; 
+  endDate: string; 
   materialSent: boolean;
+  materialUrl?: string; // 🟢 NUEVO CAMPO URL DE MATERIALES
   observations?: string;
   certReq: boolean;
   agencySale: boolean;
   commissionSrl: number;
   srlItems: AdvertisingOrderItemSrl[];
   adjustmentSrl: number;
-  
-  // SAS Fields
   sasItems: AdvertisingOrderItemSas[];
   adjustmentSas: number;
-  
-  // Totales Calculados (Opcional, para reportes rápidos)
   totalSrl?: number;
   totalSas?: number;
   totalOrder?: number;
