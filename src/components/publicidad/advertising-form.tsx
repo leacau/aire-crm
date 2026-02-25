@@ -249,13 +249,14 @@ export function AdvertisingForm() {
         const pdfHeight = pdf.internal.pageSize.getHeight();
 
         const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-            const canvas = await html2canvas(pageElement, { scale: 2, useCORS: true, logging: false });
-            const imgData = canvas.toDataURL('image/png');
+            // 🟢 REDUCIDO A SCALE 1.5 Y FORMATO JPEG (Previene el error 413)
+            const canvas = await html2canvas(pageElement, { scale: 1.5, useCORS: true, logging: false });
+            const imgData = canvas.toDataURL('image/jpeg', 0.7);
             const ratio = canvas.width / canvas.height;
             const height = pdfWidth / ratio;
 
             if (pageNum > 1) pdf.addPage();
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, height);
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, height);
 
             const links = pageElement.querySelectorAll('a');
             const elementRect = pageElement.getBoundingClientRect();
@@ -354,7 +355,7 @@ export function AdvertisingForm() {
 
       await createAdvertisingOrder(cleanPayload);
 
-      // 🟢 ENVÍO DE MAIL AL GUARDAR LA ORDEN
+      // ENVÍO DE MAIL AL GUARDAR LA ORDEN
       if (pdfRef.current) {
           const accessToken = await getGoogleAccessToken();
           if (accessToken) {
@@ -473,7 +474,6 @@ export function AdvertisingForm() {
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center border p-3 rounded-md bg-slate-50">
                <FormField control={form.control} name="materialSent" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Envía mat.</FormLabel></FormItem>)} />
-               {/* 🟢 NUEVO CAMPO: URL DE MATERIALES */}
                <FormField control={form.control} name="materialUrl" render={({ field }) => (<FormItem className="col-span-4"><FormLabel>Link de Materiales (Drive/URL)</FormLabel><FormControl><Input placeholder="https://..." {...field} /></FormControl></FormItem>)} />
                <FormField control={form.control} name="certReq" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Solicita Cert.</FormLabel></FormItem>)} />
                <FormField control={form.control} name="agencySale" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Venta Agencia</FormLabel></FormItem>)} />
