@@ -23,7 +23,6 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { advertisingOrderSchema, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
-// Services & Types
 import { 
     createAdvertisingOrder, 
     getClients, 
@@ -35,6 +34,7 @@ import {
 } from "@/lib/firebase-service";
 import { Client, Agency, AdvertisingOrder } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
+import { sendEmail } from "@/lib/google-gmail-service";
 
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
@@ -42,7 +42,7 @@ import { AdvertisingOrderPdf } from "./advertising-pdf";
 
 export function AdvertisingForm() {
   const { toast } = useToast();
-  const { userInfo } = useAuth();
+  const { userInfo, getGoogleAccessToken } = useAuth();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -61,6 +61,7 @@ export function AdvertisingForm() {
     defaultValues: {
       accountExecutive: "",
       materialSent: false,
+      materialUrl: "",
       certReq: false,
       agencySale: false,
       commissionSrl: 0,
@@ -121,6 +122,7 @@ export function AdvertisingForm() {
                       startDate: new Date(order.startDate),
                       endDate: new Date(order.endDate),
                       materialSent: order.materialSent || false,
+                      materialUrl: order.materialUrl || "",
                       observations: order.observations || "",
                       certReq: order.certReq || false,
                       agencySale: order.agencySale || false,
@@ -141,7 +143,6 @@ export function AdvertisingForm() {
            getOpportunitiesByClientId(urlClientId).then(setOpportunities);
       }
   }, [form]);
-
 
   useEffect(() => {
     if (!selectedClientId) { setOpportunities([]); return; }
@@ -223,6 +224,7 @@ export function AdvertisingForm() {
           startDate: safeStartDate,
           endDate: safeEndDate,
           materialSent: values.materialSent || false,
+          materialUrl: values.materialUrl || "",
           observations: values.observations,
           certReq: values.certReq || false,
           agencySale: values.agencySale || false,
@@ -237,36 +239,50 @@ export function AdvertisingForm() {
       };
   };
 
-  // 🟢 FUNCIÓN EXPORTAR ADAPTADA A MÚLTIPLES PÁGINAS (APAISADAS)
+  const generatePdfBase64 = async (element: HTMLElement) => {
+        const page1 = element.querySelector('#ad-pdf-page-1') as HTMLElement;
+        const page2 = element.querySelector('#ad-pdf-page-2') as HTMLElement;
+        if (!page1) throw new Error("Página 1 no encontrada");
+
+        const pdf = new jsPDF('l', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        const processPage = async (pageElement: HTMLElement, pageNum: number) => {
+            const canvas = await html2canvas(pageElement, { scale: 2, useCORS: true, logging: false });
+            const imgData = canvas.toDataURL('image/png');
+            const ratio = canvas.width / canvas.height;
+            const height = pdfWidth / ratio;
+
+            if (pageNum > 1) pdf.addPage();
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, height);
+
+            const links = pageElement.querySelectorAll('a');
+            const elementRect = pageElement.getBoundingClientRect();
+
+            links.forEach((link) => {
+                const linkRect = link.getBoundingClientRect();
+                if (linkRect.width === 0 || linkRect.height === 0) return;
+                
+                const top = ((linkRect.top - elementRect.top) * height) / elementRect.height;
+                const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
+                const width = (linkRect.width * pdfWidth) / elementRect.width;
+                const linkH = (linkRect.height * height) / elementRect.height;
+                pdf.link(left, top, width, linkH, { url: link.href });
+            });
+        };
+
+        await processPage(page1, 1);
+        if (page2) await processPage(page2, 2);
+
+        return pdf;
+  };
+
   const handleExportPdf = async () => {
       if (!pdfRef.current) return;
       setIsExporting(true);
       try {
-          const page1 = pdfRef.current.querySelector('#ad-pdf-page-1') as HTMLElement;
-          const page2 = pdfRef.current.querySelector('#ad-pdf-page-2') as HTMLElement;
-
-          if (!page1) throw new Error("No se encontró la página del PDF");
-
-          const pdf = new jsPDF('l', 'mm', 'a4'); // 'l' = Landscape
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-
-          // 1️⃣ PÁGINA 1
-          const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true, logging: false });
-          const imgData1 = canvas1.toDataURL('image/png');
-          const ratio1 = canvas1.width / canvas1.height;
-          const height1 = pdfWidth / ratio1;
-          pdf.addImage(imgData1, 'PNG', 0, 0, pdfWidth, height1);
-
-          // 2️⃣ PÁGINA 2 (Condicional)
-          if (page2) {
-              pdf.addPage();
-              const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true, logging: false });
-              const imgData2 = canvas2.toDataURL('image/png');
-              const ratio2 = canvas2.width / canvas2.height;
-              const height2 = pdfWidth / ratio2;
-              pdf.addImage(imgData2, 'PNG', 0, 0, pdfWidth, height2);
-          }
-
+          const pdf = await generatePdfBase64(pdfRef.current);
           pdf.save(`OP-${format(new Date(), 'yyyyMMdd')}.pdf`);
           toast({ title: "PDF Exportado", description: "El archivo se ha descargado correctamente." });
       } catch (err) {
@@ -283,12 +299,7 @@ export function AdvertisingForm() {
       if (errors.startDate || errors.endDate) missing.push("Fechas de Vigencia");
       if (errors.srlItems) missing.push("Falta seleccionar Programa en la tabla SRL");
       if (errors.sasItems) missing.push("Falta formato en tabla SAS");
-      
-      toast({ 
-          title: "Faltan datos obligatorios", 
-          description: `Por favor completa: ${missing.join(", ")}`, 
-          variant: "destructive" 
-      });
+      toast({ title: "Faltan datos obligatorios", description: `Por favor completa: ${missing.join(", ")}`, variant: "destructive" });
   };
 
   async function onSubmit(data: AdvertisingOrderFormValues) {
@@ -342,6 +353,44 @@ export function AdvertisingForm() {
       const cleanPayload = JSON.parse(JSON.stringify(orderPayload));
 
       await createAdvertisingOrder(cleanPayload);
+
+      // 🟢 ENVÍO DE MAIL AL GUARDAR LA ORDEN
+      if (pdfRef.current) {
+          const accessToken = await getGoogleAccessToken();
+          if (accessToken) {
+              try {
+                  const pdf = await generatePdfBase64(pdfRef.current);
+                  const pdfBase64 = pdf.output('datauristring').split(',')[1];
+                  
+                  const emailBody = `
+                      <div style="font-family: Arial, sans-serif; color: #333;">
+                          <h2 style="color: #1d4ed8;">Nueva Orden de Publicidad Registrada</h2>
+                          <p>El ejecutivo <strong>${userInfo!.name}</strong> ha cargado una orden.</p>
+                          <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #1d4ed8; margin: 20px 0;">
+                              <p><strong>Cliente:</strong> ${selectedClient?.denominacion || 'Desconocido'}</p>
+                              <p><strong>Producto:</strong> ${oppTitle}</p>
+                              <p><strong>Vigencia:</strong> ${format(new Date(data.startDate), "dd/MM/yyyy")} al ${format(new Date(data.endDate), "dd/MM/yyyy")}</p>
+                          </div>
+                      </div>
+                  `;
+
+                  await sendEmail({
+                      accessToken,
+                      to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
+                      subject: `Nueva OP: ${oppTitle} - ${selectedClient?.denominacion}`,
+                      body: emailBody,
+                      attachments: [{
+                          filename: `OP_${oppTitle.replace(/ /g, "_")}.pdf`,
+                          content: pdfBase64,
+                          encoding: 'base64'
+                      }]
+                  });
+              } catch (emailErr) {
+                  console.error("Error al enviar correo de la orden:", emailErr);
+              }
+          }
+      }
+
       toast({ title: "Guardado", description: "Orden creada exitosamente." });
       router.push(`/clients/${data.clientId}`);
     } catch (error) {
@@ -396,7 +445,6 @@ export function AdvertisingForm() {
           <FormField control={form.control} name="accountExecutive" render={({ field }) => (<FormItem><FormLabel>Ejecutivo</FormLabel><FormControl><Input {...field} readOnly /></FormControl></FormItem>)} />
         </div>
 
-        {/* AIRE SRL */}
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
           <div className="bg-slate-100 px-4 py-2 border-b"><h3 className="text-lg font-semibold text-slate-800">AIRE SRL</h3></div>
           <div className="p-4 grid gap-6">
@@ -425,10 +473,15 @@ export function AdvertisingForm() {
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center border p-3 rounded-md bg-slate-50">
                <FormField control={form.control} name="materialSent" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Envía mat.</FormLabel></FormItem>)} />
+               {/* 🟢 NUEVO CAMPO: URL DE MATERIALES */}
+               <FormField control={form.control} name="materialUrl" render={({ field }) => (<FormItem className="col-span-4"><FormLabel>Link de Materiales (Drive/URL)</FormLabel><FormControl><Input placeholder="https://..." {...field} /></FormControl></FormItem>)} />
                <FormField control={form.control} name="certReq" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Solicita Cert.</FormLabel></FormItem>)} />
                <FormField control={form.control} name="agencySale" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Venta Agencia</FormLabel></FormItem>)} />
                {agencySale && (<FormField control={form.control} name="commissionSrl" render={({ field }) => (<FormItem className="col-span-2"><FormLabel>Comisión (%)</FormLabel><FormControl><Input type="number" {...field} onChange={e=>field.onChange(parseFloat(e.target.value)||0)}/></FormControl></FormItem>)} />)}
-               <FormField control={form.control} name="observations" render={({ field }) => (<FormItem className={cn("col-span-4", !agencySale && "col-span-6")}><FormLabel>Observaciones</FormLabel><FormControl><Textarea className="h-10 resize-none" {...field} /></FormControl></FormItem>)} />
+            </div>
+
+            <div className="grid grid-cols-1">
+                <FormField control={form.control} name="observations" render={({ field }) => (<FormItem><FormLabel>Observaciones</FormLabel><FormControl><Textarea className="h-10 resize-none" {...field} /></FormControl></FormItem>)} />
             </div>
 
             <div className="mt-4">
