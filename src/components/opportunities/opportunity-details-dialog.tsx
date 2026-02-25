@@ -1,9 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import html2canvas from 'html2canvas'; 
-import jsPDF from 'jspdf'; 
 import {
   Dialog,
   DialogContent,
@@ -33,8 +31,7 @@ import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession, getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder, getPrograms } from '@/lib/firebase-service';
-import { sendEmail } from '@/lib/google-gmail-service'; 
-import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail, Briefcase, Send, Loader2 } from 'lucide-react';
+import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail, Briefcase } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -43,7 +40,6 @@ import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { CommentThread } from '@/components/comments/comment-thread';
 import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer'; 
-import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf'; 
 
 import {
   AlertDialog,
@@ -176,10 +172,6 @@ export function OpportunityDetailsDialog({
 
   const [addToCoaching, setAddToCoaching] = useState(false);
   const [isSendingToCoaching, setIsSendingToCoaching] = useState(false);
-  
-  const [isSendingToRedaccion, setIsSendingToRedaccion] = useState<string | null>(null);
-  const hiddenPdfRef = useRef<HTMLDivElement>(null);
-  const [orderToPrint, setOrderToPrint] = useState<AdvertisingOrder | null>(null);
 
   const isEditing = !!opportunity;
 
@@ -409,83 +401,6 @@ export function OpportunityDetailsDialog({
           console.error("Error al eliminar la orden:", error);
           toast({ title: "Error al eliminar", variant: "destructive" });
       }
-  };
-
-  const handleSendToRedaccion = async (order: AdvertisingOrder) => {
-      setIsSendingToRedaccion(order.id!);
-      setOrderToPrint(order); 
-      
-      setTimeout(async () => {
-          try {
-              const accessToken = await getGoogleAccessToken();
-              if (!accessToken) throw new Error("Sin acceso a Gmail");
-
-              const page1 = hiddenPdfRef.current?.querySelector('#ad-pdf-page-1') as HTMLElement;
-              const page2 = hiddenPdfRef.current?.querySelector('#ad-pdf-page-2') as HTMLElement;
-              
-              if (!page1) throw new Error("No se pudo generar el documento.");
-
-              const pdf = new jsPDF('l', 'mm', 'a4');
-              const pdfWidth = pdf.internal.pageSize.getWidth();
-
-              const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-                  // 🟢 REDUCIDO A SCALE 1.5 Y FORMATO JPEG (Previene el error 413)
-                  const canvas = await html2canvas(pageElement, { scale: 1.5, useCORS: true, logging: false });
-                  const imgData = canvas.toDataURL('image/jpeg', 0.7);
-                  const ratio = canvas.width / canvas.height;
-                  const height = pdfWidth / ratio;
-
-                  if (pageNum > 1) pdf.addPage();
-                  pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, height);
-
-                  const links = pageElement.querySelectorAll('a');
-                  const elementRect = pageElement.getBoundingClientRect();
-
-                  links.forEach((link) => {
-                      const linkRect = link.getBoundingClientRect();
-                      if (linkRect.width === 0 || linkRect.height === 0) return;
-                      const top = ((linkRect.top - elementRect.top) * height) / elementRect.height;
-                      const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
-                      const width = (linkRect.width * pdfWidth) / elementRect.width;
-                      const linkH = (linkRect.height * height) / elementRect.height;
-                      pdf.link(left, top, width, linkH, { url: link.href });
-                  });
-              };
-
-              await processPage(page1, 1);
-              if (page2) await processPage(page2, 2);
-
-              const pdfBase64 = pdf.output('datauristring').split(',')[1];
-
-              const emailBody = `
-                  <div style="font-family: Arial, sans-serif; color: #333;">
-                      <h2 style="color: #ea580c;">Nueva Gacetilla de Prensa</h2>
-                      <p>Se solicita publicación para el cliente <strong>${order.clientName}</strong>.</p>
-                      <p>Por favor revise el PDF adjunto con las instrucciones y el link a los materiales.</p>
-                  </div>
-              `;
-
-              await sendEmail({
-                  accessToken,
-                  to: ['lchena@airedesantafe.com.ar'], 
-                  subject: `Gacetilla de Prensa: ${order.clientName}`,
-                  body: emailBody,
-                  attachments: [{
-                      filename: `Gacetilla_${order.clientName?.replace(/ /g, "_")}.pdf`,
-                      content: pdfBase64,
-                      encoding: 'base64'
-                  }]
-              });
-
-              toast({ title: 'Enviado a Redacción exitosamente.' });
-          } catch (error) {
-              console.error(error);
-              toast({ title: 'Error al enviar a redacción.', variant: 'destructive' });
-          } finally {
-              setIsSendingToRedaccion(null);
-              setOrderToPrint(null);
-          }
-      }, 500); 
   };
 
   const handleBonusDecision = (decision: 'Autorizado' | 'Rechazado') => {
@@ -970,8 +885,6 @@ export function OpportunityDetailsDialog({
                 
                 <div className="space-y-3">
                     {advertisingOrders.map(order => {
-                        const hasGacetilla = order.sasItems?.some(s => s.format === 'Gacetilla de prensa');
-
                         return (
                             <div key={order.id} className="p-3 border rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white shadow-sm gap-2 hover:shadow transition-shadow">
                                 <div>
@@ -981,19 +894,6 @@ export function OpportunityDetailsDialog({
                                     </p>
                                 </div>
                                 <div className="flex gap-2">
-                                    {hasGacetilla && (
-                                        <Button 
-                                            variant="outline" 
-                                            size="sm" 
-                                            onClick={() => handleSendToRedaccion(order)}
-                                            disabled={isSendingToRedaccion === order.id}
-                                            className="text-orange-600 border-orange-200 hover:bg-orange-50"
-                                        >
-                                            {isSendingToRedaccion === order.id ? <Loader2 className="h-4 w-4 animate-spin mr-1"/> : <Send className="h-4 w-4 mr-1" />}
-                                            A Redacción
-                                        </Button>
-                                    )}
-
                                     <AdvertisingOrderViewer order={order} programs={programs} />
                                     {isBoss && (
                                         <Button variant="ghost" size="icon" onClick={() => handleDeleteAdOrder(order.id!)}>
@@ -1172,11 +1072,6 @@ export function OpportunityDetailsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-
-    {/* 🟢 DIV OCULTO PARA GENERAR PDF DE REDACCIÓN */}
-    <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
-        {orderToPrint && <AdvertisingOrderPdf ref={hiddenPdfRef} order={orderToPrint} programs={programs} hidePrices={true} />}
-    </div>
 
      {isTaskFormOpen && opportunity && userInfo && (
             <TaskFormDialog
