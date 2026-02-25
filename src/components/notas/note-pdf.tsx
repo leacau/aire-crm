@@ -26,14 +26,15 @@ const Field = ({ label, value, fullWidth = false }: { label: string, value?: str
             <span className="font-bold text-sm">{label}: </span>
             <span className="text-sm break-words whitespace-pre-wrap">
                 {isUrl ? (
+                    // 🟢 REFORMULACIÓN: Se muestra la URL completa y se vuelve un bloque para garantizar mapeo exacto
                     <a 
                         href={displayValue as string} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="text-red-600 underline font-bold"
-                        style={{ display: 'inline-block', minWidth: '10px' }} // Asegura área de clic
+                        className="text-blue-600 underline font-bold break-all"
+                        style={{ display: 'block', padding: '4px 0' }}
                     >
-                        VER CONTENIDO
+                        {displayValue}
                     </a>
                 ) : (
                     value || '-'
@@ -99,19 +100,21 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                         ))}
                     </div>
 
+                    {/* 🟢 REFORMULACIÓN DEL LINK DE SOPORTE GRÁFICO */}
                    {note.graphicSupport && (
-                      <div className="mt-4 p-2 bg-yellow-100 border border-yellow-300 text-yellow-800 font-bold text-center rounded">
-                          ⚠️ REQUIERE SOPORTE GRÁFICO 
+                      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded">
+                          <p className="text-yellow-900 font-bold text-center mb-2">⚠️ REQUIERE SOPORTE GRÁFICO</p>
                           {note.graphicSupportLink && (
-                            <div>
-                               <a 
+                            <div className="bg-white p-3 border border-yellow-200 rounded text-center">
+                                <span className="text-xs text-gray-500 font-bold block mb-1">ENLACE AL MATERIAL:</span>
+                                <a 
                                     href={note.graphicSupportLink.startsWith('http') ? note.graphicSupportLink : `https://${note.graphicSupportLink}`} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
-                                    className="ml-2 underline text-red-700 inline-block px-1"
-                                    style={{ cursor: 'pointer' }}
+                                    className="text-blue-600 underline font-mono text-sm break-all block"
+                                    style={{ padding: '8px', cursor: 'pointer', display: 'block' }}
                                 >
-                                   👉 Ver contenido 👈
+                                    {note.graphicSupportLink}
                                 </a>
                             </div>
                           )}
