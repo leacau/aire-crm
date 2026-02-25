@@ -128,6 +128,9 @@ export default function NewCommercialNotePage() {
             links.forEach((link) => {
                 const linkRect = link.getBoundingClientRect();
                 
+                // 🟢 FIX: Si el enlace está invisible o no tiene tamaño real, lo ignoramos
+                if (linkRect.width === 0 || linkRect.height === 0) return;
+                
                 const top = ((linkRect.top - elementRect.top) * pdfHeight) / elementRect.height;
                 const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
                 const width = (linkRect.width * pdfWidth) / elementRect.width;
