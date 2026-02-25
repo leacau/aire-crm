@@ -3678,14 +3678,13 @@ export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, '
       createdAt: new Date().toISOString(),
     });
     
-    // Opcional: Registrar actividad en el cliente
     await logActivity({
-      userId: orderData.createdBy, // Asumiendo que pasamos el ID del usuario creador
+      userId: orderData.createdBy, 
       userName: orderData.accountExecutive,
       entityType: 'client',
       entityId: orderData.clientId,
       entityName: orderData.clientName || 'Cliente',
-      type: 'create', // Puedes definir un tipo 'order' si lo prefieres
+      type: 'create', 
       details: `Creó un nuevo pedido de publicidad para el producto: ${orderData.product}`,
       timestamp: new Date().toISOString(),
     });
@@ -3728,7 +3727,7 @@ export const deleteAdvertisingOrder = async (id: string, userId: string, userNam
             userId,
             userName,
             type: 'delete',
-            entityType: 'opportunity' as any, // Vinculado para que salga en el historial
+            entityType: 'opportunity' as any,
             entityId: id,
             entityName: 'Orden de Publicidad',
             details: `eliminó una orden de publicidad del cliente <strong>${clientName}</strong>`,
@@ -3737,5 +3736,23 @@ export const deleteAdvertisingOrder = async (id: string, userId: string, userNam
     } catch (error) {
         console.error("Error deleting ad order:", error);
         throw error;
+    }
+};
+
+export const getRecentAdvertisingOrders = async (): Promise<AdvertisingOrder[]> => {
+    try {
+        const twoMonthsAgo = new Date();
+        twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+
+        const q = query(
+            collection(db, 'advertising_orders'), 
+            where('createdAt', '>=', twoMonthsAgo.toISOString()),
+            orderBy('createdAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AdvertisingOrder));
+    } catch (error) {
+        console.error("Error fetching recent ad orders:", error);
+        return [];
     }
 };
