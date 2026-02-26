@@ -227,6 +227,34 @@ export const deleteCommercialNote = async (noteId: string, userId: string, userN
     });
 };
 
+// 🟢 NUEVO: Función para actualizar Notas Comerciales
+export const updateCommercialNote = async (
+    noteId: string,
+    noteData: Partial<Omit<CommercialNote, 'id' | 'createdAt'>>,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(collections.commercialNotes, noteId);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) throw new Error("Nota no encontrada");
+
+    await updateDoc(docRef, {
+        ...noteData,
+        updatedAt: serverTimestamp() // Audit de actualización
+    });
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'commercial_note' as any,
+        entityId: noteId,
+        entityName: noteData.title || 'Nota Comercial',
+        details: `editó la nota comercial <strong>${noteData.title}</strong>`,
+        ownerName: noteData.advisorName || userName
+    });
+};
+
 export const bulkReleaseProspects = async (
     prospectIds: string[],
     userId: string,
@@ -3755,4 +3783,32 @@ export const getRecentAdvertisingOrders = async (): Promise<AdvertisingOrder[]> 
         console.error("Error fetching recent ad orders:", error);
         return [];
     }
+};
+
+// 🟢 NUEVO: Función para actualizar Órdenes de Publicidad
+export const updateAdvertisingOrder = async (
+    orderId: string,
+    orderData: Partial<Omit<AdvertisingOrder, 'id' | 'createdAt'>>,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(db, 'advertising_orders', orderId);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) throw new Error("Orden no encontrada");
+
+    await updateDoc(docRef, {
+        ...orderData,
+        updatedAt: serverTimestamp()
+    });
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'opportunity' as any,
+        entityId: orderId,
+        entityName: 'Orden de Publicidad',
+        details: `editó la orden de publicidad del cliente <strong>${orderData.clientName}</strong>`,
+        ownerName: orderData.accountExecutive || userName
+    });
 };
