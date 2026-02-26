@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, FileDown, ArrowLeft, Copy, Mail } from 'lucide-react'; 
+import { ExternalLink, FileDown, ArrowLeft, Copy, Mail, Edit } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { NotePdf } from '@/components/notas/note-pdf';
 import html2canvas from 'html2canvas';
@@ -19,11 +19,12 @@ import jsPDF from 'jspdf';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { sendEmail } from '@/lib/google-gmail-service';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 export default function NoteDetailPage() {
     const { id } = useParams();
     const { toast } = useToast();
-    const { getGoogleAccessToken } = useAuth();
+    const { userInfo, getGoogleAccessToken } = useAuth(); 
     const [note, setNote] = useState<CommercialNote | null>(null);
     const [programs, setPrograms] = useState<Program[]>([]);
     const [loading, setLoading] = useState(true);
@@ -69,8 +70,6 @@ export default function NoteDetailPage() {
 
             links.forEach((link) => {
                 const linkRect = link.getBoundingClientRect();
-                
-                // 🟢 FIX: Si el enlace está invisible o no tiene tamaño real, lo ignoramos
                 if (linkRect.width === 0 || linkRect.height === 0) return;
                 
                 const top = ((linkRect.top - elementRect.top) * pdfHeight) / elementRect.height;
@@ -105,11 +104,7 @@ export default function NoteDetailPage() {
         setIsResending(true);
         try {
             const accessToken = await getGoogleAccessToken();
-            if (!accessToken) {
-                toast({ title: "Error", description: "No se pudo obtener acceso a Gmail.", variant: "destructive" });
-                setIsResending(false);
-                return;
-            }
+            if (!accessToken) throw new Error("Sin acceso a Gmail");
 
             const pdf = await generateMultiPagePdf(pdfRef.current);
             const pdfBase64 = pdf.output('datauristring').split(',')[1];
@@ -180,22 +175,34 @@ export default function NoteDetailPage() {
         </div>
     );
 
+    const canEdit = userInfo && (hasManagementPrivileges(userInfo) || userInfo.id === note.advisorId);
+
     return (
         <div className="flex flex-col h-full overflow-hidden bg-gray-50/50">
             <Header title={`Detalle de Nota: ${note.title}`}>
-                <Button variant="ghost" onClick={() => router.back()}>
-                    <ArrowLeft className="mr-2 h-4 w-4" /> Volver
-                </Button>
-                <Button variant="outline" onClick={handleReinformar} disabled={isResending}>
-                    {isResending ? <Spinner size="small" className="mr-2"/> : <Mail className="mr-2 h-4 w-4" />}
-                    Reinformar
-                </Button>
-                <Button variant="outline" onClick={() => router.push(`/notas/new?cloneId=${note.id}`)}>
-                    <Copy className="mr-2 h-4 w-4" /> Duplicar Nota
-                </Button>
-                <Button variant="outline" onClick={handleDownloadPdf}>
-                    <FileDown className="mr-2 h-4 w-4" /> Exportar PDF
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                    <Button variant="ghost" onClick={() => router.back()}>
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Volver
+                    </Button>
+                    
+                    {/* 🟢 BOTÓN EDITAR */}
+                    {canEdit && (
+                        <Button variant="outline" onClick={() => router.push(`/notas/new?editId=${note.id}`)}>
+                            <Edit className="mr-2 h-4 w-4 text-blue-600" /> Editar Nota
+                        </Button>
+                    )}
+
+                    <Button variant="outline" onClick={handleReinformar} disabled={isResending}>
+                        {isResending ? <Spinner size="small" className="mr-2"/> : <Mail className="mr-2 h-4 w-4" />}
+                        Reinformar
+                    </Button>
+                    <Button variant="outline" onClick={() => router.push(`/notas/new?cloneId=${note.id}`)}>
+                        <Copy className="mr-2 h-4 w-4" /> Duplicar
+                    </Button>
+                    <Button variant="outline" onClick={handleDownloadPdf}>
+                        <FileDown className="mr-2 h-4 w-4" /> Exportar PDF
+                    </Button>
+                </div>
             </Header>
             <main className="flex-1 overflow-auto p-4 md:p-8 max-w-5xl mx-auto w-full">
                 <div className="grid gap-6 md:grid-cols-3">
