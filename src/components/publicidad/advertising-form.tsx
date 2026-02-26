@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
-import { CalendarIcon, Save, FileDown, Loader2 } from "lucide-react";
+import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft } from "lucide-react"; // 🟢 Se agregó ArrowLeft
 import { useRouter } from "next/navigation";
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -55,7 +55,7 @@ export function AdvertisingForm() {
   const [isNewOpp, setIsNewOpp] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
-  // 🟢 MODO EDICIÓN
+  // MODO EDICIÓN
   const [editModeId, setEditModeId] = useState<string | null>(null);
 
   const pdfRef = useRef<HTMLDivElement>(null);
@@ -120,6 +120,11 @@ export function AdvertisingForm() {
 
           getAdvertisingOrder(idToFetch).then(order => {
               if (order) {
+                  // Pre-cargar la lista de oportunidades antes de resetear el form
+                  if (order.clientId) {
+                      getOpportunitiesByClientId(order.clientId).then(setOpportunities);
+                  }
+                  
                   form.reset({
                       clientId: order.clientId,
                       agencyId: order.agencyId || "none",
@@ -141,9 +146,6 @@ export function AdvertisingForm() {
                       adjustmentSrl: order.adjustmentSrl || 0,
                       adjustmentSas: order.adjustmentSas || 0,
                   });
-                  if (order.clientId) {
-                      getOpportunitiesByClientId(order.clientId).then(setOpportunities);
-                  }
               }
           });
       } else if (urlClientId) {
@@ -361,7 +363,7 @@ export function AdvertisingForm() {
 
       const cleanPayload = JSON.parse(JSON.stringify(orderPayload));
 
-      // 🟢 MODO EDICIÓN VS CREACIÓN
+      // MODO EDICIÓN VS CREACIÓN
       let finalOrderId = editModeId;
 
       if (editModeId) {
@@ -434,7 +436,8 @@ export function AdvertisingForm() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 p-4 border rounded-md bg-white shadow-sm">
           <FormField control={form.control} name="clientId" render={({ field }) => (
               <FormItem><FormLabel>Anunciante (Cliente) <span className="text-red-500">*</span></FormLabel>
-                <Select onValueChange={(val) => { field.onChange(val); setValue("opportunityId", ""); }} defaultValue={field.value}>
+                {/* 🟢 SE CORRIGIÓ PARA USAR VALUE EN LUGAR DE DEFAULTVALUE */}
+                <Select onValueChange={(val) => { field.onChange(val); setValue("opportunityId", ""); }} value={field.value || undefined}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
                   <SelectContent>{clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>))}</SelectContent>
                 </Select>
@@ -442,7 +445,8 @@ export function AdvertisingForm() {
             )} />
           <FormField control={form.control} name="agencyId" render={({ field }) => (
               <FormItem><FormLabel>Agencia</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                {/* 🟢 SE CORRIGIÓ PARA USAR VALUE EN LUGAR DE DEFAULTVALUE */}
+                <Select onValueChange={field.onChange} value={field.value || undefined}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
                   <SelectContent><SelectItem value="none">Ninguna</SelectItem>{agencies.map((a) => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
                 </Select>
@@ -451,7 +455,8 @@ export function AdvertisingForm() {
           <div className="col-span-1">
              <FormField control={form.control} name="opportunityId" render={({ field }) => (
                   <FormItem><FormLabel>Producto (Oportunidad) <span className="text-red-500">*</span></FormLabel>
-                    <Select onValueChange={(val) => { field.onChange(val); setIsNewOpp(val === "new_custom_opportunity"); }} value={field.value}>
+                    {/* 🟢 SE CORRIGIÓ PARA USAR VALUE EN LUGAR DE DEFAULTVALUE */}
+                    <Select onValueChange={(val) => { field.onChange(val); setIsNewOpp(val === "new_custom_opportunity"); }} value={field.value || undefined}>
                       <FormControl><SelectTrigger><SelectValue placeholder={opportunities.length === 0 ? "Sin oportunidades" : "Seleccionar"} /></SelectTrigger></FormControl>
                       <SelectContent>
                          {opportunities.map(opp => (<SelectItem key={opp.id} value={opp.id}>{opp.title} ({opp.stage})</SelectItem>))}
@@ -520,21 +525,28 @@ export function AdvertisingForm() {
           <div className="p-4"><SasSection form={form} /></div>
         </div>
 
-        <div className="flex justify-end pt-6 gap-4">
-          <Button 
-            type="button" 
-            variant="outline" 
-            size="lg" 
-            onClick={handleExportPdf}
-            disabled={isExporting || !showSrlSection}
-          >
-             {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
-             {isExporting ? "Generando..." : "Exportar PDF"}
+        {/* 🟢 SE AÑADIÓ EL BOTÓN DE VOLVER JUNTO A LAS ACCIONES DE GUARDADO */}
+        <div className="flex justify-between items-center pt-6 border-t mt-8 gap-4">
+          <Button type="button" variant="ghost" onClick={() => router.back()}>
+             <ArrowLeft className="mr-2 h-4 w-4" /> Volver
           </Button>
+          
+          <div className="flex gap-4">
+            <Button 
+              type="button" 
+              variant="outline" 
+              size="lg" 
+              onClick={handleExportPdf}
+              disabled={isExporting || !showSrlSection}
+            >
+               {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
+               {isExporting ? "Generando..." : "Exportar PDF"}
+            </Button>
 
-          <Button type="submit" size="lg" disabled={isSubmitting}>
-            {isSubmitting ? "Guardando..." : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
-          </Button>
+            <Button type="submit" size="lg" disabled={isSubmitting}>
+              {isSubmitting ? "Guardando..." : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
+            </Button>
+          </div>
         </div>
       </form>
     </Form>
