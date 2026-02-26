@@ -30,7 +30,8 @@ import {
     getPrograms, 
     getOpportunitiesByClientId, 
     createQuickOpportunity,
-    getAdvertisingOrder
+    getAdvertisingOrder,
+    updateAdvertisingOrder
 } from "@/lib/firebase-service";
 import { Client, Agency, AdvertisingOrder } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
@@ -53,6 +54,9 @@ export function AdvertisingForm() {
   const [opportunities, setOpportunities] = useState<any[]>([]);
   const [isNewOpp, setIsNewOpp] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
+
+  // 🟢 MODO EDICIÓN
+  const [editModeId, setEditModeId] = useState<string | null>(null);
 
   const pdfRef = useRef<HTMLDivElement>(null);
 
@@ -82,7 +86,7 @@ export function AdvertisingForm() {
   const selectedClientId = watch("clientId");
 
   useEffect(() => {
-    if (userInfo?.name) setValue("accountExecutive", userInfo.name);
+    if (userInfo?.name && !editModeId) setValue("accountExecutive", userInfo.name);
     const loadData = async () => {
       try {
         const [clientsData, agenciesData, programsData] = await Promise.all([
@@ -99,17 +103,22 @@ export function AdvertisingForm() {
       }
     };
     loadData();
-  }, [userInfo, setValue]);
+  }, [userInfo, setValue, editModeId]);
 
   useEffect(() => {
       const search = window.location.search;
       const params = new URLSearchParams(search);
       const cloneId = params.get('cloneId');
+      const editId = params.get('editId');
       const urlClientId = params.get('clientId');
       const urlOppId = params.get('opportunityId');
 
-      if (cloneId) {
-          getAdvertisingOrder(cloneId).then(order => {
+      const idToFetch = cloneId || editId;
+
+      if (idToFetch) {
+          if (editId) setEditModeId(editId);
+
+          getAdvertisingOrder(idToFetch).then(order => {
               if (order) {
                   form.reset({
                       clientId: order.clientId,
@@ -118,7 +127,7 @@ export function AdvertisingForm() {
                       newOpportunityTitle: "",
                       product: order.product || "",
                       accountExecutive: order.accountExecutive,
-                      tangoOrderNo: "", 
+                      tangoOrderNo: editId ? order.tangoOrderNo : "", 
                       startDate: new Date(order.startDate),
                       endDate: new Date(order.endDate),
                       materialSent: order.materialSent || false,
@@ -352,36 +361,43 @@ export function AdvertisingForm() {
 
       const cleanPayload = JSON.parse(JSON.stringify(orderPayload));
 
-      await createAdvertisingOrder(cleanPayload);
+      // 🟢 MODO EDICIÓN VS CREACIÓN
+      let finalOrderId = editModeId;
 
-      // 🟢 ENVÍO DE MAIL AL GUARDAR LA ORDEN
-      if (pdfRef.current) {
+      if (editModeId) {
+          await updateAdvertisingOrder(editModeId, cleanPayload, userInfo.id, userInfo.name);
+      } else {
+          finalOrderId = await createAdvertisingOrder(cleanPayload);
+      }
+
+      // ENVÍO DE MAIL AL GUARDAR LA ORDEN SIEMPRE
+      if (pdfRef.current && finalOrderId) {
           const accessToken = await getGoogleAccessToken();
           if (accessToken) {
               try {
                   const pdf = await generatePdfBase64(pdfRef.current);
                   const pdfBase64 = pdf.output('datauristring').split(',')[1];
                   const baseUrl = window.location.origin;
-                  const detailLink = `${baseUrl}/publicidad`;
+                  const detailLink = `${baseUrl}/publicidad/${finalOrderId}`;
                   
                   const emailBody = `
                       <div style="font-family: Arial, sans-serif; color: #333;">
-                          <h2 style="color: #1d4ed8;">Nueva Orden de Publicidad Registrada</h2>
-                          <p>El ejecutivo <strong>${userInfo!.name}</strong> ha cargado una orden.</p>
+                          <h2 style="color: #1d4ed8;">Orden de Publicidad ${editModeId ? 'Editada' : 'Registrada'}</h2>
+                          <p>El ejecutivo <strong>${userInfo!.name}</strong> ha ${editModeId ? 'actualizado' : 'cargado'} una orden.</p>
                           <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #1d4ed8; margin: 20px 0;">
                               <p><strong>Cliente:</strong> ${selectedClient?.denominacion || 'Desconocido'}</p>
                               <p><strong>Producto:</strong> ${oppTitle}</p>
                               <p><strong>Vigencia:</strong> ${format(new Date(data.startDate), "dd/MM/yyyy")} al ${format(new Date(data.endDate), "dd/MM/yyyy")}</p>
                           </div>
-                          <p>Puede ver el listado de órdenes y su detalle ingresando al siguiente enlace:</p>
-                          <p><a href="${detailLink}">Ver Órdenes de Publicidad</a></p>
+                          <p>Puede ver el detalle ingresando al siguiente enlace:</p>
+                          <p><a href="${detailLink}">Ver Detalles de la Orden</a></p>
                       </div>
                   `;
 
                   await sendEmail({
                       accessToken,
                       to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
-                      subject: `Nueva OP: ${oppTitle} - ${selectedClient?.denominacion}`,
+                      subject: `${editModeId ? 'Modificación' : 'Nueva'} OP: ${oppTitle} - ${selectedClient?.denominacion}`,
                       body: emailBody,
                       attachments: [{
                           filename: `OP_${oppTitle.replace(/ /g, "_")}.pdf`,
@@ -395,8 +411,8 @@ export function AdvertisingForm() {
           }
       }
 
-      toast({ title: "Guardado", description: "Orden creada exitosamente." });
-      router.push(`/clients/${data.clientId}`);
+      toast({ title: "Guardado", description: "Orden guardada exitosamente." });
+      router.push(`/publicidad`);
     } catch (error) {
       console.error(error);
       toast({ title: "Error", description: "No se pudo guardar.", variant: "destructive" });
@@ -517,7 +533,7 @@ export function AdvertisingForm() {
           </Button>
 
           <Button type="submit" size="lg" disabled={isSubmitting}>
-            {isSubmitting ? "Guardando..." : <><Save className="mr-2 h-4 w-4" /> Guardar Pedido</>}
+            {isSubmitting ? "Guardando..." : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
           </Button>
         </div>
       </form>
