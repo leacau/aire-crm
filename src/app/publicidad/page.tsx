@@ -6,11 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getRecentAdvertisingOrders, getClients, getPrograms } from '@/lib/firebase-service';
-import type { AdvertisingOrder, Program } from '@/lib/types';
+import { getRecentAdvertisingOrders, getClients } from '@/lib/firebase-service';
+import type { AdvertisingOrder } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,12 +22,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer';
 
 export default function AdvertisingOrdersListPage() {
     const { userInfo, loading: authLoading } = useAuth();
     const [orders, setOrders] = useState<AdvertisingOrder[]>([]);
-    const [programs, setPrograms] = useState<Program[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -36,12 +34,7 @@ export default function AdvertisingOrdersListPage() {
             if (!userInfo) return;
             setLoading(true);
             try {
-                const [allOrders, fetchedPrograms] = await Promise.all([
-                    getRecentAdvertisingOrders(), // Trae solo las de los últimos 2 meses
-                    getPrograms()
-                ]);
-
-                setPrograms(fetchedPrograms);
+                const allOrders = await getRecentAdvertisingOrders(); 
 
                 if (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion') {
                     setOrders(allOrders);
@@ -108,7 +101,7 @@ export default function AdvertisingOrdersListPage() {
                                     <TableHead>Producto / Campaña</TableHead>
                                     <TableHead>Cliente</TableHead>
                                     <TableHead>Ejecutivo</TableHead>
-                                    <TableHead className="text-right w-[150px]">Acciones</TableHead>
+                                    <TableHead className="text-right w-[100px]"></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -122,7 +115,11 @@ export default function AdvertisingOrdersListPage() {
                                             <TableCell>{order.clientName}</TableCell>
                                             <TableCell>{order.accountExecutive}</TableCell>
                                             <TableCell className="text-right">
-                                                <AdvertisingOrderViewer order={order} programs={programs} />
+                                                <Button variant="ghost" size="sm" asChild>
+                                                    <Link href={`/publicidad/${order.id}`}>
+                                                        <Eye className="h-4 w-4" />
+                                                    </Link>
+                                                </Button>
                                             </TableCell>
                                         </TableRow>
                                     ))
