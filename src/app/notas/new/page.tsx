@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote, getCommercialNote } from '@/lib/firebase-service'; 
+import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote, getCommercialNote, updateCommercialNote } from '@/lib/firebase-service'; 
 import type { Client, Program, CommercialNote, ScheduleItem } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -38,21 +38,17 @@ export default function NewCommercialNotePage() {
     const [saving, setSaving] = useState(false);
     const pdfRef = useRef<HTMLDivElement>(null);
     
-    // Data
     const [clients, setClients] = useState<Client[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
     
-    // --- SECCIÓN 1: DATOS DE CLIENTE ---
     const [selectedClientId, setSelectedClientId] = useState<string>('');
     const [cuit, setCuit] = useState('');
     const [razonSocial, setRazonSocial] = useState('');
     const [rubro, setRubro] = useState('');
     
-    // --- SECCIÓN 2: COMERCIAL ---
     const [saleValue, setSaleValue] = useState<string>('');
     const [financialObservations, setFinancialObservations] = useState('');
     
-    // --- SECCIÓN 3: PRODUCCIÓN/PAUTADO ---
     const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
     const [programSchedule, setProgramSchedule] = useState<Record<string, ScheduleItem[]>>({});
     const [replicateWeb, setReplicateWeb] = useState(false);
@@ -66,7 +62,6 @@ export default function NewCommercialNotePage() {
     const [contactPhone, setContactPhone] = useState('');
     const [contactName, setContactName] = useState('');
 
-    // --- SECCIÓN 4: NOTA ---
     const [title, setTitle] = useState('');
     const [location, setLocation] = useState<'Estudio' | 'Móvil' | 'Meet' | 'Llamada' | undefined>(undefined);
     const [callPhone, setCallPhone] = useState('');
@@ -98,9 +93,10 @@ export default function NewCommercialNotePage() {
     const [noteObservations, setNoteObservations] = useState('');
 
     const [notifyOnSave, setNotifyOnSave] = useState(true);
-
-    // 🟢 Flag para no sobreescribir el borrador al cargar
     const [isRestored, setIsRestored] = useState(false);
+
+    // 🟢 NUEVO: Estado para saber si estamos editando
+    const [editModeId, setEditModeId] = useState<string | null>(null);
 
     const primaryGrafError = primaryGrafs.some(g => g.length > 84);
     const secondaryGrafError = secondaryGrafs.some(g => g.length > 55);
@@ -127,15 +123,12 @@ export default function NewCommercialNotePage() {
 
             links.forEach((link) => {
                 const linkRect = link.getBoundingClientRect();
-                
-                // 🟢 FIX: Si el enlace está invisible o no tiene tamaño real, lo ignoramos
                 if (linkRect.width === 0 || linkRect.height === 0) return;
                 
                 const top = ((linkRect.top - elementRect.top) * pdfHeight) / elementRect.height;
                 const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
                 const width = (linkRect.width * pdfWidth) / elementRect.width;
                 const height = (linkRect.height * pdfHeight) / elementRect.height;
-
                 pdf.link(left, top, width, height, { url: link.href });
             });
         };
@@ -161,14 +154,21 @@ export default function NewCommercialNotePage() {
         }
     };
     
-    // 🟢 CARGA INICIAL: Revisa si hay que Clonar o cargar el Borrador
     useEffect(() => {
         const search = window.location.search;
         const params = new URLSearchParams(search);
         const cloneId = params.get('cloneId');
+        const editId = params.get('editId'); // 🟢 Manejo de edición
 
-        if (cloneId) {
-            getCommercialNote(cloneId).then(note => {
+        const idToFetch = cloneId || editId;
+
+        if (idToFetch) {
+            if (editId) {
+                setEditModeId(editId);
+                setNotifyOnSave(true); // Siempre forzar notificación al editar
+            }
+
+            getCommercialNote(idToFetch).then(note => {
                 if (note) {
                     setSelectedClientId(note.clientId);
                     setCuit(note.cuit || '');
@@ -187,7 +187,7 @@ export default function NewCommercialNotePage() {
                     setContactPhone(note.contactPhone || '');
                     setContactName(note.contactName || '');
                     
-                    setTitle(note.title ? `${note.title} (Copia)` : ''); 
+                    setTitle(note.title ? (cloneId ? `${note.title} (Copia)` : note.title) : ''); 
                     
                     setLocation(note.location);
                     setCallPhone(note.callPhone || '');
@@ -216,7 +216,6 @@ export default function NewCommercialNotePage() {
                 setIsRestored(true);
             });
         } else {
-            // 🟢 LÓGICA DE RECUPERACIÓN DE BORRADOR
             const draft = localStorage.getItem('commercial_note_draft');
             if (draft) {
                 try {
@@ -273,10 +272,8 @@ export default function NewCommercialNotePage() {
         }
     }, [toast]);
 
-    // 🟢 AUTOGUARDADO EN LOCALSTORAGE (Funciona en tiempo real)
     useEffect(() => {
-        if (!isRestored) return; // Evitar que guarde el estado vacío antes de cargar el borrador
-
+        if (!isRestored || editModeId) return; // 🟢 No guardamos borrador si estamos editando
         const draftData = {
             selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations,
             selectedProgramIds, programSchedule, replicateWeb, replicateSocials,
@@ -289,8 +286,7 @@ export default function NewCommercialNotePage() {
             graphicSupport, graphicLink, noteObservations
         };
         localStorage.setItem('commercial_note_draft', JSON.stringify(draftData));
-
-    }, [isRestored, selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations, selectedProgramIds, programSchedule, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, contactPhone, contactName, title, location, callPhone, mobileAddress, primaryGrafs, secondaryGrafs, questions, topicsToAvoid, intervieweeName, intervieweeRole, intervieweeBio, instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp, commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress, graphicSupport, graphicLink, noteObservations]);
+    }, [isRestored, editModeId, selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations, selectedProgramIds, programSchedule, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, contactPhone, contactName, title, location, callPhone, mobileAddress, primaryGrafs, secondaryGrafs, questions, topicsToAvoid, intervieweeName, intervieweeRole, intervieweeBio, instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp, commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress, graphicSupport, graphicLink, noteObservations]);
 
     useEffect(() => {
         const loadData = async () => {
@@ -465,9 +461,16 @@ export default function NewCommercialNotePage() {
                 return acc;
             }, {} as Omit<CommercialNote, 'id' | 'createdAt'>);
 
-            const newNoteId = await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
+            let newNoteId = editModeId;
 
-            if (notifyOnSave && pdfRef.current) {
+            // 🟢 SI ES MODO EDICIÓN, ACTUALIZAMOS. SINO, CREAMOS.
+            if (editModeId) {
+                await updateCommercialNote(editModeId, noteData, userInfo!.id, userInfo!.name);
+            } else {
+                newNoteId = await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
+            }
+
+            if (notifyOnSave && pdfRef.current && newNoteId) {
                 const accessToken = await getGoogleAccessToken();
                 if (accessToken) {
                     try {
@@ -486,8 +489,8 @@ export default function NewCommercialNotePage() {
 
                         const emailBody = `
                             <div style="font-family: Arial, sans-serif; color: #333;">
-                                <h2 style="color: #cc0000;">Nueva Nota Comercial Registrada</h2>
-                                <p>El asesor <strong>${userInfo!.name}</strong> ha cargado una nueva nota.</p>
+                                <h2 style="color: #cc0000;">Nota Comercial Registrada / Editada</h2>
+                                <p>El asesor <strong>${userInfo!.name}</strong> ha cargado o actualizado una nota.</p>
                                 <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #cc0000; margin: 20px 0;">
                                     <p><strong>Cliente:</strong> ${client?.denominacion || 'Desconocido'}</p>
                                     <p><strong>Título:</strong> ${title}</p>
@@ -502,7 +505,7 @@ export default function NewCommercialNotePage() {
                         await sendEmail({
                             accessToken,
                             to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
-                            subject: `Nueva Nota Comercial: ${title} - ${client?.denominacion}`,
+                            subject: `Nota Comercial: ${title} - ${client?.denominacion}`,
                             body: emailBody,
                             attachments: [{
                                 filename: `Nota_${title.replace(/ /g, "_")}.pdf`,
@@ -520,9 +523,7 @@ export default function NewCommercialNotePage() {
                 toast({ title: 'Nota guardada correctamente.' });
             }
             
-            // 🟢 LÓGICA DE LIMPIEZA DEL BORRADOR TRAS GUARDAR CON ÉXITO
             localStorage.removeItem('commercial_note_draft');
-
             router.push('/notas');
 
         } catch (error) {
@@ -537,7 +538,7 @@ export default function NewCommercialNotePage() {
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            <Header title="Nueva Nota Comercial">
+            <Header title={editModeId ? "Editar Nota Comercial" : "Nueva Nota Comercial"}>
                 <div className="flex items-center gap-4">
                      <Button variant="ghost" onClick={() => router.back()}>
                         <ArrowLeft className="mr-2 h-4 w-4" /> Volver
@@ -546,7 +547,8 @@ export default function NewCommercialNotePage() {
                         <ExternalLink className="mr-2 h-4 w-4" /> Exportar PDF
                     </Button>
                     <div className="flex items-center space-x-2">
-                        <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
+                        {/* 🟢 El switch ahora es disableable o fijo si estamos en edit mode */}
+                        <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} disabled={!!editModeId} />
                         <Label htmlFor="notify">Notificar</Label>
                     </div>
                     <Button onClick={handleSave} disabled={saving || hasGrafErrors}>
