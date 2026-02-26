@@ -31,15 +31,15 @@ import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession, getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder, getPrograms } from '@/lib/firebase-service';
-import { PlusCircle, Clock, Trash2, FileText, Save, Calculator, CalendarIcon, Mail, Briefcase } from 'lucide-react';
+import { PlusCircle, Clock, Trash2, Save, CalendarIcon, Mail, Briefcase, ExternalLink } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
-import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
+import { sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { CommentThread } from '@/components/comments/comment-thread';
-import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer'; 
+import Link from 'next/link';
 
 import {
   AlertDialog,
@@ -160,7 +160,6 @@ export function OpportunityDetailsDialog({
   
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [programs, setPrograms] = useState<Program[]>([]); 
   const [advertisingOrders, setAdvertisingOrders] = useState<AdvertisingOrder[]>([]);
 
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
@@ -295,10 +294,6 @@ export function OpportunityDetailsDialog({
         getAgencies()
             .then(setAgencies)
             .catch(() => toast({ title: "Error al cargar agencias", variant: "destructive" }));
-            
-        getPrograms()
-            .then(setPrograms)
-            .catch(console.error);
 
         if (isEditing) {
             fetchInvoices();
@@ -402,6 +397,7 @@ export function OpportunityDetailsDialog({
           toast({ title: "Error al eliminar", variant: "destructive" });
       }
   };
+
 
   const handleBonusDecision = (decision: 'Autorizado' | 'Rechazado') => {
     if (!userInfo) return;
@@ -894,7 +890,13 @@ export function OpportunityDetailsDialog({
                                     </p>
                                 </div>
                                 <div className="flex gap-2">
-                                    <AdvertisingOrderViewer order={order} programs={programs} />
+                                    {/* 🟢 REEMPLAZAMOS EL VISOR EMERGENTE POR UN LINK A LA PÁGINA COMPLETA */}
+                                    <Button variant="outline" size="icon" asChild>
+                                        <Link href={`/publicidad/${order.id}`}>
+                                            <ExternalLink className="h-4 w-4" />
+                                        </Link>
+                                    </Button>
+
                                     {isBoss && (
                                         <Button variant="ghost" size="icon" onClick={() => handleDeleteAdOrder(order.id!)}>
                                             <Trash2 className="h-4 w-4 text-destructive" />
