@@ -150,25 +150,22 @@ const PaymentDetailDialog = ({
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Estado</Label>
-            {isBossView ? (
-              <p className="rounded-md border bg-muted px-3 py-2 text-sm">{entry.status}</p>
-            ) : (
-              <Select
-                value={entry.status}
-                onValueChange={(value) => onUpdate(entry, { status: value as PaymentStatus }, { reason: 'status' })}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {paymentStatuses.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            {/* 🟢 SE HABILITÓ PARA QUE LOS JEFES PUEDAN CAMBIAR EL ESTADO */}
+            <Select
+              value={entry.status}
+              onValueChange={(value) => onUpdate(entry, { status: value as PaymentStatus }, { reason: 'status' })}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {paymentStatuses.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label>Importe pendiente</Label>
@@ -176,18 +173,13 @@ const PaymentDetailDialog = ({
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label>Nota/Aclaración del asesor</Label>
-            {isBossView ? (
-              <p className="min-h-[48px] rounded-md border bg-muted px-3 py-2 text-sm whitespace-pre-wrap">
-                {entry.notes?.trim() || '—'}
-              </p>
-            ) : (
-              <Input
-                value={localNotes}
-                placeholder="Agregar detalle"
-                onChange={(e) => setLocalNotes(e.target.value)}
-                onBlur={() => onUpdate(entry, { notes: localNotes }, { reason: 'notes' })}
-              />
-            )}
+            {/* 🟢 SE HABILITÓ PARA QUE LOS JEFES TAMBIÉN PUEDAN ESCRIBIR NOTAS */}
+            <Input
+              value={localNotes}
+              placeholder="Agregar detalle"
+              onChange={(e) => setLocalNotes(e.target.value)}
+              onBlur={() => onUpdate(entry, { notes: localNotes }, { reason: 'notes' })}
+            />
           </div>
           <div className="space-y-3">
             <div className="space-y-1">
@@ -325,7 +317,8 @@ const PaymentRow = ({
       style={rowColor ? { backgroundColor: rowColor } : undefined}
       className={entry.status === 'Pagado' ? 'line-through text-muted-foreground/80' : undefined}
     >
-      {allowDelete && (
+      {/* 🟢 SE HABILITÓ CHECKBOX DE ELIMINACIÓN PARA JEFES */}
+      {(allowDelete || isBossView) && (
         <TableCell>
           <Checkbox
             aria-label="Seleccionar pago"
@@ -355,44 +348,39 @@ const PaymentRow = ({
       {!isBossView && <TableCell>{formatDate(entry.dueDate)}</TableCell>}
       <TableCell>{typeof daysLate === 'number' ? daysLate : '—'}</TableCell>
       <TableCell>
-        {isBossView ? (
-          <span className="text-sm font-medium">{entry.status}</span>
-        ) : (
-          <Select
-            value={entry.status}
-            onValueChange={(value) => onUpdate(entry, { status: value as PaymentStatus }, { reason: 'status' })}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {paymentStatuses.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        {/* 🟢 SE HABILITÓ EL SELECTOR DE ESTADO PARA JEFES */}
+        <Select
+          value={entry.status}
+          onValueChange={(value) => onUpdate(entry, { status: value as PaymentStatus }, { reason: 'status' })}
+        >
+          <SelectTrigger className="w-[140px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {paymentStatuses.map((status) => (
+              <SelectItem key={status} value={status}>
+                {status}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </TableCell>
       <TableCell className="max-w-xs">
-        {isBossView ? (
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">{entry.notes?.trim() || '—'}</p>
-        ) : (
-          <Input
-            value={localNote}
-            placeholder="Agregar detalle"
-            onChange={(e) => setLocalNote(e.target.value)}
-            onBlur={() => onUpdate(entry, { notes: localNote }, { reason: 'notes' })}
-          />
-        )}
+         {/* 🟢 SE HABILITÓ EDICIÓN DE NOTAS PARA JEFES */}
+        <Input
+          value={localNote}
+          placeholder="Agregar detalle"
+          onChange={(e) => setLocalNote(e.target.value)}
+          onBlur={() => onUpdate(entry, { notes: localNote }, { reason: 'notes' })}
+        />
       </TableCell>
       <TableCell>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setDetailOpen(true)}>
             Ver detalle
           </Button>
-          {!isBossView && allowDelete && (
+          {/* 🟢 SE HABILITÓ EL BOTÓN ELIMINAR PARA JEFES */}
+          {(allowDelete || isBossView) && (
             <Button
               variant="destructive"
               size="sm"
@@ -429,9 +417,10 @@ export function PaymentsTable({
   onRequestExplanation,
 }: Props) {
   const tableContainerRef = useRef<HTMLDivElement>(null);
-  const allSelected = allowDelete && entries.length > 0 && selectedIds.length === entries.length;
+  const allSelected = (allowDelete || isBossView) && entries.length > 0 && selectedIds.length === entries.length;
+  
   const columnCount =
-    (allowDelete ? 1 : 0) +
+    (allowDelete || isBossView ? 1 : 0) +
     (isBossView ? 0 : 1) +
     1 +
     1 +
@@ -552,7 +541,7 @@ export function PaymentsTable({
               </Button>
             </>
           )}
-          {allowDelete && (
+          {(allowDelete || isBossView) && (
             <Button
               variant="outline"
               size="sm"
@@ -572,13 +561,13 @@ export function PaymentsTable({
           <Table>
             <TableHeader>
               <TableRow>
-                {allowDelete && (
+                {(allowDelete || isBossView) && (
                 <TableHead className="w-10">
                   <Checkbox
                     aria-label="Seleccionar todos"
                     checked={allSelected}
                     onCheckedChange={(checked) => onToggleSelectAll(Boolean(checked))}
-                    indeterminate={allowDelete && selectedIds.length > 0 && selectedIds.length < entries.length}
+                    indeterminate={(allowDelete || isBossView) && selectedIds.length > 0 && selectedIds.length < entries.length}
                   />
                 </TableHead>
               )}
