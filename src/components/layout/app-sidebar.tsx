@@ -183,7 +183,7 @@ export function AppSidebar() {
         const allowedScreens: ScreenName[] = [
           'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
           'Canjes', 'Quotes', 'Approvals', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
-          'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses'
+          'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses', 'Publicidad'
         ];
         return allowedScreens.includes(item.screenName);
       }
