@@ -176,7 +176,10 @@ export default function DashboardPage() {
   const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
+  
+  // 🟢 ESTADOS DE CARGA ESCALONADA PARA MEJORAR VELOCIDAD
   const [loadingData, setLoadingData] = useState(true);
+
   const [notified, setNotified] = useState(false);
   const [selectedTaskStatus, setSelectedTaskStatus] = useState<TaskStatus | null>(null);
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
@@ -192,40 +195,43 @@ export default function DashboardPage() {
     };
   }, [selectedDate]);
 
-
+  // 🟢 LÓGICA DE CARGA PROGRESIVA / ESCALONADA
   useEffect(() => {
-    const fetchData = async () => {
-      if (!userInfo) return;
-      setLoadingData(true);
-      try {
-        const [allOpps, allClients, allTasks, allInvoices, allPayments, allUsers, allAdvisors] = await Promise.all([
-            getAllOpportunities(userInfo, isBoss),
-            getClients(),
-            getAllClientActivities(),
-            getInvoices(),
-            getPaymentEntries(),
-            getAllUsers(),
-            getAllUsers('Asesor'),
-        ]);
+    if (!userInfo) return;
+    let isMounted = true;
+    setLoadingData(true);
 
-        setOpportunities(allOpps);
-        setClients(allClients);
-        setTasks(allTasks);
-        setInvoices(allInvoices);
-        setPaymentEntries(allPayments);
-        setUsers(allUsers);
-        setAdvisors(allAdvisors);
+    // 1. Carga Rápida: Usuarios y Clientes
+    Promise.all([getAllUsers(), getClients()]).then(([u, c]) => {
+        if (!isMounted) return;
+        setUsers(u);
+        setAdvisors(u.filter(x => x.role === 'Asesor'));
+        setClients(c);
+    }).catch(console.error);
 
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-      } finally {
-        setLoadingData(false);
-      }
-    };
-    
-    if (userInfo) {
-      fetchData();
-    }
+    // 2. Carga Rápida: Tareas
+    getAllClientActivities().then(t => {
+        if (!isMounted) return;
+        setTasks(t);
+    }).catch(console.error);
+
+    // 3. Carga Pesada: Finanzas y Oportunidades
+    Promise.all([
+        getAllOpportunities(userInfo, isBoss),
+        getInvoices(),
+        getPaymentEntries()
+    ]).then(([o, i, p]) => {
+        if (!isMounted) return;
+        setOpportunities(o);
+        setInvoices(i);
+        setPaymentEntries(p);
+        setLoadingData(false); // Todo cargado
+    }).catch(error => {
+        console.error("Error fetching heavy dashboard data:", error);
+        if (isMounted) setLoadingData(false);
+    });
+
+    return () => { isMounted = false; };
   }, [userInfo, isBoss]);
   
   const { 
@@ -379,7 +385,8 @@ export default function DashboardPage() {
   };
 
 
-  if (authLoading || loadingData) {
+  // 🟢 QUITAMOS EL SPINNER GLOBAL DE LOADINGDATA PARA QUE LA PANTALLA CARGUE AL INSTANTE
+  if (authLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
@@ -467,13 +474,10 @@ export default function DashboardPage() {
   const showManagementView = userInfo?.role === 'Admin' || (isBoss && userInfo?.area === 'Comercial');
   const now = new Date();
   
-  // 1. Billing Evolution Data
-  // "no debe contabilizar el mes en curso, debe mostrar el mes ultimo pasado y los 11 anteriores"
-  // Range: [Start of 12 months ago, End of last month]
   const startOfLastMonth = startOfMonth(subMonths(now, 1));
   
   const last12Months = eachMonthOfInterval({
-      start: subMonths(startOfLastMonth, 11), // 11 months before last month = 12 months total
+      start: subMonths(startOfLastMonth, 11), 
       end: endOfMonth(subMonths(now, 1))
   });
 
@@ -484,23 +488,19 @@ export default function DashboardPage() {
       
       return invoiceList
         .filter(inv => {
-             // "Debe sumar el total de facturas cargadas a clientes del vendedor de acuerdo a la fecha de emisión"
              return inv.date && dateFilter(inv.date, range) && isValidInvoice(inv);
         })
         .reduce((acc, inv) => acc + inv.amount, 0);
   };
 
-  // Prepare data for Chart (Advisor View)
   const billingChartData = last12Months.map(monthDate => ({
       month: format(monthDate, 'MMM yy', { locale: es }),
       amount: getBillingForMonth(monthDate, userInvoices),
       fullDate: monthDate
   }));
 
-  // Prepare data for Table (Management View)
-  const billingTableColumns = [...last12Months].reverse().slice(0, 6); // Last 6 months for columns
+  const billingTableColumns = [...last12Months].reverse().slice(0, 6); 
   const billingTableData = advisors.map(advisor => {
-      // Get invoices for this advisor
       const advisorClientIds = new Set(clients.filter(c => c.ownerId === advisor.id).map(c => c.id));
       const oppIds = new Set(opportunities.filter(o => advisorClientIds.has(o.clientId)).map(o => o.id));
       const advisorInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
@@ -524,8 +524,6 @@ export default function DashboardPage() {
   }).sort((a, b) => b.totalYear - a.totalYear);
 
 
-  // 2. Mora Data
-  // "comprobantes cargados en la sección Mora para cada vendedor... no Pagado" -> Use PaymentEntry
   const getDaysLatePayment = (payment: PaymentEntry) => {
       if (!payment.dueDate) return 0;
       const due = parseISO(payment.dueDate);
@@ -534,7 +532,7 @@ export default function DashboardPage() {
 
   const categorizeMora = (paymentsList: PaymentEntry[]) => {
       const buckets = {
-          '0': 0, // Not late or current
+          '0': 0, 
           '1-30': 0,
           '31-60': 0,
           '61-90': 0,
@@ -559,11 +557,11 @@ export default function DashboardPage() {
   const moraChartData = (() => {
       const buckets = categorizeMora(userPayments);
       return [
-          { name: 'Al día', value: buckets['0'], color: '#22c55e' }, // green
-          { name: '1-30 días', value: buckets['1-30'], color: '#eab308' }, // yellow
-          { name: '31-60 días', value: buckets['31-60'], color: '#f97316' }, // orange
-          { name: '61-90 días', value: buckets['61-90'], color: '#ef4444' }, // red
-          { name: '+90 días', value: buckets['91+'], color: '#7f1d1d' }, // dark red
+          { name: 'Al día', value: buckets['0'], color: '#22c55e' }, 
+          { name: '1-30 días', value: buckets['1-30'], color: '#eab308' }, 
+          { name: '31-60 días', value: buckets['31-60'], color: '#f97316' }, 
+          { name: '61-90 días', value: buckets['61-90'], color: '#ef4444' }, 
+          { name: '+90 días', value: buckets['91+'], color: '#7f1d1d' }, 
       ];
   })();
 
@@ -618,22 +616,30 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatCurrency(totalBillingInPeriod)}
+                  {loadingData ? <Skeleton className="h-8 w-32" /> : formatCurrency(totalBillingInPeriod)}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Pagado: {formatCurrency(totalPaidInPeriod)} / 
-                  A cobrar: {formatCurrency(totalToCollectInPeriod)}
-                </p>
-                 <p className="text-xs text-muted-foreground mt-1">
-                    Mes Anterior: {formatCurrency(previousMonthBilling)}
-                </p>
-                 <p className={cn(
-                    "text-xs font-medium flex items-center mt-1",
-                    billingDifference >= 0 ? "text-green-600" : "text-red-600"
-                  )}>
-                  {billingDifference >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
-                  Dif: {formatCurrency(billingDifference)}
-                </p>
+                {loadingData ? (
+                   <Skeleton className="h-4 w-48 mt-2" />
+                ) : (
+                   <p className="text-xs text-muted-foreground">
+                      Pagado: {formatCurrency(totalPaidInPeriod)} / A cobrar: {formatCurrency(totalToCollectInPeriod)}
+                   </p>
+                )}
+                 {loadingData ? (
+                   <Skeleton className="h-4 w-48 mt-1" />
+                 ) : (
+                   <p className="text-xs text-muted-foreground mt-1">
+                      Mes Anterior: {formatCurrency(previousMonthBilling)}
+                   </p>
+                 )}
+                 {loadingData ? (
+                    <Skeleton className="h-4 w-32 mt-1" />
+                 ) : (
+                    <p className={cn("text-xs font-medium flex items-center mt-1", billingDifference >= 0 ? "text-green-600" : "text-red-600")}>
+                      {billingDifference >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
+                      Dif: {formatCurrency(billingDifference)}
+                    </p>
+                 )}
               </CardContent>
             </Card>
           </Link>
@@ -647,7 +653,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatCurrency(forecastedValue)}
+                  {loadingData ? <Skeleton className="h-8 w-32" /> : formatCurrency(forecastedValue)}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Propuesta, Negociación y Aprobación.
@@ -661,7 +667,9 @@ export default function DashboardPage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalClients}</div>
+              <div className="text-2xl font-bold">
+                {loadingData ? <Skeleton className="h-8 w-16" /> : totalClients}
+              </div>
               <p className="text-xs text-muted-foreground">
                 Total de clientes en cartera.
               </p>
@@ -679,30 +687,38 @@ export default function DashboardPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <TaskSummaryCard 
-                            title="Vencidas"
-                            count={overdueTasks.length}
-                            icon={<AlertTriangle className="h-5 w-5 text-red-500" />}
-                            onClick={() => handleTaskStatusSelect('overdue')}
-                            isSelected={selectedTaskStatus === 'overdue'}
-                        />
-                        <TaskSummaryCard 
-                            title="Vencen Hoy"
-                            count={dueTodayTasks.length}
-                            icon={<CalendarCheck className="h-5 w-5 text-blue-500" />}
-                            onClick={() => handleTaskStatusSelect('dueToday')}
-                            isSelected={selectedTaskStatus === 'dueToday'}
-                        />
-                        <TaskSummaryCard 
-                            title="Vencen Mañana"
-                            count={dueTomorrowTasks.length}
-                            icon={<CalendarClock className="h-5 w-5 text-yellow-500" />}
-                            onClick={() => handleTaskStatusSelect('dueTomorrow')}
-                             isSelected={selectedTaskStatus === 'dueTomorrow'}
-                        />
-                    </div>
-                     {selectedTaskStatus && (
+                    {loadingData ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <Skeleton className="h-24 w-full rounded-xl" />
+                            <Skeleton className="h-24 w-full rounded-xl" />
+                            <Skeleton className="h-24 w-full rounded-xl" />
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <TaskSummaryCard 
+                                title="Vencidas"
+                                count={overdueTasks.length}
+                                icon={<AlertTriangle className="h-5 w-5 text-red-500" />}
+                                onClick={() => handleTaskStatusSelect('overdue')}
+                                isSelected={selectedTaskStatus === 'overdue'}
+                            />
+                            <TaskSummaryCard 
+                                title="Vencen Hoy"
+                                count={dueTodayTasks.length}
+                                icon={<CalendarCheck className="h-5 w-5 text-blue-500" />}
+                                onClick={() => handleTaskStatusSelect('dueToday')}
+                                isSelected={selectedTaskStatus === 'dueToday'}
+                            />
+                            <TaskSummaryCard 
+                                title="Vencen Mañana"
+                                count={dueTomorrowTasks.length}
+                                icon={<CalendarClock className="h-5 w-5 text-yellow-500" />}
+                                onClick={() => handleTaskStatusSelect('dueTomorrow')}
+                                 isSelected={selectedTaskStatus === 'dueTomorrow'}
+                            />
+                        </div>
+                    )}
+                     {selectedTaskStatus && !loadingData && (
                         <TaskSection 
                            title={
                              selectedTaskStatus === 'overdue' ? 'Detalle de Tareas Vencidas' :
@@ -736,7 +752,9 @@ export default function DashboardPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className='min-h-[300px]'>
-                    {showManagementView ? (
+                    {loadingData ? (
+                         <Skeleton className="h-[300px] w-full" />
+                    ) : showManagementView ? (
                          <div className="overflow-auto max-h-[400px]">
                             <Table>
                                 <TableHeader>
@@ -816,7 +834,9 @@ export default function DashboardPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className='min-h-[300px]'>
-                    {showManagementView ? (
+                    {loadingData ? (
+                         <Skeleton className="h-[300px] w-full" />
+                    ) : showManagementView ? (
                         <div className="overflow-auto max-h-[400px]">
                             <Table>
                                 <TableHeader>
