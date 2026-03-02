@@ -73,7 +73,7 @@ export function AdvertisingForm() {
       adjustmentSas: 0,
       srlItems: [],
       sasItems: [],
-      billingRequests: [], // 🟢 Nuevo
+      billingRequests: [], 
       startDate: undefined,
       endDate: undefined,
     },
@@ -156,7 +156,7 @@ export function AdvertisingForm() {
                       sasItems: order.sasItems || [],
                       adjustmentSrl: order.adjustmentSrl || 0,
                       adjustmentSas: order.adjustmentSas || 0,
-                      billingRequests: fetchedBillingRequests // 🟢
+                      billingRequests: fetchedBillingRequests 
                   });
               }
           });
@@ -267,12 +267,13 @@ export function AdvertisingForm() {
         const page2 = element.querySelector('#ad-pdf-page-2') as HTMLElement;
         if (!page1) throw new Error("Página 1 no encontrada");
 
-        const pdf = new jsPDF('l', 'mm', 'a4');
+        const pdf = new jsPDF('l', 'mm', 'a4', true);
         const pdfWidth = pdf.internal.pageSize.getWidth();
 
         const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-            const canvas = await html2canvas(pageElement, { scale: 1.5, useCORS: true, logging: false });
-            const imgData = canvas.toDataURL('image/jpeg', 0.7);
+            // 🟢 REDUCIDO A SCALE 1.0 Y FORMATO JPEG PARA NO EXCEDER EL LÍMITE DE VERCEL
+            const canvas = await html2canvas(pageElement, { scale: 1.0, useCORS: true, logging: false });
+            const imgData = canvas.toDataURL('image/jpeg', 0.6);
             const ratio = canvas.width / canvas.height;
             const height = pdfWidth / ratio;
 
@@ -369,8 +370,8 @@ export function AdvertisingForm() {
         startDate: data.startDate.toISOString(),
         endDate: data.endDate.toISOString(),
         srlItems: validSrlItems,
-        sasItems: data.sasItems, // Ensure sasItems pass correctly
-        billingRequests: data.billingRequests, // 🟢 Pasamos las fechas de facturación
+        sasItems: data.sasItems,
+        billingRequests: data.billingRequests, 
         id: undefined 
       };
 
@@ -384,6 +385,7 @@ export function AdvertisingForm() {
           finalOrderId = await createAdvertisingOrder(cleanPayload);
       }
 
+      // 🟢 SE AÑADIÓ AVISO Y SE CORRIGIÓ PARA QUE ENVÍE EL MAIL SIEMPRE
       if (pdfRef.current && finalOrderId) {
           const accessToken = await getGoogleAccessToken();
           if (accessToken) {
@@ -418,13 +420,18 @@ export function AdvertisingForm() {
                           encoding: 'base64'
                       }]
                   });
+                  toast({ title: "Guardado", description: "Orden guardada y enviada por mail." });
               } catch (emailErr) {
                   console.error("Error al enviar correo de la orden:", emailErr);
+                  toast({ title: "Guardado", description: "Orden guardada, pero falló el envío del mail (tamaño).", variant: "destructive" });
               }
+          } else {
+             toast({ title: "Guardado", description: "Orden guardada exitosamente." });
           }
+      } else {
+         toast({ title: "Guardado", description: "Orden guardada exitosamente." });
       }
 
-      toast({ title: "Guardado", description: "Orden guardada exitosamente." });
       router.push(`/publicidad`);
     } catch (error) {
       console.error(error);
@@ -533,7 +540,6 @@ export function AdvertisingForm() {
           <div className="p-4"><SasSection form={form} /></div>
         </div>
 
-        {/* 🟢 NUEVO: PEDIDOS DE FACTURACIÓN (USO INTERNO) */}
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
             <div className="bg-slate-100 px-4 py-2 border-b">
                 <h3 className="text-lg font-semibold text-slate-800">Fechas de Facturación (Administración)</h3>
@@ -584,7 +590,7 @@ export function AdvertisingForm() {
             </Button>
 
             <Button type="submit" size="lg" disabled={isSubmitting}>
-              {isSubmitting ? "Guardando..." : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
+              {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando...</> : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
             </Button>
           </div>
         </div>
