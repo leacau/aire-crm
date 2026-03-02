@@ -700,7 +700,7 @@ export default function NewCommercialNotePage() {
                             </div>
                             <div className="space-y-2">
                                 <div className="flex justify-between"><Label className={noCommercialPhone ? "text-muted-foreground" : ""}>Teléfono Comercial</Label><div className="flex items-center space-x-2"><Checkbox checked={noCommercialPhone} onCheckedChange={(c) => setNoCommercialPhone(!!c)} /><Label className="text-xs">No informar</Label></div></div>
-                                <div className="flex gap-2"><Input value={commercialPhone} onChange={e => setCommercialPhone(e.target.value)} disabled={noWhatsapp} /></div>
+                                <div className="flex gap-2"><Input value={commercialPhone} onChange={e => setCommercialPhone(e.target.value)} disabled={noCommercialPhone} /></div>
                             </div>
                             <div className="space-y-2 md:col-span-2 border-t pt-4">
                                 <div className="flex justify-between mb-2"><Label className={noCommercialAddress ? "text-muted-foreground" : ""}>Domicilio Comercial</Label><div className="flex items-center space-x-2"><Checkbox checked={noCommercialAddress} onCheckedChange={(c) => setNoCommercialAddress(!!c)} /><Label className="text-xs">No informar</Label></div></div>
