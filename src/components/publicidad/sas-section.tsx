@@ -25,7 +25,6 @@ export function SasSection({ form }: SasSectionProps) {
 
   const items = form.watch("sasItems");
 
-  // Totales SAS
   const subtotal = items.reduce((acc, item) => {
     let net = 0;
     if (item.format === "Banner") {
@@ -41,11 +40,10 @@ export function SasSection({ form }: SasSectionProps) {
   const ivaAmount = taxableBase * 0.05; // 5% IVA
   const totalToInvoice = taxableBase + ivaAmount;
   
-  const agencyCommissionPct = form.watch("commissionSrl") || 0; // Se usa la misma comisión definida arriba? Asumo que sí o hereda.
+  const agencyCommissionPct = form.watch("commissionSrl") || 0; 
   const agencyAmount = form.watch("agencySale") ? (totalToInvoice * (agencyCommissionPct / 100)) : 0;
   const netAction = totalToInvoice - agencyAmount;
 
-  // Lógica de Opciones Dinámicas
   const getTypeOptions = (format: string) => {
     switch (format) {
         case "Banner": return ["Display_tradicional", "RichMedia"];
@@ -96,10 +94,10 @@ export function SasSection({ form }: SasSectionProps) {
                 <TableBody>
                     {fields.map((field, index) => {
                         const item = items[index];
+                        const isCustom = item.format === "Personalizado";
                         const typeOptions = getTypeOptions(item.format);
                         const detailOptions = getDetailOptions(item.format, item.type || "");
                         
-                        // Importe Neto calculation for display
                         let rowNet = 0;
                         if (item.format === "Banner") {
                             rowNet = (item.cpm || 0) * (item.unitRate || 0);
@@ -116,7 +114,6 @@ export function SasSection({ form }: SasSectionProps) {
                                         render={({ field }) => (
                                             <Select onValueChange={(val) => {
                                                 field.onChange(val);
-                                                // Reset dependent fields
                                                 form.setValue(`sasItems.${index}.type`, undefined);
                                                 form.setValue(`sasItems.${index}.detail`, undefined);
                                             }} value={field.value}>
@@ -129,50 +126,57 @@ export function SasSection({ form }: SasSectionProps) {
                                     />
                                 </TableCell>
                                 <TableCell>
-                                    <FormField
-                                        control={form.control}
-                                        name={`sasItems.${index}.type`}
-                                        render={({ field }) => (
-                                            <Select 
-                                                onValueChange={(val) => {
-                                                     field.onChange(val);
-                                                     form.setValue(`sasItems.${index}.detail`, undefined);
-                                                }} 
-                                                value={field.value} 
-                                                disabled={typeOptions.length === 0}
-                                            >
-                                                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                                                <SelectContent>
-                                                    {typeOptions.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                        )}
-                                    />
+                                    {isCustom ? (
+                                        <span className="text-xs text-muted-foreground block text-center">-</span>
+                                    ) : (
+                                        <FormField
+                                            control={form.control}
+                                            name={`sasItems.${index}.type`}
+                                            render={({ field }) => (
+                                                <Select 
+                                                    onValueChange={(val) => {
+                                                         field.onChange(val);
+                                                         form.setValue(`sasItems.${index}.detail`, undefined);
+                                                    }} 
+                                                    value={field.value} 
+                                                    disabled={typeOptions.length === 0}
+                                                >
+                                                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {typeOptions.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
+                                            )}
+                                        />
+                                    )}
                                 </TableCell>
                                 <TableCell>
-                                    <FormField
-                                        control={form.control}
-                                        name={`sasItems.${index}.detail`}
-                                        render={({ field }) => (
-                                             <Select onValueChange={field.onChange} value={field.value} disabled={detailOptions.length === 0}>
-                                                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                                                <SelectContent>
-                                                    {detailOptions.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                        )}
-                                    />
+                                    {isCustom ? (
+                                        <FormField
+                                            control={form.control}
+                                            name={`sasItems.${index}.customDetail`}
+                                            render={({ field }) => (
+                                                <Input {...field} className="h-8 text-xs" placeholder="Escribir detalle..." />
+                                            )}
+                                        />
+                                    ) : (
+                                        <FormField
+                                            control={form.control}
+                                            name={`sasItems.${index}.detail`}
+                                            render={({ field }) => (
+                                                 <Select onValueChange={field.onChange} value={field.value} disabled={detailOptions.length === 0}>
+                                                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {detailOptions.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
+                                            )}
+                                        />
+                                    )}
                                 </TableCell>
                                 <TableCell>
-                                    <FormField
-                                        control={form.control}
-                                        name={`sasItems.${index}.observations`}
-                                        render={({ field }) => (
-                                            <Textarea {...field} className="h-8 min-h-[32px] p-1 text-xs" />
-                                        )}
-                                    />
+                                    <FormField control={form.control} name={`sasItems.${index}.observations`} render={({ field }) => (<Textarea {...field} className="h-8 min-h-[32px] p-1 text-xs" />)} />
                                 </TableCell>
-                                {/* Checkboxes */}
                                 <TableCell className="text-center"><FormField control={form.control} name={`sasItems.${index}.desktop`} render={({field}) => <Checkbox checked={field.value} onCheckedChange={field.onChange} />}/></TableCell>
                                 <TableCell className="text-center"><FormField control={form.control} name={`sasItems.${index}.mobile`} render={({field}) => <Checkbox checked={field.value} onCheckedChange={field.onChange} />}/></TableCell>
                                 <TableCell className="text-center"><FormField control={form.control} name={`sasItems.${index}.home`} render={({field}) => <Checkbox checked={field.value} onCheckedChange={field.onChange} />}/></TableCell>
@@ -183,36 +187,19 @@ export function SasSection({ form }: SasSectionProps) {
                                         control={form.control}
                                         name={`sasItems.${index}.cpm`}
                                         render={({ field }) => (
-                                            <Input 
-                                                type="number" 
-                                                className="h-8 text-right" 
-                                                disabled={item.format !== "Banner"}
-                                                {...field}
-                                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                                            />
+                                            <Input type="number" className="h-8 text-right" disabled={item.format !== "Banner"} {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                                         )}
                                     />
                                 </TableCell>
                                 <TableCell>
-                                    <FormField
-                                        control={form.control}
-                                        name={`sasItems.${index}.url`}
-                                        render={({ field }) => (
-                                            <Input className="h-8" placeholder="https://..." {...field} />
-                                        )}
-                                    />
+                                    <FormField control={form.control} name={`sasItems.${index}.url`} render={({ field }) => (<Input className="h-8" placeholder="https://..." {...field} />)} />
                                 </TableCell>
                                 <TableCell>
                                     <FormField
                                         control={form.control}
                                         name={`sasItems.${index}.unitRate`}
                                         render={({ field }) => (
-                                            <Input 
-                                                type="number" 
-                                                className="h-8 text-right" 
-                                                {...field}
-                                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                                            />
+                                            <Input type="number" className="h-8 text-right" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                                         )}
                                     />
                                 </TableCell>
@@ -231,7 +218,6 @@ export function SasSection({ form }: SasSectionProps) {
             </Table>
         </div>
 
-        {/* FOOTER TOTALES SAS */}
         <div className="flex justify-end mt-4">
             <div className="w-full max-w-2xl bg-slate-50 p-4 rounded-lg border grid grid-cols-2 gap-x-8 gap-y-2">
                 <div className="flex justify-between items-center text-sm">
@@ -247,12 +233,7 @@ export function SasSection({ form }: SasSectionProps) {
                             control={form.control}
                             name="adjustmentSas"
                             render={({ field }) => (
-                                <Input 
-                                    type="number" 
-                                    className="h-8 text-right"
-                                    {...field} 
-                                    onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                                />
+                                <Input type="number" className="h-8 text-right" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                             )}
                         />
                     </div>
