@@ -138,6 +138,9 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     const itemValues = items?.[index];
                     if (!itemValues || itemValues.month !== monthKey) return null;
 
+                    // 🟢 NUEVO: Verificamos si el programa está seleccionado
+                    const isProgramSelected = !!itemValues.programId && itemValues.programId !== "";
+                    
                     const isCustom = itemValues.programId === "Personalizado";
                     const currentProgram = programs.find(p => p.id === itemValues.programId);
                     const validDays = new Set<number>();
@@ -146,7 +149,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                             schedule.daysOfWeek.forEach(day => validDays.add(day));
                         });
                     }
-                    // Si es personalizado, no hay restricciones de días
+                    
                     const hasRestrictions = !isCustom && validDays.size > 0;
 
                     const adType = itemValues.adType;
@@ -199,13 +202,17 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                             const dateKey = format(day, "yyyy-MM-dd");
                             const jsDay = getDay(day);
                             const isoDay = jsDay === 0 ? 7 : jsDay; 
-                            const isBlocked = hasRestrictions && !validDays.has(isoDay);
+                            
+                            // 🟢 NUEVO: Si no hay programa, se bloquea. Si hay programa, respeta las restricciones de días.
+                            const isBlocked = !isProgramSelected || (hasRestrictions && !validDays.has(isoDay));
+                            
                             return (
                                 <TableCell key={dateKey} className={cn("p-0 border-r border-slate-300", isBlocked ? "bg-slate-200" : "bg-white")}>
                                     <FormField control={form.control} name={`srlItems.${index}.dailySpots.${dateKey}`} render={({ field }) => (
                                             <Input 
                                                 type="text" 
                                                 disabled={isBlocked} 
+                                                title={!isProgramSelected ? "Debes seleccionar un programa primero" : ""}
                                                 className={cn(
                                                     "h-8 w-full px-0 text-center border-none focus-visible:ring-1 focus-visible:ring-inset text-xs rounded-none", 
                                                     field.value ? "bg-blue-100 font-bold text-blue-800" : "text-gray-400 hover:bg-slate-50", 
