@@ -22,7 +22,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
   const router = useRouter();
   
   const pdfRef = useRef<HTMLDivElement>(null);
-  const hiddenPdfRef = useRef<HTMLDivElement>(null); // 🟢 Para el PDF de Redacción
+  const hiddenPdfRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { getGoogleAccessToken } = useAuth();
 
@@ -32,12 +32,13 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
         if (!page1) throw new Error("No se encontró la página del PDF");
 
-        const pdf = new jsPDF('l', 'mm', 'a4'); 
+        const pdf = new jsPDF('l', 'mm', 'a4', true); 
         const pdfWidth = pdf.internal.pageSize.getWidth();
 
         const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-            const canvas = await html2canvas(pageElement, { scale: 1.5, useCORS: true, logging: false });
-            const imgData = canvas.toDataURL('image/jpeg', 0.7);
+            // 🟢 REDUCIDO A SCALE 1.0 Y FORMATO JPEG PARA NO EXCEDER EL LÍMITE DE VERCEL
+            const canvas = await html2canvas(pageElement, { scale: 1.0, useCORS: true, logging: false });
+            const imgData = canvas.toDataURL('image/jpeg', 0.6);
             const ratio = canvas.width / canvas.height;
             const height = pdfWidth / ratio;
 
@@ -128,13 +129,12 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
             toast({ title: 'Orden reinformada exitosamente.' });
         } catch (error) {
             console.error("Error al reinformar", error);
-            toast({ title: 'Error al enviar el correo.', variant: 'destructive' });
+            toast({ title: 'Error al enviar el correo.', description: 'Puede que la orden sea muy pesada.', variant: 'destructive' });
         } finally {
             setIsResending(false);
         }
   };
 
-  // 🟢 LÓGICA DE ENVÍO A REDACCIÓN MOVIDA AQUÍ
   const handleSendToRedaccion = async () => {
       if (!hiddenPdfRef.current) return;
       setIsSendingToRedaccion(true);
@@ -191,7 +191,6 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
              <h2 className="text-2xl font-bold text-slate-800">Orden de Publicidad</h2>
              <div className="flex flex-wrap gap-2">
                  
-                 {/* 🟢 BOTÓN DE REDACCIÓN TRASLADADO AL VISOR */}
                  {hasGacetilla && (
                     <Button variant="outline" onClick={handleSendToRedaccion} disabled={isSendingToRedaccion} className="bg-white text-orange-600 border-orange-200 hover:bg-orange-50">
                         {isSendingToRedaccion ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />} 
