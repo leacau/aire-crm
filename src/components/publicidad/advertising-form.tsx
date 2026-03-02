@@ -262,23 +262,43 @@ export function AdvertisingForm() {
       };
   };
 
+  // 🟢 NUEVA LÓGICA DE PAGINACIÓN AUTOMÁTICA Y FONDO BLANCO
   const generatePdfBase64 = async (element: HTMLElement) => {
         const page1 = element.querySelector('#ad-pdf-page-1') as HTMLElement;
         const page2 = element.querySelector('#ad-pdf-page-2') as HTMLElement;
         if (!page1) throw new Error("Página 1 no encontrada");
 
-        const pdf = new jsPDF('l', 'mm', 'a4', true);
+        const pdf = new jsPDF('l', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
 
-        const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-            // 🟢 REDUCIDO A SCALE 1.0 Y FORMATO JPEG PARA NO EXCEDER EL LÍMITE DE VERCEL
-            const canvas = await html2canvas(pageElement, { scale: 1.0, useCORS: true, logging: false });
-            const imgData = canvas.toDataURL('image/jpeg', 0.6);
+        const processPage = async (pageElement: HTMLElement, startPageNum: number) => {
+            const canvas = await html2canvas(pageElement, { 
+                scale: 1.5, 
+                useCORS: true, 
+                logging: false,
+                backgroundColor: '#ffffff'
+            });
+            const imgData = canvas.toDataURL('image/jpeg', 0.7);
             const ratio = canvas.width / canvas.height;
-            const height = pdfWidth / ratio;
+            const mappedHeight = pdfWidth / ratio;
 
-            if (pageNum > 1) pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, height);
+            let heightLeft = mappedHeight;
+            let position = 0;
+            let pagesAdded = 0;
+
+            if (startPageNum > 1) pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
+            heightLeft -= pdfHeight;
+            pagesAdded++;
+
+            while (heightLeft > 0) {
+                position -= pdfHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
+                heightLeft -= pdfHeight;
+                pagesAdded++;
+            }
 
             const links = pageElement.querySelectorAll('a');
             const elementRect = pageElement.getBoundingClientRect();
@@ -287,16 +307,24 @@ export function AdvertisingForm() {
                 const linkRect = link.getBoundingClientRect();
                 if (linkRect.width === 0 || linkRect.height === 0) return;
                 
-                const top = ((linkRect.top - elementRect.top) * height) / elementRect.height;
+                const topInPx = linkRect.top - elementRect.top;
+                const topInMm = (topInPx * mappedHeight) / elementRect.height;
+                const sliceIndex = Math.floor(topInMm / pdfHeight);
+                const topOnPage = topInMm - (sliceIndex * pdfHeight);
+
                 const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
                 const width = (linkRect.width * pdfWidth) / elementRect.width;
-                const linkH = (linkRect.height * height) / elementRect.height;
-                pdf.link(left, top, width, linkH, { url: link.href });
+                const linkH = (linkRect.height * mappedHeight) / elementRect.height;
+                pdf.setPage(startPageNum + sliceIndex);
+                pdf.link(left, topOnPage, width, linkH, { url: link.href });
             });
+
+            return startPageNum + pagesAdded;
         };
 
-        await processPage(page1, 1);
-        if (page2) await processPage(page2, 2);
+        let nextPageIndex = 1;
+        nextPageIndex = await processPage(page1, nextPageIndex);
+        if (page2) await processPage(page2, nextPageIndex);
 
         return pdf;
   };
@@ -385,7 +413,6 @@ export function AdvertisingForm() {
           finalOrderId = await createAdvertisingOrder(cleanPayload);
       }
 
-      // 🟢 SE AÑADIÓ AVISO Y SE CORRIGIÓ PARA QUE ENVÍE EL MAIL SIEMPRE
       if (pdfRef.current && finalOrderId) {
           const accessToken = await getGoogleAccessToken();
           if (accessToken) {
@@ -411,7 +438,7 @@ export function AdvertisingForm() {
 
                   await sendEmail({
                       accessToken,
-                      to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
+                      to: ['lchena@airedesantafe.com.ar', /* 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar' */], 
                       subject: `${editModeId ? 'Modificación' : 'Nueva'} OP: ${oppTitle} - ${selectedClient?.denominacion}`,
                       body: emailBody,
                       attachments: [{
@@ -420,18 +447,13 @@ export function AdvertisingForm() {
                           encoding: 'base64'
                       }]
                   });
-                  toast({ title: "Guardado", description: "Orden guardada y enviada por mail." });
               } catch (emailErr) {
                   console.error("Error al enviar correo de la orden:", emailErr);
-                  toast({ title: "Guardado", description: "Orden guardada, pero falló el envío del mail (tamaño).", variant: "destructive" });
               }
-          } else {
-             toast({ title: "Guardado", description: "Orden guardada exitosamente." });
           }
-      } else {
-         toast({ title: "Guardado", description: "Orden guardada exitosamente." });
       }
 
+      toast({ title: "Guardado", description: "Orden guardada exitosamente." });
       router.push(`/publicidad`);
     } catch (error) {
       console.error(error);
