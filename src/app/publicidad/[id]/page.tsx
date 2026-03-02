@@ -6,7 +6,7 @@ import { getAdvertisingOrder, getPrograms } from '@/lib/firebase-service';
 import type { AdvertisingOrder, Program } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
-import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2 } from 'lucide-react'; // 🟢 Agregado Loader2
+import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2 } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import html2canvas from 'html2canvas';
@@ -46,25 +46,49 @@ export default function AdvertisingOrderDetailPage() {
         load();
     }, [id]);
 
+    // 🟢 NUEVA LÓGICA DE PAGINACIÓN AUTOMÁTICA Y FONDO BLANCO
     const generatePdf = async (element: HTMLElement) => {
         const page1 = element.querySelector('#ad-pdf-page-1') as HTMLElement;
         const page2 = element.querySelector('#ad-pdf-page-2') as HTMLElement;
 
         if (!page1) throw new Error("No se encontró la página del PDF");
 
-        const pdf = new jsPDF('l', 'mm', 'a4', true); // compress: true
+        const pdf = new jsPDF('l', 'mm', 'a4'); 
         const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
 
-        const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-            // 🟢 Escala a 1 y calidad a 0.6 para reducir fuertemente el peso del PDF (Evita el error 413 Vercel)
-            const canvas = await html2canvas(pageElement, { scale: 1.0, useCORS: true, logging: false });
-            const imgData = canvas.toDataURL('image/jpeg', 0.6);
+        const processPage = async (pageElement: HTMLElement, startPageNum: number) => {
+            // Se fuerza color blanco puro y se captura toda la altura posible
+            const canvas = await html2canvas(pageElement, { 
+                scale: 1.5, 
+                useCORS: true, 
+                logging: false,
+                backgroundColor: '#ffffff' 
+            });
+            const imgData = canvas.toDataURL('image/jpeg', 0.7);
             const ratio = canvas.width / canvas.height;
-            const height = pdfWidth / ratio;
+            const mappedHeight = pdfWidth / ratio;
 
-            if (pageNum > 1) pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, height);
+            let heightLeft = mappedHeight;
+            let position = 0;
+            let pagesAdded = 0;
 
+            // Dibuja la primera hoja de esta sección
+            if (startPageNum > 1) pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
+            heightLeft -= pdfHeight;
+            pagesAdded++;
+
+            // Paginación Inteligente: Si sobra altura, crea hojas nuevas y desplaza la imagen hacia arriba
+            while (heightLeft > 0) {
+                position -= pdfHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
+                heightLeft -= pdfHeight;
+                pagesAdded++;
+            }
+
+            // Mapeo Inteligente de Links (Detecta en qué hoja cayó cada link)
             const links = pageElement.querySelectorAll('a');
             const elementRect = pageElement.getBoundingClientRect();
 
@@ -72,17 +96,27 @@ export default function AdvertisingOrderDetailPage() {
                 const linkRect = link.getBoundingClientRect();
                 if (linkRect.width === 0 || linkRect.height === 0) return;
                 
-                const top = ((linkRect.top - elementRect.top) * height) / elementRect.height;
+                const topInPx = linkRect.top - elementRect.top;
+                const topInMm = (topInPx * mappedHeight) / elementRect.height;
+                
+                // Calculamos en qué página se encuentra este link
+                const sliceIndex = Math.floor(topInMm / pdfHeight);
+                const topOnPage = topInMm - (sliceIndex * pdfHeight);
+
                 const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
                 const width = (linkRect.width * pdfWidth) / elementRect.width;
-                const linkH = (linkRect.height * height) / elementRect.height;
+                const linkH = (linkRect.height * mappedHeight) / elementRect.height;
 
-                pdf.link(left, top, width, linkH, { url: link.href });
+                pdf.setPage(startPageNum + sliceIndex);
+                pdf.link(left, topOnPage, width, linkH, { url: link.href });
             });
+
+            return startPageNum + pagesAdded;
         };
 
-        await processPage(page1, 1);
-        if (page2) await processPage(page2, 2);
+        let nextPageIndex = 1;
+        nextPageIndex = await processPage(page1, nextPageIndex);
+        if (page2) await processPage(page2, nextPageIndex);
 
         return pdf;
     }
@@ -129,7 +163,7 @@ export default function AdvertisingOrderDetailPage() {
 
             await sendEmail({
                 accessToken,
-                to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
+                to: ['lchena@airedesantafe.com.ar', /* 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar' */], 
                 subject: `Reinforme - OP: ${oppTitle} - ${order.clientName}`,
                 body: emailBody,
                 attachments: [{
