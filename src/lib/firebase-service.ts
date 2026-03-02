@@ -34,6 +34,7 @@ const collections = {
     chatSpaces: collection(db, 'chat_spaces'),
     coachingSessions: collection(db, 'coaching_sessions'),
     commercialNotes: collection(db, 'commercial_notes'),
+    billingRequests: collection(db, 'billing_requests'),
 };
 
 const cache: { [key: string]: { data: any; timestamp: number } } = {};
@@ -3701,19 +3702,37 @@ export const rejectProspectClaim = async (prospect: Prospect, managerId: string,
 
 export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, 'id' | 'createdAt'>) => {
   try {
+    const { billingRequests, ...restOrderData } = orderData;
     const docRef = await addDoc(collection(db, 'advertising_orders'), {
-      ...orderData,
+      ...restOrderData,
       createdAt: new Date().toISOString(),
     });
     
+    // 🟢 Guardar Fechas de Facturación
+    if (billingRequests && billingRequests.length > 0) {
+        const batch = writeBatch(db);
+        billingRequests.forEach(br => {
+            const brRef = doc(collections.billingRequests);
+            batch.set(brRef, {
+                orderId: docRef.id,
+                opportunityId: restOrderData.opportunityId || '',
+                clientId: restOrderData.clientId,
+                date: br.date,
+                amount: br.amount,
+                createdAt: serverTimestamp()
+            });
+        });
+        await batch.commit();
+    }
+
     await logActivity({
-      userId: orderData.createdBy, 
-      userName: orderData.accountExecutive,
+      userId: restOrderData.createdBy, 
+      userName: restOrderData.accountExecutive,
       entityType: 'client',
-      entityId: orderData.clientId,
-      entityName: orderData.clientName || 'Cliente',
+      entityId: restOrderData.clientId,
+      entityName: restOrderData.clientName || 'Cliente',
       type: 'create', 
-      details: `Creó un nuevo pedido de publicidad para el producto: ${orderData.product}`,
+      details: `Creó un nuevo pedido de publicidad para el producto: ${restOrderData.product}`,
       timestamp: new Date().toISOString(),
     });
 
@@ -3785,21 +3804,43 @@ export const getRecentAdvertisingOrders = async (): Promise<AdvertisingOrder[]> 
     }
 };
 
-// 🟢 NUEVO: Función para actualizar Órdenes de Publicidad
 export const updateAdvertisingOrder = async (
     orderId: string,
     orderData: Partial<Omit<AdvertisingOrder, 'id' | 'createdAt'>>,
     userId: string,
     userName: string
 ): Promise<void> => {
+    const { billingRequests, ...restOrderData } = orderData;
     const docRef = doc(db, 'advertising_orders', orderId);
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) throw new Error("Orden no encontrada");
 
     await updateDoc(docRef, {
-        ...orderData,
+        ...restOrderData,
         updatedAt: serverTimestamp()
     });
+
+    // 🟢 Reemplazar Fechas de Facturación
+    const existingBrQuery = query(collections.billingRequests, where('orderId', '==', orderId));
+    const existingBrSnap = await getDocs(existingBrQuery);
+    
+    const batch = writeBatch(db);
+    existingBrSnap.forEach(doc => batch.delete(doc.ref));
+
+    if (billingRequests && billingRequests.length > 0) {
+        billingRequests.forEach(br => {
+            const brRef = doc(collections.billingRequests);
+            batch.set(brRef, {
+                orderId: orderId,
+                opportunityId: restOrderData.opportunityId || '',
+                clientId: restOrderData.clientId,
+                date: br.date,
+                amount: br.amount,
+                createdAt: serverTimestamp()
+            });
+        });
+    }
+    await batch.commit();
 
     await logActivity({
         userId,
@@ -3808,7 +3849,18 @@ export const updateAdvertisingOrder = async (
         entityType: 'opportunity' as any,
         entityId: orderId,
         entityName: 'Orden de Publicidad',
-        details: `editó la orden de publicidad del cliente <strong>${orderData.clientName}</strong>`,
-        ownerName: orderData.accountExecutive || userName
+        details: `editó la orden de publicidad del cliente <strong>${restOrderData.clientName}</strong>`,
+        ownerName: restOrderData.accountExecutive || userName
     });
+};
+
+export const getBillingRequestsByOrder = async (orderId: string) => {
+    try {
+        const q = query(collections.billingRequests, where('orderId', '==', orderId));
+        const snap = await getDocs(q);
+        return snap.docs.map(doc => doc.data());
+    } catch (e) {
+        console.error(e);
+        return [];
+    }
 };
