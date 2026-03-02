@@ -6,7 +6,7 @@ import { getAdvertisingOrder, getPrograms } from '@/lib/firebase-service';
 import type { AdvertisingOrder, Program } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
-import { ArrowLeft, Copy, Mail, FileDown, Send, Edit } from 'lucide-react';
+import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2 } from 'lucide-react'; // 🟢 Agregado Loader2
 import { Button } from '@/components/ui/button';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import html2canvas from 'html2canvas';
@@ -52,12 +52,13 @@ export default function AdvertisingOrderDetailPage() {
 
         if (!page1) throw new Error("No se encontró la página del PDF");
 
-        const pdf = new jsPDF('l', 'mm', 'a4'); 
+        const pdf = new jsPDF('l', 'mm', 'a4', true); // compress: true
         const pdfWidth = pdf.internal.pageSize.getWidth();
 
         const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-            const canvas = await html2canvas(pageElement, { scale: 1.5, useCORS: true, logging: false });
-            const imgData = canvas.toDataURL('image/jpeg', 0.7);
+            // 🟢 Escala a 1 y calidad a 0.6 para reducir fuertemente el peso del PDF (Evita el error 413 Vercel)
+            const canvas = await html2canvas(pageElement, { scale: 1.0, useCORS: true, logging: false });
+            const imgData = canvas.toDataURL('image/jpeg', 0.6);
             const ratio = canvas.width / canvas.height;
             const height = pdfWidth / ratio;
 
@@ -141,7 +142,7 @@ export default function AdvertisingOrderDetailPage() {
             toast({ title: 'Orden reinformada exitosamente.' });
         } catch (error) {
             console.error("Error al reinformar", error);
-            toast({ title: 'Error al enviar el correo.', variant: 'destructive' });
+            toast({ title: 'Error al enviar el correo.', description: 'Puede que el PDF sea muy pesado. Intente de nuevo.', variant: 'destructive' });
         } finally {
             setIsResending(false);
         }
