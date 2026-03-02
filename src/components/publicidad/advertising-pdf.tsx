@@ -8,7 +8,7 @@ import { es } from 'date-fns/locale';
 interface AdvertisingOrderPdfProps {
   order: AdvertisingOrder;
   programs: Program[];
-  hidePrices?: boolean; // 🟢 NUEVA PROPIEDAD: "Modo Redacción"
+  hidePrices?: boolean; 
 }
 
 export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPdfProps>(({ order, programs = [], hidePrices = false }, ref) => {
@@ -110,7 +110,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                 <span style={styles.label}>Vigencia:</span>
                 <span style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{formatDate(order.startDate)} al {formatDate(order.endDate)}</span>
             </div>
-            {/* 🟢 NUEVO CAMPO: MATERIALES */}
             <div style={styles.dataRow}>
                 <span style={styles.label}>Materiales:</span>
                 <span>
@@ -160,14 +159,16 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                                 <th style={{ ...styles.th, width: '35px' }}>Seg</th>
                                 {days.map(d => (<th key={d.toISOString()} style={{ ...styles.th, width: '22px', fontSize: '9px' }}>{format(d, "d")}</th>))}
                                 <th style={{ ...styles.th, width: '40px' }}>Cant</th>
-                                {/* 🟢 Ocultar columnas si está en modo redacción */}
                                 {!hidePrices && <th style={{ ...styles.th, width: '60px' }}>T. Unit</th>}
                                 {!hidePrices && <th style={{ ...styles.th, width: '90px' }}>Neto</th>}
                             </tr>
                         </thead>
                         <tbody>
                             {itemsInMonth.map((item, idx) => {
-                                const progName = programs.find(p => p.id === item.programId)?.name || item.programId;
+                                // 🟢 LÓGICA DE PROGRAMA / TIPO CUSTOM
+                                const progName = item.programId === 'Personalizado' ? 'Personalizado' : (programs.find(p => p.id === item.programId)?.name || item.programId);
+                                const typeLabel = (item.programId === 'Personalizado' || item.adType === 'Personalizado') ? (item.customType || 'Personalizado') : item.adType;
+
                                 const dailySpots = item.dailySpots || {};
                                 const totalAds = Object.values(dailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
                                 const mult = item.adType === 'Spot' ? (item.seconds || 0) : 1;
@@ -176,7 +177,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                                 return (
                                     <tr key={idx}>
                                         <td style={{ ...styles.td, textAlign: 'left', fontWeight: 'bold' }}>{progName}</td>
-                                        <td style={styles.td}>{item.adType}</td>
+                                        <td style={styles.td}>{typeLabel}</td>
                                         <td style={styles.td}>{item.hasTv ? 'SI' : ''}</td>
                                         <td style={styles.td}>{item.adType === 'Spot' ? item.seconds : '-'}</td>
                                         {days.map(d => {
@@ -184,7 +185,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                                             return (<td key={d.toISOString()} style={{ ...styles.td, backgroundColor: val ? '#dbeafe' : 'transparent', fontWeight: val ? 'bold' : 'normal' }}>{val || ''}</td>);
                                         })}
                                         <td style={{ ...styles.td, fontWeight: 'bold' }}>{totalAds}</td>
-                                        {/* 🟢 Ocultar valores en modo redacción */}
                                         {!hidePrices && <td style={styles.td}>${(item.unitRate || 0).toLocaleString('es-AR')}</td>}
                                         {!hidePrices && <td style={{ ...styles.td, textAlign: 'right', fontWeight: 'bold' }}>${net.toLocaleString('es-AR')}</td>}
                                     </tr>
@@ -232,10 +232,13 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                     const locs = [];
                     if(item.desktop) locs.push("D"); if(item.mobile) locs.push("M"); if(item.home) locs.push("H"); if(item.interiores) locs.push("I");
 
+                    // 🟢 LÓGICA DE DETALLE CUSTOM
+                    const detailLabel = item.format === 'Personalizado' ? (item.customDetail || "-") : (item.detail || item.type || "-");
+
                     return (
                         <tr key={i}>
                             <td style={{ ...styles.td, textAlign: 'left', fontWeight: 'bold' }}>{item.format}</td>
-                            <td style={{ ...styles.td, textAlign: 'left' }}>{item.detail || item.type || "-"}</td>
+                            <td style={{ ...styles.td, textAlign: 'left' }}>{detailLabel}</td>
                             <td style={styles.td}>{locs.join(", ") || "-"}</td>
                             <td style={{ ...styles.td, textAlign: 'left', fontStyle: 'italic', color: '#6b7280' }}>{item.observations}</td>
                             {!hidePrices && <td style={{ ...styles.td, textAlign: 'right', fontWeight: 'bold' }}>${net.toLocaleString('es-AR')}</td>}
