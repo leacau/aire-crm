@@ -54,6 +54,8 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
   useEffect(() => {
      items?.forEach((item, index) => {
          if (!item.programId || !item.adType) return;
+         if (item.programId === "Personalizado") return; // Si es personalizado, no forzamos tarifa automática
+         
          const program = programs.find(p => p.id === item.programId);
          if (!program || !program.rates) return;
 
@@ -110,7 +112,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                 </Button>
             </div>
             <div className="overflow-x-auto">
-              {/* 🟢 TABLA MÁS MARCADA */}
               <Table className="min-w-[1200px] border-collapse">
                 <TableHeader>
                   <TableRow className="bg-slate-100 border-b border-slate-300">
@@ -118,7 +119,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     <TableHead className="w-[120px] border-r border-slate-300 font-bold text-slate-700">Tipo Aviso</TableHead>
                     <TableHead className="w-[50px] text-center border-r border-slate-300 font-bold text-slate-700" title="Lleva Barrida TV">TV</TableHead>
                     <TableHead className="w-[80px] border-r border-slate-300 font-bold text-slate-700"># Seg</TableHead>
-                    {/* 🟢 DÍAS CON BORDES MARCADOS */}
                     {days.map(day => (
                       <TableHead key={day.toISOString()} className="w-[35px] p-0 text-center border-r border-slate-300 bg-slate-200">
                         <div className="flex flex-col items-center justify-center h-full py-1">
@@ -138,6 +138,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     const itemValues = items?.[index];
                     if (!itemValues || itemValues.month !== monthKey) return null;
 
+                    const isCustom = itemValues.programId === "Personalizado";
                     const currentProgram = programs.find(p => p.id === itemValues.programId);
                     const validDays = new Set<number>();
                     if (currentProgram?.schedules) {
@@ -145,7 +146,8 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                             schedule.daysOfWeek.forEach(day => validDays.add(day));
                         });
                     }
-                    const hasRestrictions = validDays.size > 0;
+                    // Si es personalizado, no hay restricciones de días
+                    const hasRestrictions = !isCustom && validDays.size > 0;
 
                     const adType = itemValues.adType;
                     const enableTv = adType === "Spot" || adType === "PNT";
@@ -160,28 +162,39 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                       <TableRow key={field.id} className="border-b border-slate-300 hover:bg-slate-50">
                         <TableCell className="p-1 border-r border-slate-300">
                             <FormField control={form.control} name={`srlItems.${index}.programId`} render={({ field }) => (
-                                <Select onValueChange={field.onChange} value={field.value || undefined} defaultValue={field.value || undefined}>
+                                <Select onValueChange={(val) => {
+                                    field.onChange(val);
+                                    if (val === "Personalizado") form.setValue(`srlItems.${index}.adType`, "Personalizado");
+                                }} value={field.value || undefined}>
                                     <SelectTrigger className="h-8 text-xs border-0 shadow-none focus:ring-1"><SelectValue placeholder="Programa" /></SelectTrigger>
-                                    <SelectContent>{programs.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+                                    <SelectContent>
+                                        {programs.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                                        <SelectItem value="Personalizado" className="font-bold text-blue-600">Personalizado</SelectItem>
+                                    </SelectContent>
                                 </Select>
                             )} />
                         </TableCell>
                         <TableCell className="p-1 border-r border-slate-300">
-                            <FormField control={form.control} name={`srlItems.${index}.adType`} render={({ field }) => (
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                    <SelectTrigger className="h-8 text-xs border-0 shadow-none focus:ring-1"><SelectValue /></SelectTrigger>
-                                    <SelectContent>{srlAdTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                                </Select>
-                            )} />
+                            {isCustom || itemValues.adType === "Personalizado" ? (
+                                <FormField control={form.control} name={`srlItems.${index}.customType`} render={({ field }) => (
+                                    <Input {...field} className="h-8 text-xs px-2" placeholder="Describir tipo..." />
+                                )} />
+                            ) : (
+                                <FormField control={form.control} name={`srlItems.${index}.adType`} render={({ field }) => (
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <SelectTrigger className="h-8 text-xs border-0 shadow-none focus:ring-1"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{srlAdTypes.filter(t => t !== "Personalizado").map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                )} />
+                            )}
                         </TableCell>
                         <TableCell className="p-1 text-center border-r border-slate-300">
-                            <FormField control={form.control} name={`srlItems.${index}.hasTv`} render={({ field }) => (<Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!enableTv} className="h-4 w-4 mx-auto" />)} />
+                            <FormField control={form.control} name={`srlItems.${index}.hasTv`} render={({ field }) => (<Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!enableTv && !isCustom} className="h-4 w-4 mx-auto" />)} />
                         </TableCell>
                         <TableCell className="p-1 border-r border-slate-300">
-                            {adType === "Spot" && (<FormField control={form.control} name={`srlItems.${index}.seconds`} render={({ field }) => (<Input type="number" className="h-8 w-full text-center px-1 text-xs border-0 shadow-none focus-visible:ring-1" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />)} />)}
+                            {(adType === "Spot" || isCustom) && (<FormField control={form.control} name={`srlItems.${index}.seconds`} render={({ field }) => (<Input type="number" className="h-8 w-full text-center px-1 text-xs border-0 shadow-none focus-visible:ring-1" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />)} />)}
                         </TableCell>
                         
-                        {/* 🟢 CELDAS DE DÍAS CON BORDES MÁS FUERTES */}
                         {days.map(day => {
                             const dateKey = format(day, "yyyy-MM-dd");
                             const jsDay = getDay(day);
@@ -208,7 +221,9 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
 
                         <TableCell className="text-center font-bold text-xs border-r border-slate-300 bg-slate-50">{totalAdsGlobal}</TableCell>
                         <TableCell className="p-1 border-r border-slate-300">
-                            <FormField control={form.control} name={`srlItems.${index}.unitRate`} render={({ field }) => (<Input type="number" className="h-8 text-right px-2 text-xs border-0 shadow-none bg-transparent" readOnly {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />)} />
+                            <FormField control={form.control} name={`srlItems.${index}.unitRate`} render={({ field }) => (
+                                <Input type="number" className="h-8 text-right px-2 text-xs border-0 shadow-none bg-transparent" readOnly={!isCustom} {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
+                            )} />
                         </TableCell>
                         <TableCell className="text-right font-bold text-slate-800 text-xs pr-2 bg-slate-50 border-r border-slate-300">${netAmountGlobal.toLocaleString("es-AR")}</TableCell>
                         <TableCell className="text-center">
@@ -224,7 +239,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
         );
       })}
       
-      {/* Footer con totales */}
       <div className="flex justify-end mt-4">
         <div className="w-full max-w-2xl bg-slate-50 p-4 rounded-lg border grid grid-cols-2 gap-x-8 gap-y-2 shadow-sm">
             <div className="flex justify-between items-center text-sm"><span className="font-bold text-slate-600">Subtotal:</span><span className="bg-slate-800 text-white px-2 py-1 rounded font-mono font-bold">${subtotal.toLocaleString("es-AR")}</span></div>
