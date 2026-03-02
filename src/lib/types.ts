@@ -345,7 +345,6 @@ export type Canje = {
   historialMensual?: HistorialMensualItem[];
 };
 
-
 export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Admin';
 export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Import', 'Admin'];
 
@@ -595,6 +594,7 @@ export type AdvertisingOrderItemSrl = {
   month: string; 
   programId: string;
   adType: string;
+  customType?: string; // 🟢 Para uso de "Personalizado"
   hasTv: boolean; 
   seconds?: number;
   dailySpots: Record<string, number>;
@@ -602,9 +602,10 @@ export type AdvertisingOrderItemSrl = {
 };
 
 export type AdvertisingOrderItemSas = {
-  format: string; // <-- "Gacetilla de prensa" ahora es un formato válido
+  format: string; 
   type?: string;
   detail?: string;
+  customDetail?: string; // 🟢 Para uso de "Personalizado"
   observations?: string;
   desktop: boolean;
   mobile: boolean;
@@ -613,6 +614,16 @@ export type AdvertisingOrderItemSas = {
   cpm?: number;
   url?: string;
   unitRate: number;
+};
+
+export type BillingRequest = {
+  id?: string;
+  orderId: string;
+  opportunityId: string;
+  clientId: string;
+  date: string;
+  amount: number;
+  createdAt?: string;
 };
 
 export type AdvertisingOrder = {
@@ -631,7 +642,7 @@ export type AdvertisingOrder = {
   startDate: string; 
   endDate: string; 
   materialSent: boolean;
-  materialUrl?: string; // 🟢 NUEVO CAMPO URL DE MATERIALES
+  materialUrl?: string; 
   observations?: string;
   certReq: boolean;
   agencySale: boolean;
@@ -643,4 +654,5 @@ export type AdvertisingOrder = {
   totalSrl?: number;
   totalSas?: number;
   totalOrder?: number;
+  billingRequests?: { date: string; amount: number }[]; // 🟢 Array temporal para manejar en UI
 };
