@@ -28,46 +28,91 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
   const generatePdf = async (containerElement: HTMLElement) => {
         const pdf = new jsPDF('l', 'mm', 'a4', true); 
-        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfWidthMm = 297;
+        const pdfHeightMm = 210;
 
-        const blocks = Array.from(containerElement.querySelectorAll('.pdf-page-block')) as HTMLElement[];
+        const topPaddingMm = 15;
+        const bottomPaddingMm = 15;
+        const usableHeightMm = pdfHeightMm - topPaddingMm - bottomPaddingMm;
 
-        if (blocks.length === 0) throw new Error("No se encontraron páginas para el PDF");
+        const domWidthPx = containerElement.offsetWidth;
+        const mmToPx = domWidthPx / pdfWidthMm;
+        const pageHeightPx = pdfHeightMm * mmToPx;
+        const usableHeightPx = usableHeightMm * mmToPx;
+        const topPaddingPx = topPaddingMm * mmToPx;
 
-        for (let i = 0; i < blocks.length; i++) {
-            const block = blocks[i];
-            
-            const canvas = await html2canvas(block, { 
-                scale: 1.5, 
-                useCORS: true, 
-                logging: false,
-                backgroundColor: '#ffffff' 
-            });
-            
-            const imgData = canvas.toDataURL('image/jpeg', 0.8);
-            const ratio = canvas.width / canvas.height;
-            const mappedHeight = pdfWidth / ratio;
+        const blocks = Array.from(containerElement.querySelectorAll('.pdf-block')) as HTMLElement[];
+        
+        blocks.forEach(b => b.style.marginTop = '0px');
+        void containerElement.offsetHeight;
 
-            if (i > 0) pdf.addPage();
-            
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, mappedHeight);
+        let absoluteY = topPaddingPx;
+        let currentPageIndex = 0;
 
-            const links = block.querySelectorAll('a');
-            const elementRect = block.getBoundingClientRect();
+        blocks.forEach((block) => {
+            const blockHeight = block.offsetHeight;
+            const blockMarginBottom = parseFloat(window.getComputedStyle(block).marginBottom) || 0;
+            const totalBlockHeight = blockHeight + blockMarginBottom;
 
-            links.forEach((link) => {
-                const linkRect = link.getBoundingClientRect();
-                if (linkRect.width === 0 || linkRect.height === 0) return;
+            const pageBottomLimit = (currentPageIndex * pageHeightPx) + topPaddingPx + usableHeightPx;
+
+            if (absoluteY + totalBlockHeight > pageBottomLimit && currentPageIndex >= 0) {
+                currentPageIndex++;
+                const targetY = (currentPageIndex * pageHeightPx) + topPaddingPx;
+                const marginToAdd = targetY - absoluteY;
                 
-                const topInPx = linkRect.top - elementRect.top;
-                const topInMm = (topInPx * mappedHeight) / elementRect.height;
-                const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
-                const width = (linkRect.width * pdfWidth) / elementRect.width;
-                const linkH = (linkRect.height * mappedHeight) / elementRect.height;
+                block.style.marginTop = `${marginToAdd}px`;
+                absoluteY = targetY + totalBlockHeight;
+            } else {
+                absoluteY += totalBlockHeight;
+            }
+        });
 
-                pdf.link(left, topInMm, width, linkH, { url: link.href });
-            });
+        const canvas = await html2canvas(containerElement, { 
+            scale: 1.5, 
+            useCORS: true, 
+            logging: false,
+            backgroundColor: '#ffffff' 
+        });
+        
+        const imgData = canvas.toDataURL('image/jpeg', 0.8);
+        const ratio = canvas.width / canvas.height;
+        const mappedHeight = pdfWidthMm / ratio;
+
+        let heightLeft = mappedHeight;
+        let position = 0;
+        let currentPage = 1;
+
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidthMm, mappedHeight);
+        heightLeft -= pdfHeightMm;
+
+        while (heightLeft > 0) {
+            position -= pdfHeightMm;
+            pdf.addPage();
+            currentPage++;
+            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidthMm, mappedHeight);
+            heightLeft -= pdfHeightMm;
         }
+
+        const links = containerElement.querySelectorAll('a');
+        const elementRect = containerElement.getBoundingClientRect();
+
+        links.forEach((link) => {
+            const linkRect = link.getBoundingClientRect();
+            if (linkRect.width === 0 || linkRect.height === 0) return;
+            
+            const topInPx = linkRect.top - elementRect.top;
+            const topInMm = (topInPx * mappedHeight) / elementRect.height;
+            const sliceIndex = Math.floor(topInMm / pdfHeightMm);
+            const topOnPage = topInMm - (sliceIndex * pdfHeightMm);
+
+            const left = ((linkRect.left - elementRect.left) * pdfWidthMm) / elementRect.width;
+            const width = (linkRect.width * pdfWidthMm) / elementRect.width;
+            const linkH = (linkRect.height * mappedHeight) / elementRect.height;
+
+            pdf.setPage(sliceIndex + 1);
+            pdf.link(left, topOnPage, width, linkH, { url: link.href });
+        });
 
         return pdf;
   }
@@ -160,7 +205,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
           await sendEmail({
               accessToken,
-              to: ['lchena@airedesantafe.com.ar'], // Redacción
+              to: ['lchena@airedesantafe.com.ar'], 
               subject: `Gacetilla de Prensa: ${order.clientName}`,
               body: emailBody,
               attachments: [{
@@ -217,14 +262,12 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
              </div>
          </div>
 
-         {/* Contenedor gris simulando el fondo de visor para ver las hojas blancas */}
          <div className="flex justify-center overflow-x-auto w-full p-4">
             <div className="w-full max-w-5xl">
                 <AdvertisingOrderPdf ref={pdfRef} order={order} programs={programs} />
             </div>
          </div>
 
-         {/* DIV OCULTO PARA EL PDF DE REDACCIÓN SIN PRECIOS */}
          <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
              <AdvertisingOrderPdf ref={hiddenPdfRef} order={order} programs={programs} hidePrices={true} />
          </div>
