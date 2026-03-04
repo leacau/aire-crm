@@ -68,7 +68,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const sasNetAction = sasTotalToInvoice - sasAgencyAmount;
 
   const styles = {
-      page: { width: '297mm', minHeight: '210mm', padding: '15mm', backgroundColor: 'white', fontFamily: 'Arial, sans-serif', color: '#000', boxSizing: 'border-box' as const, fontSize: '11px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' },
+      container: { width: '297mm', padding: '15mm', backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif', color: '#000', boxSizing: 'border-box' as const, fontSize: '11px' },
       header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #ccc', paddingBottom: '10px' },
       clientInfoContainer: { marginBottom: '20px', backgroundColor: '#f9fafb', padding: '10px', borderRadius: '4px', border: '1px solid #e5e7eb' },
       sectionTitle: { backgroundColor: '#e5e7eb', padding: '5px', fontWeight: 'bold', textTransform: 'uppercase' as const, fontSize: '12px', borderBottom: '2px solid #dc2626', marginBottom: '10px' },
@@ -81,57 +81,57 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       totalRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '11px' }
   };
 
-  const renderHeader = () => (
-    <div style={styles.header}>
-      <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#dc2626', margin: 0 }}>ORDEN DE PUBLICIDAD</h1>
-          <p style={{ color: '#6b7280', fontWeight: 'bold', margin: 0 }}>Aire de Santa Fe</p>
-          {hidePrices && <span style={{ backgroundColor: '#fef08a', color: '#9a3412', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', marginTop: '4px', display: 'inline-block' }}>COPIA REDACCIÓN</span>}
-      </div>
-      <div style={{ textAlign: 'right' }}>
-          <p style={{ margin: 0 }}><strong>Emisión:</strong> {format(new Date(), "dd/MM/yyyy")}</p>
-          <p style={{ margin: 0 }}><strong>Ejecutivo:</strong> {order.accountExecutive}</p>
-      </div>
-    </div>
-  );
-
-  const renderClientInfo = () => {
+  const renderHeaderAndInfo = () => {
     const isUrl = order.materialUrl && (order.materialUrl.startsWith('http') || order.materialUrl.startsWith('www.'));
     const linkHref = isUrl ? (order.materialUrl!.startsWith('http') ? order.materialUrl : `https://${order.materialUrl}`) : undefined;
 
     return (
-      <div style={styles.clientInfoContainer}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            <div style={styles.dataRow}><span style={styles.label}>Cliente:</span><span>{order.clientName}</span></div>
-            <div style={styles.dataRow}><span style={styles.label}>Agencia:</span><span>{order.agencyName || "-"}</span></div>
-            <div style={styles.dataRow}><span style={styles.label}>Producto:</span><span>{order.opportunityTitle || order.product || "-"}</span></div>
-            <div style={styles.dataRow}><span style={styles.label}>Orden Tango:</span><span>{order.tangoOrderNo || "-"}</span></div>
-            <div style={styles.dataRow}>
-                <span style={styles.label}>Vigencia:</span>
-                <span style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{formatDate(order.startDate)} al {formatDate(order.endDate)}</span>
+        <div className="pdf-block" style={{ marginBottom: '20px' }}>
+            <div style={styles.header}>
+                <div>
+                    <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#dc2626', margin: 0 }}>ORDEN DE PUBLICIDAD</h1>
+                    <p style={{ color: '#6b7280', fontWeight: 'bold', margin: 0 }}>Aire de Santa Fe</p>
+                    {hidePrices && <span style={{ backgroundColor: '#fef08a', color: '#9a3412', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', marginTop: '4px', display: 'inline-block' }}>COPIA REDACCIÓN</span>}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                    <p style={{ margin: 0 }}><strong>Emisión:</strong> {format(new Date(), "dd/MM/yyyy")}</p>
+                    <p style={{ margin: 0 }}><strong>Ejecutivo:</strong> {order.accountExecutive}</p>
+                </div>
             </div>
-            <div style={styles.dataRow}>
-                <span style={styles.label}>Materiales:</span>
-                <span>
-                   {isUrl ? (
-                      <a href={linkHref} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '2px 8px', backgroundColor: '#eff6ff', borderRadius: '4px', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 'bold', textDecoration: 'none' }}>👉 VER MATERIALES 👈</a>
-                   ) : (
-                      order.materialUrl || (order.materialSent ? "Sí (Adjunto)" : "Pendiente")
-                   )}
-                </span>
+            
+            <div style={styles.clientInfoContainer}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div style={styles.dataRow}><span style={styles.label}>Cliente:</span><span>{order.clientName}</span></div>
+                    <div style={styles.dataRow}><span style={styles.label}>Agencia:</span><span>{order.agencyName || "-"}</span></div>
+                    <div style={styles.dataRow}><span style={styles.label}>Producto:</span><span>{order.opportunityTitle || order.product || "-"}</span></div>
+                    <div style={styles.dataRow}><span style={styles.label}>Orden Tango:</span><span>{order.tangoOrderNo || "-"}</span></div>
+                    <div style={styles.dataRow}>
+                        <span style={styles.label}>Vigencia:</span>
+                        <span style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{formatDate(order.startDate)} al {formatDate(order.endDate)}</span>
+                    </div>
+                    <div style={styles.dataRow}>
+                        <span style={styles.label}>Materiales:</span>
+                        <span>
+                        {isUrl ? (
+                            <a href={linkHref} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '2px 8px', backgroundColor: '#eff6ff', borderRadius: '4px', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 'bold', textDecoration: 'none' }}>👉 VER MATERIALES 👈</a>
+                        ) : (
+                            order.materialUrl || (order.materialSent ? "Sí (Adjunto)" : "Pendiente")
+                        )}
+                        </span>
+                    </div>
+                    {order.observations && (
+                    <div style={{ ...styles.dataRow, gridColumn: 'span 2' }}>
+                        <span style={styles.label}>Obs:</span>
+                        <span style={{ fontStyle: 'italic' }}>{order.observations}</span>
+                    </div>
+                    )}
+                </div>
             </div>
-            {order.observations && (
-              <div style={{ ...styles.dataRow, gridColumn: 'span 2' }}>
-                  <span style={styles.label}>Obs:</span>
-                  <span style={{ fontStyle: 'italic' }}>{order.observations}</span>
-              </div>
-            )}
         </div>
-      </div>
     );
   };
 
-  const renderSRLMonth = (monthDate: Date, isFirstElement: boolean) => {
+  const renderSRLMonth = (monthDate: Date, isFirstMonth: boolean) => {
         const monthKey = format(monthDate, "yyyy-MM");
         const itemsInMonth = srlItems.filter(item => item.month === monthKey);
         if (itemsInMonth.length === 0) return null;
@@ -143,11 +143,9 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
         const days = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
 
         return (
-            <div key={monthKey} className="pdf-page-block" style={{ ...styles.page, marginTop: isFirstElement ? '0' : '20px' }}>
-                {renderHeader()}
-                {isFirstElement && renderClientInfo()}
-                <div style={styles.sectionTitle}>PAUTA AIRE SRL</div>
-                <div style={{ marginBottom: '15px' }}>
+            <div key={monthKey} className="pdf-block" style={{ marginBottom: '20px' }}>
+                {isFirstMonth && <div style={styles.sectionTitle}>PAUTA AIRE SRL</div>}
+                <div>
                     <div style={{ backgroundColor: '#e5e7eb', padding: '4px 8px', fontWeight: 'bold', fontSize: '11px', border: '1px solid #9ca3af', borderBottom: 'none' }}>
                         {format(monthDate, "MMMM yyyy", { locale: es }).toUpperCase()}
                     </div>
@@ -200,9 +198,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const renderSRLTotals = () => {
     if (hidePrices) return null;
     return (
-        <div className="pdf-page-block" style={{ ...styles.page, marginTop: '20px' }}>
-             {renderHeader()}
-             <div style={styles.sectionTitle}>TOTALES AIRE SRL</div>
+        <div className="pdf-block" style={{ marginBottom: '30px' }}>
              <div style={styles.totalBox}>
                 <div style={styles.totalRow}><span>Subtotal:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
                 <div style={styles.totalRow}><span>Desajuste:</span><span>${srlAdjustment.toLocaleString('es-AR')}</span></div>
@@ -218,12 +214,10 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     );
   };
 
-  const renderSAS = (isFirstElement: boolean) => {
+  const renderSAS = () => {
     if (sasItems.length === 0) return null;
     return (
-        <div className="pdf-page-block" style={{ ...styles.page, marginTop: isFirstElement ? '0' : '20px' }}>
-            {renderHeader()}
-            {isFirstElement && renderClientInfo()}
+        <div className="pdf-block" style={{ marginBottom: '30px' }}>
             <div style={styles.sectionTitle}>PAUTA DIGITAL (SAS)</div>
             <table style={styles.table}>
                 <thead>
@@ -276,13 +270,13 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   };
 
   const renderFooter = () => (
-    <div className="pdf-page-block" style={{ ...styles.page, marginTop: '20px', minHeight: 'auto', paddingBottom: '30px' }}>
+    <div className="pdf-block" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', paddingTop: '20px' }}>
       {!hidePrices && (
         <div style={{ width: '100%', borderTop: '2px solid #000', paddingTop: '10px', textAlign: 'right' }}>
             <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>Total Pedido: ${ (order.totalOrder || 0).toLocaleString('es-AR') }</p>
         </div>
       )}
-      <div style={{ marginTop: hidePrices ? '20px' : '40px', borderTop: '1px solid #000', width: '250px', textAlign: 'center', fontSize: '11px', paddingTop: '5px', marginLeft: 'auto' }}>
+      <div style={{ marginTop: hidePrices ? '20px' : '40px', borderTop: '1px solid #000', width: '250px', textAlign: 'center', fontSize: '11px', paddingTop: '5px' }}>
           Firma Cliente
       </div>
     </div>
@@ -292,12 +286,14 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const hasSAS = sasItems.length > 0;
 
   return (
-    <div ref={ref} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#e2e8f0', padding: '20px', gap: '20px' }}>
-      {/* 🟢 Renderizamos cada sección como una hoja independiente */}
-      {hasSRL && months.map((m, idx) => renderSRLMonth(m, idx === 0))}
-      {hasSRL && renderSRLTotals()}
-      {hasSAS && renderSAS(!hasSRL)}
-      {renderFooter()}
+    <div ref={ref} style={{ display: 'flex', justifyContent: 'center' }}>
+      <div style={styles.container}>
+        {renderHeaderAndInfo()}
+        {hasSRL && months.map((m, idx) => renderSRLMonth(m, idx === 0))}
+        {hasSRL && renderSRLTotals()}
+        {hasSAS && renderSAS()}
+        {renderFooter()}
+      </div>
     </div>
   );
 });
