@@ -17,7 +17,9 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "-";
     try {
-      return format(new Date(dateStr), "dd/MM/yyyy");
+      // Agregamos T12:00:00 para evitar que el desfasaje de zona horaria atrase 1 día
+      const safeStr = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`;
+      return format(new Date(safeStr), "dd/MM/yyyy");
     } catch {
       return "-";
     }
@@ -77,7 +79,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '10px', marginBottom: '10px' },
       th: { border: '1px solid #9ca3af', padding: '5px 2px', backgroundColor: '#f3f4f6', textAlign: 'center' as const, fontWeight: 'bold' },
       td: { border: '1px solid #9ca3af', padding: '5px 2px', textAlign: 'center' as const },
-      totalBox: { width: '280px', marginLeft: 'auto', marginTop: '10px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#f9fafb' },
+      totalBox: { width: '280px', marginLeft: 'auto', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#f9fafb' },
       totalRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '11px' }
   };
 
@@ -129,6 +131,35 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
             </div>
         </div>
     );
+  };
+
+  // 🟢 NUEVO BLOQUE: Dibuja las fechas de facturación
+  const renderBillingRequests = () => {
+      if (hidePrices || !order.billingRequests || order.billingRequests.length === 0) {
+          return <div style={{ flex: 1 }} />; // Ocupa espacio para no romper el flex
+      }
+
+      return (
+          <div style={{ flex: 1, marginRight: '20px' }}>
+              <div style={{ width: '260px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#fef3c7' }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '6px', borderBottom: '1px solid #d1d5db', paddingBottom: '4px', color: '#9a3412', fontSize: '10px' }}>
+                      FECHAS DE FACTURACIÓN (INTERNO)
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                      <tbody>
+                          {order.billingRequests.map((br, i) => (
+                              <tr key={i}>
+                                  <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db' }}>{formatDate(br.date)}</td>
+                                  <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', fontWeight: 'bold' }}>
+                                      ${Number(br.amount).toLocaleString('es-AR')}
+                                  </td>
+                              </tr>
+                          ))}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      );
   };
 
   const renderSRLMonth = (monthDate: Date, isFirstMonth: boolean) => {
@@ -195,26 +226,31 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
         );
   };
 
-  const renderSRLTotals = () => {
+  const renderSRLTotals = (includeBilling: boolean) => {
     if (hidePrices) return null;
     return (
         <div className="pdf-block" style={{ marginBottom: '30px' }}>
-             <div style={styles.totalBox}>
-                <div style={styles.totalRow}><span>Subtotal:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
-                <div style={styles.totalRow}><span>Desajuste:</span><span>${srlAdjustment.toLocaleString('es-AR')}</span></div>
-                <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
-                    <span>Total a Facturar:</span><span>${srlTotalToInvoice.toLocaleString('es-AR')}</span>
-                </div>
-                <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({srlCommissionPct}%):</span><span>${srlAgencyAmount.toLocaleString('es-AR')}</span></div>
-                <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
-                    <span>Neto de Acción:</span><span>${srlNetAction.toLocaleString('es-AR')}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                 {/* 🟢 Mostramos u ocultamos la caja de Fechas de Facturación en la izquierda */}
+                 {includeBilling ? renderBillingRequests() : <div style={{ flex: 1 }} />}
+
+                 <div style={{ ...styles.totalBox, marginTop: 0 }}>
+                    <div style={styles.totalRow}><span>Subtotal:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
+                    <div style={styles.totalRow}><span>Desajuste:</span><span>${srlAdjustment.toLocaleString('es-AR')}</span></div>
+                    <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
+                        <span>Total a Facturar:</span><span>${srlTotalToInvoice.toLocaleString('es-AR')}</span>
+                    </div>
+                    <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({srlCommissionPct}%):</span><span>${srlAgencyAmount.toLocaleString('es-AR')}</span></div>
+                    <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
+                        <span>Neto de Acción:</span><span>${srlNetAction.toLocaleString('es-AR')}</span>
+                    </div>
                 </div>
             </div>
         </div>
     );
   };
 
-  const renderSAS = () => {
+  const renderSAS = (includeBilling: boolean) => {
     if (sasItems.length === 0) return null;
     return (
         <div className="pdf-block" style={{ marginBottom: '30px' }}>
@@ -252,16 +288,21 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
             </table>
 
             {!hidePrices && (
-            <div style={styles.totalBox}>
-                <div style={styles.totalRow}><span>Subtotal:</span><span>${sasSubtotal.toLocaleString('es-AR')}</span></div>
-                <div style={styles.totalRow}><span>Desajuste:</span><span>${sasAdjustment.toLocaleString('es-AR')}</span></div>
-                <div style={styles.totalRow}><span>IVA 5%:</span><span>${sasIva.toLocaleString('es-AR')}</span></div>
-                <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
-                    <span>Total a Facturar:</span><span>${sasTotalToInvoice.toLocaleString('es-AR')}</span>
-                </div>
-                <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({sasCommissionPct}%):</span><span>${sasAgencyAmount.toLocaleString('es-AR')}</span></div>
-                <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
-                    <span>Neto de Acción:</span><span>${sasNetAction.toLocaleString('es-AR')}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '10px' }}>
+                {/* 🟢 Si hay SAS y no había SRL, mostramos la facturación acá */}
+                {includeBilling ? renderBillingRequests() : <div style={{ flex: 1 }} />}
+
+                <div style={{ ...styles.totalBox, marginTop: 0 }}>
+                    <div style={styles.totalRow}><span>Subtotal:</span><span>${sasSubtotal.toLocaleString('es-AR')}</span></div>
+                    <div style={styles.totalRow}><span>Desajuste:</span><span>${sasAdjustment.toLocaleString('es-AR')}</span></div>
+                    <div style={styles.totalRow}><span>IVA 5%:</span><span>${sasIva.toLocaleString('es-AR')}</span></div>
+                    <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
+                        <span>Total a Facturar:</span><span>${sasTotalToInvoice.toLocaleString('es-AR')}</span>
+                    </div>
+                    <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({sasCommissionPct}%):</span><span>${sasAgencyAmount.toLocaleString('es-AR')}</span></div>
+                    <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
+                        <span>Neto de Acción:</span><span>${sasNetAction.toLocaleString('es-AR')}</span>
+                    </div>
                 </div>
             </div>
             )}
@@ -276,7 +317,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
             <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>Total Pedido: ${ (order.totalOrder || 0).toLocaleString('es-AR') }</p>
         </div>
       )}
-      <div style={{ marginTop: hidePrices ? '20px' : '40px', borderTop: '1px solid #000', width: '250px', textAlign: 'center', fontSize: '11px', paddingTop: '5px' }}>
+      <div style={{ marginTop: hidePrices ? '20px' : '40px', borderTop: '1px solid #000', width: '250px', textAlign: 'center', fontSize: '11px', paddingTop: '5px', marginLeft: 'auto' }}>
           Firma Cliente
       </div>
     </div>
@@ -290,8 +331,13 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       <div style={styles.container}>
         {renderHeaderAndInfo()}
         {hasSRL && months.map((m, idx) => renderSRLMonth(m, idx === 0))}
-        {hasSRL && renderSRLTotals()}
-        {hasSAS && renderSAS()}
+        
+        {/* Si tiene SRL y no tiene SAS, pasamos true para que muestre la facturación ahí. Si tiene SAS pasamos false porque se mostrará abajo en SAS. */}
+        {hasSRL && renderSRLTotals(!hasSAS)}
+
+        {/* Si tiene SAS, siempre imprimirá la facturación a su izquierda */}
+        {hasSAS && renderSAS(true)}
+        
         {renderFooter()}
       </div>
     </div>
