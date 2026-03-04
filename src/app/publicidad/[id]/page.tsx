@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getAdvertisingOrder, getPrograms } from '@/lib/firebase-service';
+import { getAdvertisingOrder, getPrograms, getBillingRequestsByOrder } from '@/lib/firebase-service';
 import type { AdvertisingOrder, Program } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
@@ -25,7 +25,6 @@ export default function AdvertisingOrderDetailPage() {
     const [programs, setPrograms] = useState<Program[]>([]);
     const [loading, setLoading] = useState(true);
     
-    // 🟢 Estados corregidos para que no den error
     const [isExporting, setIsExporting] = useState(false);
     const [isResending, setIsResending] = useState(false);
     const [isSendingToRedaccion, setIsSendingToRedaccion] = useState(false);
@@ -38,11 +37,17 @@ export default function AdvertisingOrderDetailPage() {
     useEffect(() => {
         const load = async () => {
             if (typeof id === 'string') {
-                const [o, p] = await Promise.all([
+                // 🟢 SE AGREGA LA CONSULTA DE BILLING REQUESTS
+                const [o, p, brs] = await Promise.all([
                     getAdvertisingOrder(id),
-                    getPrograms()
+                    getPrograms(),
+                    getBillingRequestsByOrder(id)
                 ]);
-                setOrder(o);
+                
+                if (o) {
+                    o.billingRequests = brs.map(b => ({ date: b.date, amount: b.amount }));
+                    setOrder(o);
+                }
                 setPrograms(p);
             }
             setLoading(false);
@@ -55,7 +60,6 @@ export default function AdvertisingOrderDetailPage() {
         const pdfWidthMm = 297;
         const pdfHeightMm = 210;
 
-        // 🟢 CÁLCULO DE BLOQUES INQUEBRANTABLES
         const topPaddingMm = 15;
         const bottomPaddingMm = 15;
         const usableHeightMm = pdfHeightMm - topPaddingMm - bottomPaddingMm;
@@ -68,9 +72,8 @@ export default function AdvertisingOrderDetailPage() {
 
         const blocks = Array.from(containerElement.querySelectorAll('.pdf-block')) as HTMLElement[];
         
-        // Reset margins
         blocks.forEach(b => b.style.marginTop = '0px');
-        void containerElement.offsetHeight; // force reflow
+        void containerElement.offsetHeight; 
 
         let absoluteY = topPaddingPx;
         let currentPageIndex = 0;
@@ -82,7 +85,6 @@ export default function AdvertisingOrderDetailPage() {
 
             const pageBottomLimit = (currentPageIndex * pageHeightPx) + topPaddingPx + usableHeightPx;
 
-            // Si el bloque se sale de la hoja actual, lo empujamos a la siguiente
             if (absoluteY + totalBlockHeight > pageBottomLimit && currentPageIndex >= 0) {
                 currentPageIndex++;
                 const targetY = (currentPageIndex * pageHeightPx) + topPaddingPx;
@@ -95,7 +97,6 @@ export default function AdvertisingOrderDetailPage() {
             }
         });
 
-        // 🟢 FOTO COMPLETA Y DIVISIÓN EXACTA
         const canvas = await html2canvas(containerElement, { 
             scale: 1.5, 
             useCORS: true, 
@@ -122,7 +123,6 @@ export default function AdvertisingOrderDetailPage() {
             heightLeft -= pdfHeightMm;
         }
 
-        // 🟢 MAPEO DE LINKS
         const links = containerElement.querySelectorAll('a');
         const elementRect = containerElement.getBoundingClientRect();
 
@@ -285,7 +285,7 @@ export default function AdvertisingOrderDetailPage() {
                         <Copy className="mr-2 h-4 w-4" /> Duplicar
                     </Button>
                     
-                    <Button variant="outline" onClick={handleExportPdf} disabled={isExporting}>
+                    <Button variant="outline" onClick={handleExportPdf}>
                         {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />} 
                         Exportar PDF
                     </Button>
