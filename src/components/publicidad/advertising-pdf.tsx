@@ -131,22 +131,23 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     );
   };
 
-  const renderSRL = () => (
-    <div style={{ marginBottom: '30px' }}>
-        <div style={styles.sectionTitle}>PAUTA AIRE SRL</div>
-        {months.map((monthDate) => {
-            const monthKey = format(monthDate, "yyyy-MM");
-            const itemsInMonth = srlItems.filter(item => item.month === monthKey);
-            if (itemsInMonth.length === 0) return null;
+  const renderSRLMonth = (monthDate: Date, isFirstElement: boolean) => {
+        const monthKey = format(monthDate, "yyyy-MM");
+        const itemsInMonth = srlItems.filter(item => item.month === monthKey);
+        if (itemsInMonth.length === 0) return null;
 
-            const mStart = startOfMonth(monthDate);
-            const mEnd = endOfMonth(monthDate);
-            const effectiveStart = mStart < startDate ? startDate : mStart;
-            const effectiveEnd = mEnd > endDate ? endDate : mEnd;
-            const days = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
+        const mStart = startOfMonth(monthDate);
+        const mEnd = endOfMonth(monthDate);
+        const effectiveStart = mStart < startDate ? startDate : mStart;
+        const effectiveEnd = mEnd > endDate ? endDate : mEnd;
+        const days = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
 
-            return (
-                <div key={monthKey} style={{ marginBottom: '15px' }}>
+        return (
+            <div key={monthKey} className="pdf-page-block" style={{ ...styles.page, marginTop: isFirstElement ? '0' : '20px' }}>
+                {renderHeader()}
+                {isFirstElement && renderClientInfo()}
+                <div style={styles.sectionTitle}>PAUTA AIRE SRL</div>
+                <div style={{ marginBottom: '15px' }}>
                     <div style={{ backgroundColor: '#e5e7eb', padding: '4px 8px', fontWeight: 'bold', fontSize: '11px', border: '1px solid #9ca3af', borderBottom: 'none' }}>
                         {format(monthDate, "MMMM yyyy", { locale: es }).toUpperCase()}
                     </div>
@@ -165,7 +166,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                         </thead>
                         <tbody>
                             {itemsInMonth.map((item, idx) => {
-                                // 🟢 LÓGICA DE PROGRAMA / TIPO CUSTOM
                                 const progName = item.programId === 'Personalizado' ? 'Personalizado' : (programs.find(p => p.id === item.programId)?.name || item.programId);
                                 const typeLabel = (item.programId === 'Personalizado' || item.adType === 'Personalizado') ? (item.customType || 'Personalizado') : item.adType;
 
@@ -193,113 +193,111 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                         </tbody>
                     </table>
                 </div>
-            );
-        })}
+            </div>
+        );
+  };
 
-        {!hidePrices && (
-          <div style={styles.totalBox}>
-              <div style={styles.totalRow}><span>Subtotal:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
-              <div style={styles.totalRow}><span>Desajuste:</span><span>${srlAdjustment.toLocaleString('es-AR')}</span></div>
-              <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
-                  <span>Total a Facturar:</span><span>${srlTotalToInvoice.toLocaleString('es-AR')}</span>
-              </div>
-              <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({srlCommissionPct}%):</span><span>${srlAgencyAmount.toLocaleString('es-AR')}</span></div>
-              <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
-                  <span>Neto de Acción:</span><span>${srlNetAction.toLocaleString('es-AR')}</span>
-              </div>
-          </div>
-        )}
-    </div>
-  );
+  const renderSRLTotals = () => {
+    if (hidePrices) return null;
+    return (
+        <div className="pdf-page-block" style={{ ...styles.page, marginTop: '20px' }}>
+             {renderHeader()}
+             <div style={styles.sectionTitle}>TOTALES AIRE SRL</div>
+             <div style={styles.totalBox}>
+                <div style={styles.totalRow}><span>Subtotal:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
+                <div style={styles.totalRow}><span>Desajuste:</span><span>${srlAdjustment.toLocaleString('es-AR')}</span></div>
+                <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
+                    <span>Total a Facturar:</span><span>${srlTotalToInvoice.toLocaleString('es-AR')}</span>
+                </div>
+                <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({srlCommissionPct}%):</span><span>${srlAgencyAmount.toLocaleString('es-AR')}</span></div>
+                <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
+                    <span>Neto de Acción:</span><span>${srlNetAction.toLocaleString('es-AR')}</span>
+                </div>
+            </div>
+        </div>
+    );
+  };
 
-  const renderSAS = () => (
-    <div style={{ marginBottom: '20px' }}>
-        <div style={styles.sectionTitle}>PAUTA DIGITAL (SAS)</div>
-        <table style={styles.table}>
-            <thead>
-                <tr>
-                    <th style={{ ...styles.th, textAlign: 'left', width: '20%' }}>Formato</th>
-                    <th style={{ ...styles.th, textAlign: 'left', width: '30%' }}>Detalle</th>
-                    <th style={{ ...styles.th, width: '15%' }}>Ubicación</th>
-                    <th style={{ ...styles.th, textAlign: 'left', width: '20%' }}>Obs</th>
-                    {!hidePrices && <th style={{ ...styles.th, textAlign: 'right', width: '15%' }}>Neto</th>}
-                </tr>
-            </thead>
-            <tbody>
-                {sasItems.map((item, i) => {
-                    let net = 0;
-                    if (item.format === "Banner") { net = (item.cpm || 0) * (item.unitRate || 0); } else { net = (item.unitRate || 0); }
-                    const locs = [];
-                    if(item.desktop) locs.push("D"); if(item.mobile) locs.push("M"); if(item.home) locs.push("H"); if(item.interiores) locs.push("I");
+  const renderSAS = (isFirstElement: boolean) => {
+    if (sasItems.length === 0) return null;
+    return (
+        <div className="pdf-page-block" style={{ ...styles.page, marginTop: isFirstElement ? '0' : '20px' }}>
+            {renderHeader()}
+            {isFirstElement && renderClientInfo()}
+            <div style={styles.sectionTitle}>PAUTA DIGITAL (SAS)</div>
+            <table style={styles.table}>
+                <thead>
+                    <tr>
+                        <th style={{ ...styles.th, textAlign: 'left', width: '20%' }}>Formato</th>
+                        <th style={{ ...styles.th, textAlign: 'left', width: '30%' }}>Detalle</th>
+                        <th style={{ ...styles.th, width: '15%' }}>Ubicación</th>
+                        <th style={{ ...styles.th, textAlign: 'left', width: '20%' }}>Obs</th>
+                        {!hidePrices && <th style={{ ...styles.th, textAlign: 'right', width: '15%' }}>Neto</th>}
+                    </tr>
+                </thead>
+                <tbody>
+                    {sasItems.map((item, i) => {
+                        let net = 0;
+                        if (item.format === "Banner") { net = (item.cpm || 0) * (item.unitRate || 0); } else { net = (item.unitRate || 0); }
+                        const locs = [];
+                        if(item.desktop) locs.push("D"); if(item.mobile) locs.push("M"); if(item.home) locs.push("H"); if(item.interiores) locs.push("I");
 
-                    // 🟢 LÓGICA DE DETALLE CUSTOM
-                    const detailLabel = item.format === 'Personalizado' ? (item.customDetail || "-") : (item.detail || item.type || "-");
+                        const detailLabel = item.format === 'Personalizado' ? (item.customDetail || "-") : (item.detail || item.type || "-");
 
-                    return (
-                        <tr key={i}>
-                            <td style={{ ...styles.td, textAlign: 'left', fontWeight: 'bold' }}>{item.format}</td>
-                            <td style={{ ...styles.td, textAlign: 'left' }}>{detailLabel}</td>
-                            <td style={styles.td}>{locs.join(", ") || "-"}</td>
-                            <td style={{ ...styles.td, textAlign: 'left', fontStyle: 'italic', color: '#6b7280' }}>{item.observations}</td>
-                            {!hidePrices && <td style={{ ...styles.td, textAlign: 'right', fontWeight: 'bold' }}>${net.toLocaleString('es-AR')}</td>}
-                        </tr>
-                    );
-                })}
-            </tbody>
-        </table>
+                        return (
+                            <tr key={i}>
+                                <td style={{ ...styles.td, textAlign: 'left', fontWeight: 'bold' }}>{item.format}</td>
+                                <td style={{ ...styles.td, textAlign: 'left' }}>{detailLabel}</td>
+                                <td style={styles.td}>{locs.join(", ") || "-"}</td>
+                                <td style={{ ...styles.td, textAlign: 'left', fontStyle: 'italic', color: '#6b7280' }}>{item.observations}</td>
+                                {!hidePrices && <td style={{ ...styles.td, textAlign: 'right', fontWeight: 'bold' }}>${net.toLocaleString('es-AR')}</td>}
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
 
-        {!hidePrices && (
-          <div style={styles.totalBox}>
-              <div style={styles.totalRow}><span>Subtotal:</span><span>${sasSubtotal.toLocaleString('es-AR')}</span></div>
-              <div style={styles.totalRow}><span>Desajuste:</span><span>${sasAdjustment.toLocaleString('es-AR')}</span></div>
-              <div style={styles.totalRow}><span>IVA 5%:</span><span>${sasIva.toLocaleString('es-AR')}</span></div>
-              <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
-                  <span>Total a Facturar:</span><span>${sasTotalToInvoice.toLocaleString('es-AR')}</span>
-              </div>
-              <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({sasCommissionPct}%):</span><span>${sasAgencyAmount.toLocaleString('es-AR')}</span></div>
-              <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
-                  <span>Neto de Acción:</span><span>${sasNetAction.toLocaleString('es-AR')}</span>
-              </div>
-          </div>
-        )}
-    </div>
-  );
+            {!hidePrices && (
+            <div style={styles.totalBox}>
+                <div style={styles.totalRow}><span>Subtotal:</span><span>${sasSubtotal.toLocaleString('es-AR')}</span></div>
+                <div style={styles.totalRow}><span>Desajuste:</span><span>${sasAdjustment.toLocaleString('es-AR')}</span></div>
+                <div style={styles.totalRow}><span>IVA 5%:</span><span>${sasIva.toLocaleString('es-AR')}</span></div>
+                <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
+                    <span>Total a Facturar:</span><span>${sasTotalToInvoice.toLocaleString('es-AR')}</span>
+                </div>
+                <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({sasCommissionPct}%):</span><span>${sasAgencyAmount.toLocaleString('es-AR')}</span></div>
+                <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
+                    <span>Neto de Acción:</span><span>${sasNetAction.toLocaleString('es-AR')}</span>
+                </div>
+            </div>
+            )}
+        </div>
+    );
+  };
 
   const renderFooter = () => (
-    <>
+    <div className="pdf-page-block" style={{ ...styles.page, marginTop: '20px', minHeight: 'auto', paddingBottom: '30px' }}>
       {!hidePrices && (
-        <div style={{ marginTop: '30px', borderTop: '2px solid #000', paddingTop: '10px', textAlign: 'right' }}>
+        <div style={{ width: '100%', borderTop: '2px solid #000', paddingTop: '10px', textAlign: 'right' }}>
             <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>Total Pedido: ${ (order.totalOrder || 0).toLocaleString('es-AR') }</p>
         </div>
       )}
-      <div style={{ marginTop: hidePrices ? '30px' : '60px', borderTop: '1px solid #000', width: '250px', textAlign: 'center', fontSize: '11px', paddingTop: '5px' }}>
+      <div style={{ marginTop: hidePrices ? '20px' : '40px', borderTop: '1px solid #000', width: '250px', textAlign: 'center', fontSize: '11px', paddingTop: '5px', marginLeft: 'auto' }}>
           Firma Cliente
       </div>
-    </>
+    </div>
   );
 
   const hasSRL = srlItems.length > 0;
   const hasSAS = sasItems.length > 0;
-  const isMultiPage = hasSRL && hasSAS;
 
   return (
-    <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: '20px', alignItems: 'center' }}>
-      <div id="ad-pdf-page-1" style={styles.page}>
-        {renderHeader()}
-        {renderClientInfo()}
-        {hasSRL && renderSRL()}
-        {!hasSRL && hasSAS && renderSAS()}
-        {!isMultiPage && renderFooter()}
-      </div>
-
-      {isMultiPage && (
-        <div id="ad-pdf-page-2" style={styles.page}>
-          {renderHeader()}
-          {renderClientInfo()}
-          {renderSAS()}
-          {renderFooter()}
-        </div>
-      )}
+    <div ref={ref} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#e2e8f0', padding: '20px', gap: '20px' }}>
+      {/* 🟢 Renderizamos cada sección como una hoja independiente */}
+      {hasSRL && months.map((m, idx) => renderSRLMonth(m, idx === 0))}
+      {hasSRL && renderSRLTotals()}
+      {hasSAS && renderSAS(!hasSRL)}
+      {renderFooter()}
     </div>
   );
 });
