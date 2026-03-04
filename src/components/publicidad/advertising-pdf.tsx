@@ -17,7 +17,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "-";
     try {
-      // Agregamos T12:00:00 para evitar que el desfasaje de zona horaria atrase 1 día
       const safeStr = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`;
       return format(new Date(safeStr), "dd/MM/yyyy");
     } catch {
@@ -133,10 +132,10 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     );
   };
 
-  // 🟢 NUEVO BLOQUE: Dibuja las fechas de facturación
+  // 🟢 BLOQUE DE FECHAS DE FACTURACIÓN (Se oculta si hidePrices es true)
   const renderBillingRequests = () => {
       if (hidePrices || !order.billingRequests || order.billingRequests.length === 0) {
-          return <div style={{ flex: 1 }} />; // Ocupa espacio para no romper el flex
+          return <div style={{ flex: 1 }} />; // Ocupa espacio para no romper el layout
       }
 
       return (
@@ -231,6 +230,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     return (
         <div className="pdf-block" style={{ marginBottom: '30px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                 
                  {/* 🟢 Mostramos u ocultamos la caja de Fechas de Facturación en la izquierda */}
                  {includeBilling ? renderBillingRequests() : <div style={{ flex: 1 }} />}
 
@@ -289,6 +289,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
 
             {!hidePrices && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '10px' }}>
+                
                 {/* 🟢 Si hay SAS y no había SRL, mostramos la facturación acá */}
                 {includeBilling ? renderBillingRequests() : <div style={{ flex: 1 }} />}
 
