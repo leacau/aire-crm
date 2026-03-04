@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FileText, Download, Copy, Loader2, Mail, Send } from "lucide-react";
@@ -13,18 +13,33 @@ import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
+import { getBillingRequestsByOrder } from "@/lib/firebase-service"; // 🟢 Importamos el fetch
 
 export function AdvertisingOrderViewer({ order, programs = [] }: { order: AdvertisingOrder, programs?: Program[] }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [isSendingToRedaccion, setIsSendingToRedaccion] = useState(false);
+  
+  // 🟢 Guardamos la orden localmente para poder adjuntarle el billingRequests
+  const [fullOrder, setFullOrder] = useState<AdvertisingOrder>(order);
+
   const router = useRouter();
   
   const pdfRef = useRef<HTMLDivElement>(null);
   const hiddenPdfRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { getGoogleAccessToken } = useAuth();
+
+  useEffect(() => {
+        setFullOrder(order);
+        if (isOpen && order.id) {
+            // 🟢 Al abrir, buscamos los billing requests
+            getBillingRequestsByOrder(order.id).then(brs => {
+                setFullOrder(prev => ({ ...prev, billingRequests: brs as any }));
+            });
+        }
+  }, [isOpen, order]);
 
   const generatePdf = async (containerElement: HTMLElement) => {
         const pdf = new jsPDF('l', 'mm', 'a4', true); 
@@ -122,7 +137,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
       setIsExporting(true);
       try {
           const pdf = await generatePdf(pdfRef.current);
-          pdf.save(`OP-${order.clientName}-${format(new Date(), 'yyyyMMdd')}.pdf`);
+          pdf.save(`OP-${fullOrder.clientName}-${format(new Date(), 'yyyyMMdd')}.pdf`);
           toast({ title: "PDF Exportado correctamente." });
       } catch (err) {
           console.error(err);
@@ -146,18 +161,18 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
             const pdf = await generatePdf(pdfRef.current);
             const pdfBase64 = pdf.output('datauristring').split(',')[1];
             
-            const oppTitle = order.opportunityTitle || order.product || 'Sin Asignar';
+            const oppTitle = fullOrder.opportunityTitle || fullOrder.product || 'Sin Asignar';
             const baseUrl = window.location.origin;
             const detailLink = `${baseUrl}/publicidad`;
             
             const emailBody = `
                 <div style="font-family: Arial, sans-serif; color: #333;">
                     <h2 style="color: #1d4ed8;">Orden de Publicidad Reinformada</h2>
-                    <p>El ejecutivo <strong>${order.accountExecutive}</strong> ha vuelto a enviar esta orden.</p>
+                    <p>El ejecutivo <strong>${fullOrder.accountExecutive}</strong> ha vuelto a enviar esta orden.</p>
                     <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #1d4ed8; margin: 20px 0;">
-                        <p><strong>Cliente:</strong> ${order.clientName || 'Desconocido'}</p>
+                        <p><strong>Cliente:</strong> ${fullOrder.clientName || 'Desconocido'}</p>
                         <p><strong>Producto:</strong> ${oppTitle}</p>
-                        <p><strong>Vigencia:</strong> ${format(new Date(order.startDate), "dd/MM/yyyy")} al ${format(new Date(order.endDate), "dd/MM/yyyy")}</p>
+                        <p><strong>Vigencia:</strong> ${format(new Date(fullOrder.startDate), "dd/MM/yyyy")} al ${format(new Date(fullOrder.endDate), "dd/MM/yyyy")}</p>
                     </div>
                     <p>Puede ver el listado de órdenes y buscar el detalle ingresando al siguiente enlace:</p>
                     <p><a href="${detailLink}">Ver Órdenes de Publicidad</a></p>
@@ -167,7 +182,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
             await sendEmail({
                 accessToken,
                 to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
-                subject: `Reinforme - OP: ${oppTitle} - ${order.clientName}`,
+                subject: `Reinforme - OP: ${oppTitle} - ${fullOrder.clientName}`,
                 body: emailBody,
                 attachments: [{
                     filename: `OP_${oppTitle.replace(/ /g, "_")}.pdf`,
@@ -198,7 +213,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
           const emailBody = `
               <div style="font-family: Arial, sans-serif; color: #333;">
                   <h2 style="color: #ea580c;">Nueva Gacetilla de Prensa</h2>
-                  <p>Se solicita publicación para el cliente <strong>${order.clientName}</strong>.</p>
+                  <p>Se solicita publicación para el cliente <strong>${fullOrder.clientName}</strong>.</p>
                   <p>Por favor revise el PDF adjunto con las instrucciones y el link a los materiales.</p>
               </div>
           `;
@@ -206,10 +221,10 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
           await sendEmail({
               accessToken,
               to: ['lchena@airedesantafe.com.ar'], 
-              subject: `Gacetilla de Prensa: ${order.clientName}`,
+              subject: `Gacetilla de Prensa: ${fullOrder.clientName}`,
               body: emailBody,
               attachments: [{
-                  filename: `Gacetilla_${order.clientName?.replace(/ /g, "_")}.pdf`,
+                  filename: `Gacetilla_${fullOrder.clientName?.replace(/ /g, "_")}.pdf`,
                   content: pdfBase64,
                   encoding: 'base64'
               }]
@@ -224,7 +239,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
       }
   };
 
-  const hasGacetilla = order.sasItems?.some(s => s.format === 'Gacetilla de prensa');
+  const hasGacetilla = fullOrder.sasItems?.some(s => s.format === 'Gacetilla de prensa');
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -252,7 +267,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
                     {isResending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />} 
                     {isResending ? 'Enviando...' : 'Reinformar'}
                  </Button>
-                 <Button variant="outline" onClick={() => { setIsOpen(false); router.push(`/publicidad/new?cloneId=${order.id}`); }} className="bg-white">
+                 <Button variant="outline" onClick={() => { setIsOpen(false); router.push(`/publicidad/new?cloneId=${fullOrder.id}`); }} className="bg-white">
                     <Copy className="mr-2 h-4 w-4" /> Duplicar Orden
                  </Button>
                  <Button onClick={handleExportPdf} disabled={isExporting}>
@@ -264,12 +279,12 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
          <div className="flex justify-center overflow-x-auto w-full p-4">
             <div className="w-full max-w-5xl">
-                <AdvertisingOrderPdf ref={pdfRef} order={order} programs={programs} />
+                <AdvertisingOrderPdf ref={pdfRef} order={fullOrder} programs={programs} />
             </div>
          </div>
 
          <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
-             <AdvertisingOrderPdf ref={hiddenPdfRef} order={order} programs={programs} hidePrices={true} />
+             <AdvertisingOrderPdf ref={hiddenPdfRef} order={fullOrder} programs={programs} hidePrices={true} />
          </div>
       </DialogContent>
     </Dialog>
