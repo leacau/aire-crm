@@ -262,46 +262,33 @@ export function AdvertisingForm() {
       };
   };
 
-  // 🟢 NUEVA LÓGICA DE PAGINACIÓN AUTOMÁTICA Y FONDO BLANCO
-  const generatePdfBase64 = async (element: HTMLElement) => {
-        const page1 = element.querySelector('#ad-pdf-page-1') as HTMLElement;
-        const page2 = element.querySelector('#ad-pdf-page-2') as HTMLElement;
-        if (!page1) throw new Error("Página 1 no encontrada");
-
-        const pdf = new jsPDF('l', 'mm', 'a4');
+  const generatePdfBase64 = async (containerElement: HTMLElement) => {
+        const pdf = new jsPDF('l', 'mm', 'a4', true); 
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
 
-        const processPage = async (pageElement: HTMLElement, startPageNum: number) => {
-            const canvas = await html2canvas(pageElement, { 
+        const blocks = Array.from(containerElement.querySelectorAll('.pdf-page-block')) as HTMLElement[];
+        if (blocks.length === 0) throw new Error("No se encontraron páginas para el PDF");
+
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
+            
+            const canvas = await html2canvas(block, { 
                 scale: 1.5, 
                 useCORS: true, 
                 logging: false,
-                backgroundColor: '#ffffff'
+                backgroundColor: '#ffffff' 
             });
-            const imgData = canvas.toDataURL('image/jpeg', 0.7);
+            
+            const imgData = canvas.toDataURL('image/jpeg', 0.8);
             const ratio = canvas.width / canvas.height;
             const mappedHeight = pdfWidth / ratio;
 
-            let heightLeft = mappedHeight;
-            let position = 0;
-            let pagesAdded = 0;
+            if (i > 0) pdf.addPage();
+            
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, mappedHeight);
 
-            if (startPageNum > 1) pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
-            heightLeft -= pdfHeight;
-            pagesAdded++;
-
-            while (heightLeft > 0) {
-                position -= pdfHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
-                heightLeft -= pdfHeight;
-                pagesAdded++;
-            }
-
-            const links = pageElement.querySelectorAll('a');
-            const elementRect = pageElement.getBoundingClientRect();
+            const links = block.querySelectorAll('a');
+            const elementRect = block.getBoundingClientRect();
 
             links.forEach((link) => {
                 const linkRect = link.getBoundingClientRect();
@@ -309,22 +296,13 @@ export function AdvertisingForm() {
                 
                 const topInPx = linkRect.top - elementRect.top;
                 const topInMm = (topInPx * mappedHeight) / elementRect.height;
-                const sliceIndex = Math.floor(topInMm / pdfHeight);
-                const topOnPage = topInMm - (sliceIndex * pdfHeight);
-
                 const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
                 const width = (linkRect.width * pdfWidth) / elementRect.width;
                 const linkH = (linkRect.height * mappedHeight) / elementRect.height;
-                pdf.setPage(startPageNum + sliceIndex);
-                pdf.link(left, topOnPage, width, linkH, { url: link.href });
+
+                pdf.link(left, topInMm, width, linkH, { url: link.href });
             });
-
-            return startPageNum + pagesAdded;
-        };
-
-        let nextPageIndex = 1;
-        nextPageIndex = await processPage(page1, nextPageIndex);
-        if (page2) await processPage(page2, nextPageIndex);
+        }
 
         return pdf;
   };
@@ -438,7 +416,7 @@ export function AdvertisingForm() {
 
                   await sendEmail({
                       accessToken,
-                      to: ['lchena@airedesantafe.com.ar', /* 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar' */], 
+                      to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
                       subject: `${editModeId ? 'Modificación' : 'Nueva'} OP: ${oppTitle} - ${selectedClient?.denominacion}`,
                       body: emailBody,
                       attachments: [{
@@ -447,13 +425,18 @@ export function AdvertisingForm() {
                           encoding: 'base64'
                       }]
                   });
+                  toast({ title: "Guardado", description: "Orden guardada y enviada por mail." });
               } catch (emailErr) {
                   console.error("Error al enviar correo de la orden:", emailErr);
+                  toast({ title: "Guardado", description: "Orden guardada, pero falló el envío del mail (tamaño).", variant: "destructive" });
               }
+          } else {
+             toast({ title: "Guardado", description: "Orden guardada exitosamente." });
           }
+      } else {
+         toast({ title: "Guardado", description: "Orden guardada exitosamente." });
       }
 
-      toast({ title: "Guardado", description: "Orden guardada exitosamente." });
       router.push(`/publicidad`);
     } catch (error) {
       console.error(error);
