@@ -26,46 +26,34 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
   const { toast } = useToast();
   const { getGoogleAccessToken } = useAuth();
 
-  const generatePdf = async (element: HTMLElement) => {
-        const page1 = element.querySelector('#ad-pdf-page-1') as HTMLElement;
-        const page2 = element.querySelector('#ad-pdf-page-2') as HTMLElement;
-
-        if (!page1) throw new Error("No se encontró la página del PDF");
-
-        const pdf = new jsPDF('l', 'mm', 'a4'); 
+  const generatePdf = async (containerElement: HTMLElement) => {
+        const pdf = new jsPDF('l', 'mm', 'a4', true); 
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
 
-        const processPage = async (pageElement: HTMLElement, startPageNum: number) => {
-            const canvas = await html2canvas(pageElement, { 
+        const blocks = Array.from(containerElement.querySelectorAll('.pdf-page-block')) as HTMLElement[];
+
+        if (blocks.length === 0) throw new Error("No se encontraron páginas para el PDF");
+
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
+            
+            const canvas = await html2canvas(block, { 
                 scale: 1.5, 
                 useCORS: true, 
                 logging: false,
-                backgroundColor: '#ffffff'
+                backgroundColor: '#ffffff' 
             });
-            const imgData = canvas.toDataURL('image/jpeg', 0.7);
+            
+            const imgData = canvas.toDataURL('image/jpeg', 0.8);
             const ratio = canvas.width / canvas.height;
             const mappedHeight = pdfWidth / ratio;
 
-            let heightLeft = mappedHeight;
-            let position = 0;
-            let pagesAdded = 0;
+            if (i > 0) pdf.addPage();
+            
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, mappedHeight);
 
-            if (startPageNum > 1) pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
-            heightLeft -= pdfHeight;
-            pagesAdded++;
-
-            while (heightLeft > 0) {
-                position -= pdfHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
-                heightLeft -= pdfHeight;
-                pagesAdded++;
-            }
-
-            const links = pageElement.querySelectorAll('a');
-            const elementRect = pageElement.getBoundingClientRect();
+            const links = block.querySelectorAll('a');
+            const elementRect = block.getBoundingClientRect();
 
             links.forEach((link) => {
                 const linkRect = link.getBoundingClientRect();
@@ -73,23 +61,13 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
                 
                 const topInPx = linkRect.top - elementRect.top;
                 const topInMm = (topInPx * mappedHeight) / elementRect.height;
-                const sliceIndex = Math.floor(topInMm / pdfHeight);
-                const topOnPage = topInMm - (sliceIndex * pdfHeight);
-
                 const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
                 const width = (linkRect.width * pdfWidth) / elementRect.width;
                 const linkH = (linkRect.height * mappedHeight) / elementRect.height;
 
-                pdf.setPage(startPageNum + sliceIndex);
-                pdf.link(left, topOnPage, width, linkH, { url: link.href });
+                pdf.link(left, topInMm, width, linkH, { url: link.href });
             });
-
-            return startPageNum + pagesAdded;
-        };
-
-        let nextPageIndex = 1;
-        nextPageIndex = await processPage(page1, nextPageIndex);
-        if (page2) await processPage(page2, nextPageIndex);
+        }
 
         return pdf;
   }
@@ -143,7 +121,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
             await sendEmail({
                 accessToken,
-                to: ['lchena@airedesantafe.com.ar', /* 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar' */], 
+                to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
                 subject: `Reinforme - OP: ${oppTitle} - ${order.clientName}`,
                 body: emailBody,
                 attachments: [{
@@ -182,7 +160,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
           await sendEmail({
               accessToken,
-              to: ['lchena@airedesantafe.com.ar'], 
+              to: ['lchena@airedesantafe.com.ar'], // Redacción
               subject: `Gacetilla de Prensa: ${order.clientName}`,
               body: emailBody,
               attachments: [{
@@ -210,11 +188,11 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
            <FileText className="h-4 w-4" /> Ver y Exportar
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-[100vw] w-[95vw] md:max-w-5xl max-h-[95vh] overflow-y-auto bg-slate-100">
+      <DialogContent className="max-w-[100vw] w-[95vw] md:max-w-5xl max-h-[95vh] overflow-y-auto bg-slate-200 p-0 border-0">
          <DialogTitle className="sr-only">Visor de Orden de Publicidad</DialogTitle>
          <DialogDescription className="sr-only">Detalles y exportación de la orden de publicidad</DialogDescription>
          
-         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-slate-300 pb-4 gap-4 sticky top-0 bg-slate-100 z-10 pt-4">
+         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-slate-300 p-4 gap-4 sticky top-0 bg-white z-10 shadow-sm">
              <h2 className="text-2xl font-bold text-slate-800">Orden de Publicidad</h2>
              <div className="flex flex-wrap gap-2">
                  
@@ -240,8 +218,10 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
          </div>
 
          {/* Contenedor gris simulando el fondo de visor para ver las hojas blancas */}
-         <div className="flex justify-center overflow-x-auto rounded-lg shadow-inner bg-slate-200 border border-slate-300 p-4">
-            <AdvertisingOrderPdf ref={pdfRef} order={order} programs={programs} />
+         <div className="flex justify-center overflow-x-auto w-full p-4">
+            <div className="w-full max-w-5xl">
+                <AdvertisingOrderPdf ref={pdfRef} order={order} programs={programs} />
+            </div>
          </div>
 
          {/* DIV OCULTO PARA EL PDF DE REDACCIÓN SIN PRECIOS */}
