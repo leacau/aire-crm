@@ -24,8 +24,12 @@ export default function AdvertisingOrderDetailPage() {
     const [order, setOrder] = useState<AdvertisingOrder | null>(null);
     const [programs, setPrograms] = useState<Program[]>([]);
     const [loading, setLoading] = useState(true);
+    
+    // 🟢 Estados corregidos para que no den error
+    const [isExporting, setIsExporting] = useState(false);
     const [isResending, setIsResending] = useState(false);
     const [isSendingToRedaccion, setIsSendingToRedaccion] = useState(false);
+    
     const router = useRouter();
 
     const pdfRef = useRef<HTMLDivElement>(null);
@@ -48,51 +52,96 @@ export default function AdvertisingOrderDetailPage() {
 
     const generatePdf = async (containerElement: HTMLElement) => {
         const pdf = new jsPDF('l', 'mm', 'a4', true); 
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const pdfWidthMm = 297;
+        const pdfHeightMm = 210;
 
-        // Buscamos todas las "páginas" generadas por el componente
-        const blocks = Array.from(containerElement.querySelectorAll('.pdf-page-block')) as HTMLElement[];
+        // 🟢 CÁLCULO DE BLOQUES INQUEBRANTABLES
+        const topPaddingMm = 15;
+        const bottomPaddingMm = 15;
+        const usableHeightMm = pdfHeightMm - topPaddingMm - bottomPaddingMm;
 
-        if (blocks.length === 0) throw new Error("No se encontraron páginas para el PDF");
+        const domWidthPx = containerElement.offsetWidth;
+        const mmToPx = domWidthPx / pdfWidthMm;
+        const pageHeightPx = pdfHeightMm * mmToPx;
+        const usableHeightPx = usableHeightMm * mmToPx;
+        const topPaddingPx = topPaddingMm * mmToPx;
 
-        for (let i = 0; i < blocks.length; i++) {
-            const block = blocks[i];
-            
-            // Forzar fondo blanco y escala controlada
-            const canvas = await html2canvas(block, { 
-                scale: 1.5, 
-                useCORS: true, 
-                logging: false,
-                backgroundColor: '#ffffff' 
-            });
-            
-            const imgData = canvas.toDataURL('image/jpeg', 0.8);
-            const ratio = canvas.width / canvas.height;
-            const mappedHeight = pdfWidth / ratio;
+        const blocks = Array.from(containerElement.querySelectorAll('.pdf-block')) as HTMLElement[];
+        
+        // Reset margins
+        blocks.forEach(b => b.style.marginTop = '0px');
+        void containerElement.offsetHeight; // force reflow
 
-            if (i > 0) pdf.addPage();
-            
-            // Agregamos la imagen desde la posición 0,0
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, mappedHeight);
+        let absoluteY = topPaddingPx;
+        let currentPageIndex = 0;
 
-            // Buscar y mapear links en esta página
-            const links = block.querySelectorAll('a');
-            const elementRect = block.getBoundingClientRect();
+        blocks.forEach((block) => {
+            const blockHeight = block.offsetHeight;
+            const blockMarginBottom = parseFloat(window.getComputedStyle(block).marginBottom) || 0;
+            const totalBlockHeight = blockHeight + blockMarginBottom;
 
-            links.forEach((link) => {
-                const linkRect = link.getBoundingClientRect();
-                if (linkRect.width === 0 || linkRect.height === 0) return;
+            const pageBottomLimit = (currentPageIndex * pageHeightPx) + topPaddingPx + usableHeightPx;
+
+            // Si el bloque se sale de la hoja actual, lo empujamos a la siguiente
+            if (absoluteY + totalBlockHeight > pageBottomLimit && currentPageIndex >= 0) {
+                currentPageIndex++;
+                const targetY = (currentPageIndex * pageHeightPx) + topPaddingPx;
+                const marginToAdd = targetY - absoluteY;
                 
-                const topInPx = linkRect.top - elementRect.top;
-                const topInMm = (topInPx * mappedHeight) / elementRect.height;
-                const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
-                const width = (linkRect.width * pdfWidth) / elementRect.width;
-                const linkH = (linkRect.height * mappedHeight) / elementRect.height;
+                block.style.marginTop = `${marginToAdd}px`;
+                absoluteY = targetY + totalBlockHeight;
+            } else {
+                absoluteY += totalBlockHeight;
+            }
+        });
 
-                pdf.link(left, topInMm, width, linkH, { url: link.href });
-            });
+        // 🟢 FOTO COMPLETA Y DIVISIÓN EXACTA
+        const canvas = await html2canvas(containerElement, { 
+            scale: 1.5, 
+            useCORS: true, 
+            logging: false,
+            backgroundColor: '#ffffff' 
+        });
+        
+        const imgData = canvas.toDataURL('image/jpeg', 0.8);
+        const ratio = canvas.width / canvas.height;
+        const mappedHeight = pdfWidthMm / ratio;
+
+        let heightLeft = mappedHeight;
+        let position = 0;
+        let currentPage = 1;
+
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidthMm, mappedHeight);
+        heightLeft -= pdfHeightMm;
+
+        while (heightLeft > 0) {
+            position -= pdfHeightMm;
+            pdf.addPage();
+            currentPage++;
+            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidthMm, mappedHeight);
+            heightLeft -= pdfHeightMm;
         }
+
+        // 🟢 MAPEO DE LINKS
+        const links = containerElement.querySelectorAll('a');
+        const elementRect = containerElement.getBoundingClientRect();
+
+        links.forEach((link) => {
+            const linkRect = link.getBoundingClientRect();
+            if (linkRect.width === 0 || linkRect.height === 0) return;
+            
+            const topInPx = linkRect.top - elementRect.top;
+            const topInMm = (topInPx * mappedHeight) / elementRect.height;
+            const sliceIndex = Math.floor(topInMm / pdfHeightMm);
+            const topOnPage = topInMm - (sliceIndex * pdfHeightMm);
+
+            const left = ((linkRect.left - elementRect.left) * pdfWidthMm) / elementRect.width;
+            const width = (linkRect.width * pdfWidthMm) / elementRect.width;
+            const linkH = (linkRect.height * mappedHeight) / elementRect.height;
+
+            pdf.setPage(sliceIndex + 1);
+            pdf.link(left, topOnPage, width, linkH, { url: link.href });
+        });
 
         return pdf;
     }
@@ -236,7 +285,7 @@ export default function AdvertisingOrderDetailPage() {
                         <Copy className="mr-2 h-4 w-4" /> Duplicar
                     </Button>
                     
-                    <Button variant="outline" onClick={handleExportPdf}>
+                    <Button variant="outline" onClick={handleExportPdf} disabled={isExporting}>
                         {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />} 
                         Exportar PDF
                     </Button>
