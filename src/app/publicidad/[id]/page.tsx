@@ -46,51 +46,39 @@ export default function AdvertisingOrderDetailPage() {
         load();
     }, [id]);
 
-    // 🟢 NUEVA LÓGICA DE PAGINACIÓN AUTOMÁTICA Y FONDO BLANCO
-    const generatePdf = async (element: HTMLElement) => {
-        const page1 = element.querySelector('#ad-pdf-page-1') as HTMLElement;
-        const page2 = element.querySelector('#ad-pdf-page-2') as HTMLElement;
-
-        if (!page1) throw new Error("No se encontró la página del PDF");
-
-        const pdf = new jsPDF('l', 'mm', 'a4'); 
+    const generatePdf = async (containerElement: HTMLElement) => {
+        const pdf = new jsPDF('l', 'mm', 'a4', true); 
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
 
-        const processPage = async (pageElement: HTMLElement, startPageNum: number) => {
-            // Se fuerza color blanco puro y se captura toda la altura posible
-            const canvas = await html2canvas(pageElement, { 
+        // Buscamos todas las "páginas" generadas por el componente
+        const blocks = Array.from(containerElement.querySelectorAll('.pdf-page-block')) as HTMLElement[];
+
+        if (blocks.length === 0) throw new Error("No se encontraron páginas para el PDF");
+
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
+            
+            // Forzar fondo blanco y escala controlada
+            const canvas = await html2canvas(block, { 
                 scale: 1.5, 
                 useCORS: true, 
                 logging: false,
                 backgroundColor: '#ffffff' 
             });
-            const imgData = canvas.toDataURL('image/jpeg', 0.7);
+            
+            const imgData = canvas.toDataURL('image/jpeg', 0.8);
             const ratio = canvas.width / canvas.height;
             const mappedHeight = pdfWidth / ratio;
 
-            let heightLeft = mappedHeight;
-            let position = 0;
-            let pagesAdded = 0;
+            if (i > 0) pdf.addPage();
+            
+            // Agregamos la imagen desde la posición 0,0
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, mappedHeight);
 
-            // Dibuja la primera hoja de esta sección
-            if (startPageNum > 1) pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
-            heightLeft -= pdfHeight;
-            pagesAdded++;
-
-            // Paginación Inteligente: Si sobra altura, crea hojas nuevas y desplaza la imagen hacia arriba
-            while (heightLeft > 0) {
-                position -= pdfHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
-                heightLeft -= pdfHeight;
-                pagesAdded++;
-            }
-
-            // Mapeo Inteligente de Links (Detecta en qué hoja cayó cada link)
-            const links = pageElement.querySelectorAll('a');
-            const elementRect = pageElement.getBoundingClientRect();
+            // Buscar y mapear links en esta página
+            const links = block.querySelectorAll('a');
+            const elementRect = block.getBoundingClientRect();
 
             links.forEach((link) => {
                 const linkRect = link.getBoundingClientRect();
@@ -98,31 +86,20 @@ export default function AdvertisingOrderDetailPage() {
                 
                 const topInPx = linkRect.top - elementRect.top;
                 const topInMm = (topInPx * mappedHeight) / elementRect.height;
-                
-                // Calculamos en qué página se encuentra este link
-                const sliceIndex = Math.floor(topInMm / pdfHeight);
-                const topOnPage = topInMm - (sliceIndex * pdfHeight);
-
                 const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
                 const width = (linkRect.width * pdfWidth) / elementRect.width;
                 const linkH = (linkRect.height * mappedHeight) / elementRect.height;
 
-                pdf.setPage(startPageNum + sliceIndex);
-                pdf.link(left, topOnPage, width, linkH, { url: link.href });
+                pdf.link(left, topInMm, width, linkH, { url: link.href });
             });
-
-            return startPageNum + pagesAdded;
-        };
-
-        let nextPageIndex = 1;
-        nextPageIndex = await processPage(page1, nextPageIndex);
-        if (page2) await processPage(page2, nextPageIndex);
+        }
 
         return pdf;
     }
 
     const handleExportPdf = async () => {
         if (!pdfRef.current || !order) return;
+        setIsExporting(true);
         try {
             const pdf = await generatePdf(pdfRef.current);
             pdf.save(`OP-${order.clientName}-${format(new Date(), 'yyyyMMdd')}.pdf`);
@@ -130,6 +107,8 @@ export default function AdvertisingOrderDetailPage() {
         } catch (err) {
             console.error(err);
             toast({ title: "Error al generar PDF", variant: "destructive" });
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -163,7 +142,7 @@ export default function AdvertisingOrderDetailPage() {
 
             await sendEmail({
                 accessToken,
-                to: ['lchena@airedesantafe.com.ar', /* 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar' */], 
+                to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
                 subject: `Reinforme - OP: ${oppTitle} - ${order.clientName}`,
                 body: emailBody,
                 attachments: [{
@@ -258,13 +237,13 @@ export default function AdvertisingOrderDetailPage() {
                     </Button>
                     
                     <Button variant="outline" onClick={handleExportPdf}>
-                        <FileDown className="mr-2 h-4 w-4" /> Exportar PDF
+                        {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />} 
+                        Exportar PDF
                     </Button>
                 </div>
             </Header>
-            <main className="flex-1 overflow-auto p-4 md:p-8 flex justify-center w-full">
-                {/* Contenedor gris simulando el fondo de visor para ver las hojas blancas */}
-                <div className="overflow-x-auto rounded-lg shadow-xl border border-slate-300 w-full max-w-5xl flex justify-center bg-slate-200 p-4">
+            <main className="flex-1 overflow-auto p-4 md:p-8 flex justify-center w-full bg-slate-200">
+                <div className="w-full max-w-5xl">
                     <AdvertisingOrderPdf ref={pdfRef} order={order} programs={programs} />
                 </div>
             </main>
