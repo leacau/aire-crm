@@ -3,9 +3,9 @@
 "use client";
 
 import { useFieldArray, UseFormReturn, useWatch } from "react-hook-form";
-import { format, eachMonthOfInterval, endOfMonth, eachDayOfInterval, startOfMonth, getDay } from "date-fns";
+import { format, eachMonthOfInterval, endOfMonth, eachDayOfInterval, startOfMonth, getDay, addMonths, isBefore } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Copy } from "lucide-react";
 import { useEffect } from "react";
 
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FormControl, FormField } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { srlAdTypes, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
+import { useToast } from "@/hooks/use-toast";
 
 interface Program {
     id: string;
@@ -44,6 +45,7 @@ interface SrlSectionProps {
 }
 
 export function SrlSection({ form, startDate, endDate, programs }: SrlSectionProps) {
+  const { toast } = useToast();
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "srlItems",
@@ -54,7 +56,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
   useEffect(() => {
      items?.forEach((item, index) => {
          if (!item.programId || !item.adType) return;
-         if (item.programId === "Personalizado") return; // Si es personalizado, no forzamos tarifa automática
+         if (item.programId === "Personalizado") return; 
          
          const program = programs.find(p => p.id === item.programId);
          if (!program || !program.rates) return;
@@ -93,6 +95,71 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
   const agencyAmount = form.watch("agencySale") ? (totalToInvoice * (agencyCommissionPct / 100)) : 0;
   const netAction = totalToInvoice - agencyAmount;
 
+  // 🟢 FUNCIÓN PARA DUPLICAR AL MES SIGUIENTE
+  const handleDuplicateToNextMonth = (itemIndex: number) => {
+      const sourceItem = form.getValues(`srlItems.${itemIndex}`);
+      if (!sourceItem || !sourceItem.month) return;
+
+      const [year, month] = sourceItem.month.split('-');
+      const currentMonthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const nextMonthDate = addMonths(currentMonthDate, 1);
+      
+      // Validamos si el mes siguiente entra dentro del endDate de la orden
+      if (isBefore(endDate, startOfMonth(nextMonthDate))) {
+          toast({
+              title: "Fuera de vigencia",
+              description: "La campaña termina antes del próximo mes.",
+              variant: "destructive"
+          });
+          return;
+      }
+
+      const nextMonthKey = format(nextMonthDate, "yyyy-MM");
+      
+      // Mapeamos los días de la semana usados en la fila original
+      const dayOfWeekQuantities = new Map<number, number>();
+      Object.entries(sourceItem.dailySpots || {}).forEach(([dateStr, qty]) => {
+          if (qty && qty > 0) {
+              const [y, m, d] = dateStr.split('-').map(Number);
+              const dateObj = new Date(y, m - 1, d);
+              let dayOfWeek = dateObj.getDay();
+              dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek; 
+              dayOfWeekQuantities.set(dayOfWeek, qty);
+          }
+      });
+
+      // Calculamos los días hábiles del próximo mes que correspondan a esos días de la semana
+      const nextMonthStartBoundary = nextMonthDate < startDate ? startDate : startOfMonth(nextMonthDate);
+      const nextMonthEndBoundary = endOfMonth(nextMonthDate) > endDate ? endDate : endOfMonth(nextMonthDate);
+      const nextMonthDays = eachDayOfInterval({ start: nextMonthStartBoundary, end: nextMonthEndBoundary });
+
+      const newDailySpots: Record<string, number> = {};
+      nextMonthDays.forEach(day => {
+          let jsDay = day.getDay();
+          let isoDay = jsDay === 0 ? 7 : jsDay;
+          if (dayOfWeekQuantities.has(isoDay)) {
+              newDailySpots[format(day, "yyyy-MM-dd")] = dayOfWeekQuantities.get(isoDay)!;
+          }
+      });
+
+      // Insertamos la nueva fila
+      append({
+          month: nextMonthKey,
+          programId: sourceItem.programId,
+          adType: sourceItem.adType,
+          customType: sourceItem.customType,
+          hasTv: sourceItem.hasTv,
+          unitRate: sourceItem.unitRate,
+          seconds: sourceItem.seconds,
+          dailySpots: newDailySpots
+      });
+
+      toast({
+          title: "Duplicado exitoso",
+          description: `Se copió la fila a ${format(nextMonthDate, "MMMM yyyy", { locale: es })}.`
+      });
+  };
+
   return (
     <div className="space-y-12">
       {months.map((monthDate) => {
@@ -129,8 +196,8 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     ))}
                     <TableHead className="w-[60px] text-center font-bold text-xs border-r border-slate-300">Cant.</TableHead>
                     <TableHead className="w-[100px] text-right font-bold text-xs border-r border-slate-300">Tarifa</TableHead>
-                    <TableHead className="w-[110px] text-right font-bold text-xs">Neto</TableHead>
-                    <TableHead className="w-[40px]"></TableHead>
+                    <TableHead className="w-[110px] text-right font-bold text-xs border-r border-slate-300">Neto</TableHead>
+                    <TableHead className="w-[80px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -138,7 +205,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     const itemValues = items?.[index];
                     if (!itemValues || itemValues.month !== monthKey) return null;
 
-                    // 🟢 NUEVO: Verificamos si el programa está seleccionado
                     const isProgramSelected = !!itemValues.programId && itemValues.programId !== "";
                     
                     const isCustom = itemValues.programId === "Personalizado";
@@ -203,7 +269,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                             const jsDay = getDay(day);
                             const isoDay = jsDay === 0 ? 7 : jsDay; 
                             
-                            // 🟢 NUEVO: Si no hay programa, se bloquea. Si hay programa, respeta las restricciones de días.
                             const isBlocked = !isProgramSelected || (hasRestrictions && !validDays.has(isoDay));
                             
                             return (
@@ -233,9 +298,33 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                             )} />
                         </TableCell>
                         <TableCell className="text-right font-bold text-slate-800 text-xs pr-2 bg-slate-50 border-r border-slate-300">${netAmountGlobal.toLocaleString("es-AR")}</TableCell>
-                        <TableCell className="text-center">
-                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => remove(index)}><Trash2 className="h-4 w-4" /></Button>
+                        
+                        {/* 🟢 BOTONES DE ACCIÓN: COPIAR Y ELIMINAR */}
+                        <TableCell className="text-center p-1">
+                            <div className="flex items-center justify-center gap-1">
+                                <Button 
+                                    type="button" 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-7 w-7 text-blue-600 hover:text-blue-800 hover:bg-blue-50" 
+                                    title="Copiar pautado al mes siguiente"
+                                    onClick={() => handleDuplicateToNextMonth(index)}
+                                >
+                                    <Copy className="h-3 w-3" />
+                                </Button>
+                                <Button 
+                                    type="button" 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50" 
+                                    title="Eliminar fila"
+                                    onClick={() => remove(index)}
+                                >
+                                    <Trash2 className="h-3 w-3" />
+                                </Button>
+                            </div>
                         </TableCell>
+
                       </TableRow>
                     );
                   })}
