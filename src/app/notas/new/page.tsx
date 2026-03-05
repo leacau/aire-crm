@@ -94,8 +94,9 @@ export default function NewCommercialNotePage() {
 
     const [notifyOnSave, setNotifyOnSave] = useState(true);
     const [isRestored, setIsRestored] = useState(false);
+    const [draftLoaded, setDraftLoaded] = useState(false); // 🟢 Para mostrar el botón de limpiar borrador
 
-    // 🟢 NUEVO: Estado para saber si estamos editando
+    // Estado para saber si estamos editando
     const [editModeId, setEditModeId] = useState<string | null>(null);
 
     const primaryGrafError = primaryGrafs.some(g => g.length > 84);
@@ -158,7 +159,7 @@ export default function NewCommercialNotePage() {
         const search = window.location.search;
         const params = new URLSearchParams(search);
         const cloneId = params.get('cloneId');
-        const editId = params.get('editId'); // 🟢 Manejo de edición
+        const editId = params.get('editId'); 
 
         const idToFetch = cloneId || editId;
 
@@ -262,6 +263,7 @@ export default function NewCommercialNotePage() {
                     setNoteObservations(parsed.noteObservations || '');
                     
                     if (parsed.selectedClientId || parsed.title) {
+                        setDraftLoaded(true);
                         toast({ title: "Borrador recuperado", description: "Se han restaurado los datos que estabas cargando." });
                     }
                 } catch (e) {
@@ -273,7 +275,7 @@ export default function NewCommercialNotePage() {
     }, [toast]);
 
     useEffect(() => {
-        if (!isRestored || editModeId) return; // 🟢 No guardamos borrador si estamos editando
+        if (!isRestored || editModeId) return; 
         const draftData = {
             selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations,
             selectedProgramIds, programSchedule, replicateWeb, replicateSocials,
@@ -349,6 +351,63 @@ export default function NewCommercialNotePage() {
             if (items[dateIndex]) items[dateIndex] = { ...items[dateIndex], time };
             return { ...prev, [programId]: items };
         });
+    };
+
+    // 🟢 NUEVO: Función para eliminar una fecha individual
+    const handleRemoveDate = (programId: string, dateIndex: number) => {
+        setProgramSchedule(prev => {
+            const items = [...(prev[programId] || [])];
+            items.splice(dateIndex, 1);
+            return { ...prev, [programId]: items };
+        });
+    };
+
+    // 🟢 NUEVO: Función para limpiar el borrador
+    const handleClearDraft = () => {
+        if (!window.confirm("¿Estás seguro de que quieres limpiar todos los datos y empezar una nueva nota?")) return;
+        localStorage.removeItem('commercial_note_draft');
+        setSelectedClientId('');
+        setCuit('');
+        setRazonSocial('');
+        setRubro('');
+        setSaleValue('');
+        setFinancialObservations('');
+        setSelectedProgramIds([]);
+        setProgramSchedule({});
+        setReplicateWeb(false);
+        setReplicateSocials([]);
+        setCollaboration(false);
+        setCollaborationHandle('');
+        setCtaText('');
+        setCtaDestination('');
+        setContactPhone('');
+        setContactName('');
+        setTitle('');
+        setLocation(undefined);
+        setCallPhone('');
+        setMobileAddress('');
+        setPrimaryGrafs(['']);
+        setSecondaryGrafs(['']);
+        setQuestions(['', '', '', '', '']);
+        setTopicsToAvoid(['']);
+        setIntervieweeName('');
+        setIntervieweeRole('');
+        setIntervieweeBio('');
+        setInstagramHandle('');
+        setNoInstagram(false);
+        setWebsite('');
+        setNoWeb(false);
+        setWhatsapp('');
+        setNoWhatsapp(false);
+        setCommercialPhone('');
+        setNoCommercialPhone(false);
+        setCommercialAddresses(['']);
+        setNoCommercialAddress(false);
+        setGraphicSupport(false);
+        setGraphicLink('');
+        setNoteObservations('');
+        setDraftLoaded(false);
+        toast({ title: "Borrador limpiado", description: "Puedes comenzar una nueva nota desde cero." });
     };
     
     const toggleSocial = (social: string) => setReplicateSocials(prev => prev.includes(social) ? prev.filter(s => s !== social) : [...prev, social]);
@@ -463,7 +522,6 @@ export default function NewCommercialNotePage() {
 
             let newNoteId = editModeId;
 
-            // 🟢 SI ES MODO EDICIÓN, ACTUALIZAMOS. SINO, CREAMOS.
             if (editModeId) {
                 await updateCommercialNote(editModeId, noteData, userInfo!.id, userInfo!.name);
             } else {
@@ -543,11 +601,18 @@ export default function NewCommercialNotePage() {
                      <Button variant="ghost" onClick={() => router.back()}>
                         <ArrowLeft className="mr-2 h-4 w-4" /> Volver
                     </Button>
+                    
+                    {/* 🟢 BOTÓN LIMPIAR BORRADOR */}
+                    {draftLoaded && !editModeId && (
+                        <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleClearDraft}>
+                            Limpiar Borrador
+                        </Button>
+                    )}
+
                     <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title || hasGrafErrors}>
                         <ExternalLink className="mr-2 h-4 w-4" /> Exportar PDF
                     </Button>
                     <div className="flex items-center space-x-2">
-                        {/* 🟢 El switch ahora es disableable o fijo si estamos en edit mode */}
                         <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} disabled={!!editModeId} />
                         <Label htmlFor="notify">Notificar</Label>
                     </div>
@@ -607,7 +672,21 @@ export default function NewCommercialNotePage() {
                                         return (
                                             <div key={pid} className="border p-3 rounded-md space-y-3">
                                                 <div className="flex justify-between items-center"><span className="font-medium">{prog?.name}</span><Popover><PopoverTrigger asChild><Button variant="outline" size="sm"><CalendarIcon className="mr-2 h-4 w-4"/>Fechas</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="multiple" selected={items.map(i => new Date(i.date))} onSelect={(d) => handleDateSelect(pid, d)} initialFocus locale={es}/></PopoverContent></Popover></div>
-                                                {items.length > 0 && <div className="max-h-40 overflow-y-auto space-y-2">{items.map((it, idx) => (<div key={it.date} className="flex gap-2 text-sm"><span className="w-24">{format(new Date(it.date), 'dd/MM/yyyy')}</span><Input type="time" className="h-8" value={it.time||''} onChange={(e) => handleTimeChange(pid, idx, e.target.value)} /></div>))}</div>}
+                                                
+                                                {items.length > 0 && (
+                                                    <div className="max-h-40 overflow-y-auto space-y-2">
+                                                        {items.map((it, idx) => (
+                                                            // 🟢 BOTÓN PARA ELIMINAR FECHAS INDIVIDUALES
+                                                            <div key={it.date} className="flex gap-2 text-sm items-center">
+                                                                <span className="w-24">{format(new Date(it.date), 'dd/MM/yyyy')}</span>
+                                                                <Input type="time" className="h-8" value={it.time||''} onChange={(e) => handleTimeChange(pid, idx, e.target.value)} />
+                                                                <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleRemoveDate(pid, idx)}>
+                                                                    <Trash2 className="h-4 w-4"/>
+                                                                </Button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })}
