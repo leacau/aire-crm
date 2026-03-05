@@ -181,7 +181,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
             await sendEmail({
                 accessToken,
-                to: ['lchena@airedesantafe.com.ar', /* 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar' */, ${userInfo!.name}], 
+                to: ['lchena@airedesantafe.com.ar', /* 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar' */, userInfo.email], 
                 subject: `Reinforme - OP: ${oppTitle} - ${fullOrder.clientName}`,
                 body: emailBody,
                 attachments: [{
