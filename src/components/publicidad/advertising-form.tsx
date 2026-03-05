@@ -92,6 +92,7 @@ export function AdvertisingForm() {
   const selectedClientId = watch("clientId");
 
   useEffect(() => {
+      console.log(userInfo)
     if (userInfo?.name && !editModeId) setValue("accountExecutive", userInfo.name);
     const loadData = async () => {
       try {
