@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format, differenceInDays, isValid, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
+import { format, differenceInDays, isValid, startOfMonth, endOfMonth, isWithinInterval, addMonths } from "date-fns";
 import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2 } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 import html2canvas from 'html2canvas';
@@ -41,6 +41,7 @@ import { sendEmail } from "@/lib/google-gmail-service";
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
 import { AdvertisingOrderPdf } from "./advertising-pdf";
+import { Label } from "@/components/ui/label";
 
 export function AdvertisingForm() {
   const { toast } = useToast();
@@ -57,6 +58,11 @@ export function AdvertisingForm() {
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [editModeId, setEditModeId] = useState<string | null>(null);
+  
+  // 🟢 ESTADOS DE CACHÉ Y SUGERENCIAS
+  const [isRestored, setIsRestored] = useState(false);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [invoiceCount, setInvoiceCount] = useState(1);
 
   const pdfRef = useRef<HTMLDivElement>(null);
 
@@ -92,7 +98,7 @@ export function AdvertisingForm() {
   const selectedClientId = watch("clientId");
 
   useEffect(() => {
-    if (userInfo?.name && !editModeId) setValue("accountExecutive", userInfo.name);
+    if (userInfo?.name && !editModeId && !draftLoaded) setValue("accountExecutive", userInfo.name);
     const loadData = async () => {
       try {
         const [clientsData, agenciesData, programsData] = await Promise.all([
@@ -109,7 +115,7 @@ export function AdvertisingForm() {
       }
     };
     loadData();
-  }, [userInfo, setValue, editModeId]);
+  }, [userInfo, setValue, editModeId, draftLoaded]);
 
   useEffect(() => {
       const search = window.location.search;
@@ -133,7 +139,13 @@ export function AdvertisingForm() {
                   let fetchedBillingRequests: any[] = [];
                   if (editId) {
                       const brs = await getBillingRequestsByOrder(idToFetch);
-                      fetchedBillingRequests = brs.map(b => ({ date: b.date, amount: b.amount }));
+                      fetchedBillingRequests = brs.map(b => ({ 
+                          date: b.date, 
+                          grossAmount: b.grossAmount || 0,
+                          adjustment: b.adjustment || 0,
+                          ivaSas: b.ivaSas || 0,
+                          amount: b.amount || 0 
+                      }));
                   }
                   
                   form.reset({
@@ -159,13 +171,51 @@ export function AdvertisingForm() {
                       billingRequests: fetchedBillingRequests 
                   });
               }
+              setIsRestored(true);
           });
       } else if (urlClientId) {
            form.setValue("clientId", urlClientId);
            if (urlOppId) form.setValue("opportunityId", urlOppId);
            getOpportunitiesByClientId(urlClientId).then(setOpportunities);
+           setIsRestored(true);
+      } else {
+          // 🟢 RECUPERAR BORRADOR SI EXISTE Y NO ESTAMOS EDITANDO NI CLONANDO
+          const draft = localStorage.getItem('advertising_order_draft');
+          if (draft) {
+              try {
+                  const parsed = JSON.parse(draft);
+                  if (parsed.startDate) parsed.startDate = new Date(parsed.startDate);
+                  if (parsed.endDate) parsed.endDate = new Date(parsed.endDate);
+                  form.reset(parsed);
+                  setDraftLoaded(true);
+                  toast({ title: "Borrador recuperado", description: "Se han restaurado los datos que estabas cargando." });
+              } catch (e) {
+                  console.error("Error recuperando borrador", e);
+              }
+          }
+          setIsRestored(true);
       }
-  }, [form]);
+  }, [form, toast]);
+
+  // 🟢 GUARDAR BORRADOR EN TIEMPO REAL
+  useEffect(() => {
+      if (!isRestored || editModeId) return;
+      localStorage.setItem('advertising_order_draft', JSON.stringify(values));
+  }, [values, isRestored, editModeId]);
+
+  const handleClearDraft = () => {
+      if (!window.confirm("¿Seguro que quieres limpiar todo el formulario para empezar de cero?")) return;
+      localStorage.removeItem('advertising_order_draft');
+      form.reset({
+          accountExecutive: userInfo?.name || "",
+          materialSent: false, materialUrl: "", certReq: false, agencySale: false,
+          commissionSrl: 0, adjustmentSrl: 0, adjustmentSas: 0,
+          srlItems: [], sasItems: [], billingRequests: [], 
+          startDate: undefined, endDate: undefined, clientId: "", agencyId: "none", opportunityId: "", newOpportunityTitle: "", product: "", tangoOrderNo: "", observations: ""
+      });
+      setDraftLoaded(false);
+      toast({ title: "Borrador limpiado", description: "Puedes comenzar de cero." });
+  };
 
   useEffect(() => {
     if (!selectedClientId) { setOpportunities([]); return; }
@@ -178,7 +228,6 @@ export function AdvertisingForm() {
     fetchOpps();
   }, [selectedClientId]);
 
-  // 🟢 Limpieza inteligente de filas SRL y SAS que queden fuera del rango al cambiar fechas
   useEffect(() => {
       if (!startDate || !endDate) return;
       const currentSrlItems = getValues("srlItems") || [];
@@ -216,6 +265,79 @@ export function AdvertisingForm() {
 
   const showSections = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
 
+  // 🟢 CÁLCULOS GLOBALES DE LA ORDEN
+  const srlItemsValid = values.srlItems?.filter(item => item.month) || [];
+  const sasItemsValid = values.sasItems?.filter(item => item.month) || [];
+
+  const srlSubtotal = srlItemsValid.reduce((acc, item) => {
+    const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (Number(val) || 0), 0);
+    const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
+    return acc + ((item.unitRate || 0) * totalAds * multiplier);
+  }, 0) || 0;
+
+  const sasSubtotal = sasItemsValid.reduce((acc, item) => {
+    let net = 0;
+    if (item.format === "Banner") net = (item.cpm || 0) * (item.unitRate || 0);
+    else net = (item.unitRate || 0);
+    return acc + net;
+  }, 0) || 0;
+
+  const srlAdjustment = values.adjustmentSrl || 0;
+  const sasAdjustment = values.adjustmentSas || 0;
+  const sasIva = (sasSubtotal - sasAdjustment) * 0.05;
+
+  const totalOrderGross = srlSubtotal + sasSubtotal;
+  const totalOrderAdj = srlAdjustment + sasAdjustment;
+  const totalOrderIva = sasIva;
+  const totalOrderNet = totalOrderGross - totalOrderAdj + totalOrderIva;
+
+  const hasSas = sasItemsValid.length > 0;
+
+  // 🟢 AUTOCÁLCULO DE FACTURAS SUGERIDAS
+  const handleGenerateBilling = () => {
+      if (invoiceCount < 1) return;
+      const invGross = totalOrderGross / invoiceCount;
+      const invAdj = totalOrderAdj / invoiceCount;
+      const invIva = totalOrderIva / invoiceCount;
+      const invNet = invGross - invAdj + invIva;
+
+      const newBrs = [];
+      let curDate = startDate && isValid(startDate) ? new Date(startDate) : new Date();
+      
+      for (let i = 0; i < invoiceCount; i++) {
+          newBrs.push({
+              date: format(curDate, 'yyyy-MM-dd'),
+              grossAmount: Number(invGross.toFixed(2)),
+              adjustment: Number(invAdj.toFixed(2)),
+              ivaSas: Number(invIva.toFixed(2)),
+              amount: Number(invNet.toFixed(2))
+          });
+          curDate = addMonths(curDate, 1);
+      }
+      setValue("billingRequests", newBrs, { shouldValidate: true });
+  };
+
+  // 🟢 ACTUALIZA NETO AL MODIFICAR BRUTO/AJUSTE MANUALMENTE EN LA TABLA
+  const updateRowNet = (index: number) => {
+      setTimeout(() => {
+          const row = form.getValues(`billingRequests.${index}`);
+          const gross = parseFloat(row.grossAmount as any) || 0;
+          const adj = parseFloat(row.adjustment as any) || 0;
+          const iva = parseFloat(row.ivaSas as any) || 0;
+          setValue(`billingRequests.${index}.amount`, gross - adj + iva, { shouldValidate: true });
+      }, 50);
+  };
+
+  // 🟢 SUMATORIAS Y VALIDACIÓN
+  const sumGross = values.billingRequests?.reduce((sum, item) => sum + (Number(item.grossAmount)||0), 0) || 0;
+  const sumAdj = values.billingRequests?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
+  const sumIva = values.billingRequests?.reduce((sum, item) => sum + (Number(item.ivaSas)||0), 0) || 0;
+  const sumNet = values.billingRequests?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
+
+  const hasGrossError = Math.abs(sumGross - totalOrderGross) > 1; // Tolerancia 1 peso por redondeo decimal
+  const hasNetError = Math.abs(sumNet - totalOrderNet) > 1;
+
+
   const getPreviewOrder = (): AdvertisingOrder => {
       const selectedClient = clients.find(c => c.id === values.clientId);
       const selectedAgency = agencies.find(a => a.id === values.agencyId);
@@ -224,24 +346,6 @@ export function AdvertisingForm() {
 
       const safeStartDate = (values.startDate && isValid(values.startDate)) ? values.startDate.toISOString() : new Date().toISOString();
       const safeEndDate = (values.endDate && isValid(values.endDate)) ? values.endDate.toISOString() : new Date().toISOString();
-
-      const srlItemsValid = values.srlItems?.filter(item => item.month) || [];
-      const sasItemsValid = values.sasItems?.filter(item => item.month) || [];
-
-      const srlSubtotal = srlItemsValid.reduce((acc, item) => {
-        const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (val || 0), 0);
-        const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
-        return acc + ((item.unitRate || 0) * totalAds * multiplier);
-      }, 0) || 0;
-      const srlTotal = srlSubtotal - (values.adjustmentSrl || 0);
-
-      const sasSubtotal = sasItemsValid.reduce((acc, item) => {
-        let net = 0;
-        if (item.format === "Banner") net = (item.cpm || 0) * (item.unitRate || 0);
-        else net = (item.unitRate || 0);
-        return acc + net;
-      }, 0) || 0;
-      const sasTotal = (sasSubtotal - (values.adjustmentSas || 0)) * 1.05;
 
       return {
           id: "preview",
@@ -268,9 +372,9 @@ export function AdvertisingForm() {
           sasItems: sasItemsValid,
           adjustmentSrl: values.adjustmentSrl || 0,
           adjustmentSas: values.adjustmentSas || 0,
-          totalSrl: srlTotal,
-          totalSas: sasTotal,
-          totalOrder: srlTotal + sasTotal,
+          totalSrl: srlSubtotal - (values.adjustmentSrl || 0),
+          totalSas: (sasSubtotal - (values.adjustmentSas || 0)) + sasIva,
+          totalOrder: totalOrderNet,
           billingRequests: values.billingRequests
       };
   };
@@ -385,8 +489,6 @@ export function AdvertisingForm() {
       const missing = [];
       if (errors.clientId) missing.push("Cliente");
       if (errors.startDate || errors.endDate) missing.push("Fechas de Vigencia");
-      if (errors.srlItems) missing.push("Falta seleccionar Programa en la tabla SRL");
-      if (errors.sasItems) missing.push("Falta formato en tabla SAS");
       toast({ title: "Faltan datos obligatorios", description: `Por favor completa: ${missing.join(", ")}`, variant: "destructive" });
   };
 
@@ -498,6 +600,7 @@ export function AdvertisingForm() {
           }
       }
 
+      localStorage.removeItem('advertising_order_draft'); // LIMPIAR AL GUARDAR
       toast({ title: "Guardado", description: "Orden guardada exitosamente." });
       router.push(`/publicidad`);
     } catch (error) {
@@ -615,42 +718,90 @@ export function AdvertisingForm() {
           </div>
         </div>
 
+        {/* 🟢 NUEVA SECCIÓN DE FACTURACIÓN CON AUTOCÁLCULO */}
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
-            <div className="bg-slate-100 px-4 py-2 border-b">
+            <div className="bg-slate-100 px-4 py-2 border-b flex justify-between items-center flex-wrap gap-2">
                 <h3 className="text-lg font-semibold text-slate-800">Fechas de Facturación (Administración)</h3>
+                <div className="flex gap-2 items-center bg-white p-1 rounded border shadow-sm">
+                    <Label className="text-xs px-2 whitespace-nowrap">Sugerir facturas:</Label>
+                    <Input type="number" min={1} value={invoiceCount} onChange={e => setInvoiceCount(parseInt(e.target.value) || 1)} className="w-16 h-8 text-center" />
+                    <Button type="button" size="sm" variant="secondary" className="h-8" onClick={handleGenerateBilling}>Generar</Button>
+                </div>
             </div>
             <div className="p-4 space-y-4">
                 {brFields.map((field, index) => (
-                    <div key={field.id} className="flex gap-4 items-end bg-slate-50 p-3 rounded-md border border-slate-200">
+                    <div key={field.id} className="flex gap-2 items-end bg-slate-50 p-3 rounded-md border border-slate-200 flex-wrap">
                         <FormField control={form.control} name={`billingRequests.${index}.date`} render={({field}) => (
-                            <FormItem className="flex-1">
-                                <FormLabel>Fecha a Facturar</FormLabel>
+                            <FormItem className="flex-[2] min-w-[120px]">
+                                <FormLabel className="text-xs">Fecha a Facturar</FormLabel>
                                 <FormControl><Input type="date" {...field} /></FormControl>
-                                <FormMessage />
                             </FormItem>
                         )} />
+                        <FormField control={form.control} name={`billingRequests.${index}.grossAmount`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[90px]">
+                                <FormLabel className="text-xs">Bruto</FormLabel>
+                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNet(index); }} /></FormControl>
+                            </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`billingRequests.${index}.adjustment`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[90px]">
+                                <FormLabel className="text-xs">Desajuste</FormLabel>
+                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNet(index); }} /></FormControl>
+                            </FormItem>
+                        )} />
+                        {hasSas && (
+                            <FormField control={form.control} name={`billingRequests.${index}.ivaSas`} render={({field}) => (
+                                <FormItem className="flex-1 min-w-[90px]">
+                                    <FormLabel className="text-xs">IVA (5%)</FormLabel>
+                                    <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNet(index); }} /></FormControl>
+                                </FormItem>
+                            )} />
+                        )}
                         <FormField control={form.control} name={`billingRequests.${index}.amount`} render={({field}) => (
-                            <FormItem className="flex-1">
-                                <FormLabel>Monto a Facturar</FormLabel>
-                                <FormControl><Input type="number" {...field} /></FormControl>
-                                <FormMessage />
+                            <FormItem className="flex-1 min-w-[90px]">
+                                <FormLabel className="text-xs">Neto Final</FormLabel>
+                                <FormControl><Input type="number" className="font-bold bg-white" {...field} readOnly /></FormControl>
                             </FormItem>
                         )} />
-                        <Button type="button" variant="ghost" className="text-red-500 mb-0.5 hover:bg-red-100" onClick={() => brRemove(index)}>
+                        <Button type="button" variant="ghost" className="text-red-500 mb-0.5 hover:bg-red-100 px-2" onClick={() => brRemove(index)}>
                             <Trash2 className="h-5 w-5"/>
                         </Button>
                     </div>
                 ))}
-                <Button type="button" variant="outline" size="sm" onClick={() => brAppend({ date: '', amount: 0 })}>
-                    <Plus className="h-4 w-4 mr-2" /> Agregar fecha de facturación
+
+                {brFields.length > 0 && (
+                    <div className="flex flex-wrap gap-2 px-3 py-2 bg-slate-200 rounded-md font-bold text-sm items-center border border-slate-300">
+                        <div className="flex-[2] min-w-[120px] text-right pr-4 text-slate-700">Comprobación de sumas:</div>
+                        <div className={cn("flex-1 min-w-[90px]", hasGrossError ? "text-red-600" : "text-green-700")}>${sumGross.toLocaleString('es-AR')}</div>
+                        <div className="flex-1 min-w-[90px] text-slate-600">${sumAdj.toLocaleString('es-AR')}</div>
+                        {hasSas && <div className="flex-1 min-w-[90px] text-slate-600">${sumIva.toLocaleString('es-AR')}</div>}
+                        <div className={cn("flex-1 min-w-[90px]", hasNetError ? "text-red-600" : "text-green-700")}>${sumNet.toLocaleString('es-AR')}</div>
+                        <div className="w-[36px]"></div>
+                        {(hasGrossError || hasNetError) && (
+                            <div className="w-full text-xs text-red-600 text-right mt-1 font-normal italic">
+                                La suma de las cuotas no coincide con el total de la orden. (Bruto Ord: ${totalOrderGross.toLocaleString('es-AR')} | Neto Ord: ${totalOrderNet.toLocaleString('es-AR')})
+                            </div>
+                        )}
+                    </div>
+                )}
+                
+                <Button type="button" variant="outline" size="sm" onClick={() => brAppend({ date: '', grossAmount: 0, adjustment: 0, ivaSas: 0, amount: 0 })}>
+                    <Plus className="h-4 w-4 mr-2" /> Agregar cuota manual
                 </Button>
             </div>
         </div>
 
         <div className="flex justify-between items-center pt-6 border-t mt-8 gap-4">
-          <Button type="button" variant="ghost" onClick={() => router.back()}>
-             <ArrowLeft className="mr-2 h-4 w-4" /> Volver
-          </Button>
+          <div className="flex items-center gap-4">
+              <Button type="button" variant="ghost" onClick={() => router.back()}>
+                 <ArrowLeft className="mr-2 h-4 w-4" /> Volver
+              </Button>
+              {draftLoaded && !editModeId && (
+                  <Button type="button" variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleClearDraft}>
+                      Limpiar Borrador
+                  </Button>
+              )}
+          </div>
           
           <div className="flex gap-4">
             <Button 
