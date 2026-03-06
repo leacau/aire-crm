@@ -104,7 +104,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
       const currentMonthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
       const nextMonthDate = addMonths(currentMonthDate, 1);
       
-      // Validamos si el mes siguiente entra dentro del endDate de la orden
       if (isBefore(endDate, startOfMonth(nextMonthDate))) {
           toast({
               title: "Fuera de vigencia",
@@ -116,7 +115,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
 
       const nextMonthKey = format(nextMonthDate, "yyyy-MM");
       
-      // Mapeamos los días de la semana usados en la fila original
       const dayOfWeekQuantities = new Map<number, number>();
       Object.entries(sourceItem.dailySpots || {}).forEach(([dateStr, qty]) => {
           if (qty && qty > 0) {
@@ -128,7 +126,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
           }
       });
 
-      // Calculamos los días hábiles del próximo mes que correspondan a esos días de la semana
       const nextMonthStartBoundary = nextMonthDate < startDate ? startDate : startOfMonth(nextMonthDate);
       const nextMonthEndBoundary = endOfMonth(nextMonthDate) > endDate ? endDate : endOfMonth(nextMonthDate);
       const nextMonthDays = eachDayOfInterval({ start: nextMonthStartBoundary, end: nextMonthEndBoundary });
@@ -142,7 +139,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
           }
       });
 
-      // Insertamos la nueva fila
       append({
           month: nextMonthKey,
           programId: sourceItem.programId,
@@ -194,9 +190,11 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                         </div>
                       </TableHead>
                     ))}
-                    <TableHead className="w-[60px] text-center font-bold text-xs border-r border-slate-300">Cant.</TableHead>
-                    <TableHead className="w-[100px] text-right font-bold text-xs border-r border-slate-300">Tarifa</TableHead>
-                    <TableHead className="w-[110px] text-right font-bold text-xs border-r border-slate-300">Neto</TableHead>
+                    {/* 🟢 NUEVAS CABECERAS */}
+                    <TableHead className="w-[50px] text-center font-bold text-xs border-r border-slate-300 px-1 leading-tight">Cant.<br/>Repet.</TableHead>
+                    <TableHead className="w-[50px] text-center font-bold text-xs border-r border-slate-300 px-1 leading-tight">Tot.<br/>Seg.</TableHead>
+                    <TableHead className="w-[80px] text-right font-bold text-xs border-r border-slate-300">Tarifa</TableHead>
+                    <TableHead className="w-[100px] text-right font-bold text-xs border-r border-slate-300">Neto</TableHead>
                     <TableHead className="w-[80px]"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -224,6 +222,8 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     const currentSeconds = itemValues.seconds || 0;
                     const currentUnitRate = itemValues.unitRate || 0;
                     const totalAdsGlobal = Object.values(currentDailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
+                    
+                    // 🟢 CÁLCULO DE SEGUNDOS
                     const totalSecondsGlobal = adType === "Spot" ? (totalAdsGlobal * currentSeconds) : 0;
                     const netAmountGlobal = currentUnitRate * totalAdsGlobal * (adType === "Spot" ? currentSeconds : 1);
 
@@ -291,15 +291,16 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                             );
                         })}
 
+                        {/* 🟢 DOS CELDAS SEPARADAS */}
                         <TableCell className="text-center font-bold text-xs border-r border-slate-300 bg-slate-50">{totalAdsGlobal}</TableCell>
+                        <TableCell className="text-center font-bold text-xs border-r border-slate-300 bg-slate-50">{adType === "Spot" ? totalSecondsGlobal : "-"}</TableCell>
+
                         <TableCell className="p-1 border-r border-slate-300">
                             <FormField control={form.control} name={`srlItems.${index}.unitRate`} render={({ field }) => (
                                 <Input type="number" className="h-8 text-right px-2 text-xs border-0 shadow-none bg-transparent" readOnly={!isCustom} {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                             )} />
                         </TableCell>
                         <TableCell className="text-right font-bold text-slate-800 text-xs pr-2 bg-slate-50 border-r border-slate-300">${netAmountGlobal.toLocaleString("es-AR")}</TableCell>
-                        
-                        {/* 🟢 BOTONES DE ACCIÓN: COPIAR Y ELIMINAR */}
                         <TableCell className="text-center p-1">
                             <div className="flex items-center justify-center gap-1">
                                 <Button 
