@@ -34,7 +34,7 @@ export const srlItemSchema = z.object({
 });
 
 export const sasItemSchema = z.object({
-  month: z.string(), // 🟢 NUEVO CAMPO MES
+  month: z.string(), 
   format: z.enum(sasFormats),
   type: z.string().optional(),
   detail: z.string().optional(),
@@ -71,7 +71,10 @@ export const advertisingOrderSchema = z.object({
   adjustmentSas: z.coerce.number().optional().default(0),
   billingRequests: z.array(z.object({
     date: z.string().min(1, "Obligatorio"),
-    amount: z.coerce.number().min(0)
+    grossAmount: z.coerce.number().min(0).default(0),
+    adjustment: z.coerce.number().min(0).default(0),
+    ivaSas: z.coerce.number().min(0).default(0),
+    amount: z.coerce.number().min(0).default(0)
   })).optional().default([]),
 });
 
