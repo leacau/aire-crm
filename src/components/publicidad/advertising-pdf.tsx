@@ -68,9 +68,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const sasAgencyAmount = sasTotalToInvoice * (sasCommissionPct / 100);
   const sasNetAction = sasTotalToInvoice - sasAgencyAmount;
 
-  const hasSRL = srlItems.length > 0;
-  const hasSAS = sasItems.length > 0;
-
   const styles = {
       container: { width: '297mm', padding: '15mm', backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif', color: '#000', boxSizing: 'border-box' as const, fontSize: '11px' },
       header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #ccc', paddingBottom: '10px' },
@@ -264,14 +261,14 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     );
   };
 
-  const renderSASMonth = (monthDate: Date, isFirstElement: boolean, isFirstSAS: boolean) => {
+  // 🟢 CORRECCIÓN APLICADA: SE REMOVIÓ RENDERCLIENTINFO QUE CAUSABA EL ERROR
+  const renderSASMonth = (monthDate: Date, isFirstSAS: boolean) => {
         const monthKey = format(monthDate, "yyyy-MM");
         const itemsInMonth = sasItems.filter(item => item.month === monthKey);
         if (itemsInMonth.length === 0) return null;
 
         return (
             <div key={`sas-${monthKey}`} className="pdf-block" style={{ marginBottom: '20px' }}>
-                {isFirstElement && renderClientInfo()}
                 {isFirstSAS && <div style={styles.sectionTitle}>PAUTA DIGITAL (SAS)</div>}
                 <div>
                     <div style={{ backgroundColor: '#e5e7eb', padding: '4px 8px', fontWeight: 'bold', fontSize: '11px', border: '1px solid #9ca3af', borderBottom: 'none' }}>
@@ -358,7 +355,8 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
         {hasSRL && months.map((m, idx) => renderSRLMonth(m, idx === 0))}
         {hasSRL && renderSRLTotals(!hasSAS)}
 
-        {hasSAS && months.map((m, idx) => renderSASMonth(m, !hasSRL && idx === 0, idx === 0))}
+        {/* 🟢 LLAMADO MES A MES PARA SAS CORREGIDO */}
+        {hasSAS && months.map((m, idx) => renderSASMonth(m, idx === 0))}
         {hasSAS && renderSASTotals(true)}
         
         {renderFooter()}
