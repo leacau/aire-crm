@@ -69,7 +69,16 @@ export const advertisingOrderSchema = z.object({
   sasItems: z.array(sasItemSchema).default([]),
   adjustmentSrl: z.coerce.number().optional().default(0),
   adjustmentSas: z.coerce.number().optional().default(0),
-  billingRequests: z.array(z.object({
+  
+  // 🟢 SEPARACIÓN DE FACTURAS SRL Y SAS
+  billingRequestsSrl: z.array(z.object({
+    date: z.string().min(1, "Obligatorio"),
+    grossAmount: z.coerce.number().min(0).default(0),
+    adjustment: z.coerce.number().min(0).default(0),
+    amount: z.coerce.number().min(0).default(0)
+  })).optional().default([]),
+  
+  billingRequestsSas: z.array(z.object({
     date: z.string().min(1, "Obligatorio"),
     grossAmount: z.coerce.number().min(0).default(0),
     adjustment: z.coerce.number().min(0).default(0),
