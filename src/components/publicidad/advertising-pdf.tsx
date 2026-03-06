@@ -85,10 +85,43 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       totalRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '11px' }
   };
 
-  const renderHeaderAndInfo = () => {
+  const renderClientInfo = () => {
     const isUrl = order.materialUrl && (order.materialUrl.startsWith('http') || order.materialUrl.startsWith('www.'));
     const linkHref = isUrl ? (order.materialUrl!.startsWith('http') ? order.materialUrl : `https://${order.materialUrl}`) : undefined;
 
+    return (
+        <div style={styles.clientInfoContainer}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={styles.dataRow}><span style={styles.label}>Cliente:</span><span>{order.clientName}</span></div>
+                <div style={styles.dataRow}><span style={styles.label}>Agencia:</span><span>{order.agencyName || "-"}</span></div>
+                <div style={styles.dataRow}><span style={styles.label}>Producto:</span><span>{order.opportunityTitle || order.product || "-"}</span></div>
+                <div style={styles.dataRow}><span style={styles.label}>Orden Tango:</span><span>{order.tangoOrderNo || "-"}</span></div>
+                <div style={styles.dataRow}>
+                    <span style={styles.label}>Vigencia:</span>
+                    <span style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{formatDate(order.startDate)} al {formatDate(order.endDate)}</span>
+                </div>
+                <div style={styles.dataRow}>
+                    <span style={styles.label}>Materiales:</span>
+                    <span>
+                    {isUrl ? (
+                        <a href={linkHref} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '2px 8px', backgroundColor: '#eff6ff', borderRadius: '4px', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 'bold', textDecoration: 'none' }}>👉 VER MATERIALES 👈</a>
+                    ) : (
+                        order.materialUrl || (order.materialSent ? "Sí (Adjunto)" : "Pendiente")
+                    )}
+                    </span>
+                </div>
+                {order.observations && (
+                <div style={{ ...styles.dataRow, gridColumn: 'span 2' }}>
+                    <span style={styles.label}>Obs:</span>
+                    <span style={{ fontStyle: 'italic' }}>{order.observations}</span>
+                </div>
+                )}
+            </div>
+        </div>
+    );
+  };
+
+  const renderHeaderAndInfo = () => {
     return (
         <div className="pdf-block" style={{ marginBottom: '20px' }}>
             <div style={styles.header}>
@@ -102,35 +135,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                     <p style={{ margin: 0 }}><strong>Ejecutivo:</strong> {order.accountExecutive}</p>
                 </div>
             </div>
-            
-            <div style={styles.clientInfoContainer}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    <div style={styles.dataRow}><span style={styles.label}>Cliente:</span><span>{order.clientName}</span></div>
-                    <div style={styles.dataRow}><span style={styles.label}>Agencia:</span><span>{order.agencyName || "-"}</span></div>
-                    <div style={styles.dataRow}><span style={styles.label}>Producto:</span><span>{order.opportunityTitle || order.product || "-"}</span></div>
-                    <div style={styles.dataRow}><span style={styles.label}>Orden Tango:</span><span>{order.tangoOrderNo || "-"}</span></div>
-                    <div style={styles.dataRow}>
-                        <span style={styles.label}>Vigencia:</span>
-                        <span style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{formatDate(order.startDate)} al {formatDate(order.endDate)}</span>
-                    </div>
-                    <div style={styles.dataRow}>
-                        <span style={styles.label}>Materiales:</span>
-                        <span>
-                        {isUrl ? (
-                            <a href={linkHref} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '2px 8px', backgroundColor: '#eff6ff', borderRadius: '4px', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 'bold', textDecoration: 'none' }}>👉 VER MATERIALES 👈</a>
-                        ) : (
-                            order.materialUrl || (order.materialSent ? "Sí (Adjunto)" : "Pendiente")
-                        )}
-                        </span>
-                    </div>
-                    {order.observations && (
-                    <div style={{ ...styles.dataRow, gridColumn: 'span 2' }}>
-                        <span style={styles.label}>Obs:</span>
-                        <span style={{ fontStyle: 'italic' }}>{order.observations}</span>
-                    </div>
-                    )}
-                </div>
-            </div>
+            {renderClientInfo()}
         </div>
     );
   };
