@@ -34,14 +34,29 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
         setFullOrder(order);
         if (isOpen && order.id) {
             getBillingRequestsByOrder(order.id).then(brs => {
-                const mapped = brs.map(b => ({
-                    date: b.date,
-                    grossAmount: b.grossAmount || 0,
-                    adjustment: b.adjustment || 0,
-                    ivaSas: b.ivaSas || 0,
-                    amount: b.amount || 0
+                const billingSrl: any[] = [];
+                const billingSas: any[] = [];
+
+                brs.forEach(b => {
+                    const mapped = { 
+                        date: b.date, 
+                        grossAmount: b.grossAmount || 0,
+                        adjustment: b.adjustment || 0,
+                        amount: b.amount || 0 
+                    };
+
+                    if (b.company === 'SRL') {
+                        billingSrl.push(mapped);
+                    } else if (b.company === 'SAS') {
+                        billingSas.push({ ...mapped, ivaSas: b.ivaSas || 0 });
+                    }
+                });
+
+                setFullOrder(prev => ({ 
+                    ...prev, 
+                    billingRequestsSrl: billingSrl,
+                    billingRequestsSas: billingSas
                 }));
-                setFullOrder(prev => ({ ...prev, billingRequests: mapped as any }));
             });
         }
   }, [isOpen, order]);
