@@ -1,5 +1,3 @@
-// src/components/publicidad/advertising-form.tsx
-
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -59,10 +57,12 @@ export function AdvertisingForm() {
 
   const [editModeId, setEditModeId] = useState<string | null>(null);
   
-  // 🟢 ESTADOS DE CACHÉ Y SUGERENCIAS
   const [isRestored, setIsRestored] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
-  const [invoiceCount, setInvoiceCount] = useState(1);
+  
+  // 🟢 ESTADOS PARA FACTURAS SUGERIDAS INDEPENDIENTES
+  const [invoiceCountSrl, setInvoiceCountSrl] = useState(1);
+  const [invoiceCountSas, setInvoiceCountSas] = useState(1);
 
   const pdfRef = useRef<HTMLDivElement>(null);
 
@@ -79,15 +79,22 @@ export function AdvertisingForm() {
       adjustmentSas: 0,
       srlItems: [],
       sasItems: [],
-      billingRequests: [], 
+      billingRequestsSrl: [], 
+      billingRequestsSas: [], 
       startDate: undefined,
       endDate: undefined,
     },
   });
 
-  const { fields: brFields, append: brAppend, remove: brRemove } = useFieldArray({
+  // 🟢 DOS ARRAYS INDEPENDIENTES
+  const { fields: brFieldsSrl, append: brAppendSrl, remove: brRemoveSrl } = useFieldArray({
       control: form.control,
-      name: "billingRequests"
+      name: "billingRequestsSrl"
+  });
+
+  const { fields: brFieldsSas, append: brAppendSas, remove: brRemoveSas } = useFieldArray({
+      control: form.control,
+      name: "billingRequestsSas"
   });
 
   const { watch, setValue, getValues } = form;
@@ -136,16 +143,26 @@ export function AdvertisingForm() {
                       getOpportunitiesByClientId(order.clientId).then(setOpportunities);
                   }
 
-                  let fetchedBillingRequests: any[] = [];
+                  let fetchedBillingRequestsSrl: any[] = [];
+                  let fetchedBillingRequestsSas: any[] = [];
+                  
                   if (editId) {
                       const brs = await getBillingRequestsByOrder(idToFetch);
-                      fetchedBillingRequests = brs.map(b => ({ 
-                          date: b.date, 
-                          grossAmount: b.grossAmount || 0,
-                          adjustment: b.adjustment || 0,
-                          ivaSas: b.ivaSas || 0,
-                          amount: b.amount || 0 
-                      }));
+                      
+                      brs.forEach(b => {
+                          const mapped = { 
+                              date: b.date, 
+                              grossAmount: b.grossAmount || 0,
+                              adjustment: b.adjustment || 0,
+                              amount: b.amount || 0 
+                          };
+
+                          if (b.company === 'SRL') {
+                              fetchedBillingRequestsSrl.push(mapped);
+                          } else if (b.company === 'SAS') {
+                              fetchedBillingRequestsSas.push({ ...mapped, ivaSas: b.ivaSas || 0 });
+                          }
+                      });
                   }
                   
                   form.reset({
@@ -168,7 +185,8 @@ export function AdvertisingForm() {
                       sasItems: order.sasItems || [],
                       adjustmentSrl: order.adjustmentSrl || 0,
                       adjustmentSas: order.adjustmentSas || 0,
-                      billingRequests: fetchedBillingRequests 
+                      billingRequestsSrl: fetchedBillingRequestsSrl,
+                      billingRequestsSas: fetchedBillingRequestsSas
                   });
               }
               setIsRestored(true);
@@ -179,7 +197,6 @@ export function AdvertisingForm() {
            getOpportunitiesByClientId(urlClientId).then(setOpportunities);
            setIsRestored(true);
       } else {
-          // 🟢 RECUPERAR BORRADOR SI EXISTE Y NO ESTAMOS EDITANDO NI CLONANDO
           const draft = localStorage.getItem('advertising_order_draft');
           if (draft) {
               try {
@@ -197,7 +214,6 @@ export function AdvertisingForm() {
       }
   }, [form, toast]);
 
-  // 🟢 GUARDAR BORRADOR EN TIEMPO REAL
   useEffect(() => {
       if (!isRestored || editModeId) return;
       localStorage.setItem('advertising_order_draft', JSON.stringify(values));
@@ -210,7 +226,7 @@ export function AdvertisingForm() {
           accountExecutive: userInfo?.name || "",
           materialSent: false, materialUrl: "", certReq: false, agencySale: false,
           commissionSrl: 0, adjustmentSrl: 0, adjustmentSas: 0,
-          srlItems: [], sasItems: [], billingRequests: [], 
+          srlItems: [], sasItems: [], billingRequestsSrl: [], billingRequestsSas: [], 
           startDate: undefined, endDate: undefined, clientId: "", agencyId: "none", opportunityId: "", newOpportunityTitle: "", product: "", tangoOrderNo: "", observations: ""
       });
       setDraftLoaded(false);
@@ -265,16 +281,20 @@ export function AdvertisingForm() {
 
   const showSections = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
 
-  // 🟢 CÁLCULOS GLOBALES DE LA ORDEN
+  // 🟢 CÁLCULOS SRL
   const srlItemsValid = values.srlItems?.filter(item => item.month) || [];
-  const sasItemsValid = values.sasItems?.filter(item => item.month) || [];
-
   const srlSubtotal = srlItemsValid.reduce((acc, item) => {
     const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (Number(val) || 0), 0);
     const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
     return acc + ((item.unitRate || 0) * totalAds * multiplier);
   }, 0) || 0;
 
+  const srlAdjustment = values.adjustmentSrl || 0;
+  const totalOrderSrlNet = srlSubtotal - srlAdjustment;
+  const hasSrl = srlItemsValid.length > 0;
+
+  // 🟢 CÁLCULOS SAS
+  const sasItemsValid = values.sasItems?.filter(item => item.month) || [];
   const sasSubtotal = sasItemsValid.reduce((acc, item) => {
     let net = 0;
     if (item.format === "Banner") net = (item.cpm || 0) * (item.unitRate || 0);
@@ -282,29 +302,46 @@ export function AdvertisingForm() {
     return acc + net;
   }, 0) || 0;
 
-  const srlAdjustment = values.adjustmentSrl || 0;
   const sasAdjustment = values.adjustmentSas || 0;
   const sasIva = (sasSubtotal - sasAdjustment) * 0.05;
-
-  const totalOrderGross = srlSubtotal + sasSubtotal;
-  const totalOrderAdj = srlAdjustment + sasAdjustment;
-  const totalOrderIva = sasIva;
-  const totalOrderNet = totalOrderGross - totalOrderAdj + totalOrderIva;
-
+  const totalOrderSasNet = sasSubtotal - sasAdjustment + sasIva;
   const hasSas = sasItemsValid.length > 0;
 
-  // 🟢 AUTOCÁLCULO DE FACTURAS SUGERIDAS
-  const handleGenerateBilling = () => {
-      if (invoiceCount < 1) return;
-      const invGross = totalOrderGross / invoiceCount;
-      const invAdj = totalOrderAdj / invoiceCount;
-      const invIva = totalOrderIva / invoiceCount;
+
+  // 🟢 GENERADOR DE FACTURAS SRL
+  const handleGenerateBillingSrl = () => {
+      if (invoiceCountSrl < 1) return;
+      const invGross = srlSubtotal / invoiceCountSrl;
+      const invAdj = srlAdjustment / invoiceCountSrl;
+      const invNet = invGross - invAdj;
+
+      const newBrs = [];
+      let curDate = startDate && isValid(startDate) ? new Date(startDate) : new Date();
+      
+      for (let i = 0; i < invoiceCountSrl; i++) {
+          newBrs.push({
+              date: format(curDate, 'yyyy-MM-dd'),
+              grossAmount: Number(invGross.toFixed(2)),
+              adjustment: Number(invAdj.toFixed(2)),
+              amount: Number(invNet.toFixed(2))
+          });
+          curDate = addMonths(curDate, 1);
+      }
+      setValue("billingRequestsSrl", newBrs, { shouldValidate: true });
+  };
+
+  // 🟢 GENERADOR DE FACTURAS SAS
+  const handleGenerateBillingSas = () => {
+      if (invoiceCountSas < 1) return;
+      const invGross = sasSubtotal / invoiceCountSas;
+      const invAdj = sasAdjustment / invoiceCountSas;
+      const invIva = sasIva / invoiceCountSas;
       const invNet = invGross - invAdj + invIva;
 
       const newBrs = [];
       let curDate = startDate && isValid(startDate) ? new Date(startDate) : new Date();
       
-      for (let i = 0; i < invoiceCount; i++) {
+      for (let i = 0; i < invoiceCountSas; i++) {
           newBrs.push({
               date: format(curDate, 'yyyy-MM-dd'),
               grossAmount: Number(invGross.toFixed(2)),
@@ -314,29 +351,48 @@ export function AdvertisingForm() {
           });
           curDate = addMonths(curDate, 1);
       }
-      setValue("billingRequests", newBrs, { shouldValidate: true });
+      setValue("billingRequestsSas", newBrs, { shouldValidate: true });
   };
 
-  // 🟢 ACTUALIZA NETO AL MODIFICAR BRUTO/AJUSTE MANUALMENTE EN LA TABLA
-  const updateRowNet = (index: number) => {
+  // 🟢 ACTUALIZA NETO AL MODIFICAR SRL MANUALMENTE
+  const updateRowNetSrl = (index: number) => {
       setTimeout(() => {
-          const row = form.getValues(`billingRequests.${index}`);
+          const row = form.getValues(`billingRequestsSrl.${index}`);
           const gross = parseFloat(row.grossAmount as any) || 0;
           const adj = parseFloat(row.adjustment as any) || 0;
-          const iva = parseFloat(row.ivaSas as any) || 0;
-          setValue(`billingRequests.${index}.amount`, gross - adj + iva, { shouldValidate: true });
+          setValue(`billingRequestsSrl.${index}.amount`, gross - adj, { shouldValidate: true });
       }, 50);
   };
 
-  // 🟢 SUMATORIAS Y VALIDACIÓN
-  const sumGross = values.billingRequests?.reduce((sum, item) => sum + (Number(item.grossAmount)||0), 0) || 0;
-  const sumAdj = values.billingRequests?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
-  const sumIva = values.billingRequests?.reduce((sum, item) => sum + (Number(item.ivaSas)||0), 0) || 0;
-  const sumNet = values.billingRequests?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
+  // 🟢 ACTUALIZA NETO E IVA AL MODIFICAR SAS MANUALMENTE
+  const updateRowNetSas = (index: number) => {
+      setTimeout(() => {
+          const row = form.getValues(`billingRequestsSas.${index}`);
+          const gross = parseFloat(row.grossAmount as any) || 0;
+          const adj = parseFloat(row.adjustment as any) || 0;
+          const iva = (gross - adj) * 0.05; // Recalcula el 5% automáticamente
+          
+          setValue(`billingRequestsSas.${index}.ivaSas`, iva, { shouldValidate: true });
+          setValue(`billingRequestsSas.${index}.amount`, gross - adj + iva, { shouldValidate: true });
+      }, 50);
+  };
 
-  const hasGrossError = Math.abs(sumGross - totalOrderGross) > 1; // Tolerancia 1 peso por redondeo decimal
-  const hasNetError = Math.abs(sumNet - totalOrderNet) > 1;
+  // 🟢 SUMATORIAS SRL
+  const sumGrossSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.grossAmount)||0), 0) || 0;
+  const sumAdjSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
+  const sumNetSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
 
+  const hasGrossErrorSrl = Math.abs(sumGrossSrl - srlSubtotal) > 1; 
+  const hasNetErrorSrl = Math.abs(sumNetSrl - totalOrderSrlNet) > 1;
+
+  // 🟢 SUMATORIAS SAS
+  const sumGrossSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.grossAmount)||0), 0) || 0;
+  const sumAdjSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
+  const sumIvaSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.ivaSas)||0), 0) || 0;
+  const sumNetSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
+
+  const hasGrossErrorSas = Math.abs(sumGrossSas - sasSubtotal) > 1; 
+  const hasNetErrorSas = Math.abs(sumNetSas - totalOrderSasNet) > 1;
 
   const getPreviewOrder = (): AdvertisingOrder => {
       const selectedClient = clients.find(c => c.id === values.clientId);
@@ -372,10 +428,11 @@ export function AdvertisingForm() {
           sasItems: sasItemsValid,
           adjustmentSrl: values.adjustmentSrl || 0,
           adjustmentSas: values.adjustmentSas || 0,
-          totalSrl: srlSubtotal - (values.adjustmentSrl || 0),
-          totalSas: (sasSubtotal - (values.adjustmentSas || 0)) + sasIva,
-          totalOrder: totalOrderNet,
-          billingRequests: values.billingRequests
+          totalSrl: totalOrderSrlNet,
+          totalSas: totalOrderSasNet,
+          totalOrder: totalOrderSrlNet + totalOrderSasNet,
+          billingRequestsSrl: values.billingRequestsSrl,
+          billingRequestsSas: values.billingRequestsSas
       };
   };
 
@@ -546,7 +603,8 @@ export function AdvertisingForm() {
         endDate: data.endDate.toISOString(),
         srlItems: validSrlItems,
         sasItems: validSasItems,
-        billingRequests: data.billingRequests, 
+        billingRequestsSrl: data.billingRequestsSrl, 
+        billingRequestsSas: data.billingRequestsSas,
         id: undefined 
       };
 
@@ -600,7 +658,7 @@ export function AdvertisingForm() {
           }
       }
 
-      localStorage.removeItem('advertising_order_draft'); // LIMPIAR AL GUARDAR
+      localStorage.removeItem('advertising_order_draft'); 
       toast({ title: "Guardado", description: "Orden guardada exitosamente." });
       router.push(`/publicidad`);
     } catch (error) {
@@ -718,78 +776,144 @@ export function AdvertisingForm() {
           </div>
         </div>
 
-        {/* 🟢 NUEVA SECCIÓN DE FACTURACIÓN CON AUTOCÁLCULO */}
+        {/* 🟢 SECCIÓN DE FACTURACIÓN SRL */}
+        {hasSrl && (
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
             <div className="bg-slate-100 px-4 py-2 border-b flex justify-between items-center flex-wrap gap-2">
-                <h3 className="text-lg font-semibold text-slate-800">Fechas de Facturación (Administración)</h3>
+                <h3 className="text-lg font-semibold text-slate-800">Sugerencia de Facturación AIRE SRL</h3>
                 <div className="flex gap-2 items-center bg-white p-1 rounded border shadow-sm">
                     <Label className="text-xs px-2 whitespace-nowrap">Sugerir facturas:</Label>
-                    <Input type="number" min={1} value={invoiceCount} onChange={e => setInvoiceCount(parseInt(e.target.value) || 1)} className="w-16 h-8 text-center" />
-                    <Button type="button" size="sm" variant="secondary" className="h-8" onClick={handleGenerateBilling}>Generar</Button>
+                    <Input type="number" min={1} value={invoiceCountSrl} onChange={e => setInvoiceCountSrl(parseInt(e.target.value) || 1)} className="w-16 h-8 text-center" />
+                    <Button type="button" size="sm" variant="secondary" className="h-8" onClick={handleGenerateBillingSrl}>Generar</Button>
                 </div>
             </div>
             <div className="p-4 space-y-4">
-                {brFields.map((field, index) => (
+                {brFieldsSrl.map((field, index) => (
                     <div key={field.id} className="flex gap-2 items-end bg-slate-50 p-3 rounded-md border border-slate-200 flex-wrap">
-                        <FormField control={form.control} name={`billingRequests.${index}.date`} render={({field}) => (
+                        <FormField control={form.control} name={`billingRequestsSrl.${index}.date`} render={({field}) => (
                             <FormItem className="flex-[2] min-w-[120px]">
                                 <FormLabel className="text-xs">Fecha a Facturar</FormLabel>
                                 <FormControl><Input type="date" {...field} /></FormControl>
                             </FormItem>
                         )} />
-                        <FormField control={form.control} name={`billingRequests.${index}.grossAmount`} render={({field}) => (
+                        <FormField control={form.control} name={`billingRequestsSrl.${index}.grossAmount`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Bruto</FormLabel>
-                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNet(index); }} /></FormControl>
+                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSrl(index); }} /></FormControl>
                             </FormItem>
                         )} />
-                        <FormField control={form.control} name={`billingRequests.${index}.adjustment`} render={({field}) => (
+                        <FormField control={form.control} name={`billingRequestsSrl.${index}.adjustment`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Desajuste</FormLabel>
-                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNet(index); }} /></FormControl>
+                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSrl(index); }} /></FormControl>
                             </FormItem>
                         )} />
-                        {hasSas && (
-                            <FormField control={form.control} name={`billingRequests.${index}.ivaSas`} render={({field}) => (
-                                <FormItem className="flex-1 min-w-[90px]">
-                                    <FormLabel className="text-xs">IVA (5%)</FormLabel>
-                                    <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNet(index); }} /></FormControl>
-                                </FormItem>
-                            )} />
-                        )}
-                        <FormField control={form.control} name={`billingRequests.${index}.amount`} render={({field}) => (
+                        <FormField control={form.control} name={`billingRequestsSrl.${index}.amount`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Neto Final</FormLabel>
                                 <FormControl><Input type="number" className="font-bold bg-white" {...field} readOnly /></FormControl>
                             </FormItem>
                         )} />
-                        <Button type="button" variant="ghost" className="text-red-500 mb-0.5 hover:bg-red-100 px-2" onClick={() => brRemove(index)}>
+                        <Button type="button" variant="ghost" className="text-red-500 mb-0.5 hover:bg-red-100 px-2" onClick={() => brRemoveSrl(index)}>
                             <Trash2 className="h-5 w-5"/>
                         </Button>
                     </div>
                 ))}
 
-                {brFields.length > 0 && (
+                {brFieldsSrl.length > 0 && (
                     <div className="flex flex-wrap gap-2 px-3 py-2 bg-slate-200 rounded-md font-bold text-sm items-center border border-slate-300">
                         <div className="flex-[2] min-w-[120px] text-right pr-4 text-slate-700">Comprobación de sumas:</div>
-                        <div className={cn("flex-1 min-w-[90px]", hasGrossError ? "text-red-600" : "text-green-700")}>${sumGross.toLocaleString('es-AR')}</div>
-                        <div className="flex-1 min-w-[90px] text-slate-600">${sumAdj.toLocaleString('es-AR')}</div>
-                        {hasSas && <div className="flex-1 min-w-[90px] text-slate-600">${sumIva.toLocaleString('es-AR')}</div>}
-                        <div className={cn("flex-1 min-w-[90px]", hasNetError ? "text-red-600" : "text-green-700")}>${sumNet.toLocaleString('es-AR')}</div>
+                        <div className={cn("flex-1 min-w-[90px]", hasGrossErrorSrl ? "text-red-600" : "text-green-700")}>${sumGrossSrl.toLocaleString('es-AR')}</div>
+                        <div className="flex-1 min-w-[90px] text-slate-600">${sumAdjSrl.toLocaleString('es-AR')}</div>
+                        <div className={cn("flex-1 min-w-[90px]", hasNetErrorSrl ? "text-red-600" : "text-green-700")}>${sumNetSrl.toLocaleString('es-AR')}</div>
                         <div className="w-[36px]"></div>
-                        {(hasGrossError || hasNetError) && (
+                        {(hasGrossErrorSrl || hasNetErrorSrl) && (
                             <div className="w-full text-xs text-red-600 text-right mt-1 font-normal italic">
-                                La suma de las cuotas no coincide con el total de la orden. (Bruto Ord: ${totalOrderGross.toLocaleString('es-AR')} | Neto Ord: ${totalOrderNet.toLocaleString('es-AR')})
+                                La suma de las cuotas no coincide con el total de la orden SRL. (Bruto: ${srlSubtotal.toLocaleString('es-AR')} | Neto: ${totalOrderSrlNet.toLocaleString('es-AR')})
                             </div>
                         )}
                     </div>
                 )}
                 
-                <Button type="button" variant="outline" size="sm" onClick={() => brAppend({ date: '', grossAmount: 0, adjustment: 0, ivaSas: 0, amount: 0 })}>
+                <Button type="button" variant="outline" size="sm" onClick={() => brAppendSrl({ date: '', grossAmount: 0, adjustment: 0, amount: 0 })}>
                     <Plus className="h-4 w-4 mr-2" /> Agregar cuota manual
                 </Button>
             </div>
         </div>
+        )}
+
+        {/* 🟢 SECCIÓN DE FACTURACIÓN SAS */}
+        {hasSas && (
+        <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
+            <div className="bg-slate-100 px-4 py-2 border-b flex justify-between items-center flex-wrap gap-2">
+                <h3 className="text-lg font-semibold text-slate-800">Sugerencia de Facturación AIRE SAS</h3>
+                <div className="flex gap-2 items-center bg-white p-1 rounded border shadow-sm">
+                    <Label className="text-xs px-2 whitespace-nowrap">Sugerir facturas:</Label>
+                    <Input type="number" min={1} value={invoiceCountSas} onChange={e => setInvoiceCountSas(parseInt(e.target.value) || 1)} className="w-16 h-8 text-center" />
+                    <Button type="button" size="sm" variant="secondary" className="h-8" onClick={handleGenerateBillingSas}>Generar</Button>
+                </div>
+            </div>
+            <div className="p-4 space-y-4">
+                {brFieldsSas.map((field, index) => (
+                    <div key={field.id} className="flex gap-2 items-end bg-slate-50 p-3 rounded-md border border-slate-200 flex-wrap">
+                        <FormField control={form.control} name={`billingRequestsSas.${index}.date`} render={({field}) => (
+                            <FormItem className="flex-[2] min-w-[120px]">
+                                <FormLabel className="text-xs">Fecha a Facturar</FormLabel>
+                                <FormControl><Input type="date" {...field} /></FormControl>
+                            </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`billingRequestsSas.${index}.grossAmount`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[90px]">
+                                <FormLabel className="text-xs">Bruto</FormLabel>
+                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSas(index); }} /></FormControl>
+                            </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`billingRequestsSas.${index}.adjustment`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[90px]">
+                                <FormLabel className="text-xs">Desajuste</FormLabel>
+                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSas(index); }} /></FormControl>
+                            </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`billingRequestsSas.${index}.ivaSas`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[90px]">
+                                <FormLabel className="text-xs">IVA (5%)</FormLabel>
+                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSas(index); }} /></FormControl>
+                            </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`billingRequestsSas.${index}.amount`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[90px]">
+                                <FormLabel className="text-xs">Neto Final</FormLabel>
+                                <FormControl><Input type="number" className="font-bold bg-white" {...field} readOnly /></FormControl>
+                            </FormItem>
+                        )} />
+                        <Button type="button" variant="ghost" className="text-red-500 mb-0.5 hover:bg-red-100 px-2" onClick={() => brRemoveSas(index)}>
+                            <Trash2 className="h-5 w-5"/>
+                        </Button>
+                    </div>
+                ))}
+
+                {brFieldsSas.length > 0 && (
+                    <div className="flex flex-wrap gap-2 px-3 py-2 bg-slate-200 rounded-md font-bold text-sm items-center border border-slate-300">
+                        <div className="flex-[2] min-w-[120px] text-right pr-4 text-slate-700">Comprobación de sumas:</div>
+                        <div className={cn("flex-1 min-w-[90px]", hasGrossErrorSas ? "text-red-600" : "text-green-700")}>${sumGrossSas.toLocaleString('es-AR')}</div>
+                        <div className="flex-1 min-w-[90px] text-slate-600">${sumAdjSas.toLocaleString('es-AR')}</div>
+                        <div className="flex-1 min-w-[90px] text-slate-600">${sumIvaSas.toLocaleString('es-AR')}</div>
+                        <div className={cn("flex-1 min-w-[90px]", hasNetErrorSas ? "text-red-600" : "text-green-700")}>${sumNetSas.toLocaleString('es-AR')}</div>
+                        <div className="w-[36px]"></div>
+                        {(hasGrossErrorSas || hasNetErrorSas) && (
+                            <div className="w-full text-xs text-red-600 text-right mt-1 font-normal italic">
+                                La suma de las cuotas no coincide con el total de la orden SAS. (Bruto: ${sasSubtotal.toLocaleString('es-AR')} | Neto: ${totalOrderSasNet.toLocaleString('es-AR')})
+                            </div>
+                        )}
+                    </div>
+                )}
+                
+                <Button type="button" variant="outline" size="sm" onClick={() => brAppendSas({ date: '', grossAmount: 0, adjustment: 0, ivaSas: 0, amount: 0 })}>
+                    <Plus className="h-4 w-4 mr-2" /> Agregar cuota manual
+                </Button>
+            </div>
+        </div>
+        )}
 
         <div className="flex justify-between items-center pt-6 border-t mt-8 gap-4">
           <div className="flex items-center gap-4">
