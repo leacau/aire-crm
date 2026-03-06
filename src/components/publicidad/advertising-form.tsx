@@ -483,7 +483,7 @@ export function AdvertisingForm() {
 
                   await sendEmail({
                       accessToken,
-                      to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
+                      to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email], 
                       subject: `${editModeId ? 'Modificación' : 'Nueva'} OP: ${oppTitle} - ${selectedClient?.denominacion}`,
                       body: emailBody,
                       attachments: [{
