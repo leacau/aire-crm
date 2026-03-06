@@ -116,7 +116,6 @@ export const saveCommercialNote = async (
     return noteRef.id;
 };
 
-// ESTA ES LA FUNCIÓN QUE CORRIGE EL ERROR "is not a function"
 export async function getCommercialNotesByClientId(clientId: string): Promise<CommercialNote[]> {
   try {
     const q = query(
@@ -228,7 +227,6 @@ export const deleteCommercialNote = async (noteId: string, userId: string, userN
     });
 };
 
-// 🟢 NUEVO: Función para actualizar Notas Comerciales
 export const updateCommercialNote = async (
     noteId: string,
     noteData: Partial<Omit<CommercialNote, 'id' | 'createdAt'>>,
@@ -241,7 +239,7 @@ export const updateCommercialNote = async (
 
     await updateDoc(docRef, {
         ...noteData,
-        updatedAt: serverTimestamp() // Audit de actualización
+        updatedAt: serverTimestamp() 
     });
 
     await logActivity({
@@ -592,9 +590,6 @@ export const getVacationRequests = async (): Promise<VacationRequest[]> => {
     return requests;
 };
 
-
-// --- Vacation Request Functions (MODIFICADAS) ---
-
 export const createVacationRequest = async (
     requestData: Omit<VacationRequest, 'id' | 'status'>,
     managerEmail: string | null
@@ -604,8 +599,6 @@ export const createVacationRequest = async (
     const holidays = await getSystemHolidays();
     const calculatedDays = calculateBusinessDays(requestData.startDate, requestData.returnDate, holidays);
 
-    // Si el cálculo da 0 o negativo, o no coincide (opcional validación), usamos el calculado
-    // Forzamos el uso del cálculo real
     const finalDaysRequested = calculatedDays;
 
     if (finalDaysRequested <= 0) {
@@ -3702,26 +3695,55 @@ export const rejectProspectClaim = async (prospect: Prospect, managerId: string,
 
 export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, 'id' | 'createdAt'>) => {
   try {
-    const { billingRequests, ...restOrderData } = orderData;
+    const { billingRequestsSrl, billingRequestsSas, ...restOrderData } = orderData;
     const docRef = await addDoc(collection(db, 'advertising_orders'), {
       ...restOrderData,
       createdAt: new Date().toISOString(),
     });
     
-    // 🟢 Guardar Fechas de Facturación
-    if (billingRequests && billingRequests.length > 0) {
-        const batch = writeBatch(db);
-        billingRequests.forEach(br => {
+    const batch = writeBatch(db);
+    let hasBilling = false;
+
+    // 🟢 Guardar Fechas de Facturación SRL
+    if (billingRequestsSrl && billingRequestsSrl.length > 0) {
+        hasBilling = true;
+        billingRequestsSrl.forEach(br => {
             const brRef = doc(collections.billingRequests);
             batch.set(brRef, {
                 orderId: docRef.id,
                 opportunityId: restOrderData.opportunityId || '',
                 clientId: restOrderData.clientId,
+                company: 'SRL',
                 date: br.date,
+                grossAmount: br.grossAmount,
+                adjustment: br.adjustment,
                 amount: br.amount,
                 createdAt: serverTimestamp()
             });
         });
+    }
+
+    // 🟢 Guardar Fechas de Facturación SAS
+    if (billingRequestsSas && billingRequestsSas.length > 0) {
+        hasBilling = true;
+        billingRequestsSas.forEach(br => {
+            const brRef = doc(collections.billingRequests);
+            batch.set(brRef, {
+                orderId: docRef.id,
+                opportunityId: restOrderData.opportunityId || '',
+                clientId: restOrderData.clientId,
+                company: 'SAS',
+                date: br.date,
+                grossAmount: br.grossAmount,
+                adjustment: br.adjustment,
+                ivaSas: br.ivaSas,
+                amount: br.amount,
+                createdAt: serverTimestamp()
+            });
+        });
+    }
+
+    if (hasBilling) {
         await batch.commit();
     }
 
@@ -3810,7 +3832,7 @@ export const updateAdvertisingOrder = async (
     userId: string,
     userName: string
 ): Promise<void> => {
-    const { billingRequests, ...restOrderData } = orderData;
+    const { billingRequestsSrl, billingRequestsSas, ...restOrderData } = orderData;
     const docRef = doc(db, 'advertising_orders', orderId);
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) throw new Error("Orden no encontrada");
@@ -3827,19 +3849,41 @@ export const updateAdvertisingOrder = async (
     const batch = writeBatch(db);
     existingBrSnap.forEach(doc => batch.delete(doc.ref));
 
-    if (billingRequests && billingRequests.length > 0) {
-        billingRequests.forEach(br => {
+    if (billingRequestsSrl && billingRequestsSrl.length > 0) {
+        billingRequestsSrl.forEach(br => {
             const brRef = doc(collections.billingRequests);
             batch.set(brRef, {
                 orderId: orderId,
                 opportunityId: restOrderData.opportunityId || '',
                 clientId: restOrderData.clientId,
+                company: 'SRL',
                 date: br.date,
+                grossAmount: br.grossAmount,
+                adjustment: br.adjustment,
                 amount: br.amount,
                 createdAt: serverTimestamp()
             });
         });
     }
+
+    if (billingRequestsSas && billingRequestsSas.length > 0) {
+        billingRequestsSas.forEach(br => {
+            const brRef = doc(collections.billingRequests);
+            batch.set(brRef, {
+                orderId: orderId,
+                opportunityId: restOrderData.opportunityId || '',
+                clientId: restOrderData.clientId,
+                company: 'SAS',
+                date: br.date,
+                grossAmount: br.grossAmount,
+                adjustment: br.adjustment,
+                ivaSas: br.ivaSas,
+                amount: br.amount,
+                createdAt: serverTimestamp()
+            });
+        });
+    }
+
     await batch.commit();
 
     await logActivity({
@@ -3858,7 +3902,7 @@ export const getBillingRequestsByOrder = async (orderId: string) => {
     try {
         const q = query(collections.billingRequests, where('orderId', '==', orderId));
         const snap = await getDocs(q);
-        return snap.docs.map(doc => doc.data());
+        return snap.docs.map(doc => doc.data() as BillingRequest);
     } catch (e) {
         console.error(e);
         return [];
