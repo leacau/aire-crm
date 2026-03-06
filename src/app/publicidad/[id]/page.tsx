@@ -37,7 +37,6 @@ export default function AdvertisingOrderDetailPage() {
     useEffect(() => {
         const load = async () => {
             if (typeof id === 'string') {
-                // 🟢 SE AGREGA LA CONSULTA DE BILLING REQUESTS
                 const [o, p, brs] = await Promise.all([
                     getAdvertisingOrder(id),
                     getPrograms(),
@@ -45,7 +44,13 @@ export default function AdvertisingOrderDetailPage() {
                 ]);
                 
                 if (o) {
-                    o.billingRequests = brs.map(b => ({ date: b.date, amount: b.amount }));
+                    o.billingRequests = brs.map(b => ({ 
+                        date: b.date, 
+                        grossAmount: b.grossAmount || 0,
+                        adjustment: b.adjustment || 0,
+                        ivaSas: b.ivaSas || 0,
+                        amount: b.amount || 0 
+                    }));
                     setOrder(o);
                 }
                 setPrograms(p);
