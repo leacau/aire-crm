@@ -589,7 +589,6 @@ export type CommercialNote = {
   createdAt: string;
 };
 
-// 🟢 PUBLICIDADES: AGREGADO DE URL Y NUEVO FORMATO
 export type AdvertisingOrderItemSrl = {
   month: string; 
   programId: string;
@@ -622,6 +621,7 @@ export type BillingRequest = {
   orderId: string;
   opportunityId: string;
   clientId: string;
+  company: 'SRL' | 'SAS'; // 🟢 NUEVO: Empresa facturadora
   date: string;
   grossAmount: number;
   adjustment: number;
@@ -658,5 +658,8 @@ export type AdvertisingOrder = {
   totalSrl?: number;
   totalSas?: number;
   totalOrder?: number;
-  billingRequests?: { date: string; grossAmount: number; adjustment: number; ivaSas: number; amount: number }[]; 
+  
+  // 🟢 SEPARACIÓN EN DOS ARRAYS PARA MAYOR LIMPIEZA
+  billingRequestsSrl?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
+  billingRequestsSas?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
 };
