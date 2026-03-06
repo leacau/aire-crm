@@ -68,6 +68,9 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const sasAgencyAmount = sasTotalToInvoice * (sasCommissionPct / 100);
   const sasNetAction = sasTotalToInvoice - sasAgencyAmount;
 
+  const hasSRL = srlItems.length > 0;
+  const hasSAS = sasItems.length > 0;
+
   const styles = {
       container: { width: '297mm', padding: '15mm', backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif', color: '#000', boxSizing: 'border-box' as const, fontSize: '11px' },
       header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #ccc', paddingBottom: '10px' },
@@ -139,21 +142,33 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
 
       return (
           <div style={{ flex: 1, marginRight: '20px' }}>
-              <div style={{ width: '260px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#fef3c7' }}>
+              <div style={{ width: hasSAS ? '340px' : '260px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#fef3c7' }}>
                   <div style={{ fontWeight: 'bold', marginBottom: '6px', borderBottom: '1px solid #d1d5db', paddingBottom: '4px', color: '#9a3412', fontSize: '10px' }}>
-                      FECHAS DE FACTURACIÓN (INTERNO)
+                      FECHAS DE FACTURACIÓN (SUGERENCIA INTERNA)
                   </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
-                      <tbody>
-                          {order.billingRequests.map((br, i) => (
-                              <tr key={i}>
-                                  <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db' }}>{formatDate(br.date)}</td>
-                                  <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', fontWeight: 'bold' }}>
-                                      ${Number(br.amount).toLocaleString('es-AR')}
-                                  </td>
-                              </tr>
-                          ))}
-                      </tbody>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
+                        <thead>
+                            <tr>
+                                <th style={{ textAlign: 'left', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Fecha</th>
+                                <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Bruto</th>
+                                <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Desaj.</th>
+                                {hasSAS && <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>IVA(5%)</th>}
+                                <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Neto</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {order.billingRequests.map((br, i) => (
+                                <tr key={i}>
+                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db' }}>{formatDate(br.date)}</td>
+                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right' }}>${Number(br.grossAmount || 0).toLocaleString('es-AR')}</td>
+                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right' }}>${Number(br.adjustment || 0).toLocaleString('es-AR')}</td>
+                                    {hasSAS && <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right' }}>${Number(br.ivaSas || 0).toLocaleString('es-AR')}</td>}
+                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', fontWeight: 'bold' }}>
+                                        ${Number(br.amount || 0).toLocaleString('es-AR')}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
                   </table>
               </div>
           </div>
@@ -186,11 +201,8 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                                 <th style={{ ...styles.th, width: '30px' }}>TV</th>
                                 <th style={{ ...styles.th, width: '35px' }}>Seg</th>
                                 {days.map(d => (<th key={d.toISOString()} style={{ ...styles.th, width: '22px', fontSize: '9px' }}>{format(d, "d")}</th>))}
-                                
-                                {/* 🟢 NUEVAS COLUMNAS */}
                                 <th style={{ ...styles.th, width: '40px' }}>Cant.<br/>Repet.</th>
                                 <th style={{ ...styles.th, width: '40px' }}>Tot.<br/>Seg.</th>
-
                                 {!hidePrices && <th style={{ ...styles.th, width: '60px' }}>T. Unit</th>}
                                 {!hidePrices && <th style={{ ...styles.th, width: '90px' }}>Neto</th>}
                             </tr>
@@ -216,11 +228,8 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                                             const val = dailySpots[format(d, "yyyy-MM-dd")];
                                             return (<td key={d.toISOString()} style={{ ...styles.td, backgroundColor: val ? '#dbeafe' : 'transparent', fontWeight: val ? 'bold' : 'normal' }}>{val || ''}</td>);
                                         })}
-                                        
-                                        {/* 🟢 NUEVOS VALORES */}
                                         <td style={{ ...styles.td, fontWeight: 'bold' }}>{totalAds}</td>
                                         <td style={{ ...styles.td, fontWeight: 'bold' }}>{totalSecs}</td>
-
                                         {!hidePrices && <td style={styles.td}>${(item.unitRate || 0).toLocaleString('es-AR')}</td>}
                                         {!hidePrices && <td style={{ ...styles.td, textAlign: 'right', fontWeight: 'bold' }}>${net.toLocaleString('es-AR')}</td>}
                                     </tr>
@@ -255,7 +264,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     );
   };
 
-  // 🟢 MAPEO MES A MES PARA SAS
   const renderSASMonth = (monthDate: Date, isFirstElement: boolean, isFirstSAS: boolean) => {
         const monthKey = format(monthDate, "yyyy-MM");
         const itemsInMonth = sasItems.filter(item => item.month === monthKey);
@@ -342,9 +350,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     </div>
   );
 
-  const hasSRL = srlItems.length > 0;
-  const hasSAS = sasItems.length > 0;
-
   return (
     <div ref={ref} style={{ display: 'flex', justifyContent: 'center' }}>
       <div style={styles.container}>
@@ -353,7 +358,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
         {hasSRL && months.map((m, idx) => renderSRLMonth(m, idx === 0))}
         {hasSRL && renderSRLTotals(!hasSAS)}
 
-        {/* 🟢 LLAMADO MES A MES PARA SAS */}
         {hasSAS && months.map((m, idx) => renderSASMonth(m, !hasSRL && idx === 0, idx === 0))}
         {hasSAS && renderSASTotals(true)}
         
