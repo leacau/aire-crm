@@ -94,9 +94,8 @@ export default function NewCommercialNotePage() {
 
     const [notifyOnSave, setNotifyOnSave] = useState(true);
     const [isRestored, setIsRestored] = useState(false);
-    const [draftLoaded, setDraftLoaded] = useState(false); // 🟢 Para mostrar el botón de limpiar borrador
+    const [draftLoaded, setDraftLoaded] = useState(false); 
 
-    // Estado para saber si estamos editando
     const [editModeId, setEditModeId] = useState<string | null>(null);
 
     const primaryGrafError = primaryGrafs.some(g => g.length > 84);
@@ -166,7 +165,7 @@ export default function NewCommercialNotePage() {
         if (idToFetch) {
             if (editId) {
                 setEditModeId(editId);
-                setNotifyOnSave(true); // Siempre forzar notificación al editar
+                setNotifyOnSave(true); 
             }
 
             getCommercialNote(idToFetch).then(note => {
@@ -353,7 +352,6 @@ export default function NewCommercialNotePage() {
         });
     };
 
-    // 🟢 NUEVO: Función para eliminar una fecha individual
     const handleRemoveDate = (programId: string, dateIndex: number) => {
         setProgramSchedule(prev => {
             const items = [...(prev[programId] || [])];
@@ -362,7 +360,6 @@ export default function NewCommercialNotePage() {
         });
     };
 
-    // 🟢 NUEVO: Función para limpiar el borrador
     const handleClearDraft = () => {
         if (!window.confirm("¿Estás seguro de que quieres limpiar todos los datos y empezar una nueva nota?")) return;
         localStorage.removeItem('commercial_note_draft');
@@ -437,7 +434,6 @@ export default function NewCommercialNotePage() {
     }, 0);
     const saleValueNum = parseFloat(saleValue) || 0;
     const mismatch = saleValueNum > 0 ? (totalValue - saleValueNum) : 0;
-
 
     const handleSave = async () => {
         if (!selectedClientId || !userInfo) { toast({ title: 'Datos incompletos', description: 'Seleccione un cliente.', variant: 'destructive' }); return; }
@@ -602,7 +598,6 @@ export default function NewCommercialNotePage() {
                         <ArrowLeft className="mr-2 h-4 w-4" /> Volver
                     </Button>
                     
-                    {/* 🟢 BOTÓN LIMPIAR BORRADOR */}
                     {draftLoaded && !editModeId && (
                         <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleClearDraft}>
                             Limpiar Borrador
@@ -676,7 +671,6 @@ export default function NewCommercialNotePage() {
                                                 {items.length > 0 && (
                                                     <div className="max-h-40 overflow-y-auto space-y-2">
                                                         {items.map((it, idx) => (
-                                                            // 🟢 BOTÓN PARA ELIMINAR FECHAS INDIVIDUALES
                                                             <div key={it.date} className="flex gap-2 text-sm items-center">
                                                                 <span className="w-24">{format(new Date(it.date), 'dd/MM/yyyy')}</span>
                                                                 <Input type="time" className="h-8" value={it.time||''} onChange={(e) => handleTimeChange(pid, idx, e.target.value)} />
