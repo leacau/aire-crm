@@ -10,7 +10,7 @@ export const srlAdTypes = [
   "Sorteo",
   "Juego",
   "Cobertura Festival",
-  "Personalizado" // 🟢 Agregado
+  "Personalizado" 
 ] as const;
 
 export const sasFormats = [
@@ -19,14 +19,14 @@ export const sasFormats = [
   "Redes",
   "Cobertura Festival",
   "Gacetilla de prensa",
-  "Personalizado" // 🟢 Agregado
+  "Personalizado" 
 ] as const;
 
 export const srlItemSchema = z.object({
   month: z.string(), 
   programId: z.string().min(1, "Seleccione un programa"),
   adType: z.enum(srlAdTypes),
-  customType: z.string().optional(), // 🟢 Nuevo
+  customType: z.string().optional(), 
   hasTv: z.boolean().default(false),
   seconds: z.coerce.number().optional().default(0),
   dailySpots: z.record(z.string(), z.any()).optional().default({}), 
@@ -34,10 +34,11 @@ export const srlItemSchema = z.object({
 });
 
 export const sasItemSchema = z.object({
+  month: z.string(), // 🟢 NUEVO CAMPO MES
   format: z.enum(sasFormats),
   type: z.string().optional(),
   detail: z.string().optional(),
-  customDetail: z.string().optional(), // 🟢 Nuevo
+  customDetail: z.string().optional(), 
   observations: z.string().optional(),
   desktop: z.boolean().default(false),
   mobile: z.boolean().default(false),
@@ -68,8 +69,6 @@ export const advertisingOrderSchema = z.object({
   sasItems: z.array(sasItemSchema).default([]),
   adjustmentSrl: z.coerce.number().optional().default(0),
   adjustmentSas: z.coerce.number().optional().default(0),
-  
-  // 🟢 Nueva colección embebida para Pedidos de Facturación
   billingRequests: z.array(z.object({
     date: z.string().min(1, "Obligatorio"),
     amount: z.coerce.number().min(0)
