@@ -358,6 +358,7 @@ export const screenNames = [
 ] as const;
 export type ScreenName = typeof screenNames[number];
 
+
 export type ScreenPermission = {
     view: boolean;
     edit: boolean;
@@ -588,6 +589,7 @@ export type CommercialNote = {
   createdAt: string;
 };
 
+// 🟢 PUBLICIDADES: AGREGADO DE URL Y NUEVO FORMATO
 export type AdvertisingOrderItemSrl = {
   month: string; 
   programId: string;
@@ -600,7 +602,7 @@ export type AdvertisingOrderItemSrl = {
 };
 
 export type AdvertisingOrderItemSas = {
-  month: string; // 🟢 NUEVO CAMPO MES PARA SAS
+  month: string; 
   format: string; 
   type?: string;
   detail?: string;
@@ -621,6 +623,9 @@ export type BillingRequest = {
   opportunityId: string;
   clientId: string;
   date: string;
+  grossAmount: number;
+  adjustment: number;
+  ivaSas: number;
   amount: number;
   createdAt?: string;
 };
@@ -653,5 +658,5 @@ export type AdvertisingOrder = {
   totalSrl?: number;
   totalSas?: number;
   totalOrder?: number;
-  billingRequests?: { date: string; amount: number }[]; 
+  billingRequests?: { date: string; grossAmount: number; adjustment: number; ivaSas: number; amount: number }[]; 
 };
