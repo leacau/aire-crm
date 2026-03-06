@@ -132,10 +132,9 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     );
   };
 
-  // 🟢 BLOQUE DE FECHAS DE FACTURACIÓN (Se oculta si hidePrices es true)
   const renderBillingRequests = () => {
       if (hidePrices || !order.billingRequests || order.billingRequests.length === 0) {
-          return <div style={{ flex: 1 }} />; // Ocupa espacio para no romper el layout
+          return <div style={{ flex: 1 }} />; 
       }
 
       return (
@@ -187,7 +186,11 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                                 <th style={{ ...styles.th, width: '30px' }}>TV</th>
                                 <th style={{ ...styles.th, width: '35px' }}>Seg</th>
                                 {days.map(d => (<th key={d.toISOString()} style={{ ...styles.th, width: '22px', fontSize: '9px' }}>{format(d, "d")}</th>))}
-                                <th style={{ ...styles.th, width: '40px' }}>Cant</th>
+                                
+                                {/* 🟢 NUEVAS COLUMNAS */}
+                                <th style={{ ...styles.th, width: '40px' }}>Cant.<br/>Repet.</th>
+                                <th style={{ ...styles.th, width: '40px' }}>Tot.<br/>Seg.</th>
+
                                 {!hidePrices && <th style={{ ...styles.th, width: '60px' }}>T. Unit</th>}
                                 {!hidePrices && <th style={{ ...styles.th, width: '90px' }}>Neto</th>}
                             </tr>
@@ -200,6 +203,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                                 const dailySpots = item.dailySpots || {};
                                 const totalAds = Object.values(dailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
                                 const mult = item.adType === 'Spot' ? (item.seconds || 0) : 1;
+                                const totalSecs = item.adType === 'Spot' ? totalAds * mult : '-';
                                 const net = (item.unitRate || 0) * totalAds * mult;
 
                                 return (
@@ -212,7 +216,11 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                                             const val = dailySpots[format(d, "yyyy-MM-dd")];
                                             return (<td key={d.toISOString()} style={{ ...styles.td, backgroundColor: val ? '#dbeafe' : 'transparent', fontWeight: val ? 'bold' : 'normal' }}>{val || ''}</td>);
                                         })}
+                                        
+                                        {/* 🟢 NUEVOS VALORES */}
                                         <td style={{ ...styles.td, fontWeight: 'bold' }}>{totalAds}</td>
+                                        <td style={{ ...styles.td, fontWeight: 'bold' }}>{totalSecs}</td>
+
                                         {!hidePrices && <td style={styles.td}>${(item.unitRate || 0).toLocaleString('es-AR')}</td>}
                                         {!hidePrices && <td style={{ ...styles.td, textAlign: 'right', fontWeight: 'bold' }}>${net.toLocaleString('es-AR')}</td>}
                                     </tr>
@@ -230,10 +238,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     return (
         <div className="pdf-block" style={{ marginBottom: '30px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                 
-                 {/* 🟢 Mostramos u ocultamos la caja de Fechas de Facturación en la izquierda */}
                  {includeBilling ? renderBillingRequests() : <div style={{ flex: 1 }} />}
-
                  <div style={{ ...styles.totalBox, marginTop: 0 }}>
                     <div style={styles.totalRow}><span>Subtotal:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
                     <div style={styles.totalRow}><span>Desajuste:</span><span>${srlAdjustment.toLocaleString('es-AR')}</span></div>
@@ -250,47 +255,61 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     );
   };
 
-  const renderSAS = (includeBilling: boolean) => {
-    if (sasItems.length === 0) return null;
+  // 🟢 MAPEO MES A MES PARA SAS
+  const renderSASMonth = (monthDate: Date, isFirstElement: boolean, isFirstSAS: boolean) => {
+        const monthKey = format(monthDate, "yyyy-MM");
+        const itemsInMonth = sasItems.filter(item => item.month === monthKey);
+        if (itemsInMonth.length === 0) return null;
+
+        return (
+            <div key={`sas-${monthKey}`} className="pdf-block" style={{ marginBottom: '20px' }}>
+                {isFirstElement && renderClientInfo()}
+                {isFirstSAS && <div style={styles.sectionTitle}>PAUTA DIGITAL (SAS)</div>}
+                <div>
+                    <div style={{ backgroundColor: '#e5e7eb', padding: '4px 8px', fontWeight: 'bold', fontSize: '11px', border: '1px solid #9ca3af', borderBottom: 'none' }}>
+                        {format(monthDate, "MMMM yyyy", { locale: es }).toUpperCase()}
+                    </div>
+                    <table style={styles.table}>
+                        <thead>
+                            <tr>
+                                <th style={{ ...styles.th, textAlign: 'left', width: '20%' }}>Formato</th>
+                                <th style={{ ...styles.th, textAlign: 'left', width: '30%' }}>Detalle</th>
+                                <th style={{ ...styles.th, width: '15%' }}>Ubicación</th>
+                                <th style={{ ...styles.th, textAlign: 'left', width: '20%' }}>Obs</th>
+                                {!hidePrices && <th style={{ ...styles.th, textAlign: 'right', width: '15%' }}>Neto</th>}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {itemsInMonth.map((item, i) => {
+                                let net = 0;
+                                if (item.format === "Banner") { net = (item.cpm || 0) * (item.unitRate || 0); } else { net = (item.unitRate || 0); }
+                                const locs = [];
+                                if(item.desktop) locs.push("D"); if(item.mobile) locs.push("M"); if(item.home) locs.push("H"); if(item.interiores) locs.push("I");
+
+                                const detailLabel = item.format === 'Personalizado' ? (item.customDetail || "-") : (item.detail || item.type || "-");
+
+                                return (
+                                    <tr key={i}>
+                                        <td style={{ ...styles.td, textAlign: 'left', fontWeight: 'bold' }}>{item.format}</td>
+                                        <td style={{ ...styles.td, textAlign: 'left' }}>{detailLabel}</td>
+                                        <td style={styles.td}>{locs.join(", ") || "-"}</td>
+                                        <td style={{ ...styles.td, textAlign: 'left', fontStyle: 'italic', color: '#6b7280' }}>{item.observations}</td>
+                                        {!hidePrices && <td style={{ ...styles.td, textAlign: 'right', fontWeight: 'bold' }}>${net.toLocaleString('es-AR')}</td>}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+  };
+
+  const renderSASTotals = (includeBilling: boolean) => {
+    if (hidePrices || sasItems.length === 0) return null;
     return (
         <div className="pdf-block" style={{ marginBottom: '30px' }}>
-            <div style={styles.sectionTitle}>PAUTA DIGITAL (SAS)</div>
-            <table style={styles.table}>
-                <thead>
-                    <tr>
-                        <th style={{ ...styles.th, textAlign: 'left', width: '20%' }}>Formato</th>
-                        <th style={{ ...styles.th, textAlign: 'left', width: '30%' }}>Detalle</th>
-                        <th style={{ ...styles.th, width: '15%' }}>Ubicación</th>
-                        <th style={{ ...styles.th, textAlign: 'left', width: '20%' }}>Obs</th>
-                        {!hidePrices && <th style={{ ...styles.th, textAlign: 'right', width: '15%' }}>Neto</th>}
-                    </tr>
-                </thead>
-                <tbody>
-                    {sasItems.map((item, i) => {
-                        let net = 0;
-                        if (item.format === "Banner") { net = (item.cpm || 0) * (item.unitRate || 0); } else { net = (item.unitRate || 0); }
-                        const locs = [];
-                        if(item.desktop) locs.push("D"); if(item.mobile) locs.push("M"); if(item.home) locs.push("H"); if(item.interiores) locs.push("I");
-
-                        const detailLabel = item.format === 'Personalizado' ? (item.customDetail || "-") : (item.detail || item.type || "-");
-
-                        return (
-                            <tr key={i}>
-                                <td style={{ ...styles.td, textAlign: 'left', fontWeight: 'bold' }}>{item.format}</td>
-                                <td style={{ ...styles.td, textAlign: 'left' }}>{detailLabel}</td>
-                                <td style={styles.td}>{locs.join(", ") || "-"}</td>
-                                <td style={{ ...styles.td, textAlign: 'left', fontStyle: 'italic', color: '#6b7280' }}>{item.observations}</td>
-                                {!hidePrices && <td style={{ ...styles.td, textAlign: 'right', fontWeight: 'bold' }}>${net.toLocaleString('es-AR')}</td>}
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
-
-            {!hidePrices && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '10px' }}>
-                
-                {/* 🟢 Si hay SAS y no había SRL, mostramos la facturación acá */}
                 {includeBilling ? renderBillingRequests() : <div style={{ flex: 1 }} />}
 
                 <div style={{ ...styles.totalBox, marginTop: 0 }}>
@@ -306,7 +325,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                     </div>
                 </div>
             </div>
-            )}
         </div>
     );
   };
@@ -331,13 +349,13 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     <div ref={ref} style={{ display: 'flex', justifyContent: 'center' }}>
       <div style={styles.container}>
         {renderHeaderAndInfo()}
-        {hasSRL && months.map((m, idx) => renderSRLMonth(m, idx === 0))}
         
-        {/* Si tiene SRL y no tiene SAS, pasamos true para que muestre la facturación ahí. Si tiene SAS pasamos false porque se mostrará abajo en SAS. */}
+        {hasSRL && months.map((m, idx) => renderSRLMonth(m, idx === 0))}
         {hasSRL && renderSRLTotals(!hasSAS)}
 
-        {/* Si tiene SAS, siempre imprimirá la facturación a su izquierda */}
-        {hasSAS && renderSAS(true)}
+        {/* 🟢 LLAMADO MES A MES PARA SAS */}
+        {hasSAS && months.map((m, idx) => renderSASMonth(m, !hasSRL && idx === 0, idx === 0))}
+        {hasSAS && renderSASTotals(true)}
         
         {renderFooter()}
       </div>
