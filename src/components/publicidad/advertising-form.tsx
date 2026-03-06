@@ -92,7 +92,6 @@ export function AdvertisingForm() {
   const selectedClientId = watch("clientId");
 
   useEffect(() => {
-      console.log(userInfo)
     if (userInfo?.name && !editModeId) setValue("accountExecutive", userInfo.name);
     const loadData = async () => {
       try {
@@ -179,32 +178,43 @@ export function AdvertisingForm() {
     fetchOpps();
   }, [selectedClientId]);
 
+  // 🟢 Limpieza inteligente de filas SRL y SAS que queden fuera del rango al cambiar fechas
   useEffect(() => {
       if (!startDate || !endDate) return;
       const currentSrlItems = getValues("srlItems") || [];
-      if (currentSrlItems.length === 0) return;
-
+      const currentSasItems = getValues("sasItems") || [];
+      
       const validStart = startOfMonth(startDate);
       const validEnd = endOfMonth(endDate);
-      let hasChanges = false;
 
-      const cleanedItems = currentSrlItems.filter(item => {
+      let srlChanges = false;
+      let sasChanges = false;
+
+      const cleanedSrlItems = currentSrlItems.filter(item => {
           if (!item.month) return false;
           const itemMonthDate = new Date(`${item.month}-15`); 
           const isValid = isWithinInterval(itemMonthDate, { start: validStart, end: validEnd });
-          if (!isValid) hasChanges = true;
+          if (!isValid) srlChanges = true;
           return isValid;
       });
 
-      if (hasChanges) {
-          setValue("srlItems", cleanedItems, { shouldValidate: true });
-      }
+      const cleanedSasItems = currentSasItems.filter(item => {
+          if (!item.month) return false;
+          const itemMonthDate = new Date(`${item.month}-15`); 
+          const isValid = isWithinInterval(itemMonthDate, { start: validStart, end: validEnd });
+          if (!isValid) sasChanges = true;
+          return isValid;
+      });
+
+      if (srlChanges) setValue("srlItems", cleanedSrlItems, { shouldValidate: true });
+      if (sasChanges) setValue("sasItems", cleanedSasItems, { shouldValidate: true });
+
   }, [startDate, endDate, setValue, getValues]);
 
   const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
     ? Math.max(0, differenceInDays(endDate, startDate) + 1) : 0;
 
-  const showSrlSection = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
+  const showSections = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
 
   const getPreviewOrder = (): AdvertisingOrder => {
       const selectedClient = clients.find(c => c.id === values.clientId);
@@ -216,6 +226,7 @@ export function AdvertisingForm() {
       const safeEndDate = (values.endDate && isValid(values.endDate)) ? values.endDate.toISOString() : new Date().toISOString();
 
       const srlItemsValid = values.srlItems?.filter(item => item.month) || [];
+      const sasItemsValid = values.sasItems?.filter(item => item.month) || [];
 
       const srlSubtotal = srlItemsValid.reduce((acc, item) => {
         const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (val || 0), 0);
@@ -224,7 +235,7 @@ export function AdvertisingForm() {
       }, 0) || 0;
       const srlTotal = srlSubtotal - (values.adjustmentSrl || 0);
 
-      const sasSubtotal = values.sasItems?.reduce((acc, item) => {
+      const sasSubtotal = sasItemsValid.reduce((acc, item) => {
         let net = 0;
         if (item.format === "Banner") net = (item.cpm || 0) * (item.unitRate || 0);
         else net = (item.unitRate || 0);
@@ -254,12 +265,13 @@ export function AdvertisingForm() {
           agencySale: values.agencySale || false,
           commissionSrl: values.commissionSrl || 0,
           srlItems: srlItemsValid,
-          sasItems: values.sasItems || [],
+          sasItems: sasItemsValid,
           adjustmentSrl: values.adjustmentSrl || 0,
           adjustmentSas: values.adjustmentSas || 0,
           totalSrl: srlTotal,
           totalSas: sasTotal,
-          totalOrder: srlTotal + sasTotal
+          totalOrder: srlTotal + sasTotal,
+          billingRequests: values.billingRequests
       };
   };
 
@@ -281,7 +293,7 @@ export function AdvertisingForm() {
         const blocks = Array.from(containerElement.querySelectorAll('.pdf-block')) as HTMLElement[];
         
         blocks.forEach(b => b.style.marginTop = '0px');
-        void containerElement.offsetHeight;
+        void containerElement.offsetHeight; 
 
         let absoluteY = topPaddingPx;
         let currentPageIndex = 0;
@@ -411,6 +423,14 @@ export function AdvertisingForm() {
           return isWithinInterval(itemDate, { start, end });
       });
 
+      const validSasItems = data.sasItems.filter(item => {
+          if (!item.month) return false;
+          const itemDate = new Date(`${item.month}-02`); 
+          const start = startOfMonth(data.startDate);
+          const end = endOfMonth(data.endDate);
+          return isWithinInterval(itemDate, { start, end });
+      });
+
       const preview = getPreviewOrder();
       const orderPayload = {
         ...preview,
@@ -423,7 +443,7 @@ export function AdvertisingForm() {
         startDate: data.startDate.toISOString(),
         endDate: data.endDate.toISOString(),
         srlItems: validSrlItems,
-        sasItems: data.sasItems,
+        sasItems: validSasItems,
         billingRequests: data.billingRequests, 
         id: undefined 
       };
@@ -463,7 +483,7 @@ export function AdvertisingForm() {
 
                   await sendEmail({
                       accessToken,
-                      to: ['lchena@airedesantafe.com.ar', /* 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar' */, userInfo.email], 
+                      to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
                       subject: `${editModeId ? 'Modificación' : 'Nueva'} OP: ${oppTitle} - ${selectedClient?.denominacion}`,
                       body: emailBody,
                       attachments: [{
@@ -571,7 +591,7 @@ export function AdvertisingForm() {
             </div>
 
             <div className="mt-4">
-               {showSrlSection ? (
+               {showSections ? (
                   <SrlSection form={form} startDate={startDate} endDate={endDate} programs={programs} />
                ) : (
                  <div className="text-center py-10 text-muted-foreground border-2 border-dashed rounded-md">
@@ -584,7 +604,15 @@ export function AdvertisingForm() {
 
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
           <div className="bg-slate-100 px-4 py-2 border-b"><h3 className="text-lg font-semibold text-slate-800">AIRE SAS</h3></div>
-          <div className="p-4"><SasSection form={form} /></div>
+          <div className="p-4">
+             {showSections ? (
+                 <SasSection form={form} startDate={startDate} endDate={endDate} />
+             ) : (
+                 <div className="text-center py-10 text-muted-foreground border-2 border-dashed rounded-md">
+                    {(!startDate || !endDate) ? "Seleccione fechas de Inicio y Fin." : "La fecha de Fin debe ser posterior a la de Inicio."}
+                 </div>
+             )}
+          </div>
         </div>
 
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
@@ -630,7 +658,7 @@ export function AdvertisingForm() {
               variant="outline" 
               size="lg" 
               onClick={handleExportPdf}
-              disabled={isExporting || !showSrlSection}
+              disabled={isExporting || !showSections}
             >
                {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
                {isExporting ? "Generando..." : "Exportar PDF"}
