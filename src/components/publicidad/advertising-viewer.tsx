@@ -13,7 +13,7 @@ import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
-import { getBillingRequestsByOrder } from "@/lib/firebase-service"; // 🟢 Importamos el fetch
+import { getBillingRequestsByOrder } from "@/lib/firebase-service";
 
 export function AdvertisingOrderViewer({ order, programs = [] }: { order: AdvertisingOrder, programs?: Program[] }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -21,7 +21,6 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
   const [isResending, setIsResending] = useState(false);
   const [isSendingToRedaccion, setIsSendingToRedaccion] = useState(false);
   
-  // 🟢 Guardamos la orden localmente para poder adjuntarle el billingRequests
   const [fullOrder, setFullOrder] = useState<AdvertisingOrder>(order);
 
   const router = useRouter();
@@ -34,9 +33,15 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
   useEffect(() => {
         setFullOrder(order);
         if (isOpen && order.id) {
-            // 🟢 Al abrir, buscamos los billing requests
             getBillingRequestsByOrder(order.id).then(brs => {
-                setFullOrder(prev => ({ ...prev, billingRequests: brs as any }));
+                const mapped = brs.map(b => ({
+                    date: b.date,
+                    grossAmount: b.grossAmount || 0,
+                    adjustment: b.adjustment || 0,
+                    ivaSas: b.ivaSas || 0,
+                    amount: b.amount || 0
+                }));
+                setFullOrder(prev => ({ ...prev, billingRequests: mapped as any }));
             });
         }
   }, [isOpen, order]);
@@ -181,7 +186,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
             await sendEmail({
                 accessToken,
-                to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email], 
+                to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
                 subject: `Reinforme - OP: ${oppTitle} - ${fullOrder.clientName}`,
                 body: emailBody,
                 attachments: [{
@@ -220,7 +225,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
           await sendEmail({
               accessToken,
-              to: ['lchena@airedesantafe.com.ar'], 
+              to: ['lchena@airedesantafe.com.ar'], // Redacción
               subject: `Gacetilla de Prensa: ${fullOrder.clientName}`,
               body: emailBody,
               attachments: [{
