@@ -316,9 +316,9 @@ export default function AdvertisingOrderDetailPage() {
                 </div>
             </main>
 
-            {/* DIV OCULTO PARA EL PDF DE REDACCIÓN SIN PRECIOS */}
+            {/* 🟢 SE LE PASA hideSrl={true} AL PDF DE REDACCIÓN */}
             <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
-                <AdvertisingOrderPdf ref={hiddenPdfRef} order={order} programs={programs} hidePrices={true} />
+                <AdvertisingOrderPdf ref={hiddenPdfRef} order={order} programs={programs} hidePrices={true} hideSrl={true} />
             </div>
         </div>
     );
