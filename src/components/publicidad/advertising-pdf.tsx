@@ -1,5 +1,3 @@
-// src/components/publicidad/advertising-pdf.tsx
-
 import React, { forwardRef } from 'react';
 import { AdvertisingOrder, Program } from '@/lib/types';
 import { format, eachMonthOfInterval, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
@@ -142,7 +140,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
 
   // 🟢 FACTURACIÓN SRL (Sin IVA)
   const renderBillingRequestsSrl = () => {
-      if (hidePrices || !order.billingRequestsSrl || order.billingRequestsSrl.length === 0) {
+      if (hidePrices || !order.billingRequestsSrl || order.billingRequestsSrl.length === 0 || !hasSRL) {
           return <div style={{ flex: 1 }} />; 
       }
 
@@ -181,7 +179,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
 
   // 🟢 FACTURACIÓN SAS (Con IVA 5%)
   const renderBillingRequestsSas = () => {
-      if (hidePrices || !order.billingRequestsSas || order.billingRequestsSas.length === 0) {
+      if (hidePrices || !order.billingRequestsSas || order.billingRequestsSas.length === 0 || !hasSAS) {
           return <div style={{ flex: 1 }} />; 
       }
 
@@ -288,11 +286,10 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   };
 
   const renderSRLTotals = () => {
-    if (hidePrices) return null;
+    if (hidePrices || !hasSRL) return null;
     return (
         <div className="pdf-block" style={{ marginBottom: '30px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                 {/* 🟢 Renderiza facturas de SRL a la izquierda */}
                  {renderBillingRequestsSrl()}
                  <div style={{ ...styles.totalBox, marginTop: 0 }}>
                     <div style={styles.totalRow}><span>Subtotal:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
@@ -360,11 +357,10 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   };
 
   const renderSASTotals = () => {
-    if (hidePrices || sasItems.length === 0) return null;
+    if (hidePrices || !hasSAS) return null;
     return (
         <div className="pdf-block" style={{ marginBottom: '30px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '10px' }}>
-                {/* 🟢 Renderiza facturas de SAS a la izquierda */}
                 {renderBillingRequestsSas()}
 
                 <div style={{ ...styles.totalBox, marginTop: 0 }}>
