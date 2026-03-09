@@ -303,8 +303,9 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
             </div>
          </div>
 
+         {/* 🟢 SE LE PASA hideSrl={true} AL PDF DE REDACCIÓN */}
          <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
-             <AdvertisingOrderPdf ref={hiddenPdfRef} order={fullOrder} programs={programs} hidePrices={true} />
+             <AdvertisingOrderPdf ref={hiddenPdfRef} order={fullOrder} programs={programs} hidePrices={true} hideSrl={true} />
          </div>
       </DialogContent>
     </Dialog>
