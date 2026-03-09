@@ -7,9 +7,10 @@ interface AdvertisingOrderPdfProps {
   order: AdvertisingOrder;
   programs: Program[];
   hidePrices?: boolean; 
+  hideSrl?: boolean; // 🟢 NUEVA PROPIEDAD PARA OCULTAR SRL A REDACCIÓN
 }
 
-export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPdfProps>(({ order, programs = [], hidePrices = false }, ref) => {
+export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPdfProps>(({ order, programs = [], hidePrices = false, hideSrl = false }, ref) => {
   if (!order) return null;
 
   const formatDate = (dateStr?: string) => {
@@ -66,7 +67,8 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const sasAgencyAmount = sasTotalToInvoice * (sasCommissionPct / 100);
   const sasNetAction = sasTotalToInvoice - sasAgencyAmount;
 
-  const hasSRL = srlItems.length > 0;
+  // 🟢 SI HIDESRL ESTÁ ACTIVO, FORZAMOS HASSRL A FALSE PARA QUE NO DIBUJE NADA
+  const hasSRL = !hideSrl && srlItems.length > 0;
   const hasSAS = sasItems.length > 0;
 
   const styles = {
@@ -138,7 +140,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     );
   };
 
-  // 🟢 FACTURACIÓN SRL (Sin IVA)
   const renderBillingRequestsSrl = () => {
       if (hidePrices || !order.billingRequestsSrl || order.billingRequestsSrl.length === 0 || !hasSRL) {
           return <div style={{ flex: 1 }} />; 
@@ -177,7 +178,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       );
   };
 
-  // 🟢 FACTURACIÓN SAS (Con IVA 5%)
   const renderBillingRequestsSas = () => {
       if (hidePrices || !order.billingRequestsSas || order.billingRequestsSas.length === 0 || !hasSAS) {
           return <div style={{ flex: 1 }} />; 
