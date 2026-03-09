@@ -590,33 +590,50 @@ export default function NewCommercialNotePage() {
 
     if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
 
+    // 🟢 BOTONERA SUPERIOR E INFERIOR (COMPARTIDA)
+    const ActionButtons = () => (
+        <div className="flex flex-wrap items-center justify-between w-full gap-4">
+            <div className="flex items-center gap-4">
+                 <Button variant="ghost" onClick={() => router.back()}>
+                    <ArrowLeft className="mr-2 h-4 w-4" /> Volver
+                </Button>
+                
+                {draftLoaded && !editModeId && (
+                    <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleClearDraft}>
+                        Limpiar Borrador
+                    </Button>
+                )}
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-4">
+                <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title || hasGrafErrors}>
+                    <ExternalLink className="mr-2 h-4 w-4" /> Exportar PDF
+                </Button>
+                <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white">
+                    <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} disabled={!!editModeId} />
+                    <Label htmlFor="notify">Notificar</Label>
+                </div>
+                <Button onClick={handleSave} disabled={saving || hasGrafErrors}>
+                    {saving ? <Spinner size="small" /> : <Save className="mr-2 h-4 w-4" />} Guardar
+                </Button>
+            </div>
+        </div>
+    );
+
     return (
         <div className="flex flex-col h-full overflow-hidden">
             <Header title={editModeId ? "Editar Nota Comercial" : "Nueva Nota Comercial"}>
-                <div className="flex items-center gap-4">
-                     <Button variant="ghost" onClick={() => router.back()}>
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Volver
-                    </Button>
-                    
-                    {draftLoaded && !editModeId && (
-                        <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleClearDraft}>
-                            Limpiar Borrador
-                        </Button>
-                    )}
-
-                    <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title || hasGrafErrors}>
-                        <ExternalLink className="mr-2 h-4 w-4" /> Exportar PDF
-                    </Button>
-                    <div className="flex items-center space-x-2">
-                        <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} disabled={!!editModeId} />
-                        <Label htmlFor="notify">Notificar</Label>
-                    </div>
-                    <Button onClick={handleSave} disabled={saving || hasGrafErrors}>
-                        {saving ? <Spinner size="small" /> : <Save className="mr-2 h-4 w-4" />} Guardar
-                    </Button>
+                <div className="w-full">
+                    {/* Reutilizamos el componente para no duplicar código */}
                 </div>
             </Header>
             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
+                
+                {/* 🟢 BOTONES DE ACCIÓN ARRIBA */}
+                <div className="bg-white p-4 border rounded-md shadow-sm">
+                    <ActionButtons />
+                </div>
+
                 <Card>
                     <CardHeader><CardTitle>Datos de Cliente</CardTitle></CardHeader>
                     <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -790,6 +807,11 @@ export default function NewCommercialNotePage() {
                         </div>
                     </CardContent>
                 </Card>
+                
+                {/* 🟢 BOTONES DE ACCIÓN ABAJO */}
+                <div className="bg-white p-4 border rounded-md shadow-sm mt-6">
+                    <ActionButtons />
+                </div>
             </main>
 
             <div style={{ position: 'absolute', top: -9999, left: -9999 }}>
