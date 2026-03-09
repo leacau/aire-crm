@@ -69,7 +69,6 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
       return [];
   };
 
-  // 🟢 FUNCIÓN PARA DUPLICAR AL MES SIGUIENTE EN SAS
   const handleDuplicateToNextMonth = (itemIndex: number) => {
       const sourceItem = form.getValues(`sasItems.${itemIndex}`);
       if (!sourceItem || !sourceItem.month) return;
@@ -102,7 +101,6 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
 
   return (
     <div className="space-y-12">
-        {/* 🟢 MAPEO DE MESES PARA SAS */}
         {months.map((monthDate) => {
             const monthKey = format(monthDate, "yyyy-MM");
 
@@ -289,49 +287,51 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
             );
         })}
 
-        {/* 🟢 TOTALES GLOBALES SAS AL FINAL */}
-        <div className="flex justify-end mt-4">
-            <div className="w-full max-w-2xl bg-slate-50 p-4 rounded-lg border grid grid-cols-2 gap-x-8 gap-y-2 shadow-sm">
-                <div className="flex justify-between items-center text-sm">
-                    <span className="font-bold">Subtotal:</span>
-                    <span className="bg-red-600 text-white px-2 py-1 rounded font-mono font-bold">
-                        ${subtotal.toLocaleString("es-AR")}
-                    </span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                    <span className="font-bold">Desajuste:</span>
-                    <div className="w-32">
-                         <FormField
-                            control={form.control}
-                            name="adjustmentSas"
-                            render={({ field }) => (
-                                <Input type="number" className="h-8 text-right font-mono" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
-                            )}
-                        />
+        {/* 🟢 TOTALES GLOBALES SAS AL FINAL (Solo si hay items cargados) */}
+        {items.length > 0 && (
+            <div className="flex justify-end mt-4">
+                <div className="w-full max-w-2xl bg-slate-50 p-4 rounded-lg border grid grid-cols-2 gap-x-8 gap-y-2 shadow-sm">
+                    <div className="flex justify-between items-center text-sm">
+                        <span className="font-bold">Subtotal:</span>
+                        <span className="bg-red-600 text-white px-2 py-1 rounded font-mono font-bold">
+                            ${subtotal.toLocaleString("es-AR")}
+                        </span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                        <span className="font-bold">Desajuste:</span>
+                        <div className="w-32">
+                             <FormField
+                                control={form.control}
+                                name="adjustmentSas"
+                                render={({ field }) => (
+                                    <Input type="number" className="h-8 text-right font-mono" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
+                                )}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex justify-between items-center text-sm text-muted-foreground">
+                        <span>IVA 5%:</span>
+                        <span>${ivaAmount.toLocaleString("es-AR")}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm col-span-2 border-t pt-2 mt-2">
+                        <span className="font-bold">Total a Facturar:</span>
+                        <span className="bg-yellow-400 text-black px-2 py-1 rounded font-mono font-bold text-lg border border-yellow-500">
+                            ${totalToInvoice.toLocaleString("es-AR")}
+                        </span>
+                    </div>
+                     <div className="flex justify-between items-center text-sm text-muted-foreground">
+                        <span>Agencia ({agencyCommissionPct}%):</span>
+                        <span>${agencyAmount.toLocaleString("es-AR")}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                        <span className="font-bold">Neto de Acción:</span>
+                        <span className="bg-green-600 text-white px-2 py-1 rounded font-mono font-bold">
+                            ${netAction.toLocaleString("es-AR")}
+                        </span>
                     </div>
                 </div>
-                <div className="flex justify-between items-center text-sm text-muted-foreground">
-                    <span>IVA 5%:</span>
-                    <span>${ivaAmount.toLocaleString("es-AR")}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm col-span-2 border-t pt-2 mt-2">
-                    <span className="font-bold">Total a Facturar:</span>
-                    <span className="bg-yellow-400 text-black px-2 py-1 rounded font-mono font-bold text-lg border border-yellow-500">
-                        ${totalToInvoice.toLocaleString("es-AR")}
-                    </span>
-                </div>
-                 <div className="flex justify-between items-center text-sm text-muted-foreground">
-                    <span>Agencia ({agencyCommissionPct}%):</span>
-                    <span>${agencyAmount.toLocaleString("es-AR")}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                    <span className="font-bold">Neto de Acción:</span>
-                    <span className="bg-green-600 text-white px-2 py-1 rounded font-mono font-bold">
-                        ${netAction.toLocaleString("es-AR")}
-                    </span>
-                </div>
             </div>
-        </div>
+        )}
     </div>
   );
 }
