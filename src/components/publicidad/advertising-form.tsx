@@ -60,7 +60,6 @@ export function AdvertisingForm() {
   const [isRestored, setIsRestored] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   
-  // 🟢 ESTADOS PARA FACTURAS SUGERIDAS INDEPENDIENTES
   const [invoiceCountSrl, setInvoiceCountSrl] = useState(1);
   const [invoiceCountSas, setInvoiceCountSas] = useState(1);
 
@@ -86,7 +85,6 @@ export function AdvertisingForm() {
     },
   });
 
-  // 🟢 DOS ARRAYS INDEPENDIENTES
   const { fields: brFieldsSrl, append: brAppendSrl, remove: brRemoveSrl } = useFieldArray({
       control: form.control,
       name: "billingRequestsSrl"
@@ -103,6 +101,8 @@ export function AdvertisingForm() {
   const endDate = watch("endDate");
   const agencySale = watch("agencySale");
   const selectedClientId = watch("clientId");
+  const srlItemsCurrent = watch("srlItems");
+  const sasItemsCurrent = watch("sasItems");
 
   useEffect(() => {
     if (userInfo?.name && !editModeId && !draftLoaded) setValue("accountExecutive", userInfo.name);
@@ -276,25 +276,32 @@ export function AdvertisingForm() {
 
   }, [startDate, endDate, setValue, getValues]);
 
+  // 🟢 EFECTO DE LIMPIEZA PROFUNDA: Si las tablas se vacían, borramos los desajustes y facturas remanentes
+  useEffect(() => {
+      if (isRestored && srlItemsCurrent?.length === 0) {
+          if (values.adjustmentSrl !== 0) setValue("adjustmentSrl", 0);
+          if (values.billingRequestsSrl?.length > 0) setValue("billingRequestsSrl", []);
+      }
+      if (isRestored && sasItemsCurrent?.length === 0) {
+          if (values.adjustmentSas !== 0) setValue("adjustmentSas", 0);
+          if (values.billingRequestsSas?.length > 0) setValue("billingRequestsSas", []);
+      }
+  }, [srlItemsCurrent, sasItemsCurrent, isRestored, values.adjustmentSrl, values.adjustmentSas, values.billingRequestsSrl?.length, values.billingRequestsSas?.length, setValue]);
+
   const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
     ? Math.max(0, differenceInDays(endDate, startDate) + 1) : 0;
 
   const showSections = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
 
-  // 🟢 CÁLCULOS SRL
   const srlItemsValid = values.srlItems?.filter(item => item.month) || [];
+  const sasItemsValid = values.sasItems?.filter(item => item.month) || [];
+
   const srlSubtotal = srlItemsValid.reduce((acc, item) => {
     const totalAds = Object.values(item.dailySpots || {}).reduce((sum, val) => sum + (Number(val) || 0), 0);
     const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
     return acc + ((item.unitRate || 0) * totalAds * multiplier);
   }, 0) || 0;
 
-  const srlAdjustment = values.adjustmentSrl || 0;
-  const totalOrderSrlNet = srlSubtotal - srlAdjustment;
-  const hasSrl = srlItemsValid.length > 0;
-
-  // 🟢 CÁLCULOS SAS
-  const sasItemsValid = values.sasItems?.filter(item => item.month) || [];
   const sasSubtotal = sasItemsValid.reduce((acc, item) => {
     let net = 0;
     if (item.format === "Banner") net = (item.cpm || 0) * (item.unitRate || 0);
@@ -302,13 +309,16 @@ export function AdvertisingForm() {
     return acc + net;
   }, 0) || 0;
 
+  const srlAdjustment = values.adjustmentSrl || 0;
+  const totalOrderSrlNet = srlSubtotal - srlAdjustment;
+  const hasSrl = srlItemsValid.length > 0;
+
   const sasAdjustment = values.adjustmentSas || 0;
   const sasIva = (sasSubtotal - sasAdjustment) * 0.05;
   const totalOrderSasNet = sasSubtotal - sasAdjustment + sasIva;
   const hasSas = sasItemsValid.length > 0;
 
 
-  // 🟢 GENERADOR DE FACTURAS SRL
   const handleGenerateBillingSrl = () => {
       if (invoiceCountSrl < 1) return;
       const invGross = srlSubtotal / invoiceCountSrl;
@@ -330,7 +340,6 @@ export function AdvertisingForm() {
       setValue("billingRequestsSrl", newBrs, { shouldValidate: true });
   };
 
-  // 🟢 GENERADOR DE FACTURAS SAS
   const handleGenerateBillingSas = () => {
       if (invoiceCountSas < 1) return;
       const invGross = sasSubtotal / invoiceCountSas;
@@ -354,7 +363,6 @@ export function AdvertisingForm() {
       setValue("billingRequestsSas", newBrs, { shouldValidate: true });
   };
 
-  // 🟢 ACTUALIZA NETO AL MODIFICAR SRL MANUALMENTE
   const updateRowNetSrl = (index: number) => {
       setTimeout(() => {
           const row = form.getValues(`billingRequestsSrl.${index}`);
@@ -364,20 +372,18 @@ export function AdvertisingForm() {
       }, 50);
   };
 
-  // 🟢 ACTUALIZA NETO E IVA AL MODIFICAR SAS MANUALMENTE
   const updateRowNetSas = (index: number) => {
       setTimeout(() => {
           const row = form.getValues(`billingRequestsSas.${index}`);
           const gross = parseFloat(row.grossAmount as any) || 0;
           const adj = parseFloat(row.adjustment as any) || 0;
-          const iva = (gross - adj) * 0.05; // Recalcula el 5% automáticamente
+          const iva = (gross - adj) * 0.05; 
           
           setValue(`billingRequestsSas.${index}.ivaSas`, iva, { shouldValidate: true });
           setValue(`billingRequestsSas.${index}.amount`, gross - adj + iva, { shouldValidate: true });
       }, 50);
   };
 
-  // 🟢 SUMATORIAS SRL
   const sumGrossSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.grossAmount)||0), 0) || 0;
   const sumAdjSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
   const sumNetSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
@@ -385,7 +391,6 @@ export function AdvertisingForm() {
   const hasGrossErrorSrl = Math.abs(sumGrossSrl - srlSubtotal) > 1; 
   const hasNetErrorSrl = Math.abs(sumNetSrl - totalOrderSrlNet) > 1;
 
-  // 🟢 SUMATORIAS SAS
   const sumGrossSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.grossAmount)||0), 0) || 0;
   const sumAdjSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
   const sumIvaSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.ivaSas)||0), 0) || 0;
