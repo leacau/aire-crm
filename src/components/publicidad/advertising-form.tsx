@@ -276,7 +276,6 @@ export function AdvertisingForm() {
 
   }, [startDate, endDate, setValue, getValues]);
 
-  // 🟢 EFECTO DE LIMPIEZA PROFUNDA: Si las tablas se vacían, borramos los desajustes y facturas remanentes
   useEffect(() => {
       if (isRestored && srlItemsCurrent?.length === 0) {
           if (values.adjustmentSrl !== 0) setValue("adjustmentSrl", 0);
@@ -317,7 +316,6 @@ export function AdvertisingForm() {
   const sasIva = (sasSubtotal - sasAdjustment) * 0.05;
   const totalOrderSasNet = sasSubtotal - sasAdjustment + sasIva;
   const hasSas = sasItemsValid.length > 0;
-
 
   const handleGenerateBillingSrl = () => {
       if (invoiceCountSrl < 1) return;
@@ -676,10 +674,47 @@ export function AdvertisingForm() {
 
   if (isLoadingData) return <div className="p-8 text-center">Cargando...</div>;
 
+  // 🟢 BOTONERA SUPERIOR E INFERIOR (COMPARTIDA)
+  const ActionButtons = () => (
+      <div className="flex flex-wrap items-center justify-between w-full gap-4">
+          <div className="flex items-center gap-4">
+              <Button type="button" variant="ghost" onClick={() => router.back()}>
+                 <ArrowLeft className="mr-2 h-4 w-4" /> Volver
+              </Button>
+              {draftLoaded && !editModeId && (
+                  <Button type="button" variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleClearDraft}>
+                      Limpiar Borrador
+                  </Button>
+              )}
+          </div>
+          
+          <div className="flex flex-wrap gap-4">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={handleExportPdf}
+              disabled={isExporting || !showSections}
+            >
+               {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
+               {isExporting ? "Generando..." : "Exportar PDF"}
+            </Button>
+
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando...</> : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
+            </Button>
+          </div>
+      </div>
+  );
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8 pb-10">
         
+        {/* 🟢 BOTONES DE ACCIÓN ARRIBA */}
+        <div className="bg-white p-4 border rounded-md shadow-sm">
+            <ActionButtons />
+        </div>
+
         <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
             <AdvertisingOrderPdf ref={pdfRef} order={getPreviewOrder()} programs={programs} />
         </div>
@@ -781,7 +816,6 @@ export function AdvertisingForm() {
           </div>
         </div>
 
-        {/* 🟢 SECCIÓN DE FACTURACIÓN SRL */}
         {hasSrl && (
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
             <div className="bg-slate-100 px-4 py-2 border-b flex justify-between items-center flex-wrap gap-2">
@@ -847,7 +881,6 @@ export function AdvertisingForm() {
         </div>
         )}
 
-        {/* 🟢 SECCIÓN DE FACTURACIÓN SAS */}
         {hasSas && (
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
             <div className="bg-slate-100 px-4 py-2 border-b flex justify-between items-center flex-wrap gap-2">
@@ -920,34 +953,9 @@ export function AdvertisingForm() {
         </div>
         )}
 
+        {/* 🟢 BOTONES DE ACCIÓN ABAJO (TAMBIÉN MANTENIDOS) */}
         <div className="flex justify-between items-center pt-6 border-t mt-8 gap-4">
-          <div className="flex items-center gap-4">
-              <Button type="button" variant="ghost" onClick={() => router.back()}>
-                 <ArrowLeft className="mr-2 h-4 w-4" /> Volver
-              </Button>
-              {draftLoaded && !editModeId && (
-                  <Button type="button" variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleClearDraft}>
-                      Limpiar Borrador
-                  </Button>
-              )}
-          </div>
-          
-          <div className="flex gap-4">
-            <Button 
-              type="button" 
-              variant="outline" 
-              size="lg" 
-              onClick={handleExportPdf}
-              disabled={isExporting || !showSections}
-            >
-               {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
-               {isExporting ? "Generando..." : "Exportar PDF"}
-            </Button>
-
-            <Button type="submit" size="lg" disabled={isSubmitting}>
-              {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando...</> : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
-            </Button>
-          </div>
+          <ActionButtons />
         </div>
       </form>
     </Form>
