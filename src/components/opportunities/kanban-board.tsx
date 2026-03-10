@@ -394,10 +394,8 @@ export function KanbanBoard({
     
     let opps = opportunities;
 
-    // Filter out "Genérica para carga de facturas" globally from Kanban
     opps = opps.filter(opp => opp.title !== 'Genérica para carga de facturas');
 
-    // 1. Filter by Advisor/User
     if(isBoss) {
       if(selectedAdvisor !== 'all' && advisorClientIds) {
         opps = opps.filter(opp => advisorClientIds.has(opp.clientId));
@@ -407,7 +405,6 @@ export function KanbanBoard({
       opps = opps.filter(opp => userClientIds.has(opp.clientId));
     }
     
-    // 2. Filter by Date
     if (dateRange?.from) {
         const filterDate = startOfMonth(dateRange.from);
         const openStages: OpportunityStage[] = ['Nuevo', 'Propuesta', 'Negociación', 'Negociación a Aprobar'];
@@ -419,27 +416,28 @@ export function KanbanBoard({
 
             if (opp.stage === 'Cerrado - Ganado') {
                 if (!opp.closeDate) return false;
-                const closeDate = parseISO(opp.closeDate);
+                
+                // LÓGICA MODIFICADA: manualUpdateDate tiene prioridad sobre closeDate
+                const referenceDate = opp.manualUpdateDate ? parseISO(opp.manualUpdateDate) : parseISO(opp.closeDate);
 
                 if (opp.finalizationDate) {
-                    const startDate = startOfMonth(closeDate);
+                    const startDate = startOfMonth(referenceDate);
                     const endDate = endOfMonth(parseISO(opp.finalizationDate));
                     return isWithinInterval(filterDate, { start: startDate, end: endDate });
                 }
                 
-                const maxPeriodicity = opp.periodicidad?.[0] || 'Ocasional';
-                const durationMonths = getPeriodDurationInMonths(maxPeriodicity);
+                const periodicity = Array.isArray(opp.periodicidad) ? opp.periodicidad[0] : (opp.periodicidad || 'Ocasional');
+                const durationMonths = getPeriodDurationInMonths(periodicity);
 
                 if (durationMonths > 1) {
-                    const startDate = startOfMonth(closeDate);
+                    const startDate = startOfMonth(referenceDate);
                     const endDate = addMonths(startDate, durationMonths -1);
                     return isWithinInterval(filterDate, { start: startDate, end: endDate });
                 } else {
-                    return isSameMonth(filterDate, closeDate);
+                    return isSameMonth(filterDate, referenceDate);
                 }
             }
             
-            // For other closed stages, only show if closeDate is in the current month
             if (opp.closeDate) {
                 return isSameMonth(filterDate, parseISO(opp.closeDate));
             }
@@ -447,7 +445,6 @@ export function KanbanBoard({
         });
     }
     
-    // 3. Filter by Client
     if (selectedClient !== 'all') {
       opps = opps.filter(opp => opp.clientId === selectedClient);
     }
@@ -470,7 +467,6 @@ export function KanbanBoard({
 
     filteredOpportunities.forEach(opp => {
       if (opp.stage === 'Cerrado - Ganado' && dateRange?.from) {
-        // Use createdAt to determine if it's a new win for the month or recurrent
         if (isSameMonth(parseISO(opp.createdAt), dateRange.from)) {
           groups['Cerrado - Ganado'].push(opp);
         } else {
@@ -525,7 +521,6 @@ export function KanbanBoard({
       } catch (error) {
         console.error("Error updating opportunity stage:", error);
         toast({ title: "Error al actualizar", variant: "destructive" });
-        // Revert UI change on error
         setOpportunities(prevOpps => 
           prevOpps.map(opp => opp.id === opportunityId ? oppToMove : opp)
         );
