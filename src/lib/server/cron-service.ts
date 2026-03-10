@@ -2,7 +2,7 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { isSaturday, isSunday, parseISO, format, addDays, isSameDay, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { Prospect, ClientActivity, SystemHolidays, User } from '@/lib/types';
+import type { Prospect, ClientActivity, SystemHolidays, User, Opportunity, Periodicidad } from '@/lib/types';
 import { sendServerEmail } from '@/lib/server/email'; // Nuevo servicio de email
 
 // --- Helpers ---
@@ -224,5 +224,85 @@ export const notifyDailyTasksServer = async (): Promise<number> => {
         }
     }
     
+    return emailsSent;
+};
+
+export const getOpportunitiesServer = async (): Promise<Opportunity[]> => {
+    const snapshot = await dbAdmin.collection('opportunities').get();
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        const convertTimestamp = (field: any) => {
+            if (field && typeof field.toDate === 'function') return field.toDate().toISOString();
+            return field;
+        };
+        return {
+            id: doc.id,
+            ...data,
+            createdAt: convertTimestamp(data.createdAt),
+            closeDate: convertTimestamp(data.closeDate),
+            manualUpdateDate: convertTimestamp(data.manualUpdateDate),
+            finalizationDate: convertTimestamp(data.finalizationDate),
+        } as Opportunity;
+    });
+};
+
+const getPeriodMonths = (period?: Periodicidad | Periodicidad[]): number => {
+    const p = Array.isArray(period) ? period[0] : period;
+    switch (p) {
+        case 'Mensual': return 1;
+        case 'Trimestral': return 3;
+        case 'Semestral': return 6;
+        case 'Anual': return 12;
+        default: return 1;
+    }
+}
+
+export const notifyExpiringProposalsServer = async (): Promise<number> => {
+    const opportunities = await getOpportunitiesServer();
+    const users = await getUsersServer();
+    const usersMap = new Map(users.map(u => [u.id, u]));
+    
+    const today = startOfDay(new Date());
+    const currentMonthStart = startOfMonth(today);
+    let emailsSent = 0;
+
+    for (const opp of opportunities) {
+        // Solo procesamos propuestas ganadas activas
+        if (opp.stage !== 'Cerrado - Ganado' || !opp.closeDate) continue;
+
+        // LÓGICA CLAVE: Prioridad a manualUpdateDate sobre closeDate
+        const baseDate = opp.manualUpdateDate ? parseISO(opp.manualUpdateDate) : parseISO(opp.closeDate);
+        const monthsToAdd = getPeriodMonths(opp.periodicidad);
+        
+        // El vencimiento es baseDate + periodicidad
+        // El "último mes" comienza en baseDate + (periodicidad - 1)
+        const lastMonthOfProposalStart = startOfMonth(addMonths(startOfMonth(baseDate), monthsToAdd - 1));
+
+        // Si el mes actual es el mismo que el inicio del último mes de la propuesta
+        if (isSameMonth(currentMonthStart, lastMonthOfProposalStart)) {
+            const owner = usersMap.get(opp.ownerId || ''); // Asumiendo que la oportunidad tiene el ownerId del vendedor
+            const destinationEmails = ['lchena@airedesantafe.com.ar'];
+            if (owner?.email) destinationEmails.push(owner.email);
+
+            const periodStr = Array.isArray(opp.periodicidad) ? opp.periodicidad[0] : (opp.periodicidad || 'Ocasional');
+
+            await sendServerEmail({
+                to: destinationEmails.join(','),
+                subject: `⚠️ Vencimiento de Propuesta: ${opp.clientName}`,
+                html: `
+                    <p>Hola,</p>
+                    <p>La propuesta <strong>"${opp.title}"</strong> para el cliente <strong>${opp.clientName}</strong> está entrando en su último mes de vigencia.</p>
+                    <ul>
+                        <li><strong>Periodicidad:</strong> ${periodStr}</li>
+                        <li><strong>Fecha de inicio/actualización:</strong> ${format(baseDate, 'dd/MM/yyyy')}</li>
+                        <li><strong>Mes de vencimiento:</strong> ${format(lastMonthOfProposalStart, 'MMMM yyyy', { locale: es })}</li>
+                    </ul>
+                    <p>Por favor, contacta al cliente para renovar o actualizar la propuesta en el CRM.</p>
+                    <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/opportunities?focusedId=${opp.id}">Ver propuesta en CRM</a></p>
+                `
+            });
+            emailsSent++;
+        }
+    }
     return emailsSent;
 };
