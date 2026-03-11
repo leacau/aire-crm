@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";air
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
 import { getBillingRequestsByOrder } from "@/lib/firebase-service";
@@ -201,7 +201,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
             await sendEmail({
                 accessToken,
-                to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
+                to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email], 
                 subject: `Reinforme - OP: ${oppTitle} - ${fullOrder.clientName}`,
                 body: emailBody,
                 attachments: [{
