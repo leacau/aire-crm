@@ -1,6 +1,6 @@
 import React, { forwardRef } from 'react';
 import { AdvertisingOrder, Program } from '@/lib/types';
-import { format, eachDayOfInterval, addDays, addMonths } from 'date-fns';
+import { format, eachDayOfInterval, addDays, addMonths, differenceInDays, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface AdvertisingOrderPdfProps {
@@ -41,6 +41,19 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   } catch (e) {
       console.error(e);
       days = [new Date()];
+  }
+
+  // 🟢 Cálculo de días y ciclos totales para mostrar en Vigencia
+  const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
+    ? Math.max(0, differenceInDays(endDate, startDate) + 1) : 0;
+
+  let totalMonthsCycle = 0;
+  if (startDate && endDate && isValid(startDate) && isValid(endDate) && endDate >= startDate) {
+      let current = new Date(startDate);
+      while (current <= endDate) {
+          totalMonthsCycle++;
+          current = addMonths(current, 1);
+      }
   }
 
   const srlSubtotal = srlItems.reduce((acc, item) => {
@@ -103,7 +116,12 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                 <div style={styles.dataRow}><span style={styles.label}>Orden Tango:</span><span>{order.tangoOrderNo || "-"}</span></div>
                 <div style={styles.dataRow}>
                     <span style={styles.label}>Vigencia:</span>
-                    <span style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{formatDate(order.startDate)} al {formatDate(order.endDate)}</span>
+                    <span style={{ fontWeight: 'bold', color: '#1e3a8a' }}>
+                        {formatDate(order.startDate)} al {formatDate(order.endDate)}
+                        <span style={{ color: '#6b7280', fontSize: '10px', marginLeft: '8px', fontWeight: 'normal' }}>
+                            ({daysCount} días / {totalMonthsCycle} ciclos)
+                        </span>
+                    </span>
                 </div>
                 <div style={styles.dataRow}>
                     <span style={styles.label}>Materiales:</span>
