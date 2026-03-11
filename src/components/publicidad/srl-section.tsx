@@ -1,11 +1,10 @@
 // src/components/publicidad/srl-section.tsx
-
 "use client";
 
 import { useFieldArray, UseFormReturn, useWatch } from "react-hook-form";
-import { format, eachMonthOfInterval, endOfMonth, eachDayOfInterval, startOfMonth, getDay, addMonths, isBefore } from "date-fns";
+import { format, eachDayOfInterval, getDay, addDays, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2, Copy } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useEffect } from "react";
 
 import { cn } from "@/lib/utils";
@@ -16,7 +15,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FormControl, FormField } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { srlAdTypes, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
-import { useToast } from "@/hooks/use-toast";
 
 interface Program {
     id: string;
@@ -45,7 +43,6 @@ interface SrlSectionProps {
 }
 
 export function SrlSection({ form, startDate, endDate, programs }: SrlSectionProps) {
-  const { toast } = useToast();
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "srlItems",
@@ -80,7 +77,13 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
 
   if (!startDate || !endDate) return null;
 
-  const months = eachMonthOfInterval({ start: startDate, end: endDate });
+  // Calculamos las fechas del primer ciclo de 30/31 días exacto (Propuesta Mensual)
+  const firstMonthStart = startDate;
+  const firstMonthEnd = addDays(addMonths(startDate, 1), -1);
+  const effectiveEnd = firstMonthEnd > endDate ? endDate : firstMonthEnd;
+  const days = eachDayOfInterval({ start: firstMonthStart, end: effectiveEnd });
+  
+  const monthKey = "Mensual"; // Usamos una key estática para la propuesta modelo
 
   const subtotal = items?.reduce((acc, item) => {
     const dailySpots = item.dailySpots || {};
@@ -95,81 +98,11 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
   const agencyAmount = form.watch("agencySale") ? (totalToInvoice * (agencyCommissionPct / 100)) : 0;
   const netAction = totalToInvoice - agencyAmount;
 
-  // 🟢 FUNCIÓN PARA DUPLICAR AL MES SIGUIENTE
-  const handleDuplicateToNextMonth = (itemIndex: number) => {
-      const sourceItem = form.getValues(`srlItems.${itemIndex}`);
-      if (!sourceItem || !sourceItem.month) return;
-
-      const [year, month] = sourceItem.month.split('-');
-      const currentMonthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const nextMonthDate = addMonths(currentMonthDate, 1);
-      
-      if (isBefore(endDate, startOfMonth(nextMonthDate))) {
-          toast({
-              title: "Fuera de vigencia",
-              description: "La campaña termina antes del próximo mes.",
-              variant: "destructive"
-          });
-          return;
-      }
-
-      const nextMonthKey = format(nextMonthDate, "yyyy-MM");
-      
-      const dayOfWeekQuantities = new Map<number, number>();
-      Object.entries(sourceItem.dailySpots || {}).forEach(([dateStr, qty]) => {
-          if (qty && qty > 0) {
-              const [y, m, d] = dateStr.split('-').map(Number);
-              const dateObj = new Date(y, m - 1, d);
-              let dayOfWeek = dateObj.getDay();
-              dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek; 
-              dayOfWeekQuantities.set(dayOfWeek, qty);
-          }
-      });
-
-      const nextMonthStartBoundary = nextMonthDate < startDate ? startDate : startOfMonth(nextMonthDate);
-      const nextMonthEndBoundary = endOfMonth(nextMonthDate) > endDate ? endDate : endOfMonth(nextMonthDate);
-      const nextMonthDays = eachDayOfInterval({ start: nextMonthStartBoundary, end: nextMonthEndBoundary });
-
-      const newDailySpots: Record<string, number> = {};
-      nextMonthDays.forEach(day => {
-          let jsDay = day.getDay();
-          let isoDay = jsDay === 0 ? 7 : jsDay;
-          if (dayOfWeekQuantities.has(isoDay)) {
-              newDailySpots[format(day, "yyyy-MM-dd")] = dayOfWeekQuantities.get(isoDay)!;
-          }
-      });
-
-      append({
-          month: nextMonthKey,
-          programId: sourceItem.programId,
-          adType: sourceItem.adType,
-          customType: sourceItem.customType,
-          hasTv: sourceItem.hasTv,
-          unitRate: sourceItem.unitRate,
-          seconds: sourceItem.seconds,
-          dailySpots: newDailySpots
-      });
-
-      toast({
-          title: "Duplicado exitoso",
-          description: `Se copió la fila a ${format(nextMonthDate, "MMMM yyyy", { locale: es })}.`
-      });
-  };
-
   return (
     <div className="space-y-12">
-      {months.map((monthDate) => {
-        const monthKey = format(monthDate, "yyyy-MM");
-        const monthStart = startOfMonth(monthDate);
-        const monthEnd = endOfMonth(monthDate);
-        const effectiveStart = monthStart < startDate ? startDate : monthStart;
-        const effectiveEnd = monthEnd > endDate ? endDate : monthEnd;
-        const days = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
-
-        return (
-          <div key={monthKey} className="border rounded-md shadow-sm overflow-hidden bg-white mb-6">
+        <div className="border rounded-md shadow-sm overflow-hidden bg-white mb-6">
             <div className="bg-slate-200 px-4 py-2 flex justify-between items-center">
-                <span className="font-bold text-slate-700">{format(monthDate, "MMMM yyyy", { locale: es }).toUpperCase()}</span>
+                <span className="font-bold text-slate-700">PROPUESTA MENSUAL</span>
                 <Button type="button" variant="outline" size="sm" onClick={() => append({ month: monthKey, programId: "", adType: "Spot", hasTv: false, unitRate: 0, seconds: 0, dailySpots: {} })}>
                     <Plus className="mr-2 h-4 w-4" /> Agregar Fila
                 </Button>
@@ -190,12 +123,11 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                         </div>
                       </TableHead>
                     ))}
-                    {/* 🟢 NUEVAS CABECERAS */}
                     <TableHead className="w-[50px] text-center font-bold text-xs border-r border-slate-300 px-1 leading-tight">Cant.<br/>Repet.</TableHead>
                     <TableHead className="w-[50px] text-center font-bold text-xs border-r border-slate-300 px-1 leading-tight">Tot.<br/>Seg.</TableHead>
                     <TableHead className="w-[80px] text-right font-bold text-xs border-r border-slate-300">Tarifa</TableHead>
                     <TableHead className="w-[100px] text-right font-bold text-xs border-r border-slate-300">Neto</TableHead>
-                    <TableHead className="w-[80px]"></TableHead>
+                    <TableHead className="w-[40px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -223,7 +155,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                     const currentUnitRate = itemValues.unitRate || 0;
                     const totalAdsGlobal = Object.values(currentDailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
                     
-                    // 🟢 CÁLCULO DE SEGUNDOS
                     const totalSecondsGlobal = adType === "Spot" ? (totalAdsGlobal * currentSeconds) : 0;
                     const netAmountGlobal = currentUnitRate * totalAdsGlobal * (adType === "Spot" ? currentSeconds : 1);
 
@@ -291,7 +222,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                             );
                         })}
 
-                        {/* 🟢 DOS CELDAS SEPARADAS */}
                         <TableCell className="text-center font-bold text-xs border-r border-slate-300 bg-slate-50">{totalAdsGlobal}</TableCell>
                         <TableCell className="text-center font-bold text-xs border-r border-slate-300 bg-slate-50">{adType === "Spot" ? totalSecondsGlobal : "-"}</TableCell>
 
@@ -303,16 +233,6 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                         <TableCell className="text-right font-bold text-slate-800 text-xs pr-2 bg-slate-50 border-r border-slate-300">${netAmountGlobal.toLocaleString("es-AR")}</TableCell>
                         <TableCell className="text-center p-1">
                             <div className="flex items-center justify-center gap-1">
-                                <Button 
-                                    type="button" 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    className="h-7 w-7 text-blue-600 hover:text-blue-800 hover:bg-blue-50" 
-                                    title="Copiar pautado al mes siguiente"
-                                    onClick={() => handleDuplicateToNextMonth(index)}
-                                >
-                                    <Copy className="h-3 w-3" />
-                                </Button>
                                 <Button 
                                     type="button" 
                                     variant="ghost" 
@@ -332,17 +252,53 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                 </TableBody>
               </Table>
             </div>
-          </div>
-        );
-      })}
+        </div>
       
       <div className="flex justify-end mt-4">
         <div className="w-full max-w-2xl bg-slate-50 p-4 rounded-lg border grid grid-cols-2 gap-x-8 gap-y-2 shadow-sm">
-            <div className="flex justify-between items-center text-sm"><span className="font-bold text-slate-600">Subtotal:</span><span className="bg-slate-800 text-white px-2 py-1 rounded font-mono font-bold">${subtotal.toLocaleString("es-AR")}</span></div>
-             <div className="flex justify-between items-center text-sm"><span className="font-bold text-slate-600">Desajuste:</span><div className="w-32"><FormField control={form.control} name="adjustmentSrl" render={({ field }) => (<Input type="number" className="h-8 text-right font-mono" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />)} /></div></div>
-             <div className="flex justify-between items-center text-sm col-span-2 border-t border-slate-300 pt-2 mt-2"><span className="font-bold text-slate-800">Total a Facturar:</span><span className="bg-yellow-400 text-black px-2 py-1 rounded font-mono font-bold text-lg border border-yellow-500">${totalToInvoice.toLocaleString("es-AR")}</span></div>
-             <div className="flex justify-between items-center text-sm text-slate-500"><span>Agencia ({agencyCommissionPct}%):</span><span className="font-mono">${agencyAmount.toLocaleString("es-AR")}</span></div>
-             <div className="flex justify-between items-center text-sm"><span className="font-bold text-slate-800">Neto de Acción:</span><span className="bg-green-600 text-white px-2 py-1 rounded font-mono font-bold">${netAction.toLocaleString("es-AR")}</span></div>
+            <div className="flex justify-between items-center text-sm">
+                <span className="font-bold text-slate-600">Subtotal:</span>
+                <span className="bg-slate-800 text-white px-2 py-1 rounded font-mono font-bold">${subtotal.toLocaleString("es-AR")}</span>
+            </div>
+            
+            <div className="flex justify-between items-center text-sm">
+                <span className="font-bold text-blue-700">Valor a Cobrar Deseado:</span>
+                <div className="w-32">
+                    <Input 
+                        type="number" 
+                        placeholder="Ej: 100000"
+                        className="h-8 text-right font-mono border-blue-300 bg-blue-50"
+                        onChange={(e) => {
+                            const targetVal = parseFloat(e.target.value);
+                            if (!isNaN(targetVal)) {
+                                form.setValue("adjustmentSrl", Math.max(0, subtotal - targetVal), { shouldValidate: true });
+                            }
+                        }}
+                    />
+                </div>
+            </div>
+
+            <div className="flex justify-between items-center text-sm">
+                 <span className="font-bold text-slate-600">Desajuste (-):</span>
+                 <div className="w-32">
+                     <FormField control={form.control} name="adjustmentSrl" render={({ field }) => (
+                         <Input type="number" className="h-8 text-right font-mono" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
+                     )} />
+                 </div>
+            </div>
+
+             <div className="flex justify-between items-center text-sm col-span-2 border-t border-slate-300 pt-2 mt-2">
+                 <span className="font-bold text-slate-800">Total a Facturar (Mensual):</span>
+                 <span className="bg-yellow-400 text-black px-2 py-1 rounded font-mono font-bold text-lg border border-yellow-500">${totalToInvoice.toLocaleString("es-AR")}</span>
+             </div>
+             <div className="flex justify-between items-center text-sm text-slate-500">
+                 <span>Agencia ({agencyCommissionPct}%):</span>
+                 <span className="font-mono">${agencyAmount.toLocaleString("es-AR")}</span>
+             </div>
+             <div className="flex justify-between items-center text-sm">
+                 <span className="font-bold text-slate-800">Neto de Acción:</span>
+                 <span className="bg-green-600 text-white px-2 py-1 rounded font-mono font-bold">${netAction.toLocaleString("es-AR")}</span>
+             </div>
         </div>
       </div>
     </div>
