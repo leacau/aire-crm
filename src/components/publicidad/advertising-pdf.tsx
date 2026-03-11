@@ -1,6 +1,6 @@
 import React, { forwardRef } from 'react';
 import { AdvertisingOrder, Program } from '@/lib/types';
-import { format, eachMonthOfInterval, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
+import { format, eachDayOfInterval, addDays, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface AdvertisingOrderPdfProps {
@@ -29,13 +29,18 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const startDate = order.startDate ? new Date(order.startDate) : new Date();
   const endDate = order.endDate ? new Date(order.endDate) : new Date();
   
-  let months: Date[] = [];
+  // 🟢 Calculamos los días del primer ciclo para la propuesta mensual
+  let days: Date[] = [];
   try {
-      if (startDate <= endDate) {
-          months = eachMonthOfInterval({ start: startDate, end: endDate });
+      const firstMonthStart = startDate;
+      const firstMonthEnd = addDays(addMonths(startDate, 1), -1);
+      const effectiveEnd = firstMonthEnd > endDate ? endDate : firstMonthEnd;
+      if (firstMonthStart <= effectiveEnd) {
+          days = eachDayOfInterval({ start: firstMonthStart, end: effectiveEnd });
       }
   } catch (e) {
-      months = [new Date()];
+      console.error(e);
+      days = [new Date()];
   }
 
   const srlSubtotal = srlItems.reduce((acc, item) => {
@@ -218,23 +223,19 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       );
   };
 
-  const renderSRLMonth = (monthDate: Date, isFirstMonth: boolean) => {
-        const monthKey = format(monthDate, "yyyy-MM");
-        const itemsInMonth = srlItems.filter(item => item.month === monthKey);
-        if (itemsInMonth.length === 0) return null;
+  const renderSRLSection = () => {
+        if (!hasSRL) return null;
 
-        const mStart = startOfMonth(monthDate);
-        const mEnd = endOfMonth(monthDate);
-        const effectiveStart = mStart < startDate ? startDate : mStart;
-        const effectiveEnd = mEnd > endDate ? endDate : mEnd;
-        const days = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
+        // 🟢 Filtramos solo los ítems mensuales por las dudas
+        const itemsToRender = srlItems.filter(item => item.month === "Mensual" || !item.month);
+        if (itemsToRender.length === 0) return null;
 
         return (
-            <div key={monthKey} className="pdf-block" style={{ marginBottom: '20px' }}>
-                {isFirstMonth && <div style={styles.sectionTitle}>PAUTA AIRE SRL</div>}
+            <div className="pdf-block" style={{ marginBottom: '20px' }}>
+                <div style={styles.sectionTitle}>PAUTA AIRE SRL</div>
                 <div>
                     <div style={{ backgroundColor: '#e5e7eb', padding: '4px 8px', fontWeight: 'bold', fontSize: '11px', border: '1px solid #9ca3af', borderBottom: 'none' }}>
-                        {format(monthDate, "MMMM yyyy", { locale: es }).toUpperCase()}
+                        PROPUESTA MENSUAL
                     </div>
                     <table style={styles.table}>
                         <thead>
@@ -251,7 +252,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                             </tr>
                         </thead>
                         <tbody>
-                            {itemsInMonth.map((item, idx) => {
+                            {itemsToRender.map((item, idx) => {
                                 const progName = item.programId === 'Personalizado' ? 'Personalizado' : (programs.find(p => p.id === item.programId)?.name || item.programId);
                                 const typeLabel = (item.programId === 'Personalizado' || item.adType === 'Personalizado') ? (item.customType || 'Personalizado') : item.adType;
 
@@ -292,10 +293,10 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                  {renderBillingRequestsSrl()}
                  <div style={{ ...styles.totalBox, marginTop: 0 }}>
-                    <div style={styles.totalRow}><span>Subtotal:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
+                    <div style={styles.totalRow}><span>Subtotal Mensual:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
                     <div style={styles.totalRow}><span>Desajuste:</span><span>${srlAdjustment.toLocaleString('es-AR')}</span></div>
                     <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
-                        <span>Total a Facturar:</span><span>${srlTotalToInvoice.toLocaleString('es-AR')}</span>
+                        <span>Total a Facturar (Mes):</span><span>${srlTotalToInvoice.toLocaleString('es-AR')}</span>
                     </div>
                     <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({srlCommissionPct}%):</span><span>${srlAgencyAmount.toLocaleString('es-AR')}</span></div>
                     <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
@@ -307,18 +308,18 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     );
   };
 
-  const renderSASMonth = (monthDate: Date, isFirstElement: boolean, isFirstSAS: boolean) => {
-        const monthKey = format(monthDate, "yyyy-MM");
-        const itemsInMonth = sasItems.filter(item => item.month === monthKey);
-        if (itemsInMonth.length === 0) return null;
+  const renderSASSection = () => {
+        if (!hasSAS) return null;
+
+        const itemsToRender = sasItems.filter(item => item.month === "Mensual" || !item.month);
+        if (itemsToRender.length === 0) return null;
 
         return (
-            <div key={`sas-${monthKey}`} className="pdf-block" style={{ marginBottom: '20px' }}>
-                {isFirstElement && renderClientInfo()}
-                {isFirstSAS && <div style={styles.sectionTitle}>PAUTA DIGITAL (SAS)</div>}
+            <div className="pdf-block" style={{ marginBottom: '20px' }}>
+                <div style={styles.sectionTitle}>PAUTA DIGITAL (SAS)</div>
                 <div>
                     <div style={{ backgroundColor: '#e5e7eb', padding: '4px 8px', fontWeight: 'bold', fontSize: '11px', border: '1px solid #9ca3af', borderBottom: 'none' }}>
-                        {format(monthDate, "MMMM yyyy", { locale: es }).toUpperCase()}
+                        PROPUESTA MENSUAL
                     </div>
                     <table style={styles.table}>
                         <thead>
@@ -331,7 +332,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                             </tr>
                         </thead>
                         <tbody>
-                            {itemsInMonth.map((item, i) => {
+                            {itemsToRender.map((item, i) => {
                                 let net = 0;
                                 if (item.format === "Banner") { net = (item.cpm || 0) * (item.unitRate || 0); } else { net = (item.unitRate || 0); }
                                 const locs = [];
@@ -364,11 +365,11 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                 {renderBillingRequestsSas()}
 
                 <div style={{ ...styles.totalBox, marginTop: 0 }}>
-                    <div style={styles.totalRow}><span>Subtotal:</span><span>${sasSubtotal.toLocaleString('es-AR')}</span></div>
+                    <div style={styles.totalRow}><span>Subtotal Mensual:</span><span>${sasSubtotal.toLocaleString('es-AR')}</span></div>
                     <div style={styles.totalRow}><span>Desajuste:</span><span>${sasAdjustment.toLocaleString('es-AR')}</span></div>
                     <div style={styles.totalRow}><span>IVA 5%:</span><span>${sasIva.toLocaleString('es-AR')}</span></div>
                     <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
-                        <span>Total a Facturar:</span><span>${sasTotalToInvoice.toLocaleString('es-AR')}</span>
+                        <span>Total a Facturar (Mes):</span><span>${sasTotalToInvoice.toLocaleString('es-AR')}</span>
                     </div>
                     <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({sasCommissionPct}%):</span><span>${sasAgencyAmount.toLocaleString('es-AR')}</span></div>
                     <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
@@ -384,7 +385,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     <div className="pdf-block" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', paddingTop: '20px' }}>
       {!hidePrices && (
         <div style={{ width: '100%', borderTop: '2px solid #000', paddingTop: '10px', textAlign: 'right' }}>
-            <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>Total Pedido: ${ (order.totalOrder || 0).toLocaleString('es-AR') }</p>
+            <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>Total Sugerido Facturación: ${ (order.totalOrder || 0).toLocaleString('es-AR') }</p>
         </div>
       )}
       <div style={{ marginTop: hidePrices ? '20px' : '40px', borderTop: '1px solid #000', width: '250px', textAlign: 'center', fontSize: '11px', paddingTop: '5px', marginLeft: 'auto' }}>
@@ -398,11 +399,11 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       <div style={styles.container}>
         {renderHeaderAndInfo()}
         
-        {hasSRL && months.map((m, idx) => renderSRLMonth(m, idx === 0))}
-        {hasSRL && renderSRLTotals()}
+        {renderSRLSection()}
+        {renderSRLTotals()}
 
-        {hasSAS && months.map((m, idx) => renderSASMonth(m, !hasSRL && idx === 0, idx === 0))}
-        {hasSAS && renderSASTotals()}
+        {renderSASSection()}
+        {renderSASTotals()}
         
         {renderFooter()}
       </div>
