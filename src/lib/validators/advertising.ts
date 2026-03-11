@@ -70,7 +70,6 @@ export const advertisingOrderSchema = z.object({
   adjustmentSrl: z.coerce.number().optional().default(0),
   adjustmentSas: z.coerce.number().optional().default(0),
   
-  // 🟢 SEPARACIÓN DE FACTURAS SRL Y SAS
   billingRequestsSrl: z.array(z.object({
     date: z.string().min(1, "Obligatorio"),
     grossAmount: z.coerce.number().min(0).default(0),
@@ -85,6 +84,15 @@ export const advertisingOrderSchema = z.object({
     ivaSas: z.coerce.number().min(0).default(0),
     amount: z.coerce.number().min(0).default(0)
   })).optional().default([]),
+}).superRefine((val, ctx) => {
+  // Validación de observación obligatoria si hay desajuste
+  if ((val.adjustmentSrl > 0 || val.adjustmentSas > 0) && (!val.observations || val.observations.trim() === "")) {
+      ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Es obligatorio dejar una observación aclarando el motivo del desajuste.",
+          path: ["observations"]
+      });
+  }
 });
 
 export type AdvertisingOrderFormValues = z.infer<typeof advertisingOrderSchema>;
