@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format, differenceInDays, isValid, startOfMonth, endOfMonth, isWithinInterval, addMonths } from "date-fns";
+import { format, differenceInDays, isValid, addMonths } from "date-fns";
 import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2 } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 import html2canvas from 'html2canvas';
@@ -244,37 +244,7 @@ export function AdvertisingForm() {
     fetchOpps();
   }, [selectedClientId]);
 
-  useEffect(() => {
-      if (!startDate || !endDate) return;
-      const currentSrlItems = getValues("srlItems") || [];
-      const currentSasItems = getValues("sasItems") || [];
-      
-      const validStart = startOfMonth(startDate);
-      const validEnd = endOfMonth(endDate);
-
-      let srlChanges = false;
-      let sasChanges = false;
-
-      const cleanedSrlItems = currentSrlItems.filter(item => {
-          if (!item.month) return false;
-          const itemMonthDate = new Date(`${item.month}-15`); 
-          const isValid = isWithinInterval(itemMonthDate, { start: validStart, end: validEnd });
-          if (!isValid) srlChanges = true;
-          return isValid;
-      });
-
-      const cleanedSasItems = currentSasItems.filter(item => {
-          if (!item.month) return false;
-          const itemMonthDate = new Date(`${item.month}-15`); 
-          const isValid = isWithinInterval(itemMonthDate, { start: validStart, end: validEnd });
-          if (!isValid) sasChanges = true;
-          return isValid;
-      });
-
-      if (srlChanges) setValue("srlItems", cleanedSrlItems, { shouldValidate: true });
-      if (sasChanges) setValue("sasItems", cleanedSasItems, { shouldValidate: true });
-
-  }, [startDate, endDate, setValue, getValues]);
+  // Se eliminó el useEffect que limpiaba items si cambiaban las fechas del mes (ya que ahora todo es "Mensual")
 
   useEffect(() => {
       if (isRestored && srlItemsCurrent?.length === 0) {
@@ -289,6 +259,16 @@ export function AdvertisingForm() {
 
   const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
     ? Math.max(0, differenceInDays(endDate, startDate) + 1) : 0;
+
+  // Cálculo de total de meses en ciclos
+  let totalMonthsCycle = 0;
+  if (startDate && endDate && isValid(startDate) && isValid(endDate) && endDate >= startDate) {
+      let current = new Date(startDate);
+      while (current <= endDate) {
+          totalMonthsCycle++;
+          current = addMonths(current, 1);
+      }
+  }
 
   const showSections = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
 
@@ -549,7 +529,8 @@ export function AdvertisingForm() {
       const missing = [];
       if (errors.clientId) missing.push("Cliente");
       if (errors.startDate || errors.endDate) missing.push("Fechas de Vigencia");
-      toast({ title: "Faltan datos obligatorios", description: `Por favor completa: ${missing.join(", ")}`, variant: "destructive" });
+      if (errors.observations) missing.push("Observaciones (Obligatorio por desajuste)");
+      toast({ title: "Faltan datos", description: `Por favor completa: ${missing.join(", ")}`, variant: "destructive" });
   };
 
   async function onSubmit(data: AdvertisingOrderFormValues) {
@@ -577,21 +558,9 @@ export function AdvertisingForm() {
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      const validSrlItems = data.srlItems.filter(item => {
-          if (!item.month) return false;
-          const itemDate = new Date(`${item.month}-02`); 
-          const start = startOfMonth(data.startDate);
-          const end = endOfMonth(data.endDate);
-          return isWithinInterval(itemDate, { start, end });
-      });
-
-      const validSasItems = data.sasItems.filter(item => {
-          if (!item.month) return false;
-          const itemDate = new Date(`${item.month}-02`); 
-          const start = startOfMonth(data.startDate);
-          const end = endOfMonth(data.endDate);
-          return isWithinInterval(itemDate, { start, end });
-      });
+      // Se guardan todos los items ya que ahora es modelo template "Mensual"
+      const validSrlItems = data.srlItems;
+      const validSasItems = data.sasItems;
 
       const preview = getPreviewOrder();
       const orderPayload = {
@@ -674,7 +643,6 @@ export function AdvertisingForm() {
 
   if (isLoadingData) return <div className="p-8 text-center">Cargando...</div>;
 
-  // 🟢 BOTONERA SUPERIOR E INFERIOR (COMPARTIDA)
   const ActionButtons = () => (
       <div className="flex flex-wrap items-center justify-between w-full gap-4">
           <div className="flex items-center gap-4">
@@ -710,7 +678,6 @@ export function AdvertisingForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8 pb-10">
         
-        {/* 🟢 BOTONES DE ACCIÓN ARRIBA */}
         <div className="bg-white p-4 border rounded-md shadow-sm">
             <ActionButtons />
         </div>
@@ -756,7 +723,7 @@ export function AdvertisingForm() {
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
           <div className="bg-slate-100 px-4 py-2 border-b"><h3 className="text-lg font-semibold text-slate-800">AIRE SRL</h3></div>
           <div className="p-4 grid gap-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                <FormField control={form.control} name="tangoOrderNo" render={({ field }) => (<FormItem><FormLabel>Orden Tango</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
                <FormField control={form.control} name="startDate" render={({ field }) => (
                   <FormItem className="flex flex-col"><FormLabel>Inicio <span className="text-red-500">*</span></FormLabel>
@@ -777,6 +744,7 @@ export function AdvertisingForm() {
                   </FormItem>
                 )} />
                <FormItem><FormLabel>Días</FormLabel><FormControl><Input value={daysCount} readOnly className="bg-slate-50" /></FormControl></FormItem>
+               <FormItem><FormLabel>Meses (Ciclos)</FormLabel><FormControl><Input value={totalMonthsCycle} readOnly className="bg-slate-50" /></FormControl></FormItem>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center border p-3 rounded-md bg-slate-50">
@@ -788,7 +756,13 @@ export function AdvertisingForm() {
             </div>
 
             <div className="grid grid-cols-1">
-                <FormField control={form.control} name="observations" render={({ field }) => (<FormItem><FormLabel>Observaciones</FormLabel><FormControl><Textarea className="h-10 resize-none" {...field} /></FormControl></FormItem>)} />
+                <FormField control={form.control} name="observations" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Observaciones {(values.adjustmentSrl > 0 || values.adjustmentSas > 0) && <span className="text-red-500 text-xs ml-1">(Obligatorio por desajuste)</span>}</FormLabel>
+                    <FormControl><Textarea className="h-10 resize-none" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
             </div>
 
             <div className="mt-4">
@@ -953,7 +927,6 @@ export function AdvertisingForm() {
         </div>
         )}
 
-        {/* 🟢 BOTONES DE ACCIÓN ABAJO (TAMBIÉN MANTENIDOS) */}
         <div className="flex justify-between items-center pt-6 border-t mt-8 gap-4">
           <ActionButtons />
         </div>
