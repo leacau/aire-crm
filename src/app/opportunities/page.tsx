@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { Header } from '@/components/layout/header';
@@ -68,18 +66,6 @@ export default function OpportunitiesPage() {
     }
   }, [pendingFocusOpportunityId, router, searchParams]);
 
-  const advisorsInList = useMemo(() => {
-    if (!isBoss) return [];
-    const clientIdsInList = new Set(clientList.map(c => c.id));
-    const advisorIdsInList = new Set(
-      allClients
-        .filter(client => clientIdsInList.has(client.id))
-        .map(client => client.ownerId)
-    );
-    return allAdvisors.filter(advisor => advisorIdsInList.has(advisor.id));
-  }, [clientList, allClients, allAdvisors, isBoss]);
-
-
   return (
     <div className="flex flex-col h-full">
       <Header title="Oportunidades">
@@ -91,7 +77,7 @@ export default function OpportunitiesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los asesores</SelectItem>
-                {advisorsInList.map(advisor => (
+                {allAdvisors.map(advisor => (
                   <SelectItem key={advisor.id} value={advisor.id}>{advisor.name}</SelectItem>
                 ))}
               </SelectContent>
