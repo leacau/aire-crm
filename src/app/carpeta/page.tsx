@@ -3,8 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
-import { getClients, getAllOpportunities } from '@/lib/firebase-service';
-import type { Client, Opportunity } from '@/lib/types';
+import { getClients, getAllOpportunities, getBillingRequestsByClient } from '@/lib/firebase-service';
+import type { Client, Opportunity, BillingRequest } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { startOfMonth, endOfMonth, parseISO, isWithinInterval, isSameMonth, addMonths } from 'date-fns';
 import Link from 'next/link';
@@ -27,17 +27,27 @@ export default function CarpetaPage() {
     const { userInfo, isBoss } = useAuth();
     const [clients, setClients] = useState<Client[]>([]);
     const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+    const [allBillingRequests, setAllBillingRequests] = useState<BillingRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
 
     useEffect(() => {
-        Promise.all([getClients(), getAllOpportunities()]).then(([allClients, allOpps]) => {
+        Promise.all([
+            getClients(), 
+            getAllOpportunities()
+        ]).then(async ([allClients, allOpps]) => {
+            let visibleClients = allClients;
             if (!isBoss && userInfo?.id) {
-                setClients(allClients.filter(c => c.ownerId === userInfo.id));
-            } else {
-                setClients(allClients);
+                visibleClients = allClients.filter(c => c.ownerId === userInfo.id);
             }
+            setClients(visibleClients);
             setOpportunities(allOpps);
+
+            // Traemos todos los billing requests de los clientes visibles para no perder campañas largas
+            const brPromises = visibleClients.map(c => getBillingRequestsByClient(c.id));
+            const brResults = await Promise.all(brPromises);
+            setAllBillingRequests(brResults.flat());
+            
             setLoading(false);
         });
     }, [userInfo, isBoss]);
@@ -48,6 +58,7 @@ export default function CarpetaPage() {
         
         const activeClientIds = new Set<string>();
 
+        // 1. Clientes por oportunidad recurrente activa
         opportunities.forEach(opp => {
             if (opp.stage !== 'Cerrado - Ganado' || !opp.closeDate) return;
 
@@ -74,10 +85,17 @@ export default function CarpetaPage() {
             }
         });
 
+        // 2. Clientes por tener un pedido de facturación (Billing Request) programado para este mes
+        allBillingRequests.forEach(br => {
+            if (br.date && isSameMonth(startOfCurrentMonth, parseISO(br.date))) {
+                activeClientIds.add(br.clientId);
+            }
+        });
+
         return clients
             .filter(client => activeClientIds.has(client.id) && client.denominacion.toLowerCase().includes(search.toLowerCase()))
             .sort((a, b) => a.denominacion.localeCompare(b.denominacion));
-    }, [clients, opportunities, search]);
+    }, [clients, opportunities, allBillingRequests, search]);
 
     return (
         <div className="flex flex-col h-full">
@@ -95,7 +113,7 @@ export default function CarpetaPage() {
                 ) : (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {activeClients.length === 0 && (
-                            <p className="col-span-full text-muted-foreground text-center">No hay clientes con propuestas activas este mes.</p>
+                            <p className="col-span-full text-muted-foreground text-center">No hay clientes con pauta o facturación pendiente para este mes.</p>
                         )}
                         {activeClients.map(client => (
                             <Link key={client.id} href={`/carpeta/${client.id}`}>
