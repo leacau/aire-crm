@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { advertisingOrderSchema, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
@@ -59,8 +60,8 @@ export function AdvertisingForm() {
   
   const [isRestored, setIsRestored] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [notifyOnSave, setNotifyOnSave] = useState(true); // 🟢 NUEVO ESTADO PARA NOTIFICACIÓN
   
-  const [invoiceCountSrl, setInvoiceCountSrl] = useState(1);
   const [invoiceCountSas, setInvoiceCountSas] = useState(1);
 
   const pdfRef = useRef<HTMLDivElement>(null);
@@ -244,8 +245,6 @@ export function AdvertisingForm() {
     fetchOpps();
   }, [selectedClientId]);
 
-  // Se eliminó el useEffect que limpiaba items si cambiaban las fechas del mes (ya que ahora todo es "Mensual")
-
   useEffect(() => {
       if (isRestored && srlItemsCurrent?.length === 0) {
           if (values.adjustmentSrl !== 0) setValue("adjustmentSrl", 0);
@@ -298,15 +297,17 @@ export function AdvertisingForm() {
   const hasSas = sasItemsValid.length > 0;
 
   const handleGenerateBillingSrl = () => {
-      if (invoiceCountSrl < 1) return;
-      const invGross = srlSubtotal / invoiceCountSrl;
-      const invAdj = srlAdjustment / invoiceCountSrl;
+      if (totalMonthsCycle < 1) return;
+      
+      // 🟢 Lógica SRL: 1 Factura obligatoria por cada ciclo, con monto mensual
+      const invGross = srlSubtotal;
+      const invAdj = srlAdjustment;
       const invNet = invGross - invAdj;
 
       const newBrs = [];
       let curDate = startDate && isValid(startDate) ? new Date(startDate) : new Date();
       
-      for (let i = 0; i < invoiceCountSrl; i++) {
+      for (let i = 0; i < totalMonthsCycle; i++) {
           newBrs.push({
               date: format(curDate, 'yyyy-MM-dd'),
               grossAmount: Number(invGross.toFixed(2)),
@@ -320,10 +321,17 @@ export function AdvertisingForm() {
 
   const handleGenerateBillingSas = () => {
       if (invoiceCountSas < 1) return;
-      const invGross = sasSubtotal / invoiceCountSas;
-      const invAdj = sasAdjustment / invoiceCountSas;
-      const invIva = sasIva / invoiceCountSas;
-      const invNet = invGross - invAdj + invIva;
+
+      // 🟢 Lógica SAS: Monto total de campaña dividido por la cantidad de facturas que elija el usuario
+      const campaignGross = sasSubtotal * totalMonthsCycle;
+      const campaignAdj = sasAdjustment * totalMonthsCycle;
+      const campaignIva = sasIva * totalMonthsCycle;
+      const campaignNet = totalOrderSasNet * totalMonthsCycle;
+
+      const invGross = campaignGross / invoiceCountSas;
+      const invAdj = campaignAdj / invoiceCountSas;
+      const invIva = campaignIva / invoiceCountSas;
+      const invNet = campaignNet / invoiceCountSas;
 
       const newBrs = [];
       let curDate = startDate && isValid(startDate) ? new Date(startDate) : new Date();
@@ -366,16 +374,22 @@ export function AdvertisingForm() {
   const sumAdjSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
   const sumNetSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
 
-  const hasGrossErrorSrl = Math.abs(sumGrossSrl - srlSubtotal) > 1; 
-  const hasNetErrorSrl = Math.abs(sumNetSrl - totalOrderSrlNet) > 1;
+  // 🟢 Comparamos contra el total de la campaña SRL
+  const campaignSrlGross = srlSubtotal * totalMonthsCycle;
+  const campaignSrlNet = totalOrderSrlNet * totalMonthsCycle;
+  const hasGrossErrorSrl = Math.abs(sumGrossSrl - campaignSrlGross) > 5; 
+  const hasNetErrorSrl = Math.abs(sumNetSrl - campaignSrlNet) > 5;
 
   const sumGrossSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.grossAmount)||0), 0) || 0;
   const sumAdjSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
   const sumIvaSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.ivaSas)||0), 0) || 0;
   const sumNetSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
 
-  const hasGrossErrorSas = Math.abs(sumGrossSas - sasSubtotal) > 1; 
-  const hasNetErrorSas = Math.abs(sumNetSas - totalOrderSasNet) > 1;
+  // 🟢 Comparamos contra el total de la campaña SAS
+  const campaignSasGross = sasSubtotal * totalMonthsCycle;
+  const campaignSasNet = totalOrderSasNet * totalMonthsCycle;
+  const hasGrossErrorSas = Math.abs(sumGrossSas - campaignSasGross) > 5; 
+  const hasNetErrorSas = Math.abs(sumNetSas - campaignSasNet) > 5;
 
   const getPreviewOrder = (): AdvertisingOrder => {
       const selectedClient = clients.find(c => c.id === values.clientId);
@@ -558,7 +572,6 @@ export function AdvertisingForm() {
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      // Se guardan todos los items ya que ahora es modelo template "Mensual"
       const validSrlItems = data.srlItems;
       const validSasItems = data.sasItems;
 
@@ -590,7 +603,8 @@ export function AdvertisingForm() {
           finalOrderId = await createAdvertisingOrder(cleanPayload);
       }
 
-      if (pdfRef.current && finalOrderId) {
+      // 🟢 Enviar correo SOLAMENTE si el usuario no lo desmarcó
+      if (notifyOnSave && pdfRef.current && finalOrderId) {
           const accessToken = await getGoogleAccessToken();
           if (accessToken) {
               try {
@@ -656,7 +670,7 @@ export function AdvertisingForm() {
               )}
           </div>
           
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <Button 
               type="button" 
               variant="outline" 
@@ -666,6 +680,11 @@ export function AdvertisingForm() {
                {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
                {isExporting ? "Generando..." : "Exportar PDF"}
             </Button>
+
+            <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white h-10">
+                <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
+                <Label htmlFor="notify" className="cursor-pointer text-sm">Notificar por email</Label>
+            </div>
 
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando...</> : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
@@ -795,8 +814,7 @@ export function AdvertisingForm() {
             <div className="bg-slate-100 px-4 py-2 border-b flex justify-between items-center flex-wrap gap-2">
                 <h3 className="text-lg font-semibold text-slate-800">Sugerencia de Facturación AIRE SRL</h3>
                 <div className="flex gap-2 items-center bg-white p-1 rounded border shadow-sm">
-                    <Label className="text-xs px-2 whitespace-nowrap">Sugerir facturas:</Label>
-                    <Input type="number" min={1} value={invoiceCountSrl} onChange={e => setInvoiceCountSrl(parseInt(e.target.value) || 1)} className="w-16 h-8 text-center" />
+                    <Label className="text-xs px-2 whitespace-nowrap">Generar {totalMonthsCycle} facturas (por ciclo):</Label>
                     <Button type="button" size="sm" variant="secondary" className="h-8" onClick={handleGenerateBillingSrl}>Generar</Button>
                 </div>
             </div>
@@ -842,7 +860,7 @@ export function AdvertisingForm() {
                         <div className="w-[36px]"></div>
                         {(hasGrossErrorSrl || hasNetErrorSrl) && (
                             <div className="w-full text-xs text-red-600 text-right mt-1 font-normal italic">
-                                La suma de las cuotas no coincide con el total de la orden SRL. (Bruto: ${srlSubtotal.toLocaleString('es-AR')} | Neto: ${totalOrderSrlNet.toLocaleString('es-AR')})
+                                La suma de las cuotas no coincide con el total de la campaña SRL. (Bruto: ${campaignSrlGross.toLocaleString('es-AR')} | Neto: ${campaignSrlNet.toLocaleString('es-AR')})
                             </div>
                         )}
                     </div>
@@ -860,7 +878,7 @@ export function AdvertisingForm() {
             <div className="bg-slate-100 px-4 py-2 border-b flex justify-between items-center flex-wrap gap-2">
                 <h3 className="text-lg font-semibold text-slate-800">Sugerencia de Facturación AIRE SAS</h3>
                 <div className="flex gap-2 items-center bg-white p-1 rounded border shadow-sm">
-                    <Label className="text-xs px-2 whitespace-nowrap">Sugerir facturas:</Label>
+                    <Label className="text-xs px-2 whitespace-nowrap">Dividir en N facturas:</Label>
                     <Input type="number" min={1} value={invoiceCountSas} onChange={e => setInvoiceCountSas(parseInt(e.target.value) || 1)} className="w-16 h-8 text-center" />
                     <Button type="button" size="sm" variant="secondary" className="h-8" onClick={handleGenerateBillingSas}>Generar</Button>
                 </div>
@@ -914,7 +932,7 @@ export function AdvertisingForm() {
                         <div className="w-[36px]"></div>
                         {(hasGrossErrorSas || hasNetErrorSas) && (
                             <div className="w-full text-xs text-red-600 text-right mt-1 font-normal italic">
-                                La suma de las cuotas no coincide con el total de la orden SAS. (Bruto: ${sasSubtotal.toLocaleString('es-AR')} | Neto: ${totalOrderSasNet.toLocaleString('es-AR')})
+                                La suma de las cuotas no coincide con el total de la campaña SAS. (Bruto: ${campaignSasGross.toLocaleString('es-AR')} | Neto: ${campaignSasNet.toLocaleString('es-AR')})
                             </div>
                         )}
                     </div>
