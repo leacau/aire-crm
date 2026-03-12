@@ -3935,14 +3935,3 @@ export const updateAdvertisingOrder = async (
         ownerName: restOrderData.accountExecutive || userName
     });
 };
-
-export const getBillingRequestsByOrder = async (orderId: string) => {
-    try {
-        const q = query(collections.billingRequests, where('orderId', '==', orderId));
-        const snap = await getDocs(q);
-        return snap.docs.map(doc => doc.data() as BillingRequest);
-    } catch (e) {
-        console.error(e);
-        return [];
-    }
-};
