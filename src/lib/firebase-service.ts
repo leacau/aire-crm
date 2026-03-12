@@ -1670,13 +1670,6 @@ export const getInvoices = async (): Promise<Invoice[]> => {
                 ? rawDeletionMarkAt
                 : null;
 
-        const rawDeletionMarkDate = (data as any).deletionMarkedAt;
-        const normalizedDeletionMarkDate = rawDeletionMarkDate instanceof Timestamp
-            ? rawDeletionMarkDate.toDate().toISOString()
-            : typeof rawDeletionMarkDate === 'string'
-                ? rawDeletionMarkDate
-                : null;
-
         return {
             id: doc.id,
             ...data,
@@ -1687,12 +1680,16 @@ export const getInvoices = async (): Promise<Invoice[]> => {
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
             deletionMarkedAt: normalizedDeletionMarkAt,
+            // 🟢 Mapeo explícito de los nuevos campos
+            periodStart: data.periodStart,
+            periodEnd: data.periodEnd,
+            orderDate: data.orderDate,
+            orderNumber: data.orderNumber,
         } as Invoice;
     });
     setInCache('invoices', invoices);
     return invoices;
 };
-
 
 export const getInvoicesForOpportunity = async (opportunityId: string): Promise<Invoice[]> => {
     const q = query(collections.invoices, where("opportunityId", "==", opportunityId));
@@ -1719,6 +1716,10 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
             deletionMarkedAt: normalizedDeletionMarkAt,
+            periodStart: data.periodStart,
+            periodEnd: data.periodEnd,
+            orderDate: data.orderDate,
+            orderNumber: data.orderNumber,
         } as Invoice;
     });
     invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
@@ -1754,6 +1755,10 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
             isCreditNote: Boolean(data.isCreditNote),
             creditNoteMarkedAt: normalizedCreditNoteDate,
             deletionMarkedAt: normalizedDeletionMarkAt,
+            periodStart: data.periodStart,
+            periodEnd: data.periodEnd,
+            orderDate: data.orderDate,
+            orderNumber: data.orderNumber,
         } as Invoice;
     });
 };
@@ -1768,6 +1773,11 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
       deletionMarkedAt: invoiceData.deletionMarkedAt ?? null,
       deletionMarkedById: invoiceData.deletionMarkedById ?? null,
       deletionMarkedByName: invoiceData.deletionMarkedByName ?? null,
+      // 🟢 Inserción de campos de carpeta
+      periodStart: invoiceData.periodStart ?? null,
+      periodEnd: invoiceData.periodEnd ?? null,
+      orderDate: invoiceData.orderDate ?? null,
+      orderNumber: invoiceData.orderNumber ?? null,
     };
     const docRef = await addDoc(collections.invoices, dataToSave);
     invalidateCache('invoices');
