@@ -24,7 +24,7 @@ import {
   Upload,
   Crosshair,
   MessageSquare,
-  Database,
+  Data
   FileSpreadsheet,
   ClipboardList,
   Briefcase,
@@ -111,7 +111,6 @@ export function AppSidebar() {
       icon: Briefcase,
       items: [
         { title: 'Objetivos', href: '/objectives', icon: Crosshair, screenName: 'Objectives' },
-        { title: 'Carpeta', href: '/carpeta', icon: FolderOpen, screenName: 'Carpeta' }, // 🟢 NUEVA SECCIÓN
         { title: 'Clientes', href: '/clients', icon: Users, screenName: 'Clients' },
         { title: 'Oportunidades', href: '/opportunities', icon: Trophy, screenName: 'Opportunities' },
         { title: 'Prospectos', href: '/prospects', icon: Target, screenName: 'Prospects' },
@@ -120,6 +119,7 @@ export function AppSidebar() {
         { title: 'Cotizador', href: '/quotes', icon: FileSpreadsheet, screenName: 'Quotes' },
         { title: 'Aprobaciones', href: '/approvals', icon: CheckSquare, screenName: 'Approvals' },
         { title: 'Seguimiento', href: '/coaching', icon: ClipboardList, screenName: 'Coaching' },
+        /* { title: 'Carpeta', href: '/carpeta', icon: FolderOpen, screenName: 'Carpeta' }, // 🟢 NUEVA SECCIÓN */
       ]
     },
     {
