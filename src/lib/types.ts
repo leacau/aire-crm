@@ -38,6 +38,11 @@ export type Invoice = {
   deletionMarkedAt?: string | null;
   deletionMarkedById?: string;
   deletionMarkedByName?: string;
+  // 🟢 NUEVOS CAMPOS PARA CARPETA DE FACTURACIÓN
+  periodStart?: string;
+  periodEnd?: string;
+  orderDate?: string;
+  orderNumber?: string;
 };
 
 export type PaymentStatus = 'Pendiente' | 'Reclamado' | 'Pagado' | 'Incobrable';
@@ -354,7 +359,7 @@ export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
-    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad'
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta' // 🟢 AGREGADO
 ] as const;
 export type ScreenName = typeof screenNames[number];
 
@@ -621,7 +626,7 @@ export type BillingRequest = {
   orderId: string;
   opportunityId: string;
   clientId: string;
-  company: 'SRL' | 'SAS'; // 🟢 NUEVO: Empresa facturadora
+  company: 'SRL' | 'SAS';
   date: string;
   grossAmount: number;
   adjustment: number;
@@ -659,7 +664,6 @@ export type AdvertisingOrder = {
   totalSas?: number;
   totalOrder?: number;
   
-  // 🟢 SEPARACIÓN EN DOS ARRAYS PARA MAYOR LIMPIEZA
   billingRequestsSrl?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
   billingRequestsSas?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
 };
