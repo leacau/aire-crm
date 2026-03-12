@@ -37,7 +37,8 @@ import {
   Scale,
   ListTodo,
   StickyNote,
-  ScrollText
+  ScrollText,
+  FolderOpen // 🟢 Importamos el ícono para la Carpeta
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -110,6 +111,7 @@ export function AppSidebar() {
       icon: Briefcase,
       items: [
         { title: 'Objetivos', href: '/objectives', icon: Crosshair, screenName: 'Objectives' },
+        { title: 'Carpeta', href: '/carpeta', icon: FolderOpen, screenName: 'Carpeta' }, // 🟢 NUEVA SECCIÓN
         { title: 'Clientes', href: '/clients', icon: Users, screenName: 'Clients' },
         { title: 'Oportunidades', href: '/opportunities', icon: Trophy, screenName: 'Opportunities' },
         { title: 'Prospectos', href: '/prospects', icon: Target, screenName: 'Prospects' },
@@ -178,10 +180,9 @@ export function AppSidebar() {
       }
       
       // 4. Lógica de Respaldo (Fallback) si no hay objeto permissions
-      // Esto restaura el acceso a los Asesores que no tienen permisos configurados en la DB
       if (userInfo.role === 'Asesor') {
         const allowedScreens: ScreenName[] = [
-          'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
+          'Objectives', 'Carpeta', 'Clients', 'Opportunities', 'Prospects', 'Tasks', // 🟢 Carpeta agregada acá
           'Canjes', 'Quotes', 'Approvals', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
           'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses', 'Publicidad'
         ];
