@@ -524,6 +524,7 @@ export default function NewCommercialNotePage() {
                 newNoteId = await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
             }
 
+            // 🟢 Enviar correo SOLAMENTE si el usuario no lo desmarcó
             if (notifyOnSave && pdfRef.current && newNoteId) {
                 const accessToken = await getGoogleAccessToken();
                 if (accessToken) {
@@ -590,7 +591,6 @@ export default function NewCommercialNotePage() {
 
     if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
 
-    // 🟢 BOTONERA SUPERIOR E INFERIOR (COMPARTIDA)
     const ActionButtons = () => (
         <div className="flex flex-wrap items-center justify-between w-full gap-4">
             <div className="flex items-center gap-4">
@@ -609,9 +609,10 @@ export default function NewCommercialNotePage() {
                 <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title || hasGrafErrors}>
                     <ExternalLink className="mr-2 h-4 w-4" /> Exportar PDF
                 </Button>
+                {/* 🟢 SWITCH DE NOTIFICAR HABILITADO SIEMPRE (SE QUITÓ EL DISABLED) */}
                 <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white">
-                    <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} disabled={!!editModeId} />
-                    <Label htmlFor="notify">Notificar</Label>
+                    <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
+                    <Label htmlFor="notify" className="cursor-pointer text-sm">Notificar por email</Label>
                 </div>
                 <Button onClick={handleSave} disabled={saving || hasGrafErrors}>
                     {saving ? <Spinner size="small" /> : <Save className="mr-2 h-4 w-4" />} Guardar
@@ -621,15 +622,12 @@ export default function NewCommercialNotePage() {
     );
 
     return (
-        <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col h-full overflow-hidden bg-gray-50/50">
             <Header title={editModeId ? "Editar Nota Comercial" : "Nueva Nota Comercial"}>
-                <div className="w-full">
-                    {/* Reutilizamos el componente para no duplicar código */}
-                </div>
+                <div className="w-full"></div>
             </Header>
             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
                 
-                {/* 🟢 BOTONES DE ACCIÓN ARRIBA */}
                 <div className="bg-white p-4 border rounded-md shadow-sm">
                     <ActionButtons />
                 </div>
@@ -808,7 +806,6 @@ export default function NewCommercialNotePage() {
                     </CardContent>
                 </Card>
                 
-                {/* 🟢 BOTONES DE ACCIÓN ABAJO */}
                 <div className="bg-white p-4 border rounded-md shadow-sm mt-6">
                     <ActionButtons />
                 </div>
