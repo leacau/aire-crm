@@ -119,7 +119,7 @@ export function AppSidebar() {
         { title: 'Cotizador', href: '/quotes', icon: FileSpreadsheet, screenName: 'Quotes' },
         { title: 'Aprobaciones', href: '/approvals', icon: CheckSquare, screenName: 'Approvals' },
         { title: 'Seguimiento', href: '/coaching', icon: ClipboardList, screenName: 'Coaching' },
-        /* { title: 'Carpeta', href: '/carpeta', icon: FolderOpen, screenName: 'Carpeta' }, // 🟢 NUEVA SECCIÓN */
+        // { title: 'Carpeta', href: '/carpeta', icon: FolderOpen, screenName: 'Carpeta' }, 🟢 NUEVA SECCIÓN
       ]
     },
     {
