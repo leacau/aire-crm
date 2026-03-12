@@ -60,8 +60,9 @@ export function AdvertisingForm() {
   
   const [isRestored, setIsRestored] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
-  const [notifyOnSave, setNotifyOnSave] = useState(true); // 🟢 NUEVO ESTADO PARA NOTIFICACIÓN
+  const [notifyOnSave, setNotifyOnSave] = useState(true); 
   
+  const [invoiceCountSrl, setInvoiceCountSrl] = useState(1);
   const [invoiceCountSas, setInvoiceCountSas] = useState(1);
 
   const pdfRef = useRef<HTMLDivElement>(null);
@@ -86,12 +87,12 @@ export function AdvertisingForm() {
     },
   });
 
-  const { fields: brFieldsSrl, append: brAppendSrl, remove: brRemoveSrl } = useFieldArray({
+  const { fields: brFieldsSrl, append: brAppendSrl, remove: brRemoveSrl, replace: brReplaceSrl } = useFieldArray({
       control: form.control,
       name: "billingRequestsSrl"
   });
 
-  const { fields: brFieldsSas, append: brAppendSas, remove: brRemoveSas } = useFieldArray({
+  const { fields: brFieldsSas, append: brAppendSas, remove: brRemoveSas, replace: brReplaceSas } = useFieldArray({
       control: form.control,
       name: "billingRequestsSas"
   });
@@ -164,6 +165,10 @@ export function AdvertisingForm() {
                               fetchedBillingRequestsSas.push({ ...mapped, ivaSas: b.ivaSas || 0 });
                           }
                       });
+
+                      // Ordenar por fecha cronológica ascendente
+                      fetchedBillingRequestsSrl.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                      fetchedBillingRequestsSas.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                   }
                   
                   form.reset({
@@ -297,17 +302,20 @@ export function AdvertisingForm() {
   const hasSas = sasItemsValid.length > 0;
 
   const handleGenerateBillingSrl = () => {
-      if (totalMonthsCycle < 1) return;
+      if (invoiceCountSrl < 1) return;
       
-      // 🟢 Lógica SRL: 1 Factura obligatoria por cada ciclo, con monto mensual
-      const invGross = srlSubtotal;
-      const invAdj = srlAdjustment;
-      const invNet = invGross - invAdj;
+      const campaignGross = srlSubtotal * totalMonthsCycle;
+      const campaignAdj = srlAdjustment * totalMonthsCycle;
+      const campaignNet = totalOrderSrlNet * totalMonthsCycle;
+
+      const invGross = campaignGross / invoiceCountSrl;
+      const invAdj = campaignAdj / invoiceCountSrl;
+      const invNet = campaignNet / invoiceCountSrl;
 
       const newBrs = [];
       let curDate = startDate && isValid(startDate) ? new Date(startDate) : new Date();
       
-      for (let i = 0; i < totalMonthsCycle; i++) {
+      for (let i = 0; i < invoiceCountSrl; i++) {
           newBrs.push({
               date: format(curDate, 'yyyy-MM-dd'),
               grossAmount: Number(invGross.toFixed(2)),
@@ -322,7 +330,6 @@ export function AdvertisingForm() {
   const handleGenerateBillingSas = () => {
       if (invoiceCountSas < 1) return;
 
-      // 🟢 Lógica SAS: Monto total de campaña dividido por la cantidad de facturas que elija el usuario
       const campaignGross = sasSubtotal * totalMonthsCycle;
       const campaignAdj = sasAdjustment * totalMonthsCycle;
       const campaignIva = sasIva * totalMonthsCycle;
@@ -347,6 +354,19 @@ export function AdvertisingForm() {
           curDate = addMonths(curDate, 1);
       }
       setValue("billingRequestsSas", newBrs, { shouldValidate: true });
+  };
+
+  // Funciones para ordenar las facturas al perder el foco de la fecha
+  const sortSrlByDate = () => {
+      const current = getValues("billingRequestsSrl");
+      const sorted = [...current].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      brReplaceSrl(sorted);
+  };
+
+  const sortSasByDate = () => {
+      const current = getValues("billingRequestsSas");
+      const sorted = [...current].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      brReplaceSas(sorted);
   };
 
   const updateRowNetSrl = (index: number) => {
@@ -814,7 +834,8 @@ export function AdvertisingForm() {
             <div className="bg-slate-100 px-4 py-2 border-b flex justify-between items-center flex-wrap gap-2">
                 <h3 className="text-lg font-semibold text-slate-800">Sugerencia de Facturación AIRE SRL</h3>
                 <div className="flex gap-2 items-center bg-white p-1 rounded border shadow-sm">
-                    <Label className="text-xs px-2 whitespace-nowrap">Generar {totalMonthsCycle} facturas (por ciclo):</Label>
+                    <Label className="text-xs px-2 whitespace-nowrap">Dividir en N facturas:</Label>
+                    <Input type="number" min={1} value={invoiceCountSrl} onChange={e => setInvoiceCountSrl(parseInt(e.target.value) || 1)} className="w-16 h-8 text-center" />
                     <Button type="button" size="sm" variant="secondary" className="h-8" onClick={handleGenerateBillingSrl}>Generar</Button>
                 </div>
             </div>
@@ -824,7 +845,9 @@ export function AdvertisingForm() {
                         <FormField control={form.control} name={`billingRequestsSrl.${index}.date`} render={({field}) => (
                             <FormItem className="flex-[2] min-w-[120px]">
                                 <FormLabel className="text-xs">Fecha a Facturar</FormLabel>
-                                <FormControl><Input type="date" {...field} /></FormControl>
+                                <FormControl>
+                                    <Input type="date" {...field} onBlur={() => sortSrlByDate()} />
+                                </FormControl>
                             </FormItem>
                         )} />
                         <FormField control={form.control} name={`billingRequestsSrl.${index}.grossAmount`} render={({field}) => (
@@ -889,7 +912,9 @@ export function AdvertisingForm() {
                         <FormField control={form.control} name={`billingRequestsSas.${index}.date`} render={({field}) => (
                             <FormItem className="flex-[2] min-w-[120px]">
                                 <FormLabel className="text-xs">Fecha a Facturar</FormLabel>
-                                <FormControl><Input type="date" {...field} /></FormControl>
+                                <FormControl>
+                                    <Input type="date" {...field} onBlur={() => sortSasByDate()} />
+                                </FormControl>
                             </FormItem>
                         )} />
                         <FormField control={form.control} name={`billingRequestsSas.${index}.grossAmount`} render={({field}) => (
