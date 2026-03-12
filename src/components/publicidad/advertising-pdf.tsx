@@ -26,6 +26,10 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const srlItems = order.srlItems || [];
   const sasItems = order.sasItems || [];
   
+  // 🟢 ORDENAMOS LAS FACTURAS CRONOLÓGICAMENTE PARA EL PDF
+  const sortedBrsSrl = [...(order.billingRequestsSrl || [])].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const sortedBrsSas = [...(order.billingRequestsSas || [])].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  
   const startDate = order.startDate ? new Date(order.startDate) : new Date();
   const endDate = order.endDate ? new Date(order.endDate) : new Date();
   
@@ -164,7 +168,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   };
 
   const renderBillingRequestsSrl = () => {
-      if (hidePrices || !order.billingRequestsSrl || order.billingRequestsSrl.length === 0 || !hasSRL) {
+      if (hidePrices || sortedBrsSrl.length === 0 || !hasSRL) {
           return <div style={{ flex: 1 }} />; 
       }
 
@@ -184,7 +188,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                             </tr>
                         </thead>
                         <tbody>
-                            {order.billingRequestsSrl.map((br, i) => (
+                            {sortedBrsSrl.map((br, i) => (
                                 <tr key={i}>
                                     <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db' }}>{formatDate(br.date)}</td>
                                     <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right' }}>${Number(br.grossAmount || 0).toLocaleString('es-AR')}</td>
@@ -202,7 +206,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   };
 
   const renderBillingRequestsSas = () => {
-      if (hidePrices || !order.billingRequestsSas || order.billingRequestsSas.length === 0 || !hasSAS) {
+      if (hidePrices || sortedBrsSas.length === 0 || !hasSAS) {
           return <div style={{ flex: 1 }} />; 
       }
 
@@ -223,7 +227,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                             </tr>
                         </thead>
                         <tbody>
-                            {order.billingRequestsSas.map((br, i) => (
+                            {sortedBrsSas.map((br, i) => (
                                 <tr key={i}>
                                     <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db' }}>{formatDate(br.date)}</td>
                                     <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right' }}>${Number(br.grossAmount || 0).toLocaleString('es-AR')}</td>
