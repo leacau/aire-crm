@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { useToast } from "@/hooks/use-toast";air
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
 import { getBillingRequestsByOrder } from "@/lib/firebase-service";
@@ -51,6 +51,10 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
                         billingSas.push({ ...mapped, ivaSas: b.ivaSas || 0 });
                     }
                 });
+
+                // 🟢 Ordenamos cronológicamente de más antigua a más reciente
+                billingSrl.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                billingSas.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
                 setFullOrder(prev => ({ 
                     ...prev, 
