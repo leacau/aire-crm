@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { getInvoicesForClient, getOpportunitiesByClientId, createInvoice, updateInvoice, getClient } from '@/lib/firebase-service';
+import { getInvoicesForClient, getOpportunitiesByClientId, createInvoice, updateInvoice, getClient, getBillingRequestsByClient } from '@/lib/firebase-service';
 import type { Invoice, Opportunity } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { startOfMonth, endOfMonth, parseISO, isWithinInterval, isSameMonth, addMonths, format } from 'date-fns';
+import { startOfMonth, endOfMonth, parseISO, format } from 'date-fns';
 import { Save, Plus } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 
@@ -25,18 +25,8 @@ interface RowData {
     date: string; // Fecha factura
     invoiceNumber: string;
     isDraft: boolean; // True si viene de propuesta pero no tiene factura guardada aún
+    billingRequestId?: string;
 }
-
-const getPeriodDurationInMonths = (period: string | string[] | undefined): number => {
-    const p = Array.isArray(period) ? period[0] : (period || 'Ocasional');
-    switch (p) {
-        case 'Mensual': return 1;
-        case 'Trimestral': return 3;
-        case 'Semestral': return 6;
-        case 'Anual': return 12;
-        default: return 1;
-    }
-};
 
 export function CarpetaTable({ clientId, clientName }: { clientId: string, clientName: string }) {
     const { userInfo } = useAuth();
@@ -54,98 +44,65 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
 
     const loadData = async () => {
         setLoading(true);
-        const currentMonthStart = startOfMonth(new Date());
 
-        const [allOpps, allInvoices] = await Promise.all([
+        const [allOpps, allInvoices, allBillingRequests] = await Promise.all([
             getOpportunitiesByClientId(clientId),
-            getInvoicesForClient(clientId)
+            getInvoicesForClient(clientId),
+            getBillingRequestsByClient(clientId)
         ]);
 
-        // 1. Filtrar opps activas ESTE mes
-        const activeThisMonth = allOpps.filter(opp => {
-            if (opp.stage !== 'Cerrado - Ganado' || !opp.closeDate) return false;
-            const referenceDate = opp.manualUpdateDate ? parseISO(opp.manualUpdateDate) : parseISO(opp.closeDate);
-
-            if (opp.finalizationDate) {
-                const startDate = startOfMonth(referenceDate);
-                const endDate = endOfMonth(parseISO(opp.finalizationDate));
-                return isWithinInterval(currentMonthStart, { start: startDate, end: endDate });
-            }
-            const durationMonths = getPeriodDurationInMonths(opp.periodicidad);
-            if (durationMonths > 1) {
-                const startDate = startOfMonth(referenceDate);
-                const endDate = addMonths(startDate, durationMonths - 1);
-                return isWithinInterval(currentMonthStart, { start: startDate, end: endDate });
-            }
-            return isSameMonth(currentMonthStart, referenceDate);
-        });
-
-        setActiveOpps(activeThisMonth);
-
-        // 2. Filtrar facturas generadas ESTE mes (buscando coincidencias de facturas frescas)
-        // Usamos facturas que tengan fecha de factura este mes, o si no, dateGenerated este mes.
-        const currentMonthInvoices = allInvoices.filter(inv => {
-            const dateToCheck = inv.date ? parseISO(inv.date) : parseISO(inv.dateGenerated);
-            return isSameMonth(currentMonthStart, dateToCheck);
-        });
+        const activeOppsList = allOpps.filter(opp => opp.stage === 'Cerrado - Ganado');
+        setActiveOpps(activeOppsList);
 
         const newRows: RowData[] = [];
 
-        // 3. Cruzar datos: Por cada Opp activa, buscar si tiene factura en este mes
-        activeThisMonth.forEach(opp => {
-            const relatedInvoices = currentMonthInvoices.filter(inv => inv.opportunityId === opp.id);
-            
-            if (relatedInvoices.length > 0) {
-                relatedInvoices.forEach(inv => {
-                    newRows.push({
-                        id: inv.id,
-                        opportunityId: opp.id,
-                        opportunityTitle: opp.title,
-                        periodStart: inv.periodStart || '',
-                        periodEnd: inv.periodEnd || '',
-                        amount: inv.amount,
-                        orderDate: inv.orderDate || '',
-                        orderNumber: inv.orderNumber || '',
-                        date: inv.date || '',
-                        invoiceNumber: inv.invoiceNumber || '',
-                        isDraft: false
-                    });
-                });
-            } else {
-                // Borrador automático para la oportunidad activa
+        // 1. Agregamos TODAS las facturas existentes
+        allInvoices.forEach(inv => {
+            const opp = allOpps.find(o => o.id === inv.opportunityId);
+            newRows.push({
+                id: inv.id,
+                opportunityId: inv.opportunityId,
+                opportunityTitle: opp?.title || 'Desconocida',
+                periodStart: inv.periodStart || '',
+                periodEnd: inv.periodEnd || '',
+                amount: inv.amount,
+                orderDate: inv.orderDate || '',
+                orderNumber: inv.orderNumber || '',
+                date: inv.date || '',
+                invoiceNumber: inv.invoiceNumber || '',
+                isDraft: false,
+                billingRequestId: inv.billingRequestId
+            });
+        });
+
+        // 2. Agregamos los pedidos de facturación (Billing Requests) de TODOS los tiempos que aún NO tienen factura
+        allBillingRequests.forEach(br => {
+            const alreadyInvoiced = allInvoices.some(inv => inv.billingRequestId === br.id);
+            if (!alreadyInvoiced) {
+                const opp = allOpps.find(o => o.id === br.opportunityId);
+                const brDate = br.date ? parseISO(br.date) : new Date();
+                
                 newRows.push({
-                    opportunityId: opp.id,
-                    opportunityTitle: opp.title,
-                    periodStart: '',
-                    periodEnd: '',
-                    amount: opp.value || '',
+                    opportunityId: br.opportunityId,
+                    opportunityTitle: opp?.title || 'Desconocida',
+                    periodStart: format(startOfMonth(brDate), 'yyyy-MM-dd'),
+                    periodEnd: format(endOfMonth(brDate), 'yyyy-MM-dd'),
+                    amount: br.amount,
                     orderDate: '',
                     orderNumber: '',
-                    date: '',
+                    date: '', // Como es borrador, lo dejamos para que el asesor lo llene
                     invoiceNumber: '',
-                    isDraft: true
+                    isDraft: true,
+                    billingRequestId: br.id
                 });
             }
         });
 
-        // 4. Agregar facturas huérfanas o manuales de este mes (que no estén en opps activas por X motivo)
-        currentMonthInvoices.forEach(inv => {
-            if (!newRows.some(r => r.id === inv.id)) {
-                const parentOpp = allOpps.find(o => o.id === inv.opportunityId);
-                newRows.push({
-                    id: inv.id,
-                    opportunityId: inv.opportunityId,
-                    opportunityTitle: parentOpp?.title || 'Desconocida',
-                    periodStart: inv.periodStart || '',
-                    periodEnd: inv.periodEnd || '',
-                    amount: inv.amount,
-                    orderDate: inv.orderDate || '',
-                    orderNumber: inv.orderNumber || '',
-                    date: inv.date || '',
-                    invoiceNumber: inv.invoiceNumber || '',
-                    isDraft: false
-                });
-            }
+        // 3. Ordenamos CRONOLÓGICAMENTE: usando periodStart, o si no, date de la factura.
+        newRows.sort((a, b) => {
+            const dateA = a.periodStart || a.date || '2099-01-01'; 
+            const dateB = b.periodStart || b.date || '2099-01-01';
+            return new Date(dateA).getTime() - new Date(dateB).getTime();
         });
 
         setRows(newRows);
@@ -180,7 +137,8 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
                 orderNumber: row.orderNumber,
                 date: row.date,
                 invoiceNumber: row.invoiceNumber,
-                status: (row.invoiceNumber || row.date) ? 'Generada' as const : 'Pendiente' as const
+                status: (row.invoiceNumber || row.date) ? 'Generada' as const : 'Pendiente' as const,
+                billingRequestId: row.billingRequestId || null
             };
 
             if (row.id && !row.isDraft) {
@@ -237,13 +195,13 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
                         {rows.map((row, i) => (
                             <TableRow key={row.id || `draft-${i}`} className={row.isDraft ? "bg-amber-50/30" : ""}>
                                 {/* PERÍODO */}
-                                <TableCell className="flex gap-1 items-center p-2">
+                                <TableCell className="flex gap-1 items-center p-2 border-r">
                                     <Input type="date" value={row.periodStart} onChange={e => handleRowChange(i, 'periodStart', e.target.value)} className="h-8 text-xs w-[110px]" disabled={isAdmin} title="Desde" />
                                     <Input type="date" value={row.periodEnd} onChange={e => handleRowChange(i, 'periodEnd', e.target.value)} className="h-8 text-xs w-[110px]" disabled={isAdmin} title="Hasta" />
                                 </TableCell>
                                 
                                 {/* CONCEPTO */}
-                                <TableCell className="p-2">
+                                <TableCell className="p-2 border-r">
                                     {row.isDraft && !row.opportunityId ? (
                                         <Select value={row.opportunityId} onValueChange={v => {
                                             handleRowChange(i, 'opportunityId', v);
@@ -263,18 +221,20 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
                                 </TableCell>
 
                                 {/* MONTO */}
-                                <TableCell className="p-2">
-                                    <Input type="number" value={row.amount} onChange={e => handleRowChange(i, 'amount', e.target.value)} className="h-8 text-xs font-mono" disabled={isAdmin} />
+                                <TableCell className="p-2 border-r">
+                                    <Input type="number" value={row.amount} onChange={e => handleRowChange(i, 'amount', e.target.value)} className="h-8 text-xs font-mono text-right" disabled={isAdmin} />
                                 </TableCell>
 
                                 {/* PEDIDO ADMIN */}
-                                <TableCell className="p-2 flex gap-1 items-center">
-                                    <Input type="date" value={row.orderDate} onChange={e => handleRowChange(i, 'orderDate', e.target.value)} className="h-8 text-xs w-[110px]" disabled={!isAdmin} title="Fecha Pedido" />
-                                    <Input placeholder="Nº Pedido" value={row.orderNumber} onChange={e => handleRowChange(i, 'orderNumber', e.target.value)} className="h-8 text-xs w-[90px]" disabled={!isAdmin} />
+                                <TableCell className="p-2 border-r">
+                                    <div className="flex gap-1 items-center">
+                                        <Input type="date" value={row.orderDate} onChange={e => handleRowChange(i, 'orderDate', e.target.value)} className="h-8 text-xs w-[110px]" disabled={!isAdmin} title="Fecha Pedido" />
+                                        <Input placeholder="Nº Pedido" value={row.orderNumber} onChange={e => handleRowChange(i, 'orderNumber', e.target.value)} className="h-8 text-xs w-[90px]" disabled={!isAdmin} />
+                                    </div>
                                 </TableCell>
 
                                 {/* FACTURA ASESOR */}
-                                <TableCell className="p-2">
+                                <TableCell className="p-2 border-r">
                                     <div className="flex gap-1 items-center">
                                         <Input type="date" value={row.date} onChange={e => handleRowChange(i, 'date', e.target.value)} className="h-8 text-xs w-[110px]" disabled={isAdmin} title="Fecha Factura" />
                                         <Input placeholder="Nº Factura" value={row.invoiceNumber} onChange={e => handleRowChange(i, 'invoiceNumber', e.target.value)} className="h-8 text-xs w-[90px]" disabled={isAdmin} />
