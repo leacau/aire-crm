@@ -38,7 +38,6 @@ import {
   ListTodo,
   StickyNote,
   ScrollText,
-  FolderOpen // 🟢 Importamos el ícono para la Carpeta
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -119,7 +118,6 @@ export function AppSidebar() {
         { title: 'Cotizador', href: '/quotes', icon: FileSpreadsheet, screenName: 'Quotes' },
         { title: 'Aprobaciones', href: '/approvals', icon: CheckSquare, screenName: 'Approvals' },
         { title: 'Seguimiento', href: '/coaching', icon: ClipboardList, screenName: 'Coaching' },
-        // { title: 'Carpeta', href: '/carpeta', icon: FolderOpen, screenName: 'Carpeta' }, 🟢 NUEVA SECCIÓN
       ]
     },
     {
@@ -182,7 +180,7 @@ export function AppSidebar() {
       // 4. Lógica de Respaldo (Fallback) si no hay objeto permissions
       if (userInfo.role === 'Asesor') {
         const allowedScreens: ScreenName[] = [
-          'Objectives', 'Carpeta', 'Clients', 'Opportunities', 'Prospects', 'Tasks', // 🟢 Carpeta agregada acá
+          'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
           'Canjes', 'Quotes', 'Approvals', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
           'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses', 'Publicidad'
         ];
