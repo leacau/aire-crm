@@ -3775,6 +3775,34 @@ export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, '
   }
 };
 
+export const getBillingRequestsByClient = async (clientId: string): Promise<BillingRequest[]> => {
+    try {
+        const q = query(collections.billingRequests, where('clientId', '==', clientId));
+        const snap = await getDocs(q);
+        const results = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as BillingRequest));
+        // 🟢 Ordenar por fecha cronológicamente ascendente (desde la más antigua)
+        return results.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    } catch (e) {
+        console.error(e);
+        return [];
+    }
+};
+
+export const getBillingRequestsByOrder = async (orderId: string) => {
+    try {
+        const q = query(collections.billingRequests, where('orderId', '==', orderId));
+        const snap = await getDocs(q);
+        const results = snap.docs.map(doc => doc.data() as BillingRequest);
+        // 🟢 Ordenar por fecha cronológicamente ascendente (desde la más antigua)
+        return results.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    } catch (e) {
+        console.error(e);
+        return [];
+    }
+};
+
+
+
 export const getAdvertisingOrdersByOpportunity = async (opportunityId: string): Promise<AdvertisingOrder[]> => {
     try {
         const q = query(collection(db, 'advertising_orders'), where('opportunityId', '==', opportunityId));
