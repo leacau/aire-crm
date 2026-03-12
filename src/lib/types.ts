@@ -38,11 +38,12 @@ export type Invoice = {
   deletionMarkedAt?: string | null;
   deletionMarkedById?: string;
   deletionMarkedByName?: string;
-  // 🟢 NUEVOS CAMPOS PARA CARPETA DE FACTURACIÓN
+  // 🟢 CAMPOS PARA CARPETA DE FACTURACIÓN
   periodStart?: string;
   periodEnd?: string;
   orderDate?: string;
   orderNumber?: string;
+  billingRequestId?: string; 
 };
 
 export type PaymentStatus = 'Pendiente' | 'Reclamado' | 'Pagado' | 'Incobrable';
@@ -359,7 +360,7 @@ export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
-    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta' // 🟢 AGREGADO
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta' 
 ] as const;
 export type ScreenName = typeof screenNames[number];
 
