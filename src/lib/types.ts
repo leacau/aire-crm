@@ -23,6 +23,8 @@ export type ProposalFile = {
 export const invoiceStatusOptions = ['Generada', 'Enviada a Cobrar', 'Pagada'] as const;
 export type InvoiceStatus = typeof invoiceStatusOptions[number];
 
+export type CarpetaBillingStatus = 'Pendiente de Pedido' | 'Pedido Realizado' | 'Facturado';
+
 export type Invoice = {
   id: string;
   opportunityId: string;
@@ -41,6 +43,8 @@ export type Invoice = {
   // 🟢 CAMPOS PARA CARPETA DE FACTURACIÓN
   periodStart?: string;
   periodEnd?: string;
+  month?: string; // Nuevo: Formato YYYY-MM
+  concept?: string; // Nuevo: Texto libre o nombre de propuesta
   orderDate?: string;
   orderNumber?: string;
   billingRequestId?: string; 
