@@ -24,7 +24,7 @@ import {
   Upload,
   Crosshair,
   MessageSquare,
-  Data
+  Data,
   FileSpreadsheet,
   ClipboardList,
   Briefcase,
