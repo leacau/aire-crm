@@ -116,7 +116,7 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
                     month: format(brDate, 'yyyy-MM'),
                     concept: opp?.title || 'Generado automático',
                     amount: br.amount,
-                    orderDate: '',
+                    orderDate: format(brDate, 'yyyy-MM-dd'), // <-- AQUI PRE-CARGAMOS LA FECHA DE PEDIDO
                     orderNumber: '',
                     date: '', 
                     invoiceNumber: '',
