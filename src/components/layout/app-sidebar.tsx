@@ -25,6 +25,7 @@ import {
   Crosshair,
   MessageSquare,
   Data,
+  Database,
   FileSpreadsheet,
   ClipboardList,
   Briefcase,
