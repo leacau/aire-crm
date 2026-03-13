@@ -3,7 +3,7 @@
 import { Header } from '@/components/layout/header';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { CarpetaTable } from '@/components/carpeta/carpeta-table';
 import { useEffect, useState } from 'react';
 import { getClient } from '@/lib/firebase-service';
@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, parseISO } from 'date-fns';
+import Link from 'next/link';
 
 export default function ClientCarpetaPage() {
     const params = useParams();
@@ -60,9 +61,17 @@ export default function ClientCarpetaPage() {
                     <div className="flex h-40 items-center justify-center"><Spinner /></div>
                 ) : client ? (
                     <div className="space-y-6">
-                        <div>
-                            <h2 className="text-2xl font-bold">{client.denominacion}</h2>
-                            <p className="text-muted-foreground">{client.ownerName}</p>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-2xl font-bold">{client.denominacion}</h2>
+                                <p className="text-muted-foreground">{client.ownerName}</p>
+                            </div>
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href={`/clients/${client.id}`} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="h-4 w-4 mr-2" />
+                                    Ir al Cliente
+                                </Link>
+                            </Button>
                         </div>
 
                         <Tabs defaultValue="facturacion" className="w-full">
@@ -83,18 +92,27 @@ export default function ClientCarpetaPage() {
                                     ) : (
                                         <div className="space-y-4">
                                             {orders.map(order => (
-                                                <div key={order.id} className="p-4 border rounded-md hover:bg-slate-50 transition-colors">
+                                                <Link 
+                                                    key={order.id} 
+                                                    href={`/publicidad/${order.id}`} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer" 
+                                                    className="block p-4 border rounded-md hover:bg-slate-50 transition-colors"
+                                                >
                                                     <div className="flex justify-between items-start">
                                                         <div>
-                                                            <p className="font-semibold">{order.product || 'Sin Producto'}</p>
-                                                            <p className="text-xs text-muted-foreground">Oportunidad: {order.opportunityTitle || 'N/A'}</p>
+                                                            <p className="font-semibold flex items-center gap-2">
+                                                                {order.product || 'Sin Producto'}
+                                                                <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                                                            </p>
+                                                            <p className="text-xs text-muted-foreground mt-1">Oportunidad: {order.opportunityTitle || 'N/A'}</p>
                                                         </div>
                                                         <div className="text-right text-sm">
                                                             <p className="font-medium">Vigencia: {order.startDate ? format(parseISO(order.startDate), 'dd/MM/yyyy') : '-'} al {order.endDate ? format(parseISO(order.endDate), 'dd/MM/yyyy') : '-'}</p>
-                                                            <p className="text-xs text-muted-foreground">Creada: {format(new Date(order.createdAt), 'dd/MM/yyyy')}</p>
+                                                            <p className="text-xs text-muted-foreground mt-1">Creada: {format(new Date(order.createdAt), 'dd/MM/yyyy')}</p>
                                                         </div>
                                                     </div>
-                                                </div>
+                                                </Link>
                                             ))}
                                         </div>
                                     )}
