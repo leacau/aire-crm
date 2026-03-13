@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { FolderOpen } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const getPeriodDurationInMonths = (period: string | string[] | undefined): number => {
     const p = Array.isArray(period) ? period[0] : (period || 'Ocasional');
@@ -52,7 +53,7 @@ export default function CarpetaPage() {
         });
     }, [userInfo, isBoss]);
 
-    const activeClients = useMemo(() => {
+    const { activeClients, inactiveClients } = useMemo(() => {
         const today = new Date();
         const startOfCurrentMonth = startOfMonth(today);
         
@@ -92,10 +93,37 @@ export default function CarpetaPage() {
             }
         });
 
-        return clients
+        const active = clients
             .filter(client => activeClientIds.has(client.id) && client.denominacion.toLowerCase().includes(search.toLowerCase()))
             .sort((a, b) => a.denominacion.localeCompare(b.denominacion));
+
+        const inactive = clients
+            .filter(client => !activeClientIds.has(client.id) && client.denominacion.toLowerCase().includes(search.toLowerCase()))
+            .sort((a, b) => a.denominacion.localeCompare(b.denominacion));
+
+        return { activeClients: active, inactiveClients: inactive };
     }, [clients, opportunities, allBillingRequests, search]);
+
+    const renderClientGrid = (clientList: Client[]) => (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {clientList.length === 0 && (
+                <p className="col-span-full text-muted-foreground text-center">No hay clientes para mostrar en esta sección.</p>
+            )}
+            {clientList.map(client => (
+                <Link key={client.id} href={`/carpeta/${client.id}`}>
+                    <div className="border bg-card p-4 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer flex items-center justify-between group">
+                        <div>
+                            <h3 className="font-semibold text-lg">{client.denominacion}</h3>
+                            <p className="text-sm text-muted-foreground">{client.ownerName}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="group-hover:bg-primary/10">
+                            <FolderOpen className="h-5 w-5 text-primary" />
+                        </Button>
+                    </div>
+                </Link>
+            ))}
+        </div>
+    );
 
     return (
         <div className="flex flex-col h-full">
@@ -111,24 +139,18 @@ export default function CarpetaPage() {
                 {loading ? (
                     <div className="flex justify-center items-center h-40"><Spinner /></div>
                 ) : (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {activeClients.length === 0 && (
-                            <p className="col-span-full text-muted-foreground text-center">No hay clientes con pauta o facturación pendiente para este mes.</p>
-                        )}
-                        {activeClients.map(client => (
-                            <Link key={client.id} href={`/carpeta/${client.id}`}>
-                                <div className="border bg-card p-4 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer flex items-center justify-between group">
-                                    <div>
-                                        <h3 className="font-semibold text-lg">{client.denominacion}</h3>
-                                        <p className="text-sm text-muted-foreground">{client.ownerName}</p>
-                                    </div>
-                                    <Button variant="ghost" size="icon" className="group-hover:bg-primary/10">
-                                        <FolderOpen className="h-5 w-5 text-primary" />
-                                    </Button>
-                                </div>
-                            </Link>
-                        ))}
-                    </div>
+                    <Tabs defaultValue="activos" className="w-full">
+                        <TabsList className="mb-6">
+                            <TabsTrigger value="activos">Activos ({activeClients.length})</TabsTrigger>
+                            <TabsTrigger value="historicos">Históricos / Inactivos ({inactiveClients.length})</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="activos">
+                            {renderClientGrid(activeClients)}
+                        </TabsContent>
+                        <TabsContent value="historicos">
+                            {renderClientGrid(inactiveClients)}
+                        </TabsContent>
+                    </Tabs>
                 )}
             </main>
         </div>
