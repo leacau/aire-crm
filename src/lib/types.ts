@@ -40,11 +40,10 @@ export type Invoice = {
   deletionMarkedAt?: string | null;
   deletionMarkedById?: string;
   deletionMarkedByName?: string;
-  // 🟢 CAMPOS PARA CARPETA DE FACTURACIÓN
   periodStart?: string;
   periodEnd?: string;
-  month?: string; // Nuevo: Formato YYYY-MM
-  concept?: string; // Nuevo: Texto libre o nombre de propuesta
+  month?: string; 
+  concept?: string; 
   orderDate?: string;
   orderNumber?: string;
   billingRequestId?: string; 
@@ -266,7 +265,8 @@ export type ActivityLog = {
     | 'monthly_closure'
     | 'opportunity_alerts_config'
     | 'payment'
-    | 'commercial_note';
+    | 'commercial_note'
+    | 'social_media_request'; // 🟢 NUEVO
   entityId: string;
   entityName: string;
   details: string; 
@@ -364,7 +364,7 @@ export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
-    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta' 
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes' // 🟢 NUEVO
 ] as const;
 export type ScreenName = typeof screenNames[number];
 
@@ -591,13 +591,51 @@ export type CommercialNote = {
   noCommercialAddress?: boolean;
   graphicSupport: boolean;
   graphicSupportLink?: string; 
-  graphicSupportLinks?: string[]; // 🟢 NUEVO: Soporte para múltiples links
+  graphicSupportLinks?: string[]; 
   totalValue: number;
   saleValue?: number;
   mismatch?: number;
   financialObservations?: string; 
   noteObservations?: string; 
   createdAt: string;
+};
+
+// 🟢 NUEVA ENTIDAD PARA REDES
+export type SocialMediaType = 'Reel' | 'Story';
+export type SocialMediaCreator = 'Redes' | 'Audiovisual';
+
+export type SocialMediaRequest = {
+  id?: string;
+  clientId: string;
+  clientName: string;
+  advisorId: string;
+  advisorName: string;
+  contactName: string;
+  recordingLocation: string;
+  recordingDate: string;
+  recordingTime: string;
+  contentType: SocialMediaType;
+  creator: SocialMediaCreator;
+  publishDate: string;
+  clientValidation: boolean;
+  objective: string;
+  script: string;
+  observations?: string;
+
+  // Story
+  isWebReplication?: boolean;
+  storyUrl?: string;
+  storyCta?: string;
+  storyTagClient?: boolean;
+  storyTagHandle?: string;
+
+  // Reel
+  reelCopy?: string;
+  reelCollaboration?: boolean;
+  reelCollabHandle?: string;
+
+  createdAt: string;
+  updatedAt?: string;
 };
 
 export type AdvertisingOrderItemSrl = {
@@ -658,7 +696,7 @@ export type AdvertisingOrder = {
   endDate: string; 
   materialSent: boolean;
   materialUrl?: string; 
-  materialUrls?: string[]; // 🟢 NUEVO: Soporte para múltiples links
+  materialUrls?: string[]; 
   observations?: string;
   certReq: boolean;
   agencySale: boolean;
