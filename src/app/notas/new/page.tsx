@@ -89,7 +89,8 @@ export default function NewCommercialNotePage() {
     const [noCommercialAddress, setNoCommercialAddress] = useState(false);
 
     const [graphicSupport, setGraphicSupport] = useState(false);
-    const [graphicLink, setGraphicLink] = useState('');
+    // 🟢 NUEVO ARREGLO DE LINKS PARA SOPORTE GRÁFICO
+    const [graphicLinks, setGraphicLinks] = useState<string[]>(['']);
     const [noteObservations, setNoteObservations] = useState('');
 
     const [notifyOnSave, setNotifyOnSave] = useState(true);
@@ -210,7 +211,10 @@ export default function NewCommercialNotePage() {
                     setCommercialAddresses(note.commercialAddresses?.length ? note.commercialAddresses : ['']);
                     setNoCommercialAddress(!!note.noCommercialAddress);
                     setGraphicSupport(!!note.graphicSupport);
-                    setGraphicLink(note.graphicSupportLink || '');
+                    
+                    // 🟢 CARGAMOS LINKS (RECONOCE FORMATO VIEJO Y NUEVO)
+                    setGraphicLinks(note.graphicSupportLinks?.length ? note.graphicSupportLinks : (note.graphicSupportLink ? [note.graphicSupportLink] : ['']));
+
                     setNoteObservations(note.noteObservations || '');
                 }
                 setIsRestored(true);
@@ -258,7 +262,7 @@ export default function NewCommercialNotePage() {
                     setCommercialAddresses(parsed.commercialAddresses || ['']);
                     setNoCommercialAddress(parsed.noCommercialAddress || false);
                     setGraphicSupport(parsed.graphicSupport || false);
-                    setGraphicLink(parsed.graphicLink || '');
+                    setGraphicLinks(parsed.graphicLinks || ['']); // 🟢 BORRADOR LINKS
                     setNoteObservations(parsed.noteObservations || '');
                     
                     if (parsed.selectedClientId || parsed.title) {
@@ -284,10 +288,10 @@ export default function NewCommercialNotePage() {
             intervieweeName, intervieweeRole, intervieweeBio,
             instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp,
             commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress,
-            graphicSupport, graphicLink, noteObservations
+            graphicSupport, graphicLinks, noteObservations
         };
         localStorage.setItem('commercial_note_draft', JSON.stringify(draftData));
-    }, [isRestored, editModeId, selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations, selectedProgramIds, programSchedule, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, contactPhone, contactName, title, location, callPhone, mobileAddress, primaryGrafs, secondaryGrafs, questions, topicsToAvoid, intervieweeName, intervieweeRole, intervieweeBio, instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp, commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress, graphicSupport, graphicLink, noteObservations]);
+    }, [isRestored, editModeId, selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations, selectedProgramIds, programSchedule, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, contactPhone, contactName, title, location, callPhone, mobileAddress, primaryGrafs, secondaryGrafs, questions, topicsToAvoid, intervieweeName, intervieweeRole, intervieweeBio, instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp, commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress, graphicSupport, graphicLinks, noteObservations]);
 
     useEffect(() => {
         const loadData = async () => {
@@ -401,7 +405,7 @@ export default function NewCommercialNotePage() {
         setCommercialAddresses(['']);
         setNoCommercialAddress(false);
         setGraphicSupport(false);
-        setGraphicLink('');
+        setGraphicLinks(['']);
         setNoteObservations('');
         setDraftLoaded(false);
         toast({ title: "Borrador limpiado", description: "Puedes comenzar una nueva nota desde cero." });
@@ -425,6 +429,11 @@ export default function NewCommercialNotePage() {
     const handleAddSecondary = () => setSecondaryGrafs([...secondaryGrafs, '']);
     const handleSecondaryChange = (index: number, value: string) => { const n = [...secondaryGrafs]; n[index] = value; setSecondaryGrafs(n); };
     const handleRemoveSecondary = (index: number) => { const n = secondaryGrafs.filter((_, i) => i !== index); setSecondaryGrafs(n.length ? n : ['']); };
+
+    // 🟢 LINKS SOPORTE GRÁFICO (AGREGAR, QUITAR Y EDITAR)
+    const handleAddGraphicLink = () => setGraphicLinks([...graphicLinks, '']);
+    const handleGraphicLinkChange = (index: number, value: string) => { const n = [...graphicLinks]; n[index] = value; setGraphicLinks(n); };
+    const handleRemoveGraphicLink = (index: number) => { const n = graphicLinks.filter((_, i) => i !== index); setGraphicLinks(n.length ? n : ['']); };
 
     const totalValue = selectedProgramIds.reduce((acc, pid) => {
         const prog = programs.find(p => p.id === pid);
@@ -502,7 +511,8 @@ export default function NewCommercialNotePage() {
                 commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim() !== ''),
                 noCommercialAddress,
                 graphicSupport,
-                graphicSupportLink: graphicSupport ? graphicLink : undefined,
+                graphicSupportLink: graphicSupport ? graphicLinks[0] : undefined, // mantenemos el primer link en el viejo campo
+                graphicSupportLinks: graphicSupport ? graphicLinks.filter(l => l.trim() !== '') : undefined, // nueva lista
                 totalValue,
                 saleValue: saleValueNum,
                 mismatch,
@@ -524,7 +534,6 @@ export default function NewCommercialNotePage() {
                 newNoteId = await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
             }
 
-            // 🟢 Enviar correo SOLAMENTE si el usuario no lo desmarcó
             if (notifyOnSave && pdfRef.current && newNoteId) {
                 const accessToken = await getGoogleAccessToken();
                 if (accessToken) {
@@ -609,7 +618,6 @@ export default function NewCommercialNotePage() {
                 <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title || hasGrafErrors}>
                     <ExternalLink className="mr-2 h-4 w-4" /> Exportar PDF
                 </Button>
-                {/* 🟢 SWITCH DE NOTIFICAR HABILITADO SIEMPRE (SE QUITÓ EL DISABLED) */}
                 <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white">
                     <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
                     <Label htmlFor="notify" className="cursor-pointer text-sm">Notificar por email</Label>
@@ -759,8 +767,8 @@ export default function NewCommercialNotePage() {
                         </div>
 
                         <div className="grid md:grid-cols-2 gap-6">
-                            <div className="space-y-3 border p-4 rounded-md"><div className="flex justify-between"><Label>Preguntas (min 5)</Label><Button variant="ghost" size="sm" onClick={handleAddQuestion}><Plus className="h-4 w-4"/></Button></div>{questions.map((q, idx) => (<div key={idx} className="flex gap-2"><Input value={q} onChange={e => handleQuestionChange(idx, e.target.value)} placeholder={`P ${idx+1}`} />{questions.length > 5 && <Button size="icon" variant="ghost" onClick={() => handleRemoveQuestion(idx)}><Trash2 className="h-4 w-4"/></Button>}</div>))}</div>
-                            <div className="space-y-3 border p-4 rounded-md bg-red-50/50"><div className="flex justify-between"><Label>Temas a EVITAR</Label><Button variant="ghost" size="sm" onClick={handleAddTopic}><Plus className="h-4 w-4"/></Button></div>{topicsToAvoid.map((t, idx) => (<div key={idx} className="flex gap-2"><Input value={t} onChange={e => handleTopicChange(idx, e.target.value)} placeholder={`Tema ${idx+1}`} />{topicsToAvoid.length > 1 && <Button size="icon" variant="ghost" onClick={() => handleRemoveTopic(idx)}><Trash2 className="h-4 w-4"/></Button>}</div>))}</div>
+                            <div className="space-y-3 border p-4 rounded-md"><div className="flex justify-between"><Label>Preguntas (min 5)</Label><Button type="button" variant="ghost" size="sm" onClick={handleAddQuestion}><Plus className="h-4 w-4"/></Button></div>{questions.map((q, idx) => (<div key={idx} className="flex gap-2"><Input value={q} onChange={e => handleQuestionChange(idx, e.target.value)} placeholder={`P ${idx+1}`} />{questions.length > 5 && <Button type="button" size="icon" variant="ghost" onClick={() => handleRemoveQuestion(idx)}><Trash2 className="h-4 w-4"/></Button>}</div>))}</div>
+                            <div className="space-y-3 border p-4 rounded-md bg-red-50/50"><div className="flex justify-between"><Label>Temas a EVITAR</Label><Button type="button" variant="ghost" size="sm" onClick={handleAddTopic}><Plus className="h-4 w-4"/></Button></div>{topicsToAvoid.map((t, idx) => (<div key={idx} className="flex gap-2"><Input value={t} onChange={e => handleTopicChange(idx, e.target.value)} placeholder={`Tema ${idx+1}`} />{topicsToAvoid.length > 1 && <Button type="button" size="icon" variant="ghost" onClick={() => handleRemoveTopic(idx)}><Trash2 className="h-4 w-4"/></Button>}</div>))}</div>
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">
@@ -773,14 +781,14 @@ export default function NewCommercialNotePage() {
                             <div className="space-y-2">
                                 <div className="flex justify-between"><Label className={noInstagram ? "text-muted-foreground" : ""}>Instagram</Label><div className="flex items-center space-x-2"><Checkbox checked={noInstagram} onCheckedChange={(c) => setNoInstagram(!!c)} /><Label className="text-xs">No informar</Label></div></div>
                                 <div className="flex gap-2"><Input value={instagramHandle} onChange={e => setInstagramHandle(e.target.value)} disabled={noInstagram} /> {instagramHandle && (
-                                        <Button size="icon" variant="ghost" onClick={() => window.open(`https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}`, '_blank')}>
+                                        <Button type="button" size="icon" variant="ghost" onClick={() => window.open(`https://instagram.com/${instagramHandle.replace('@', '').replace('https://instagram.com/', '')}`, '_blank')}>
                                             <ExternalLink className="h-4 w-4" />
                                         </Button>)}
                                 </div>
                             </div>
                             <div className="space-y-2">
                                 <div className="flex justify-between"><Label className={noWeb ? "text-muted-foreground" : ""}>Web</Label><div className="flex items-center space-x-2"><Checkbox checked={noWeb} onCheckedChange={(c) => setNoWeb(!!c)} /><Label className="text-xs">No informar</Label></div></div>
-                                <div className="flex gap-2"><Input value={website} onChange={e => setWebsite(e.target.value)} disabled={noWeb} />{website && !noWeb && <Button size="icon" variant="ghost" onClick={() => window.open(website.startsWith('http') ? website : `https://${website}`, '_blank')}><ExternalLink className="h-4 w-4" /></Button>}</div>
+                                <div className="flex gap-2"><Input value={website} onChange={e => setWebsite(e.target.value)} disabled={noWeb} />{website && !noWeb && <Button type="button" size="icon" variant="ghost" onClick={() => window.open(website.startsWith('http') ? website : `https://${website}`, '_blank')}><ExternalLink className="h-4 w-4" /></Button>}</div>
                             </div>
                             <div className="space-y-2">
                                 <div className="flex justify-between"><Label className={noWhatsapp ? "text-muted-foreground" : ""}>Whatsapp</Label><div className="flex items-center space-x-2"><Checkbox checked={noWhatsapp} onCheckedChange={(c) => setNoWhatsapp(!!c)} /><Label className="text-xs">No informar</Label></div></div>
@@ -793,14 +801,36 @@ export default function NewCommercialNotePage() {
                             <div className="space-y-2 md:col-span-2 border-t pt-4">
                                 <div className="flex justify-between mb-2"><Label className={noCommercialAddress ? "text-muted-foreground" : ""}>Domicilio Comercial</Label><div className="flex items-center space-x-2"><Checkbox checked={noCommercialAddress} onCheckedChange={(c) => setNoCommercialAddress(!!c)} /><Label className="text-xs">No informar</Label></div></div>
                                 {!noCommercialAddress && commercialAddresses.map((addr, idx) => (
-                                    <div key={idx} className="flex gap-2 mb-2"><Input value={addr} onChange={e => handleAddressChange(idx, e.target.value)} placeholder="Dirección..." /><div className="flex">{commercialAddresses.length > 1 && <Button size="icon" variant="ghost" onClick={() => handleRemoveAddress(idx)}><Minus className="h-4 w-4" /></Button>}{idx === commercialAddresses.length - 1 && <Button size="icon" variant="outline" onClick={handleAddAddress}><Plus className="h-4 w-4" /></Button>}</div></div>
+                                    <div key={idx} className="flex gap-2 mb-2"><Input value={addr} onChange={e => handleAddressChange(idx, e.target.value)} placeholder="Dirección..." /><div className="flex">{commercialAddresses.length > 1 && <Button type="button" size="icon" variant="ghost" onClick={() => handleRemoveAddress(idx)}><Minus className="h-4 w-4" /></Button>}{idx === commercialAddresses.length - 1 && <Button type="button" size="icon" variant="outline" onClick={handleAddAddress}><Plus className="h-4 w-4" /></Button>}</div></div>
                                 ))}
                             </div>
                         </div>
 
                         <div className="space-y-4 border-t pt-4">
                              <div className="flex items-center space-x-2"><Switch checked={graphicSupport} onCheckedChange={setGraphicSupport} /><Label>Agrega Soporte Gráfico</Label></div>
-                             {graphicSupport && <Input value={graphicLink} onChange={e => setGraphicLink(e.target.value)} placeholder="Link Drive..." />}
+                             
+                             {/* 🟢 NUEVO BLOQUE DE LINKS GRÁFICOS DINÁMICO */}
+                             {graphicSupport && (
+                                 <div className="space-y-2 border p-3 rounded-md bg-slate-50">
+                                     <div className="flex justify-between mb-2">
+                                         <Label>Links al material (Drive/URL)</Label>
+                                         <Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddGraphicLink}>
+                                             <Plus className="h-4 w-4"/>
+                                         </Button>
+                                     </div>
+                                     {graphicLinks.map((link, idx) => (
+                                         <div key={idx} className="flex gap-2">
+                                             <Input value={link} onChange={e => handleGraphicLinkChange(idx, e.target.value)} placeholder="https://..." />
+                                             {graphicLinks.length > 1 && (
+                                                 <Button type="button" size="icon" variant="ghost" onClick={() => handleRemoveGraphicLink(idx)}>
+                                                     <Trash2 className="h-4 w-4"/>
+                                                 </Button>
+                                             )}
+                                         </div>
+                                     ))}
+                                 </div>
+                             )}
+
                              <div className="space-y-2"><Label>Observaciones Generales</Label><Textarea value={noteObservations} onChange={e => setNoteObservations(e.target.value)} /></div>
                         </div>
                     </CardContent>
@@ -822,7 +852,9 @@ export default function NewCommercialNotePage() {
                         secondaryGrafs: secondaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
                         primaryGraf: primaryGrafs[0]?.toUpperCase() || '', 
                         secondaryGraf: secondaryGrafs[0]?.toUpperCase() || '',
-                        questions: questions.filter(q => q.trim()), topicsToAvoid: topicsToAvoid.filter(t => t.trim()), intervieweeName, intervieweeRole, intervieweeBio, instagram: instagramHandle, website, whatsapp, phone: commercialPhone, noWeb, noWhatsapp, noCommercialPhone, commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim()), noCommercialAddress, graphicSupport, graphicSupportLink: graphicSupport ? graphicLink : undefined, noteObservations
+                        questions: questions.filter(q => q.trim()), topicsToAvoid: topicsToAvoid.filter(t => t.trim()), intervieweeName, intervieweeRole, intervieweeBio, instagram: instagramHandle, website, whatsapp, phone: commercialPhone, noWeb, noWhatsapp, noCommercialPhone, commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim()), noCommercialAddress, graphicSupport, 
+                        graphicSupportLinks: graphicSupport ? graphicLinks.filter(l => l.trim() !== '') : undefined, // Pasamos el array de links
+                        noteObservations
                     }}
                 />
             </div>
