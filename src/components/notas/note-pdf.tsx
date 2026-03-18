@@ -17,7 +17,6 @@ const SectionTitle = ({ title }: { title: string }) => (
 );
 
 const Field = ({ label, value, fullWidth = false }: { label: string, value?: string | number | null, fullWidth?: boolean }) => {
-    // Detectamos si el valor es una URL
     const isUrl = typeof value === 'string' && (value.startsWith('http') || value.startsWith('www.')) && label !== 'Web' ;
     const displayValue = isUrl ? (value.startsWith('http') ? value : `https://${value}`) : value;
 
@@ -25,7 +24,6 @@ const Field = ({ label, value, fullWidth = false }: { label: string, value?: str
         <div className={`mb-2 ${fullWidth ? 'w-full' : ''}`}>
             <span className="font-bold text-sm">{label}: </span>
             {isUrl ? (
-                // 🟢 REFORMULACIÓN: Quitamos el <span> contenedor para evitar ruptura del bounding box
                 <a 
                     href={displayValue as string} 
                     target="_blank" 
@@ -54,7 +52,6 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
         boxSizing: 'border-box'
     };
   
-    // Helper para obtener arrays (legacy compatibility)
     const pGrafs = note.primaryGrafs && note.primaryGrafs.length > 0 ? note.primaryGrafs : (note.primaryGraf ? [note.primaryGraf] : []);
     const sGrafs = note.secondaryGrafs && note.secondaryGrafs.length > 0 ? note.secondaryGrafs : (note.secondaryGraf ? [note.secondaryGraf] : []);
   
@@ -101,21 +98,28 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                    {note.graphicSupport && (
                       <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded">
                           <p className="text-yellow-900 font-bold text-center mb-2">⚠️ REQUIERE SOPORTE GRÁFICO</p>
-                          {note.graphicSupportLink && (
-                            <div className="bg-white p-4 border border-yellow-200 rounded text-center">
-                                <span className="text-xs text-gray-500 font-bold block mb-2">ENLACE AL MATERIAL:</span>
-                                {/* 🟢 REFORMULACIÓN: Un botón con display inline-block para que jspdf lo detecte bien */}
-                                <a 
-                                    href={note.graphicSupportLink.startsWith('http') ? note.graphicSupportLink : `https://${note.graphicSupportLink}`} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="text-blue-700 underline font-bold text-base"
-                                    style={{ display: 'inline-block', padding: '8px 16px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px' }}
-                                >
-                                    👉 IR A MATERIAL 👈
-                                </a>
-                            </div>
-                          )}
+                          
+                          {(() => {
+                              const links = note.graphicSupportLinks?.length ? note.graphicSupportLinks : (note.graphicSupportLink ? [note.graphicSupportLink] : []);
+                              if (links.length === 0) return null;
+                              return (
+                                  <div className="bg-white p-4 border border-yellow-200 rounded text-center flex flex-col gap-2">
+                                      <span className="text-xs text-gray-500 font-bold block mb-1">ENLACES AL MATERIAL:</span>
+                                      {links.map((link, idx) => (
+                                          <a 
+                                              key={idx} 
+                                              href={link.startsWith('http') ? link : `https://${link}`} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="text-blue-700 underline font-bold text-base"
+                                              style={{ display: 'inline-block', padding: '8px 16px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px' }}
+                                          >
+                                              👉 ENLACE {idx + 1} 👈
+                                          </a>
+                                      ))}
+                                  </div>
+                              );
+                          })()}
                       </div>
                     )}
                 </div>
