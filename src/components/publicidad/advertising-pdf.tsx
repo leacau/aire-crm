@@ -98,7 +98,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #ccc', paddingBottom: '10px' },
       clientInfoContainer: { marginBottom: '20px', backgroundColor: '#f9fafb', padding: '10px', borderRadius: '4px', border: '1px solid #e5e7eb' },
       sectionTitle: { backgroundColor: '#e5e7eb', padding: '5px', fontWeight: 'bold', textTransform: 'uppercase' as const, fontSize: '12px', borderBottom: '2px solid #dc2626', marginBottom: '10px' },
-      dataRow: { display: 'flex', borderBottom: '1px solid #e5e7eb', padding: '4px 0' },
+      dataRow: { display: 'flex', borderBottom: '1px solid #e5e7eb', padding: '4px 0', alignItems: 'flex-start' as const },
       label: { fontWeight: 'bold', width: '100px' },
       table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '10px', marginBottom: '10px' },
       th: { border: '1px solid #9ca3af', padding: '5px 2px', backgroundColor: '#f3f4f6', textAlign: 'center' as const, fontWeight: 'bold' },
@@ -108,9 +108,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   };
 
   const renderClientInfo = () => {
-    const isUrl = order.materialUrl && (order.materialUrl.startsWith('http') || order.materialUrl.startsWith('www.'));
-    const linkHref = isUrl ? (order.materialUrl!.startsWith('http') ? order.materialUrl : `https://${order.materialUrl}`) : undefined;
-
     return (
         <div style={styles.clientInfoContainer}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -127,15 +124,28 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                         </span>
                     </span>
                 </div>
-                <div style={styles.dataRow}>
+                <div style={{ ...styles.dataRow, paddingBottom: '8px' }}>
                     <span style={styles.label}>Materiales:</span>
-                    <span>
-                    {isUrl ? (
-                        <a href={linkHref} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '2px 8px', backgroundColor: '#eff6ff', borderRadius: '4px', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 'bold', textDecoration: 'none' }}>👉 VER MATERIALES 👈</a>
-                    ) : (
-                        order.materialUrl || (order.materialSent ? "Sí (Adjunto)" : "Pendiente")
-                    )}
-                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                        {(() => {
+                            // Compatibilidad con notas viejas y nuevas
+                            const urls = order.materialUrls?.length ? order.materialUrls : (order.materialUrl ? [order.materialUrl] : []);
+                            if (urls.length === 0) return <span>{order.materialSent ? "Sí (Adjunto)" : "Pendiente"}</span>;
+                            
+                            return urls.map((url, i) => {
+                                const isUrl = url.startsWith('http') || url.startsWith('www.');
+                                const linkHref = isUrl ? (url.startsWith('http') ? url : `https://${url}`) : undefined;
+                                if (isUrl) {
+                                    return (
+                                        <a key={i} href={linkHref} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '4px 8px', backgroundColor: '#eff6ff', borderRadius: '4px', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 'bold', textDecoration: 'none', fontSize: '10px' }}>
+                                            👉 LINK MATERIAL {i+1}
+                                        </a>
+                                    );
+                                }
+                                return <span key={i} style={{ display: 'inline-block', backgroundColor: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>{url}</span>;
+                            });
+                        })()}
+                    </div>
                 </div>
                 {order.observations && (
                 <div style={{ ...styles.dataRow, gridColumn: 'span 2' }}>
