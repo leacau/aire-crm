@@ -13,7 +13,7 @@ import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
-import { getBillingRequestsByOrder } from "@/lib/firebase-service";
+import { getBillingRequestsByOrder, getClient } from "@/lib/firebase-service"; // 🟢 Añadido getClient
 
 export function AdvertisingOrderViewer({ order, programs = [] }: { order: AdvertisingOrder, programs?: Program[] }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -52,7 +52,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
                     }
                 });
 
-                // 🟢 Ordenamos cronológicamente de más antigua a más reciente
+                // Ordenamos cronológicamente de más antigua a más reciente
                 billingSrl.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                 billingSas.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -62,6 +62,18 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
                     billingRequestsSas: billingSas
                 }));
             });
+
+            // 🟢 Buscar el cliente en vivo para actualizar el display al nombre de Razón Social si está disponible
+            if (order.clientId) {
+                getClient(order.clientId).then(c => {
+                    if (c && c.razonSocial) {
+                        setFullOrder(prev => ({
+                            ...prev,
+                            clientName: c.razonSocial || c.denominacion || prev.clientName
+                        }));
+                    }
+                });
+            }
         }
   }, [isOpen, order]);
 
