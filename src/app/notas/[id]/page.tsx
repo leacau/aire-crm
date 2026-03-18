@@ -185,7 +185,6 @@ export default function NoteDetailPage() {
                         <ArrowLeft className="mr-2 h-4 w-4" /> Volver
                     </Button>
                     
-                    {/* 🟢 BOTÓN EDITAR */}
                     {canEdit && (
                         <Button variant="outline" onClick={() => router.push(`/notas/new?editId=${note.id}`)}>
                             <Edit className="mr-2 h-4 w-4 text-blue-600" /> Editar Nota
@@ -240,13 +239,21 @@ export default function NoteDetailPage() {
                                     </div>
 
                                     {note.graphicSupport && (
-                                        <div className="p-3 bg-yellow-100 border border-yellow-300 rounded text-yellow-900 font-medium flex items-center gap-2">
-                                            <span>⚠️ Requiere Soporte Gráfico</span>
-                                            {note.graphicSupportLink && (
-                                                <a href={note.graphicSupportLink} target="_blank" rel="noreferrer" className="text-blue-600 underline text-sm flex items-center">
-                                                    Ver Drive <ExternalLink className="h-3 w-3 ml-1" />
-                                                </a>
-                                            )}
+                                        <div className="p-3 bg-yellow-100 border border-yellow-300 rounded text-yellow-900 font-medium">
+                                            <span className="mb-2 block">⚠️ Requiere Soporte Gráfico</span>
+                                            {(() => {
+                                                const links = note.graphicSupportLinks?.length ? note.graphicSupportLinks : (note.graphicSupportLink ? [note.graphicSupportLink] : []);
+                                                if (links.length === 0) return null;
+                                                return (
+                                                    <div className="flex flex-col gap-2">
+                                                        {links.map((link, idx) => (
+                                                            <a key={idx} href={link.startsWith('http') ? link : `https://${link}`} target="_blank" rel="noreferrer" className="text-blue-600 underline text-sm flex items-center bg-white p-2 rounded border border-blue-200">
+                                                                Ver Drive {idx + 1} <ExternalLink className="h-3 w-3 ml-1" />
+                                                            </a>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                     )}
                                 </Section>
