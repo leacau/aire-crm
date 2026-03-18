@@ -591,6 +591,7 @@ export type CommercialNote = {
   noCommercialAddress?: boolean;
   graphicSupport: boolean;
   graphicSupportLink?: string; 
+  graphicSupportLinks?: string[]; // 🟢 NUEVO: Soporte para múltiples links
   totalValue: number;
   saleValue?: number;
   mismatch?: number;
@@ -657,6 +658,7 @@ export type AdvertisingOrder = {
   endDate: string; 
   materialSent: boolean;
   materialUrl?: string; 
+  materialUrls?: string[]; // 🟢 NUEVO: Soporte para múltiples links
   observations?: string;
   certReq: boolean;
   agencySale: boolean;
