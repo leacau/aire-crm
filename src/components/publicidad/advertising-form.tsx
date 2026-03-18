@@ -64,6 +64,9 @@ export function AdvertisingForm() {
   
   const [invoiceCountSrl, setInvoiceCountSrl] = useState(1);
   const [invoiceCountSas, setInvoiceCountSas] = useState(1);
+  
+  // 🟢 ESTADO PARA LOS LINKS DE MATERIALES
+  const [materialUrls, setMaterialUrls] = useState<string[]>(['']);
 
   const pdfRef = useRef<HTMLDivElement>(null);
 
@@ -166,11 +169,13 @@ export function AdvertisingForm() {
                           }
                       });
 
-                      // Ordenar por fecha cronológica ascendente
                       fetchedBillingRequestsSrl.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                       fetchedBillingRequestsSas.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                   }
                   
+                  // 🟢 CARGAR LINKS
+                  setMaterialUrls(order.materialUrls?.length ? order.materialUrls : (order.materialUrl ? [order.materialUrl] : ['']));
+
                   form.reset({
                       clientId: order.clientId,
                       agencyId: order.agencyId || "none",
@@ -182,7 +187,7 @@ export function AdvertisingForm() {
                       startDate: new Date(order.startDate),
                       endDate: new Date(order.endDate),
                       materialSent: order.materialSent || false,
-                      materialUrl: order.materialUrl || "",
+                      materialUrl: order.materialUrl || "", // Ignorado pero mantenido por compatibilidad
                       observations: order.observations || "",
                       certReq: order.certReq || false,
                       agencySale: order.agencySale || false,
@@ -209,6 +214,7 @@ export function AdvertisingForm() {
                   const parsed = JSON.parse(draft);
                   if (parsed.startDate) parsed.startDate = new Date(parsed.startDate);
                   if (parsed.endDate) parsed.endDate = new Date(parsed.endDate);
+                  if (parsed.materialUrls) setMaterialUrls(parsed.materialUrls);
                   form.reset(parsed);
                   setDraftLoaded(true);
                   toast({ title: "Borrador recuperado", description: "Se han restaurado los datos que estabas cargando." });
@@ -222,12 +228,13 @@ export function AdvertisingForm() {
 
   useEffect(() => {
       if (!isRestored || editModeId) return;
-      localStorage.setItem('advertising_order_draft', JSON.stringify(values));
-  }, [values, isRestored, editModeId]);
+      localStorage.setItem('advertising_order_draft', JSON.stringify({ ...values, materialUrls }));
+  }, [values, materialUrls, isRestored, editModeId]);
 
   const handleClearDraft = () => {
       if (!window.confirm("¿Seguro que quieres limpiar todo el formulario para empezar de cero?")) return;
       localStorage.removeItem('advertising_order_draft');
+      setMaterialUrls(['']);
       form.reset({
           accountExecutive: userInfo?.name || "",
           materialSent: false, materialUrl: "", certReq: false, agencySale: false,
@@ -261,10 +268,21 @@ export function AdvertisingForm() {
       }
   }, [srlItemsCurrent, sasItemsCurrent, isRestored, values.adjustmentSrl, values.adjustmentSas, values.billingRequestsSrl?.length, values.billingRequestsSas?.length, setValue]);
 
+  // 🟢 MANEJO DE LINKS DE MATERIAL
+  const handleAddMaterialUrl = () => setMaterialUrls([...materialUrls, '']);
+  const handleMaterialUrlChange = (index: number, value: string) => {
+      const newUrls = [...materialUrls];
+      newUrls[index] = value;
+      setMaterialUrls(newUrls);
+  };
+  const handleRemoveMaterialUrl = (index: number) => {
+      const newUrls = materialUrls.filter((_, i) => i !== index);
+      setMaterialUrls(newUrls.length ? newUrls : ['']);
+  };
+
   const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
     ? Math.max(0, differenceInDays(endDate, startDate) + 1) : 0;
 
-  // Cálculo de total de meses en ciclos
   let totalMonthsCycle = 0;
   if (startDate && endDate && isValid(startDate) && isValid(endDate) && endDate >= startDate) {
       let current = new Date(startDate);
@@ -356,7 +374,6 @@ export function AdvertisingForm() {
       setValue("billingRequestsSas", newBrs, { shouldValidate: true });
   };
 
-  // Funciones para ordenar las facturas al perder el foco de la fecha
   const sortSrlByDate = () => {
       const current = getValues("billingRequestsSrl");
       const sorted = [...current].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -394,7 +411,6 @@ export function AdvertisingForm() {
   const sumAdjSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
   const sumNetSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
 
-  // 🟢 Comparamos contra el total de la campaña SRL
   const campaignSrlGross = srlSubtotal * totalMonthsCycle;
   const campaignSrlNet = totalOrderSrlNet * totalMonthsCycle;
   const hasGrossErrorSrl = Math.abs(sumGrossSrl - campaignSrlGross) > 5; 
@@ -405,7 +421,6 @@ export function AdvertisingForm() {
   const sumIvaSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.ivaSas)||0), 0) || 0;
   const sumNetSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
 
-  // 🟢 Comparamos contra el total de la campaña SAS
   const campaignSasGross = sasSubtotal * totalMonthsCycle;
   const campaignSasNet = totalOrderSasNet * totalMonthsCycle;
   const hasGrossErrorSas = Math.abs(sumGrossSas - campaignSasGross) > 5; 
@@ -436,7 +451,8 @@ export function AdvertisingForm() {
           startDate: safeStartDate,
           endDate: safeEndDate,
           materialSent: values.materialSent || false,
-          materialUrl: values.materialUrl || "",
+          materialUrl: materialUrls[0] || "",
+          materialUrls: materialUrls.filter(u => u.trim() !== ''),
           observations: values.observations,
           certReq: values.certReq || false,
           agencySale: values.agencySale || false,
@@ -623,7 +639,6 @@ export function AdvertisingForm() {
           finalOrderId = await createAdvertisingOrder(cleanPayload);
       }
 
-      // 🟢 Enviar correo SOLAMENTE si el usuario no lo desmarcó
       if (notifyOnSave && pdfRef.current && finalOrderId) {
           const accessToken = await getGoogleAccessToken();
           if (accessToken) {
@@ -786,11 +801,29 @@ export function AdvertisingForm() {
                <FormItem><FormLabel>Meses (Ciclos)</FormLabel><FormControl><Input value={totalMonthsCycle} readOnly className="bg-slate-50" /></FormControl></FormItem>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center border p-3 rounded-md bg-slate-50">
-               <FormField control={form.control} name="materialSent" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Envía mat.</FormLabel></FormItem>)} />
-               <FormField control={form.control} name="materialUrl" render={({ field }) => (<FormItem className="col-span-4"><FormLabel>Link de Materiales (Drive/URL)</FormLabel><FormControl><Input placeholder="https://..." {...field} /></FormControl></FormItem>)} />
-               <FormField control={form.control} name="certReq" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Solicita Cert.</FormLabel></FormItem>)} />
-               <FormField control={form.control} name="agencySale" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Venta Agencia</FormLabel></FormItem>)} />
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start border p-3 rounded-md bg-slate-50">
+               <FormField control={form.control} name="materialSent" render={({ field }) => (<FormItem className="flex flex-row items-center h-10 space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Envía mat.</FormLabel></FormItem>)} />
+               
+               {/* 🟢 MÚLTIPLES LINKS DE MATERIAL */}
+               <div className="col-span-4 space-y-2">
+                   <div className="flex justify-between items-center mb-1">
+                       <FormLabel>Links de Materiales (Drive/URL)</FormLabel>
+                       <Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddMaterialUrl}><Plus className="h-4 w-4"/></Button>
+                   </div>
+                   {materialUrls.map((url, idx) => (
+                       <div key={idx} className="flex gap-2">
+                           <Input value={url} onChange={e => handleMaterialUrlChange(idx, e.target.value)} placeholder="https://..." className="h-9" />
+                           {materialUrls.length > 1 && (
+                               <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-red-500 hover:bg-red-100" onClick={() => handleRemoveMaterialUrl(idx)}>
+                                   <Trash2 className="h-4 w-4"/>
+                               </Button>
+                           )}
+                       </div>
+                   ))}
+               </div>
+
+               <FormField control={form.control} name="certReq" render={({ field }) => (<FormItem className="flex flex-row items-center h-10 space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Solicita Cert.</FormLabel></FormItem>)} />
+               <FormField control={form.control} name="agencySale" render={({ field }) => (<FormItem className="flex flex-row items-center h-10 space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Venta Agencia</FormLabel></FormItem>)} />
                {agencySale && (<FormField control={form.control} name="commissionSrl" render={({ field }) => (<FormItem className="col-span-2"><FormLabel>Comisión (%)</FormLabel><FormControl><Input type="number" {...field} onChange={e=>field.onChange(parseFloat(e.target.value)||0)}/></FormControl></FormItem>)} />)}
             </div>
 
