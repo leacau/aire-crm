@@ -438,7 +438,8 @@ export function AdvertisingForm() {
       return {
           id: "preview",
           clientId: values.clientId || "",
-          clientName: selectedClient?.denominacion || "Cliente (Vista Previa)",
+          // 🟢 Mostrar Razón Social
+          clientName: selectedClient?.razonSocial || selectedClient?.denominacion || "Cliente (Vista Previa)",
           agencyId: values.agencyId === "none" ? undefined : values.agencyId,
           agencyName: values.agencyId === "none" ? undefined : selectedAgency?.name,
           product: "", 
@@ -598,7 +599,8 @@ export function AdvertisingForm() {
               toast({ title: "Falta Nombre", description: "Ingrese nombre para la nueva oportunidad", variant: "destructive"});
               setIsSubmitting(false); return;
           }
-          finalOppId = await createQuickOpportunity(data.newOpportunityTitle, data.clientId, selectedClient?.denominacion || "Cliente", userInfo.id);
+          // 🟢 Pasar Razón Social a la oportunidad rápida si corresponde
+          finalOppId = await createQuickOpportunity(data.newOpportunityTitle, data.clientId, selectedClient?.razonSocial || selectedClient?.denominacion || "Cliente", userInfo.id);
           oppTitle = data.newOpportunityTitle;
       } else if (!data.opportunityId) {
           toast({ title: "Falta Producto", description: "Seleccione una oportunidad o cree una nueva", variant: "destructive"});
@@ -615,7 +617,8 @@ export function AdvertisingForm() {
       const orderPayload = {
         ...preview,
         clientId: data.clientId,
-        clientName: selectedClient?.denominacion || "Desconocido",
+        // 🟢 Guardar Razón Social
+        clientName: selectedClient?.razonSocial || selectedClient?.denominacion || "Desconocido",
         agencyId: data.agencyId === "none" ? undefined : data.agencyId,
         agencyName: data.agencyId === "none" ? undefined : selectedAgency?.name,
         opportunityId: finalOppId,
@@ -648,12 +651,14 @@ export function AdvertisingForm() {
                   const baseUrl = window.location.origin;
                   const detailLink = `${baseUrl}/publicidad/${finalOrderId}`;
                   
+                  const clientDisplayName = selectedClient?.razonSocial || selectedClient?.denominacion || 'Desconocido';
+
                   const emailBody = `
                       <div style="font-family: Arial, sans-serif; color: #333;">
                           <h2 style="color: #1d4ed8;">Orden de Publicidad ${editModeId ? 'Editada' : 'Registrada'}</h2>
                           <p>El ejecutivo <strong>${userInfo!.name}</strong> ha ${editModeId ? 'actualizado' : 'cargado'} una orden.</p>
                           <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #1d4ed8; margin: 20px 0;">
-                              <p><strong>Cliente:</strong> ${selectedClient?.denominacion || 'Desconocido'}</p>
+                              <p><strong>Cliente:</strong> ${clientDisplayName}</p>
                               <p><strong>Producto:</strong> ${oppTitle}</p>
                               <p><strong>Vigencia:</strong> ${format(new Date(data.startDate), "dd/MM/yyyy")} al ${format(new Date(data.endDate), "dd/MM/yyyy")}</p>
                           </div>
@@ -665,7 +670,7 @@ export function AdvertisingForm() {
                   await sendEmail({
                       accessToken,
                       to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email], 
-                      subject: `${editModeId ? 'Modificación' : 'Nueva'} OP: ${oppTitle} - ${selectedClient?.denominacion}`,
+                      subject: `${editModeId ? 'Modificación' : 'Nueva'} OP: ${oppTitle} - ${clientDisplayName}`,
                       body: emailBody,
                       attachments: [{
                           filename: `OP_${oppTitle.replace(/ /g, "_")}.pdf`,
@@ -745,7 +750,8 @@ export function AdvertisingForm() {
               <FormItem><FormLabel>Anunciante (Cliente) <span className="text-red-500">*</span></FormLabel>
                 <Select onValueChange={(val) => { field.onChange(val); setValue("opportunityId", ""); }} value={field.value || undefined}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
-                  <SelectContent>{clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>))}</SelectContent>
+                  {/* 🟢 MOSTRAR RAZÓN SOCIAL Y DENOMINACIÓN EN EL SELECTOR */}
+                  <SelectContent>{clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.razonSocial ? `${c.razonSocial} (${c.denominacion})` : c.denominacion}</SelectItem>))}</SelectContent>
                 </Select>
               <FormMessage /></FormItem>
             )} />
