@@ -238,7 +238,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
               <div style="font-family: Arial, sans-serif; color: #333;">
                   <h2 style="color: #ea580c;">Nueva Gacetilla de Prensa</h2>
                   <p>Se solicita publicación para el cliente <strong>${fullOrder.clientName}</strong>.</p>
-                  <p>Por favor revise el PDF adjunto con las instrucciones y el link a los materiales.</p>
+                  <p>Por favor revise el PDF adjunto con las instrucciones y los links a los materiales.</p>
               </div>
           `;
 
