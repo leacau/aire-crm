@@ -35,6 +35,7 @@ const collections = {
     coachingSessions: collection(db, 'coaching_sessions'),
     commercialNotes: collection(db, 'commercial_notes'),
     billingRequests: collection(db, 'billing_requests'),
+    socialMediaRequests: collection(db, 'social_media_requests'),
 };
 
 const cache: { [key: string]: { data: any; timestamp: number } } = {};
@@ -3933,5 +3934,133 @@ export const updateAdvertisingOrder = async (
         entityName: 'Orden de Publicidad',
         details: `editó la orden de publicidad del cliente <strong>${restOrderData.clientName}</strong>`,
         ownerName: restOrderData.accountExecutive || userName
+    });
+};
+
+// --- Social Media Requests Functions ---
+
+export const saveSocialMediaRequest = async (
+    requestData: Omit<SocialMediaRequest, 'id' | 'createdAt'>,
+    userId: string,
+    userName: string
+): Promise<string> => {
+    const dataToSave = {
+        ...requestData,
+        createdAt: serverTimestamp(),
+    };
+
+    const docRef = await addDoc(collections.socialMediaRequests, dataToSave);
+    invalidateCache('socialMediaRequests');
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'social_media_request' as any,
+        entityId: docRef.id,
+        entityName: requestData.clientName,
+        details: `creó un pedido de redes para <strong>${requestData.clientName}</strong> (${requestData.contentType})`,
+        ownerName: requestData.advisorName,
+    });
+
+    return docRef.id;
+};
+
+export const getSocialMediaRequests = async (): Promise<SocialMediaRequest[]> => {
+    const cachedData = getFromCache('socialMediaRequests');
+    if (cachedData) return cachedData;
+
+    const q = query(collections.socialMediaRequests, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const requests = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+        } as SocialMediaRequest;
+    });
+    
+    setInCache('socialMediaRequests', requests);
+    return requests;
+};
+
+export const getSocialMediaRequest = async (id: string): Promise<SocialMediaRequest | null> => {
+    const docRef = doc(db, 'social_media_requests', id);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            ...data,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+        } as SocialMediaRequest;
+    }
+    return null;
+};
+
+export const updateSocialMediaRequest = async (
+    id: string, 
+    data: Partial<Omit<SocialMediaRequest, 'id' | 'createdAt'>>,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(db, 'social_media_requests', id);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) throw new Error('Pedido no encontrado');
+    
+    const originalData = docSnap.data() as SocialMediaRequest;
+
+    const updateData: any = { ...data, updatedAt: serverTimestamp() };
+    
+    // Limpiar campos según el tipo de contenido para evitar datos cruzados
+    if (data.contentType === 'Reel') {
+        updateData.isWebReplication = deleteField();
+        updateData.storyUrl = deleteField();
+        updateData.storyCta = deleteField();
+        updateData.storyTagClient = deleteField();
+        updateData.storyTagHandle = deleteField();
+    } else if (data.contentType === 'Story') {
+        updateData.reelCopy = deleteField();
+        updateData.reelCollaboration = deleteField();
+        updateData.reelCollabHandle = deleteField();
+    }
+
+    await updateDoc(docRef, updateData);
+    invalidateCache('socialMediaRequests');
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'social_media_request' as any,
+        entityId: id,
+        entityName: data.clientName || originalData.clientName,
+        details: `actualizó un pedido de redes de <strong>${data.clientName || originalData.clientName}</strong>`,
+        ownerName: data.advisorName || originalData.advisorName,
+    });
+};
+
+export const deleteSocialMediaRequest = async (id: string, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'social_media_requests', id);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) return;
+    
+    const data = docSnap.data() as SocialMediaRequest;
+    
+    await deleteDoc(docRef);
+    invalidateCache('socialMediaRequests');
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'social_media_request' as any,
+        entityId: id,
+        entityName: data.clientName,
+        details: `eliminó un pedido de redes de <strong>${data.clientName}</strong>`,
+        ownerName: data.advisorName,
     });
 };
