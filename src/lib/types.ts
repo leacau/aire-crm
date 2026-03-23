@@ -600,7 +600,6 @@ export type CommercialNote = {
   createdAt: string;
 };
 
-// 🟢 NUEVA ENTIDAD PARA REDES
 export type SocialMediaType = 'Reel' | 'Story';
 export type SocialMediaCreator = 'Redes' | 'Audiovisual';
 
