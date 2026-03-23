@@ -11,6 +11,7 @@ import { Plus, Eye } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
+import { ColumnDef } from '@tanstack/react-table';
 
 export default function RedesPage() {
     const { userInfo, isBoss } = useAuth();
@@ -33,17 +34,39 @@ export default function RedesPage() {
         if (userInfo) load();
     }, [userInfo, isBoss]);
 
-    const columns = [
-        { key: 'createdAt', label: 'Cargado', render: (val: any) => format(new Date(val), 'dd/MM/yyyy') },
-        { key: 'clientName', label: 'Cliente', render: (val: any) => <span className="font-bold">{val}</span> },
-        { key: 'contentType', label: 'Formato', render: (val: any) => <span className="bg-gray-100 px-2 py-1 rounded border text-xs font-semibold">{val}</span> },
-        { key: 'recordingDate', label: 'F. Grabación', render: (val: any) => val ? format(parseISO(val), 'dd/MM/yyyy') : '-' },
-        { key: 'advisorName', label: 'Ejecutivo' },
+    // 🟢 Definición de columnas corregida al formato de TanStack Table
+    const columns: ColumnDef<SocialMediaRequest>[] = [
         { 
-            key: 'actions', 
-            label: 'Acción', 
-            render: (_: any, row: SocialMediaRequest) => (
-                <Button size="sm" variant="outline" onClick={() => router.push(`/redes/${row.id}`)}><Eye className="h-4 w-4 mr-2"/> Ver</Button>
+            accessorKey: 'createdAt', 
+            header: 'Cargado', 
+            cell: ({ row }) => format(new Date(row.original.createdAt), 'dd/MM/yyyy') 
+        },
+        { 
+            accessorKey: 'clientName', 
+            header: 'Cliente', 
+            cell: ({ row }) => <span className="font-bold">{row.original.clientName}</span> 
+        },
+        { 
+            accessorKey: 'contentType', 
+            header: 'Formato', 
+            cell: ({ row }) => <span className="bg-gray-100 px-2 py-1 rounded border text-xs font-semibold">{row.original.contentType}</span> 
+        },
+        { 
+            accessorKey: 'recordingDate', 
+            header: 'F. Grabación', 
+            cell: ({ row }) => row.original.recordingDate ? format(parseISO(row.original.recordingDate), 'dd/MM/yyyy') : '-' 
+        },
+        { 
+            accessorKey: 'advisorName', 
+            header: 'Ejecutivo' 
+        },
+        { 
+            id: 'actions', 
+            header: 'Acción', 
+            cell: ({ row }) => (
+                <Button size="sm" variant="outline" onClick={() => router.push(`/redes/${row.original.id}`)}>
+                    <Eye className="h-4 w-4 mr-2"/> Ver
+                </Button>
             ) 
         }
     ];
