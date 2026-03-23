@@ -39,6 +39,7 @@ import {
   ListTodo,
   StickyNote,
   ScrollText,
+  Share2, // 🟢 ÍCONO PARA REDES
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -128,7 +129,8 @@ export function AppSidebar() {
         { title: 'Grilla', href: '/grilla', icon: Radio, screenName: 'Grilla' },
         { title: 'PNTs', href: '/pnts', icon: Megaphone, screenName: 'PNTs' },
         { title: 'Nota Comercial', href: '/notas', icon: StickyNote, screenName: 'Notas' },
-        { title: 'Orden de Publicidad', href: '/publicidad/', icon: ScrollText, screenName: 'Publicidad' }, 
+        { title: 'Pedido de Redes', href: '/redes', icon: Share2, screenName: 'Redes' }, // 🟢 NUEVA PANTALLA
+        { title: 'Orden de Publicidad', href: '/publicidad', icon: ScrollText, screenName: 'Publicidad' }, 
       ]
     },
     { title: 'Calendario', href: '/calendar', icon: Calendar, screenName: 'Calendar' },
@@ -183,7 +185,7 @@ export function AppSidebar() {
         const allowedScreens: ScreenName[] = [
           'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
           'Canjes', 'Quotes', 'Approvals', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
-          'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses', 'Publicidad'
+          'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes' // 🟢 AGREGADO A LA LISTA
         ];
         return allowedScreens.includes(item.screenName);
       }
@@ -213,7 +215,7 @@ export function AppSidebar() {
     if (state === 'collapsed') return; 
     
     const activeGroup = filteredEntries.find(entry => 
-      isSidebarGroup(entry) && entry.items.some(item => pathname === item.href)
+      isSidebarGroup(entry) && entry.items.some(item => pathname.startsWith(item.href))
     );
     
     if (activeGroup && isSidebarGroup(activeGroup)) {
@@ -239,7 +241,7 @@ export function AppSidebar() {
         <SidebarMenu>
           {filteredEntries.map((entry) => {
             if (isSidebarGroup(entry)) {
-              const isActive = entry.items.some(item => pathname === item.href);
+              const isActive = entry.items.some(item => pathname.startsWith(item.href));
               const isOpen = openGroup === entry.groupLabel;
 
               if (state === 'collapsed') {
@@ -299,7 +301,7 @@ export function AppSidebar() {
                           <SidebarMenuSubItem key={subItem.href}>
                             <SidebarMenuSubButton 
                               asChild 
-                              isActive={pathname === subItem.href}
+                              isActive={pathname.startsWith(subItem.href)}
                             >
                               <Link href={subItem.href}>
                                 <subItem.icon className="size-4" />
