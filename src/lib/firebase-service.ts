@@ -239,7 +239,7 @@ export const updateCommercialNote = async (
     if (!docSnap.exists()) throw new Error("Nota no encontrada");
 
     await updateDoc(docRef, {
-        ...noteData,
+        ...noteData, // Aquí viajan "advisorId" y "advisorName"
         updatedAt: serverTimestamp() 
     });
 
@@ -251,7 +251,7 @@ export const updateCommercialNote = async (
         entityId: noteId,
         entityName: noteData.title || 'Nota Comercial',
         details: `editó la nota comercial <strong>${noteData.title}</strong>`,
-        ownerName: noteData.advisorName || userName
+        ownerName: noteData.advisorName || userName // Se loguea al dueño real de la orden
     });
 };
 
@@ -2233,7 +2233,8 @@ export const getAllUsers = async (role?: UserRole): Promise<User[]> => {
   if (role) {
       users = users.filter(u => u.role === role);
   }
-  return users;
+  // 🟢 Ordenamos alfabéticamente por nombre
+  return users.sort((a, b) => a.name.localeCompare(b.name));
 };
 
 export const getUserById = async (userId: string): Promise<User | null> => {
@@ -3877,7 +3878,7 @@ export const updateAdvertisingOrder = async (
     if (!docSnap.exists()) throw new Error("Orden no encontrada");
 
     await updateDoc(docRef, {
-        ...restOrderData,
+        ...restOrderData, // Aquí viajan "createdBy" y "accountExecutive"
         updatedAt: serverTimestamp()
     });
 
@@ -3933,7 +3934,7 @@ export const updateAdvertisingOrder = async (
         entityId: orderId,
         entityName: 'Orden de Publicidad',
         details: `editó la orden de publicidad del cliente <strong>${restOrderData.clientName}</strong>`,
-        ownerName: restOrderData.accountExecutive || userName
+        ownerName: restOrderData.accountExecutive || userName // Se loguea al dueño real de la orden
     });
 };
 
@@ -4013,7 +4014,7 @@ export const updateSocialMediaRequest = async (
     
     const originalData = docSnap.data() as SocialMediaRequest;
 
-    const updateData: any = { ...data, updatedAt: serverTimestamp() };
+    const updateData: any = { ...data, updatedAt: serverTimestamp() }; // Aquí viajan "advisorId" y "advisorName"
     
     // Limpiar campos según el tipo de contenido para evitar datos cruzados
     if (data.contentType === 'Reel') {
@@ -4039,7 +4040,7 @@ export const updateSocialMediaRequest = async (
         entityId: id,
         entityName: data.clientName || originalData.clientName,
         details: `actualizó un pedido de redes de <strong>${data.clientName || originalData.clientName}</strong>`,
-        ownerName: data.advisorName || originalData.advisorName,
+        ownerName: data.advisorName || originalData.advisorName, // Se loguea al dueño real del pedido
     });
 };
 
