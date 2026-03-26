@@ -57,7 +57,9 @@ export const SocialMediaPdf = React.forwardRef<HTMLDivElement, SocialMediaPdfPro
     };
   
     return (
-      <div ref={ref} style={{ display: 'flex', justifyContent: 'center' }}>
+      <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: '20px', alignItems: 'center' }}>
+        
+        {/* --- PÁGINA 1 --- */}
         <div id="social-pdf-page-1" style={pageStyle}>
             <header className="flex justify-between items-center mb-6 border-b pb-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -115,7 +117,23 @@ export const SocialMediaPdf = React.forwardRef<HTMLDivElement, SocialMediaPdfPro
                         )}
                     </>
                 )}
+            </div>
+            
+            <div className="absolute bottom-8 right-8 text-xs text-gray-400">Página 1 de 2</div>
+        </div>
 
+        {/* --- PÁGINA 2 --- */}
+        <div id="social-pdf-page-2" style={pageStyle}>
+            <header className="flex justify-between items-center mb-6 border-b pb-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.webp" alt="AIRE Logo" style={{ width: '80px', height: 'auto', opacity: 0.7 }} />
+                <div className="text-right">
+                    <h2 className="text-lg font-bold text-gray-600">PEDIDO DE REDES - Cont.</h2>
+                    <p className="text-xs text-gray-400">Cliente: {request.clientName}</p>
+                </div>
+            </header>
+
+            <div className="flex flex-col gap-2">
                 <SectionTitle title="4. Contenido Estratégico" />
                 <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded">
                     <span className="font-bold text-sm block mb-1">Objetivo del contenido:</span>
@@ -135,8 +153,10 @@ export const SocialMediaPdf = React.forwardRef<HTMLDivElement, SocialMediaPdfPro
                     </>
                 )}
             </div>
-            
+
+            <div className="absolute bottom-8 right-8 text-xs text-gray-400">Página 2 de 2</div>
         </div>
+
       </div>
     );
 });
