@@ -4,9 +4,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocialMediaRequest } from '@/lib/firebase-service'; 
-import { Client, SocialMediaRequest } from '@/lib/types';
+import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocialMediaRequest, getAllUsers } from '@/lib/firebase-service'; 
+import { Client, SocialMediaRequest, User } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [clients, setClients] = useState<Client[]>([]);
+    const [users, setUsers] = useState<User[]>([]); // 🟢
     
     // --- ESTADOS DEL FORMULARIO ---
     const [clientId, setClientId] = useState('');
@@ -59,13 +61,26 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const [reelCollaboration, setReelCollaboration] = useState(false);
     const [reelCollabHandle, setReelCollabHandle] = useState('');
 
+    // 🟢 ESTADOS DE AUTORÍA
+    const [advisorId, setAdvisorId] = useState('');
+    const [advisorName, setAdvisorName] = useState('');
+
     const [notifyOnSave, setNotifyOnSave] = useState(true);
+    
+    const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
 
     useEffect(() => {
         const init = async () => {
             try {
                 const clientsData = await getClients();
-                setClients(userInfo?.role === 'Asesor' ? clientsData.filter(c => c.ownerId === userInfo.id) : clientsData);
+                
+                if (canReassign) {
+                    setClients(clientsData);
+                    const allUsers = await getAllUsers();
+                    setUsers(allUsers);
+                } else {
+                    setClients(clientsData.filter(c => c.ownerId === userInfo?.id));
+                }
                 
                 const idToFetch = editId || cloneId;
                 if (idToFetch) {
@@ -93,7 +108,14 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                         setReelCopy(req.reelCopy || '');
                         setReelCollaboration(req.reelCollaboration || false);
                         setReelCollabHandle(req.reelCollabHandle || '');
+
+                        // 🟢 Preservar / Reasignar Autor
+                        setAdvisorId(req.advisorId || userInfo?.id || '');
+                        setAdvisorName(req.advisorName || userInfo?.name || '');
                     }
+                } else {
+                    setAdvisorId(userInfo?.id || '');
+                    setAdvisorName(userInfo?.name || '');
                 }
             } catch (e) {
                 console.error(e);
@@ -103,12 +125,12 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
             }
         };
         if (userInfo) init();
-    }, [userInfo, editId, cloneId, toast]);
+    }, [userInfo, editId, cloneId, toast, canReassign]);
 
     const getPreviewData = (): Partial<SocialMediaRequest> => ({
         clientId,
         clientName: clients.find(c => c.id === clientId)?.denominacion || 'Cliente Desconocido',
-        advisorName: userInfo?.name || '',
+        advisorName: advisorName || userInfo?.name || '',
         contactName, recordingLocation, recordingDate, recordingTime,
         contentType, creator, publishDate, clientValidation,
         objective, script, observations,
@@ -116,24 +138,51 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
         reelCopy, reelCollaboration, reelCollabHandle
     });
 
-    const generatePdfBase64 = async (containerElement: HTMLElement) => {
+    // 🟢 NUEVO: Multi-page PDF Generator para Redes (Evita cortes)
+    const generateMultiPagePdf = async (element: HTMLElement) => {
+        const page1 = element.querySelector('#social-pdf-page-1') as HTMLElement;
+        const page2 = element.querySelector('#social-pdf-page-2') as HTMLElement;
+        if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
+
         const pdf = new jsPDF('p', 'mm', 'a4');
-        const canvas = await html2canvas(containerElement, { scale: 1.5, useCORS: true });
-        const imgData = canvas.toDataURL('image/jpeg', 0.8);
-        
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        const processPage = async (pageElement: HTMLElement, pageNum: number) => {
+            const canvas = await html2canvas(pageElement, { scale: 1.5, useCORS: true });
+            const imgData = canvas.toDataURL('image/jpeg', 0.8);
+            
+            if (pageNum > 1) pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+            const links = pageElement.querySelectorAll('a');
+            const elementRect = pageElement.getBoundingClientRect();
+
+            links.forEach((link) => {
+                const linkRect = link.getBoundingClientRect();
+                if (linkRect.width === 0 || linkRect.height === 0) return;
+                
+                const top = ((linkRect.top - elementRect.top) * pdfHeight) / elementRect.height;
+                const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
+                const width = (linkRect.width * pdfWidth) / elementRect.width;
+                const height = (linkRect.height * pdfHeight) / elementRect.height;
+                pdf.link(left, top, width, height, { url: link.href });
+            });
+        };
+
+        await processPage(page1, 1);
+        await processPage(page2, 2);
+
         return pdf;
     };
 
     const handleDownloadPdf = async () => {
         if (!pdfRef.current) return;
         try {
-            const pdf = await generatePdfBase64(pdfRef.current);
+            const pdf = await generateMultiPagePdf(pdfRef.current);
             pdf.save(`PedidoRedes_${clients.find(c => c.id === clientId)?.denominacion || 'Cliente'}.pdf`);
         } catch (error) {
+            console.error(error);
             toast({ title: 'Error al exportar PDF', variant: 'destructive' });
         }
     };
@@ -150,8 +199,8 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
             const dataToSave: Omit<SocialMediaRequest, 'id' | 'createdAt'> = {
                 clientId,
                 clientName: client?.denominacion || 'Unknown',
-                advisorId: userInfo!.id,
-                advisorName: userInfo!.name,
+                advisorId: advisorId || userInfo!.id,
+                advisorName: advisorName || userInfo!.name,
                 contactName, recordingLocation, recordingDate, recordingTime,
                 contentType, creator, publishDate, clientValidation,
                 objective, script, observations,
@@ -179,13 +228,13 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
             if (notifyOnSave && pdfRef.current && finalId) {
                 const token = await getGoogleAccessToken();
                 if (token) {
-                    const pdf = await generatePdfBase64(pdfRef.current);
+                    const pdf = await generateMultiPagePdf(pdfRef.current);
                     const base64 = pdf.output('datauristring').split(',')[1];
                     const link = `${window.location.origin}/redes/${finalId}`;
                     
                     const emailBody = `
                         <h2>Pedido de Material para Redes (${contentType})</h2>
-                        <p>Asesor: <strong>${userInfo!.name}</strong></p>
+                        <p>El usuario <strong>${userInfo!.name}</strong> ha cargado o modificado un pedido a nombre de <strong>${advisorName}</strong>.</p>
                         <p>Cliente: <strong>${client?.denominacion}</strong></p>
                         <p><a href="${link}">Ver Detalles del Pedido en el CRM</a></p>
                     `;
@@ -231,8 +280,27 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                             <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.razonSocial ? `${c.razonSocial} (${c.denominacion})` : c.denominacion}</SelectItem>)}</SelectContent>
                         </Select>
                     </div>
+                    <div className="space-y-2">
+                        <Label>Ejecutivo / Asesor</Label>
+                        {canReassign ? (
+                            <Select value={advisorId} onValueChange={(val) => {
+                                setAdvisorId(val);
+                                const u = users.find(x => x.id === val);
+                                if (u) setAdvisorName(u.name);
+                            }}>
+                                <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                <SelectContent>
+                                    {users.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        ) : (
+                            <Input value={advisorName} readOnly className="bg-slate-50" />
+                        )}
+                    </div>
+
                     <div className="space-y-2"><Label>Contacto Coordinación *</Label><Input value={contactName} onChange={e=>setContactName(e.target.value)} /></div>
                     <div className="space-y-2"><Label>Lugar de Grabación *</Label><Input value={recordingLocation} onChange={e=>setRecordingLocation(e.target.value)} /></div>
+                    
                     <div className="flex gap-4">
                         <div className="space-y-2 flex-1"><Label>Fecha Grabación</Label><Input type="date" value={recordingDate} onChange={e=>setRecordingDate(e.target.value)} /></div>
                         <div className="space-y-2 flex-1"><Label>Hora</Label><Input type="time" value={recordingTime} onChange={e=>setRecordingTime(e.target.value)} /></div>
