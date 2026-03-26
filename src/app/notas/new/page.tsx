@@ -12,8 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote, getCommercialNote, updateCommercialNote } from '@/lib/firebase-service'; 
-import type { Client, Program, CommercialNote, ScheduleItem } from '@/lib/types';
+import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote, getCommercialNote, updateCommercialNote, getAllUsers } from '@/lib/firebase-service'; 
+import type { Client, Program, CommercialNote, ScheduleItem, User } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, Save, Plus, ExternalLink, Trash2, MapPin, Minus, ArrowLeft } from 'lucide-react';
@@ -28,7 +28,7 @@ import { NotePdf } from '@/components/notas/note-pdf';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function NewCommercialNotePage() {
     const { userInfo, getGoogleAccessToken } = useAuth();
@@ -40,11 +40,16 @@ export default function NewCommercialNotePage() {
     
     const [clients, setClients] = useState<Client[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
+    const [users, setUsers] = useState<User[]>([]); // 🟢 Usuarios para reasignar
     
     const [selectedClientId, setSelectedClientId] = useState<string>('');
     const [cuit, setCuit] = useState('');
     const [razonSocial, setRazonSocial] = useState('');
     const [rubro, setRubro] = useState('');
+    
+    // 🟢 ESTADOS DE AUTORÍA
+    const [advisorId, setAdvisorId] = useState('');
+    const [advisorName, setAdvisorName] = useState('');
     
     const [saleValue, setSaleValue] = useState<string>('');
     const [financialObservations, setFinancialObservations] = useState('');
@@ -89,7 +94,6 @@ export default function NewCommercialNotePage() {
     const [noCommercialAddress, setNoCommercialAddress] = useState(false);
 
     const [graphicSupport, setGraphicSupport] = useState(false);
-    // 🟢 NUEVO ARREGLO DE LINKS PARA SOPORTE GRÁFICO
     const [graphicLinks, setGraphicLinks] = useState<string[]>(['']);
     const [noteObservations, setNoteObservations] = useState('');
 
@@ -102,6 +106,8 @@ export default function NewCommercialNotePage() {
     const primaryGrafError = primaryGrafs.some(g => g.length > 84);
     const secondaryGrafError = secondaryGrafs.some(g => g.length > 55);
     const hasGrafErrors = primaryGrafError || secondaryGrafError;
+
+    const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
 
     const generateMultiPagePdf = async (element: HTMLElement) => {
         const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
@@ -157,7 +163,7 @@ export default function NewCommercialNotePage() {
     
     useEffect(() => {
         const search = window.location.search;
-        const params = new URLSearchParams(search);
+        const params = newSearchParams(search);
         const cloneId = params.get('cloneId');
         const editId = params.get('editId'); 
 
@@ -211,11 +217,12 @@ export default function NewCommercialNotePage() {
                     setCommercialAddresses(note.commercialAddresses?.length ? note.commercialAddresses : ['']);
                     setNoCommercialAddress(!!note.noCommercialAddress);
                     setGraphicSupport(!!note.graphicSupport);
-                    
-                    // 🟢 CARGAMOS LINKS (RECONOCE FORMATO VIEJO Y NUEVO)
                     setGraphicLinks(note.graphicSupportLinks?.length ? note.graphicSupportLinks : (note.graphicSupportLink ? [note.graphicSupportLink] : ['']));
-
                     setNoteObservations(note.noteObservations || '');
+
+                    // 🟢 Preservar al autor original
+                    setAdvisorId(note.advisorId || userInfo?.id || '');
+                    setAdvisorName(note.advisorName || userInfo?.name || '');
                 }
                 setIsRestored(true);
             });
@@ -262,9 +269,12 @@ export default function NewCommercialNotePage() {
                     setCommercialAddresses(parsed.commercialAddresses || ['']);
                     setNoCommercialAddress(parsed.noCommercialAddress || false);
                     setGraphicSupport(parsed.graphicSupport || false);
-                    setGraphicLinks(parsed.graphicLinks || ['']); // 🟢 BORRADOR LINKS
+                    setGraphicLinks(parsed.graphicLinks || ['']);
                     setNoteObservations(parsed.noteObservations || '');
                     
+                    if (parsed.advisorId) setAdvisorId(parsed.advisorId);
+                    if (parsed.advisorName) setAdvisorName(parsed.advisorName);
+
                     if (parsed.selectedClientId || parsed.title) {
                         setDraftLoaded(true);
                         toast({ title: "Borrador recuperado", description: "Se han restaurado los datos que estabas cargando." });
@@ -272,10 +282,14 @@ export default function NewCommercialNotePage() {
                 } catch (e) {
                     console.error("Error recuperando el borrador", e);
                 }
+            } else {
+                // Nuevo desde cero
+                setAdvisorId(userInfo?.id || '');
+                setAdvisorName(userInfo?.name || '');
             }
             setIsRestored(true);
         }
-    }, [toast]);
+    }, [toast, userInfo]);
 
     useEffect(() => {
         if (!isRestored || editModeId) return; 
@@ -288,10 +302,10 @@ export default function NewCommercialNotePage() {
             intervieweeName, intervieweeRole, intervieweeBio,
             instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp,
             commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress,
-            graphicSupport, graphicLinks, noteObservations
+            graphicSupport, graphicLinks, noteObservations, advisorId, advisorName
         };
         localStorage.setItem('commercial_note_draft', JSON.stringify(draftData));
-    }, [isRestored, editModeId, selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations, selectedProgramIds, programSchedule, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, contactPhone, contactName, title, location, callPhone, mobileAddress, primaryGrafs, secondaryGrafs, questions, topicsToAvoid, intervieweeName, intervieweeRole, intervieweeBio, instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp, commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress, graphicSupport, graphicLinks, noteObservations]);
+    }, [isRestored, editModeId, selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations, selectedProgramIds, programSchedule, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, contactPhone, contactName, title, location, callPhone, mobileAddress, primaryGrafs, secondaryGrafs, questions, topicsToAvoid, intervieweeName, intervieweeRole, intervieweeBio, instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp, commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress, graphicSupport, graphicLinks, noteObservations, advisorId, advisorName]);
 
     useEffect(() => {
         const loadData = async () => {
@@ -302,8 +316,10 @@ export default function NewCommercialNotePage() {
                 ]);
 
                 if (userInfo) {
-                    if (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion') {
+                    if (canReassign) {
                         setClients(fetchedClients);
+                        const allUsers = await getAllUsers();
+                        setUsers(allUsers);
                     } else {
                         setClients(fetchedClients.filter(c => c.ownerId === userInfo.id));
                     }
@@ -317,7 +333,7 @@ export default function NewCommercialNotePage() {
             }
         };
         if (userInfo) loadData();
-    }, [userInfo, toast]);
+    }, [userInfo, toast, canReassign]);
 
     const handleClientSelect = (clientId: string) => {
         setSelectedClientId(clientId);
@@ -407,6 +423,8 @@ export default function NewCommercialNotePage() {
         setGraphicSupport(false);
         setGraphicLinks(['']);
         setNoteObservations('');
+        setAdvisorId(userInfo?.id || '');
+        setAdvisorName(userInfo?.name || '');
         setDraftLoaded(false);
         toast({ title: "Borrador limpiado", description: "Puedes comenzar una nueva nota desde cero." });
     };
@@ -430,7 +448,6 @@ export default function NewCommercialNotePage() {
     const handleSecondaryChange = (index: number, value: string) => { const n = [...secondaryGrafs]; n[index] = value; setSecondaryGrafs(n); };
     const handleRemoveSecondary = (index: number) => { const n = secondaryGrafs.filter((_, i) => i !== index); setSecondaryGrafs(n.length ? n : ['']); };
 
-    // 🟢 LINKS SOPORTE GRÁFICO (AGREGAR, QUITAR Y EDITAR)
     const handleAddGraphicLink = () => setGraphicLinks([...graphicLinks, '']);
     const handleGraphicLinkChange = (index: number, value: string) => { const n = [...graphicLinks]; n[index] = value; setGraphicLinks(n); };
     const handleRemoveGraphicLink = (index: number) => { const n = graphicLinks.filter((_, i) => i !== index); setGraphicLinks(n.length ? n : ['']); };
@@ -471,8 +488,8 @@ export default function NewCommercialNotePage() {
                 clientId: selectedClientId,
                 clientName: client?.denominacion || 'Unknown',
                 cuit,
-                advisorId: userInfo!.id,
-                advisorName: userInfo!.name,
+                advisorId: advisorId || userInfo!.id, // 🟢 Preservado/Reasignado
+                advisorName: advisorName || userInfo!.name, // 🟢 Preservado/Reasignado
                 razonSocial,
                 rubro,
                 replicateWeb,
@@ -511,8 +528,8 @@ export default function NewCommercialNotePage() {
                 commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim() !== ''),
                 noCommercialAddress,
                 graphicSupport,
-                graphicSupportLink: graphicSupport ? graphicLinks[0] : undefined, // mantenemos el primer link en el viejo campo
-                graphicSupportLinks: graphicSupport ? graphicLinks.filter(l => l.trim() !== '') : undefined, // nueva lista
+                graphicSupportLink: graphicSupport ? graphicLinks[0] : undefined, 
+                graphicSupportLinks: graphicSupport ? graphicLinks.filter(l => l.trim() !== '') : undefined, 
                 totalValue,
                 saleValue: saleValueNum,
                 mismatch,
@@ -554,7 +571,7 @@ export default function NewCommercialNotePage() {
                         const emailBody = `
                             <div style="font-family: Arial, sans-serif; color: #333;">
                                 <h2 style="color: #cc0000;">Nota Comercial Registrada / Editada</h2>
-                                <p>El asesor <strong>${userInfo!.name}</strong> ha cargado o actualizado una nota.</p>
+                                <p>El usuario <strong>${userInfo!.name}</strong> ha cargado o actualizado una nota a nombre de <strong>${advisorName}</strong>.</p>
                                 <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #cc0000; margin: 20px 0;">
                                     <p><strong>Cliente:</strong> ${client?.denominacion || 'Desconocido'}</p>
                                     <p><strong>Título:</strong> ${title}</p>
@@ -642,7 +659,8 @@ export default function NewCommercialNotePage() {
 
                 <Card>
                     <CardHeader><CardTitle>Datos de Cliente</CardTitle></CardHeader>
-                    <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {/* 🟢 Pasó a 5 columnas para incluir al Asesor */}
+                    <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
                         <div className="space-y-2">
                             <Label>Cliente <span className="text-red-500">*</span></Label>
                             <Select value={selectedClientId} onValueChange={handleClientSelect}>
@@ -653,6 +671,25 @@ export default function NewCommercialNotePage() {
                         <div className="space-y-2"><Label>CUIT</Label><Input value={cuit} onChange={e => setCuit(e.target.value)} /></div>
                         <div className="space-y-2"><Label>Razón Social</Label><Input value={razonSocial} onChange={e => setRazonSocial(e.target.value)} /></div>
                         <div className="space-y-2"><Label>Rubro</Label><Input value={rubro} onChange={e => setRubro(e.target.value)} /></div>
+                        
+                        {/* 🟢 Selector de Asesor (solo Administradores) */}
+                        <div className="space-y-2">
+                            <Label>Asesor / Ejecutivo</Label>
+                            {canReassign ? (
+                                <Select value={advisorId} onValueChange={(val) => {
+                                    setAdvisorId(val);
+                                    const u = users.find(x => x.id === val);
+                                    if (u) setAdvisorName(u.name);
+                                }}>
+                                    <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {users.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <Input value={advisorName} readOnly className="bg-slate-50" />
+                            )}
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -740,12 +777,12 @@ export default function NewCommercialNotePage() {
 
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2 border p-3 rounded-md">
-                                <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84)</Label><Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
+                                <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84)</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
                                 {primaryGrafs.map((g, idx) => (
                                     <div key={idx} className="space-y-1 mb-2">
                                         <div className="flex gap-2">
                                             <Input value={g} onChange={e => handlePrimaryChange(idx, e.target.value)} className={g.length > 84 ? "border-destructive" : ""} placeholder={`Titular ${idx+1}`} />
-                                            {primaryGrafs.length > 1 && <Button size="icon" variant="ghost" onClick={() => handleRemovePrimary(idx)}><Trash2 className="h-4 w-4"/></Button>}
+                                            {primaryGrafs.length > 1 && <Button type="button" size="icon" variant="ghost" onClick={() => handleRemovePrimary(idx)}><Trash2 className="h-4 w-4"/></Button>}
                                         </div>
                                         {g.length > 84 && <span className="text-xs text-destructive">{g.length}/84 caracteres</span>}
                                     </div>
@@ -753,12 +790,12 @@ export default function NewCommercialNotePage() {
                             </div>
                             
                             <div className="space-y-2 border p-3 rounded-md">
-                                <div className="flex justify-between mb-2"><Label className={secondaryGrafError ? "text-destructive" : ""}>NOMBRE/FUNCION.Text (Max 55)</Label><Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddSecondary}><Plus className="h-4 w-4"/></Button></div>
+                                <div className="flex justify-between mb-2"><Label className={secondaryGrafError ? "text-destructive" : ""}>NOMBRE/FUNCION.Text (Max 55)</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddSecondary}><Plus className="h-4 w-4"/></Button></div>
                                 {secondaryGrafs.map((g, idx) => (
                                     <div key={idx} className="space-y-1 mb-2">
                                         <div className="flex gap-2">
                                             <Input value={g} onChange={e => handleSecondaryChange(idx, e.target.value)} className={g.length > 55 ? "border-destructive" : ""} placeholder={`Nombre/Función ${idx+1}`} />
-                                            {secondaryGrafs.length > 1 && <Button size="icon" variant="ghost" onClick={() => handleRemoveSecondary(idx)}><Trash2 className="h-4 w-4"/></Button>}
+                                            {secondaryGrafs.length > 1 && <Button type="button" size="icon" variant="ghost" onClick={() => handleRemoveSecondary(idx)}><Trash2 className="h-4 w-4"/></Button>}
                                         </div>
                                         {g.length > 55 && <span className="text-xs text-destructive">{g.length}/55 caracteres</span>}
                                     </div>
@@ -809,7 +846,6 @@ export default function NewCommercialNotePage() {
                         <div className="space-y-4 border-t pt-4">
                              <div className="flex items-center space-x-2"><Switch checked={graphicSupport} onCheckedChange={setGraphicSupport} /><Label>Agrega Soporte Gráfico</Label></div>
                              
-                             {/* 🟢 NUEVO BLOQUE DE LINKS GRÁFICOS DINÁMICO */}
                              {graphicSupport && (
                                  <div className="space-y-2 border p-3 rounded-md bg-slate-50">
                                      <div className="flex justify-between mb-2">
@@ -847,13 +883,15 @@ export default function NewCommercialNotePage() {
                     programs={programs}
                     note={{
                         clientName: clients.find(c => c.id === selectedClientId)?.denominacion,
-                        cuit, advisorName: userInfo?.name, razonSocial, rubro, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, schedule: programSchedule, contactPhone, contactName, title, location, callPhone: location === 'Llamada' ? callPhone : undefined, mobileAddress: location === 'Móvil' ? mobileAddress : undefined,
+                        cuit, 
+                        advisorName: advisorName || userInfo?.name, 
+                        razonSocial, rubro, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, schedule: programSchedule, contactPhone, contactName, title, location, callPhone: location === 'Llamada' ? callPhone : undefined, mobileAddress: location === 'Móvil' ? mobileAddress : undefined,
                         primaryGrafs: primaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
                         secondaryGrafs: secondaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
                         primaryGraf: primaryGrafs[0]?.toUpperCase() || '', 
                         secondaryGraf: secondaryGrafs[0]?.toUpperCase() || '',
                         questions: questions.filter(q => q.trim()), topicsToAvoid: topicsToAvoid.filter(t => t.trim()), intervieweeName, intervieweeRole, intervieweeBio, instagram: instagramHandle, website, whatsapp, phone: commercialPhone, noWeb, noWhatsapp, noCommercialPhone, commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim()), noCommercialAddress, graphicSupport, 
-                        graphicSupportLinks: graphicSupport ? graphicLinks.filter(l => l.trim() !== '') : undefined, // Pasamos el array de links
+                        graphicSupportLinks: graphicSupport ? graphicLinks.filter(l => l.trim() !== '') : undefined,
                         noteObservations
                     }}
                 />
