@@ -31,11 +31,13 @@ import {
     createQuickOpportunity,
     getAdvertisingOrder,
     updateAdvertisingOrder,
-    getBillingRequestsByOrder
+    getBillingRequestsByOrder,
+    getAllUsers // 🟢 Añadido para poder reasignar
 } from "@/lib/firebase-service";
-import { Client, Agency, AdvertisingOrder } from "@/lib/types";
+import { Client, Agency, AdvertisingOrder, User } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
+import { hasManagementPrivileges } from "@/lib/role-utils";
 
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
@@ -53,6 +55,8 @@ export function AdvertisingForm() {
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [programs, setPrograms] = useState<any[]>([]); 
   const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [users, setUsers] = useState<User[]>([]); // 🟢 Estado para usuarios
+
   const [isNewOpp, setIsNewOpp] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
@@ -65,10 +69,14 @@ export function AdvertisingForm() {
   const [invoiceCountSrl, setInvoiceCountSrl] = useState(1);
   const [invoiceCountSas, setInvoiceCountSas] = useState(1);
   
-  // 🟢 ESTADO PARA LOS LINKS DE MATERIALES
   const [materialUrls, setMaterialUrls] = useState<string[]>(['']);
+  
+  // 🟢 Estado para preservar (o reasignar) al autor original
+  const [orderCreatedBy, setOrderCreatedBy] = useState<string>('');
 
   const pdfRef = useRef<HTMLDivElement>(null);
+
+  const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
 
   const form = useForm<AdvertisingOrderFormValues>({
     resolver: zodResolver(advertisingOrderSchema),
@@ -110,7 +118,10 @@ export function AdvertisingForm() {
   const sasItemsCurrent = watch("sasItems");
 
   useEffect(() => {
-    if (userInfo?.name && !editModeId && !draftLoaded) setValue("accountExecutive", userInfo.name);
+    if (userInfo?.name && !editModeId && !draftLoaded) {
+        setValue("accountExecutive", userInfo.name);
+        setOrderCreatedBy(userInfo.id);
+    }
     const loadData = async () => {
       try {
         const [clientsData, agenciesData, programsData] = await Promise.all([
@@ -120,6 +131,12 @@ export function AdvertisingForm() {
         else if (Array.isArray(clientsData)) setClients(clientsData as Client[]);
         setAgencies(agenciesData);
         setPrograms(programsData);
+
+        if (canReassign) {
+            const allUsers = await getAllUsers();
+            setUsers(allUsers);
+        }
+
       } catch (error) {
         console.error("Error loading data:", error);
       } finally {
@@ -127,7 +144,7 @@ export function AdvertisingForm() {
       }
     };
     loadData();
-  }, [userInfo, setValue, editModeId, draftLoaded]);
+  }, [userInfo, setValue, editModeId, draftLoaded, canReassign]);
 
   useEffect(() => {
       const search = window.location.search;
@@ -173,8 +190,10 @@ export function AdvertisingForm() {
                       fetchedBillingRequestsSas.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                   }
                   
-                  // 🟢 CARGAR LINKS
                   setMaterialUrls(order.materialUrls?.length ? order.materialUrls : (order.materialUrl ? [order.materialUrl] : ['']));
+
+                  // 🟢 Al editar o clonar, preservamos al creador original (o lo asignamos)
+                  setOrderCreatedBy(order.createdBy || userInfo?.id || '');
 
                   form.reset({
                       clientId: order.clientId,
@@ -187,7 +206,7 @@ export function AdvertisingForm() {
                       startDate: new Date(order.startDate),
                       endDate: new Date(order.endDate),
                       materialSent: order.materialSent || false,
-                      materialUrl: order.materialUrl || "", // Ignorado pero mantenido por compatibilidad
+                      materialUrl: order.materialUrl || "",
                       observations: order.observations || "",
                       certReq: order.certReq || false,
                       agencySale: order.agencySale || false,
@@ -215,6 +234,7 @@ export function AdvertisingForm() {
                   if (parsed.startDate) parsed.startDate = new Date(parsed.startDate);
                   if (parsed.endDate) parsed.endDate = new Date(parsed.endDate);
                   if (parsed.materialUrls) setMaterialUrls(parsed.materialUrls);
+                  if (parsed.createdBy) setOrderCreatedBy(parsed.createdBy);
                   form.reset(parsed);
                   setDraftLoaded(true);
                   toast({ title: "Borrador recuperado", description: "Se han restaurado los datos que estabas cargando." });
@@ -224,17 +244,18 @@ export function AdvertisingForm() {
           }
           setIsRestored(true);
       }
-  }, [form, toast]);
+  }, [form, toast, userInfo]);
 
   useEffect(() => {
       if (!isRestored || editModeId) return;
-      localStorage.setItem('advertising_order_draft', JSON.stringify({ ...values, materialUrls }));
-  }, [values, materialUrls, isRestored, editModeId]);
+      localStorage.setItem('advertising_order_draft', JSON.stringify({ ...values, materialUrls, createdBy: orderCreatedBy }));
+  }, [values, materialUrls, isRestored, editModeId, orderCreatedBy]);
 
   const handleClearDraft = () => {
       if (!window.confirm("¿Seguro que quieres limpiar todo el formulario para empezar de cero?")) return;
       localStorage.removeItem('advertising_order_draft');
       setMaterialUrls(['']);
+      setOrderCreatedBy(userInfo?.id || '');
       form.reset({
           accountExecutive: userInfo?.name || "",
           materialSent: false, materialUrl: "", certReq: false, agencySale: false,
@@ -268,7 +289,6 @@ export function AdvertisingForm() {
       }
   }, [srlItemsCurrent, sasItemsCurrent, isRestored, values.adjustmentSrl, values.adjustmentSas, values.billingRequestsSrl?.length, values.billingRequestsSas?.length, setValue]);
 
-  // 🟢 MANEJO DE LINKS DE MATERIAL
   const handleAddMaterialUrl = () => setMaterialUrls([...materialUrls, '']);
   const handleMaterialUrlChange = (index: number, value: string) => {
       const newUrls = [...materialUrls];
@@ -321,25 +341,16 @@ export function AdvertisingForm() {
 
   const handleGenerateBillingSrl = () => {
       if (invoiceCountSrl < 1) return;
-      
       const campaignGross = srlSubtotal * totalMonthsCycle;
       const campaignAdj = srlAdjustment * totalMonthsCycle;
       const campaignNet = totalOrderSrlNet * totalMonthsCycle;
-
       const invGross = campaignGross / invoiceCountSrl;
       const invAdj = campaignAdj / invoiceCountSrl;
       const invNet = campaignNet / invoiceCountSrl;
-
       const newBrs = [];
       let curDate = startDate && isValid(startDate) ? new Date(startDate) : new Date();
-      
       for (let i = 0; i < invoiceCountSrl; i++) {
-          newBrs.push({
-              date: format(curDate, 'yyyy-MM-dd'),
-              grossAmount: Number(invGross.toFixed(2)),
-              adjustment: Number(invAdj.toFixed(2)),
-              amount: Number(invNet.toFixed(2))
-          });
+          newBrs.push({ date: format(curDate, 'yyyy-MM-dd'), grossAmount: Number(invGross.toFixed(2)), adjustment: Number(invAdj.toFixed(2)), amount: Number(invNet.toFixed(2)) });
           curDate = addMonths(curDate, 1);
       }
       setValue("billingRequestsSrl", newBrs, { shouldValidate: true });
@@ -347,28 +358,18 @@ export function AdvertisingForm() {
 
   const handleGenerateBillingSas = () => {
       if (invoiceCountSas < 1) return;
-
       const campaignGross = sasSubtotal * totalMonthsCycle;
       const campaignAdj = sasAdjustment * totalMonthsCycle;
       const campaignIva = sasIva * totalMonthsCycle;
       const campaignNet = totalOrderSasNet * totalMonthsCycle;
-
       const invGross = campaignGross / invoiceCountSas;
       const invAdj = campaignAdj / invoiceCountSas;
       const invIva = campaignIva / invoiceCountSas;
       const invNet = campaignNet / invoiceCountSas;
-
       const newBrs = [];
       let curDate = startDate && isValid(startDate) ? new Date(startDate) : new Date();
-      
       for (let i = 0; i < invoiceCountSas; i++) {
-          newBrs.push({
-              date: format(curDate, 'yyyy-MM-dd'),
-              grossAmount: Number(invGross.toFixed(2)),
-              adjustment: Number(invAdj.toFixed(2)),
-              ivaSas: Number(invIva.toFixed(2)),
-              amount: Number(invNet.toFixed(2))
-          });
+          newBrs.push({ date: format(curDate, 'yyyy-MM-dd'), grossAmount: Number(invGross.toFixed(2)), adjustment: Number(invAdj.toFixed(2)), ivaSas: Number(invIva.toFixed(2)), amount: Number(invNet.toFixed(2)) });
           curDate = addMonths(curDate, 1);
       }
       setValue("billingRequestsSas", newBrs, { shouldValidate: true });
@@ -401,7 +402,6 @@ export function AdvertisingForm() {
           const gross = parseFloat(row.grossAmount as any) || 0;
           const adj = parseFloat(row.adjustment as any) || 0;
           const iva = (gross - adj) * 0.05; 
-          
           setValue(`billingRequestsSas.${index}.ivaSas`, iva, { shouldValidate: true });
           setValue(`billingRequestsSas.${index}.amount`, gross - adj + iva, { shouldValidate: true });
       }, 50);
@@ -410,7 +410,6 @@ export function AdvertisingForm() {
   const sumGrossSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.grossAmount)||0), 0) || 0;
   const sumAdjSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
   const sumNetSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
-
   const campaignSrlGross = srlSubtotal * totalMonthsCycle;
   const campaignSrlNet = totalOrderSrlNet * totalMonthsCycle;
   const hasGrossErrorSrl = Math.abs(sumGrossSrl - campaignSrlGross) > 5; 
@@ -420,7 +419,6 @@ export function AdvertisingForm() {
   const sumAdjSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
   const sumIvaSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.ivaSas)||0), 0) || 0;
   const sumNetSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
-
   const campaignSasGross = sasSubtotal * totalMonthsCycle;
   const campaignSasNet = totalOrderSasNet * totalMonthsCycle;
   const hasGrossErrorSas = Math.abs(sumGrossSas - campaignSasGross) > 5; 
@@ -438,7 +436,6 @@ export function AdvertisingForm() {
       return {
           id: "preview",
           clientId: values.clientId || "",
-          // 🟢 Mostrar Razón Social
           clientName: selectedClient?.razonSocial || selectedClient?.denominacion || "Cliente (Vista Previa)",
           agencyId: values.agencyId === "none" ? undefined : values.agencyId,
           agencyName: values.agencyId === "none" ? undefined : selectedAgency?.name,
@@ -447,7 +444,7 @@ export function AdvertisingForm() {
           opportunityTitle: oppTitle || "Campaña",
           accountExecutive: values.accountExecutive || userInfo?.name || "",
           createdAt: new Date().toISOString(),
-          createdBy: userInfo?.id || "",
+          createdBy: orderCreatedBy || userInfo?.id || "",
           tangoOrderNo: values.tangoOrderNo,
           startDate: safeStartDate,
           endDate: safeEndDate,
@@ -599,7 +596,6 @@ export function AdvertisingForm() {
               toast({ title: "Falta Nombre", description: "Ingrese nombre para la nueva oportunidad", variant: "destructive"});
               setIsSubmitting(false); return;
           }
-          // 🟢 Pasar Razón Social a la oportunidad rápida si corresponde
           finalOppId = await createQuickOpportunity(data.newOpportunityTitle, data.clientId, selectedClient?.razonSocial || selectedClient?.denominacion || "Cliente", userInfo.id);
           oppTitle = data.newOpportunityTitle;
       } else if (!data.opportunityId) {
@@ -617,7 +613,6 @@ export function AdvertisingForm() {
       const orderPayload = {
         ...preview,
         clientId: data.clientId,
-        // 🟢 Guardar Razón Social
         clientName: selectedClient?.razonSocial || selectedClient?.denominacion || "Desconocido",
         agencyId: data.agencyId === "none" ? undefined : data.agencyId,
         agencyName: data.agencyId === "none" ? undefined : selectedAgency?.name,
@@ -629,6 +624,9 @@ export function AdvertisingForm() {
         sasItems: validSasItems,
         billingRequestsSrl: data.billingRequestsSrl, 
         billingRequestsSas: data.billingRequestsSas,
+        // 🟢 Asegurarnos de enviar el ID y Nombre del ejecutivo (preservado o reasignado)
+        accountExecutive: data.accountExecutive,
+        createdBy: orderCreatedBy || userInfo.id,
         id: undefined 
       };
 
@@ -656,7 +654,7 @@ export function AdvertisingForm() {
                   const emailBody = `
                       <div style="font-family: Arial, sans-serif; color: #333;">
                           <h2 style="color: #1d4ed8;">Orden de Publicidad ${editModeId ? 'Editada' : 'Registrada'}</h2>
-                          <p>El ejecutivo <strong>${userInfo!.name}</strong> ha ${editModeId ? 'actualizado' : 'cargado'} una orden.</p>
+                          <p>El usuario <strong>${userInfo!.name}</strong> ha ${editModeId ? 'actualizado' : 'cargado'} una orden a nombre de <strong>${data.accountExecutive}</strong>.</p>
                           <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #1d4ed8; margin: 20px 0;">
                               <p><strong>Cliente:</strong> ${clientDisplayName}</p>
                               <p><strong>Producto:</strong> ${oppTitle}</p>
@@ -750,7 +748,6 @@ export function AdvertisingForm() {
               <FormItem><FormLabel>Anunciante (Cliente) <span className="text-red-500">*</span></FormLabel>
                 <Select onValueChange={(val) => { field.onChange(val); setValue("opportunityId", ""); }} value={field.value || undefined}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
-                  {/* 🟢 MOSTRAR RAZÓN SOCIAL Y DENOMINACIÓN EN EL SELECTOR */}
                   <SelectContent>{clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.razonSocial ? `${c.razonSocial} (${c.denominacion})` : c.denominacion}</SelectItem>))}</SelectContent>
                 </Select>
               <FormMessage /></FormItem>
@@ -777,9 +774,28 @@ export function AdvertisingForm() {
                 )} />
               {isNewOpp && (<FormField control={form.control} name="newOpportunityTitle" render={({ field }) => (<div className="mt-2"><Input placeholder="Nombre del producto *" {...field} /></div>)} />)}
           </div>
-          <FormField control={form.control} name="accountExecutive" render={({ field }) => (<FormItem><FormLabel>Ejecutivo</FormLabel><FormControl><Input {...field} readOnly /></FormControl></FormItem>)} />
+          
+          {/* 🟢 Selector de Ejecutivo o Campo de Texto según Permisos */}
+          <div className="space-y-2 flex flex-col justify-end pb-1">
+             <FormLabel>Ejecutivo / Autor de Orden</FormLabel>
+             {canReassign ? (
+                 <Select value={orderCreatedBy || userInfo?.id} onValueChange={(val) => {
+                     setOrderCreatedBy(val);
+                     const u = users.find(x => x.id === val);
+                     if (u) form.setValue('accountExecutive', u.name);
+                 }}>
+                     <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                     <SelectContent>
+                         {users.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                     </SelectContent>
+                 </Select>
+             ) : (
+                 <Input value={form.watch('accountExecutive')} readOnly className="bg-slate-50" />
+             )}
+          </div>
         </div>
 
+        {/* --- RESTO DEL FORMULARIO INTACTO --- */}
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
           <div className="bg-slate-100 px-4 py-2 border-b"><h3 className="text-lg font-semibold text-slate-800">AIRE SRL</h3></div>
           <div className="p-4 grid gap-6">
@@ -810,7 +826,6 @@ export function AdvertisingForm() {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start border p-3 rounded-md bg-slate-50">
                <FormField control={form.control} name="materialSent" render={({ field }) => (<FormItem className="flex flex-row items-center h-10 space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Envía mat.</FormLabel></FormItem>)} />
                
-               {/* 🟢 MÚLTIPLES LINKS DE MATERIAL */}
                <div className="col-span-4 space-y-2">
                    <div className="flex justify-between items-center mb-1">
                        <FormLabel>Links de Materiales (Drive/URL)</FormLabel>
