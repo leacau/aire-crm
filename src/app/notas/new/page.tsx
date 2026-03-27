@@ -40,7 +40,7 @@ export default function NewCommercialNotePage() {
     
     const [clients, setClients] = useState<Client[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
-    const [users, setUsers] = useState<User[]>([]); // 🟢 Usuarios para reasignar
+    const [users, setUsers] = useState<User[]>([]); 
     
     const [selectedClientId, setSelectedClientId] = useState<string>('');
     const [cuit, setCuit] = useState('');
@@ -163,7 +163,8 @@ export default function NewCommercialNotePage() {
     
     useEffect(() => {
         const search = window.location.search;
-        const params = newSearchParams(search);
+        // 🟢 CORRECCIÓN APLICADA: new URLSearchParams
+        const params = new URLSearchParams(search);
         const cloneId = params.get('cloneId');
         const editId = params.get('editId'); 
 
@@ -220,7 +221,7 @@ export default function NewCommercialNotePage() {
                     setGraphicLinks(note.graphicSupportLinks?.length ? note.graphicSupportLinks : (note.graphicSupportLink ? [note.graphicSupportLink] : ['']));
                     setNoteObservations(note.noteObservations || '');
 
-                    // 🟢 Preservar al autor original
+                    // Preservar al autor original si se está editando
                     setAdvisorId(note.advisorId || userInfo?.id || '');
                     setAdvisorName(note.advisorName || userInfo?.name || '');
                 }
@@ -283,7 +284,6 @@ export default function NewCommercialNotePage() {
                     console.error("Error recuperando el borrador", e);
                 }
             } else {
-                // Nuevo desde cero
                 setAdvisorId(userInfo?.id || '');
                 setAdvisorName(userInfo?.name || '');
             }
