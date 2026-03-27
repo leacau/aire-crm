@@ -292,7 +292,7 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                     
                      <div className="flex justify-between items-center text-sm text-muted-foreground">
                         <span>Agencia ({agencyCommissionPct}%):</span>
-                        <span>${.toLocaleString("es-AR")}</span>
+                        <span>${agencyAmount.toLocaleString("es-AR")}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
                         <span className="font-bold">Neto de Acción:</span>
