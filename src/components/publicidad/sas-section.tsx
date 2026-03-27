@@ -47,7 +47,7 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
   const totalToInvoice = taxableBase + ivaAmount;
   
   const agencyCommissionPct = form.watch("commissionSrl") || 0; 
-  const agencyAmount = form.watch("agencySale") ? (totalToInvoice * (agencyCommissionPct / 100)) : 0;
+  const agencyAmount = form.watch("agencySale") ? (taxableBase * (agencyCommissionPct / 100)) : 0;
   const netAction = totalToInvoice - agencyAmount;
 
   const getTypeOptions = (format: string) => {
@@ -292,7 +292,7 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                     
                      <div className="flex justify-between items-center text-sm text-muted-foreground">
                         <span>Agencia ({agencyCommissionPct}%):</span>
-                        <span>${agencyAmount.toLocaleString("es-AR")}</span>
+                        <span>${.toLocaleString("es-AR")}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
                         <span className="font-bold">Neto de Acción:</span>
