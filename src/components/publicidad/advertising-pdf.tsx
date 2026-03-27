@@ -86,7 +86,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const sasIva = sasBase * 0.05; 
   const sasTotalToInvoice = sasBase + sasIva;
   const sasCommissionPct = order.agencySale ? (order.commissionSrl || 0) : 0;
-  const sasAgencyAmount = sasTotalToInvoice * (sasCommissionPct / 100);
+  const sasAgencyAmount = sasBase * (sasCommissionPct / 100);
   const sasNetAction = sasTotalToInvoice - sasAgencyAmount;
 
   // 🟢 SI HIDESRL ESTÁ ACTIVO, FORZAMOS HASSRL A FALSE PARA QUE NO DIBUJE NADA
