@@ -73,24 +73,17 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const handleCreateSession = async () => {
         if (!userInfo) return;
         
-        // 1. Identificar tareas pendientes de sesiones anteriores (ordenadas por fecha descendente, la 0 es la última)
         let pendingItems: CoachingItem[] = [];
-        
-        // Buscamos en todas las sesiones las tareas que no estén completadas ni canceladas
-        // Usamos un Map para no duplicar taskIds (si una tarea aparece en varias sesiones antiguas, tomamos la más reciente)
         const pendingMap = new Map<string, CoachingItem>();
         
-        // Recorremos desde la más antigua a la más nueva para que la versión más reciente sobrescriba
         [...sessions].reverse().forEach(session => {
             const sessionDateStr = format(parseISO(session.date), 'dd/MM');
 
             session.items.forEach(item => {
                 if (item.status !== 'Completado' && item.status !== 'Cancelado') {
-                    // CAMBIO: Si es origen jefatura, mantenemos prefijo de fecha.
                     const isManagerOrigin = !item.origin || item.origin === 'manager';
                     let actionWithHistory = item.action;
                     
-                    // Solo agregamos la fecha al historial de acción si fue creado por un manager para rastrear pedidos
                     if (isManagerOrigin) {
                          actionWithHistory = `[Del ${sessionDateStr}] ${item.action}`;
                     }
@@ -101,10 +94,9 @@ export function CoachingView({ advisor }: { advisor: User }) {
                         action: actionWithHistory, 
                         status: item.status, 
                         advisorNotes: item.advisorNotes,
-                        origin: item.origin || 'manager' // Preservar origen al arrastrar
+                        origin: item.origin || 'manager' 
                     });
                 } else {
-                    // Si se completó en algún momento, la quitamos del mapa de pendientes
                     pendingMap.delete(item.taskId);
                 }
             });
@@ -119,7 +111,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 managerId: userInfo.id,
                 managerName: userInfo.name,
                 date: new Date().toISOString(),
-                items: pendingItems, // Tareas arrastradas con historial de acción actualizado
+                items: pendingItems, 
                 generalNotes: ''
             }, userInfo.id, userInfo.name);
             
@@ -138,19 +130,36 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const handleAddItem = async (sessionId: string) => {
         if (!newItemEntity.trim() || !newItemAction.trim()) return;
         
-        // CAMBIO: Determinar origen según rol
+        // 🟢 VALIDACIÓN DE UNIDAD (Evitar que creen manual un cliente que ya está en la lista activa de la sesión)
+        const session = sessions.find(s => s.id === sessionId);
+        if (session) {
+            const existsOpen = session.items.some(i => 
+                i.entityName.toLowerCase() === newItemEntity.trim().toLowerCase() && 
+                (i.status === 'Pendiente' || i.status === 'En Proceso')
+            );
+
+            if (existsOpen) {
+                toast({ 
+                    title: "Ya existe un seguimiento", 
+                    description: `Ya hay un ítem abierto para "${newItemEntity}". Por favor, agrega tus notas o pedidos a ese mismo ítem.`, 
+                    variant: "destructive" 
+                });
+                return;
+            }
+        }
+
         const origin = canManage ? 'manager' : 'advisor';
 
         const item: CoachingItem = {
             id: '', 
-            taskId: '', // Se genera en backend
+            taskId: '', 
             originalCreatedAt: new Date().toISOString(),
             entityType: newItemType,
             entityName: newItemEntity,
             action: newItemAction,
             status: 'Pendiente',
             advisorNotes: '',
-            origin: origin // Guardamos quién lo creó
+            origin: origin 
         };
 
         try {
@@ -164,20 +173,16 @@ export function CoachingView({ advisor }: { advisor: User }) {
         }
     };
 
-    // Actualizado para aceptar Partial<CoachingItem> (permite actualizar 'action' también)
     const handleUpdateItem = async (session: CoachingSession, item: CoachingItem, updates: Partial<CoachingItem>) => {
         if (!userInfo) return;
         try {
-            // Pasamos taskId y advisorId para la propagación
             await updateCoachingItem(session.id, item.id, updates as any, userInfo.id, userInfo.name, item.taskId, session.advisorId);
             
-            // Update local optimista
             setSessions(prev => prev.map(s => {
                 let newItems = s.items;
                 if (s.id === session.id) {
                     newItems = s.items.map(i => i.id === item.id ? { ...i, ...updates, lastUpdate: new Date().toISOString() } : i);
                 } 
-                // Actualizar en otras sesiones si hay cambio de estado (Visualmente)
                 else if (updates.status && item.taskId) {
                     newItems = s.items.map(i => i.taskId === item.taskId ? { ...i, status: updates.status as any } : i);
                 }
@@ -190,7 +195,6 @@ export function CoachingView({ advisor }: { advisor: User }) {
         }
     };
 
-    // CAMBIO 2: Lógica para guardar NUEVA NOTA con fecha
     const commitNote = async (session: CoachingSession, item: CoachingItem) => {
         const newVal = inputStates[item.id]?.note;
         if (!newVal?.trim()) return;
@@ -198,17 +202,14 @@ export function CoachingView({ advisor }: { advisor: User }) {
         const dateStr = format(new Date(), "dd/MM HH:mm");
         const toAppend = `[${dateStr}] ${newVal.trim()}`;
         
-        // Mantiene lo anterior, agrega nueva línea con fecha y texto nuevo
         const updatedNotes = item.advisorNotes 
             ? `${item.advisorNotes}\n\n${toAppend}` 
             : toAppend;
         
         await handleUpdateItem(session, item, { advisorNotes: updatedNotes });
-        // Limpiar input
         setInputStates(prev => ({...prev, [item.id]: { ...prev[item.id], note: '' }}));
     };
 
-    // CAMBIO 1 (Parte 2): Lógica para guardar NUEVO PEDIDO DEL JEFE con fecha
     const commitAction = async (session: CoachingSession, item: CoachingItem) => {
         const newVal = inputStates[item.id]?.action;
         if (!newVal?.trim()) return;
@@ -277,18 +278,15 @@ export function CoachingView({ advisor }: { advisor: User }) {
         setOpenSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
     };
 
-    // Helper para renderizar items
     const renderItemRow = (session: CoachingSession, item: CoachingItem) => (
         <div key={item.id} className="grid grid-cols-1 md:grid-cols-[45%_55%] gap-4 p-4 border rounded-lg bg-card/50 shadow-sm transition-shadow">
             
-            {/* Columna Izquierda: La Tarea y Pedidos */}
             <div className="space-y-3 border-r md:pr-4 border-dashed md:border-solid border-border/50 relative">
                 <div className="flex flex-wrap items-center gap-2 pr-6">
                     <Badge variant="outline" className="capitalize bg-background text-[10px]">{item.entityType === 'general' ? 'General' : 'Cliente/Prospecto'}</Badge>
                     <span className="font-semibold text-sm truncate block max-w-full" title={item.entityName}>{item.entityName}</span>
                 </div>
                 
-                {/* Botón borrar (Jefes borran todo, Asesores solo lo suyo y si está abierta) */}
                 {(canManage || (item.origin === 'advisor' && session.status === 'Open')) && (
                     <Button 
                         variant="ghost" 
@@ -300,12 +298,10 @@ export function CoachingView({ advisor }: { advisor: User }) {
                     </Button>
                 )}
 
-                {/* Historial de Pedidos */}
                 <div className="bg-muted/30 p-2 rounded text-sm font-medium text-foreground/90 border whitespace-pre-wrap max-h-[150px] overflow-y-auto">
                     {item.action}
                 </div>
 
-                {/* Solo Jefes agregan indicaciones extra sobre lo existente */}
                 {canManage && session.status === 'Open' && (
                      <div className="flex gap-2 items-center">
                         <Input 
@@ -321,7 +317,6 @@ export function CoachingView({ advisor }: { advisor: User }) {
                      </div>
                 )}
                 
-                {/* Estado Visual */}
                 <div className="pt-1 flex items-center justify-between">
                     <Select 
                         value={item.status} 
@@ -352,20 +347,17 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 </div>
             </div>
 
-            {/* Columna Derecha: Bitácora (Asesor) */}
             <div className="space-y-2 flex flex-col h-full">
                 <Label className="text-xs text-muted-foreground flex items-center gap-2 font-medium">
                     <Save className="h-3 w-3" /> Bitácora de Avance
                 </Label>
                 
-                {/* CAMBIO 2: Historial de solo lectura para mantener lo escrito */}
                 {item.advisorNotes && (
                     <div className="text-xs text-muted-foreground bg-yellow-50/50 p-2 rounded border border-yellow-100 whitespace-pre-wrap max-h-[120px] overflow-y-auto">
                         {item.advisorNotes}
                     </div>
                 )}
 
-                {/* CAMBIO 2: Nuevo campo para guardar fecha y aclaración */}
                 <div className="flex-1 flex flex-col gap-2">
                     <Textarea 
                         className="flex-1 min-h-[60px] text-sm resize-none bg-background focus:bg-white transition-colors"
@@ -428,7 +420,6 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 )}
 
                 {sessions.map((session) => {
-                    // CAMBIO: Filtrar items por origen
                     const managerItems = session.items.filter(i => !i.origin || i.origin === 'manager');
                     const advisorItems = session.items.filter(i => i.origin === 'advisor');
 
@@ -492,7 +483,6 @@ export function CoachingView({ advisor }: { advisor: User }) {
 
                         <CollapsibleContent>
                             <div className="px-4 pb-4 pt-0 space-y-6">
-                                {/* SECCIÓN 1: SOLICITUDES DE JEFATURA */}
                                 {managerItems.length > 0 && (
                                     <div className="space-y-3">
                                         <h4 className="text-xs uppercase font-bold text-muted-foreground flex items-center gap-2">
@@ -502,7 +492,6 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                     </div>
                                 )}
 
-                                {/* SECCIÓN 2: CARTERA DEL ASESOR */}
                                 {advisorItems.length > 0 && (
                                     <div className="space-y-3 mt-6">
                                         <h4 className="text-xs uppercase font-bold text-primary flex items-center gap-2 border-t pt-4">
@@ -518,7 +507,6 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                     </div>
                                 )}
 
-                                {/* Formulario para agregar items (Ahora visible para TODOS si está abierta) */}
                                 {session.status === 'Open' && (
                                     <div className={`p-3 rounded-lg border border-dashed flex flex-col md:flex-row gap-3 items-end mt-4 ${canManage ? 'bg-muted/40' : 'bg-blue-50/50 border-blue-200'}`}>
                                         <div className="w-full md:w-[120px] space-y-1">
