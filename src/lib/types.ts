@@ -355,17 +355,18 @@ export type Canje = {
   historialMensual?: HistorialMensualItem[];
 };
 
-export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Admin';
-export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Import', 'Admin'];
+export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Admin' | 'Asesor Canjes';
+export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Import', 'Admin', 'Asesor Canjes'];
 
-export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción';
-export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'];
+export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción' | 'Canjes';
+export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción', 'Canjes'];
 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
-    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes' // 🟢 NUEVO
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes', 'AppCanjes' // 🟢 Se agregó 'AppCanjes'
 ] as const;
+
 export type ScreenName = typeof screenNames[number];
 
 
@@ -710,4 +711,28 @@ export type AdvertisingOrder = {
   
   billingRequestsSrl?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
   billingRequestsSas?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
+};
+
+export type ConvenioCanje = {
+  id?: string;
+  clientId: string;
+  clientName: string;
+  advisorId: string;
+  advisorName: string;
+  opportunityId: string;
+  
+  // Lo que da la Radio (Pautado o Mención)
+  radioEntrega: string;
+  
+  // Lo que da el Cliente (Bienes o Servicios)
+  clienteEntrega: string;
+  
+  // Vigencia
+  fechaInicio: string;
+  fechaFin: string;
+  
+  observaciones?: string;
+  
+  createdAt: string;
+  updatedAt?: string;
 };
