@@ -3597,15 +3597,55 @@ export const deleteCoachingItem = async (sessionId: string, itemId: string) => {
 
 export const addItemsToSession = async (sessionId: string, newItems: CoachingItem[]) => {
     const sessionRef = doc(db, 'coaching_sessions', sessionId);
-    const itemsWithIds = newItems.map(i => ({
-        ...i, 
-        id: typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2),
-        taskId: i.taskId || (typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
-        originalCreatedAt: i.originalCreatedAt || new Date().toISOString()
-    }));
     
-    await updateDoc(sessionRef, {
-        items: arrayUnion(...itemsWithIds)
+    await runTransaction(db, async (transaction) => {
+        const sessionSnap = await transaction.get(sessionRef);
+        if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
+        
+        const sessionData = sessionSnap.data() as CoachingSession;
+        let currentItems = [...sessionData.items];
+        let hasChanges = false;
+
+        newItems.forEach(newItem => {
+            // Buscamos si ya existe un item para esta misma entidad que esté abierto ('Pendiente' o 'En Proceso')
+            const existingItemIndex = currentItems.findIndex(i => 
+                i.entityId === newItem.entityId && 
+                (i.status === 'Pendiente' || i.status === 'En Proceso')
+            );
+
+            if (existingItemIndex >= 0) {
+                // El ítem ya existe y está activo: Agregamos a la bitácora de 'action' o 'advisorNotes'
+                const existingItem = currentItems[existingItemIndex];
+                const dateStr = format(new Date(), "dd/MM HH:mm");
+                const newText = `[Agregado ${dateStr}] ${newItem.action}`;
+                
+                currentItems[existingItemIndex] = {
+                    ...existingItem,
+                    // Si el origen es del manager, sumamos al action. Si es del asesor, sumamos a advisorNotes.
+                    action: newItem.origin === 'manager' 
+                        ? (existingItem.action ? `${existingItem.action}\n\n${newText}` : newText)
+                        : existingItem.action,
+                    advisorNotes: newItem.origin === 'advisor'
+                        ? (existingItem.advisorNotes ? `${existingItem.advisorNotes}\n\n${newText}` : newText)
+                        : existingItem.advisorNotes,
+                    lastUpdate: new Date().toISOString()
+                };
+                hasChanges = true;
+            } else {
+                // No existe un ítem abierto para esta entidad, lo creamos como nuevo.
+                currentItems.push({
+                    ...newItem, 
+                    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+                    taskId: newItem.taskId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
+                    originalCreatedAt: newItem.originalCreatedAt || new Date().toISOString()
+                });
+                hasChanges = true;
+            }
+        });
+
+        if (hasChanges) {
+            transaction.update(sessionRef, { items: currentItems });
+        }
     });
 };
 
