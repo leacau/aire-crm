@@ -4,9 +4,19 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { ArrowRight, BarChart3, ShieldCheck, Users } from 'lucide-react';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function LandingPage() {
-  const { user, loading } = useAuth();
+  const { user, userInfo, loading } = useAuth();
+  const router = useRouter();
+
+  // 🟢 Redirección Automática si es Asesor Canjes
+  useEffect(() => {
+      if (userInfo && userInfo.role === 'Asesor Canjes') {
+          router.replace('/app-canjes');
+      }
+  }, [userInfo, router]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -43,9 +53,9 @@ export default function LandingPage() {
                 {loading ? (
                   <Button disabled>Cargando...</Button>
                 ) : user ? (
-                  <Link href="/dashboard">
+                  <Link href={userInfo?.role === 'Asesor Canjes' ? "/app-canjes" : "/dashboard"}>
                     <Button className="h-12 px-8">
-                      Ir al Dashboard <ArrowRight className="ml-2 h-4 w-4" />
+                      Ir a mi Panel <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </Link>
                 ) : (
