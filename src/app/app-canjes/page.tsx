@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
-import { getClients, createClient, createOpportunity, saveConvenioCanje, createAdvertisingOrder, getPrograms } from '@/lib/firebase-service';
-import type { Client, Program, ConvenioCanje } from '@/lib/types';
+import { getClients, createClient, createOpportunity, saveConvenioCanje, createAdvertisingOrder, getPrograms, getProspects } from '@/lib/firebase-service';
+import type { Client, Program, Prospect } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 
 import { Button } from '@/components/ui/button';
@@ -15,9 +15,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { ArrowRight, ArrowLeft, CheckCircle2, Search, PlusCircle, Radio } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle2, Search, Radio } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { cn } from '@/lib/utils';
 
 import { ConvenioPdf } from '@/components/canjes/convenio-pdf';
 // Usaremos el componente de PDF de pautado que ya tienes, pero oculto.
@@ -33,6 +34,7 @@ export default function AppCanjesMobile() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const [clients, setClients] = useState<Client[]>([]);
+    const [prospects, setProspects] = useState<Prospect[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
     
     // --- ESTADOS PASO 1: CLIENTE ---
@@ -65,10 +67,11 @@ export default function AppCanjesMobile() {
         if (!userInfo) return;
         const load = async () => {
             try {
-                const [c, p] = await Promise.all([getClients(), getPrograms()]);
-                // Si es asesor normal/canjes, ve solo sus clientes. Si es admin, ve todos.
-                setClients(userInfo.role === 'Admin' || userInfo.role === 'Gerencia' ? c : c.filter(x => x.ownerId === userInfo.id));
+                // Traemos todos los clientes y prospectos para poder validar duplicados de cualquier asesor
+                const [c, p, pros] = await Promise.all([getClients(), getPrograms(), getProspects()]);
+                setClients(c);
                 setPrograms(p);
+                setProspects(pros);
             } catch (e) {
                 console.error(e);
             } finally {
@@ -78,7 +81,23 @@ export default function AppCanjesMobile() {
         load();
     }, [userInfo]);
 
-    const filteredClients = clients.filter(c => c.denominacion.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 5);
+    // 🟢 BÚSQUEDA AVANZADA (Mínimo 3 caracteres, busca en Clientes y Prospectos)
+    const searchResults = React.useMemo(() => {
+        if (searchQuery.length < 3) return [];
+        
+        const query = searchQuery.toLowerCase();
+        
+        const matchedClients = clients.filter(c => 
+            c.denominacion.toLowerCase().includes(query) || 
+            (c.razonSocial && c.razonSocial.toLowerCase().includes(query))
+        );
+        
+        const matchedProspects = prospects.filter(p => 
+            p.companyName.toLowerCase().includes(query)
+        );
+
+        return [...matchedClients, ...matchedProspects].slice(0, 10);
+    }, [searchQuery, clients, prospects]);
 
     const handleNextStep = () => {
         if (step === 1) {
@@ -264,7 +283,10 @@ export default function AppCanjesMobile() {
                         <CardHeader><CardTitle className="text-xl text-slate-800">1. Identificar Cliente</CardTitle></CardHeader>
                         <CardContent className="space-y-6">
                             <div className="flex items-center space-x-2 bg-slate-100 p-3 rounded-md">
-                                <Checkbox id="newClient" checked={isNewClient} onCheckedChange={(c) => setIsNewClient(!!c)} />
+                                <Checkbox id="newClient" checked={isNewClient} onCheckedChange={(c) => {
+                                    setIsNewClient(!!c);
+                                    if(!!c) setSelectedClient(null);
+                                }} />
                                 <Label htmlFor="newClient" className="text-base font-semibold text-primary">Es un cliente nuevo</Label>
                             </div>
 
@@ -272,19 +294,53 @@ export default function AppCanjesMobile() {
                                 <div className="space-y-4 animate-in fade-in">
                                     <div className="relative">
                                         <Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                                        <Input className="pl-10 h-12 text-lg" placeholder="Buscar cliente existente..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                                        <Input className="pl-10 h-12 text-lg" placeholder="Buscar cliente existente (mín. 3 letras)..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
                                     </div>
+                                    
+                                    {searchQuery.length > 0 && searchQuery.length < 3 && (
+                                        <p className="text-sm text-muted-foreground text-center">Escribe al menos 3 caracteres para buscar...</p>
+                                    )}
+
                                     <div className="space-y-2">
-                                        {filteredClients.map(c => (
-                                            <div 
-                                                key={c.id} 
-                                                onClick={() => setSelectedClient(c)}
-                                                className={`p-4 border rounded-lg flex items-center justify-between transition-colors ${selectedClient?.id === c.id ? 'border-red-500 bg-red-50' : 'bg-white'}`}
-                                            >
-                                                <span className="font-medium text-lg">{c.denominacion}</span>
-                                                {selectedClient?.id === c.id && <CheckCircle2 className="text-red-500 h-5 w-5" />}
-                                            </div>
-                                        ))}
+                                        {searchResults.map(item => {
+                                            const isClient = 'denominacion' in item;
+                                            const name = isClient ? item.denominacion : item.companyName;
+                                            const razonSocial = isClient ? item.razonSocial : '';
+                                            const ownerId = item.ownerId;
+                                            const ownerName = item.ownerName || 'Sin asignar';
+                                            
+                                            // 🟢 REGLA DE NEGOCIO: No permitir si es de otro vendedor o si es un prospecto (debe ser cliente)
+                                            const canSelect = isClient && ownerId === userInfo?.id;
+
+                                            return (
+                                                <div 
+                                                    key={item.id} 
+                                                    onClick={() => canSelect ? setSelectedClient(item as Client) : undefined}
+                                                    className={cn(
+                                                        "p-4 border rounded-lg flex flex-col justify-center transition-colors",
+                                                        canSelect 
+                                                            ? (selectedClient?.id === item.id ? 'border-red-500 bg-red-50 cursor-pointer' : 'bg-white cursor-pointer hover:bg-gray-50')
+                                                            : 'bg-gray-100 opacity-80 cursor-not-allowed'
+                                                    )}
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-medium text-lg">{name} {razonSocial ? `(${razonSocial})` : ''}</span>
+                                                        {selectedClient?.id === item.id && <CheckCircle2 className="text-red-500 h-5 w-5" />}
+                                                    </div>
+                                                    {!canSelect && (
+                                                        <span className="text-sm text-red-600 font-bold mt-1">
+                                                            {ownerId !== userInfo?.id 
+                                                                ? `Ya registrado - Asignado a: ${ownerName}`
+                                                                : `Es un Prospecto. Conviértelo a Cliente en el CRM.`}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                        
+                                        {searchQuery.length >= 3 && searchResults.length === 0 && (
+                                            <p className="text-sm text-muted-foreground text-center pt-4">No se encontraron resultados. Márcarlo como "Cliente nuevo" arriba.</p>
+                                        )}
                                     </div>
                                 </div>
                             ) : (
