@@ -36,6 +36,7 @@ const collections = {
     commercialNotes: collection(db, 'commercial_notes'),
     billingRequests: collection(db, 'billing_requests'),
     socialMediaRequests: collection(db, 'social_media_requests'),
+    convenios: collection(db, 'convenios'),
 };
 
 const cache: { [key: string]: { data: any; timestamp: number } } = {};
@@ -4104,4 +4105,31 @@ export const deleteSocialMediaRequest = async (id: string, userId: string, userN
         details: `eliminó un pedido de redes de <strong>${data.clientName}</strong>`,
         ownerName: data.advisorName,
     });
+};
+
+// --- Convenios de Canje (App Móvil) ---
+export const saveConvenioCanje = async (
+    convenioData: Omit<ConvenioCanje, 'id' | 'createdAt'>,
+    userId: string,
+    userName: string
+): Promise<string> => {
+    const dataToSave = {
+        ...convenioData,
+        createdAt: serverTimestamp(),
+    };
+
+    const docRef = await addDoc(collections.convenios, dataToSave);
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'canje' as any, // Lo asociamos genéricamente a canjes
+        entityId: docRef.id,
+        entityName: `Convenio: ${convenioData.clientName}`,
+        details: `creó un nuevo Convenio de Canje para <strong>${convenioData.clientName}</strong>`,
+        ownerName: userName,
+    });
+
+    return docRef.id;
 };
