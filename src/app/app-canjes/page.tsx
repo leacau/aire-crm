@@ -13,6 +13,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+// 🟢 AQUI ESTÁ LA IMPORTACIÓN QUE FALTABA
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { ArrowRight, ArrowLeft, CheckCircle2, Search, Radio } from 'lucide-react';
@@ -21,7 +23,6 @@ import jsPDF from 'jspdf';
 import { cn } from '@/lib/utils';
 
 import { ConvenioPdf } from '@/components/canjes/convenio-pdf';
-// Usaremos el componente de PDF de pautado que ya tienes, pero oculto.
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 
 export default function AppCanjesMobile() {
@@ -67,7 +68,6 @@ export default function AppCanjesMobile() {
         if (!userInfo) return;
         const load = async () => {
             try {
-                // Traemos todos los clientes y prospectos para poder validar duplicados de cualquier asesor
                 const [c, p, pros] = await Promise.all([getClients(), getPrograms(), getProspects()]);
                 setClients(c);
                 setPrograms(p);
@@ -81,7 +81,7 @@ export default function AppCanjesMobile() {
         load();
     }, [userInfo]);
 
-    // 🟢 BÚSQUEDA AVANZADA (Mínimo 3 caracteres, busca en Clientes y Prospectos)
+    // BÚSQUEDA AVANZADA
     const searchResults = React.useMemo(() => {
         if (searchQuery.length < 3) return [];
         
@@ -153,7 +153,7 @@ export default function AppCanjesMobile() {
                 clientId: finalClientId,
                 clientName: finalClientName,
                 value: Number(oppValue),
-                stage: 'Cerrado - Ganado', // Entra ganada directo
+                stage: 'Cerrado - Ganado', 
                 closeDate: new Date().toISOString(),
                 createdAt: new Date().toISOString(),
                 formaDePago: [],
@@ -196,8 +196,8 @@ export default function AppCanjesMobile() {
                     adType: 'Spot',
                     hasTv: true,
                     seconds: Number(seconds),
-                    dailySpots: { 'Lunes a Viernes': Number(repetitions) }, // Representación simplificada
-                    unitRate: 0 // Es canje
+                    dailySpots: { 'Lunes a Viernes': Number(repetitions) }, 
+                    unitRate: 0 
                 }],
                 sasItems: [],
                 createdBy: userInfo!.id
@@ -222,7 +222,7 @@ export default function AppCanjesMobile() {
 
                 await sendEmail({
                     accessToken: token,
-                    to: ['lchena@airedesantafe.com.ar', userInfo!.email], // Ajustar destinatarios
+                    to: ['lchena@airedesantafe.com.ar', userInfo!.email], 
                     subject: `Nuevo Canje: ${finalClientName} - ${userInfo!.name}`,
                     body: emailBody,
                     attachments: [
@@ -233,7 +233,6 @@ export default function AppCanjesMobile() {
             }
 
             toast({ title: '¡Canje procesado con éxito!' });
-            // Reiniciar para uno nuevo
             setStep(1);
             setSelectedClient(null);
             setIsNewClient(false);
@@ -253,7 +252,6 @@ export default function AppCanjesMobile() {
 
     if (loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Spinner size="large" /></div>;
 
-    // Data simulada para el PDF de pautado oculto
     const previewOrderData: any = {
         clientName: isNewClient ? newClientData.denominacion : selectedClient?.denominacion,
         accountExecutive: userInfo?.name,
@@ -309,7 +307,6 @@ export default function AppCanjesMobile() {
                                             const ownerId = item.ownerId;
                                             const ownerName = item.ownerName || 'Sin asignar';
                                             
-                                            // 🟢 REGLA DE NEGOCIO: No permitir si es de otro vendedor o si es un prospecto (debe ser cliente)
                                             const canSelect = isClient && ownerId === userInfo?.id;
 
                                             return (
@@ -449,7 +446,6 @@ export default function AppCanjesMobile() {
                 )}
             </main>
 
-            {/* BOTONERA FIJA INFERIOR */}
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-[0_-5px_15px_rgba(0,0,0,0.05)] flex gap-3 z-20">
                 {step > 1 && (
                     <Button variant="outline" className="h-14 w-14 rounded-full shrink-0" onClick={() => setStep(s => s - 1)}>
@@ -467,7 +463,6 @@ export default function AppCanjesMobile() {
                 )}
             </div>
 
-            {/* CONTENEDORES OCULTOS PARA RENDERIZAR PDFs */}
             <div style={{ position: 'fixed', top: '-10000px', left: '-10000px', zIndex: -1 }}>
                 <ConvenioPdf 
                     ref={convenioPdfRef} 
