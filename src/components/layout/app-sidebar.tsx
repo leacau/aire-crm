@@ -39,7 +39,8 @@ import {
   ListTodo,
   StickyNote,
   ScrollText,
-  Share2, // 🟢 ÍCONO PARA REDES
+  Share2, 
+  Smartphone, // 🟢 ÍCONO PARA LA APP MÓVIL
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -107,6 +108,8 @@ export function AppSidebar() {
 
   const rawSidebarEntries: SidebarEntry[] = [
     { title: 'Dashboard', href: '/', icon: LayoutDashboard, screenName: 'Dashboard' },
+    // 🟢 APP MÓVIL DE CANJES (SOLO VISIBLE PARA ESE ROL O ADMINS)
+    { title: 'App Móvil Canjes', href: '/app-canjes', icon: Smartphone, screenName: 'AppCanjes' },
     {
       groupLabel: 'Comercial',
       icon: Briefcase,
@@ -129,7 +132,7 @@ export function AppSidebar() {
         { title: 'Grilla', href: '/grilla', icon: Radio, screenName: 'Grilla' },
         { title: 'PNTs', href: '/pnts', icon: Megaphone, screenName: 'PNTs' },
         { title: 'Nota Comercial', href: '/notas', icon: StickyNote, screenName: 'Notas' },
-        { title: 'Pedido de Redes', href: '/redes', icon: Share2, screenName: 'Redes' }, // 🟢 NUEVA PANTALLA
+        { title: 'Pedido de Redes', href: '/redes', icon: Share2, screenName: 'Redes' }, 
         { title: 'Orden de Publicidad', href: '/publicidad', icon: ScrollText, screenName: 'Publicidad' }, 
       ]
     },
@@ -168,11 +171,15 @@ export function AppSidebar() {
     if (!userInfo) return [];
 
     const hasPermission = (item: SidebarItem) => {
-      // 1. Super Admin siempre tiene acceso
-      if (userInfo.email === 'lchena@airedesantafe.com.ar') return true;
-      if (userInfo.role === 'Admin') return true;
+      // 🟢 Si es Asesor de Canjes, SOLO ve su App (ni siquiera el Dashboard)
+      if (userInfo.role === 'Asesor Canjes') {
+          return item.screenName === 'AppCanjes';
+      }
 
-      // 2. Dashboard siempre visible
+      // 1. Super Admin siempre tiene acceso a todo (incluso la app móvil para testear)
+      if (userInfo.email === 'lchena@airedesantafe.com.ar' || userInfo.role === 'Admin') return true;
+
+      // 2. Dashboard siempre visible (excepto para Asesor Canjes, manejado arriba)
       if (item.screenName === 'Dashboard') return true;
 
       // 3. Chequeo de Permisos Explícitos
@@ -185,7 +192,7 @@ export function AppSidebar() {
         const allowedScreens: ScreenName[] = [
           'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
           'Canjes', 'Quotes', 'Approvals', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
-          'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes' // 🟢 AGREGADO A LA LISTA
+          'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes'
         ];
         return allowedScreens.includes(item.screenName);
       }
