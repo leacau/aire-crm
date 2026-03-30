@@ -691,6 +691,7 @@ export type AdvertisingOrder = {
   createdBy: string;  
   opportunityId?: string; 
   opportunityTitle?: string;
+  canjeId?: string;
   tangoOrderNo?: string;
   startDate: string; 
   endDate: string; 
