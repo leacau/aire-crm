@@ -87,7 +87,7 @@ export type SupervisorCommentReply = {
 
 export type SupervisorComment = {
   id: string;
-  entityType: 'client' | 'opportunity';
+  entityType: '' | 'opportunity';
   entityId: string;
   entityName: string;
   ownerId: string;
@@ -140,8 +140,8 @@ export type ProposalItem = {
 export type Opportunity = {
   id: string;
   title: string;
-  clientName: string;
-  clientId: string;
+  Name: string;
+  Id: string;
   value: number; 
   stage: OpportunityStage;
   closeDate: string;
@@ -177,7 +177,7 @@ export type Person = {
   phone?: string;
   cargo?: string;
   observaciones?: string;
-  clientIds: string[];
+  Ids: string[];
 };
 
 export type TipoEntidad = 'Pública' | 'Privada' | 'Mixta';
@@ -209,6 +209,7 @@ export type Client = {
   isDeactivated?: boolean;
   deactivationHistory?: string[];
   needsAttention?: boolean;
+  allowCanjes?: boolean;
 };
 
 export const prospectStatusOptions = ['Nuevo', 'Contactado', 'Calificado', 'No Próspero', 'Convertido'] as const;
