@@ -4133,3 +4133,29 @@ export const saveConvenioCanje = async (
 
     return docRef.id;
 };
+
+// --- Gestión de Lista Blanca de Correos ---
+export const getEmailWhitelist = async (): Promise<string[]> => {
+    const docRef = doc(collections.systemConfig, 'email_whitelist');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+        return snap.data().emails || [];
+    }
+    return [];
+};
+
+export const updateEmailWhitelist = async (emails: string[], userId: string, userName: string): Promise<void> => {
+    const docRef = doc(collections.systemConfig, 'email_whitelist');
+    await setDoc(docRef, { emails }, { merge: true });
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'system_config' as any,
+        entityId: 'email_whitelist',
+        entityName: 'Lista Blanca de Accesos',
+        details: 'actualizó los correos autorizados para ingresar al sistema.',
+        ownerName: 'Sistema',
+    });
+};
