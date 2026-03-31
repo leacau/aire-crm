@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { ArrowRight, ArrowLeft, CheckCircle2, Search, Radio, Trash2 } from 'lucide-react';
@@ -136,7 +137,6 @@ export default function AppCanjesMobile() {
         }
         if (step === 3) {
             if (!radioEntrega || !clienteEntrega || !fechaInicio || !fechaFin) return toast({ title: "Completa todos los campos del convenio", variant: "destructive" });
-            // Sincronizar fechas con el form de la OP para que SrlSection renderice los días correctos
             form.setValue('startDate', new Date(fechaInicio));
             form.setValue('endDate', new Date(fechaFin));
         }
@@ -161,7 +161,6 @@ export default function AppCanjesMobile() {
         setIsSubmitting(true);
         
         try {
-            // 1. Crear Cliente si es nuevo
             let finalClientId = selectedClient?.id || '';
             let finalClientName = selectedClient?.denominacion || '';
             
@@ -179,7 +178,10 @@ export default function AppCanjesMobile() {
                 finalClientName = newClientData.denominacion;
             }
 
-            // 2. Crear Oportunidad de Canje
+            // Notar que la oportunidad se crea a nombre del vendedor original si el cliente ya existía
+            const clientOwnerId = selectedClient?.ownerId || userInfo!.id;
+            const clientOwnerName = selectedClient?.ownerName || userInfo!.name;
+
             const oppId = await createOpportunity({
                 title: oppTitle,
                 clientId: finalClientId,
@@ -190,13 +192,12 @@ export default function AppCanjesMobile() {
                 createdAt: new Date().toISOString(),
                 formaDePago: [],
                 periodicidad: [],
-            }, userInfo!.id, userInfo!.name, userInfo!.name);
+            }, userInfo!.id, userInfo!.name, clientOwnerName);
 
-            // 3. Crear Convenio
             const canjeId = await saveConvenioCanje({
                 clientId: finalClientId,
                 clientName: finalClientName,
-                advisorId: userInfo!.id,
+                advisorId: userInfo!.id, // 🟢 El convenio queda a nombre del Asesor Canjes
                 advisorName: userInfo!.name,
                 opportunityId: oppId,
                 radioEntrega,
@@ -205,7 +206,6 @@ export default function AppCanjesMobile() {
                 fechaFin: new Date(fechaFin).toISOString(),
             }, userInfo!.id, userInfo!.name);
 
-            // 4. Crear Orden de Publicidad (Pautado Real)
             const formValues = form.getValues();
             const validSrlItems = formValues.srlItems?.filter(item => item.month) || [];
             const validSasItems = formValues.sasItems?.filter(item => item.month) || [];
@@ -214,10 +214,10 @@ export default function AppCanjesMobile() {
                 clientId: finalClientId,
                 clientName: finalClientName,
                 product: oppTitle,
-                accountExecutive: userInfo!.name,
+                accountExecutive: userInfo!.name, // 🟢 La OP queda a nombre del Asesor Canjes
                 opportunityId: oppId,
                 opportunityTitle: oppTitle,
-                canjeId: canjeId, // 🟢 Vinculado al convenio
+                canjeId: canjeId,
                 startDate: new Date(fechaInicio).toISOString(),
                 endDate: new Date(fechaFin).toISOString(),
                 materialSent: false,
@@ -233,7 +233,6 @@ export default function AppCanjesMobile() {
                 createdBy: userInfo!.id
             });
 
-            // 5. Generar PDFs y Enviar Email
             const token = await getGoogleAccessToken();
             if (token && convenioPdfRef.current && pautadoPdfRef.current) {
                 const convenio64 = await generatePdfBase64(convenioPdfRef.current);
@@ -265,7 +264,6 @@ export default function AppCanjesMobile() {
             }
 
             toast({ title: '¡Canje procesado y enviado con éxito!' });
-            // Reiniciar para uno nuevo
             setStep(1);
             setSelectedClient(null);
             setIsNewClient(false);
@@ -287,7 +285,6 @@ export default function AppCanjesMobile() {
 
     if (loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Spinner size="large" /></div>;
 
-    // Data para el PDF de pautado oculto
     const previewOrderData: any = {
         clientName: isNewClient ? newClientData.denominacion : selectedClient?.denominacion,
         accountExecutive: userInfo?.name,
@@ -343,8 +340,12 @@ export default function AppCanjesMobile() {
                                             const ownerId = item.ownerId;
                                             const ownerName = item.ownerName || 'Sin asignar';
                                             
-                                            // Solo el dueño (o Admin) puede seleccionar el cliente
-                                            const canSelect = isClient && (ownerId === userInfo?.id || userInfo?.role === 'Admin');
+                                            // 🟢 REGLA DE SELECCIÓN ACTUALIZADA
+                                            const canSelect = isClient && (
+                                                ownerId === userInfo?.id || 
+                                                userInfo?.role === 'Admin' || 
+                                                (item as Client).allowCanjes === true
+                                            );
 
                                             return (
                                                 <div 
@@ -364,7 +365,7 @@ export default function AppCanjesMobile() {
                                                     {!canSelect && (
                                                         <span className="text-sm text-red-600 font-bold mt-1">
                                                             {ownerId !== userInfo?.id 
-                                                                ? `Ya registrado - Asignado a: ${ownerName}`
+                                                                ? `Asignado a: ${ownerName} (No habilitado para canje externo)`
                                                                 : `Es un Prospecto. Conviértelo a Cliente en el CRM.`}
                                                         </span>
                                                     )}
