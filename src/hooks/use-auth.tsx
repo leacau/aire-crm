@@ -5,11 +5,11 @@ import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWit
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
-import { getUserProfile, getEmailWhitelist } from '@/lib/firebase-service'; // 🟢 Importamos la lista blanca
+import { getUserProfile, getEmailWhitelist } from '@/lib/firebase-service'; 
 import type { User } from '@/lib/types';
 import { validateGoogleServicesAccess } from '@/lib/google-service-check';
 import { initializePermissions } from '@/lib/permissions';
-import { useToast } from '@/hooks/use-toast'; // 🟢 Importamos toast para el mensaje de rechazo
+import { useToast } from '@/hooks/use-toast'; 
 
 const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service', '/'];
 
@@ -41,11 +41,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
-  const { toast } = useToast(); // 🟢
+  const { toast } = useToast(); 
 
   useEffect(() => {
     if (!loading) {
-      const isPublicRoute = publicRoutes.includes(pathname);
+      // 🟢 BARRERA: Permitimos las rutas que empiecen con /public
+      const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/public');
       if (!user && !isPublicRoute) {
         router.push('/login');
       } else if (user && pathname === '/login') {
@@ -110,7 +111,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
             return;
         }
-        // 🟢 FIN DE LA BARRERA
 
         setUser(firebaseUser);
         
@@ -152,17 +152,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => unsubscribe();
   }, [toast]);
-
-  useEffect(() => {
-    if (!loading) {
-      const isPublicRoute = publicRoutes.includes(pathname);
-      if (!user && !isPublicRoute) {
-        router.push('/login');
-      } else if (user && pathname === '/login') {
-        router.push('/');
-      }
-    }
-  }, [user, loading, pathname, router]);
 
   useEffect(() => {
     if (loading || !user) return;
@@ -237,7 +226,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return await getGoogleAccessToken({ silent: false });
     };
 
-  if (loading && !publicRoutes.includes(pathname)) {
+  // 🟢 SI ES RUTA PÚBLICA, DEJAR RENDERIZAR SIN CORTAR POR CARGA
+  if (loading && !publicRoutes.includes(pathname) && !pathname.startsWith('/public')) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Spinner size="large" />
@@ -245,7 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!loading && (user || publicRoutes.includes(pathname))) {
+  if (!loading && (user || publicRoutes.includes(pathname) || pathname.startsWith('/public'))) {
     return (
       <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, ensureGoogleAccessToken }}>
         {children}
