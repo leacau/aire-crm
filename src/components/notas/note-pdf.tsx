@@ -1,9 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { CommercialNote, Program } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Copy, Check } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface NotePdfProps {
   note: Partial<CommercialNote>;
@@ -249,7 +251,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     {note.topicsToAvoid && note.topicsToAvoid.length > 0 && (
                         <div className="p-3 bg-red-50 border border-red-200 rounded">
                             <span className="font-bold text-sm block mb-2 text-red-700 underline">⚠️ TEMAS A EVITAR:</span>
-                            <ul className="list-disc list-inside text-sm space-y-1 text-red-900">
+                            <ul className="list-disc list-inside text-red-900 space-y-1">
                                 {note.topicsToAvoid.map((t, i) => (
                                     <li key={i}>{t}</li>
                                 ))}
