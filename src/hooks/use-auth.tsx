@@ -5,10 +5,11 @@ import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWit
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
-import { getUserProfile } from '@/lib/firebase-service';
+import { getUserProfile, getEmailWhitelist } from '@/lib/firebase-service'; // 🟢 Importamos la lista blanca
 import type { User } from '@/lib/types';
 import { validateGoogleServicesAccess } from '@/lib/google-service-check';
 import { initializePermissions } from '@/lib/permissions';
+import { useToast } from '@/hooks/use-toast'; // 🟢 Importamos toast para el mensaje de rechazo
 
 const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service', '/'];
 
@@ -30,7 +31,6 @@ const AuthContext = createContext<AuthContextType>({
   ensureGoogleAccessToken: async () => null,
 });
 
-
 const STORAGE_TOKEN_KEY = 'google_api_token';
 const STORAGE_EXPIRY_KEY = 'google_api_token_expiry';
 
@@ -41,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
+  const { toast } = useToast(); // 🟢
 
   useEffect(() => {
     if (!loading) {
@@ -48,7 +49,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!user && !isPublicRoute) {
         router.push('/login');
       } else if (user && pathname === '/login') {
-        // CAMBIO: Redirigir al dashboard en lugar de '/'
         router.push('/dashboard');
       }
     }
@@ -85,6 +85,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        // 🟢 BARRERA DE ACCESO: VALIDACIÓN DE DOMINIO Y LISTA BLANCA
+        const email = firebaseUser.email?.toLowerCase() || '';
+        const isAuthorizedDomain = email.endsWith('@airedesantafe.com.ar') || email.endsWith('@airedigital.com.ar');
+        const isHardcodedException = email === 'leandrochena@gmail.com';
+
+        let isWhitelisted = false;
+        if (!isAuthorizedDomain && !isHardcodedException) {
+            const whitelist = await getEmailWhitelist();
+            isWhitelisted = whitelist.includes(email);
+        }
+
+        if (!isAuthorizedDomain && !isHardcodedException && !isWhitelisted) {
+            await auth.signOut();
+            clearStoredToken();
+            setUser(null);
+            setUserInfo(null);
+            setIsBoss(false);
+            setLoading(false);
+            toast({ 
+                title: 'Acceso Denegado', 
+                description: 'Tu correo no pertenece a la organización ni está en la lista de autorizados.', 
+                variant: 'destructive' 
+            });
+            return;
+        }
+        // 🟢 FIN DE LA BARRERA
+
         setUser(firebaseUser);
         
         const [profile] = await Promise.all([
@@ -124,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (!loading) {
@@ -137,13 +164,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
-  // Validación de servicios con Auto-Limpieza
   useEffect(() => {
     if (loading || !user) return;
 
     const runCheck = async () => {
       const storageKey = 'google-access-validated';
-      // Si ya validamos en esta sesión, no revalidar para no saturar
       const hasValidated = typeof window !== 'undefined' ? sessionStorage.getItem(storageKey) === 'true' : false;
       if (hasValidated) return;
 
@@ -154,8 +179,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (typeof window !== 'undefined') sessionStorage.setItem(storageKey, 'true');
         } catch (error: any) {
           console.warn('Silent validation failed:', error);
-          
-          // CRÍTICO: Si el error es de permisos (403/401), el token es inútil. Lo borramos.
           if (error.message && (error.message.includes('403') || error.message.includes('401'))) {
              console.log('Token inválido o sin scopes. Eliminando para forzar re-login.');
              clearStoredToken();
