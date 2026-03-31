@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -12,11 +12,12 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { Header } from '@/components/layout/header';
 import { Spinner } from '@/components/ui/spinner';
-import { ArrowLeft, Shield, UploadCloud } from 'lucide-react';
+import { ArrowLeft, Shield, UploadCloud, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useDropzone } from 'react-dropzone';
 import { uploadAvatarToDrive } from '@/lib/google-avatar-service';
-import { updateUserProfile } from '@/lib/firebase-service';
+import { updateUserProfile, getEmailWhitelist, updateEmailWhitelist } from '@/lib/firebase-service';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
@@ -26,6 +27,19 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
+
+  // 🟢 ESTADOS PARA LISTA BLANCA
+  const [whitelist, setWhitelist] = useState<string[]>([]);
+  const [newEmail, setNewEmail] = useState('');
+  const [whitelistLoading, setWhitelistLoading] = useState(false);
+
+  const canManageSystem = userInfo ? hasManagementPrivileges(userInfo) || userInfo.role === 'Admin' || userInfo.role === 'Administracion' : false;
+
+  useEffect(() => {
+      if (canManageSystem) {
+          getEmailWhitelist().then(setWhitelist);
+      }
+  }, [canManageSystem]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +63,43 @@ export default function SettingsPage() {
     }
   };
 
+  // 🟢 FUNCIONES PARA LISTA BLANCA
+  const handleAddEmail = async () => {
+      if (!newEmail.trim() || !newEmail.includes('@')) return;
+      const lowerEmail = newEmail.trim().toLowerCase();
+      if (whitelist.includes(lowerEmail)) {
+          toast({ title: 'El correo ya está en la lista' });
+          return;
+      }
+      
+      setWhitelistLoading(true);
+      const updatedList = [...whitelist, lowerEmail];
+      try {
+          await updateEmailWhitelist(updatedList, userInfo!.id, userInfo!.name);
+          setWhitelist(updatedList);
+          setNewEmail('');
+          toast({ title: 'Correo autorizado agregado' });
+      } catch (error) {
+          toast({ title: 'Error al actualizar la lista', variant: 'destructive' });
+      } finally {
+          setWhitelistLoading(false);
+      }
+  };
+
+  const handleRemoveEmail = async (emailToRemove: string) => {
+      setWhitelistLoading(true);
+      const updatedList = whitelist.filter(e => e !== emailToRemove);
+      try {
+          await updateEmailWhitelist(updatedList, userInfo!.id, userInfo!.name);
+          setWhitelist(updatedList);
+          toast({ title: 'Correo removido' });
+      } catch (error) {
+          toast({ title: 'Error al actualizar la lista', variant: 'destructive' });
+      } finally {
+          setWhitelistLoading(false);
+      }
+  };
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (!file || !user || !userInfo) return;
@@ -64,12 +115,7 @@ export default function SettingsPage() {
         
         await updateProfile(user, { photoURL: fileUrl });
         await updateUserProfile(user.uid, { photoURL: fileUrl });
-
-        // This is a bit of a hack to force a re-render of the user object in the auth context
-        // In a real-world app, you might have a more robust state management solution
         window.location.reload(); 
-
-        toast({ title: "Foto de perfil actualizada" });
     } catch (error: any) {
         toast({ title: "Error al subir la imagen", description: error.message, variant: "destructive" });
     } finally {
@@ -157,6 +203,7 @@ export default function SettingsPage() {
                 </form>
               </CardContent>
           </Card>
+          
            {userInfo && (
             <Card>
                 <CardHeader>
@@ -173,6 +220,49 @@ export default function SettingsPage() {
                     </p>
                 </CardContent>
             </Card>
+           )}
+
+           {/* 🟢 PANEL DE LISTA BLANCA DE CORREOS */}
+           {canManageSystem && (
+               <Card className="border-red-200">
+                   <CardHeader className="bg-red-50/50">
+                       <CardTitle className="text-red-700">Accesos de Personal Externo</CardTitle>
+                       <CardDescription>
+                           Agrega correos de Gmail o dominios externos que tengan permiso para iniciar sesión en el CRM.
+                       </CardDescription>
+                   </CardHeader>
+                   <CardContent className="space-y-4 pt-4">
+                       <div className="flex gap-2">
+                           <Input 
+                                placeholder="Ej: asesorcanjes@gmail.com" 
+                                value={newEmail} 
+                                onChange={e => setNewEmail(e.target.value)}
+                                disabled={whitelistLoading}
+                            />
+                           <Button onClick={handleAddEmail} disabled={whitelistLoading || !newEmail}>
+                               {whitelistLoading ? <Spinner size="small" color="white" /> : <Plus className="h-4 w-4" />}
+                               Agregar
+                           </Button>
+                       </div>
+                       
+                       {whitelist.length > 0 ? (
+                           <div className="space-y-2 mt-4">
+                               {whitelist.map(email => (
+                                   <div key={email} className="flex justify-between items-center p-3 border rounded-md bg-slate-50">
+                                       <span className="font-medium text-sm">{email}</span>
+                                       <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-100 h-8 w-8 p-0" onClick={() => handleRemoveEmail(email)} disabled={whitelistLoading}>
+                                           <Trash2 className="h-4 w-4" />
+                                       </Button>
+                                   </div>
+                               ))}
+                           </div>
+                       ) : (
+                           <p className="text-sm text-muted-foreground italic text-center py-4 border border-dashed rounded-md mt-4">
+                               No hay correos externos autorizados.
+                           </p>
+                       )}
+                   </CardContent>
+               </Card>
            )}
         </div>
       </main>
