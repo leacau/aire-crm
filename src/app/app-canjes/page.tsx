@@ -137,6 +137,7 @@ export default function AppCanjesMobile() {
         }
         if (step === 3) {
             if (!radioEntrega || !clienteEntrega || !fechaInicio || !fechaFin) return toast({ title: "Completa todos los campos del convenio", variant: "destructive" });
+            // Sincronizar fechas con el form de la OP para que SrlSection renderice los días correctos
             form.setValue('startDate', new Date(fechaInicio));
             form.setValue('endDate', new Date(fechaFin));
         }
@@ -161,6 +162,7 @@ export default function AppCanjesMobile() {
         setIsSubmitting(true);
         
         try {
+            // 1. Crear Cliente si es nuevo
             let finalClientId = selectedClient?.id || '';
             let finalClientName = selectedClient?.denominacion || '';
             
@@ -182,6 +184,7 @@ export default function AppCanjesMobile() {
             const clientOwnerId = selectedClient?.ownerId || userInfo!.id;
             const clientOwnerName = selectedClient?.ownerName || userInfo!.name;
 
+            // 2. Crear Oportunidad de Canje
             const oppId = await createOpportunity({
                 title: oppTitle,
                 clientId: finalClientId,
@@ -194,10 +197,11 @@ export default function AppCanjesMobile() {
                 periodicidad: [],
             }, userInfo!.id, userInfo!.name, clientOwnerName);
 
+            // 3. Crear Convenio
             const canjeId = await saveConvenioCanje({
                 clientId: finalClientId,
                 clientName: finalClientName,
-                advisorId: userInfo!.id, // 🟢 El convenio queda a nombre del Asesor Canjes
+                advisorId: userInfo!.id, // El convenio queda a nombre del Asesor Canjes
                 advisorName: userInfo!.name,
                 opportunityId: oppId,
                 radioEntrega,
@@ -206,18 +210,20 @@ export default function AppCanjesMobile() {
                 fechaFin: new Date(fechaFin).toISOString(),
             }, userInfo!.id, userInfo!.name);
 
+            // 4. Crear Orden de Publicidad (Pautado Real)
             const formValues = form.getValues();
             const validSrlItems = formValues.srlItems?.filter(item => item.month) || [];
             const validSasItems = formValues.sasItems?.filter(item => item.month) || [];
 
-            await createAdvertisingOrder({
+            // 🟢 SOLUCIÓN: Limpiamos los "undefined" de las grillas de React Hook Form
+            const adOrderPayload = {
                 clientId: finalClientId,
                 clientName: finalClientName,
                 product: oppTitle,
-                accountExecutive: userInfo!.name, // 🟢 La OP queda a nombre del Asesor Canjes
+                accountExecutive: userInfo!.name, // La OP queda a nombre del Asesor Canjes
                 opportunityId: oppId,
                 opportunityTitle: oppTitle,
-                canjeId: canjeId,
+                canjeId: canjeId, // Vinculado al convenio
                 startDate: new Date(fechaInicio).toISOString(),
                 endDate: new Date(fechaFin).toISOString(),
                 materialSent: false,
@@ -231,8 +237,13 @@ export default function AppCanjesMobile() {
                 srlItems: validSrlItems,
                 sasItems: validSasItems,
                 createdBy: userInfo!.id
-            });
+            };
 
+            const cleanAdOrderPayload = JSON.parse(JSON.stringify(adOrderPayload)); // Esto borra cualquier undefined residual
+            
+            await createAdvertisingOrder(cleanAdOrderPayload);
+
+            // 5. Generar PDFs y Enviar Email
             const token = await getGoogleAccessToken();
             if (token && convenioPdfRef.current && pautadoPdfRef.current) {
                 const convenio64 = await generatePdfBase64(convenioPdfRef.current);
@@ -264,6 +275,7 @@ export default function AppCanjesMobile() {
             }
 
             toast({ title: '¡Canje procesado y enviado con éxito!' });
+            // Reiniciar para uno nuevo
             setStep(1);
             setSelectedClient(null);
             setIsNewClient(false);
@@ -285,6 +297,7 @@ export default function AppCanjesMobile() {
 
     if (loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Spinner size="large" /></div>;
 
+    // Data para el PDF de pautado oculto
     const previewOrderData: any = {
         clientName: isNewClient ? newClientData.denominacion : selectedClient?.denominacion,
         accountExecutive: userInfo?.name,
