@@ -47,7 +47,6 @@ export default function NewCommercialNotePage() {
     const [razonSocial, setRazonSocial] = useState('');
     const [rubro, setRubro] = useState('');
     
-    // 🟢 ESTADOS DE AUTORÍA
     const [advisorId, setAdvisorId] = useState('');
     const [advisorName, setAdvisorName] = useState('');
     
@@ -163,7 +162,6 @@ export default function NewCommercialNotePage() {
     
     useEffect(() => {
         const search = window.location.search;
-        // 🟢 CORRECCIÓN APLICADA: new URLSearchParams
         const params = new URLSearchParams(search);
         const cloneId = params.get('cloneId');
         const editId = params.get('editId'); 
@@ -221,7 +219,6 @@ export default function NewCommercialNotePage() {
                     setGraphicLinks(note.graphicSupportLinks?.length ? note.graphicSupportLinks : (note.graphicSupportLink ? [note.graphicSupportLink] : ['']));
                     setNoteObservations(note.noteObservations || '');
 
-                    // Preservar al autor original si se está editando
                     setAdvisorId(note.advisorId || userInfo?.id || '');
                     setAdvisorName(note.advisorName || userInfo?.name || '');
                 }
@@ -488,8 +485,8 @@ export default function NewCommercialNotePage() {
                 clientId: selectedClientId,
                 clientName: client?.denominacion || 'Unknown',
                 cuit,
-                advisorId: advisorId || userInfo!.id, // 🟢 Preservado/Reasignado
-                advisorName: advisorName || userInfo!.name, // 🟢 Preservado/Reasignado
+                advisorId: advisorId || userInfo!.id,
+                advisorName: advisorName || userInfo!.name,
                 razonSocial,
                 rubro,
                 replicateWeb,
@@ -558,6 +555,9 @@ export default function NewCommercialNotePage() {
                         const pdf = await generateMultiPagePdf(pdfRef.current);
                         const pdfBase64 = pdf.output('datauristring').split(',')[1];
                         const baseUrl = window.location.origin;
+                        
+                        // 🟢 LINK PARA EL CORREO: LLEVA A LA RUTA PÚBLICA
+                        const publicLink = `${baseUrl}/public/notas/${newNoteId}`;
                         const detailLink = `${baseUrl}/notas/${newNoteId}`;
                         
                         let scheduleSummary = '';
@@ -568,6 +568,7 @@ export default function NewCommercialNotePage() {
                             });
                         });
 
+                        // 🟢 CORREO MODIFICADO CON BOTÓN GIGANTE
                         const emailBody = `
                             <div style="font-family: Arial, sans-serif; color: #333;">
                                 <h2 style="color: #cc0000;">Nota Comercial Registrada / Editada</h2>
@@ -578,8 +579,12 @@ export default function NewCommercialNotePage() {
                                     <p><strong>Cronograma:</strong></p>
                                     <ul>${scheduleSummary || '<li>Sin fecha definida</li>'}</ul>
                                 </div>
-                                <p>Puede ver el detalle completo y descargar el PDF ingresando al siguiente enlace:</p>
-                                <p><a href="${detailLink}">Ver Detalle de la Nota</a></p>
+                                <div style="margin-top: 20px; padding: 20px; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; text-align: center;">
+                                    <h3 style="color: #1d4ed8; margin-top: 0;">🎥 Acceso para Producción</h3>
+                                    <p style="margin-bottom: 15px;">Para ver los detalles completos, copiar los Zócalos/Grafs y exportar el PDF, ingresa al siguiente enlace (no requiere contraseña):</p>
+                                    <a href="${publicLink}" style="display: inline-block; padding: 12px 24px; background-color: #1d4ed8; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">ABRIR DETALLE DE LA NOTA</a>
+                                </div>
+                                <p style="margin-top: 30px; font-size: 12px; color: #666;">Enlace interno administrativo: <a href="${detailLink}">${detailLink}</a></p>
                             </div>
                         `;
 
@@ -594,7 +599,7 @@ export default function NewCommercialNotePage() {
                                 encoding: 'base64'
                             }]
                         });
-                        toast({ title: 'Nota guardada y notificada por correo.' });
+                        toast({ title: 'Nota guardada y notificada a Producción.' });
                     } catch (emailError) {
                         console.error("Error sending email", emailError);
                         toast({ title: 'Nota guardada, pero falló el envío del correo.', variant: 'default' });
@@ -659,7 +664,6 @@ export default function NewCommercialNotePage() {
 
                 <Card>
                     <CardHeader><CardTitle>Datos de Cliente</CardTitle></CardHeader>
-                    {/* 🟢 Pasó a 5 columnas para incluir al Asesor */}
                     <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
                         <div className="space-y-2">
                             <Label>Cliente <span className="text-red-500">*</span></Label>
@@ -672,7 +676,6 @@ export default function NewCommercialNotePage() {
                         <div className="space-y-2"><Label>Razón Social</Label><Input value={razonSocial} onChange={e => setRazonSocial(e.target.value)} /></div>
                         <div className="space-y-2"><Label>Rubro</Label><Input value={rubro} onChange={e => setRubro(e.target.value)} /></div>
                         
-                        {/* 🟢 Selector de Asesor (solo Administradores) */}
                         <div className="space-y-2">
                             <Label>Asesor / Ejecutivo</Label>
                             {canReassign ? (
