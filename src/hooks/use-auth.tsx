@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (firebaseUser) {
         // 🟢 BARRERA DE ACCESO: VALIDACIÓN DE DOMINIO Y LISTA BLANCA
         const email = firebaseUser.email?.toLowerCase() || '';
-        const isAuthorizedDomain = email.endsWith('@airedesantafe.com.ar') || email.endsWith('@airedigital.com.ar');
+        const isAuthorizedDomain = email.endsWith('@airedesantafe.com.ar') || email.endsWith('@airedigital.com');
         const isHardcodedException = email === 'leandrochena@gmail.com';
 
         let isWhitelisted = false;
