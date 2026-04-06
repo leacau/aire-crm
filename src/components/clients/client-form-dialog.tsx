@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -20,10 +18,11 @@ import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/
 import type { Client, TipoEntidad, CondicionIVA, Agency } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
-import { getAgencies, createClient, getClients } from '@/lib/firebase-service';
+import { getAgencies, createClient } from '@/lib/firebase-service';
 import { Checkbox } from '../ui/checkbox';
 import { useAuth } from '@/hooks/use-auth';
 import { hasManagementPrivileges } from '@/lib/role-utils';
+import { formatCuit, cleanCuit } from '@/lib/utils'; // 🟢 Importamos las funciones
 
 type ClientFormData = Partial<Omit<Client, 'id' | 'personIds' | 'deactivationHistory' | 'newClientDate'>>;
 
@@ -50,6 +49,7 @@ const initialFormData: ClientFormData = {
   agencyId: undefined,
   isNewClient: false,
   isDeactivated: false,
+  allowCanjes: false,
   idAireSrl: '',
   idAireDigital: '',
 };
@@ -68,12 +68,16 @@ export function ClientFormDialog({
   const { toast } = useToast();
 
   const isEditing = client && client.id;
-  const canEditIds = userInfo ? hasManagementPrivileges(userInfo) : false;
+  const canEditIds = userInfo ? (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin') : false;
 
   useEffect(() => {
     if (isOpen) {
         if (client) {
-            const combinedData = { ...initialFormData, ...client };
+            const combinedData = { 
+                ...initialFormData, 
+                ...client,
+                cuit: formatCuit(client.cuit || '') // 🟢 Formateamos al abrir
+            };
             setFormData(combinedData);
         } else {
             setFormData(initialFormData);
@@ -91,8 +95,11 @@ export function ClientFormDialog({
 
     setIsSaving(true);
     
-    if (formData.cuit) {
-        const validationMessage = await onValidateCuit(formData.cuit, client?.id);
+    // 🟢 Limpiamos el CUIT antes de guardar/validar
+    const cleanedCuit = cleanCuit(formData.cuit);
+    
+    if (cleanedCuit) {
+        const validationMessage = await onValidateCuit(cleanedCuit, client?.id);
         if (validationMessage) {
             toast({
                 title: "CUIT Duplicado",
@@ -108,7 +115,7 @@ export function ClientFormDialog({
     const finalData = {
       denominacion: formData.denominacion,
       razonSocial: formData.razonSocial || '',
-      cuit: formData.cuit || '',
+      cuit: cleanedCuit, // 🟢 Guardamos limpio sin guiones
       condicionIVA: formData.condicionIVA || 'Consumidor Final',
       provincia: formData.provincia || '',
       localidad: formData.localidad || '',
@@ -120,13 +127,13 @@ export function ClientFormDialog({
       agencyId: formData.agencyId,
       isNewClient: formData.isNewClient || false,
       isDeactivated: formData.isDeactivated || false,
+      allowCanjes: formData.allowCanjes || false,
       idAireSrl: canEditIds ? (formData.idAireSrl || '').trim() : client?.idAireSrl || '',
       idAireDigital: canEditIds ? (formData.idAireDigital || '').trim() : client?.idAireDigital || '',
     };
     
     try {
         if (isEditing) {
-          // This onSaveSuccess is now handled in client-details page, which calls the update function.
           onSaveSuccess(finalData); 
           toast({ title: "Cliente Actualizado", description: "Los datos del cliente se han guardado." });
         } else {
@@ -137,7 +144,7 @@ export function ClientFormDialog({
            }
            await createClient(finalData, ownerId, ownerName);
            toast({ title: "Cliente Creado", description: `${finalData.denominacion} ha sido añadido a la lista.`});
-           onSaveSuccess(); // Callback for prospect conversion or simple creation.
+           onSaveSuccess(); 
         }
         onOpenChange(false);
     } catch (error: any) {
@@ -150,7 +157,12 @@ export function ClientFormDialog({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    // 🟢 Formateo en vivo para el campo CUIT
+    if (name === 'cuit') {
+        setFormData(prev => ({ ...prev, [name]: formatCuit(value) }));
+    } else {
+        setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSelectChange = (name: keyof ClientFormData, value: string) => {
@@ -184,12 +196,20 @@ export function ClientFormDialog({
             </div>
           )}
           {isEditing && (
-             <div className="flex items-center space-x-2">
+             <div className="flex items-center space-x-2 border p-2 rounded bg-slate-50">
                 <Checkbox id="isDeactivated" name="isDeactivated" checked={formData.isDeactivated} onCheckedChange={(checked) => handleCheckboxChange('isDeactivated', checked)} />
-                <Label htmlFor="isDeactivated" className="font-normal">Dar de baja al cliente</Label>
+                <Label htmlFor="isDeactivated" className="font-normal text-destructive font-bold">Dar de baja al cliente</Label>
             </div>
           )}
-          <div className="grid grid-cols-4 items-center gap-4">
+
+          {isEditing && canEditIds && (
+             <div className="flex items-center space-x-2 border p-2 rounded bg-blue-50 border-blue-200">
+                <Checkbox id="allowCanjes" name="allowCanjes" checked={formData.allowCanjes} onCheckedChange={(checked) => handleCheckboxChange('allowCanjes', checked)} />
+                <Label htmlFor="allowCanjes" className="font-normal text-blue-800 font-bold">Habilitar carga de canjes por otros asesores</Label>
+            </div>
+          )}
+
+          <div className="grid grid-cols-4 items-center gap-4 mt-2">
             <Label htmlFor="denominacion" className="text-right">
               Denominación
             </Label>
@@ -205,7 +225,14 @@ export function ClientFormDialog({
             <Label htmlFor="cuit" className="text-right">
               CUIT
             </Label>
-            <Input id="cuit" name="cuit" value={formData.cuit} onChange={handleChange} className="col-span-3"/>
+            <Input 
+                id="cuit" 
+                name="cuit" 
+                value={formData.cuit} 
+                onChange={handleChange} 
+                placeholder="XX-XXXXXXXX-X"
+                className="col-span-3"
+            />
           </div>
           {isEditing && canEditIds && (
             <>
