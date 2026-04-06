@@ -14,6 +14,9 @@ import { Form } from '@/components/ui/form';
 import { SrlSection } from '@/components/publicidad/srl-section';
 import { SasSection } from '@/components/publicidad/sas-section';
 
+// 🟢 AQUÍ ESTÁ LA IMPORTACIÓN QUE FALTABA
+import { format } from 'date-fns';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -215,7 +218,6 @@ export default function AppCanjesMobile() {
             const validSrlItems = formValues.srlItems?.filter(item => item.month) || [];
             const validSasItems = formValues.sasItems?.filter(item => item.month) || [];
 
-            // 🟢 SOLUCIÓN: Limpiamos los "undefined" de las grillas de React Hook Form
             const adOrderPayload = {
                 clientId: finalClientId,
                 clientName: finalClientName,
@@ -353,7 +355,6 @@ export default function AppCanjesMobile() {
                                             const ownerId = item.ownerId;
                                             const ownerName = item.ownerName || 'Sin asignar';
                                             
-                                            // 🟢 REGLA DE SELECCIÓN ACTUALIZADA
                                             const canSelect = isClient && (
                                                 ownerId === userInfo?.id || 
                                                 userInfo?.role === 'Admin' || 
