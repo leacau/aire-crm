@@ -5,11 +5,11 @@ import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWit
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
-import { getUserProfile, getEmailWhitelist } from '@/lib/firebase-service'; 
+import { getUserProfile, getEmailWhitelist, createUserProfile } from '@/lib/firebase-service'; 
 import type { User } from '@/lib/types';
 import { validateGoogleServicesAccess } from '@/lib/google-service-check';
 import { initializePermissions } from '@/lib/permissions';
-import { useToast } from '@/hooks/use-toast'; 
+import { useToast } from '@/hooks/use-toast';
 
 const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service', '/'];
 
@@ -45,8 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loading) {
-      // 🟢 BARRERA: Permitimos las rutas que empiecen con /public
-      const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/public');
+      // 🟢 CORRECCIÓN: /public/ con barra final
+      const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/public/');
       if (!user && !isPublicRoute) {
         router.push('/login');
       } else if (user && pathname === '/login') {
@@ -86,9 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // 🟢 BARRERA DE ACCESO: VALIDACIÓN DE DOMINIO Y LISTA BLANCA
         const email = firebaseUser.email?.toLowerCase() || '';
-        const isAuthorizedDomain = email.endsWith('@airedesantafe.com.ar') || email.endsWith('@airedigital.com');
+        const isAuthorizedDomain = email.endsWith('@airedesantafe.com.ar') || email.endsWith('@airedigital.com.ar');
         const isHardcodedException = email === 'leandrochena@gmail.com';
 
         let isWhitelisted = false;
@@ -131,6 +130,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
         } else {
             const name = firebaseUser.displayName || 'Usuario';
+            
+            await createUserProfile(firebaseUser.uid, name, firebaseUser.email || '', firebaseUser.photoURL || undefined);
+            
             setUserInfo({
                 id: firebaseUser.uid,
                 name: name,
@@ -152,6 +154,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => unsubscribe();
   }, [toast]);
+
+  useEffect(() => {
+    if (!loading) {
+      // 🟢 CORRECCIÓN: /public/ con barra final
+      const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/public/');
+      if (!user && !isPublicRoute) {
+        router.push('/login');
+      } else if (user && pathname === '/login') {
+        router.push('/');
+      }
+    }
+  }, [user, loading, pathname, router]);
 
   useEffect(() => {
     if (loading || !user) return;
@@ -226,8 +240,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return await getGoogleAccessToken({ silent: false });
     };
 
-  // 🟢 SI ES RUTA PÚBLICA, DEJAR RENDERIZAR SIN CORTAR POR CARGA
-  if (loading && !publicRoutes.includes(pathname) && !pathname.startsWith('/public')) {
+  // 🟢 CORRECCIÓN: /public/ con barra final
+  if (loading && !publicRoutes.includes(pathname) && !pathname.startsWith('/public/')) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Spinner size="large" />
@@ -235,7 +249,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!loading && (user || publicRoutes.includes(pathname) || pathname.startsWith('/public'))) {
+  // 🟢 CORRECCIÓN: /public/ con barra final
+  if (!loading && (user || publicRoutes.includes(pathname) || pathname.startsWith('/public/'))) {
     return (
       <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, ensureGoogleAccessToken }}>
         {children}
