@@ -9,8 +9,8 @@ const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-servi
 
 export function AuthLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
-    const isPublic = publicRoutes.includes(pathname);
-
+    const isPublic = publicRoutes.includes(pathname) || pathname.startsWith('/public');
+    
     if (isPublic) {
         return <>{children}</>;
     }
