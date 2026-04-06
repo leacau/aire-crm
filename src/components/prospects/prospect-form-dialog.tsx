@@ -18,16 +18,16 @@ import { prospectStatusOptions } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Checkbox } from '@/components/ui/checkbox'; // Importar Checkbox
+import { Checkbox } from '@/components/ui/checkbox';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { formatCuit, cleanCuit } from '@/lib/utils'; // 🟢 Importación
 
-type ProspectFormData = Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName' | 'statusChangedAt'>;
+type ProspectFormData = Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName' | 'statusChangedAt'> & { cuit?: string }; // Añadimos CUIT opcional al tipo local
 
 interface ProspectFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  // Actualizamos la firma de onSave
   onSave: (prospectData: ProspectFormData, addToCoaching: boolean, coachingNote: string) => void;
   prospect?: Prospect | null;
   activities?: ClientActivity[];
@@ -42,6 +42,7 @@ const initialFormData: ProspectFormData = {
   sector: '',
   notes: '',
   status: 'Nuevo',
+  cuit: '',
 };
 
 export function ProspectFormDialog({
@@ -54,8 +55,6 @@ export function ProspectFormDialog({
 }: ProspectFormDialogProps) {
   const [formData, setFormData] = useState<ProspectFormData>(initialFormData);
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Nuevos estados para el seguimiento
   const [addToCoaching, setAddToCoaching] = useState(false);
   const [coachingNote, setCoachingNote] = useState('');
 
@@ -74,11 +73,12 @@ export function ProspectFormDialog({
           sector: prospect.sector || '',
           notes: prospect.notes || '',
           status: prospect.status,
+          // Si tuvieran CUIT en prospectos (en la BD no hay, pero si lo sumas a futuro, ya queda formateado)
+          cuit: formatCuit((prospect as any).cuit || ''),
         });
       } else {
         setFormData(initialFormData);
       }
-      // Resetear campos de coaching al abrir
       setAddToCoaching(false);
       setCoachingNote('');
       setIsSaving(false);
@@ -100,21 +100,30 @@ export function ProspectFormDialog({
       return;
     }
     
-    // Validar nota si se seleccionó agregar al seguimiento
     if (addToCoaching && !coachingNote.trim()) {
         toast({ title: "Campo requerido", description: "Si agregas al seguimiento, debes indicar una tarea o nota inicial.", variant: "destructive" });
         return;
     }
 
     setIsSaving(true);
-    // Pasamos los nuevos valores
-    onSave(formData, addToCoaching, coachingNote);
+    
+    // 🟢 Limpiamos el CUIT si se cargó uno
+    const finalDataToSave = {
+        ...formData,
+        cuit: cleanCuit(formData.cuit)
+    };
+
+    onSave(finalDataToSave, addToCoaching, coachingNote);
     onOpenChange(false);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'cuit') {
+        setFormData(prev => ({ ...prev, [name]: formatCuit(value) }));
+    } else {
+        setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const filteredStatusOptions = prospectStatusOptions.filter(status => status !== 'Convertido' && status !== 'No Próspero');
@@ -131,22 +140,22 @@ export function ProspectFormDialog({
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="companyName">Empresa</Label>
+              <Label htmlFor="companyName">Empresa *</Label>
               <Input id="companyName" name="companyName" value={formData.companyName} onChange={handleChange} />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="cuit">CUIT (Opcional)</Label>
+              <Input id="cuit" name="cuit" value={formData.cuit} onChange={handleChange} placeholder="XX-XXXXXXXX-X" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <div className="space-y-2">
               <Label htmlFor="sector">Sector / Rubro</Label>
               <Input id="sector" name="sector" value={formData.sector || ''} onChange={handleChange} />
             </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="contactName">Contacto</Label>
+              <Label htmlFor="contactName">Persona de Contacto</Label>
               <Input id="contactName" name="contactName" value={formData.contactName || ''} onChange={handleChange} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="contactPhone">Teléfono</Label>
-              <Input id="contactPhone" name="contactPhone" value={formData.contactPhone || ''} onChange={handleChange} />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -154,6 +163,12 @@ export function ProspectFormDialog({
               <Label htmlFor="contactEmail">Email</Label>
               <Input id="contactEmail" name="contactEmail" type="email" value={formData.contactEmail || ''} onChange={handleChange} />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="contactPhone">Teléfono</Label>
+              <Input id="contactPhone" name="contactPhone" value={formData.contactPhone || ''} onChange={handleChange} />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-2">
               <Label htmlFor="status">Estado</Label>
               <Select value={formData.status} onValueChange={(value: ProspectStatus) => setFormData(p => ({...p, status: value}))}>
