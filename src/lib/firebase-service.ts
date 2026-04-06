@@ -4159,3 +4159,25 @@ export const updateEmailWhitelist = async (emails: string[], userId: string, use
         ownerName: 'Sistema',
     });
 };
+
+// --- Obtener Convenios de Canje (Nueva Modalidad) ---
+export const getConveniosCanje = async (): Promise<ConvenioCanje[]> => {
+    const cachedData = getFromCache('convenios_canje');
+    if (cachedData) return cachedData;
+
+    const snapshot = await getDocs(query(collections.convenios, orderBy("createdAt", "desc")));
+    const convenios = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+        
+        return { 
+            id: doc.id,
+            ...data,
+            createdAt: convertTimestamp(data.createdAt),
+            updatedAt: convertTimestamp(data.updatedAt),
+        } as ConvenioCanje;
+    });
+    
+    setInCache('convenios_canje', convenios);
+    return convenios;
+};
