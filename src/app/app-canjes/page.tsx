@@ -15,7 +15,7 @@ import { SasSection } from '@/components/publicidad/sas-section';
 
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { formatCuit, cleanCuit } from '@/lib/utils'; // 🟢 Importamos herramientas CUIT
+import { formatCuit, cleanCuit } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -60,7 +60,6 @@ export default function AppCanjesMobile() {
     const [selectedClient, setSelectedClient] = useState<Client | null>(null);
     const [isNewClient, setIsNewClient] = useState(false);
     
-    // 🟢 NUEVOS CAMPOS REQUERIDOS PARA CLIENTE
     const [newClientData, setNewClientData] = useState({ 
         denominacion: '', 
         razonSocial: '', 
@@ -77,7 +76,7 @@ export default function AppCanjesMobile() {
     // --- ESTADOS PASO 2: OPORTUNIDAD & FACTURACION ---
     const [oppTitle, setOppTitle] = useState('');
     const [oppValue, setOppValue] = useState('');
-    const [billingType, setBillingType] = useState<BillingType>('AVION'); // 🟢 FACTURACIÓN
+    const [billingType, setBillingType] = useState<BillingType>('AVION');
 
     // --- ESTADOS PASO 3: CONVENIO ---
     const [radioEntrega, setRadioEntrega] = useState('');
@@ -104,6 +103,19 @@ export default function AppCanjesMobile() {
         }
     });
 
+    // 🟢 FUNCIONES FALTANTES RESTAURADAS 🟢
+    const handleAddMaterialUrl = () => setMaterialUrls([...materialUrls, '']);
+    const handleMaterialUrlChange = (index: number, value: string) => {
+        const newUrls = [...materialUrls];
+        newUrls[index] = value;
+        setMaterialUrls(newUrls);
+    };
+    const handleRemoveMaterialUrl = (index: number) => {
+        const newUrls = materialUrls.filter((_, i) => i !== index);
+        setMaterialUrls(newUrls.length ? newUrls : ['']);
+    };
+    // ------------------------------------
+
     // Refs para PDFs
     const convenioPdfRef = useRef<HTMLDivElement>(null);
     const pautadoPdfRef = useRef<HTMLDivElement>(null);
@@ -121,7 +133,6 @@ export default function AppCanjesMobile() {
             setClients(c);
             setPrograms(p);
             setProspects(pros);
-            // Filtramos solo los canjes creados por este asesor
             setMyCanjes(allCanjes.filter(canje => canje.creadoPorId === userInfo?.id));
         } catch (e) {
             console.error(e);
@@ -134,7 +145,7 @@ export default function AppCanjesMobile() {
     const searchResults = React.useMemo(() => {
         if (searchQuery.length < 3) return [];
         const query = searchQuery.toLowerCase();
-        const cleanedQuery = cleanCuit(query); // Permite buscar CUITs con o sin guiones
+        const cleanedQuery = cleanCuit(query); 
         
         const matchedClients = clients.filter(c => 
             c.denominacion.toLowerCase().includes(query) || 
@@ -171,7 +182,6 @@ export default function AppCanjesMobile() {
                     return toast({ title: "Faltan datos obligatorios del cliente nuevo", variant: "destructive" });
                 }
                 
-                // Validar CUIT duplicado
                 const cleanedCuit = cleanCuit(newClientData.cuit);
                 if (cleanedCuit) {
                     const exists = clients.find(c => cleanCuit(c.cuit) === cleanedCuit);
@@ -211,7 +221,6 @@ export default function AppCanjesMobile() {
             let finalClientId = selectedClient?.id || '';
             let finalClientName = selectedClient?.denominacion || '';
             
-            // 1. Crear Cliente
             if (isNewClient) {
                 finalClientId = await createClient({
                     ...newClientData,
@@ -223,7 +232,6 @@ export default function AppCanjesMobile() {
 
             const clientOwnerName = selectedClient?.ownerName || userInfo!.name;
 
-            // 2. Crear Oportunidad
             const oppId = await createOpportunity({
                 title: oppTitle,
                 clientId: finalClientId,
@@ -236,7 +244,6 @@ export default function AppCanjesMobile() {
                 periodicidad: [],
             }, userInfo!.id, userInfo!.name, clientOwnerName);
 
-            // 3. Crear Convenio
             const canjeId = await saveConvenioCanje({
                 clientId: finalClientId,
                 clientName: finalClientName,
@@ -247,10 +254,9 @@ export default function AppCanjesMobile() {
                 clienteEntrega,
                 fechaInicio: new Date(fechaInicio).toISOString(),
                 fechaFin: new Date(fechaFin).toISOString(),
-                observaciones: `Facturación: ${billingType}` // Dejamos asentado el tipo
+                observaciones: `Facturación: ${billingType}` 
             }, userInfo!.id, userInfo!.name);
 
-            // 4. Crear OP
             const formValues = form.getValues();
             const validSrlItems = formValues.srlItems?.filter(item => item.month) || [];
             const validSasItems = formValues.sasItems?.filter(item => item.month) || [];
@@ -280,7 +286,6 @@ export default function AppCanjesMobile() {
 
             await createAdvertisingOrder(JSON.parse(JSON.stringify(adOrderPayload)));
 
-            // 5. PDFs y Email
             const token = await getGoogleAccessToken();
             if (token && convenioPdfRef.current && pautadoPdfRef.current) {
                 const convenio64 = await generatePdfBase64(convenioPdfRef.current);
@@ -291,7 +296,6 @@ export default function AppCanjesMobile() {
                     { filename: `OP_${finalClientName.replace(/ /g, "_")}.pdf`, content: pautado64, encoding: 'base64' }
                 ];
 
-                // 🟢 SI ES NUEVO CLIENTE, SUMAMOS EL TERCER PDF
                 if (isNewClient && clientPdfRef.current) {
                     const client64 = await generatePdfBase64(clientPdfRef.current);
                     attachments.push({ filename: `Alta_${finalClientName.replace(/ /g, "_")}.pdf`, content: client64, encoding: 'base64' });
@@ -321,8 +325,8 @@ export default function AppCanjesMobile() {
             }
 
             toast({ title: '¡Canje procesado y enviado con éxito!' });
-            loadData(); // Recargamos lista
-            setView('list'); // Volvemos al inicio
+            loadData(); 
+            setView('list'); 
             resetWizard();
             
         } catch (error) {
