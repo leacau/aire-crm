@@ -40,7 +40,6 @@ import { MonthlyClosureDialog } from './monthly-closure-dialog';
 import { getObjectiveForDate, monthKey } from '@/lib/objective-utils';
 import { format } from 'date-fns';
 
-
 interface UserStats {
   user: User;
   wonOpps: number;
@@ -52,7 +51,7 @@ interface UserStats {
   previousMonthBilling: number | null;
 }
 
-const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción'];
+const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción', 'Canjes'];
 
 const TANGO_COMPANIES = [
     { value: 'Aire SRL', label: 'Aire SRL' },
@@ -76,8 +75,8 @@ export function TeamPerformanceTable() {
   const [visibilityMonth, setVisibilityMonth] = useState('');
   const [visibilityDeadline, setVisibilityDeadline] = useState('');
 
-  // Estados de filtros
-  const [filterArea, setFilterArea] = useState<AreaType | 'all'>('Comercial'); // Por defecto Comercial, pero cambiable
+  // 🟢 CORRECCIÓN: Inicia en 'all' para no esconder a los usuarios nuevos sin área asignada
+  const [filterArea, setFilterArea] = useState<AreaType | 'all'>('all'); 
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
 
   // Estados para la edición de códigos de vendedor
@@ -240,7 +239,7 @@ export function TeamPerformanceTable() {
     });
 
     return filteredUsers.map(user => {
-        const isAdvisor = user.role === 'Asesor';
+        const isAdvisor = user.role === 'Asesor' || user.role === 'Asesor Canjes';
         const advisorClientIds = isAdvisor ? new Set(clients.filter(c => c.ownerId === user.id).map(c => c.id)) : new Set();
         const userOpps = isAdvisor ? opportunities.filter(opp => advisorClientIds.has(opp.clientId)) : [];
         const userProspects = isAdvisor ? prospects.filter(p => p.ownerId === user.id && p.status !== 'Convertido') : [];
@@ -263,7 +262,7 @@ export function TeamPerformanceTable() {
         return {
             user,
             wonOpps: wonOpps.length,
-            totalRevenue: 0, // This seems deprecated by monthly billing
+            totalRevenue: 0, 
             activeOpps: activeOpps.length,
             pipelineValue,
             prospectsCount: userProspects.length,
@@ -274,7 +273,7 @@ export function TeamPerformanceTable() {
   }, [users, opportunities, clients, prospects, filterArea, filterRole]);
   
   const managers = useMemo(() => users.filter(u => u.role === 'Jefe' || u.role === 'Gerencia'), [users]);
-  const advisors = useMemo(() => users.filter(u => u.role === 'Asesor'), [users]);
+  const advisors = useMemo(() => users.filter(u => u.role === 'Asesor' || u.role === 'Asesor Canjes'), [users]);
 
 
   const columns = useMemo<ColumnDef<UserStats>[]>(() => [
@@ -341,7 +340,7 @@ export function TeamPerformanceTable() {
         cell: ({ row }) => {
             const { user } = row.original;
             return (
-                <Select value={user.role} onValueChange={(newRole: UserRole) => handleUpdateUser(user.id, { role: newRole })} disabled={!isBoss}>
+                <Select value={user.role || 'Asesor'} onValueChange={(newRole: UserRole) => handleUpdateUser(user.id, { role: newRole })} disabled={!isBoss}>
                     <SelectTrigger className="w-[130px]">
                         <SelectValue placeholder="Seleccionar rol" />
                     </SelectTrigger>
@@ -360,7 +359,7 @@ export function TeamPerformanceTable() {
       cell: ({ row }) => {
         const { user } = row.original;
         return (
-          <Select value={user.area} onValueChange={(newArea) => handleUpdateUser(user.id, { area: newArea as AreaType })} disabled={!isBoss}>
+          <Select value={user.area || 'Comercial'} onValueChange={(newArea) => handleUpdateUser(user.id, { area: newArea as AreaType })} disabled={!isBoss}>
             <SelectTrigger className="w-[130px]">
               <SelectValue placeholder="Asignar área..." />
             </SelectTrigger>
@@ -469,7 +468,6 @@ export function TeamPerformanceTable() {
         cell: ({ row }) => {
             const { user } = row.original;
             
-            // Allow access to self or if boss
             if (!isBoss && user.id !== userInfo?.id) return null;
 
             return (
@@ -551,7 +549,6 @@ export function TeamPerformanceTable() {
         </div>
       )}
 
-      {/* Controles y Filtros Superiores */}
       <div className='flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4'>
         <div className="flex gap-2 items-center flex-wrap">
             <div className="flex items-center gap-2">
@@ -559,7 +556,6 @@ export function TeamPerformanceTable() {
                 <span className="text-sm font-medium">Filtros:</span>
             </div>
             
-            {/* Filtro por Área */}
             <Select value={filterArea} onValueChange={(val) => setFilterArea(val as AreaType | 'all')}>
                 <SelectTrigger className="w-[160px] h-8">
                     <SelectValue placeholder="Todas las áreas" />
@@ -572,7 +568,6 @@ export function TeamPerformanceTable() {
                 </SelectContent>
             </Select>
 
-            {/* Filtro por Rol */}
             <Select value={filterRole} onValueChange={(val) => setFilterRole(val as UserRole | 'all')}>
                 <SelectTrigger className="w-[160px] h-8">
                     <SelectValue placeholder="Todos los roles" />
@@ -624,7 +619,6 @@ export function TeamPerformanceTable() {
         onSaveSuccess={fetchData}
       />
 
-      {/* Dialog para edición de códigos de vendedor */}
       <Dialog open={!!userForCodes} onOpenChange={(open) => !open && setUserForCodes(null)}>
         <DialogContent className="sm:max-w-md">
             <DialogHeader>
