@@ -6,7 +6,7 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface ConvenioPdfProps {
-  convenio: Partial<ConvenioCanje>;
+  convenio: Partial<ConvenioCanje> & { valorMonetario?: number };
 }
 
 export const ConvenioPdf = React.forwardRef<HTMLDivElement, ConvenioPdfProps>(({ convenio }, ref) => {
@@ -27,7 +27,6 @@ export const ConvenioPdf = React.forwardRef<HTMLDivElement, ConvenioPdfProps>(({
       <div ref={ref} style={{ display: 'flex', justifyContent: 'center' }}>
         <div style={pageStyle}>
             
-            {/* Header como tu PDF de muestra */}
             <header style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '40px' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/logo.webp" alt="AIRE Logo" style={{ width: '130px', height: 'auto' }} />
@@ -46,6 +45,9 @@ export const ConvenioPdf = React.forwardRef<HTMLDivElement, ConvenioPdfProps>(({
                 </div>
                 <div style={{ marginBottom: '20px' }}>
                     <strong>Plazo convenio:</strong> {convenio.fechaInicio ? format(parseISO(convenio.fechaInicio), 'dd/MM/yyyy') : '-'} al {convenio.fechaFin ? format(parseISO(convenio.fechaFin), 'dd/MM/yyyy') : '-'}
+                </div>
+                <div style={{ marginBottom: '20px' }}>
+                    <strong>Importe / Valor:</strong> ${convenio.valorMonetario?.toLocaleString('es-AR') || '0'}
                 </div>
 
                 <div style={{ marginTop: '40px', marginBottom: '20px' }}>
@@ -71,7 +73,6 @@ export const ConvenioPdf = React.forwardRef<HTMLDivElement, ConvenioPdfProps>(({
                     </div>
                 )}
 
-                {/* Firma a la derecha, debajo de todo */}
                 <div style={{ marginTop: '80px', display: 'flex', justifyContent: 'flex-end', textAlign: 'center' }}>
                     <div style={{ width: '200px' }}>
                         <div style={{ borderTop: '1px solid #000', marginBottom: '5px' }}></div>
@@ -81,7 +82,6 @@ export const ConvenioPdf = React.forwardRef<HTMLDivElement, ConvenioPdfProps>(({
                 </div>
             </main>
 
-            {/* Footer Oficial (como el documento PDF que me pasaste) */}
             <footer style={{ position: 'absolute', bottom: '25mm', left: '20mm', right: '20mm', borderTop: '2px solid #dc2626', paddingTop: '10px', fontSize: '9pt', color: '#666' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <div>
