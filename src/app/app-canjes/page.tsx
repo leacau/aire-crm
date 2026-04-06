@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { getClients, createClient, createOpportunity, saveConvenioCanje, createAdvertisingOrder, getPrograms, getProspects, getCanjes } from '@/lib/firebase-service';
-import type { Client, Program, Prospect, Canje, CondicionIVA, TipoEntidad } from '@/lib/types';
+import { getClients, createClient, createOpportunity, saveConvenioCanje, createAdvertisingOrder, getPrograms, getProspects, getConveniosCanje } from '@/lib/firebase-service';
+import type { Client, Program, Prospect, ConvenioCanje, CondicionIVA, TipoEntidad } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 
 import { useForm } from 'react-hook-form';
@@ -13,7 +13,7 @@ import { Form } from '@/components/ui/form';
 import { SrlSection } from '@/components/publicidad/srl-section';
 import { SasSection } from '@/components/publicidad/sas-section';
 
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { formatCuit, cleanCuit } from '@/lib/utils';
 
@@ -49,8 +49,8 @@ export default function AppCanjesMobile() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     // --- DATA ---
-    const [myCanjes, setMyCanjes] = useState<Canje[]>([]);
-    const [selectedCanjeDetail, setSelectedCanjeDetail] = useState<Canje | null>(null);
+    const [myCanjes, setMyCanjes] = useState<ConvenioCanje[]>([]);
+    const [selectedCanjeDetail, setSelectedCanjeDetail] = useState<ConvenioCanje | null>(null);
     const [clients, setClients] = useState<Client[]>([]);
     const [prospects, setProspects] = useState<Prospect[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
@@ -103,7 +103,6 @@ export default function AppCanjesMobile() {
         }
     });
 
-    // 🟢 FUNCIONES FALTANTES RESTAURADAS 🟢
     const handleAddMaterialUrl = () => setMaterialUrls([...materialUrls, '']);
     const handleMaterialUrlChange = (index: number, value: string) => {
         const newUrls = [...materialUrls];
@@ -114,7 +113,6 @@ export default function AppCanjesMobile() {
         const newUrls = materialUrls.filter((_, i) => i !== index);
         setMaterialUrls(newUrls.length ? newUrls : ['']);
     };
-    // ------------------------------------
 
     // Refs para PDFs
     const convenioPdfRef = useRef<HTMLDivElement>(null);
@@ -129,11 +127,11 @@ export default function AppCanjesMobile() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [c, p, pros, allCanjes] = await Promise.all([getClients(), getPrograms(), getProspects(), getCanjes()]);
+            const [c, p, pros, allConvenios] = await Promise.all([getClients(), getPrograms(), getProspects(), getConveniosCanje()]);
             setClients(c);
             setPrograms(p);
             setProspects(pros);
-            setMyCanjes(allCanjes.filter(canje => canje.creadoPorId === userInfo?.id));
+            setMyCanjes(allConvenios.filter(conv => conv.advisorId === userInfo?.id));
         } catch (e) {
             console.error(e);
             toast({ title: 'Error al cargar datos', variant: 'destructive'});
@@ -307,7 +305,7 @@ export default function AppCanjesMobile() {
                         <p>El asesor <strong>${userInfo!.name}</strong> ha cerrado un nuevo canje mediante la App Móvil.</p>
                         <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #dc2626; margin: 20px 0;">
                             <p><strong>Cliente:</strong> ${finalClientName} ${isNewClient ? '<span style="color:#2563eb; font-weight:bold;">(CLIENTE NUEVO - Se adjunta Alta)</span>' : ''}</p>
-                            <p><strong>Valor Canje:</strong> $${Number(oppValue).toLocaleString()}</p>
+                            <p><strong>Valor Canje:</strong> $${Number(oppValue).toLocaleString('es-AR')}</p>
                             <p><strong>Facturación:</strong> ${billingType}</p>
                             <p><strong>Vigencia:</strong> ${format(new Date(fechaInicio), 'dd/MM/yyyy')} al ${format(new Date(fechaFin), 'dd/MM/yyyy')}</p>
                         </div>
@@ -352,14 +350,30 @@ export default function AppCanjesMobile() {
                 <main className="flex-1 p-4 pb-20 space-y-4">
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-xl">{selectedCanjeDetail.titulo}</CardTitle>
-                            <CardDescription>{selectedCanjeDetail.clienteName}</CardDescription>
+                            <CardTitle className="text-xl">Canje con {selectedCanjeDetail.clientName}</CardTitle>
+                            <CardDescription>Cargado el: {format(parseISO(selectedCanjeDetail.createdAt), 'dd/MM/yyyy')}</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div><Label className="text-muted-foreground text-xs uppercase">Estado</Label><div className="font-semibold text-lg">{selectedCanjeDetail.estado}</div></div>
-                            <div><Label className="text-muted-foreground text-xs uppercase">Valor</Label><div className="font-semibold text-green-700 text-xl">${selectedCanjeDetail.valorCanje?.toLocaleString() || '0'}</div></div>
-                            {selectedCanjeDetail.fechaResolucion && <div><Label className="text-muted-foreground text-xs uppercase">Fecha de Carga</Label><div>{format(new Date(selectedCanjeDetail.fechaResolucion), 'dd/MM/yyyy')}</div></div>}
-                            {selectedCanjeDetail.observaciones && <div><Label className="text-muted-foreground text-xs uppercase">Observaciones</Label><div className="bg-slate-100 p-3 rounded text-sm mt-1 whitespace-pre-wrap">{selectedCanjeDetail.observaciones}</div></div>}
+                            <div>
+                                <Label className="text-muted-foreground text-xs uppercase">Vigencia</Label>
+                                <div className="font-semibold text-lg text-slate-800">
+                                    {selectedCanjeDetail.fechaInicio ? format(parseISO(selectedCanjeDetail.fechaInicio), 'dd/MM/yyyy') : '-'} al {selectedCanjeDetail.fechaFin ? format(parseISO(selectedCanjeDetail.fechaFin), 'dd/MM/yyyy') : '-'}
+                                </div>
+                            </div>
+                            <div>
+                                <Label className="text-muted-foreground text-xs uppercase">Aire de Santa Fe entrega</Label>
+                                <div className="bg-slate-100 p-3 rounded text-sm mt-1 whitespace-pre-wrap text-slate-700">{selectedCanjeDetail.radioEntrega}</div>
+                            </div>
+                            <div>
+                                <Label className="text-muted-foreground text-xs uppercase">El Cliente entrega</Label>
+                                <div className="bg-slate-100 p-3 rounded text-sm mt-1 whitespace-pre-wrap text-slate-700">{selectedCanjeDetail.clienteEntrega}</div>
+                            </div>
+                            {selectedCanjeDetail.observaciones && (
+                                <div>
+                                    <Label className="text-muted-foreground text-xs uppercase">Observaciones</Label>
+                                    <div className="bg-slate-100 p-3 rounded text-sm mt-1 whitespace-pre-wrap text-slate-700">{selectedCanjeDetail.observaciones}</div>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </main>
@@ -393,15 +407,13 @@ export default function AppCanjesMobile() {
                                 <Card key={canje.id} className="cursor-pointer hover:border-red-300 transition-colors shadow-sm" onClick={() => { setSelectedCanjeDetail(canje); setView('detail'); }}>
                                     <CardContent className="p-4 flex items-center justify-between">
                                         <div className="flex-1 min-w-0 pr-4">
-                                            <h3 className="font-bold text-slate-800 truncate text-lg">{canje.titulo}</h3>
-                                            <p className="text-sm text-slate-500 truncate">{canje.clienteName}</p>
+                                            <h3 className="font-bold text-slate-800 truncate text-lg">{canje.clientName}</h3>
+                                            <p className="text-sm text-slate-500 truncate mt-1">
+                                                Vigencia: {canje.fechaInicio ? format(parseISO(canje.fechaInicio), 'dd/MM/yy') : '-'} al {canje.fechaFin ? format(parseISO(canje.fechaFin), 'dd/MM/yy') : '-'}
+                                            </p>
                                             <div className="flex items-center gap-2 mt-2">
-                                                <span className={cn("text-[10px] font-bold uppercase px-2 py-0.5 rounded-full", canje.estado === 'Aprobado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>{canje.estado}</span>
-                                                <span className="text-xs text-slate-400 font-medium flex items-center gap-1"><Clock className="h-3 w-3"/> {format(new Date(canje.fechaCreacion), 'dd/MM/yy')}</span>
+                                                <span className="text-xs text-slate-400 font-medium flex items-center gap-1"><Clock className="h-3 w-3"/> Creado: {format(parseISO(canje.createdAt), 'dd/MM/yy')}</span>
                                             </div>
-                                        </div>
-                                        <div className="text-right shrink-0">
-                                            <p className="font-bold text-green-700 text-lg">${canje.valorCanje?.toLocaleString() || '0'}</p>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -678,7 +690,8 @@ export default function AppCanjesMobile() {
                         clientName: isNewClient ? newClientData.denominacion : selectedClient?.denominacion,
                         advisorName: userInfo?.name,
                         fechaInicio, fechaFin, radioEntrega, clienteEntrega,
-                        observaciones: `Facturación: ${billingType}`
+                        observaciones: `Facturación: ${billingType}`,
+                        valorMonetario: Number(oppValue)
                     }} 
                 />
                 <AdvertisingOrderPdf 
@@ -700,6 +713,7 @@ export default function AppCanjesMobile() {
                         ref={clientPdfRef} 
                         client={{
                             ...newClientData,
+                            cuit: cleanCuit(newClientData.cuit),
                             id: 'temp',
                             ownerId: '',
                             ownerName: '',
