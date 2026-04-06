@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { Header } from '@/components/layout/header';
@@ -16,7 +14,8 @@ export default function TeamPage() {
   const router = useRouter();
 
   const canManage = hasManagementPrivileges(userInfo);
-  const isSuperAdmin = userInfo?.email === 'lchena@airedesantafe.com.ar';
+  // Eliminamos el `isSuperAdmin` y la restricción por email, 
+  // porque si están acá, ya fueron autorizados por la Lista Blanca.
 
   useEffect(() => {
     if (!loading && !canManage) {
