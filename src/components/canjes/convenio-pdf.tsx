@@ -13,72 +13,87 @@ export const ConvenioPdf = React.forwardRef<HTMLDivElement, ConvenioPdfProps>(({
     const pageStyle: React.CSSProperties = {
         width: '210mm',
         minHeight: '297mm',
-        padding: '20mm',
+        padding: '25mm 20mm',
         backgroundColor: 'white',
         fontFamily: 'Arial, sans-serif',
         position: 'relative',
         boxSizing: 'border-box',
-        color: '#333'
+        color: '#1a1a1a',
+        fontSize: '11pt',
+        lineHeight: '1.5'
     };
 
     return (
       <div ref={ref} style={{ display: 'flex', justifyContent: 'center' }}>
         <div style={pageStyle}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #dc2626', paddingBottom: '20px', marginBottom: '30px' }}>
+            
+            {/* Header como tu PDF de muestra */}
+            <header style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '40px' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.webp" alt="AIRE Logo" style={{ width: '150px', height: 'auto' }} />
-                <div style={{ textAlign: 'right' }}>
-                    <h1 style={{ fontSize: '24px', color: '#dc2626', margin: 0, fontWeight: 'bold' }}>CONVENIO DE CANJE</h1>
-                    <p style={{ margin: '5px 0 0 0', color: '#666' }}>Fecha: {format(new Date(), "d 'de' MMMM, yyyy", { locale: es })}</p>
-                </div>
+                <img src="/logo.webp" alt="AIRE Logo" style={{ width: '130px', height: 'auto' }} />
             </header>
 
-            <main style={{ fontSize: '14px', lineHeight: '1.6' }}>
-                <p style={{ marginBottom: '20px' }}>
-                    Entre <strong>AIRE DE SANTA FE</strong>, representado en este acto por el ejecutivo comercial <strong>{convenio.advisorName}</strong>, 
-                    y la empresa/cliente <strong>{convenio.clientName}</strong>, se acuerda el siguiente convenio de intercambio publicitario (Canje).
-                </p>
-
-                <div style={{ backgroundColor: '#f9fafb', padding: '15px', borderLeft: '4px solid #dc2626', marginBottom: '20px' }}>
-                    <h3 style={{ margin: '0 0 10px 0', fontSize: '16px', color: '#111827' }}>VIGENCIA DEL ACUERDO</h3>
-                    <p style={{ margin: 0 }}>
-                        <strong>Desde:</strong> {convenio.fechaInicio ? format(parseISO(convenio.fechaInicio), 'dd/MM/yyyy') : '-'} <br/>
-                        <strong>Hasta:</strong> {convenio.fechaFin ? format(parseISO(convenio.fechaFin), 'dd/MM/yyyy') : '-'}
-                    </p>
+            <main>
+                <div style={{ textAlign: 'right', marginBottom: '30px' }}>
+                    Santa Fe, {format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}
                 </div>
 
                 <div style={{ marginBottom: '20px' }}>
-                    <h3 style={{ fontSize: '16px', color: '#111827', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>1. AIRE DE SANTA FE ENTREGA (Pautado Publicitario):</h3>
-                    <p style={{ whiteSpace: 'pre-wrap', backgroundColor: '#fff', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '4px' }}>
-                        {convenio.radioEntrega}
-                    </p>
+                    <strong>Cliente:</strong> {convenio.clientName}
+                </div>
+                <div style={{ marginBottom: '20px' }}>
+                    <strong>Medio:</strong> AIRE DE SANTA FE
+                </div>
+                <div style={{ marginBottom: '20px' }}>
+                    <strong>Plazo convenio:</strong> {convenio.fechaInicio ? format(parseISO(convenio.fechaInicio), 'dd/MM/yyyy') : '-'} al {convenio.fechaFin ? format(parseISO(convenio.fechaFin), 'dd/MM/yyyy') : '-'}
                 </div>
 
-                <div style={{ marginBottom: '30px' }}>
-                    <h3 style={{ fontSize: '16px', color: '#111827', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>2. EL CLIENTE ENTREGA (Bienes / Servicios):</h3>
-                    <p style={{ whiteSpace: 'pre-wrap', backgroundColor: '#fff', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '4px' }}>
+                <div style={{ marginTop: '40px', marginBottom: '20px' }}>
+                    <strong>El Cliente provee:</strong>
+                    <div style={{ marginTop: '10px', paddingLeft: '15px', whiteSpace: 'pre-wrap' }}>
                         {convenio.clienteEntrega}
-                    </p>
+                    </div>
+                </div>
+
+                <div style={{ marginTop: '40px', marginBottom: '20px' }}>
+                    <strong>Aire de Santa Fe provee:</strong>
+                    <div style={{ marginTop: '10px', paddingLeft: '15px', whiteSpace: 'pre-wrap' }}>
+                        {convenio.radioEntrega}
+                    </div>
                 </div>
 
                 {convenio.observaciones && (
-                    <div style={{ marginBottom: '40px', fontSize: '12px', color: '#4b5563' }}>
-                        <strong>Observaciones Adicionales:</strong><br/>
-                        {convenio.observaciones}
+                    <div style={{ marginTop: '40px', marginBottom: '20px' }}>
+                        <strong>Observaciones:</strong>
+                        <div style={{ marginTop: '10px', paddingLeft: '15px', whiteSpace: 'pre-wrap' }}>
+                            {convenio.observaciones}
+                        </div>
                     </div>
                 )}
 
-                <div style={{ marginTop: '60px', display: 'flex', justifyContent: 'space-between', textAlign: 'center' }}>
-                    <div style={{ width: '40%', borderTop: '1px solid #000', paddingTop: '10px' }}>
-                        <strong>{convenio.clientName}</strong><br/>
-                        <span style={{ fontSize: '12px', color: '#666' }}>Firma y Aclaración</span>
-                    </div>
-                    <div style={{ width: '40%', borderTop: '1px solid #000', paddingTop: '10px' }}>
+                {/* Firma a la derecha, debajo de todo */}
+                <div style={{ marginTop: '80px', display: 'flex', justifyContent: 'flex-end', textAlign: 'center' }}>
+                    <div style={{ width: '200px' }}>
+                        <div style={{ borderTop: '1px solid #000', marginBottom: '5px' }}></div>
                         <strong>{convenio.advisorName}</strong><br/>
-                        <span style={{ fontSize: '12px', color: '#666' }}>Representante Comercial</span>
+                        <span style={{ fontSize: '9pt', color: '#666' }}>Firma Comercial</span>
                     </div>
                 </div>
             </main>
+
+            {/* Footer Oficial (como el documento PDF que me pasaste) */}
+            <footer style={{ position: 'absolute', bottom: '25mm', left: '20mm', right: '20mm', borderTop: '2px solid #dc2626', paddingTop: '10px', fontSize: '9pt', color: '#666' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <div>
+                        <strong>AIRE SRL</strong><br/>
+                        CUIT 30-71599389-5<br/>
+                        25 de Mayo 3255. Santa Fe, Santa Fe, Argentina | CP 3000
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                        <a href="https://www.airedigital.com" style={{ color: '#dc2626', textDecoration: 'none' }}>→ www.airedigital.com</a>
+                    </div>
+                </div>
+            </footer>
         </div>
       </div>
     );
