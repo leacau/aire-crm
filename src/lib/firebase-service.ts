@@ -2156,7 +2156,7 @@ export const getAllUsers = async (role?: UserRole): Promise<User[]> => {
   if (role) {
       users = users.filter(u => u.role === role);
   }
-  return users;
+  return users.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 };
 
 export const getUserById = async (userId: string): Promise<User | null> => {
