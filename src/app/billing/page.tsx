@@ -195,9 +195,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(() => new Set());
   
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const canManageBillingDeletion = Boolean(
-    isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Admin',
-  );
 
   // NUEVO: Definir permisos específicos para ver/eliminar duplicados (Jefe, Gerente, Admin)
   const canManageDuplicates = Boolean(
