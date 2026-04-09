@@ -41,7 +41,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const [recordingLocation, setRecordingLocation] = useState('');
     const [recordingDate, setRecordingDate] = useState('');
     const [recordingTime, setRecordingTime] = useState('');
-    const [contentType, setContentType] = useState<'Reel' | 'Story'>('Reel');
+    const [contentType, setContentType] = useState<'Reel' | 'Story | 'Carrusel'>('Reel');
     const [creator, setCreator] = useState<'Redes' | 'Audiovisual'>('Redes');
     const [publishDate, setPublishDate] = useState('');
     const [clientValidation, setClientValidation] = useState(false);
@@ -317,6 +317,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                             <RadioGroup value={contentType} onValueChange={(v: any) => setContentType(v)} className="flex gap-4">
                                 <div className="flex items-center space-x-2"><RadioGroupItem value="Reel" id="t-r" /><Label htmlFor="t-r">Reel</Label></div>
                                 <div className="flex items-center space-x-2"><RadioGroupItem value="Story" id="t-s" /><Label htmlFor="t-s">Story</Label></div>
+                                <div className="flex items-center space-x-2"><RadioGroupItem value="Carrusel" id="t-s" /><Label htmlFor="t-s">Carrusel</Label></div>
                             </RadioGroup>
                         </div>
                         <div className="space-y-3">
@@ -360,6 +361,15 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                     {contentType === 'Reel' && (
                         <div className="bg-blue-50 p-4 rounded-md border border-blue-100 space-y-4">
                             <h3 className="font-bold text-blue-800 border-b border-blue-200 pb-2">Opciones de Reel</h3>
+                            <div className="space-y-2"><Label>Copy estimado (o datos clave a incluir)</Label><Textarea className="h-20" value={reelCopy} onChange={e=>setReelCopy(e.target.value)} /></div>
+                            <div className="flex items-center space-x-2"><Checkbox checked={reelCollaboration} onCheckedChange={(v) => setReelCollaboration(!!v)} /><Label>Publicación en Colaboración</Label></div>
+                            {reelCollaboration && <div className="space-y-2 w-1/2"><Label>Cuenta a invitar</Label><Input value={reelCollabHandle} onChange={e=>setReelCollabHandle(e.target.value)} placeholder="@usuario" /></div>}
+                        </div>
+                    )}
+
+                    {contentType === 'Carrusel' && (
+                        <div className="bg-blue-50 p-4 rounded-md border border-blue-100 space-y-4">
+                            <h3 className="font-bold text-blue-800 border-b border-blue-200 pb-2">Opciones de Carrusel</h3>
                             <div className="space-y-2"><Label>Copy estimado (o datos clave a incluir)</Label><Textarea className="h-20" value={reelCopy} onChange={e=>setReelCopy(e.target.value)} /></div>
                             <div className="flex items-center space-x-2"><Checkbox checked={reelCollaboration} onCheckedChange={(v) => setReelCollaboration(!!v)} /><Label>Publicación en Colaboración</Label></div>
                             {reelCollaboration && <div className="space-y-2 w-1/2"><Label>Cuenta a invitar</Label><Input value={reelCollabHandle} onChange={e=>setReelCollabHandle(e.target.value)} placeholder="@usuario" /></div>}
