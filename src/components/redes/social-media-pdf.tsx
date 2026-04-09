@@ -117,6 +117,22 @@ export const SocialMediaPdf = React.forwardRef<HTMLDivElement, SocialMediaPdfPro
                         )}
                     </>
                 )}
+
+               {request.contentType === 'Carrusel' && (
+                    <>
+                        <SectionTitle title="3. Detalles del Carrusel" />
+                        <div className="grid grid-cols-2 gap-4">
+                            <Field label="¿Va colaborado?" value={request.reelCollaboration} />
+                            {request.reelCollaboration && <Field label="Cuenta a colaborar" value={request.reelCollabHandle} />}
+                        </div>
+                        {request.reelCopy && (
+                            <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded">
+                                <span className="font-bold text-sm block mb-1">Copy / Texto estimado:</span>
+                                <p className="text-sm whitespace-pre-wrap">{request.reelCopy}</p>
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
             
             <div className="absolute bottom-8 right-8 text-xs text-gray-400">Página 1 de 2</div>
