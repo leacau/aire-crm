@@ -41,7 +41,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const [recordingLocation, setRecordingLocation] = useState('');
     const [recordingDate, setRecordingDate] = useState('');
     const [recordingTime, setRecordingTime] = useState('');
-    const [contentType, setContentType] = useState<'Reel' | 'Story | 'Carrusel'>('Reel');
+    const [contentType, setContentType] = useState<'Reel' | 'Story' | 'Carrusel'>('Reel');
     const [creator, setCreator] = useState<'Redes' | 'Audiovisual'>('Redes');
     const [publishDate, setPublishDate] = useState('');
     const [clientValidation, setClientValidation] = useState(false);
