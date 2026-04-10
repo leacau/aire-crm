@@ -4055,7 +4055,7 @@ export const updateSocialMediaRequest = async (
     
     const originalData = docSnap.data() as SocialMediaRequest;
 
-    const updateData: any = { ...data, updatedAt: serverTimestamp() }; // Aquí viajan "advisorId" y "advisorName"
+    const updateData: any = { ...data, updatedAt: serverTimestamp() }; 
     
     // Limpiar campos según el tipo de contenido para evitar datos cruzados
     if (data.contentType === 'Reel') {
@@ -4064,10 +4064,21 @@ export const updateSocialMediaRequest = async (
         updateData.storyCta = deleteField();
         updateData.storyTagClient = deleteField();
         updateData.storyTagHandle = deleteField();
+        // 🟢 Limpiar basura de carrusel
+        updateData.carouselSlides = deleteField();
     } else if (data.contentType === 'Story') {
         updateData.reelCopy = deleteField();
         updateData.reelCollaboration = deleteField();
         updateData.reelCollabHandle = deleteField();
+        updateData.carouselSlides = deleteField();
+    } else if (data.contentType === 'Carrusel') {
+        updateData.isWebReplication = deleteField();
+        updateData.storyUrl = deleteField();
+        updateData.storyCta = deleteField();
+        updateData.storyTagClient = deleteField();
+        updateData.storyTagHandle = deleteField();
+        updateData.reelCopy = deleteField();
+        // En Carrusel Sí hay colaboración, por lo que preservamos reelCollaboration y reelCollabHandle
     }
 
     await updateDoc(docRef, updateData);
@@ -4081,7 +4092,7 @@ export const updateSocialMediaRequest = async (
         entityId: id,
         entityName: data.clientName || originalData.clientName,
         details: `actualizó un pedido de redes de <strong>${data.clientName || originalData.clientName}</strong>`,
-        ownerName: data.advisorName || originalData.advisorName, // Se loguea al dueño real del pedido
+        ownerName: data.advisorName || originalData.advisorName, 
     });
 };
 
