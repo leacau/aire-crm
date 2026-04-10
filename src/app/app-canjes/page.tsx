@@ -2,7 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { getClients, createClient, createOpportunity, saveConvenioCanje, createAdvertisingOrder, getPrograms, getProspects, getConveniosCanje } from '@/lib/firebase-service';
+import { 
+    getClients, createClient, createOpportunity, saveConvenioCanje, createAdvertisingOrder, 
+    getPrograms, getProspects, getConveniosCanje, getOpportunityById, getAdvertisingOrdersByOpportunity, 
+    updateOpportunity, updateConvenioCanje, updateAdvertisingOrder, deleteConvenioCanje 
+} from '@/lib/firebase-service';
 import type { Client, Program, Prospect, ConvenioCanje, CondicionIVA, TipoEntidad } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 
@@ -22,11 +26,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { ArrowRight, ArrowLeft, CheckCircle2, Search, Radio, Trash2, Plus, Clock, FileText } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle2, Search, Radio, Trash2, Plus, Clock, FileText, Edit, Copy } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { cn } from '@/lib/utils';
@@ -48,6 +52,11 @@ export default function AppCanjesMobile() {
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
+    // --- ESTADOS DE EDICIÓN ---
+    const [editId, setEditId] = useState<string | undefined>();
+    const [editOppId, setEditOppId] = useState<string | undefined>();
+    const [editAdOrderId, setEditAdOrderId] = useState<string | undefined>();
+    
     // --- DATA ---
     const [myCanjes, setMyCanjes] = useState<ConvenioCanje[]>([]);
     const [selectedCanjeDetail, setSelectedCanjeDetail] = useState<ConvenioCanje | null>(null);
@@ -61,16 +70,10 @@ export default function AppCanjesMobile() {
     const [isNewClient, setIsNewClient] = useState(false);
     
     const [newClientData, setNewClientData] = useState({ 
-        denominacion: '', 
-        razonSocial: '', 
-        cuit: '', 
+        denominacion: '', razonSocial: '', cuit: '', 
         condicionIVA: 'Responsable Inscripto' as CondicionIVA, 
-        provincia: 'Santa Fe', 
-        localidad: 'Santa Fe', 
-        tipoEntidad: 'Privada' as TipoEntidad, 
-        rubro: '', 
-        phone: '', 
-        email: '' 
+        provincia: 'Santa Fe', localidad: 'Santa Fe', tipoEntidad: 'Privada' as TipoEntidad, 
+        rubro: '', phone: '', email: '' 
     });
 
     // --- ESTADOS PASO 2: OPORTUNIDAD & FACTURACION ---
@@ -90,16 +93,8 @@ export default function AppCanjesMobile() {
     const form = useForm<AdvertisingOrderFormValues>({
         resolver: zodResolver(advertisingOrderSchema),
         defaultValues: {
-            srlItems: [],
-            sasItems: [],
-            adjustmentSas: 0,
-            adjustmentSrl: 0,
-            commissionSrl: 0,
-            agencySale: false,
-            certReq: false,
-            materialSent: false,
-            materialUrl: '',
-            observations: ''
+            srlItems: [], sasItems: [], adjustmentSas: 0, adjustmentSrl: 0, commissionSrl: 0,
+            agencySale: false, certReq: false, materialSent: false, materialUrl: '', observations: ''
         }
     });
 
@@ -131,7 +126,13 @@ export default function AppCanjesMobile() {
             setClients(c);
             setPrograms(p);
             setProspects(pros);
-            setMyCanjes(allConvenios.filter(conv => conv.advisorId === userInfo?.id));
+            
+            const isBossOrAdmin = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion' || userInfo?.role === 'Admin';
+            if (isBossOrAdmin) {
+                setMyCanjes(allConvenios);
+            } else {
+                setMyCanjes(allConvenios.filter(conv => conv.advisorId === userInfo?.id));
+            }
         } catch (e) {
             console.error(e);
             toast({ title: 'Error al cargar datos', variant: 'destructive'});
@@ -150,9 +151,7 @@ export default function AppCanjesMobile() {
             (c.razonSocial && c.razonSocial.toLowerCase().includes(query)) ||
             (c.cuit && cleanCuit(c.cuit).includes(cleanedQuery))
         );
-        const matchedProspects = prospects.filter(p => 
-            p.companyName.toLowerCase().includes(query)
-        );
+        const matchedProspects = prospects.filter(p => p.companyName.toLowerCase().includes(query));
 
         return [...matchedClients, ...matchedProspects].slice(0, 10);
     }, [searchQuery, clients, prospects]);
@@ -169,7 +168,95 @@ export default function AppCanjesMobile() {
         setClienteEntrega('');
         setSearchQuery('');
         setMaterialUrls(['']);
+        setEditId(undefined);
+        setEditOppId(undefined);
+        setEditAdOrderId(undefined);
         form.reset();
+    };
+
+    const loadForEditOrClone = async (mode: 'edit' | 'clone') => {
+        if (!selectedCanjeDetail) return;
+        setLoading(true);
+        try {
+            const opp = await getOpportunityById(selectedCanjeDetail.opportunityId);
+            const adOrders = await getAdvertisingOrdersByOpportunity(selectedCanjeDetail.opportunityId);
+            const adOrder = adOrders[0]; 
+
+            const client = clients.find(c => c.id === selectedCanjeDetail.clientId);
+            if (client) setSelectedClient(client);
+            setIsNewClient(false);
+
+            if (opp) {
+                setOppTitle(mode === 'clone' ? `${opp.title} (Copia)` : opp.title);
+                setOppValue(opp.value.toString());
+            }
+
+            let bType: BillingType = 'AVION';
+            if (selectedCanjeDetail.observaciones?.includes('SRL')) bType = 'SRL';
+            else if (selectedCanjeDetail.observaciones?.includes('SAS')) bType = 'SAS';
+            setBillingType(bType);
+
+            setFechaInicio(selectedCanjeDetail.fechaInicio ? selectedCanjeDetail.fechaInicio.split('T')[0] : '');
+            setFechaFin(selectedCanjeDetail.fechaFin ? selectedCanjeDetail.fechaFin.split('T')[0] : '');
+            setRadioEntrega(selectedCanjeDetail.radioEntrega || '');
+            setClienteEntrega(selectedCanjeDetail.clienteEntrega || '');
+
+            if (adOrder) {
+                setMaterialUrls(adOrder.materialUrls?.length ? adOrder.materialUrls : ['']);
+                let obs = adOrder.observations || '';
+                obs = obs.replace(/Facturación solicitada: (SRL|SAS|AVIÓN)/g, '').replace(/Facturación: (SRL|SAS|AVIÓN)/g, '').replace(/PAUTA POR CANJE\./g, '').trim();
+
+                form.reset({
+                    srlItems: adOrder.srlItems || [],
+                    sasItems: adOrder.sasItems || [],
+                    adjustmentSas: adOrder.adjustmentSas || 0,
+                    adjustmentSrl: adOrder.adjustmentSrl || 0,
+                    commissionSrl: adOrder.commissionSrl || 0,
+                    agencySale: adOrder.agencySale || false,
+                    certReq: adOrder.certReq || false,
+                    materialSent: adOrder.materialSent || false,
+                    materialUrl: '',
+                    observations: obs
+                });
+            }
+
+            if (mode === 'edit') {
+                setEditId(selectedCanjeDetail.id);
+                setEditOppId(selectedCanjeDetail.opportunityId);
+                setEditAdOrderId(adOrder?.id);
+            } else {
+                setEditId(undefined);
+                setEditOppId(undefined);
+                setEditAdOrderId(undefined);
+            }
+
+            setStep(1);
+            setView('form');
+        } catch (error) {
+            console.error(error);
+            toast({ title: 'Error al cargar los datos', variant: 'destructive' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteCanje = async () => {
+        if (!selectedCanjeDetail || !userInfo) return;
+        if (window.confirm("¿Estás seguro de que deseas eliminar este canje? También se eliminará la oportunidad y el pautado asociado de forma irreversible.")) {
+            setLoading(true);
+            try {
+                await deleteConvenioCanje(selectedCanjeDetail.id!, selectedCanjeDetail.opportunityId, userInfo.id, userInfo.name);
+                toast({ title: 'Canje y registros eliminados' });
+                setSelectedCanjeDetail(null);
+                setView('list');
+                loadData();
+            } catch (error) {
+                console.error(error);
+                toast({ title: 'Error al eliminar', variant: 'destructive' });
+            } finally {
+                setLoading(false);
+            }
+        }
     };
 
     const handleNextStep = async () => {
@@ -179,7 +266,6 @@ export default function AppCanjesMobile() {
                 if (!newClientData.denominacion || !newClientData.razonSocial || !newClientData.provincia || !newClientData.localidad) {
                     return toast({ title: "Faltan datos obligatorios del cliente nuevo", variant: "destructive" });
                 }
-                
                 const cleanedCuit = cleanCuit(newClientData.cuit);
                 if (cleanedCuit) {
                     const exists = clients.find(c => cleanCuit(c.cuit) === cleanedCuit);
@@ -229,61 +315,98 @@ export default function AppCanjesMobile() {
             }
 
             const clientOwnerName = selectedClient?.ownerName || userInfo!.name;
-
-            const oppId = await createOpportunity({
-                title: oppTitle,
-                clientId: finalClientId,
-                clientName: finalClientName,
-                value: Number(oppValue),
-                stage: 'Cerrado - Ganado', 
-                closeDate: new Date().toISOString(),
-                createdAt: new Date().toISOString(),
-                formaDePago: [],
-                periodicidad: [],
-            }, userInfo!.id, userInfo!.name, clientOwnerName);
-
-            const canjeId = await saveConvenioCanje({
-                clientId: finalClientId,
-                clientName: finalClientName,
-                advisorId: userInfo!.id,
-                advisorName: userInfo!.name,
-                opportunityId: oppId,
-                radioEntrega,
-                clienteEntrega,
-                fechaInicio: new Date(fechaInicio).toISOString(),
-                fechaFin: new Date(fechaFin).toISOString(),
-                observaciones: `Facturación: ${billingType}` 
-            }, userInfo!.id, userInfo!.name);
-
             const formValues = form.getValues();
             const validSrlItems = formValues.srlItems?.filter(item => item.month) || [];
             const validSasItems = formValues.sasItems?.filter(item => item.month) || [];
 
-            const adOrderPayload = {
-                clientId: finalClientId,
-                clientName: finalClientName,
-                product: oppTitle,
-                accountExecutive: userInfo!.name,
-                opportunityId: oppId,
-                opportunityTitle: oppTitle,
-                canjeId: canjeId,
-                startDate: new Date(fechaInicio).toISOString(),
-                endDate: new Date(fechaFin).toISOString(),
-                materialSent: false,
-                materialUrls: materialUrls.filter(u => u.trim() !== ''),
-                certReq: false,
-                agencySale: false,
-                commissionSrl: 0,
-                adjustmentSas: 0,
-                adjustmentSrl: 0,
-                observations: formValues.observations || `PAUTA POR CANJE.\nFacturación solicitada: ${billingType}`,
-                srlItems: validSrlItems,
-                sasItems: validSasItems,
-                createdBy: userInfo!.id
-            };
+            if (editId) {
+                // 🟢 FLUJO DE ACTUALIZACIÓN
+                await updateOpportunity(editOppId!, {
+                    title: oppTitle,
+                    value: Number(oppValue),
+                    clientId: finalClientId,
+                    clientName: finalClientName
+                }, userInfo!.id, userInfo!.name, clientOwnerName);
 
-            await createAdvertisingOrder(JSON.parse(JSON.stringify(adOrderPayload)));
+                await updateConvenioCanje(editId, {
+                    clientId: finalClientId,
+                    clientName: finalClientName,
+                    radioEntrega,
+                    clienteEntrega,
+                    fechaInicio: new Date(fechaInicio).toISOString(),
+                    fechaFin: new Date(fechaFin).toISOString(),
+                    observaciones: `Facturación: ${billingType}` 
+                }, userInfo!.id, userInfo!.name);
 
+                if (editAdOrderId) {
+                    await updateAdvertisingOrder(editAdOrderId, {
+                        clientId: finalClientId,
+                        clientName: finalClientName,
+                        product: oppTitle,
+                        opportunityTitle: oppTitle,
+                        startDate: new Date(fechaInicio).toISOString(),
+                        endDate: new Date(fechaFin).toISOString(),
+                        materialUrls: materialUrls.filter(u => u.trim() !== ''),
+                        observations: formValues.observations ? `${formValues.observations}\nFacturación: ${billingType}` : `PAUTA POR CANJE.\nFacturación: ${billingType}`,
+                        srlItems: validSrlItems,
+                        sasItems: validSasItems,
+                    }, userInfo!.id, userInfo!.name);
+                }
+
+            } else {
+                // 🟢 FLUJO DE CREACIÓN NUEVA
+                const oppId = await createOpportunity({
+                    title: oppTitle,
+                    clientId: finalClientId,
+                    clientName: finalClientName,
+                    value: Number(oppValue),
+                    stage: 'Cerrado - Ganado', 
+                    closeDate: new Date().toISOString(),
+                    createdAt: new Date().toISOString(),
+                    formaDePago: [],
+                    periodicidad: [],
+                }, userInfo!.id, userInfo!.name, clientOwnerName);
+
+                const canjeId = await saveConvenioCanje({
+                    clientId: finalClientId,
+                    clientName: finalClientName,
+                    advisorId: userInfo!.id,
+                    advisorName: userInfo!.name,
+                    opportunityId: oppId,
+                    radioEntrega,
+                    clienteEntrega,
+                    fechaInicio: new Date(fechaInicio).toISOString(),
+                    fechaFin: new Date(fechaFin).toISOString(),
+                    observaciones: `Facturación: ${billingType}` 
+                }, userInfo!.id, userInfo!.name);
+
+                const adOrderPayload = {
+                    clientId: finalClientId,
+                    clientName: finalClientName,
+                    product: oppTitle,
+                    accountExecutive: userInfo!.name,
+                    opportunityId: oppId,
+                    opportunityTitle: oppTitle,
+                    canjeId: canjeId,
+                    startDate: new Date(fechaInicio).toISOString(),
+                    endDate: new Date(fechaFin).toISOString(),
+                    materialSent: false,
+                    materialUrls: materialUrls.filter(u => u.trim() !== ''),
+                    certReq: false,
+                    agencySale: false,
+                    commissionSrl: 0,
+                    adjustmentSas: 0,
+                    adjustmentSrl: 0,
+                    observations: formValues.observations || `PAUTA POR CANJE.\nFacturación solicitada: ${billingType}`,
+                    srlItems: validSrlItems,
+                    sasItems: validSasItems,
+                    createdBy: userInfo!.id
+                };
+
+                await createAdvertisingOrder(JSON.parse(JSON.stringify(adOrderPayload)));
+            }
+
+            // 🟢 Generar PDFs y Enviar Email
             const token = await getGoogleAccessToken();
             if (token && convenioPdfRef.current && pautadoPdfRef.current) {
                 const convenio64 = await generatePdfBase64(convenioPdfRef.current);
@@ -301,28 +424,28 @@ export default function AppCanjesMobile() {
 
                 const emailBody = `
                     <div style="font-family: Arial, sans-serif; color: #333;">
-                        <h2 style="color: #dc2626;">Nuevo Ingreso por Canje</h2>
-                        <p>El asesor <strong>${userInfo!.name}</strong> ha cerrado un nuevo canje mediante la App Móvil.</p>
+                        <h2 style="color: #dc2626;">${editId ? 'Canje Editado' : 'Nuevo Ingreso por Canje'}</h2>
+                        <p>El asesor <strong>${userInfo!.name}</strong> ha ${editId ? 'editado' : 'cerrado'} un canje mediante la App Móvil.</p>
                         <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #dc2626; margin: 20px 0;">
                             <p><strong>Cliente:</strong> ${finalClientName} ${isNewClient ? '<span style="color:#2563eb; font-weight:bold;">(CLIENTE NUEVO - Se adjunta Alta)</span>' : ''}</p>
                             <p><strong>Valor Canje:</strong> $${Number(oppValue).toLocaleString('es-AR')}</p>
                             <p><strong>Facturación:</strong> ${billingType}</p>
                             <p><strong>Vigencia:</strong> ${format(new Date(fechaInicio), 'dd/MM/yyyy')} al ${format(new Date(fechaFin), 'dd/MM/yyyy')}</p>
                         </div>
-                        <p>Se adjuntan los documentos correspondientes generados por el sistema.</p>
+                        <p>Se adjuntan los documentos correspondientes actualizados.</p>
                     </div>
                 `;
 
                 await sendEmail({
                     accessToken: token,
                     to: ['lchena@airedesantafe.com.ar', userInfo!.email], 
-                    subject: `Nuevo Canje: ${finalClientName} - ${userInfo!.name}`,
+                    subject: `${editId ? 'Edición de Canje:' : 'Nuevo Canje:'} ${finalClientName} - ${userInfo!.name}`,
                     body: emailBody,
                     attachments
                 });
             }
 
-            toast({ title: '¡Canje procesado y enviado con éxito!' });
+            toast({ title: editId ? '¡Canje actualizado con éxito!' : '¡Canje procesado y enviado con éxito!' });
             loadData(); 
             setView('list'); 
             resetWizard();
@@ -336,6 +459,8 @@ export default function AppCanjesMobile() {
     };
 
     if (loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Spinner size="large" /></div>;
+
+    const isBossOrAdmin = userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion' || userInfo?.role === 'Admin';
 
     // --- VISTA: DETALLE DE UN CANJE ---
     if (view === 'detail' && selectedCanjeDetail) {
@@ -351,7 +476,10 @@ export default function AppCanjesMobile() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-xl">Canje con {selectedCanjeDetail.clientName}</CardTitle>
-                            <CardDescription>Cargado el: {format(parseISO(selectedCanjeDetail.createdAt), 'dd/MM/yyyy')}</CardDescription>
+                            <CardDescription>
+                                Cargado el: {format(parseISO(selectedCanjeDetail.createdAt), 'dd/MM/yyyy')} 
+                                <br /> Por: {selectedCanjeDetail.advisorName}
+                            </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div>
@@ -375,6 +503,20 @@ export default function AppCanjesMobile() {
                                 </div>
                             )}
                         </CardContent>
+                        
+                        <CardFooter className="flex flex-col sm:flex-row gap-3 pt-6 border-t bg-slate-50/50 rounded-b-lg">
+                            <Button variant="outline" className="w-full sm:flex-1 border-2" onClick={() => loadForEditOrClone('edit')}>
+                                <Edit className="mr-2 h-4 w-4" /> Editar
+                            </Button>
+                            <Button variant="outline" className="w-full sm:flex-1 border-2" onClick={() => loadForEditOrClone('clone')}>
+                                <Copy className="mr-2 h-4 w-4" /> Duplicar
+                            </Button>
+                            {isBossOrAdmin && (
+                                <Button variant="destructive" className="w-full sm:flex-1" onClick={handleDeleteCanje}>
+                                    <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                                </Button>
+                            )}
+                        </CardFooter>
                     </Card>
                 </main>
             </div>
@@ -423,7 +565,7 @@ export default function AppCanjesMobile() {
                 </main>
 
                 <div className="fixed bottom-6 right-6 z-20">
-                    <Button size="icon" className="h-16 w-16 rounded-full shadow-xl bg-red-600 hover:bg-red-700" onClick={() => setView('form')}>
+                    <Button size="icon" className="h-16 w-16 rounded-full shadow-xl bg-red-600 hover:bg-red-700" onClick={() => { resetWizard(); setView('form'); }}>
                         <Plus className="h-8 w-8 text-white" />
                     </Button>
                 </div>
@@ -441,7 +583,7 @@ export default function AppCanjesMobile() {
                         <Button variant="ghost" size="icon" className="text-white hover:bg-red-700 h-8 w-8 -ml-2" onClick={() => { resetWizard(); setView('list'); }}>
                             <ArrowLeft className="h-5 w-5"/>
                         </Button>
-                        <h1 className="font-bold text-lg">Nuevo Canje</h1>
+                        <h1 className="font-bold text-lg">{editId ? 'Editar Canje' : 'Nuevo Canje'}</h1>
                     </div>
                     <span className="text-xs bg-red-800 px-2 py-1 rounded-full">Paso {step} / 5</span>
                 </div>
@@ -472,13 +614,26 @@ export default function AppCanjesMobile() {
                                     {searchQuery.length > 0 && searchQuery.length < 3 && <p className="text-sm text-muted-foreground text-center">Escribe 3 caracteres mínimo...</p>}
 
                                     <div className="space-y-2">
+                                        {/* SI ESTAMOS EN EDICIÓN, MOSTRAMOS EL CLIENTE SELECCIONADO ARRIBA */}
+                                        {editId && selectedClient && searchQuery === '' && (
+                                            <div className="p-4 border border-red-500 bg-red-50 rounded-lg flex flex-col justify-center mb-4">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="font-medium text-lg">{selectedClient.denominacion} {selectedClient.razonSocial ? `(${selectedClient.razonSocial})` : ''}</span>
+                                                    <CheckCircle2 className="text-red-500 h-5 w-5" />
+                                                </div>
+                                                <span className="text-xs text-red-600 mt-1">Cliente actual del canje</span>
+                                            </div>
+                                        )}
+
                                         {searchResults.map(item => {
                                             const isClient = 'denominacion' in item;
                                             const name = isClient ? item.denominacion : item.companyName;
                                             const razonSocial = isClient ? item.razonSocial : '';
                                             const ownerId = item.ownerId;
                                             const ownerName = item.ownerName || 'Sin asignar';
-                                            const canSelect = isClient && (ownerId === userInfo?.id || userInfo?.role === 'Admin' || (item as Client).allowCanjes === true);
+                                            const canSelect = isClient && (ownerId === userInfo?.id || userInfo?.role === 'Admin' || (item as Client).allowCanjes === true || isBossOrAdmin);
+
+                                            if (editId && selectedClient?.id === item.id && searchQuery === '') return null; // Ya se muestra arriba
 
                                             return (
                                                 <div 
@@ -648,15 +803,15 @@ export default function AppCanjesMobile() {
                     <Card className="border-0 shadow-sm bg-green-50 border-green-200 animate-in zoom-in-95">
                         <CardHeader className="text-center pb-2">
                             <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-2" />
-                            <CardTitle className="text-2xl text-green-800">Todo listo para enviar</CardTitle>
+                            <CardTitle className="text-2xl text-green-800">Todo listo para {editId ? 'actualizar' : 'enviar'}</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4 text-center">
                             <p className="text-slate-600">Al tocar el botón de abajo, se procesará automáticamente:</p>
                             <ul className="text-left text-sm space-y-2 bg-white p-4 rounded-lg border shadow-sm">
-                                <li>👤 {isNewClient ? 'Alta de cliente (con PDF de Alta)' : 'Asignación a cliente existente'}</li>
-                                <li>💼 Oportunidad ganada (${oppValue} / {billingType})</li>
-                                <li>📄 PDF "Convenio de Canje"</li>
-                                <li>📢 PDF "Orden de Publicidad"</li>
+                                <li>👤 {isNewClient ? 'Alta de cliente (con PDF de Alta)' : (editId ? 'Actualización de cliente' : 'Asignación a cliente existente')}</li>
+                                <li>💼 {editId ? 'Actualización de Oportunidad' : 'Oportunidad ganada'} (${oppValue} / {billingType})</li>
+                                <li>📄 PDF "Convenio de Canje" actualizado</li>
+                                <li>📢 PDF "Orden de Publicidad" actualizado</li>
                                 <li>📧 Email adjunto a Gerencia y a tu correo.</li>
                             </ul>
                         </CardContent>
@@ -677,7 +832,7 @@ export default function AppCanjesMobile() {
                     </Button>
                 ) : (
                     <Button className="flex-1 h-14 text-lg rounded-full shadow-lg bg-green-600 hover:bg-green-700" onClick={handleFinalSubmit} disabled={isSubmitting}>
-                        {isSubmitting ? <Spinner color="white" /> : 'Confirmar y Enviar'}
+                        {isSubmitting ? <Spinner color="white" /> : (editId ? 'Guardar Cambios' : 'Confirmar y Enviar')}
                     </Button>
                 )}
             </div>
