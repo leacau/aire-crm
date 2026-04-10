@@ -120,17 +120,23 @@ export const SocialMediaPdf = React.forwardRef<HTMLDivElement, SocialMediaPdfPro
 
                {request.contentType === 'Carrusel' && (
                     <>
-                        <SectionTitle title="3. Detalles del Carrusel" />
-                        <div className="grid grid-cols-2 gap-4">
+                        <SectionTitle title={`3. Slides del Carrusel (${request.carouselSlides?.length || 0})`} />
+                        <div className="grid grid-cols-2 gap-4 mb-2">
                             <Field label="¿Va colaborado?" value={request.reelCollaboration} />
                             {request.reelCollaboration && <Field label="Cuenta a colaborar" value={request.reelCollabHandle} />}
                         </div>
-                        {request.reelCopy && (
-                            <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded">
-                                <span className="font-bold text-sm block mb-1">Copy / Texto estimado:</span>
-                                <p className="text-sm whitespace-pre-wrap">{request.reelCopy}</p>
+                        
+                        {request.carouselSlides && request.carouselSlides.map((slide, i) => (
+                            <div key={i} className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded">
+                                <span className="font-bold text-sm block text-purple-900 mb-1">Slide #{i + 1}</span>
+                                {slide.text && <p className="text-sm whitespace-pre-wrap mb-2">{slide.text}</p>}
+                                {slide.link && (
+                                    <a href={slide.link.startsWith('http') ? slide.link : `https://${slide.link}`} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline font-bold text-xs">
+                                        👉 Enlace a material
+                                    </a>
+                                )}
                             </div>
-                        )}
+                        ))}
                     </>
                 )}
             </div>
