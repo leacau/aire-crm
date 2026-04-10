@@ -24,7 +24,6 @@ import {
   Upload,
   Crosshair,
   MessageSquare,
-  Data,
   Database,
   FileSpreadsheet,
   ClipboardList,
@@ -40,13 +39,12 @@ import {
   StickyNote,
   ScrollText,
   Share2, 
-  Smartphone, // 🟢 ÍCONO PARA LA APP MÓVIL
+  Smartphone,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useMemo, useState, useEffect } from 'react';
 
-// Importamos los componentes de UI
 import {
   Sidebar,
   SidebarContent,
@@ -108,7 +106,6 @@ export function AppSidebar() {
 
   const rawSidebarEntries: SidebarEntry[] = [
     { title: 'Dashboard', href: '/', icon: LayoutDashboard, screenName: 'Dashboard' },
-    // 🟢 APP MÓVIL DE CANJES (SOLO VISIBLE PARA ESE ROL O ADMINS)
     { title: 'App Móvil Canjes', href: '/app-canjes', icon: Smartphone, screenName: 'AppCanjes' },
     {
       groupLabel: 'Comercial',
@@ -171,38 +168,44 @@ export function AppSidebar() {
     if (!userInfo) return [];
 
     const hasPermission = (item: SidebarItem) => {
-      // 🟢 Si es Asesor de Canjes, SOLO ve su App (ni siquiera el Dashboard)
-      if (userInfo.role === 'Asesor Canjes') {
-          return item.screenName === 'AppCanjes';
-      }
 
-      // 1. Super Admin siempre tiene acceso a todo (incluso la app móvil para testear)
-      if (userInfo.email === 'lchena@airedesantafe.com.ar' || userInfo.role === 'Admin') return true;
+      // 1. Super Admin, Jefes y Administración siempre tienen acceso a todo
+      if (
+          userInfo.email === 'lchena@airedesantafe.com.ar' || 
+          hasManagementPrivileges(userInfo) || 
+          userInfo.role === 'Administracion'
+      ) return true;
 
-      // 2. Dashboard siempre visible (excepto para Asesor Canjes, manejado arriba)
-      if (item.screenName === 'Dashboard') return true;
-
-      // 3. Chequeo de Permisos Explícitos
+      // 2. Chequeo de Permisos Explícitos customizados
       if (userInfo.permissions && Object.keys(userInfo.permissions).length > 0) {
         return !!userInfo.permissions[item.screenName]?.view;
       }
       
-      // 4. Lógica de Respaldo (Fallback) si no hay objeto permissions
-      if (userInfo.role === 'Asesor') {
-        const allowedScreens: ScreenName[] = [
-          'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
+      // 3. Lógica según Área / Rol (Optimizando la carga)
+      const allowedScreens: ScreenName[] = [];
+
+      if (userInfo.role === 'Asesor Canjes' || userInfo.area === 'Canjes') {
+         allowedScreens.push('Dashboard', 'AppCanjes', 'Clients', 'Prospectos', 'Canjes', 'Grilla', 'Notas', 'Chat');
+      } 
+      else if (userInfo.area === 'Pautado' || userInfo.area === 'Programación') {
+         allowedScreens.push('Dashboard', 'Grilla', 'PNTs', 'Notas', 'Publicidad', 'Clients', 'Chat');
+      }
+      else if (userInfo.area === 'Redacción' || userInfo.area === 'Redes' || userInfo.area === 'Audiovisual') {
+         allowedScreens.push('Dashboard', 'Redes', 'Notas', 'Chat');
+      }
+      else if (userInfo.area === 'Recursos Humanos') {
+         allowedScreens.push('Dashboard', 'Licenses', 'Team', 'Chat');
+      }
+      else if (userInfo.role === 'Asesor' || userInfo.area === 'Comercial') {
+         // El Asesor Comercial estándar
+         allowedScreens.push(
+          'Dashboard', 'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
           'Canjes', 'Quotes', 'Approvals', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
           'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes'
-        ];
-        return allowedScreens.includes(item.screenName);
+         );
       }
 
-      // Si es Jefe, Gerencia o Administración y no tiene permisos, mostrar todo por defecto
-      if (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion') {
-        return true;
-      }
-
-      return false; 
+      return allowedScreens.includes(item.screenName);
     };
 
     return rawSidebarEntries.reduce<SidebarEntry[]>((acc, entry) => {
