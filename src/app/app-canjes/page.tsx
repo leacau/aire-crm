@@ -60,7 +60,7 @@ export default function AppCanjesMobile() {
     // --- DATA ---
     const [myCanjes, setMyCanjes] = useState<ConvenioCanje[]>([]);
     const [selectedCanjeDetail, setSelectedCanjeDetail] = useState<ConvenioCanje | null>(null);
-    const [selectedAdOrder, setSelectedAdOrder] = useState<AdvertisingOrder | null>(null); // 🟢 ORDEN DE PUBLICIDAD ASOCIADA
+    const [selectedAdOrder, setSelectedAdOrder] = useState<AdvertisingOrder | null>(null); // 🟢 ESTADO PARA LA OP
     const [clients, setClients] = useState<Client[]>([]);
     const [prospects, setProspects] = useState<Prospect[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
@@ -708,7 +708,7 @@ export default function AppCanjesMobile() {
                                             const razonSocial = isClient ? item.razonSocial : '';
                                             const ownerId = item.ownerId;
                                             const ownerName = item.ownerName || 'Sin asignar';
-                                            const canSelect = isClient && (ownerId === userInfo?.id || userInfo?.role === 'Admin' || (item as Client).allowCanjes === true || isBossOrAdmin);
+                                            const canSelect = isClient && (ownerId === userInfo?.id || userInfo?.role === 'Administracion' || (item as Client).allowCanjes === true || isBossOrAdmin);
 
                                             if (editId && selectedClient?.id === item.id && searchQuery === '') return null; // Ya se muestra arriba
 
