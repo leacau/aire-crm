@@ -69,6 +69,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { hasManagementPrivileges } from '@/lib/role-utils';
 
 
 type TaskStatus = 'overdue' | 'dueToday' | 'dueTomorrow';
@@ -159,16 +160,22 @@ const TaskSummaryCard = ({ title, count, icon, onClick, isSelected }: { title: s
 
 const EXCLUDED_OWNERS_FOR_BOSS_BILLING = ['Mario Altamirano', 'Corporativo', 'Sin Asesor', 'Sin propietario'];
 
-// Helper for currency formatting
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
 };
 
 export default function DashboardPage() {
-  const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const { userInfo, loading: authLoading } = useAuth();
+  
+  // 🟢 Determinamos el nivel de acceso en base al nuevo sistema
+  const isBoss = userInfo ? (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion') : false;
+  // Áreas restringidas que no deberían cargar ni facturas ni oportunidades para ahorrar recursos
+  const isLightWeightArea = userInfo?.area && ['Pautado', 'Programación', 'Redacción', 'Redes', 'Audiovisual', 'Recursos Humanos', 'Canjes'].includes(userInfo.area);
+
   const router = useRouter();
   const { toast } = useToast();
   const { notificationPermission, requestNotificationPermission, showNotification } = useNotifications();
+  
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [tasks, setTasks] = useState<ClientActivity[]>([]);
@@ -177,7 +184,6 @@ export default function DashboardPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   
-  // 🟢 ESTADOS DE CARGA ESCALONADA PARA MEJORAR VELOCIDAD
   const [loadingData, setLoadingData] = useState(true);
 
   const [notified, setNotified] = useState(false);
@@ -195,44 +201,45 @@ export default function DashboardPage() {
     };
   }, [selectedDate]);
 
-  // 🟢 LÓGICA DE CARGA PROGRESIVA / ESCALONADA
   useEffect(() => {
     if (!userInfo) return;
     let isMounted = true;
     setLoadingData(true);
 
-    // 1. Carga Rápida: Usuarios y Clientes
-    Promise.all([getAllUsers(), getClients()]).then(([u, c]) => {
+    // 1. Carga Rápida
+    Promise.all([getAllUsers(), getClients(), getAllClientActivities()]).then(([u, c, t]) => {
         if (!isMounted) return;
         setUsers(u);
         setAdvisors(u.filter(x => x.role === 'Asesor'));
         setClients(c);
-    }).catch(console.error);
-
-    // 2. Carga Rápida: Tareas
-    getAllClientActivities().then(t => {
-        if (!isMounted) return;
         setTasks(t);
-    }).catch(console.error);
+        
+        // 🟢 OPTIMIZACIÓN: Si es un área ligera (Ej: Pautado, Redes), cortamos acá y no cargamos las finanzas
+        if (isLightWeightArea && !isBoss) {
+            setLoadingData(false);
+            return;
+        }
 
-    // 3. Carga Pesada: Finanzas y Oportunidades
-    Promise.all([
-        getAllOpportunities(userInfo, isBoss),
-        getInvoices(),
-        getPaymentEntries()
-    ]).then(([o, i, p]) => {
-        if (!isMounted) return;
-        setOpportunities(o);
-        setInvoices(i);
-        setPaymentEntries(p);
-        setLoadingData(false); // Todo cargado
-    }).catch(error => {
-        console.error("Error fetching heavy dashboard data:", error);
-        if (isMounted) setLoadingData(false);
-    });
+        // 2. Carga Pesada (Solo para Comercial, Admin, Jefes)
+        Promise.all([
+            getAllOpportunities(),
+            getInvoices(),
+            getPaymentEntries()
+        ]).then(([o, i, p]) => {
+            if (!isMounted) return;
+            setOpportunities(o);
+            setInvoices(i);
+            setPaymentEntries(p);
+            setLoadingData(false); 
+        }).catch(error => {
+            console.error("Error fetching heavy dashboard data:", error);
+            if (isMounted) setLoadingData(false);
+        });
+
+    }).catch(console.error);
 
     return () => { isMounted = false; };
-  }, [userInfo, isBoss]);
+  }, [userInfo, isBoss, isLightWeightArea]);
   
   const { 
     userOpportunities, 
@@ -278,7 +285,6 @@ export default function DashboardPage() {
 
   }, [userInfo, isBoss, selectedAdvisor, opportunities, clients, tasks, invoices, paymentEntries]);
 
-
   const today = startOfToday();
   const overdueTasks = userTasks.filter(t => {
       if (t.completed || !t.dueDate) return false;
@@ -299,9 +305,8 @@ export default function DashboardPage() {
     }
   }, [loadingData, hasPendingTasks]);
 
-
   useEffect(() => {
-    if (loadingData || isBoss) return; // Notifications only for non-bosses
+    if (loadingData || isBoss) return; 
 
     if (hasPendingTasks && notificationPermission === 'default') {
         toast({
@@ -320,7 +325,7 @@ export default function DashboardPage() {
         showNotification('Tareas Pendientes', {
             body: notificationBody,
         });
-        setNotified(true); // Mark as notified for this session
+        setNotified(true); 
     }
   }, [
       loadingData, 
@@ -362,7 +367,7 @@ export default function DashboardPage() {
           toast({ title: `Tarea ${completed ? 'completada' : 'marcada como pendiente'}`});
       } catch (error) {
            console.error("Error updating task status", error);
-           setTasks(prevTasks => prevTasks.map(t => t.id === task.id ? task : t)); // Revert on error
+           setTasks(prevTasks => prevTasks.map(t => t.id === task.id ? task : t)); 
            toast({ title: "Error al actualizar la tarea", variant: 'destructive' });
       }
   }
@@ -385,7 +390,6 @@ export default function DashboardPage() {
   };
 
 
-  // 🟢 QUITAMOS EL SPINNER GLOBAL DE LOADINGDATA PARA QUE LA PANTALLA CARGUE AL INSTANTE
   if (authLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
@@ -469,9 +473,7 @@ export default function DashboardPage() {
 
   const totalClients = userClients.length;
 
-  // --- VISUALIZATION LOGIC ---
-
-  const showManagementView = userInfo?.role === 'Admin' || (isBoss && userInfo?.area === 'Comercial');
+  const showManagementView = userInfo?.role === 'Administracion' || (isBoss && userInfo?.area === 'Comercial');
   const now = new Date();
   
   const startOfLastMonth = startOfMonth(subMonths(now, 1));
@@ -522,7 +524,6 @@ export default function DashboardPage() {
       rowData.totalYear = total;
       return rowData;
   }).sort((a, b) => b.totalYear - a.totalYear);
-
 
   const getDaysLatePayment = (payment: PaymentEntry) => {
       if (!payment.dueDate) return 0;
@@ -589,8 +590,10 @@ export default function DashboardPage() {
     )}
     <div className="flex flex-col h-full">
       <Header title="Panel">
-        <DynamicMonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
-        {isBoss && (
+        {(!isLightWeightArea || isBoss) && (
+            <DynamicMonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
+        )}
+        {isBoss && !isLightWeightArea && (
           <Select value={selectedAdvisor} onValueChange={setSelectedAdvisor}>
             <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Filtrar por asesor" />
@@ -605,62 +608,72 @@ export default function DashboardPage() {
         )}
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
+        
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          <Link href="/billing?tab=to-collect">
-            <Card className="hover:bg-muted/50 transition-colors">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Facturación del Período
-                </CardTitle>
-                <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {loadingData ? <Skeleton className="h-8 w-32" /> : formatCurrency(totalBillingInPeriod)}
-                </div>
-                {loadingData ? (
-                   <Skeleton className="h-4 w-48 mt-2" />
-                ) : (
-                   <p className="text-xs text-muted-foreground">
-                      Pagado: {formatCurrency(totalPaidInPeriod)} / A cobrar: {formatCurrency(totalToCollectInPeriod)}
-                   </p>
-                )}
-                 {loadingData ? (
-                   <Skeleton className="h-4 w-48 mt-1" />
-                 ) : (
-                   <p className="text-xs text-muted-foreground mt-1">
-                      Mes Anterior: {formatCurrency(previousMonthBilling)}
-                   </p>
-                 )}
-                 {loadingData ? (
-                    <Skeleton className="h-4 w-32 mt-1" />
-                 ) : (
-                    <p className={cn("text-xs font-medium flex items-center mt-1", billingDifference >= 0 ? "text-green-600" : "text-red-600")}>
-                      {billingDifference >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
-                      Dif: {formatCurrency(billingDifference)}
+          
+          {/* 🟢 Si es Pautado, RRHH, etc, ocultamos la tarjeta de Facturación */}
+          {(!isLightWeightArea || isBoss) && (
+              <Link href="/billing?tab=to-collect">
+                <Card className="hover:bg-muted/50 transition-colors">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Facturación del Período
+                    </CardTitle>
+                    <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {loadingData ? <Skeleton className="h-8 w-32" /> : formatCurrency(totalBillingInPeriod)}
+                    </div>
+                    {loadingData ? (
+                       <Skeleton className="h-4 w-48 mt-2" />
+                    ) : (
+                       <p className="text-xs text-muted-foreground">
+                          Pagado: {formatCurrency(totalPaidInPeriod)} / A cobrar: {formatCurrency(totalToCollectInPeriod)}
+                       </p>
+                    )}
+                     {loadingData ? (
+                       <Skeleton className="h-4 w-48 mt-1" />
+                     ) : (
+                       <p className="text-xs text-muted-foreground mt-1">
+                          Mes Anterior: {formatCurrency(previousMonthBilling)}
+                       </p>
+                     )}
+                     {loadingData ? (
+                        <Skeleton className="h-4 w-32 mt-1" />
+                     ) : (
+                        <p className={cn("text-xs font-medium flex items-center mt-1", billingDifference >= 0 ? "text-green-600" : "text-red-600")}>
+                          {billingDifference >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
+                          Dif: {formatCurrency(billingDifference)}
+                        </p>
+                     )}
+                  </CardContent>
+                </Card>
+              </Link>
+          )}
+
+          {/* 🟢 Idem para Oportunidades ("En Cartera") */}
+          {(!isLightWeightArea || isBoss) && (
+              <Link href="/opportunities">
+                <Card className="hover:bg-muted/50 transition-colors">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      En Cartera
+                    </CardTitle>
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {loadingData ? <Skeleton className="h-8 w-32" /> : formatCurrency(forecastedValue)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Propuesta, Negociación y Aprobación.
                     </p>
-                 )}
-              </CardContent>
-            </Card>
-          </Link>
-           <Link href="/opportunities">
-            <Card className="hover:bg-muted/50 transition-colors">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  En Cartera
-                </CardTitle>
-                <Briefcase className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {loadingData ? <Skeleton className="h-8 w-32" /> : formatCurrency(forecastedValue)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Propuesta, Negociación y Aprobación.
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
+                  </CardContent>
+                </Card>
+              </Link>
+          )}
+          
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Clientes Totales</CardTitle>
@@ -668,17 +681,17 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {loadingData ? <Skeleton className="h-8 w-16" /> : totalClients}
+                {totalClients}
               </div>
               <p className="text-xs text-muted-foreground">
-                Total de clientes en cartera.
+                Total de clientes en tu cartera.
               </p>
             </CardContent>
           </Card>
         </div>
 
         <div className="mt-6 flex flex-col gap-6" ref={tasksSectionRef}>
-            {/* Tareas */}
+            {/* Tareas (Quedan visibles para todos) */}
             <Card className="w-full">
                  <CardHeader>
                     <CardTitle>Tareas Pendientes</CardTitle>
@@ -687,38 +700,30 @@ export default function DashboardPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {loadingData ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <Skeleton className="h-24 w-full rounded-xl" />
-                            <Skeleton className="h-24 w-full rounded-xl" />
-                            <Skeleton className="h-24 w-full rounded-xl" />
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <TaskSummaryCard 
-                                title="Vencidas"
-                                count={overdueTasks.length}
-                                icon={<AlertTriangle className="h-5 w-5 text-red-500" />}
-                                onClick={() => handleTaskStatusSelect('overdue')}
-                                isSelected={selectedTaskStatus === 'overdue'}
-                            />
-                            <TaskSummaryCard 
-                                title="Vencen Hoy"
-                                count={dueTodayTasks.length}
-                                icon={<CalendarCheck className="h-5 w-5 text-blue-500" />}
-                                onClick={() => handleTaskStatusSelect('dueToday')}
-                                isSelected={selectedTaskStatus === 'dueToday'}
-                            />
-                            <TaskSummaryCard 
-                                title="Vencen Mañana"
-                                count={dueTomorrowTasks.length}
-                                icon={<CalendarClock className="h-5 w-5 text-yellow-500" />}
-                                onClick={() => handleTaskStatusSelect('dueTomorrow')}
-                                 isSelected={selectedTaskStatus === 'dueTomorrow'}
-                            />
-                        </div>
-                    )}
-                     {selectedTaskStatus && !loadingData && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <TaskSummaryCard 
+                            title="Vencidas"
+                            count={overdueTasks.length}
+                            icon={<AlertTriangle className="h-5 w-5 text-red-500" />}
+                            onClick={() => handleTaskStatusSelect('overdue')}
+                            isSelected={selectedTaskStatus === 'overdue'}
+                        />
+                        <TaskSummaryCard 
+                            title="Vencen Hoy"
+                            count={dueTodayTasks.length}
+                            icon={<CalendarCheck className="h-5 w-5 text-blue-500" />}
+                            onClick={() => handleTaskStatusSelect('dueToday')}
+                            isSelected={selectedTaskStatus === 'dueToday'}
+                        />
+                        <TaskSummaryCard 
+                            title="Vencen Mañana"
+                            count={dueTomorrowTasks.length}
+                            icon={<CalendarClock className="h-5 w-5 text-yellow-500" />}
+                            onClick={() => handleTaskStatusSelect('dueTomorrow')}
+                             isSelected={selectedTaskStatus === 'dueTomorrow'}
+                        />
+                    </div>
+                     {selectedTaskStatus && (
                         <TaskSection 
                            title={
                              selectedTaskStatus === 'overdue' ? 'Detalle de Tareas Vencidas' :
@@ -738,164 +743,168 @@ export default function DashboardPage() {
                 </CardContent>
             </Card>
 
-            {/* Evolución de Facturación */}
-            <Card className='w-full'>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <TrendingUp className="h-5 w-5 text-primary" />
-                        Evolución de Facturación (12 meses anteriores)
-                    </CardTitle>
-                    <CardDescription>
-                        {showManagementView 
-                            ? "Comparativa de facturación por asesor (excluyendo mes en curso)." 
-                            : "Tu histórico de facturación (excluyendo mes en curso)."}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className='min-h-[300px]'>
-                    {loadingData ? (
-                         <Skeleton className="h-[300px] w-full" />
-                    ) : showManagementView ? (
-                         <div className="overflow-auto max-h-[400px]">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Asesor</TableHead>
-                                        <TableHead className='text-right'>Total Año</TableHead>
-                                        {billingTableColumns.map(col => (
-                                            <TableHead key={col.toISOString()} className='text-right whitespace-nowrap'>
-                                                {format(col, 'MMM yy', { locale: es })}
-                                            </TableHead>
-                                        ))}
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {billingTableData.map((row) => (
-                                        <TableRow key={row.advisorId}>
-                                            <TableCell className="font-medium">{row.advisorName}</TableCell>
-                                            <TableCell className='text-right font-bold'>{formatCurrency(row.totalYear)}</TableCell>
-                                            {billingTableColumns.map(col => (
-                                                <TableCell key={col.toISOString()} className='text-right'>
-                                                    {formatCurrency(row[format(col, 'MMM yy', { locale: es })] || 0)}
-                                                </TableCell>
+            {/* 🟢 Ocultar Gráficos de Finanzas para áreas ligeras */}
+            {(!isLightWeightArea || isBoss) && (
+                <>
+                    {/* Evolución de Facturación */}
+                    <Card className='w-full'>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <TrendingUp className="h-5 w-5 text-primary" />
+                                Evolución de Facturación (12 meses anteriores)
+                            </CardTitle>
+                            <CardDescription>
+                                {showManagementView 
+                                    ? "Comparativa de facturación por asesor (excluyendo mes en curso)." 
+                                    : "Tu histórico de facturación (excluyendo mes en curso)."}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className='min-h-[300px]'>
+                            {loadingData ? (
+                                 <Skeleton className="h-[300px] w-full" />
+                            ) : showManagementView ? (
+                                 <div className="overflow-auto max-h-[400px]">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Asesor</TableHead>
+                                                <TableHead className='text-right'>Total Año</TableHead>
+                                                {billingTableColumns.map(col => (
+                                                    <TableHead key={col.toISOString()} className='text-right whitespace-nowrap'>
+                                                        {format(col, 'MMM yy', { locale: es })}
+                                                    </TableHead>
+                                                ))}
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {billingTableData.map((row) => (
+                                                <TableRow key={row.advisorId}>
+                                                    <TableCell className="font-medium">{row.advisorName}</TableCell>
+                                                    <TableCell className='text-right font-bold'>{formatCurrency(row.totalYear)}</TableCell>
+                                                    {billingTableColumns.map(col => (
+                                                        <TableCell key={col.toISOString()} className='text-right'>
+                                                            {formatCurrency(row[format(col, 'MMM yy', { locale: es })] || 0)}
+                                                        </TableCell>
+                                                    ))}
+                                                </TableRow>
                                             ))}
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                         </div>
-                    ) : (
-                        <div className="h-[300px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={billingChartData}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis 
-                                        dataKey="month" 
-                                        tickLine={false}
-                                        axisLine={false}
-                                        tickMargin={8}
-                                        tick={{ fontSize: 12 }}
-                                    />
-                                    <YAxis 
-                                        tickFormatter={(value) => `$${value/1000}k`}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        tick={{ fontSize: 12 }}
-                                    />
-                                    <Tooltip 
-                                        formatter={(value: number) => formatCurrency(value)}
-                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="amount" 
-                                        stroke="hsl(var(--primary))" 
-                                        strokeWidth={2}
-                                        dot={{ r: 4, fill: "hsl(var(--primary))" }}
-                                        activeDot={{ r: 6 }}
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+                                        </TableBody>
+                                    </Table>
+                                 </div>
+                            ) : (
+                                <div className="h-[300px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={billingChartData}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                            <XAxis 
+                                                dataKey="month" 
+                                                tickLine={false}
+                                                axisLine={false}
+                                                tickMargin={8}
+                                                tick={{ fontSize: 12 }}
+                                            />
+                                            <YAxis 
+                                                tickFormatter={(value) => `$${value/1000}k`}
+                                                tickLine={false}
+                                                axisLine={false}
+                                                tick={{ fontSize: 12 }}
+                                            />
+                                            <Tooltip 
+                                                formatter={(value: number) => formatCurrency(value)}
+                                                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                            />
+                                            <Line 
+                                                type="monotone" 
+                                                dataKey="amount" 
+                                                stroke="hsl(var(--primary))" 
+                                                strokeWidth={2}
+                                                dot={{ r: 4, fill: "hsl(var(--primary))" }}
+                                                activeDot={{ r: 6 }}
+                                            />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
 
-            {/* Resumen de Mora */}
-             <Card className='w-full'>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Clock className="h-5 w-5 text-orange-500" />
-                        Resumen de Mora
-                    </CardTitle>
-                    <CardDescription>
-                         {showManagementView 
-                            ? "Estado de deuda vencida agrupada por asesor (Sección Mora, excluyendo Pagados)." 
-                            : "Tu cartera de deuda agrupada por días de atraso (Sección Mora, excluyendo Pagados)."}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className='min-h-[300px]'>
-                    {loadingData ? (
-                         <Skeleton className="h-[300px] w-full" />
-                    ) : showManagementView ? (
-                        <div className="overflow-auto max-h-[400px]">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Asesor</TableHead>
-                                        <TableHead className='text-right text-green-600'>Al día</TableHead>
-                                        <TableHead className='text-right text-yellow-600'>1-30</TableHead>
-                                        <TableHead className='text-right text-orange-600'>31-60</TableHead>
-                                        <TableHead className='text-right text-red-600'>61-90</TableHead>
-                                        <TableHead className='text-right text-red-800'>+90</TableHead>
-                                        <TableHead className='text-right font-bold'>Total</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {moraTableData.map((row) => (
-                                        <TableRow key={row.advisorId}>
-                                            <TableCell className="font-medium text-xs">{row.advisorName}</TableCell>
-                                            <TableCell className='text-right text-xs'>{formatCurrency(row['0'])}</TableCell>
-                                            <TableCell className='text-right text-xs'>{formatCurrency(row['1-30'])}</TableCell>
-                                            <TableCell className='text-right text-xs'>{formatCurrency(row['31-60'])}</TableCell>
-                                            <TableCell className='text-right text-xs'>{formatCurrency(row['61-90'])}</TableCell>
-                                            <TableCell className='text-right text-xs'>{formatCurrency(row['91+'])}</TableCell>
-                                            <TableCell className='text-right font-bold text-xs'>{formatCurrency(row.total)}</TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    ) : (
-                        <div className="h-[300px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={moraChartData} layout="vertical" margin={{ left: 20 }}>
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                    <XAxis type="number" hide />
-                                    <YAxis 
-                                        dataKey="name" 
-                                        type="category" 
-                                        width={80}
-                                        tick={{ fontSize: 12 }}
-                                        tickLine={false}
-                                        axisLine={false}
-                                    />
-                                    <Tooltip 
-                                        cursor={{fill: 'transparent'}}
-                                        formatter={(value: number) => formatCurrency(value)}
-                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    />
-                                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                                        {moraChartData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-
+                    {/* Resumen de Mora */}
+                     <Card className='w-full'>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Clock className="h-5 w-5 text-orange-500" />
+                                Resumen de Mora
+                            </CardTitle>
+                            <CardDescription>
+                                 {showManagementView 
+                                    ? "Estado de deuda vencida agrupada por asesor (Sección Mora, excluyendo Pagados)." 
+                                    : "Tu cartera de deuda agrupada por días de atraso (Sección Mora, excluyendo Pagados)."}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className='min-h-[300px]'>
+                            {loadingData ? (
+                                 <Skeleton className="h-[300px] w-full" />
+                            ) : showManagementView ? (
+                                <div className="overflow-auto max-h-[400px]">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Asesor</TableHead>
+                                                <TableHead className='text-right text-green-600'>Al día</TableHead>
+                                                <TableHead className='text-right text-yellow-600'>1-30</TableHead>
+                                                <TableHead className='text-right text-orange-600'>31-60</TableHead>
+                                                <TableHead className='text-right text-red-600'>61-90</TableHead>
+                                                <TableHead className='text-right text-red-800'>+90</TableHead>
+                                                <TableHead className='text-right font-bold'>Total</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {moraTableData.map((row) => (
+                                                <TableRow key={row.advisorId}>
+                                                    <TableCell className="font-medium text-xs">{row.advisorName}</TableCell>
+                                                    <TableCell className='text-right text-xs'>{formatCurrency(row['0'])}</TableCell>
+                                                    <TableCell className='text-right text-xs'>{formatCurrency(row['1-30'])}</TableCell>
+                                                    <TableCell className='text-right text-xs'>{formatCurrency(row['31-60'])}</TableCell>
+                                                    <TableCell className='text-right text-xs'>{formatCurrency(row['61-90'])}</TableCell>
+                                                    <TableCell className='text-right text-xs'>{formatCurrency(row['91+'])}</TableCell>
+                                                    <TableCell className='text-right font-bold text-xs'>{formatCurrency(row.total)}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            ) : (
+                                <div className="h-[300px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={moraChartData} layout="vertical" margin={{ left: 20 }}>
+                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                            <XAxis type="number" hide />
+                                            <YAxis 
+                                                dataKey="name" 
+                                                type="category" 
+                                                width={80}
+                                                tick={{ fontSize: 12 }}
+                                                tickLine={false}
+                                                axisLine={false}
+                                            />
+                                            <Tooltip 
+                                                cursor={{fill: 'transparent'}}
+                                                formatter={(value: number) => formatCurrency(value)}
+                                                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                            />
+                                            <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                                                {moraChartData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </>
+            )}
         </div>
       </main>
     </div>
