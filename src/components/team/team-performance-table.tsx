@@ -75,11 +75,9 @@ export function TeamPerformanceTable() {
   const [visibilityMonth, setVisibilityMonth] = useState('');
   const [visibilityDeadline, setVisibilityDeadline] = useState('');
 
-  // 🟢 CORRECCIÓN: Inicia en 'all' para no esconder a los usuarios nuevos sin área asignada
   const [filterArea, setFilterArea] = useState<AreaType | 'all'>('all'); 
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
 
-  // Estados para la edición de códigos de vendedor
   const [userForCodes, setUserForCodes] = useState<User | null>(null);
   const [tempSellerConfig, setTempSellerConfig] = useState<SellerCompanyConfig[]>([]);
   const [newCodeInput, setNewCodeInput] = useState<Record<string, string>>({});
@@ -118,7 +116,6 @@ export function TeamPerformanceTable() {
     setVisibilityDeadline(objectiveVisibility.visibleUntil ?? '');
   }, [objectiveVisibility]);
 
-  // Inicializar el estado temporal cuando se abre el diálogo de códigos
   useEffect(() => {
     if (userForCodes) {
         setTempSellerConfig(userForCodes.sellerConfig || []);
@@ -170,7 +167,7 @@ export function TeamPerformanceTable() {
     try {
         await deleteUserAndReassignEntities(userToDelete.id, userInfo.id, userInfo.name);
         toast({ title: "Usuario Eliminado", description: `${userToDelete.name} ha sido eliminado y sus clientes han sido desasignados.` });
-        fetchData(); // Refresh all data
+        fetchData(); 
     } catch (error) {
         console.error("Error deleting user:", error);
         toast({ title: 'Error al eliminar el usuario', variant: 'destructive', description: (error as Error).message });
@@ -231,9 +228,9 @@ export function TeamPerformanceTable() {
     const prevMonthDate = subMonths(today, 1);
     const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
-    // APLICAR FILTROS
+    // APLICAR FILTROS (incluyendo usuarios nuevos sin área)
     const filteredUsers = users.filter(u => {
-        const matchesArea = filterArea === 'all' || u.area === filterArea;
+        const matchesArea = filterArea === 'all' || u.area === filterArea || (!u.area && filterArea === 'all');
         const matchesRole = filterRole === 'all' || u.role === filterRole;
         return matchesArea && matchesRole;
     });
@@ -341,7 +338,7 @@ export function TeamPerformanceTable() {
             const { user } = row.original;
             return (
                 <Select value={user.role || 'Asesor'} onValueChange={(newRole: UserRole) => handleUpdateUser(user.id, { role: newRole })} disabled={!isBoss}>
-                    <SelectTrigger className="w-[130px]">
+                    <SelectTrigger className="w-[140px]">
                         <SelectValue placeholder="Seleccionar rol" />
                     </SelectTrigger>
                     <SelectContent>
@@ -358,12 +355,14 @@ export function TeamPerformanceTable() {
       header: 'Área',
       cell: ({ row }) => {
         const { user } = row.original;
+        // 🟢 Permitimos que el Select no explote si el área es undefined o vacía
         return (
-          <Select value={user.area || 'Comercial'} onValueChange={(newArea) => handleUpdateUser(user.id, { area: newArea as AreaType })} disabled={!isBoss}>
+          <Select value={user.area || 'none'} onValueChange={(newArea) => handleUpdateUser(user.id, { area: newArea as AreaType })} disabled={!isBoss}>
             <SelectTrigger className="w-[130px]">
               <SelectValue placeholder="Asignar área..." />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="none">Sin Área</SelectItem>
               {areaTypes.map(area => (
                 <SelectItem key={area} value={area}>{area}</SelectItem>
               ))}
