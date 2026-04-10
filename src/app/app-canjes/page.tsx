@@ -7,7 +7,7 @@ import {
     getPrograms, getProspects, getConveniosCanje, getOpportunityById, getAdvertisingOrdersByOpportunity, 
     updateOpportunity, updateConvenioCanje, updateAdvertisingOrder, deleteConvenioCanje 
 } from '@/lib/firebase-service';
-import type { Client, Program, Prospect, ConvenioCanje, CondicionIVA, TipoEntidad } from '@/lib/types';
+import type { Client, Program, Prospect, ConvenioCanje, CondicionIVA, TipoEntidad, AdvertisingOrder } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 
 import { useForm } from 'react-hook-form';
@@ -30,7 +30,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { ArrowRight, ArrowLeft, CheckCircle2, Search, Radio, Trash2, Plus, Clock, FileText, Edit, Copy } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle2, Search, Radio, Trash2, Plus, Clock, FileText, Edit, Copy, ExternalLink } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { cn } from '@/lib/utils';
@@ -60,6 +60,7 @@ export default function AppCanjesMobile() {
     // --- DATA ---
     const [myCanjes, setMyCanjes] = useState<ConvenioCanje[]>([]);
     const [selectedCanjeDetail, setSelectedCanjeDetail] = useState<ConvenioCanje | null>(null);
+    const [selectedAdOrder, setSelectedAdOrder] = useState<AdvertisingOrder | null>(null); // 🟢 ORDEN DE PUBLICIDAD ASOCIADA
     const [clients, setClients] = useState<Client[]>([]);
     const [prospects, setProspects] = useState<Prospect[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
@@ -518,6 +519,70 @@ export default function AppCanjesMobile() {
                             )}
                         </CardFooter>
                     </Card>
+
+                    {/* 🟢 ORDEN DE PUBLICIDAD ASOCIADA */}
+                    {selectedAdOrder && (
+                        <Card className="mt-4 border-blue-200 shadow-sm">
+                            <CardHeader className="bg-blue-50/50 border-b border-blue-100 pb-4">
+                                <CardTitle className="text-lg text-blue-800">Orden de Publicidad (Pautado)</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-5 pt-4">
+                                {selectedAdOrder.materialUrls && selectedAdOrder.materialUrls.length > 0 && (
+                                    <div>
+                                        <Label className="text-muted-foreground text-xs uppercase">Materiales</Label>
+                                        <div className="flex flex-col gap-2 mt-2">
+                                            {selectedAdOrder.materialUrls.map((url, idx) => (
+                                                <a key={idx} href={url.startsWith('http') ? url : `https://${url}`} target="_blank" rel="noopener noreferrer" className="flex items-center text-blue-600 text-sm hover:underline bg-blue-50 px-3 py-2 rounded-md border border-blue-100 w-fit">
+                                                    <ExternalLink className="h-4 w-4 mr-2" /> Enlace de material {idx + 1}
+                                                </a>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {selectedAdOrder.srlItems && selectedAdOrder.srlItems.length > 0 && (
+                                    <div>
+                                        <Label className="text-muted-foreground text-xs uppercase mb-1 block">Pautado SRL</Label>
+                                        <div className="bg-red-50 p-3 rounded-md text-sm border border-red-100 space-y-2">
+                                            {selectedAdOrder.srlItems.map((item, idx) => {
+                                                const progName = programs.find(p => p.id === item.programId)?.name || 'Programa';
+                                                return (
+                                                    <div key={idx} className="border-b border-red-200/60 last:border-0 pb-2 last:pb-0">
+                                                        <span className="font-semibold text-red-800 uppercase text-xs tracking-wider mr-2">{item.month}:</span> 
+                                                        <span className="font-medium">{progName}</span> - {item.adType === 'Otro' ? item.customType : item.adType} {item.hasTv ? <span className="text-xs bg-red-200 text-red-800 px-1 py-0.5 rounded ml-1">TV</span> : ''}
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {selectedAdOrder.sasItems && selectedAdOrder.sasItems.length > 0 && (
+                                    <div>
+                                        <Label className="text-muted-foreground text-xs uppercase mb-1 block">Pautado SAS</Label>
+                                        <div className="bg-blue-50 p-3 rounded-md text-sm border border-blue-100 space-y-2">
+                                            {selectedAdOrder.sasItems.map((item, idx) => (
+                                                <div key={idx} className="border-b border-blue-200/60 last:border-0 pb-2 last:pb-0 flex flex-col">
+                                                    <div>
+                                                        <span className="font-semibold text-blue-800 uppercase text-xs tracking-wider mr-2">{item.month}:</span> 
+                                                        <span className="font-medium">{item.format}</span> {item.detail && item.detail !== 'Otro' ? `- ${item.detail}` : ''} {item.customDetail ? `- ${item.customDetail}` : ''}
+                                                    </div>
+                                                    {item.url && <a href={item.url.startsWith('http') ? item.url : `https://${item.url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1">Ver URL de destino</a>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {selectedAdOrder.observations && (
+                                    <div>
+                                        <Label className="text-muted-foreground text-xs uppercase">Observaciones OP</Label>
+                                        <div className="bg-slate-100 p-3 rounded-md text-sm mt-1 whitespace-pre-wrap text-slate-700 italic border">{selectedAdOrder.observations}</div>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
                 </main>
             </div>
         );
@@ -546,7 +611,19 @@ export default function AppCanjesMobile() {
                     ) : (
                         <div className="space-y-3">
                             {myCanjes.map(canje => (
-                                <Card key={canje.id} className="cursor-pointer hover:border-red-300 transition-colors shadow-sm" onClick={() => { setSelectedCanjeDetail(canje); setView('detail'); }}>
+                                <Card 
+                                    key={canje.id} 
+                                    className="cursor-pointer hover:border-red-300 transition-colors shadow-sm" 
+                                    onClick={() => { 
+                                        setSelectedCanjeDetail(canje); 
+                                        setView('detail'); 
+                                        setSelectedAdOrder(null);
+                                        // 🟢 Buscar OP al abrir el detalle
+                                        getAdvertisingOrdersByOpportunity(canje.opportunityId).then(orders => {
+                                            if (orders && orders.length > 0) setSelectedAdOrder(orders[0]);
+                                        }).catch(console.error);
+                                    }}
+                                >
                                     <CardContent className="p-4 flex items-center justify-between">
                                         <div className="flex-1 min-w-0 pr-4">
                                             <h3 className="font-bold text-slate-800 truncate text-lg">{canje.clientName}</h3>
