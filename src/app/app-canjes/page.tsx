@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils';
 
 import { ConvenioPdf } from '@/components/canjes/convenio-pdf';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
+import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer'; // 🟢 Importamos el visor oficial
 import { ClientPdf } from '@/components/clients/client-pdf';
 import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/lib/data';
 
@@ -60,7 +61,7 @@ export default function AppCanjesMobile() {
     // --- DATA ---
     const [myCanjes, setMyCanjes] = useState<ConvenioCanje[]>([]);
     const [selectedCanjeDetail, setSelectedCanjeDetail] = useState<ConvenioCanje | null>(null);
-    const [selectedAdOrder, setSelectedAdOrder] = useState<AdvertisingOrder | null>(null); // 🟢 ESTADO PARA LA OP
+    const [selectedAdOrder, setSelectedAdOrder] = useState<AdvertisingOrder | null>(null); 
     const [clients, setClients] = useState<Client[]>([]);
     const [prospects, setProspects] = useState<Prospect[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
@@ -522,13 +523,14 @@ export default function AppCanjesMobile() {
 
                     {/* 🟢 ORDEN DE PUBLICIDAD ASOCIADA */}
                     {selectedAdOrder && (
-                        <Card className="mt-4 border-blue-200 shadow-sm">
-                            <CardHeader className="bg-blue-50/50 border-b border-blue-100 pb-4">
+                        <Card className="mt-4 border-blue-200 shadow-sm overflow-hidden">
+                            <CardHeader className="bg-blue-50/50 border-b border-blue-100 pb-4 flex flex-row items-center justify-between">
                                 <CardTitle className="text-lg text-blue-800">Orden de Publicidad (Pautado)</CardTitle>
+                                <AdvertisingOrderViewer order={selectedAdOrder} programs={programs} />
                             </CardHeader>
-                            <CardContent className="space-y-5 pt-4">
+                            <CardContent className="p-0">
                                 {selectedAdOrder.materialUrls && selectedAdOrder.materialUrls.length > 0 && (
-                                    <div>
+                                    <div className="p-4 border-b bg-white">
                                         <Label className="text-muted-foreground text-xs uppercase">Materiales</Label>
                                         <div className="flex flex-col gap-2 mt-2">
                                             {selectedAdOrder.materialUrls.map((url, idx) => (
@@ -540,46 +542,11 @@ export default function AppCanjesMobile() {
                                     </div>
                                 )}
                                 
-                                {selectedAdOrder.srlItems && selectedAdOrder.srlItems.length > 0 && (
-                                    <div>
-                                        <Label className="text-muted-foreground text-xs uppercase mb-1 block">Pautado SRL</Label>
-                                        <div className="bg-red-50 p-3 rounded-md text-sm border border-red-100 space-y-2">
-                                            {selectedAdOrder.srlItems.map((item, idx) => {
-                                                const progName = programs.find(p => p.id === item.programId)?.name || 'Programa';
-                                                return (
-                                                    <div key={idx} className="border-b border-red-200/60 last:border-0 pb-2 last:pb-0">
-                                                        <span className="font-semibold text-red-800 uppercase text-xs tracking-wider mr-2">{item.month}:</span> 
-                                                        <span className="font-medium">{progName}</span> - {item.adType === 'Otro' ? item.customType : item.adType} {item.hasTv ? <span className="text-xs bg-red-200 text-red-800 px-1 py-0.5 rounded ml-1">TV</span> : ''}
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
+                                <div className="overflow-x-auto w-full bg-slate-200 p-4">
+                                    <div className="mx-auto bg-white shadow-md border" style={{ width: 'max-content', minWidth: '297mm' }}>
+                                        <AdvertisingOrderPdf order={selectedAdOrder} programs={programs} />
                                     </div>
-                                )}
-                                
-                                {selectedAdOrder.sasItems && selectedAdOrder.sasItems.length > 0 && (
-                                    <div>
-                                        <Label className="text-muted-foreground text-xs uppercase mb-1 block">Pautado SAS</Label>
-                                        <div className="bg-blue-50 p-3 rounded-md text-sm border border-blue-100 space-y-2">
-                                            {selectedAdOrder.sasItems.map((item, idx) => (
-                                                <div key={idx} className="border-b border-blue-200/60 last:border-0 pb-2 last:pb-0 flex flex-col">
-                                                    <div>
-                                                        <span className="font-semibold text-blue-800 uppercase text-xs tracking-wider mr-2">{item.month}:</span> 
-                                                        <span className="font-medium">{item.format}</span> {item.detail && item.detail !== 'Otro' ? `- ${item.detail}` : ''} {item.customDetail ? `- ${item.customDetail}` : ''}
-                                                    </div>
-                                                    {item.url && <a href={item.url.startsWith('http') ? item.url : `https://${item.url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1">Ver URL de destino</a>}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {selectedAdOrder.observations && (
-                                    <div>
-                                        <Label className="text-muted-foreground text-xs uppercase">Observaciones OP</Label>
-                                        <div className="bg-slate-100 p-3 rounded-md text-sm mt-1 whitespace-pre-wrap text-slate-700 italic border">{selectedAdOrder.observations}</div>
-                                    </div>
-                                )}
+                                </div>
                             </CardContent>
                         </Card>
                     )}
