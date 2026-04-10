@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocialMediaRequest, getAllUsers } from '@/lib/firebase-service'; 
-import { Client, SocialMediaRequest, User } from '@/lib/types';
+import { Client, SocialMediaRequest, User, CarouselSlide } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 
@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { Spinner } from '@/components/ui/spinner';
-import { Save, ExternalLink, ArrowLeft, Loader2 } from 'lucide-react';
+import { Save, ExternalLink, ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { SocialMediaPdf } from './social-media-pdf';
@@ -33,7 +33,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [clients, setClients] = useState<Client[]>([]);
-    const [users, setUsers] = useState<User[]>([]); // 🟢
+    const [users, setUsers] = useState<User[]>([]); 
     
     // --- ESTADOS DEL FORMULARIO ---
     const [clientId, setClientId] = useState('');
@@ -56,12 +56,14 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const [storyTagClient, setStoryTagClient] = useState(false);
     const [storyTagHandle, setStoryTagHandle] = useState('');
 
-    // Específicos Reel
+    // Específicos Reel / Carrusel
     const [reelCopy, setReelCopy] = useState('');
     const [reelCollaboration, setReelCollaboration] = useState(false);
     const [reelCollabHandle, setReelCollabHandle] = useState('');
 
-    // 🟢 ESTADOS DE AUTORÍA
+    // 🟢 Específicos Carrusel (Slides)
+    const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([{ text: '', link: '' }]);
+
     const [advisorId, setAdvisorId] = useState('');
     const [advisorName, setAdvisorName] = useState('');
 
@@ -109,7 +111,11 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                         setReelCollaboration(req.reelCollaboration || false);
                         setReelCollabHandle(req.reelCollabHandle || '');
 
-                        // 🟢 Preservar / Reasignar Autor
+                        // 🟢 Cargar slides si es carrusel
+                        if (req.carouselSlides && req.carouselSlides.length > 0) {
+                            setCarouselSlides(req.carouselSlides);
+                        }
+
                         setAdvisorId(req.advisorId || userInfo?.id || '');
                         setAdvisorName(req.advisorName || userInfo?.name || '');
                     }
@@ -127,6 +133,17 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
         if (userInfo) init();
     }, [userInfo, editId, cloneId, toast, canReassign]);
 
+    const handleAddSlide = () => setCarouselSlides([...carouselSlides, { text: '', link: '' }]);
+    const handleRemoveSlide = (idx: number) => {
+        const newSlides = carouselSlides.filter((_, i) => i !== idx);
+        setCarouselSlides(newSlides.length ? newSlides : [{ text: '', link: '' }]);
+    };
+    const handleSlideChange = (idx: number, field: 'text'|'link', value: string) => {
+        const newSlides = [...carouselSlides];
+        newSlides[idx][field] = value;
+        setCarouselSlides(newSlides);
+    };
+
     const getPreviewData = (): Partial<SocialMediaRequest> => ({
         clientId,
         clientName: clients.find(c => c.id === clientId)?.denominacion || 'Cliente Desconocido',
@@ -135,10 +152,10 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
         contentType, creator, publishDate, clientValidation,
         objective, script, observations,
         isWebReplication, storyUrl, storyCta, storyTagClient, storyTagHandle,
-        reelCopy, reelCollaboration, reelCollabHandle
+        reelCopy, reelCollaboration, reelCollabHandle,
+        carouselSlides // 🟢 Al PDF
     });
 
-    // 🟢 NUEVO: Multi-page PDF Generator para Redes (Evita cortes)
     const generateMultiPagePdf = async (element: HTMLElement) => {
         const page1 = element.querySelector('#social-pdf-page-1') as HTMLElement;
         const page2 = element.querySelector('#social-pdf-page-2') as HTMLElement;
@@ -212,10 +229,15 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 dataToSave.storyCta = storyCta;
                 dataToSave.storyTagClient = storyTagClient;
                 dataToSave.storyTagHandle = storyTagClient ? storyTagHandle : undefined;
-            } else {
+            } else if (contentType === 'Reel') {
                 dataToSave.reelCopy = reelCopy;
                 dataToSave.reelCollaboration = reelCollaboration;
                 dataToSave.reelCollabHandle = reelCollaboration ? reelCollabHandle : undefined;
+            } else if (contentType === 'Carrusel') {
+                dataToSave.reelCollaboration = reelCollaboration;
+                dataToSave.reelCollabHandle = reelCollaboration ? reelCollabHandle : undefined;
+                // Guardamos solo los slides que tienen algo de info
+                dataToSave.carouselSlides = carouselSlides.filter(s => s.text.trim() || s.link.trim());
             }
 
             let finalId = editId;
@@ -317,7 +339,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                             <RadioGroup value={contentType} onValueChange={(v: any) => setContentType(v)} className="flex gap-4">
                                 <div className="flex items-center space-x-2"><RadioGroupItem value="Reel" id="t-r" /><Label htmlFor="t-r">Reel</Label></div>
                                 <div className="flex items-center space-x-2"><RadioGroupItem value="Story" id="t-s" /><Label htmlFor="t-s">Story</Label></div>
-                                <div className="flex items-center space-x-2"><RadioGroupItem value="Carrusel" id="t-s" /><Label htmlFor="t-s">Carrusel</Label></div>
+                                <div className="flex items-center space-x-2"><RadioGroupItem value="Carrusel" id="t-c" /><Label htmlFor="t-c">Carrusel</Label></div>
                             </RadioGroup>
                         </div>
                         <div className="space-y-3">
@@ -367,11 +389,38 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                         </div>
                     )}
 
+                    {/* 🟢 Opciones Dinámicas de Carrusel */}
                     {contentType === 'Carrusel' && (
-                        <div className="bg-blue-50 p-4 rounded-md border border-blue-100 space-y-4">
-                            <h3 className="font-bold text-blue-800 border-b border-blue-200 pb-2">Opciones de Carrusel</h3>
-                            <div className="space-y-2"><Label>Copy estimado (o datos clave a incluir)</Label><Textarea className="h-20" value={reelCopy} onChange={e=>setReelCopy(e.target.value)} /></div>
-                            <div className="flex items-center space-x-2"><Checkbox checked={reelCollaboration} onCheckedChange={(v) => setReelCollaboration(!!v)} /><Label>Publicación en Colaboración</Label></div>
+                        <div className="bg-purple-50 p-4 rounded-md border border-purple-100 space-y-4">
+                            <div className="flex justify-between items-center border-b border-purple-200 pb-2">
+                                <h3 className="font-bold text-purple-800">Slides del Carrusel (Total: {carouselSlides.length})</h3>
+                                <Button type="button" size="sm" variant="outline" onClick={handleAddSlide}><Plus className="mr-1 h-4 w-4"/> Agregar Slide</Button>
+                            </div>
+                            
+                            <div className="space-y-4">
+                                {carouselSlides.map((slide, idx) => (
+                                    <div key={idx} className="p-3 bg-white border rounded shadow-sm relative">
+                                        <div className="absolute top-3 right-3 text-xs font-bold text-purple-300">#{idx + 1}</div>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <Label className="text-xs">Texto / Copy del Slide</Label>
+                                                <Textarea className="h-16 mt-1" value={slide.text} onChange={e=>handleSlideChange(idx, 'text', e.target.value)} placeholder="Ej: 3 beneficios de nuestro producto..." />
+                                            </div>
+                                            <div className="flex gap-2 items-end">
+                                                <div className="flex-1">
+                                                    <Label className="text-xs">Enlace del material (opcional)</Label>
+                                                    <Input className="mt-1" value={slide.link} onChange={e=>handleSlideChange(idx, 'link', e.target.value)} placeholder="https://drive.google.com/..." />
+                                                </div>
+                                                {carouselSlides.length > 1 && (
+                                                    <Button type="button" variant="ghost" className="text-red-500 hover:bg-red-50" onClick={() => handleRemoveSlide(idx)}><Trash2 className="h-4 w-4"/></Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex items-center space-x-2 pt-4 border-t border-purple-200 mt-4"><Checkbox checked={reelCollaboration} onCheckedChange={(v) => setReelCollaboration(!!v)} /><Label>Publicación en Colaboración</Label></div>
                             {reelCollaboration && <div className="space-y-2 w-1/2"><Label>Cuenta a invitar</Label><Input value={reelCollabHandle} onChange={e=>setReelCollabHandle(e.target.value)} placeholder="@usuario" /></div>}
                         </div>
                     )}
