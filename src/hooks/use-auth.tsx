@@ -45,7 +45,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loading) {
-      // 🟢 CORRECCIÓN: /public/ con barra final
       const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/public/');
       if (!user && !isPublicRoute) {
         router.push('/login');
@@ -93,7 +92,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let isWhitelisted = false;
         if (!isAuthorizedDomain && !isHardcodedException) {
             const whitelist = await getEmailWhitelist();
-            isWhitelisted = whitelist.includes(email);
+            // Validamos contra la lista asegurándonos de limpiar espacios y mayúsculas
+            isWhitelisted = whitelist.some(w => w.toLowerCase().trim() === email);
         }
 
         if (!isAuthorizedDomain && !isHardcodedException && !isWhitelisted) {
@@ -113,36 +113,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setUser(firebaseUser);
         
-        const [profile] = await Promise.all([
-            getUserProfile(firebaseUser.uid),
-            initializePermissions()
-        ]);
-        
-        if (profile) {
-          const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';
-          const finalProfile = { 
-            id: firebaseUser.uid, 
-            ...profile,
-            photoURL: firebaseUser.photoURL || profile.photoURL,
-            initials
-          };
-          setUserInfo(finalProfile);
-          setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
-        } else {
-            const name = firebaseUser.displayName || 'Usuario';
+        try {
+            const [profile] = await Promise.all([
+                getUserProfile(firebaseUser.uid),
+                initializePermissions()
+            ]);
             
-            await createUserProfile(firebaseUser.uid, name, firebaseUser.email || '', firebaseUser.photoURL || undefined);
-            
+            if (profile) {
+              const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';
+              const finalProfile = { 
+                id: firebaseUser.uid, 
+                ...profile,
+                photoURL: firebaseUser.photoURL || profile.photoURL,
+                initials
+              };
+              setUserInfo(finalProfile);
+              setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
+            } else {
+                const name = firebaseUser.displayName || 'Usuario';
+                // Crear perfil inicial. Aseguramos que se guarde en BD.
+                await createUserProfile(firebaseUser.uid, name, firebaseUser.email || '', firebaseUser.photoURL || undefined);
+                
+                setUserInfo({
+                    id: firebaseUser.uid,
+                    name: name,
+                    email: firebaseUser.email || '',
+                    role: 'Asesor Canjes', // 🟢 Damos este rol por defecto a los nuevos que pasan la whitelist
+                    photoURL: firebaseUser.photoURL,
+                    initials: name.substring(0, 2).toUpperCase()
+                });
+                setIsBoss(false);
+            }
+        } catch (error) {
+            console.error("Error al inicializar el usuario:", error);
+            // Fallback por si Firestore rechaza la creación
             setUserInfo({
                 id: firebaseUser.uid,
-                name: name,
+                name: firebaseUser.displayName || 'Usuario',
                 email: firebaseUser.email || '',
                 role: 'Asesor',
                 photoURL: firebaseUser.photoURL,
-                initials: name.substring(0, 2).toUpperCase()
+                initials: (firebaseUser.displayName || 'U').substring(0, 2).toUpperCase()
             });
             setIsBoss(false);
         }
+
       } else {
         setUser(null);
         setUserInfo(null);
@@ -157,7 +172,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loading) {
-      // 🟢 CORRECCIÓN: /public/ con barra final
       const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/public/');
       if (!user && !isPublicRoute) {
         router.push('/login');
@@ -240,7 +254,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return await getGoogleAccessToken({ silent: false });
     };
 
-  // 🟢 CORRECCIÓN: /public/ con barra final
   if (loading && !publicRoutes.includes(pathname) && !pathname.startsWith('/public/')) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -249,7 +262,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  // 🟢 CORRECCIÓN: /public/ con barra final
   if (!loading && (user || publicRoutes.includes(pathname) || pathname.startsWith('/public/'))) {
     return (
       <AuthContext.Provider value={{ user, userInfo, loading, isBoss, getGoogleAccessToken, ensureGoogleAccessToken }}>
