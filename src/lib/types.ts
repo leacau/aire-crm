@@ -356,8 +356,9 @@ export type Canje = {
   historialMensual?: HistorialMensualItem[];
 };
 
-export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Admin' | 'Asesor Canjes';
-export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Import', 'Admin', 'Asesor Canjes'];
+// 🟢 CORRECCIÓN: Se eliminó 'Admin' y quedó unificada en 'Administracion'
+export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Asesor Canjes';
+export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Import', 'Asesor Canjes'];
 
 export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción' | 'Canjes';
 export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción', 'Canjes'];
@@ -602,7 +603,6 @@ export type CommercialNote = {
   createdAt: string;
 };
 
-// 🟢 Añadimos CarouselSlide y la prop a SocialMediaRequest
 export type SocialMediaType = 'Reel' | 'Story' | 'Carrusel';
 export type SocialMediaCreator = 'Redes' | 'Audiovisual';
 
@@ -641,7 +641,7 @@ export type SocialMediaRequest = {
   reelCollaboration?: boolean;
   reelCollabHandle?: string;
   
-  // 🟢 Carrusel
+  // Carrusel
   carouselSlides?: CarouselSlide[];
 
   createdAt: string;
