@@ -140,8 +140,8 @@ export type ProposalItem = {
 export type Opportunity = {
   id: string;
   title: string;
-  Name: string;
-  Id: string;
+  clientName: string;
+  clientId: string;
   value: number; 
   stage: OpportunityStage;
   closeDate: string;
@@ -177,7 +177,7 @@ export type Person = {
   phone?: string;
   cargo?: string;
   observaciones?: string;
-  Ids: string[];
+  clientIds: string[];
 };
 
 export type TipoEntidad = 'Pública' | 'Privada' | 'Mixta';
@@ -267,7 +267,7 @@ export type ActivityLog = {
     | 'opportunity_alerts_config'
     | 'payment'
     | 'commercial_note'
-    | 'social_media_request'; // 🟢 NUEVO
+    | 'social_media_request'; 
   entityId: string;
   entityName: string;
   details: string; 
@@ -365,7 +365,7 @@ export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
-    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes', 'AppCanjes' // 🟢 Se agregó 'AppCanjes'
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes', 'AppCanjes' 
 ] as const;
 
 export type ScreenName = typeof screenNames[number];
@@ -602,8 +602,14 @@ export type CommercialNote = {
   createdAt: string;
 };
 
-export type SocialMediaType = 'Reel' | 'Story';
+// 🟢 Añadimos CarouselSlide y la prop a SocialMediaRequest
+export type SocialMediaType = 'Reel' | 'Story' | 'Carrusel';
 export type SocialMediaCreator = 'Redes' | 'Audiovisual';
+
+export type CarouselSlide = {
+  text: string;
+  link: string;
+};
 
 export type SocialMediaRequest = {
   id?: string;
@@ -634,6 +640,9 @@ export type SocialMediaRequest = {
   reelCopy?: string;
   reelCollaboration?: boolean;
   reelCollabHandle?: string;
+  
+  // 🟢 Carrusel
+  carouselSlides?: CarouselSlide[];
 
   createdAt: string;
   updatedAt?: string;
@@ -723,13 +732,9 @@ export type ConvenioCanje = {
   advisorName: string;
   opportunityId: string;
   
-  // Lo que da la Radio (Pautado o Mención)
   radioEntrega: string;
-  
-  // Lo que da el Cliente (Bienes o Servicios)
   clienteEntrega: string;
   
-  // Vigencia
   fechaInicio: string;
   fechaFin: string;
   
