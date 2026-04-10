@@ -4192,3 +4192,75 @@ export const getConveniosCanje = async (): Promise<ConvenioCanje[]> => {
     setInCache('convenios_canje', convenios);
     return convenios;
 };
+
+export const getOpportunityById = async (id: string): Promise<Opportunity | null> => {
+    const docRef = doc(db, 'opportunities', id);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+        return mapOpportunityDoc(snap); // Usamos la misma función de mapeo interno
+    }
+    return null;
+};
+
+export const updateConvenioCanje = async (
+    id: string, 
+    data: Partial<Omit<ConvenioCanje, 'id' | 'createdAt'>>, 
+    userId: string, 
+    userName: string
+): Promise<void> => {
+    const docRef = doc(db, 'convenios', id);
+    await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
+    invalidateCache('convenios_canje');
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'canje' as any,
+        entityId: id,
+        entityName: data.clientName || 'Convenio de Canje',
+        details: `actualizó un Convenio de Canje para <strong>${data.clientName || 'Cliente'}</strong>`,
+        ownerName: userName,
+    });
+};
+
+export const deleteConvenioCanje = async (
+    canjeId: string, 
+    oppId: string, 
+    userId: string, 
+    userName: string
+): Promise<void> => {
+    const batch = writeBatch(db);
+    
+    // 1. Borrar Convenio
+    batch.delete(doc(db, 'convenios', canjeId));
+    
+    // 2. Borrar Oportunidad y todo lo que cuelga de ella
+    if (oppId) {
+        batch.delete(doc(db, 'opportunities', oppId));
+        
+        const adQ = query(collection(db, 'advertising_orders'), where('opportunityId', '==', oppId));
+        const adSnap = await getDocs(adQ);
+        adSnap.forEach(d => batch.delete(d.ref));
+        
+        const invQ = query(collections.invoices, where('opportunityId', '==', oppId));
+        const invSnap = await getDocs(invQ);
+        invSnap.forEach(d => batch.delete(d.ref));
+    }
+    
+    await batch.commit();
+    invalidateCache('convenios_canje');
+    invalidateCache('opportunities');
+    invalidateCache('invoices');
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'canje' as any,
+        entityId: canjeId,
+        entityName: 'Convenio de Canje',
+        details: `eliminó un Convenio de Canje y su Orden de Publicidad asociada`,
+        ownerName: userName,
+    });
+};
