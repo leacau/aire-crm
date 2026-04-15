@@ -217,9 +217,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (auth.currentUser) {
             const provider = new GoogleAuthProvider();
+            // 🟢 CORRECCIÓN: Se añade include_granted_scopes
             provider.setCustomParameters({
                   prompt: 'consent select_account',
-                  access_type: 'offline'
+                  access_type: 'offline',
+                  include_granted_scopes: 'true'
               });
             
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
