@@ -263,7 +263,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
 
                     await sendEmail({
                         accessToken: token,
-                        to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'redes@airedesantafe.com.ar'],
+                        to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'],
                         subject: `Pedido Redes: ${contentType} - ${client?.denominacion}`,
                         body: emailBody,
                         attachments: [{ filename: `Redes_${client?.denominacion}.pdf`, content: base64, encoding: 'base64' }]
