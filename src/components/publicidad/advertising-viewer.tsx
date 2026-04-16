@@ -256,7 +256,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
           await sendEmail({
               accessToken,
-              to: ['lchena@airedesantafe.com.ar'], // Redacción
+              to: ['lchenadesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email], // Redacción
               subject: `Gacetilla de Prensa: ${fullOrder.clientName}`,
               body: emailBody,
               attachments: [{
