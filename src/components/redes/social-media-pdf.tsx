@@ -87,6 +87,7 @@ export const SocialMediaPdf = React.forwardRef<HTMLDivElement, SocialMediaPdfPro
                     <Field label="Hora Grabación" value={request.recordingTime ? `${request.recordingTime} hs` : '-'} />
                     <Field label="Fecha Publicación" value={request.publishDate ? format(parseISO(request.publishDate), 'dd/MM/yyyy') : '-'} />
                 </div>
+                {request.materialUrl && <Field label="Link a Materiales" value={request.materialUrl} fullWidth />}
                 <Field label="¿Requiere validación del cliente antes de publicar?" value={request.clientValidation} />
 
                 {request.contentType === 'Story' && (
