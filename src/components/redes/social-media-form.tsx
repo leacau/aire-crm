@@ -72,7 +72,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
 
     useEffect(() => {
-        console.log(userInfo)
+        console.log(userInfo.email)
         const init = async () => {
             try {
                 const clientsData = await getClients();
@@ -264,7 +264,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
 
                     await sendEmail({
                         accessToken: token,
-                        to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', ],
+                        to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email],
                         subject: `Pedido Redes: ${contentType} - ${client?.denominacion}`,
                         body: emailBody,
                         attachments: [{ filename: `Redes_${client?.denominacion}.pdf`, content: base64, encoding: 'base64' }]
