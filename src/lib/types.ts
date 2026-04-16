@@ -628,6 +628,7 @@ export type SocialMediaRequest = {
   objective: string;
   script: string;
   observations?: string;
+  materialUrl?: string;
 
   // Story
   isWebReplication?: boolean;
