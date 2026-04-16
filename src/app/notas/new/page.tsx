@@ -590,7 +590,7 @@ export default function NewCommercialNotePage() {
 
                         await sendEmail({
                             accessToken,
-                            to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
+                            to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email], 
                             subject: `Nota Comercial: ${title} - ${client?.denominacion}`,
                             body: emailBody,
                             attachments: [{
