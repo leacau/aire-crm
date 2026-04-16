@@ -29,6 +29,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const { toast } = useToast();
     const router = useRouter();
     const pdfRef = useRef<HTMLDivElement>(null);
+    const [materialUrl, setMaterialUrl] = useState('');
     
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -101,6 +102,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                         setObjective(req.objective || '');
                         setScript(req.script || '');
                         setObservations(req.observations || '');
+                        setMaterialUrl(req.materialUrl || '');
 
                         setIsWebReplication(req.isWebReplication || false);
                         setStoryUrl(req.storyUrl || '');
@@ -151,10 +153,10 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
         advisorName: advisorName || userInfo?.name || '',
         contactName, recordingLocation, recordingDate, recordingTime,
         contentType, creator, publishDate, clientValidation,
-        objective, script, observations,
+        objective, script, observations, materialUrl,
         isWebReplication, storyUrl, storyCta, storyTagClient, storyTagHandle,
         reelCopy, reelCollaboration, reelCollabHandle,
-        carouselSlides // 🟢 Al PDF
+        carouselSlides, 
     });
 
     const generateMultiPagePdf = async (element: HTMLElement) => {
@@ -221,7 +223,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 advisorName: advisorName || userInfo!.name,
                 contactName, recordingLocation, recordingDate, recordingTime,
                 contentType, creator, publishDate, clientValidation,
-                objective, script, observations,
+                objective, script, observations, materialUrl,
             };
 
             if (contentType === 'Story') {
@@ -425,7 +427,18 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                             {reelCollaboration && <div className="space-y-2 w-1/2"><Label>Cuenta a invitar</Label><Input value={reelCollabHandle} onChange={e=>setReelCollabHandle(e.target.value)} placeholder="@usuario" /></div>}
                         </div>
                     )}
-
+                    <div className="space-y-2">
+    <Label className="flex items-center gap-2">
+        Link a Materiales de Apoyo 
+        <span className="text-xs text-muted-foreground font-normal">(Drive, Dropbox, WeTransfer, etc.)</span>
+    </Label>
+    <Input 
+        value={materialUrl} 
+        onChange={e => setMaterialUrl(e.target.value)} 
+        placeholder="https://drive.google.com/..." 
+        className="bg-white"
+    />
+</div>
                     <div className="space-y-2"><Label>Observaciones adicionales</Label><Textarea value={observations} onChange={e=>setObservations(e.target.value)} /></div>
                 </CardContent>
             </Card>
