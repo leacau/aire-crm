@@ -136,7 +136,7 @@ export default function NoteDetailPage() {
 
             await sendEmail({
                 accessToken,
-                to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar'], 
+                to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email], 
                 subject: `Reinforme - Nota Comercial: ${note.title} - ${note.clientName}`,
                 body: emailBody,
                 attachments: [{
