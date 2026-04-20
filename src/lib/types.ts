@@ -168,6 +168,17 @@ export type Opportunity = {
   proposalItems?: ProposalItem[];
   valorTarifario?: number; 
   finalizationDate?: string;
+  startDate?: string;       
+  endDate?: string;         
+  periodHistory?: OpportunityPeriod[];
+};
+
+export type OpportunityPeriod = {
+  startDate: string;
+  endDate: string;
+  value: number;
+  updatedAt: string;
+  updatedBy?: string;
 };
 
 export type Person = {
