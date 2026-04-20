@@ -1,7 +1,7 @@
 'use client';
 
 import { db } from './firebase';
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays, AdvertisingOrder } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
@@ -1691,6 +1691,42 @@ export const getInvoices = async (): Promise<Invoice[]> => {
     return invoices;
 };
 
+export const getInvoicesPaginated = async (
+    lastVisibleDoc: QueryDocumentSnapshot | null = null, 
+    pageSize: number = 50
+) => {
+    let q;
+    
+    if (lastVisibleDoc) {
+        q = query(
+            collections.invoices, 
+            orderBy("dateGenerated", "desc"), 
+            startAfter(lastVisibleDoc), 
+            limit(pageSize)
+        );
+    } else {
+        q = query(
+            collections.invoices, 
+            orderBy("dateGenerated", "desc"), 
+            limit(pageSize)
+        );
+    }
+
+    const snapshot = await getDocs(q);
+    
+    const invoices = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const validDate = data.date && typeof data.date === 'string' ? parseDateWithTimezone(data.date) : null;
+        const validDatePaid = data.datePaid && typeof data.datePaid === 'string' ? parseDateWithTimezone(data.datePaid) : null;
+        return { id: doc.id, ...data } as Invoice;
+    });
+
+    return {
+        invoices,
+        lastVisible: snapshot.docs[snapshot.docs.length - 1] || null // Guardamos el último documento para la siguiente página
+    };
+};
+
 export const getInvoicesForOpportunity = async (opportunityId: string): Promise<Invoice[]> => {
     const q = query(collections.invoices, where("opportunityId", "==", opportunityId));
     const snapshot = await getDocs(q);
@@ -1781,6 +1817,12 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
     };
     const docRef = await addDoc(collections.invoices, dataToSave);
     invalidateCache('invoices');
+   if (invoiceData.date && !invoiceData.isCreditNote) {
+        const monthKey = invoiceData.date.substring(0, 7); // Extrae "YYYY-MM"
+        const amountToLog = Math.abs(invoiceData.amount); // Tomamos el valor positivo
+        
+        await updateMonthlyBillingStat(monthKey, amountToLog, userId);
+    }
     return docRef.id;
 };
 
@@ -3756,7 +3798,22 @@ export const getBillingRequestsByOrder = async (orderId: string) => {
     }
 };
 
-
+export const updateMonthlyBillingStat = async (
+    monthKey: string, // Ej: "2026-04"
+    amountToAdd: number, 
+    advisorId: string
+) => {
+    // Creamos una referencia al documento de estadísticas de ese mes específico
+    const statsRef = doc(db, 'estadisticas_mensuales', monthKey);
+    
+    // Usamos merge: true e increment() para sumar el valor al total existente
+    // Si el documento no existe, Firebase lo crea automáticamente.
+    await setDoc(statsRef, {
+        totalGeneral: increment(amountToAdd),
+        [`total_asesor_${advisorId}`]: increment(amountToAdd),
+        updatedAt: serverTimestamp()
+    }, { merge: true });
+};
 
 export const getAdvertisingOrdersByOpportunity = async (opportunityId: string): Promise<AdvertisingOrder[]> => {
     try {
