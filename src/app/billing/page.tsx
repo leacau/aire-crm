@@ -6,8 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries, requestPaymentExplanation, getChatSpaces, deleteInvoicesInBatches } from '@/lib/firebase-service';
-import type { Opportunity, Client, User, Invoice, PaymentEntry, ChatSpaceMapping } from '@/lib/types';
+import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries, deleteInvoicesInBatches } from '@/lib/firebase-service';
+import type { Opportunity, Client, User, Invoice, PaymentEntry } from '@/lib/types';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
@@ -188,7 +188,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
-  const [chatSpaces, setChatSpaces] = useState<ChatSpaceMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -486,21 +485,19 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       setLoading(true);
     }
     try {
-      const [allOpps, allClients, allAdvisors, allInvoices, paymentRows, savedSpaces] = await Promise.all([
+      const [allOpps, allClients, allAdvisors, allInvoices, paymentRows] = await Promise.all([
         getAllOpportunities(),
         getClients(),
         getAllUsers('Asesor'),
         getInvoices(),
         getPaymentEntries(),
-        getChatSpaces(),
       ]);
       setOpportunities(allOpps);
       setClients(allClients);
       setAdvisors(allAdvisors);
       setInvoices(allInvoices);
       setPayments(paymentRows);
-      setChatSpaces(savedSpaces);
-
+        
     } catch (error) {
       console.error("Error fetching billing data:", error);
       toast({ title: 'Error al cargar datos de facturación', variant: 'destructive' });
@@ -947,92 +944,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       console.error('Error updating payment entry', error);
       toast({ title: 'No se pudo actualizar el pago', variant: 'destructive' });
       fetchData();
-    }
-  };
-
-  const handleRequestPaymentExplanation = async (entry: PaymentEntry, note?: string) => {
-    if (!userInfo) return;
-    const advisor = usersMap[entry.advisorId];
-    if (!advisor?.email) {
-      toast({ title: 'No se encontró el email del asesor', variant: 'destructive' });
-      return;
-    }
-
-    const baseUrl = typeof window !== 'undefined'
-      ? window.location.origin
-      : process.env.NEXT_PUBLIC_APP_URL || '';
-    const moraLink = `${baseUrl}/billing?tab=payments`;
-    const messageLines = [
-      `Hola ${advisor.name || advisor.email}, se necesita una nueva aclaración sobre el comprobante ${entry.comprobanteNumber || 'sin número'}.`,
-      note ? `Motivo: ${note}` : undefined,
-      `Podés responder en ${moraLink}`,
-    ].filter(Boolean);
-
-    try {
-      const text = messageLines.join('\n');
-      const token = await getGoogleAccessToken({ silent: true });
-      const mappedSpace = chatSpaces.find((space) => space.userId === entry.advisorId || space.userEmail === advisor.email);
-
-      if (!token) {
-        throw new Error('Necesitás iniciar sesión con permisos de Google Chat para avisar al asesor en su espacio directo.');
-      }
-
-      try {
-        const apiResponse = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            text,
-            targetSpace: mappedSpace?.spaceId,
-            targetEmail: mappedSpace ? undefined : advisor.email,
-            mode: 'api',
-          }),
-        });
-
-        if (!apiResponse.ok) {
-          const error = await apiResponse.text().catch(() => '');
-          throw new Error(error || 'No se pudo enviar el mensaje directo.');
-        }
-      } catch (error) {
-        console.error('Error enviando mensaje directo de mora', error);
-        throw error instanceof Error ? error : new Error('No se pudo enviar el mensaje directo.');
-      }
-
-      await requestPaymentExplanation(entry.id, {
-        advisorId: entry.advisorId,
-        advisorName: entry.advisorName,
-        requestedById: userInfo.id,
-        requestedByName: userInfo.name,
-        note,
-        comprobanteNumber: entry.comprobanteNumber,
-      });
-
-      const now = new Date().toISOString();
-      setPayments((prev) =>
-        prev.map((p) =>
-          p.id === entry.id
-            ? {
-                ...p,
-                lastExplanationRequestAt: now,
-                lastExplanationRequestById: userInfo.id,
-                lastExplanationRequestByName: userInfo.name,
-                explanationRequestNote: note,
-              }
-            : p,
-        ),
-      );
-
-      toast({
-        title: 'Pedido enviado',
-        description: `Se notificó a ${advisor.name || advisor.email} por Google Chat.`,
-      });
-    } catch (error) {
-      console.error('Error enviando pedido de aclaración', error);
-      const message = error instanceof Error ? error.message : 'No se pudo enviar el pedido.';
-      toast({ title: 'Chat no enviado', description: message, variant: 'destructive' });
     }
   };
 
@@ -1712,7 +1623,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                     onToggleSelectAll={handleSelectAllPayments}
                     allowDelete={isBoss}
                     isBossView={isBoss}
-                    onRequestExplanation={isBoss ? handleRequestPaymentExplanation : undefined}
                   />
                 </div>
               )}
