@@ -34,7 +34,7 @@ import {
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
-import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, eachMonthOfInterval, differenceInDays, startOfDay } from 'date-fns';
+import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, eachMonthOfInterval, differenceInDays, startOfDay, addDays, isAfter, isBefore } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -86,22 +86,6 @@ const DynamicMonthYearPicker = dynamic(() => import('@/components/ui/month-year-
   ssr: false,
   loading: () => <Skeleton className="h-10 w-[260px]" />,
 });
-
-const opportunitiesToRenew = useMemo(() => {
-  const today = new Date();
-  const thirtyDaysFromNow = addDays(today, 30);
-
-  return userOpportunities.filter(opp => {
-    if (opp.stage !== 'Cerrado - Ganado') return false;
-    
-    const end = getOpportunityEndDate(opp);
-    if (!end) return false;
-
-    // Está vigente PERO vence pronto (dentro de los próximos 30 días)
-    return isAfter(end, today) && isBefore(end, thirtyDaysFromNow);
-  });
-}, [userOpportunities]);
-
 
 const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskToggle, usersMap }) => (
     <div className='mt-4'>
@@ -299,6 +283,21 @@ export default function DashboardPage() {
     };
 
   }, [userInfo, isBoss, selectedAdvisor, opportunities, clients, tasks, invoices, paymentEntries]);
+
+  const opportunitiesToRenew = useMemo(() => {
+  const today = new Date();
+  const thirtyDaysFromNow = addDays(today, 30);
+
+  return userOpportunities.filter(opp => {
+    if (opp.stage !== 'Cerrado - Ganado') return false;
+    
+    const end = getOpportunityEndDate(opp);
+    if (!end) return false;
+
+    // Está vigente PERO vence pronto (dentro de los próximos 30 días)
+    return isAfter(end, today) && isBefore(end, thirtyDaysFromNow);
+  });
+}, [userOpportunities]);
 
   const today = startOfToday();
   const overdueTasks = userTasks.filter(t => {
