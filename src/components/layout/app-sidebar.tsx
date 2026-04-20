@@ -23,7 +23,6 @@ import {
   BadgePercent,
   Upload,
   Crosshair,
-  MessageSquare,
   Database,
   FileSpreadsheet,
   ClipboardList,
@@ -134,7 +133,6 @@ export function AppSidebar() {
       ]
     },
     { title: 'Calendario', href: '/calendar', icon: Calendar, screenName: 'Calendar' },
-    { title: 'Chat', href: '/chat', icon: MessageSquare, screenName: 'Chat' },
     {
       groupLabel: 'Contable',
       icon: Calculator,
@@ -168,40 +166,35 @@ export function AppSidebar() {
     if (!userInfo) return [];
 
     const hasPermission = (item: SidebarItem) => {
-
-      // 1. Super Admin, Jefes y Administración siempre tienen acceso a todo
       if (
           userInfo.email === 'lchena@airedesantafe.com.ar' || 
           hasManagementPrivileges(userInfo) || 
           userInfo.role === 'Administracion'
       ) return true;
 
-      // 2. Chequeo de Permisos Explícitos customizados
       if (userInfo.permissions && Object.keys(userInfo.permissions).length > 0) {
         return !!userInfo.permissions[item.screenName]?.view;
       }
       
-      // 3. Lógica según Área / Rol (Optimizando la carga)
       const allowedScreens: ScreenName[] = [];
 
       if (userInfo.role === 'Asesor Canjes' || userInfo.area === 'Canjes') {
-         allowedScreens.push('Dashboard', 'AppCanjes', 'Clients', 'Prospectos', 'Canjes', 'Grilla', 'Notas', 'Chat');
+         allowedScreens.push('Dashboard', 'AppCanjes', 'Clients', 'Prospectos', 'Canjes', 'Grilla', 'Notas');
       } 
       else if (userInfo.area === 'Pautado' || userInfo.area === 'Programación') {
-         allowedScreens.push('Dashboard', 'Grilla', 'PNTs', 'Notas', 'Publicidad', 'Clients', 'Chat');
+         allowedScreens.push('Dashboard', 'Grilla', 'PNTs', 'Notas', 'Publicidad', 'Clients');
       }
       else if (userInfo.area === 'Redacción' || userInfo.area === 'Redes' || userInfo.area === 'Audiovisual') {
-         allowedScreens.push('Dashboard', 'Redes', 'Notas', 'Chat');
+         allowedScreens.push('Dashboard', 'Redes', 'Notas');
       }
       else if (userInfo.area === 'Recursos Humanos') {
-         allowedScreens.push('Dashboard', 'Licenses', 'Team', 'Chat');
+         allowedScreens.push('Dashboard', 'Licenses', 'Team');
       }
       else if (userInfo.role === 'Asesor' || userInfo.area === 'Comercial') {
-         // El Asesor Comercial estándar
          allowedScreens.push(
           'Dashboard', 'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
           'Canjes', 'Quotes', 'Approvals', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
-          'Calendar', 'Chat', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes'
+          'Calendar', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes'
          );
       }
 
