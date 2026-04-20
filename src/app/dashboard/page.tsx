@@ -87,6 +87,21 @@ const DynamicMonthYearPicker = dynamic(() => import('@/components/ui/month-year-
   loading: () => <Skeleton className="h-10 w-[260px]" />,
 });
 
+const opportunitiesToRenew = useMemo(() => {
+  const today = new Date();
+  const thirtyDaysFromNow = addDays(today, 30);
+
+  return userOpportunities.filter(opp => {
+    if (opp.stage !== 'Cerrado - Ganado') return false;
+    
+    const end = getOpportunityEndDate(opp);
+    if (!end) return false;
+
+    // Está vigente PERO vence pronto (dentro de los próximos 30 días)
+    return isAfter(end, today) && isBefore(end, thirtyDaysFromNow);
+  });
+}, [userOpportunities]);
+
 
 const TaskSection: React.FC<TaskSectionProps> = ({ title, tasks, icon, onTaskToggle, usersMap }) => (
     <div className='mt-4'>
@@ -746,6 +761,55 @@ export default function DashboardPage() {
             {/* 🟢 Ocultar Gráficos de Finanzas para áreas ligeras */}
             {(!isLightWeightArea || isBoss) && (
                 <>
+                  {/* Oportunidades a vencer */}
+
+                  {opportunitiesToRenew.length > 0 && (
+  <Card className="mt-6 border-amber-200 bg-amber-50/30">
+    <CardHeader className="flex flex-row items-center gap-2">
+      <Clock className="h-5 w-5 text-amber-600" />
+      <div>
+        <CardTitle className="text-amber-800">Renovaciones Próximas</CardTitle>
+        <CardDescription className="text-amber-700">
+          Oportunidades que finalizan en menos de 30 días.
+        </CardDescription>
+      </div>
+    </CardHeader>
+    <CardContent>
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent border-amber-200">
+            <TableHead className="text-amber-800">Cliente</TableHead>
+            <TableHead className="text-amber-800">Oportunidad</TableHead>
+            <TableHead className="text-amber-800">Finaliza el</TableHead>
+            <TableHead className="text-amber-800 text-right">Días restantes</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {opportunitiesToRenew.map((opp) => {
+            const endDate = getOpportunityEndDate(opp)!;
+            const daysLeft = differenceInDays(endDate, new Date());
+            return (
+              <TableRow 
+                key={opp.id} 
+                className="cursor-pointer hover:bg-amber-100/50 border-amber-100"
+                onClick={() => handleRowClick(opp)}
+              >
+                <TableCell className="font-medium">{opp.clientName}</TableCell>
+                <TableCell>{opp.title}</TableCell>
+                <TableCell>{format(endDate, 'dd/MM/yyyy')}</TableCell>
+                <TableCell className="text-right">
+                  <Badge variant={daysLeft < 7 ? "destructive" : "outline"} className="bg-white">
+                    {daysLeft} días
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </CardContent>
+  </Card>
+)}
                     {/* Evolución de Facturación */}
                     <Card className='w-full'>
                         <CardHeader>
