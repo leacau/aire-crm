@@ -92,7 +92,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let isWhitelisted = false;
         if (!isAuthorizedDomain && !isHardcodedException) {
             const whitelist = await getEmailWhitelist();
-            // Validamos contra la lista asegurándonos de limpiar espacios y mayúsculas
             isWhitelisted = whitelist.some(w => w.toLowerCase().trim() === email);
         }
 
@@ -131,14 +130,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
             } else {
                 const name = firebaseUser.displayName || 'Usuario';
-                // Crear perfil inicial. Aseguramos que se guarde en BD.
                 await createUserProfile(firebaseUser.uid, name, firebaseUser.email || '', firebaseUser.photoURL || undefined);
                 
                 setUserInfo({
                     id: firebaseUser.uid,
                     name: name,
                     email: firebaseUser.email || '',
-                    role: 'Asesor Canjes', // 🟢 Damos este rol por defecto a los nuevos que pasan la whitelist
+                    role: 'Asesor Canjes',
                     photoURL: firebaseUser.photoURL,
                     initials: name.substring(0, 2).toUpperCase()
                 });
@@ -146,7 +144,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
         } catch (error) {
             console.error("Error al inicializar el usuario:", error);
-            // Fallback por si Firestore rechaza la creación
             setUserInfo({
                 id: firebaseUser.uid,
                 name: firebaseUser.displayName || 'Usuario',
@@ -217,7 +214,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (auth.currentUser) {
             const provider = new GoogleAuthProvider();
-            // 🟢 CORRECCIÓN: Se añade include_granted_scopes
             provider.setCustomParameters({
                   prompt: 'consent select_account',
                   access_type: 'offline',
@@ -226,9 +222,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
-            provider.addScope('https://www.googleapis.com/auth/drive.file');
-            provider.addScope('https://www.googleapis.com/auth/chat.messages');
-            provider.addScope('https://www.googleapis.com/auth/chat.spaces.readonly');
+            
+            // 🟢 Eliminados los scopes de Google Chat y Drive
             
             try {
                 const result = await signInWithPopup(auth, provider);
