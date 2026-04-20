@@ -31,7 +31,6 @@ const collections = {
     systemConfig: collection(db, 'system_config'),
     supervisorComments: collection(db, 'supervisor_comments'),
     paymentEntries: collection(db, 'payment_entries'),
-    chatSpaces: collection(db, 'chat_spaces'),
     coachingSessions: collection(db, 'coaching_sessions'),
     commercialNotes: collection(db, 'commercial_notes'),
     billingRequests: collection(db, 'billing_requests'),
@@ -41,7 +40,6 @@ const collections = {
 
 const cache: { [key: string]: { data: any; timestamp: number } } = {};
 const CACHE_DURATION_MS = 60 * 60 * 1000;
-const CHAT_SPACES_CACHE_KEY = 'chat_spaces_cache';
 
 const getFromCache = (key: string) => {
     const cached = cache[key];
@@ -3348,92 +3346,6 @@ export const updateClientActivity = async (
 
     await updateDoc(docRef, updateData);
     invalidateCache('client_activities');
-};
-
-export const getChatSpaces = async (): Promise<ChatSpaceMapping[]> => {
-    const cached = getFromCache(CHAT_SPACES_CACHE_KEY);
-    if (cached) return cached;
-
-    const snap = await getDocs(collections.chatSpaces);
-    const mappings: ChatSpaceMapping[] = snap.docs
-        .map((docSnap) => {
-            const data = docSnap.data() as any;
-            if (!data?.spaceId || !data?.userEmail) return null;
-            return {
-                userId: docSnap.id,
-                userEmail: data.userEmail as string,
-                spaceId: data.spaceId as string,
-                updatedById: data.updatedById as string | undefined,
-                updatedByName: data.updatedByName as string | undefined,
-                updatedAt: timestampToISO(data.updatedAt),
-            } satisfies ChatSpaceMapping;
-        })
-        .filter(Boolean) as ChatSpaceMapping[];
-
-    setInCache(CHAT_SPACES_CACHE_KEY, mappings);
-    return mappings;
-};
-
-export const upsertChatSpace = async (params: {
-    userId: string;
-    userEmail: string;
-    spaceId: string;
-    updatedById: string;
-    updatedByName: string;
-}) => {
-    const { userId, userEmail, spaceId, updatedById, updatedByName } = params;
-    const docRef = doc(collections.chatSpaces, userId);
-
-    await setDoc(
-        docRef,
-        {
-            userId,
-            userEmail,
-            spaceId,
-            updatedById,
-            updatedByName,
-            updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-    );
-
-    invalidateCache(CHAT_SPACES_CACHE_KEY);
-
-    await logActivity({
-        userId: updatedById,
-        userName: updatedByName,
-        type: 'update',
-        entityType: 'chat_space',
-        entityId: userId,
-        entityName: 'Chat directo',
-        details: `actualizó el space de chat para ${userEmail}.`,
-        ownerName: updatedByName,
-    });
-};
-
-export const getChatUserMappings = async (): Promise<Record<string, string>> => {
-    const docRef = doc(collections.systemConfig, 'chat_user_mappings');
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-        return snap.data().mappings || {};
-    }
-    return {};
-};
-
-export const saveChatUserMappings = async (mappings: Record<string, string>, userId: string, userName: string) => {
-    const docRef = doc(collections.systemConfig, 'chat_user_mappings');
-    await setDoc(docRef, { mappings }, { merge: true });
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'system_config', // Using existing types, closest fit
-        entityId: 'chat_user_mappings',
-        entityName: 'Alias de Chat',
-        details: 'actualizó los alias de usuarios de Google Chat.',
-        ownerName: userName,
-    });
 };
 
 export const getCoachingSessions = async (advisorId: string): Promise<CoachingSession[]> => {
