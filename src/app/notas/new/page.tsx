@@ -468,6 +468,65 @@ export default function NewCommercialNotePage() {
         if (secondaryGrafs.filter(g => g.trim() !== '').length === 0) { toast({ title: 'Falta NOMBRE/FUNCION.Text', variant: 'destructive' }); return; }
         if (hasGrafErrors) { toast({ title: 'Error en Grafs', description: 'El texto excede el límite permitido.', variant: 'destructive' }); return; }
 
+        // 🟢 VALIDACIÓN DE FECHAS Y HORARIOS (LÍMITE 10:00 AM)
+        const now = new Date();
+        const currentHour = now.getHours();
+        
+        let hasTodayError = false;
+        let hasNextBusinessDayError = false;
+        
+        // Determinar cuál es el "próximo día hábil" a partir de hoy
+        let nextBusinessDay = new Date(now);
+        nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
+        while (nextBusinessDay.getDay() === 0 || nextBusinessDay.getDay() === 6) { // 0 es Domingo, 6 es Sábado
+            nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
+        }
+        
+        // Si hoy es fin de semana, ya perdimos el límite del viernes a las 10 AM
+        const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+
+        // Normalizar fechas para comparar estrictamente Día, Mes y Año local
+        const normalizeDate = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        
+        const todayTime = normalizeDate(now);
+        const nextBizTime = normalizeDate(nextBusinessDay);
+
+        for (const progId of Object.keys(programSchedule)) {
+            for (const item of programSchedule[progId]) {
+                const itemDate = new Date(item.date);
+                const itemTime = normalizeDate(itemDate);
+                
+                if (itemTime === todayTime) {
+                    hasTodayError = true;
+                } else if (itemTime === nextBizTime) {
+                    if (isWeekend) {
+                        hasNextBusinessDayError = true; // Sábado/Domingo queriendo cargar para el Lunes
+                    } else if (currentHour >= 10) {
+                        hasNextBusinessDayError = true; // Lunes a Viernes pero pasadas las 10 AM
+                    }
+                }
+            }
+        }
+
+        if (hasTodayError) {
+            toast({ 
+                title: 'Límite excedido', 
+                description: 'No se pueden cargar ni programar notas comerciales para el mismo día de hoy.', 
+                variant: 'destructive' 
+            });
+            return;
+        }
+
+        if (hasNextBusinessDayError) {
+            toast({ 
+                title: 'Límite de horario excedido', 
+                description: 'Las notas para el próximo día hábil deben cargarse antes de las 10:00 a.m. Por favor, reprogramá la fecha de salida.', 
+                variant: 'destructive' 
+            });
+            return;
+        }
+        // 🔴 FIN DE LA VALIDACIÓN
+
         setSaving(true);
         try {
             const client = clients.find(c => c.id === selectedClientId);
@@ -780,7 +839,7 @@ export default function NewCommercialNotePage() {
 
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2 border p-3 rounded-md">
-                                <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84) - Principal</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
+                                <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84) - Graf Principal</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
                                 {primaryGrafs.map((g, idx) => (
                                     <div key={idx} className="space-y-1 mb-2">
                                         <div className="flex gap-2">
@@ -793,7 +852,7 @@ export default function NewCommercialNotePage() {
                             </div>
                             
                             <div className="space-y-2 border p-3 rounded-md">
-                                <div className="flex justify-between mb-2"><Label className={secondaryGrafError ? "text-destructive" : ""}>NOMBRE/FUNCION.Text (Max 55) - Secundario</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddSecondary}><Plus className="h-4 w-4"/></Button></div>
+                                <div className="flex justify-between mb-2"><Label className={secondaryGrafError ? "text-destructive" : ""}>NOMBRE/FUNCION.Text (Max 55) - Graf Secundario</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddSecondary}><Plus className="h-4 w-4"/></Button></div>
                                 {secondaryGrafs.map((g, idx) => (
                                     <div key={idx} className="space-y-1 mb-2">
                                         <div className="flex gap-2">
