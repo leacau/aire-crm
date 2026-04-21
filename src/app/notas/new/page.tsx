@@ -839,7 +839,7 @@ export default function NewCommercialNotePage() {
 
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2 border p-3 rounded-md">
-                                <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84) - Graf Principal</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
+                                <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84) - Garf Principal</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
                                 {primaryGrafs.map((g, idx) => (
                                     <div key={idx} className="space-y-1 mb-2">
                                         <div className="flex gap-2">
