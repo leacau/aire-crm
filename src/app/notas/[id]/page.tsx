@@ -226,13 +226,13 @@ export default function NoteDetailPage() {
                                      <div className="my-4 space-y-2">
                                         {pGrafs.map((g, i) => (
                                             <div key={i} className="p-3 bg-muted rounded border">
-                                                <span className="text-xs font-bold uppercase text-muted-foreground">TITULAR.Text - Titular</span>
+                                                <span className="text-xs font-bold uppercase text-muted-foreground">TITULAR.Text - Graf Principalr</span>
                                                 <p className="uppercase">{g}</p>
                                             </div>
                                         ))}
                                         {sGrafs.map((g, i) => (
                                             <div key={i} className="p-3 bg-muted rounded border">
-                                                <span className="text-xs font-bold uppercase text-muted-foreground">NOMBRE/FUNCION.Text - Secundario</span>
+                                                <span className="text-xs font-bold uppercase text-muted-foreground">NOMBRE/FUNCION.Text - Graf Secundario</span>
                                                 <p className="uppercase">{g}</p>
                                             </div>
                                         ))}
