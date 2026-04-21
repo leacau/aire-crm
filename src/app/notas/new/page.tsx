@@ -780,7 +780,7 @@ export default function NewCommercialNotePage() {
 
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2 border p-3 rounded-md">
-                                <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84)</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
+                                <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84) - Principal</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
                                 {primaryGrafs.map((g, idx) => (
                                     <div key={idx} className="space-y-1 mb-2">
                                         <div className="flex gap-2">
@@ -793,7 +793,7 @@ export default function NewCommercialNotePage() {
                             </div>
                             
                             <div className="space-y-2 border p-3 rounded-md">
-                                <div className="flex justify-between mb-2"><Label className={secondaryGrafError ? "text-destructive" : ""}>NOMBRE/FUNCION.Text (Max 55)</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddSecondary}><Plus className="h-4 w-4"/></Button></div>
+                                <div className="flex justify-between mb-2"><Label className={secondaryGrafError ? "text-destructive" : ""}>NOMBRE/FUNCION.Text (Max 55) - Secundario</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddSecondary}><Plus className="h-4 w-4"/></Button></div>
                                 {secondaryGrafs.map((g, idx) => (
                                     <div key={idx} className="space-y-1 mb-2">
                                         <div className="flex gap-2">
