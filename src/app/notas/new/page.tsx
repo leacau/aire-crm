@@ -31,7 +31,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function NewCommercialNotePage() {
-    const { userInfo, getGoogleAccessToken } = useAuth();
+    const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
     const { toast } = useToast();
     const router = useRouter();
     const [loading, setLoading] = useState(true);
@@ -106,7 +106,14 @@ export default function NewCommercialNotePage() {
     const secondaryGrafError = secondaryGrafs.some(g => g.length > 55);
     const hasGrafErrors = primaryGrafError || secondaryGrafError;
 
-    const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
+    const canReassign = isBoss || !!(userInfo && (
+        hasManagementPrivileges(userInfo) || 
+        ['Administracion', 'Admin'].includes(userInfo.role || '') || 
+        userInfo.email === 'lchena@airedesantafe.com.ar'
+    ));
+
+    // 🟢 Llave maestra consolidada: Si puede reasignar notas, es Jefe/Admin y no tiene límite de horario
+    const isExemptFromTimeLimit = canReassign;
 
     const generateMultiPagePdf = async (element: HTMLElement) => {
         const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
@@ -508,22 +515,25 @@ export default function NewCommercialNotePage() {
             }
         }
 
-        if (hasTodayError) {
-            toast({ 
-                title: 'Límite excedido', 
-                description: 'No se pueden cargar ni programar notas comerciales para el mismo día de hoy.', 
-                variant: 'destructive' 
-            });
-            return;
-        }
+        // 🟢 Si NO es Jefe o Gerente, aplicamos las restricciones
+        if (!isExemptFromTimeLimit) {
+            if (hasTodayError) {
+                toast({ 
+                    title: 'Límite excedido', 
+                    description: 'No se pueden cargar ni programar notas comerciales para el mismo día de hoy.', 
+                    variant: 'destructive' 
+                });
+                return;
+            }
 
-        if (hasNextBusinessDayError) {
-            toast({ 
-                title: 'Límite de horario excedido', 
-                description: 'Las notas para el próximo día hábil deben cargarse antes de las 10:00 a.m. Por favor, reprogramá la fecha de salida.', 
-                variant: 'destructive' 
-            });
-            return;
+            if (hasNextBusinessDayError) {
+                toast({ 
+                    title: 'Límite de horario excedido', 
+                    description: 'Las notas para el próximo día hábil deben cargarse antes de las 10:00 a.m. Por favor, reprogramá la fecha de salida.', 
+                    variant: 'destructive' 
+                });
+                return;
+            }
         }
         // 🔴 FIN DE LA VALIDACIÓN
 
@@ -839,7 +849,7 @@ export default function NewCommercialNotePage() {
 
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2 border p-3 rounded-md">
-                                <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84) - Garf Principal</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
+                                <div className="flex justify-between mb-2"><Label className={primaryGrafError ? "text-destructive" : ""}>TITULAR.Text (Max 84) - Graf Principal</Label><Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={handleAddPrimary}><Plus className="h-4 w-4"/></Button></div>
                                 {primaryGrafs.map((g, idx) => (
                                     <div key={idx} className="space-y-1 mb-2">
                                         <div className="flex gap-2">
