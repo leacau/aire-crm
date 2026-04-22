@@ -562,6 +562,13 @@ export type ScheduleItem = {
     time?: string; 
 };
 
+// 🟢 NUEVO: TIPO INTERVIEWEE
+export type Interviewee = {
+  name: string;
+  role: string;
+  location: 'Piso' | 'Teléfono' | 'Video Llamada';
+};
+
 export type CommercialNote = {
   id: string;
   clientId: string;
@@ -582,17 +589,26 @@ export type CommercialNote = {
   contactPhone?: string; 
   contactName?: string; 
   title?: string;
+  
+  // 🔥 LOCATION: SE MANTIENE POR COMPATIBILIDAD CON DATOS VIEJOS
   location?: 'Estudio' | 'Móvil' | 'Meet' | 'Llamada';
   callPhone?: string; 
   mobileAddress?: string; 
+  
   primaryGraf?: string; 
   secondaryGraf?: string; 
   primaryGrafs?: string[];
   secondaryGrafs?: string[];
   questions?: string[];
   topicsToAvoid?: string[];
+  
+  // 🔥 ENTREVISTADOS VIEJOS (LEGACY)
   intervieweeName?: string;
   intervieweeRole?: string;
+  
+  // 🟢 NUEVA LISTA DE ENTREVISTADOS
+  interviewees?: Interviewee[];
+  
   intervieweeBio?: string;
   instagram?: string; 
   website?: string;
