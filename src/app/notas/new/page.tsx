@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote, getCommercialNote, updateCommercialNote, getAllUsers } from '@/lib/firebase-service'; 
-import type { Client, Program, CommercialNote, ScheduleItem, User } from '@/lib/types';
+import type { Client, Program, CommercialNote, ScheduleItem, User, Interviewee } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, Save, Plus, ExternalLink, Trash2, MapPin, Minus, ArrowLeft } from 'lucide-react';
@@ -67,6 +67,8 @@ export default function NewCommercialNotePage() {
     const [contactName, setContactName] = useState('');
 
     const [title, setTitle] = useState('');
+    
+    // 🔥 Ubiacación General (Dejamos de usarla pero la mantenemos por ahora si hay código viejo que lo exige, o lo dejamos como 'Móvil' gral)
     const [location, setLocation] = useState<'Estudio' | 'Móvil' | 'Meet' | 'Llamada' | undefined>(undefined);
     const [callPhone, setCallPhone] = useState('');
     const [mobileAddress, setMobileAddress] = useState(''); 
@@ -77,8 +79,9 @@ export default function NewCommercialNotePage() {
     const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']);
     const [topicsToAvoid, setTopicsToAvoid] = useState<string[]>(['']);
 
-    const [intervieweeName, setIntervieweeName] = useState('');
-    const [intervieweeRole, setIntervieweeRole] = useState('');
+    // 🟢 NUEVO ESTADO: ARRAY DE ENTREVISTADOS
+    const [interviewees, setInterviewees] = useState<Interviewee[]>([{ name: '', role: '', location: 'Piso' }]);
+
     const [intervieweeBio, setIntervieweeBio] = useState('');
 
     const [instagramHandle, setInstagramHandle] = useState('');
@@ -112,7 +115,6 @@ export default function NewCommercialNotePage() {
         userInfo.email === 'lchena@airedesantafe.com.ar'
     ));
 
-    // 🟢 Llave maestra consolidada: Si puede reasignar notas, es Jefe/Admin y no tiene límite de horario
     const isExemptFromTimeLimit = canReassign;
 
     const generateMultiPagePdf = async (element: HTMLElement) => {
@@ -209,8 +211,21 @@ export default function NewCommercialNotePage() {
                     setSecondaryGrafs(note.secondaryGrafs?.length ? note.secondaryGrafs : ['']);
                     setQuestions(note.questions?.length ? note.questions : ['', '', '', '', '']);
                     setTopicsToAvoid(note.topicsToAvoid?.length ? note.topicsToAvoid : ['']);
-                    setIntervieweeName(note.intervieweeName || '');
-                    setIntervieweeRole(note.intervieweeRole || '');
+                    
+                    // 🟢 MIGRACIÓN AL LEER (Si no tiene array, armamos uno con los datos viejos)
+                    if (note.interviewees && note.interviewees.length > 0) {
+                        setInterviewees(note.interviewees);
+                    } else if (note.intervieweeName || note.intervieweeRole) {
+                        setInterviewees([{
+                            name: note.intervieweeName || '',
+                            role: note.intervieweeRole || '',
+                            // Convertimos la locación vieja al nuevo formato. Si era 'Estudio' o 'Móvil' -> Piso. Meet -> Video. Llamada -> Teléfono.
+                            location: (note.location === 'Meet' ? 'Video Llamada' : (note.location === 'Llamada' ? 'Teléfono' : 'Piso'))
+                        }]);
+                    } else {
+                        setInterviewees([{ name: '', role: '', location: 'Piso' }]);
+                    }
+
                     setIntervieweeBio(note.intervieweeBio || '');
                     setInstagramHandle(note.instagram || '');
                     setNoInstagram(!!note.noInstagram);
@@ -260,8 +275,11 @@ export default function NewCommercialNotePage() {
                     setSecondaryGrafs(parsed.secondaryGrafs || ['']);
                     setQuestions(parsed.questions || ['', '', '', '', '']);
                     setTopicsToAvoid(parsed.topicsToAvoid || ['']);
-                    setIntervieweeName(parsed.intervieweeName || '');
-                    setIntervieweeRole(parsed.intervieweeRole || '');
+                    
+                    if (parsed.interviewees && parsed.interviewees.length > 0) {
+                        setInterviewees(parsed.interviewees);
+                    }
+
                     setIntervieweeBio(parsed.intervieweeBio || '');
                     setInstagramHandle(parsed.instagramHandle || '');
                     setNoInstagram(parsed.noInstagram || false);
@@ -303,13 +321,13 @@ export default function NewCommercialNotePage() {
             collaboration, collaborationHandle, ctaText, ctaDestination,
             contactPhone, contactName, title, location, callPhone, mobileAddress,
             primaryGrafs, secondaryGrafs, questions, topicsToAvoid,
-            intervieweeName, intervieweeRole, intervieweeBio,
+            interviewees, intervieweeBio, // Guardamos el array en el borrador
             instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp,
             commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress,
             graphicSupport, graphicLinks, noteObservations, advisorId, advisorName
         };
         localStorage.setItem('commercial_note_draft', JSON.stringify(draftData));
-    }, [isRestored, editModeId, selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations, selectedProgramIds, programSchedule, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, contactPhone, contactName, title, location, callPhone, mobileAddress, primaryGrafs, secondaryGrafs, questions, topicsToAvoid, intervieweeName, intervieweeRole, intervieweeBio, instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp, commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress, graphicSupport, graphicLinks, noteObservations, advisorId, advisorName]);
+    }, [isRestored, editModeId, selectedClientId, cuit, razonSocial, rubro, saleValue, financialObservations, selectedProgramIds, programSchedule, replicateWeb, replicateSocials, collaboration, collaborationHandle, ctaText, ctaDestination, contactPhone, contactName, title, location, callPhone, mobileAddress, primaryGrafs, secondaryGrafs, questions, topicsToAvoid, interviewees, intervieweeBio, instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp, commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress, graphicSupport, graphicLinks, noteObservations, advisorId, advisorName]);
 
     useEffect(() => {
         const loadData = async () => {
@@ -411,8 +429,7 @@ export default function NewCommercialNotePage() {
         setSecondaryGrafs(['']);
         setQuestions(['', '', '', '', '']);
         setTopicsToAvoid(['']);
-        setIntervieweeName('');
-        setIntervieweeRole('');
+        setInterviewees([{ name: '', role: '', location: 'Piso' }]);
         setIntervieweeBio('');
         setInstagramHandle('');
         setNoInstagram(false);
@@ -456,6 +473,19 @@ export default function NewCommercialNotePage() {
     const handleGraphicLinkChange = (index: number, value: string) => { const n = [...graphicLinks]; n[index] = value; setGraphicLinks(n); };
     const handleRemoveGraphicLink = (index: number) => { const n = graphicLinks.filter((_, i) => i !== index); setGraphicLinks(n.length ? n : ['']); };
 
+    // 🟢 MÉTODOS PARA EL ARRAY DE ENTREVISTADOS
+    const handleAddInterviewee = () => setInterviewees([...interviewees, { name: '', role: '', location: 'Piso' }]);
+    const handleIntervieweeChange = (index: number, field: keyof Interviewee, value: string) => {
+        const n = [...interviewees];
+        n[index] = { ...n[index], [field]: value };
+        setInterviewees(n);
+    };
+    const handleRemoveInterviewee = (index: number) => {
+        const n = interviewees.filter((_, i) => i !== index);
+        setInterviewees(n.length ? n : [{ name: '', role: '', location: 'Piso' }]);
+    };
+
+
     const totalValue = selectedProgramIds.reduce((acc, pid) => {
         const prog = programs.find(p => p.id === pid);
         const datesCount = programSchedule[pid]?.length || 0;
@@ -468,6 +498,10 @@ export default function NewCommercialNotePage() {
     const handleSave = async () => {
         if (!selectedClientId || !userInfo) { toast({ title: 'Datos incompletos', description: 'Seleccione un cliente.', variant: 'destructive' }); return; }
         if (!title.trim()) { toast({ title: 'Falta título', variant: 'destructive' }); return; }
+        
+        // 🟢 Validamos que al menos un entrevistado tenga nombre
+        if (interviewees.filter(i => i.name.trim() !== '').length === 0) { toast({ title: 'Falta Entrevistado', description: 'Debe ingresar al menos un entrevistado.', variant: 'destructive' }); return; }
+
         if (!location) { toast({ title: 'Seleccione ubicación', variant: 'destructive' }); return; }
         if (location === 'Móvil' && !mobileAddress.trim()) { toast({ title: 'Falta dirección del móvil', variant: 'destructive' }); return; }
         
@@ -475,26 +509,19 @@ export default function NewCommercialNotePage() {
         if (secondaryGrafs.filter(g => g.trim() !== '').length === 0) { toast({ title: 'Falta NOMBRE/FUNCION.Text', variant: 'destructive' }); return; }
         if (hasGrafErrors) { toast({ title: 'Error en Grafs', description: 'El texto excede el límite permitido.', variant: 'destructive' }); return; }
 
-        // 🟢 VALIDACIÓN DE FECHAS Y HORARIOS (LÍMITE 10:00 AM)
         const now = new Date();
         const currentHour = now.getHours();
-        
         let hasTodayError = false;
         let hasNextBusinessDayError = false;
         
-        // Determinar cuál es el "próximo día hábil" a partir de hoy
         let nextBusinessDay = new Date(now);
         nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
-        while (nextBusinessDay.getDay() === 0 || nextBusinessDay.getDay() === 6) { // 0 es Domingo, 6 es Sábado
+        while (nextBusinessDay.getDay() === 0 || nextBusinessDay.getDay() === 6) {
             nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
         }
         
-        // Si hoy es fin de semana, ya perdimos el límite del viernes a las 10 AM
         const isWeekend = now.getDay() === 0 || now.getDay() === 6;
-
-        // Normalizar fechas para comparar estrictamente Día, Mes y Año local
         const normalizeDate = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-        
         const todayTime = normalizeDate(now);
         const nextBizTime = normalizeDate(nextBusinessDay);
 
@@ -507,15 +534,14 @@ export default function NewCommercialNotePage() {
                     hasTodayError = true;
                 } else if (itemTime === nextBizTime) {
                     if (isWeekend) {
-                        hasNextBusinessDayError = true; // Sábado/Domingo queriendo cargar para el Lunes
+                        hasNextBusinessDayError = true;
                     } else if (currentHour >= 10) {
-                        hasNextBusinessDayError = true; // Lunes a Viernes pero pasadas las 10 AM
+                        hasNextBusinessDayError = true; 
                     }
                 }
             }
         }
 
-        // 🟢 Si NO es Jefe o Gerente, aplicamos las restricciones
         if (!isExemptFromTimeLimit) {
             if (hasTodayError) {
                 toast({ 
@@ -535,7 +561,6 @@ export default function NewCommercialNotePage() {
                 return;
             }
         }
-        // 🔴 FIN DE LA VALIDACIÓN
 
         setSaving(true);
         try {
@@ -581,8 +606,13 @@ export default function NewCommercialNotePage() {
 
                 questions: questions.filter(q => q.trim() !== ''),
                 topicsToAvoid: topicsToAvoid.filter(t => t.trim() !== ''),
-                intervieweeName,
-                intervieweeRole,
+                
+                // 🟢 Guardamos el array de entrevistados limpios
+                interviewees: interviewees.filter(i => i.name.trim() !== ''),
+                // 🔥 Guardamos el primero en los campos viejos POR COMPATIBILIDAD
+                intervieweeName: interviewees[0]?.name || '',
+                intervieweeRole: interviewees[0]?.role || '',
+                
                 intervieweeBio: intervieweeBio || undefined,
                 instagram: instagramHandle ? instagramHandle : undefined,
                 website: noWeb ? undefined : website,
@@ -625,7 +655,6 @@ export default function NewCommercialNotePage() {
                         const pdfBase64 = pdf.output('datauristring').split(',')[1];
                         const baseUrl = window.location.origin;
                         
-                        // 🟢 LINK PARA EL CORREO: LLEVA A LA RUTA PÚBLICA
                         const publicLink = `${baseUrl}/public/notas/${newNoteId}`;
                         const detailLink = `${baseUrl}/notas/${newNoteId}`;
                         
@@ -637,7 +666,6 @@ export default function NewCommercialNotePage() {
                             });
                         });
 
-                        // 🟢 CORREO MODIFICADO CON BOTÓN GIGANTE
                         const emailBody = `
                             <div style="font-family: Arial, sans-serif; color: #333;">
                                 <h2 style="color: #cc0000;">Nota Comercial Registrada / Editada</h2>
@@ -844,7 +872,9 @@ export default function NewCommercialNotePage() {
                     <CardContent className="space-y-6">
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2"><Label>Título</Label><Input value={title} onChange={e => setTitle(e.target.value)} /></div>
-                            <div className="space-y-3"><Label>Ubicación</Label><RadioGroup value={location} onValueChange={(v:any) => setLocation(v)} className="flex flex-wrap gap-4"><div className="flex items-center space-x-2"><RadioGroupItem value="Estudio" id="re" /><Label htmlFor="re">Estudio</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Móvil" id="rm" /><Label htmlFor="rm">Móvil</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Meet" id="mt" /><Label htmlFor="mt">Meet</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Llamada" id="rl" /><Label htmlFor="rl">Llamada</Label></div></RadioGroup>{location === 'Llamada' && <Input className="mt-2" value={callPhone} onChange={e => setCallPhone(e.target.value)} placeholder="Teléfono..." />}{location === 'Móvil' && <Input className="mt-2" value={mobileAddress} onChange={e => setMobileAddress(e.target.value)} placeholder="Dirección del móvil..." />}</div>
+                            
+                            {/* 🔥 Mantenemos ubicación general por las dudas, pero el campo importante será el individual */}
+                            <div className="space-y-3"><Label>Ubicación (General de la nota)</Label><RadioGroup value={location} onValueChange={(v:any) => setLocation(v)} className="flex flex-wrap gap-4"><div className="flex items-center space-x-2"><RadioGroupItem value="Estudio" id="re" /><Label htmlFor="re">Estudio</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Móvil" id="rm" /><Label htmlFor="rm">Móvil</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Meet" id="mt" /><Label htmlFor="mt">Meet</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Llamada" id="rl" /><Label htmlFor="rl">Llamada</Label></div></RadioGroup>{location === 'Llamada' && <Input className="mt-2" value={callPhone} onChange={e => setCallPhone(e.target.value)} placeholder="Teléfono..." />}{location === 'Móvil' && <Input className="mt-2" value={mobileAddress} onChange={e => setMobileAddress(e.target.value)} placeholder="Dirección del móvil..." />}</div>
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">
@@ -880,13 +910,53 @@ export default function NewCommercialNotePage() {
                             <div className="space-y-3 border p-4 rounded-md bg-red-50/50"><div className="flex justify-between"><Label>Temas a EVITAR</Label><Button type="button" variant="ghost" size="sm" onClick={handleAddTopic}><Plus className="h-4 w-4"/></Button></div>{topicsToAvoid.map((t, idx) => (<div key={idx} className="flex gap-2"><Input value={t} onChange={e => handleTopicChange(idx, e.target.value)} placeholder={`Tema ${idx+1}`} />{topicsToAvoid.length > 1 && <Button type="button" size="icon" variant="ghost" onClick={() => handleRemoveTopic(idx)}><Trash2 className="h-4 w-4"/></Button>}</div>))}</div>
                         </div>
 
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2"><Label>Nombre Entrevistado</Label><Input value={intervieweeName} onChange={e => setIntervieweeName(e.target.value)} /></div>
-                            <div className="space-y-2"><Label>Cargo/Título</Label><Input value={intervieweeRole} onChange={e => setIntervieweeRole(e.target.value)} /></div>
-                            <div className="md:col-span-2 space-y-2"><Label>Bio</Label><Textarea value={intervieweeBio} onChange={e => setIntervieweeBio(e.target.value)} className="min-h-[80px]" /></div>
+                        {/* 🟢 NUEVA SECCIÓN DE ENTREVISTADOS */}
+                        <div className="space-y-4 border-t pt-4">
+                            <div className="flex items-center justify-between mb-2">
+                                <Label className="text-lg font-bold">Entrevistados</Label>
+                                <Button type="button" size="sm" variant="outline" onClick={handleAddInterviewee}>
+                                    <Plus className="h-4 w-4 mr-2" /> Agregar Entrevistado
+                                </Button>
+                            </div>
+                            
+                            <div className="grid gap-4">
+                                {interviewees.map((interviewee, idx) => (
+                                    <div key={idx} className="flex flex-col md:flex-row gap-4 p-4 border rounded-md bg-slate-50 relative">
+                                        <div className="flex-1 space-y-2">
+                                            <Label>Nombre</Label>
+                                            <Input value={interviewee.name} onChange={e => handleIntervieweeChange(idx, 'name', e.target.value)} placeholder="Juan Pérez" />
+                                        </div>
+                                        <div className="flex-1 space-y-2">
+                                            <Label>Cargo / Título</Label>
+                                            <Input value={interviewee.role} onChange={e => handleIntervieweeChange(idx, 'role', e.target.value)} placeholder="Director de Marketing" />
+                                        </div>
+                                        <div className="w-full md:w-48 space-y-2">
+                                            <Label>Lugar</Label>
+                                            <Select value={interviewee.location} onValueChange={(val: any) => handleIntervieweeChange(idx, 'location', val)}>
+                                                <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Piso">Estudio / Móvil</SelectItem>
+                                                    <SelectItem value="Video Llamada">Video Llamada</SelectItem>
+                                                    <SelectItem value="Teléfono">Teléfono</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        {interviewees.length > 1 && (
+                                            <Button type="button" size="icon" variant="ghost" className="absolute top-2 right-2 text-red-500 hover:bg-red-100" onClick={() => handleRemoveInterviewee(idx)}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            <div className="space-y-2 mt-4">
+                                <Label>Bio / Info Adicional (Contexto para todos)</Label>
+                                <Textarea value={intervieweeBio} onChange={e => setIntervieweeBio(e.target.value)} className="min-h-[80px]" placeholder="Información de contexto para la producción..." />
+                            </div>
                         </div>
 
-                         <div className="grid gap-4 md:grid-cols-2">
+                         <div className="grid gap-4 md:grid-cols-2 border-t pt-4 mt-6">
                             <div className="space-y-2">
                                 <div className="flex justify-between"><Label className={noInstagram ? "text-muted-foreground" : ""}>Instagram</Label><div className="flex items-center space-x-2"><Checkbox checked={noInstagram} onCheckedChange={(c) => setNoInstagram(!!c)} /><Label className="text-xs">No informar</Label></div></div>
                                 <div className="flex gap-2"><Input value={instagramHandle} onChange={e => setInstagramHandle(e.target.value)} disabled={noInstagram} /> {instagramHandle && (
@@ -962,7 +1032,12 @@ export default function NewCommercialNotePage() {
                         secondaryGrafs: secondaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
                         primaryGraf: primaryGrafs[0]?.toUpperCase() || '', 
                         secondaryGraf: secondaryGrafs[0]?.toUpperCase() || '',
-                        questions: questions.filter(q => q.trim()), topicsToAvoid: topicsToAvoid.filter(t => t.trim()), intervieweeName, intervieweeRole, intervieweeBio, instagram: instagramHandle, website, whatsapp, phone: commercialPhone, noWeb, noWhatsapp, noCommercialPhone, commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim()), noCommercialAddress, graphicSupport, 
+                        questions: questions.filter(q => q.trim()), topicsToAvoid: topicsToAvoid.filter(t => t.trim()), 
+                        
+                        // 🟢 PASAMOS LA LISTA DE ENTREVISTADOS AL PDF
+                        interviewees: interviewees.filter(i => i.name.trim()),
+                        
+                        intervieweeBio, instagram: instagramHandle, website, whatsapp, phone: commercialPhone, noWeb, noWhatsapp, noCommercialPhone, commercialAddresses: noCommercialAddress ? [] : commercialAddresses.filter(a => a.trim()), noCommercialAddress, graphicSupport, 
                         graphicSupportLinks: graphicSupport ? graphicLinks.filter(l => l.trim() !== '') : undefined,
                         noteObservations
                     }}
