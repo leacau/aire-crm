@@ -155,6 +155,8 @@ export function CoachingView({ advisor }: { advisor: User }) {
             taskId: '', 
             originalCreatedAt: new Date().toISOString(),
             entityType: newItemType,
+            // 🟢 SOLUCIÓN AL BUG: Agregamos un entityId único basado en el nombre para evitar que Firebase fusione las tareas manuales
+            entityId: `manual_${newItemEntity.trim().toLowerCase()}_${Date.now()}`,
             entityName: newItemEntity,
             action: newItemAction,
             status: 'Pendiente',
