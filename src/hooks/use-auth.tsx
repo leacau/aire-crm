@@ -214,11 +214,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (auth.currentUser) {
             const provider = new GoogleAuthProvider();
+            
+            // 🟢 CORRECCIÓN: Quitamos el "prompt" obligatorio y arreglamos el tipo de include_granted_scopes
+            // para evitar el auth/internal-error. Ahora renovará el token de forma casi transparente.
             provider.setCustomParameters({
-                  prompt: 'consent select_account',
-                  access_type: 'offline',
-                  include_granted_scopes: 'true',
-              });
+                  include_granted_scopes: 'true'
+            });
             
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/gmail.send');
