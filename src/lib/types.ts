@@ -566,7 +566,7 @@ export type ScheduleItem = {
 export type Interviewee = {
   name: string;
   role: string;
-  location: 'Piso' | 'Teléfono' | 'Video Llamada';
+  location: 'Piso' | 'Teléfono' | 'Video Llamada' | 'Móvil';
 };
 
 export type CommercialNote = {
