@@ -57,6 +57,11 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
     const pGrafs = note.primaryGrafs && note.primaryGrafs.length > 0 ? note.primaryGrafs : (note.primaryGraf ? [note.primaryGraf] : []);
     const sGrafs = note.secondaryGrafs && note.secondaryGrafs.length > 0 ? note.secondaryGrafs : (note.secondaryGraf ? [note.secondaryGraf] : []);
   
+    // 🟢 Normalización de entrevistados para el PDF
+    const safeInterviewees = note.interviewees?.length 
+        ? note.interviewees 
+        : (note.intervieweeName ? [{ name: note.intervieweeName, role: note.intervieweeRole || '', location: 'Piso' }] : []);
+
     return (
       <div ref={ref}>
         
@@ -198,11 +203,17 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
             <div className="flex flex-col gap-6">
                 
                 <div className="w-full">
-                    <SectionTitle title="4. Entrevistado" />
-                    <div className="grid grid-cols-2 gap-4">
-                        <Field label="Nombre" value={note.intervieweeName} />
-                        <Field label="Cargo" value={note.intervieweeRole} />
-                    </div>
+                    {/* 🟢 SECCIÓN DE ENTREVISTADOS ACTUALIZADA AL ARRAY */}
+                    <SectionTitle title="4. Entrevistado(s)" />
+                    
+                    {safeInterviewees.map((person, idx) => (
+                        <div key={idx} className="grid grid-cols-3 gap-4 mb-2 pb-2 border-b border-gray-100 last:border-0 last:pb-0">
+                            <Field label="Nombre" value={person.name} />
+                            <Field label="Cargo" value={person.role} />
+                            <Field label="Locación" value={person.location} />
+                        </div>
+                    ))}
+
                     {note.intervieweeBio && (
                         <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-100">
                             <span className="font-bold text-sm block">Bio / Info Adicional:</span>
