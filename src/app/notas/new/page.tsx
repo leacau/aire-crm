@@ -935,7 +935,8 @@ export default function NewCommercialNotePage() {
                                             <Select value={interviewee.location} onValueChange={(val: any) => handleIntervieweeChange(idx, 'location', val)}>
                                                 <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="Piso">Estudio / Móvil</SelectItem>
+                                                    <SelectItem value="Piso">Estudio</SelectItem>
+                                                    <SelectItem value="Móvil">Móvil</SelectItem>
                                                     <SelectItem value="Video Llamada">Video Llamada</SelectItem>
                                                     <SelectItem value="Teléfono">Teléfono</SelectItem>
                                                 </SelectContent>
