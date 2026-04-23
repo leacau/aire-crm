@@ -161,7 +161,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
         const page1 = element.querySelector('#social-pdf-page-1') as HTMLElement;
         const page2 = element.querySelector('#social-pdf-page-2') as HTMLElement;
         
-        // 🟢 Evitamos crasheos si la página 1 no renderizó a tiempo.
         if (!page1) throw new Error("No se encontraron las páginas del PDF");
 
         const pdf = new jsPDF('p', 'mm', 'a4');
@@ -192,7 +191,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
 
         await processPage(page1, 1);
         
-        // 🟢 Evita crashear si el PDF ocupó menos espacio y no tiene página 2 (muy común en Carruseles simples)
         if (page2) {
             await processPage(page2, 2);
         }
@@ -212,20 +210,33 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     };
 
     const handleSave = async () => {
-        if (!clientId || !contactName || !recordingLocation || !objective || !script) {
+        // 🟢 NUEVAS REGLAS DE VALIDACIÓN MÁS FLEXIBLES
+        if (!clientId || !contactName || !objective) {
             toast({ title: 'Datos incompletos', description: 'Por favor complete los campos obligatorios marcados con *', variant: 'destructive' });
+            return;
+        }
+
+        if (contentType === 'Reel' && !recordingLocation.trim()) {
+            toast({ title: 'Falta Lugar de Grabación', description: 'Debe especificar dónde se grabará el Reel.', variant: 'destructive' });
+            return;
+        }
+
+        if ((contentType === 'Reel' || contentType === 'Carrusel') && !reelCopy.trim()) {
+            toast({ title: 'Falta el Copy', description: 'El Copy de la publicación es obligatorio para Reel y Carrusel.', variant: 'destructive' });
             return;
         }
 
         setSaving(true);
         try {
             const client = clients.find(c => c.id === clientId);
+            
+            // 🟢 ARMAMOS LOS DATOS LIMPIOS SEGÚN EL FORMATO
             const dataToSaveRaw: Partial<SocialMediaRequest> = {
                 clientId,
                 clientName: client?.denominacion || 'Unknown',
                 advisorId: advisorId || userInfo!.id,
                 advisorName: advisorName || userInfo!.name,
-                contactName, recordingLocation, recordingDate, recordingTime,
+                contactName,
                 contentType, creator, publishDate, clientValidation,
                 objective, script, observations, materialUrl,
             };
@@ -237,17 +248,19 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 dataToSaveRaw.storyTagClient = storyTagClient;
                 if (storyTagClient) dataToSaveRaw.storyTagHandle = storyTagHandle;
             } else if (contentType === 'Reel') {
+                dataToSaveRaw.recordingLocation = recordingLocation;
+                dataToSaveRaw.recordingDate = recordingDate;
+                dataToSaveRaw.recordingTime = recordingTime;
                 dataToSaveRaw.reelCopy = reelCopy;
                 dataToSaveRaw.reelCollaboration = reelCollaboration;
                 if (reelCollaboration) dataToSaveRaw.reelCollabHandle = reelCollabHandle;
             } else if (contentType === 'Carrusel') {
+                dataToSaveRaw.reelCopy = reelCopy;
                 dataToSaveRaw.reelCollaboration = reelCollaboration;
                 if (reelCollaboration) dataToSaveRaw.reelCollabHandle = reelCollabHandle;
-                // Guardamos solo los slides que tienen algo de info
                 dataToSaveRaw.carouselSlides = carouselSlides.filter(s => s.text.trim() || s.link.trim());
             }
 
-            // 🟢 Lógica infalible para limpiar undefineds y evitar el FirebaseError
             const dataToSave = Object.keys(dataToSaveRaw).reduce((acc, key) => {
                 const val = (dataToSaveRaw as any)[key];
                 if (val !== undefined) {
@@ -263,7 +276,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 finalId = await saveSocialMediaRequest(dataToSave, userInfo!.id, userInfo!.name);
             }
 
-            // 🟢 Try..Catch interno específico para el correo/PDF (Para que no arruine el guardado)
             if (notifyOnSave && pdfRef.current && finalId) {
                 const token = await getGoogleAccessToken();
                 if (token) {
@@ -301,7 +313,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
             router.push('/redes');
 
         } catch (error) {
-            // 🟢 Ahora logueamos el error de Firebase en consola para poder verlo a futuro.
             console.error("Error crítico al guardar el pedido:", error);
             toast({ title: 'Error al guardar', variant: 'destructive' });
         } finally {
@@ -348,14 +359,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                             <Input value={advisorName} readOnly className="bg-slate-50" />
                         )}
                     </div>
-
-                    <div className="space-y-2"><Label>Contacto Coordinación *</Label><Input value={contactName} onChange={e=>setContactName(e.target.value)} /></div>
-                    <div className="space-y-2"><Label>Lugar de Grabación *</Label><Input value={recordingLocation} onChange={e=>setRecordingLocation(e.target.value)} /></div>
-                    
-                    <div className="flex gap-4">
-                        <div className="space-y-2 flex-1"><Label>Fecha Grabación</Label><Input type="date" value={recordingDate} onChange={e=>setRecordingDate(e.target.value)} /></div>
-                        <div className="space-y-2 flex-1"><Label>Hora</Label><Input type="time" value={recordingTime} onChange={e=>setRecordingTime(e.target.value)} /></div>
-                    </div>
+                    <div className="space-y-2 md:col-span-2"><Label>Contacto Coordinación *</Label><Input value={contactName} onChange={e=>setContactName(e.target.value)} /></div>
                 </CardContent>
             </Card>
 
@@ -380,21 +384,38 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                         </div>
                         <div className="space-y-3">
                             <Label className="font-bold">Validación</Label>
-                            <div className="flex items-center space-x-2 h-9"><Checkbox id="val" checked={clientValidation} onCheckedChange={(v) => setClientValidation(!!v)} /><Label htmlFor="val">Requiere validación del cliente antes de publicar</Label></div>
+                            <div className="flex items-center space-x-2 h-9"><Checkbox id="val" checked={clientValidation} onCheckedChange={(v) => setClientValidation(!!v)} /><Label htmlFor="val">Requiere validación del cliente</Label></div>
                         </div>
                     </div>
 
+                    {/* 🟢 NUEVO LUGAR PARA LOS CAMPOS DE GRABACIÓN */}
+                    {contentType === 'Reel' && (
+                        <div className="grid md:grid-cols-3 gap-4 border-b border-dashed pb-6 bg-slate-50 p-4 rounded-md">
+                            <div className="space-y-2"><Label>Lugar de Grabación *</Label><Input value={recordingLocation} onChange={e=>setRecordingLocation(e.target.value)} placeholder="Ej: Estudio / Local del cliente" /></div>
+                            <div className="space-y-2"><Label>Fecha Grabación</Label><Input type="date" value={recordingDate} onChange={e=>setRecordingDate(e.target.value)} /></div>
+                            <div className="space-y-2"><Label>Hora</Label><Input type="time" value={recordingTime} onChange={e=>setRecordingTime(e.target.value)} /></div>
+                        </div>
+                    )}
+
                     <div className="space-y-4">
+                        <div className="space-y-2 flex-1"><Label>Fecha de Publicación Sugerida</Label><Input type="date" className="w-48" value={publishDate} onChange={e=>setPublishDate(e.target.value)} /></div>
                         <div className="space-y-2">
                             <Label>Objetivo del contenido * <span className="text-xs text-muted-foreground font-normal">(¿Qué quiero comunicar? ¿Beneficio de marca? ¿Vías de contacto?)</span></Label>
                             <Textarea className="h-20" value={objective} onChange={e=>setObjective(e.target.value)} />
                         </div>
                         <div className="space-y-2">
-                            <Label>Guion estimativo / Idea * <span className="text-xs text-muted-foreground font-normal">(Qué mostrar y qué NO mostrar)</span></Label>
+                            <Label>Guion estimativo / Idea <span className="text-xs text-muted-foreground font-normal">(Qué mostrar y qué NO mostrar)</span></Label>
                             <Textarea className="h-20" value={script} onChange={e=>setScript(e.target.value)} />
                         </div>
-                        <div className="space-y-2 flex-1"><Label>Fecha de Publicación Sugerida</Label><Input type="date" className="w-48" value={publishDate} onChange={e=>setPublishDate(e.target.value)} /></div>
                     </div>
+
+                    {/* 🟢 NUEVO LUGAR PARA EL COPY GENERAL */}
+                    {(contentType === 'Reel' || contentType === 'Carrusel') && (
+                        <div className="space-y-2 bg-blue-50/50 p-4 rounded-md border border-blue-100">
+                            <Label>Copy de la publicación * <span className="text-xs text-muted-foreground font-normal">(Texto que acompaña al posteo en el feed)</span></Label>
+                            <Textarea className="h-20 bg-white" value={reelCopy} onChange={e=>setReelCopy(e.target.value)} />
+                        </div>
+                    )}
 
                     {contentType === 'Story' && (
                         <div className="bg-orange-50 p-4 rounded-md border border-orange-100 space-y-4">
@@ -412,7 +433,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                     {contentType === 'Reel' && (
                         <div className="bg-blue-50 p-4 rounded-md border border-blue-100 space-y-4">
                             <h3 className="font-bold text-blue-800 border-b border-blue-200 pb-2">Opciones de Reel</h3>
-                            <div className="space-y-2"><Label>Copy estimado (o datos clave a incluir)</Label><Textarea className="h-20" value={reelCopy} onChange={e=>setReelCopy(e.target.value)} /></div>
                             <div className="flex items-center space-x-2"><Checkbox checked={reelCollaboration} onCheckedChange={(v) => setReelCollaboration(!!v)} /><Label>Publicación en Colaboración</Label></div>
                             {reelCollaboration && <div className="space-y-2 w-1/2"><Label>Cuenta a invitar</Label><Input value={reelCollabHandle} onChange={e=>setReelCollabHandle(e.target.value)} placeholder="@usuario" /></div>}
                         </div>
