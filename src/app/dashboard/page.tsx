@@ -31,6 +31,7 @@ import {
   getAllUsers,
   getInvoices,
   getPaymentEntries,
+  updateOpportunity // 🟢 IMPORTACIÓN NUEVA
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
@@ -70,6 +71,9 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { hasManagementPrivileges } from '@/lib/role-utils';
+
+// 🟢 IMPORTACIÓN NUEVA: El Modal de Oportunidades
+import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 
 type TaskStatus = 'overdue' | 'dueToday' | 'dueTomorrow';
 
@@ -162,12 +166,10 @@ const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
 };
 
-// 🟢 Función para calcular cuándo vence una oportunidad (soporta datos viejos y nuevos)
+// Función para calcular cuándo vence una oportunidad
 const getOpportunityEndDate = (opp: Opportunity): Date | null => {
-  // 1. Si ya tiene el formato nuevo con endDate
   if (opp.endDate) return parseISO(opp.endDate);
 
-  // 2. Si es el formato viejo (Periodicidad fija)
   if (opp.createdAt && opp.periodicidad && opp.periodicidad.length > 0) {
     const start = parseISO(opp.createdAt);
     let months = 0;
@@ -176,7 +178,7 @@ const getOpportunityEndDate = (opp: Opportunity): Date | null => {
       case 'Trimestral': months = 3; break;
       case 'Semestral': months = 6; break;
       case 'Anual': months = 12; break;
-      default: return null; // Ocasional no tiene vencimiento fijo
+      default: return null; 
     }
     return addMonths(start, months);
   }
@@ -187,9 +189,7 @@ const getOpportunityEndDate = (opp: Opportunity): Date | null => {
 export default function DashboardPage() {
   const { userInfo, loading: authLoading } = useAuth();
   
-  // Determinamos el nivel de acceso en base al nuevo sistema
   const isBoss = userInfo ? (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion') : false;
-  // Áreas restringidas que no deberían cargar ni facturas ni oportunidades para ahorrar recursos
   const isLightWeightArea = userInfo?.area && ['Pautado', 'Programación', 'Redacción', 'Redes', 'Audiovisual', 'Recursos Humanos', 'Canjes'].includes(userInfo.area);
 
   const router = useRouter();
@@ -210,6 +210,11 @@ export default function DashboardPage() {
   const [selectedTaskStatus, setSelectedTaskStatus] = useState<TaskStatus | null>(null);
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
   const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
+  
+  // 🟢 NUEVOS ESTADOS PARA ABRIR LA OPORTUNIDAD
+  const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
+  const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
+  
   const tasksSectionRef = useRef<HTMLDivElement>(null);
 
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -226,7 +231,6 @@ export default function DashboardPage() {
     let isMounted = true;
     setLoadingData(true);
 
-    // 1. Carga Rápida
     Promise.all([getAllUsers(), getClients(), getAllClientActivities()]).then(([u, c, t]) => {
         if (!isMounted) return;
         setUsers(u);
@@ -234,13 +238,11 @@ export default function DashboardPage() {
         setClients(c);
         setTasks(t);
         
-        // OPTIMIZACIÓN: Si es un área ligera (Ej: Pautado, Redes), cortamos acá y no cargamos las finanzas
         if (isLightWeightArea && !isBoss) {
             setLoadingData(false);
             return;
         }
 
-        // 2. Carga Pesada (Solo para Comercial, Admin, Jefes)
         Promise.all([
             getAllOpportunities(),
             getInvoices(),
@@ -305,7 +307,6 @@ export default function DashboardPage() {
 
   }, [userInfo, isBoss, selectedAdvisor, opportunities, clients, tasks, invoices, paymentEntries]);
 
-  // Las oportunidades a renovar se definen AQUÍ, después de definir userOpportunities
   const opportunitiesToRenew = useMemo(() => {
     const today = new Date();
     const thirtyDaysFromNow = addDays(today, 30);
@@ -316,7 +317,6 @@ export default function DashboardPage() {
       const end = getOpportunityEndDate(opp);
       if (!end) return false;
 
-      // Está vigente PERO vence pronto (dentro de los próximos 30 días)
       return isAfter(end, today) && isBefore(end, thirtyDaysFromNow);
     });
   }, [userOpportunities]);
@@ -425,9 +425,24 @@ export default function DashboardPage() {
     tasksSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // 🟢 CORRECCIÓN: Ahora manda opportunityId en lugar de id
+  // 🟢 CORRECCIÓN: En lugar de ir a otra página, abre el modal
   const handleRowClick = (opp: Opportunity) => {
-      router.push(`/opportunities?opportunityId=${opp.id}`);
+      setEditingOpportunity(opp);
+      setIsOpportunityModalOpen(true);
+  };
+  
+  // 🟢 CORRECCIÓN: Función para guardar cambios en Firebase
+  const handleUpdateOpportunity = async (updates: Partial<Opportunity>) => {
+      if (!editingOpportunity || !userInfo) return;
+      try {
+          await updateOpportunity(editingOpportunity.id, updates, userInfo.id, userInfo.name);
+          setOpportunities(prev => prev.map(o => o.id === editingOpportunity.id ? { ...o, ...updates } : o));
+          toast({ title: 'Oportunidad actualizada' });
+          setIsOpportunityModalOpen(false);
+      } catch (error) {
+          console.error("Error updating opportunity", error);
+          toast({ title: 'Error al actualizar', variant: 'destructive' });
+      }
   };
 
 
@@ -652,7 +667,6 @@ export default function DashboardPage() {
         
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           
-          {/* 🟢 Si es Pautado, RRHH, etc, ocultamos la tarjeta de Facturación */}
           {(!isLightWeightArea || isBoss) && (
               <Link href="/billing?tab=to-collect">
                 <Card className="hover:bg-muted/50 transition-colors">
@@ -693,7 +707,6 @@ export default function DashboardPage() {
               </Link>
           )}
 
-          {/* 🟢 Idem para Oportunidades ("En Cartera") */}
           {(!isLightWeightArea || isBoss) && (
               <Link href="/opportunities">
                 <Card className="hover:bg-muted/50 transition-colors">
@@ -732,7 +745,6 @@ export default function DashboardPage() {
         </div>
 
         <div className="mt-6 flex flex-col gap-6" ref={tasksSectionRef}>
-            {/* Tareas (Quedan visibles para todos) */}
             <Card className="w-full">
                  <CardHeader>
                     <CardTitle>Tareas Pendientes</CardTitle>
@@ -784,10 +796,8 @@ export default function DashboardPage() {
                 </CardContent>
             </Card>
 
-            {/* 🟢 Ocultar Gráficos de Finanzas para áreas ligeras */}
             {(!isLightWeightArea || isBoss) && (
                 <>
-                  {/* Oportunidades a vencer */}
                   {opportunitiesToRenew.length > 0 && (
                     <Card className="mt-6 border-amber-200 bg-amber-50/30">
                       <CardHeader className="flex flex-row items-center gap-2">
@@ -836,7 +846,6 @@ export default function DashboardPage() {
                     </Card>
                   )}
 
-                    {/* Evolución de Facturación */}
                     <Card className='w-full'>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
@@ -918,7 +927,6 @@ export default function DashboardPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Resumen de Mora */}
                      <Card className='w-full'>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
@@ -1005,7 +1013,17 @@ export default function DashboardPage() {
         dueTodayTasks={dueTodayTasks}
         dueTomorrowTasks={dueTomorrowTasks}
         usersMap={usersMap}
-      />
+    />
+    {/* 🟢 NUEVO: Modal de Oportunidades Integrado al Dashboard */}
+    {isOpportunityModalOpen && editingOpportunity && (
+        <OpportunityDetailsDialog
+            isOpen={isOpportunityModalOpen}
+            onOpenChange={setIsOpportunityModalOpen}
+            opportunity={editingOpportunity}
+            onUpdate={handleUpdateOpportunity}
+            client={clients.find(c => c.id === editingOpportunity.clientId)}
+        />
+    )}
     </>
   );
 }
