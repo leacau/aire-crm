@@ -187,7 +187,7 @@ const getOpportunityEndDate = (opp: Opportunity): Date | null => {
 export default function DashboardPage() {
   const { userInfo, loading: authLoading } = useAuth();
   
-  // 🟢 Determinamos el nivel de acceso en base al nuevo sistema
+  // Determinamos el nivel de acceso en base al nuevo sistema
   const isBoss = userInfo ? (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion') : false;
   // Áreas restringidas que no deberían cargar ni facturas ni oportunidades para ahorrar recursos
   const isLightWeightArea = userInfo?.area && ['Pautado', 'Programación', 'Redacción', 'Redes', 'Audiovisual', 'Recursos Humanos', 'Canjes'].includes(userInfo.area);
@@ -234,7 +234,7 @@ export default function DashboardPage() {
         setClients(c);
         setTasks(t);
         
-        // 🟢 OPTIMIZACIÓN: Si es un área ligera (Ej: Pautado, Redes), cortamos acá y no cargamos las finanzas
+        // OPTIMIZACIÓN: Si es un área ligera (Ej: Pautado, Redes), cortamos acá y no cargamos las finanzas
         if (isLightWeightArea && !isBoss) {
             setLoadingData(false);
             return;
@@ -305,7 +305,7 @@ export default function DashboardPage() {
 
   }, [userInfo, isBoss, selectedAdvisor, opportunities, clients, tasks, invoices, paymentEntries]);
 
-  // 🟢 Las oportunidades a renovar se definen AQUÍ, después de definir userOpportunities
+  // Las oportunidades a renovar se definen AQUÍ, después de definir userOpportunities
   const opportunitiesToRenew = useMemo(() => {
     const today = new Date();
     const thirtyDaysFromNow = addDays(today, 30);
@@ -425,8 +425,9 @@ export default function DashboardPage() {
     tasksSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // 🟢 CORRECCIÓN: Ahora manda opportunityId en lugar de id
   const handleRowClick = (opp: Opportunity) => {
-      router.push(`/opportunities?id=${opp.id}`);
+      router.push(`/opportunities?opportunityId=${opp.id}`);
   };
 
 
