@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, SupervisorComment, AdvertisingOrder, Program } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, SupervisorComment, AdvertisingOrder, Program, OpportunityPeriod } from '@/lib/types';
 import { periodicidadOptions, formaDePagoOptions, invoiceStatusOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
@@ -31,7 +31,7 @@ import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession, getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder, getPrograms } from '@/lib/firebase-service';
-import { PlusCircle, Clock, Trash2, Save, CalendarIcon, Mail, Briefcase, ExternalLink } from 'lucide-react';
+import { PlusCircle, Clock, Trash2, Save, CalendarIcon, Mail, Briefcase, ExternalLink, RefreshCw } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -353,7 +353,6 @@ export function OpportunityDetailsDialog({
       }
   };
 
-
  const handleSave = async () => {
     if (!editedOpportunity.title) {
         toast({ title: "Falta el título", description: "Por favor ingresa un título para la oportunidad.", variant: "destructive" });
@@ -458,6 +457,41 @@ export function OpportunityDetailsDialog({
 
   const handleDateChange = (name: keyof Opportunity, date: Date | undefined) => {
     setEditedOpportunity(prev => ({ ...prev, [name]: date ? date.toISOString().split('T')[0] : undefined }));
+  };
+
+  const handleRenewPeriod = () => {
+    if (!editedOpportunity.startDate || !editedOpportunity.endDate) {
+        toast({ title: "Faltan fechas", description: "Debe haber un período activo para poder renovarlo y pasarlo al historial.", variant: "destructive" });
+        return;
+    }
+    
+    if (!window.confirm("¿Seguro que deseas renovar? El período actual pasará al historial y podrás configurar las nuevas fechas de la pauta.")) return;
+
+    const newHistoryItem: OpportunityPeriod = {
+        startDate: editedOpportunity.startDate,
+        endDate: editedOpportunity.endDate,
+        value: editedOpportunity.value || 0,
+        updatedAt: new Date().toISOString(),
+        updatedBy: userInfo?.name || 'Sistema'
+    };
+
+    setEditedOpportunity(prev => ({
+        ...prev,
+        periodHistory: [...(prev.periodHistory || []), newHistoryItem],
+        startDate: undefined,
+        endDate: undefined
+    }));
+    
+    toast({ title: "Período archivado", description: "Ahora puedes ingresar las nuevas fechas de inicio y fin del nuevo período." });
+  };
+
+  const handleDeleteHistoryPeriod = (index: number) => {
+    if (!window.confirm("¿Seguro que deseas eliminar este período del historial? Esta acción no se guardará hasta que guardes la oportunidad.")) return;
+    setEditedOpportunity(prev => {
+        const newHistory = [...(prev.periodHistory || [])];
+        newHistory.splice(index, 1);
+        return { ...prev, periodHistory: newHistory };
+    });
   };
 
   const handleSaveOrdenPautado = (orden: OrdenPautado) => {
@@ -746,22 +780,78 @@ export function OpportunityDetailsDialog({
           </TabsContent>
 
           <TabsContent value="conditions" className="space-y-4 py-4">
-              <div className="space-y-2">
-                  <Label htmlFor="periodicidad">Periodicidad</Label>
-                  <div className="flex flex-wrap gap-x-4 gap-y-2">
-                      {periodicidadOptions.map(option => (
-                          <div key={option} className="flex items-center space-x-2">
-                              <Checkbox
-                                  id={`period-${option}`}
-                                  name='periodicidad'
-                                  checked={editedOpportunity.periodicidad?.includes(option)}
-                                  onCheckedChange={(checked) => handleMultiCheckboxChange('periodicidad', option, !!checked)}
-                              />
-                              <Label htmlFor={`period-${option}`} className="font-normal">{option}</Label>
-                          </div>
-                      ))}
+              
+              <div className="space-y-4 border p-4 rounded-md bg-slate-50/50">
+                  <div className="flex justify-between items-center mb-2">
+                      <Label className="text-base font-bold text-primary">Vigencia del Contrato</Label>
+                      {editedOpportunity.startDate && editedOpportunity.endDate && (
+                          <Button type="button" variant="outline" size="sm" onClick={handleRenewPeriod} className="h-8">
+                              <RefreshCw className="h-4 w-4 mr-2" /> Renovar Período
+                          </Button>
+                      )}
                   </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                          <Label>Fecha de Inicio</Label>
+                          <Popover>
+                              <PopoverTrigger asChild>
+                                  <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal bg-white", !editedOpportunity.startDate && "text-muted-foreground")}>
+                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                      {editedOpportunity.startDate ? format(parseISO(editedOpportunity.startDate), "PPP", { locale: es }) : <span>Seleccionar inicio</span>}
+                                  </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0">
+                                  <Calendar mode="single" selected={editedOpportunity.startDate ? parseISO(editedOpportunity.startDate) : undefined} onSelect={(d) => handleDateChange('startDate', d)} initialFocus />
+                              </PopoverContent>
+                          </Popover>
+                      </div>
+                      <div className="space-y-2">
+                          <Label>Fecha de Fin</Label>
+                          <Popover>
+                              <PopoverTrigger asChild>
+                                  <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal bg-white", !editedOpportunity.endDate && "text-muted-foreground")}>
+                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                      {editedOpportunity.endDate ? format(parseISO(editedOpportunity.endDate), "PPP", { locale: es }) : <span>Seleccionar fin</span>}
+                                  </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0">
+                                  <Calendar mode="single" selected={editedOpportunity.endDate ? parseISO(editedOpportunity.endDate) : undefined} onSelect={(d) => handleDateChange('endDate', d)} initialFocus />
+                              </PopoverContent>
+                          </Popover>
+                      </div>
+                  </div>
+
+                  {(!editedOpportunity.startDate && editedOpportunity.periodicidad && editedOpportunity.periodicidad.length > 0) && (
+                      <div className="text-sm text-amber-700 bg-amber-50 p-2 rounded mt-2 border border-amber-200">
+                          <span className="font-bold">Aviso de migración:</span> Esta oportunidad tiene configurada una periodicidad antigua ({editedOpportunity.periodicidad.join(', ')}). Por favor, define las fechas exactas de Inicio y Fin arriba.
+                      </div>
+                  )}
+
+                  {editedOpportunity.periodHistory && editedOpportunity.periodHistory.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-slate-200">
+                          <Label className="text-sm font-bold text-muted-foreground mb-2 block">Historial de Períodos Anteriores</Label>
+                          <div className="space-y-2">
+                              {editedOpportunity.periodHistory.map((period, idx) => (
+                                  <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border border-slate-200 text-sm shadow-sm">
+                                      <div>
+                                          <span className="font-medium text-slate-700">{format(parseISO(period.startDate), 'dd/MM/yyyy')}</span>
+                                          <span className="mx-2 text-muted-foreground">al</span>
+                                          <span className="font-medium text-slate-700">{format(parseISO(period.endDate), 'dd/MM/yyyy')}</span>
+                                      </div>
+                                      <div className="text-muted-foreground flex items-center gap-4">
+                                          <span>Valor: ${period.value.toLocaleString('es-AR')}</span>
+                                          <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:bg-red-50" onClick={() => handleDeleteHistoryPeriod(idx)}>
+                                              <Trash2 className="h-3 w-3" />
+                                          </Button>
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+                  )}
               </div>
+
               <div className="space-y-2">
                 <Label>Forma de Pago</Label>
                 <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -890,7 +980,6 @@ export function OpportunityDetailsDialog({
                                     </p>
                                 </div>
                                 <div className="flex gap-2">
-                                    {/* 🟢 REEMPLAZAMOS EL VISOR EMERGENTE POR UN LINK A LA PÁGINA COMPLETA */}
                                     <Button variant="outline" size="icon" asChild>
                                         <Link href={`/publicidad/${order.id}`}>
                                             <ExternalLink className="h-4 w-4" />
@@ -969,7 +1058,7 @@ export function OpportunityDetailsDialog({
                                 <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={editedOpportunity.finalizationDate ? parseISO(editedOpportunity.finalizationDate) : undefined} onSelect={(d) => handleDateChange('finalizationDate', d)} initialFocus /></PopoverContent>
                             </Popover>
                              <p className="text-xs text-muted-foreground">
-                                Esta oportunidad se considerará finalizada en esta fecha, independientemente de su periodicidad.
+                                Esta oportunidad se considerará finalizada en esta fecha, independientemente de su vigencia.
                             </p>
                         </div>
                     )}
