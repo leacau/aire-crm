@@ -62,7 +62,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const [reelCollaboration, setReelCollaboration] = useState(false);
     const [reelCollabHandle, setReelCollabHandle] = useState('');
 
-    // 🟢 Específicos Carrusel (Slides)
+    // Específicos Carrusel (Slides)
     const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([{ text: '', link: '' }]);
 
     const [advisorId, setAdvisorId] = useState('');
@@ -73,7 +73,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
 
     useEffect(() => {
-        console.log(userInfo.email)
         const init = async () => {
             try {
                 const clientsData = await getClients();
@@ -114,7 +113,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                         setReelCollaboration(req.reelCollaboration || false);
                         setReelCollabHandle(req.reelCollabHandle || '');
 
-                        // 🟢 Cargar slides si es carrusel
                         if (req.carouselSlides && req.carouselSlides.length > 0) {
                             setCarouselSlides(req.carouselSlides);
                         }
@@ -162,7 +160,9 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const generateMultiPagePdf = async (element: HTMLElement) => {
         const page1 = element.querySelector('#social-pdf-page-1') as HTMLElement;
         const page2 = element.querySelector('#social-pdf-page-2') as HTMLElement;
-        if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
+        
+        // 🟢 Evitamos crasheos si la página 1 no renderizó a tiempo.
+        if (!page1) throw new Error("No se encontraron las páginas del PDF");
 
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -191,7 +191,11 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
         };
 
         await processPage(page1, 1);
-        await processPage(page2, 2);
+        
+        // 🟢 Evita crashear si el PDF ocupó menos espacio y no tiene página 2 (muy común en Carruseles simples)
+        if (page2) {
+            await processPage(page2, 2);
+        }
 
         return pdf;
     };
@@ -216,7 +220,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
         setSaving(true);
         try {
             const client = clients.find(c => c.id === clientId);
-            const dataToSave: Omit<SocialMediaRequest, 'id' | 'createdAt'> = {
+            const dataToSaveRaw: Partial<SocialMediaRequest> = {
                 clientId,
                 clientName: client?.denominacion || 'Unknown',
                 advisorId: advisorId || userInfo!.id,
@@ -227,21 +231,30 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
             };
 
             if (contentType === 'Story') {
-                dataToSave.isWebReplication = isWebReplication;
-                dataToSave.storyUrl = storyUrl;
-                dataToSave.storyCta = storyCta;
-                dataToSave.storyTagClient = storyTagClient;
-                dataToSave.storyTagHandle = storyTagClient ? storyTagHandle : undefined;
+                dataToSaveRaw.isWebReplication = isWebReplication;
+                dataToSaveRaw.storyUrl = storyUrl;
+                dataToSaveRaw.storyCta = storyCta;
+                dataToSaveRaw.storyTagClient = storyTagClient;
+                if (storyTagClient) dataToSaveRaw.storyTagHandle = storyTagHandle;
             } else if (contentType === 'Reel') {
-                dataToSave.reelCopy = reelCopy;
-                dataToSave.reelCollaboration = reelCollaboration;
-                dataToSave.reelCollabHandle = reelCollaboration ? reelCollabHandle : undefined;
+                dataToSaveRaw.reelCopy = reelCopy;
+                dataToSaveRaw.reelCollaboration = reelCollaboration;
+                if (reelCollaboration) dataToSaveRaw.reelCollabHandle = reelCollabHandle;
             } else if (contentType === 'Carrusel') {
-                dataToSave.reelCollaboration = reelCollaboration;
-                dataToSave.reelCollabHandle = reelCollaboration ? reelCollabHandle : undefined;
+                dataToSaveRaw.reelCollaboration = reelCollaboration;
+                if (reelCollaboration) dataToSaveRaw.reelCollabHandle = reelCollabHandle;
                 // Guardamos solo los slides que tienen algo de info
-                dataToSave.carouselSlides = carouselSlides.filter(s => s.text.trim() || s.link.trim());
+                dataToSaveRaw.carouselSlides = carouselSlides.filter(s => s.text.trim() || s.link.trim());
             }
+
+            // 🟢 Lógica infalible para limpiar undefineds y evitar el FirebaseError
+            const dataToSave = Object.keys(dataToSaveRaw).reduce((acc, key) => {
+                const val = (dataToSaveRaw as any)[key];
+                if (val !== undefined) {
+                    acc[key] = val;
+                }
+                return acc;
+            }, {} as Record<string, any>) as Omit<SocialMediaRequest, 'id' | 'createdAt'>;
 
             let finalId = editId;
             if (editId) {
@@ -250,33 +263,46 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 finalId = await saveSocialMediaRequest(dataToSave, userInfo!.id, userInfo!.name);
             }
 
+            // 🟢 Try..Catch interno específico para el correo/PDF (Para que no arruine el guardado)
             if (notifyOnSave && pdfRef.current && finalId) {
                 const token = await getGoogleAccessToken();
                 if (token) {
-                    const pdf = await generateMultiPagePdf(pdfRef.current);
-                    const base64 = pdf.output('datauristring').split(',')[1];
-                    const link = `${window.location.origin}/redes/${finalId}`;
-                    
-                    const emailBody = `
-                        <h2>Pedido de Material para Redes (${contentType})</h2>
-                        <p>El usuario <strong>${userInfo!.name}</strong> ha cargado o modificado un pedido a nombre de <strong>${advisorName}</strong>.</p>
-                        <p>Cliente: <strong>${client?.denominacion}</strong></p>
-                        <p><a href="${link}">Ver Detalles del Pedido en el CRM</a></p>
-                    `;
+                    try {
+                        const pdf = await generateMultiPagePdf(pdfRef.current);
+                        const base64 = pdf.output('datauristring').split(',')[1];
+                        const link = `${window.location.origin}/redes/${finalId}`;
+                        
+                        const emailBody = `
+                            <h2>Pedido de Material para Redes (${contentType})</h2>
+                            <p>El usuario <strong>${userInfo!.name}</strong> ha cargado o modificado un pedido a nombre de <strong>${advisorName}</strong>.</p>
+                            <p>Cliente: <strong>${client?.denominacion}</strong></p>
+                            <p><a href="${link}">Ver Detalles del Pedido en el CRM</a></p>
+                        `;
 
-                    await sendEmail({
-                        accessToken: token,
-                        to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email],
-                        subject: `Pedido Redes: ${contentType} - ${client?.denominacion}`,
-                        body: emailBody,
-                        attachments: [{ filename: `Redes_${client?.denominacion}.pdf`, content: base64, encoding: 'base64' }]
-                    });
+                        await sendEmail({
+                            accessToken: token,
+                            to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email],
+                            subject: `Pedido Redes: ${contentType} - ${client?.denominacion}`,
+                            body: emailBody,
+                            attachments: [{ filename: `Redes_${client?.denominacion}.pdf`, content: base64, encoding: 'base64' }]
+                        });
+                        toast({ title: 'Pedido guardado y notificado correctamente' });
+                    } catch (notificationError) {
+                        console.error("Error al generar PDF o enviar email:", notificationError);
+                        toast({ title: 'Pedido guardado', description: 'Ocurrió un error al enviar el correo, pero el pedido se guardó.', variant: 'default' });
+                    }
+                } else {
+                    toast({ title: 'Pedido guardado correctamente' });
                 }
+            } else {
+                 toast({ title: 'Pedido guardado correctamente' });
             }
 
-            toast({ title: 'Pedido guardado correctamente' });
             router.push('/redes');
+
         } catch (error) {
+            // 🟢 Ahora logueamos el error de Firebase en consola para poder verlo a futuro.
+            console.error("Error crítico al guardar el pedido:", error);
             toast({ title: 'Error al guardar', variant: 'destructive' });
         } finally {
             setSaving(false);
@@ -392,7 +418,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                         </div>
                     )}
 
-                    {/* 🟢 Opciones Dinámicas de Carrusel */}
                     {contentType === 'Carrusel' && (
                         <div className="bg-purple-50 p-4 rounded-md border border-purple-100 space-y-4">
                             <div className="flex justify-between items-center border-b border-purple-200 pb-2">
@@ -428,17 +453,17 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                         </div>
                     )}
                     <div className="space-y-2">
-    <Label className="flex items-center gap-2">
-        Link a Materiales de Apoyo 
-        <span className="text-xs text-muted-foreground font-normal">(Drive, Dropbox, WeTransfer, etc.)</span>
-    </Label>
-    <Input 
-        value={materialUrl} 
-        onChange={e => setMaterialUrl(e.target.value)} 
-        placeholder="https://drive.google.com/..." 
-        className="bg-white"
-    />
-</div>
+                        <Label className="flex items-center gap-2">
+                            Link a Materiales de Apoyo 
+                            <span className="text-xs text-muted-foreground font-normal">(Drive, Dropbox, WeTransfer, etc.)</span>
+                        </Label>
+                        <Input 
+                            value={materialUrl} 
+                            onChange={e => setMaterialUrl(e.target.value)} 
+                            placeholder="https://drive.google.com/..." 
+                            className="bg-white"
+                        />
+                    </div>
                     <div className="space-y-2"><Label>Observaciones adicionales</Label><Textarea value={observations} onChange={e=>setObservations(e.target.value)} /></div>
                 </CardContent>
             </Card>
