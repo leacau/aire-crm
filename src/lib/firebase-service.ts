@@ -1036,6 +1036,11 @@ export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'create
         details: `creó el prospecto <strong>${prospectData.companyName}</strong>`,
         ownerName: userName,
     });
+    try {
+        await autoUpdateCoachingSession(userId, userName, 'prospect', docRef.id, prospectData.companyName, 'Nuevo prospecto cargado en el sistema.');
+    } catch (e) {
+        console.error('Error auto-updating coaching:', e);
+    }
     return docRef.id;
 };
 
@@ -2423,6 +2428,13 @@ export const createClient = async (
             ownerName: userName
         });
     }
+    if (userId && userName) {
+        try {
+            await autoUpdateCoachingSession(userId, userName, 'client', docRef.id, clientData.denominacion, 'Nuevo cliente cargado en el sistema.');
+        } catch (e) {
+            console.error('Error auto-updating coaching:', e);
+        }
+    }
 
     return docRef.id;
 };
@@ -2958,6 +2970,11 @@ export const createOpportunity = async (
         details: `creó la oportunidad <strong>${opportunityData.title}</strong> para el cliente <a href="/clients/${opportunityData.clientId}" class="font-bold text-primary hover:underline">${opportunityData.clientName}</a>`,
         ownerName: ownerName
     });
+    try {
+        await autoUpdateCoachingSession(userId, userName, 'client', opportunityData.clientId, opportunityData.clientName, `Nueva propuesta: ${opportunityData.title} - Valor: $${opportunityData.value}`);
+    } catch (e) {
+        console.error('Error auto-updating coaching:', e);
+    }
 
     return docRef.id;
 };
@@ -3139,6 +3156,19 @@ export const updateOpportunity = async (
         entityName: originalData.title,
         ownerName: ownerName
     };
+
+    const isRenewal = data.periodHistory && originalData.periodHistory && (data.periodHistory.length > originalData.periodHistory.length);
+    const isFirstRenewal = data.periodHistory && (!originalData.periodHistory || originalData.periodHistory.length === 0);
+    
+    if (isRenewal || isFirstRenewal) {
+         try {
+             const newStart = data.startDate ? format(parseISO(data.startDate), 'dd/MM/yyyy', { locale: es }) : '?';
+             const newEnd = data.endDate ? format(parseISO(data.endDate), 'dd/MM/yyyy', { locale: es }) : '?';
+             await autoUpdateCoachingSession(userId, userName, 'client', originalData.clientId, originalData.clientName, `Propuesta renovada: ${data.title || originalData.title} - Valor: $${data.value || originalData.value} - Período: ${newStart} al ${newEnd}`);
+         } catch (e) {
+             console.error('Error auto-updating coaching:', e);
+         }
+    }
 
     if (stageChanged) {
         await logActivity({
@@ -3358,6 +3388,18 @@ export const createClientActivity = async (
 
     const docRef = await addDoc(collections.clientActivities, dataToSave);
     invalidateCache('client_activities');
+    if (activityData.userId && activityData.userName) {
+        try {
+            const entityType = activityData.clientId ? 'client' : 'prospect';
+            const entityId = activityData.clientId || activityData.prospectId || '';
+            const entityName = activityData.clientName || activityData.prospectName || '';
+            if (entityId) {
+                await autoUpdateCoachingSession(activityData.userId, activityData.userName, entityType, entityId, entityName, `Actividad (${activityData.type}): ${activityData.observation}`);
+            }
+        } catch (e) {
+            console.error('Error auto-updating coaching:', e);
+        }
+    }
     return docRef.id;
 };
 
@@ -4232,4 +4274,73 @@ export const deleteConvenioCanje = async (
         details: `eliminó un Convenio de Canje y su Orden de Publicidad asociada`,
         ownerName: userName,
     });
+};
+
+export const autoUpdateCoachingSession = async (
+    advisorId: string,
+    advisorName: string,
+    entityType: 'client' | 'prospect',
+    entityId: string,
+    entityName: string,
+    actionText: string
+) => {
+    if (!advisorId || !entityId) return;
+
+    // 1. Buscar sesión abierta
+    const sessions = await getCoachingSessions(advisorId);
+    let openSession = sessions.find(s => s.status === 'Open');
+
+    // 2. Crear sesión si no existe
+    if (!openSession) {
+        const newSessionId = await createCoachingSession({
+            advisorId: advisorId,
+            advisorName: advisorName,
+            managerId: advisorId,
+            managerName: 'Sistema Automático',
+            date: new Date().toISOString(),
+            items: [],
+            generalNotes: ''
+        }, advisorId, 'Sistema');
+        openSession = { id: newSessionId, items: [] } as any;
+    }
+
+    const dateStr = format(new Date(), "dd/MM HH:mm");
+    const newText = `[Agregado ${dateStr}] ${actionText}`;
+
+    // 3. Buscar si la entidad ya está en la sesión
+    const existingItemIndex = openSession!.items?.findIndex(i => 
+        i.entityId === entityId && 
+        (i.status === 'Pendiente' || i.status === 'En Proceso')
+    ) ?? -1;
+
+    if (existingItemIndex >= 0) {
+        // 4. Actualizar bitácora del ítem existente
+        const existingItem = openSession!.items[existingItemIndex];
+        const updatedAdvisorNotes = existingItem.advisorNotes 
+            ? `${existingItem.advisorNotes}\n\n${newText}` 
+            : newText;
+        
+        await updateCoachingItem(
+            openSession!.id, 
+            existingItem.id, 
+            { advisorNotes: updatedAdvisorNotes }, 
+            advisorId, 
+            advisorName
+        );
+    } else {
+        // 5. Crear nuevo ítem en la sesión
+        const newItem: CoachingItem = {
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+            taskId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+            originalCreatedAt: new Date().toISOString(),
+            entityType: entityType,
+            entityId: entityId,
+            entityName: entityName,
+            action: actionText,
+            status: 'Pendiente',
+            advisorNotes: '',
+            origin: 'advisor'
+        };
+        await addItemsToSession(openSession!.id, [newItem]);
+    }
 };
