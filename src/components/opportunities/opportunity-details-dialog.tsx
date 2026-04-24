@@ -30,7 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getCoachingSessions, createCoachingSession, addItemsToSession, getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder, getPrograms } from '@/lib/firebase-service';
+import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder, getPrograms, autoUpdateCoachingSession } from '@/lib/firebase-service'; // 🟢 Importamos autoUpdateCoachingSession
 import { PlusCircle, Clock, Trash2, Save, CalendarIcon, Mail, Briefcase, ExternalLink, RefreshCw } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
@@ -169,7 +169,6 @@ export function OpportunityDetailsDialog({
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const [unreadCommentsCount, setUnreadCommentsCount] = useState(0);
 
-  const [addToCoaching, setAddToCoaching] = useState(false);
   const [isSendingToCoaching, setIsSendingToCoaching] = useState(false);
 
   const isEditing = !!opportunity;
@@ -288,7 +287,6 @@ export function OpportunityDetailsDialog({
         if (!initialData.createdAt && isEditing) initialData.createdAt = opportunity?.createdAt;
         setEditedOpportunity(initialData);
         
-        setAddToCoaching(false);
         setIsSendingToCoaching(false);
 
         getAgencies()
@@ -310,41 +308,20 @@ export function OpportunityDetailsDialog({
     setEditedOpportunity(prev => ({...prev, agencyId: newAgency.id }));
   }
 
+  // 🟢 ACTUALIZADO: Envío manual con la nueva lógica inteligente
   const sendToCoaching = async (oppTitle: string) => {
       if (!userInfo || !client) return;
       setIsSendingToCoaching(true);
       try {
-          const sessions = await getCoachingSessions(userInfo.id);
-          let openSession = sessions.find(s => s.status === 'Open');
-
-          if (!openSession) {
-              const newSessionId = await createCoachingSession({
-                  advisorId: userInfo.id,
-                  advisorName: userInfo.name,
-                  managerId: userInfo.managerId || userInfo.id, 
-                  managerName: 'Jefatura',
-                  date: new Date().toISOString(),
-                  items: [],
-                  generalNotes: ''
-              }, userInfo.id, userInfo.name);
-              openSession = { id: newSessionId } as any;
-          }
-
-          if (openSession) {
-              await addItemsToSession(openSession.id, [{
-                  id: '', 
-                  taskId: '', 
-                  originalCreatedAt: new Date().toISOString(),
-                  entityType: 'client',
-                  entityId: client.id,
-                  entityName: client.name,
-                  action: `Nueva propuesta: ${oppTitle}`,
-                  status: 'Pendiente',
-                  advisorNotes: '', 
-                  origin: 'advisor'
-              }]);
-              toast({ title: "Agregado al seguimiento", description: "La propuesta se sumó a tu hoja de ruta semanal." });
-          }
+          await autoUpdateCoachingSession(
+              userInfo.id,
+              userInfo.name,
+              'client',
+              client.id,
+              client.name,
+              `Enviado a seguimiento: Propuesta ${oppTitle}`
+          );
+          toast({ title: "Agregado al seguimiento", description: "La propuesta se sumó a tu hoja de ruta semanal." });
       } catch (error) {
           console.error("Error sending to coaching:", error);
           toast({ title: "Error", description: "No se pudo agregar al seguimiento.", variant: "destructive" });
@@ -375,10 +352,6 @@ export function OpportunityDetailsDialog({
     } else if (!isEditing) {
         const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
         onCreate(newOpp, []);
-        
-        if (addToCoaching) {
-            await sendToCoaching(editedOpportunity.title!);
-        }
     }
     onOpenChange(false);
 };
@@ -1146,16 +1119,6 @@ export function OpportunityDetailsDialog({
 
         </div>
         <DialogFooter className="flex-col sm:flex-row gap-2">
-          {!isEditing && (
-             <div className="flex items-center space-x-2 mr-auto self-start sm:self-center">
-                <Checkbox 
-                    id="addToCoaching" 
-                    checked={addToCoaching} 
-                    onCheckedChange={(checked) => setAddToCoaching(!!checked)} 
-                />
-                <Label htmlFor="addToCoaching" className="cursor-pointer">Agregar al Seguimiento Semanal</Label>
-             </div>
-          )}
           <div className="flex gap-2 justify-end w-full sm:w-auto">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button onClick={handleSave}>Guardar Cambios</Button>
