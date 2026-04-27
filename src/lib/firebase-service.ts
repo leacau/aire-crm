@@ -4555,3 +4555,34 @@ export const cleanupOldActivities = async (): Promise<void> => {
         console.error("Error during cleanup of old activities:", e);
     }
 };
+// 🟢 Función para obtener toda la data necesaria para reportes consolidados
+export const getReportDataForAdvisors = async (advisorIds: string[]): Promise<any[]> => {
+    const allOpps = await getOpportunities();
+    const allPayments = await getPendingPaymentEntries();
+    const results = [];
+
+    for (const id of advisorIds) {
+        const user = await getUserById(id);
+        if (!user) continue;
+
+        const advisorOpps = allOpps.filter(o => {
+            // Filtrar por dueño de cliente
+            // Nota: Aquí dependemos de la carga previa de clients en el caché para velocidad
+            const cachedClients = getFromCache('clients') as Client[];
+            const client = cachedClients?.find(c => c.id === o.clientId);
+            return client?.ownerId === id;
+        });
+
+        const advisorPayments = allPayments.filter(p => p.advisorId === id);
+        const sessions = await getCoachingSessions(id);
+        const openSession = sessions.find(s => s.status === 'Open');
+
+        results.push({
+            advisor: user,
+            opportunities: advisorOpps,
+            payments: advisorPayments,
+            coaching: openSession || null
+        });
+    }
+    return results;
+};
