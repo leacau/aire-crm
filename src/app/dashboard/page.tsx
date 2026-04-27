@@ -24,14 +24,14 @@ import {
 import type { Opportunity, Client, ClientActivity, User, Invoice, PaymentEntry } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
-  getAllOpportunities,
+  getOpportunities, // 🟢 CAMBIO: Usamos la versión que lee del caché
   getClients,
   getAllClientActivities,
   updateClientActivity,
   getAllUsers,
-  getInvoices,
+  getDashboardInvoices, // 🟢 CAMBIO: Trae solo los últimos 13 meses
   getPaymentEntries,
-  updateOpportunity // 🟢 IMPORTACIÓN NUEVA
+  updateOpportunity 
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
@@ -71,8 +71,6 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { hasManagementPrivileges } from '@/lib/role-utils';
-
-// 🟢 IMPORTACIÓN NUEVA: El Modal de Oportunidades
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 
 type TaskStatus = 'overdue' | 'dueToday' | 'dueTomorrow';
@@ -166,7 +164,6 @@ const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
 };
 
-// Función para calcular cuándo vence una oportunidad
 const getOpportunityEndDate = (opp: Opportunity): Date | null => {
   if (opp.endDate) return parseISO(opp.endDate);
 
@@ -211,7 +208,6 @@ export default function DashboardPage() {
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
   const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
   
-  // 🟢 NUEVOS ESTADOS PARA ABRIR LA OPORTUNIDAD
   const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   
@@ -244,8 +240,8 @@ export default function DashboardPage() {
         }
 
         Promise.all([
-            getAllOpportunities(),
-            getInvoices(),
+            getOpportunities(), // 🟢 Se trae desde el caché (ahorra miles de lecturas)
+            getDashboardInvoices(), // 🟢 Trae solo 13 meses
             getPaymentEntries()
         ]).then(([o, i, p]) => {
             if (!isMounted) return;
@@ -425,17 +421,15 @@ export default function DashboardPage() {
     tasksSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // 🟢 CORRECCIÓN: En lugar de ir a otra página, abre el modal
   const handleRowClick = (opp: Opportunity) => {
       setEditingOpportunity(opp);
       setIsOpportunityModalOpen(true);
   };
   
-  // 🟢 CORRECCIÓN: Función para guardar cambios en Firebase
   const handleUpdateOpportunity = async (updates: Partial<Opportunity>) => {
       if (!editingOpportunity || !userInfo) return;
       try {
-          await updateOpportunity(editingOpportunity.id, updates, userInfo.id, userInfo.name);
+          await updateOpportunity(editingOpportunity.id, updates, userInfo.id, userInfo.name, editingOpportunity.clientName);
           setOpportunities(prev => prev.map(o => o.id === editingOpportunity.id ? { ...o, ...updates } : o));
           toast({ title: 'Oportunidad actualizada' });
           setIsOpportunityModalOpen(false);
@@ -1014,7 +1008,6 @@ export default function DashboardPage() {
         dueTomorrowTasks={dueTomorrowTasks}
         usersMap={usersMap}
     />
-    {/* 🟢 NUEVO: Modal de Oportunidades Integrado al Dashboard */}
     {isOpportunityModalOpen && editingOpportunity && (
         <OpportunityDetailsDialog
             isOpen={isOpportunityModalOpen}
