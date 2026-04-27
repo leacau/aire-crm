@@ -1696,6 +1696,46 @@ export const getInvoices = async (): Promise<Invoice[]> => {
     return invoices;
 };
 
+export const getDashboardInvoices = async (): Promise<Invoice[]> => {
+    const cachedData = getFromCache('dashboard_invoices');
+    if (cachedData) return cachedData;
+
+    // 🟢 Solo traemos facturas de los últimos 13 meses para el gráfico, ahorrando miles de lecturas.
+    const thirteenMonthsAgo = new Date();
+    thirteenMonthsAgo.setMonth(thirteenMonthsAgo.getMonth() - 13);
+    const dateStr = thirteenMonthsAgo.toISOString();
+
+    const q = query(
+        collections.invoices, 
+        where("dateGenerated", ">=", dateStr), 
+        orderBy("dateGenerated", "desc")
+    );
+    const snapshot = await getDocs(q);
+    
+    const invoices = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const validDate = data.date && typeof data.date === 'string' ? parseDateWithTimezone(data.date) : null;
+        const validDatePaid = data.datePaid && typeof data.datePaid === 'string' ? parseDateWithTimezone(data.datePaid) : null;
+
+        return {
+            id: doc.id,
+            ...data,
+            amount: normalizeInvoiceAmount(data.amount),
+            date: validDate ? format(validDate, 'yyyy-MM-dd') : undefined,
+            dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
+            datePaid: validDatePaid ? format(validDatePaid, 'yyyy-MM-dd') : undefined,
+            isCreditNote: Boolean(data.isCreditNote),
+            periodStart: data.periodStart,
+            periodEnd: data.periodEnd,
+            orderDate: data.orderDate,
+            orderNumber: data.orderNumber,
+        } as Invoice;
+    });
+
+    setInCache('dashboard_invoices', invoices);
+    return invoices;
+};
+
 export const getInvoicesPaginated = async (
     lastVisibleDoc: QueryDocumentSnapshot | null = null, 
     pageSize: number = 50
@@ -2273,14 +2313,20 @@ export async function updateUserProfile(uid: string, data: Partial<User>) {
 
 
 export const getAllUsers = async (role?: UserRole): Promise<User[]> => {
+  const cacheKey = `all_users_${role || 'all'}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   const usersRef = collection(db, 'users');
   const snapshot = await getDocs(usersRef);
   let users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
   if (role) {
       users = users.filter(u => u.role === role);
   }
-  // 🟢 Ordenamos alfabéticamente por nombre
-  return users.sort((a, b) => a.name.localeCompare(b.name));
+  
+  const sortedUsers = users.sort((a, b) => a.name.localeCompare(b.name));
+  setInCache(cacheKey, sortedUsers);
+  return sortedUsers;
 };
 
 export const getUserById = async (userId: string): Promise<User | null> => {
