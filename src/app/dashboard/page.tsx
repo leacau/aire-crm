@@ -25,12 +25,12 @@ import type { Opportunity, Client, ClientActivity, User, Invoice, PaymentEntry }
 import { useAuth } from '@/hooks/use-auth';
 import {
   getOpportunities,
-  getDashboardTasks,
+  getDashboardTasks, // 🟢 NUEVA: Solo tareas
   getClients,
   updateClientActivity,
   getAllUsers,
   getDashboardInvoices,
-  getPendingPaymentEntries,
+  getPendingPaymentEntries, // 🟢 NUEVA: Solo mora
   updateOpportunity,
   getAgencies, // 🟢 PREFETCH
   cleanupOldActivities // 🟢 LIMPIEZA
@@ -85,7 +85,7 @@ interface TaskSectionProps {
     usersMap: Record<string, User>;
 }
 
-const DynamicMonthYearPicker = dynamic(() => import('@/components/ui/month-year-picker').then(mod => mod.MonthYearPicker), {
+const DynamicMonthYearPicker = dynamic(() => import('@components/ui/month-year-picker').then(mod => mod.MonthYearPicker), {
   ssr: false,
   loading: () => <Skeleton className="h-10 w-[260px]" />,
 });
@@ -229,8 +229,8 @@ export default function DashboardPage() {
     let isMounted = true;
     setLoadingData(true);
 
-    // 🟢 PREFETCH de Agencias (se guardan en caché para acelerar los popups)
-    Promise.all([getAllUsers(), getClients(), getAllClientActivities(), getAgencies()]).then(([u, c, t, _]) => {
+    // 🟢 PREFETCH y uso de getDashboardTasks en lugar de getAllClientActivities
+    Promise.all([getAllUsers(), getClients(), getDashboardTasks(), getAgencies()]).then(([u, c, t, _]) => {
         if (!isMounted) return;
         setUsers(u);
         setAdvisors(u.filter(x => x.role === 'Asesor'));
@@ -248,7 +248,7 @@ export default function DashboardPage() {
         Promise.all([
             getOpportunities(),
             getDashboardInvoices(),
-            getPaymentEntries()
+            getPendingPaymentEntries() // 🟢 NUEVA: Solo trae facturas con deuda
         ]).then(([o, i, p]) => {
             if (!isMounted) return;
             setOpportunities(o);
@@ -276,7 +276,7 @@ export default function DashboardPage() {
     
     let filteredOpps = opportunities;
     let filteredClients = clients;
-    let filteredTasks = tasks.filter(t => t.isTask);
+    let filteredTasks = tasks.filter(t => t.isTask); // Ya viene filtrado de BD, pero es doble seguridad
     let filteredInvoices = invoices;
     let filteredPayments = paymentEntries;
 
