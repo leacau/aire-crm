@@ -2941,8 +2941,26 @@ export const getOpportunities = async (): Promise<Opportunity[]> => {
     const cachedData = getFromCache('opportunities');
     if (cachedData) return cachedData;
 
-    const snapshot = await getDocs(collections.opportunities);
-    const opportunities = snapshot.docs.map(mapOpportunityDoc);
+    // 🟢 ESTRATEGIA LIGERA: Traemos etapas activas y solo las "Perdidas" recientes
+    const activeStages = ['Nuevo', 'Propuesta', 'Negociación', 'Negociación a Aprobar', 'Cerrado - No Definido', 'Cerrado - Ganado'];
+    
+    // Ejecutamos las consultas de las activas en paralelo
+    const activeQueries = activeStages.map(stage => getDocs(query(collections.opportunities, where('stage', '==', stage))));
+    
+    // Traemos solo las Perdidas de los últimos 3 meses
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const lostQuery = getDocs(query(collections.opportunities, where('stage', '==', 'Cerrado - Perdido'), where('createdAt', '>=', threeMonthsAgo.toISOString())));
+
+    const snapshots = await Promise.all([...activeQueries, lostQuery]);
+    
+    const opportunities: Opportunity[] = [];
+    snapshots.forEach(snap => {
+        snap.docs.forEach(doc => {
+            opportunities.push(mapOpportunityDoc(doc));
+        });
+    });
+
     setInCache('opportunities', opportunities);
     return opportunities;
 };
@@ -4388,5 +4406,42 @@ export const autoUpdateCoachingSession = async (
             origin: 'advisor'
         };
         await addItemsToSession(openSession!.id, [newItem]);
+    }
+};
+
+// --- Mantenimiento Automático ---
+export const cleanupOldActivities = async (): Promise<void> => {
+    // Ejecutar solo 1 vez por día por navegador para no saturar
+    const lastCleanup = typeof window !== 'undefined' ? localStorage.getItem('last_activity_cleanup') : null;
+    const today = new Date().toISOString().split('T')[0];
+    if (lastCleanup === today) return;
+
+    try {
+        const sixtyDaysAgo = new Date();
+        sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+        const q = query(
+            collections.clientActivities,
+            where('completed', '==', true),
+            where('completedAt', '<', sixtyDaysAgo.toISOString()),
+            limit(100) // Borramos de a tandas pequeñas para no agotar escrituras
+        );
+
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+            if (typeof window !== 'undefined') localStorage.setItem('last_activity_cleanup', today);
+            return;
+        }
+
+        const batch = writeBatch(db);
+        snapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+        
+        if (typeof window !== 'undefined') localStorage.setItem('last_activity_cleanup', today);
+        console.log(`[Mantenimiento] Se limpiaron ${snapshot.docs.length} actividades antiguas.`);
+    } catch (e) {
+        console.error("Error during cleanup of old activities:", e);
     }
 };
