@@ -42,13 +42,39 @@ const cache: { [key: string]: { data: any; timestamp: number } } = {};
 const CACHE_DURATION_MS = 60 * 60 * 1000;
 
 const getFromCache = (key: string) => {
-    const cached = cache[key];
-    if (cached && (Date.now() - cached.timestamp < CACHE_DURATION_MS)) return cached.data;
+    // 1. Buscamos en la memoria RAM rápida
+    let cached = cache[key];
+    
+    // 2. Si no está en RAM (ej. apretó F5), buscamos en el sessionStorage del navegador
+    if (!cached && typeof window !== 'undefined') {
+        const sessionStr = sessionStorage.getItem(`crm_cache_${key}`);
+        if (sessionStr) {
+            try {
+                cached = JSON.parse(sessionStr);
+                cache[key] = cached; // Lo subimos de nuevo a la RAM
+            } catch (e) {}
+        }
+    }
+
+    // 3. Verificamos que no esté vencido (1 hora de vida)
+    if (cached && (Date.now() - cached.timestamp < CACHE_DURATION_MS)) {
+        return cached.data;
+    }
     return null;
 };
+
 const setInCache = (key: string, data: any) => {
-    cache[key] = { data, timestamp: Date.now() };
+    const cacheData = { data, timestamp: Date.now() };
+    cache[key] = cacheData;
+    if (typeof window !== 'undefined') {
+        try {
+            sessionStorage.setItem(`crm_cache_${key}`, JSON.stringify(cacheData));
+        } catch (e) {
+            // Ignoramos si el navegador del usuario está sin espacio
+        }
+    }
 };
+
 const timestampToISO = (value: any): string | undefined => {
     if (!value) return undefined;
     if (typeof value === 'string') return value;
@@ -56,8 +82,21 @@ const timestampToISO = (value: any): string | undefined => {
     return undefined;
 };
 export const invalidateCache = (key?: string) => {
-    if (key) delete cache[key];
-    else Object.keys(cache).forEach(k => delete cache[k]);
+    if (key) {
+        delete cache[key];
+        if (typeof window !== 'undefined') sessionStorage.removeItem(`crm_cache_${key}`);
+    } else {
+        // Borramos todo
+        Object.keys(cache).forEach(k => delete cache[k]);
+        if (typeof window !== 'undefined') {
+            const keysToRemove = [];
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const k = sessionStorage.key(i);
+                if (k && k.startsWith('crm_cache_')) keysToRemove.push(k);
+            }
+            keysToRemove.forEach(k => sessionStorage.removeItem(k));
+        }
+    }
 };
 const parseDateWithTimezone = (dateString: string) => {
     if (!dateString || typeof dateString !== 'string') return null;
@@ -1736,6 +1775,32 @@ export const getDashboardInvoices = async (): Promise<Invoice[]> => {
     return invoices;
 };
 
+export const getDashboardTasks = async (): Promise<ClientActivity[]> => {
+    const cachedData = getFromCache('dashboard_tasks');
+    if (cachedData) return cachedData;
+
+    // 🟢 ESTRATEGIA LIGERA: Traemos exclusivamente las que son tareas.
+    const q = query(
+        collections.clientActivities, 
+        where('isTask', '==', true), 
+        orderBy('timestamp', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    const tasks = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            timestamp: data.timestamp instanceof Timestamp ? data.timestamp.toDate().toISOString() : data.timestamp,
+            dueDate: data.dueDate instanceof Timestamp ? data.dueDate.toDate().toISOString() : data.dueDate,
+            completedAt: data.completedAt instanceof Timestamp ? data.completedAt.toDate().toISOString() : data.completedAt,
+        } as ClientActivity;
+    });
+    setInCache('dashboard_tasks', tasks);
+    return tasks;
+};
+
 export const getInvoicesPaginated = async (
     lastVisibleDoc: QueryDocumentSnapshot | null = null, 
     pageSize: number = 50
@@ -2019,11 +2084,18 @@ const computeDaysLate = (dueDate?: string | null) => {
     return diff > 0 ? diff : 0;
 };
 
-export const getPaymentEntries = async (): Promise<PaymentEntry[]> => {
-    const cached = getFromCache(PAYMENT_CACHE_KEY);
+export const getPendingPaymentEntries = async (): Promise<PaymentEntry[]> => {
+    const cached = getFromCache('pendingPaymentEntries');
     if (cached) return cached;
 
-    const snapshot = await getDocs(query(collections.paymentEntries, orderBy('createdAt', 'desc')));
+    // 🟢 ESTRATEGIA LIGERA: Traemos exclusivamente la mora
+    const q = query(
+        collections.paymentEntries,
+        where('status', 'in', ['Pendiente', 'Reclamado', 'Incobrable']),
+        orderBy('createdAt', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
     const payments = snapshot.docs.map(docSnap => {
         const data = docSnap.data();
         const parsed: PaymentEntry = {
@@ -2053,7 +2125,7 @@ export const getPaymentEntries = async (): Promise<PaymentEntry[]> => {
         return parsed;
     });
 
-    setInCache(PAYMENT_CACHE_KEY, payments);
+    setInCache('pendingPaymentEntries', payments);
     return payments;
 };
 
