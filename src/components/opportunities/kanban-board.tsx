@@ -18,7 +18,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service';
+import { getOpportunities, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service'; // 🟢 Usamos la rápida
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval, addMonths, startOfMonth, parseISO, isSameMonth, endOfMonth, format } from 'date-fns';
@@ -89,7 +89,6 @@ const KanbanColumn = ({
 }) => {
   const columnTotal = total ?? opportunities.reduce((sum, opp) => sum + Number(opp.value || 0), 0);
   const roundedTotal = Math.round(columnTotal * 100) / 100;
-
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -348,11 +347,12 @@ export function KanbanBoard({
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 🟢 ACÁ SE USA LA VERSIÓN RÁPIDA
   const fetchOpportunities = useCallback(async () => {
     setLoading(true);
     try {
       const [allOpps, allClients] = await Promise.all([
-        getAllOpportunities(),
+        getOpportunities(),
         getClients(),
       ]);
       setOpportunities(allOpps);
