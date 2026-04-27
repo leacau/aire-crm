@@ -19,7 +19,9 @@ import {
   CheckCircle,
   Briefcase,
   TrendingDown,
-  Clock
+  Clock,
+  FileDown, // 🟢 IMPORTACIÓN NUEVA
+  Users as UsersIcon // 🟢 IMPORTACIÓN NUEVA
 } from 'lucide-react';
 import type { Opportunity, Client, ClientActivity, User, Invoice, PaymentEntry } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
@@ -33,8 +35,10 @@ import {
   getPendingPaymentEntries,
   updateOpportunity,
   getAgencies, 
-  cleanupOldActivities
+  cleanupOldActivities,
+  getReportDataForAdvisors // 🟢 IMPORTACIÓN NUEVA
 } from '@/lib/firebase-service';
+import { generateAdvisorsPdfReport } from '@/lib/report-generator'; // 🟢 IMPORTACIÓN NUEVA
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, eachMonthOfInterval, differenceInDays, startOfDay, addDays, isAfter, isBefore, addMonths } from 'date-fns';
@@ -214,6 +218,9 @@ export default function DashboardPage() {
   const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   
+  // 🟢 ESTADO PARA DESCARGA DE PDF
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
   const tasksSectionRef = useRef<HTMLDivElement>(null);
 
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -444,6 +451,36 @@ export default function DashboardPage() {
       }
   };
 
+  // 🟢 FUNCIONES DE REPORTE PDF
+  const handleDownloadMyReport = async () => {
+    if (!userInfo) return;
+    setIsGeneratingPdf(true);
+    try {
+      const data = await getReportDataForAdvisors([userInfo.id]);
+      generateAdvisorsPdfReport(data);
+      toast({ title: "Reporte generado", description: "Tu informe se descargará en breve." });
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "No se pudo generar el reporte.", variant: "destructive" });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleDownloadTeamReport = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      const advisorIds = advisors.map(a => a.id);
+      const data = await getReportDataForAdvisors(advisorIds);
+      generateAdvisorsPdfReport(data);
+      toast({ title: "Reporte consolidado", description: "El informe del equipo se descargará en breve." });
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "No se pudo generar el reporte consolidado.", variant: "destructive" });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   if (authLoading) {
     return (
@@ -645,6 +682,33 @@ export default function DashboardPage() {
     )}
     <div className="flex flex-col h-full">
       <Header title="Panel">
+        {/* 🟢 BOTONES DE REPORTE */}
+        <div className="flex gap-2 items-center mr-2">
+            <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleDownloadMyReport} 
+                disabled={isGeneratingPdf}
+                className="hidden sm:flex"
+            >
+                {isGeneratingPdf ? <Spinner size="small" className="mr-2" /> : <FileDown className="mr-2 h-4 w-4" />}
+                Mi Informe
+            </Button>
+
+            {isBoss && (
+                <Button 
+                    variant="default" 
+                    size="sm" 
+                    onClick={handleDownloadTeamReport} 
+                    disabled={isGeneratingPdf}
+                    className="hidden sm:flex"
+                >
+                    {isGeneratingPdf ? <Spinner size="small" className="mr-2" /> : <UsersIcon className="mr-2 h-4 w-4" />}
+                    Informe Equipo
+                </Button>
+            )}
+        </div>
+
         {(!isLightWeightArea || isBoss) && (
             <DynamicMonthYearPicker date={selectedDate} onDateChange={setSelectedDate} />
         )}
