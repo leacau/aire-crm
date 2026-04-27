@@ -25,15 +25,15 @@ import type { Opportunity, Client, ClientActivity, User, Invoice, PaymentEntry }
 import { useAuth } from '@/hooks/use-auth';
 import {
   getOpportunities,
-  getDashboardTasks, // 🟢 NUEVA: Solo tareas
+  getDashboardTasks,
   getClients,
   updateClientActivity,
   getAllUsers,
   getDashboardInvoices,
-  getPendingPaymentEntries, // 🟢 NUEVA: Solo mora
+  getPendingPaymentEntries,
   updateOpportunity,
-  getAgencies, // 🟢 PREFETCH
-  cleanupOldActivities // 🟢 LIMPIEZA
+  getAgencies, 
+  cleanupOldActivities
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
@@ -85,7 +85,8 @@ interface TaskSectionProps {
     usersMap: Record<string, User>;
 }
 
-const DynamicMonthYearPicker = dynamic(() => import('@components/ui/month-year-picker').then(mod => mod.MonthYearPicker), {
+// 🟢 CORRECCIÓN: Agregada la barra en '@/components...'
+const DynamicMonthYearPicker = dynamic(() => import('@/components/ui/month-year-picker').then(mod => mod.MonthYearPicker), {
   ssr: false,
   loading: () => <Skeleton className="h-10 w-[260px]" />,
 });
@@ -229,7 +230,6 @@ export default function DashboardPage() {
     let isMounted = true;
     setLoadingData(true);
 
-    // 🟢 PREFETCH y uso de getDashboardTasks en lugar de getAllClientActivities
     Promise.all([getAllUsers(), getClients(), getDashboardTasks(), getAgencies()]).then(([u, c, t, _]) => {
         if (!isMounted) return;
         setUsers(u);
@@ -237,7 +237,6 @@ export default function DashboardPage() {
         setClients(c);
         setTasks(t);
         
-        // 🟢 LIMPIEZA SILENCIOSA de tareas viejas
         cleanupOldActivities();
 
         if (isLightWeightArea && !isBoss) {
@@ -248,7 +247,7 @@ export default function DashboardPage() {
         Promise.all([
             getOpportunities(),
             getDashboardInvoices(),
-            getPendingPaymentEntries() // 🟢 NUEVA: Solo trae facturas con deuda
+            getPendingPaymentEntries() 
         ]).then(([o, i, p]) => {
             if (!isMounted) return;
             setOpportunities(o);
@@ -276,7 +275,7 @@ export default function DashboardPage() {
     
     let filteredOpps = opportunities;
     let filteredClients = clients;
-    let filteredTasks = tasks.filter(t => t.isTask); // Ya viene filtrado de BD, pero es doble seguridad
+    let filteredTasks = tasks.filter(t => t.isTask); 
     let filteredInvoices = invoices;
     let filteredPayments = paymentEntries;
 
