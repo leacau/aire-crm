@@ -25,12 +25,12 @@ import type { Opportunity, Client, ClientActivity, User, Invoice, PaymentEntry }
 import { useAuth } from '@/hooks/use-auth';
 import {
   getOpportunities,
+  getDashboardTasks,
   getClients,
-  getAllClientActivities,
   updateClientActivity,
   getAllUsers,
   getDashboardInvoices,
-  getPaymentEntries,
+  getPendingPaymentEntries,
   updateOpportunity,
   getAgencies, // 🟢 PREFETCH
   cleanupOldActivities // 🟢 LIMPIEZA
