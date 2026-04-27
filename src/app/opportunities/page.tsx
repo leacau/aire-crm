@@ -7,11 +7,10 @@ import type { DateRange } from 'react-day-picker';
 import { MonthYearPicker } from '@/components/ui/month-year-picker';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getAllUsers, getClients } from '@/lib/firebase-service';
+import { getAllUsers, getClients, getAgencies } from '@/lib/firebase-service'; // 🟢 PREFETCH
 import type { User, Client } from '@/lib/types';
 import { startOfMonth, endOfMonth } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';
-
 
 export default function OpportunitiesPage() {
   const { isBoss } = useAuth();
@@ -37,16 +36,19 @@ export default function OpportunitiesPage() {
     if(isBoss) {
       Promise.all([
         getAllUsers('Asesor'),
-        getClients()
+        getClients(),
+        getAgencies() // 🟢 PREFETCH para combos
       ]).then(([advisors, clients]) => {
         setAllAdvisors(advisors);
         setAllClients(clients);
       });
+    } else {
+        // Si el que entra es un asesor, precargamos las agencias de todos modos
+        getAgencies();
     }
   }, [isBoss]);
   
   useEffect(() => {
-    // Reset client filter when advisor changes
     setSelectedClient('all');
   }, [selectedAdvisor, dateRange]);
 
