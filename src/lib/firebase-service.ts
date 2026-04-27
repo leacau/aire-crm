@@ -2084,6 +2084,44 @@ const computeDaysLate = (dueDate?: string | null) => {
     return diff > 0 ? diff : 0;
 };
 
+export const getPaymentEntries = async (): Promise<PaymentEntry[]> => {
+    const cached = getFromCache('paymentEntries');
+    if (cached) return cached;
+
+    const snapshot = await getDocs(query(collections.paymentEntries, orderBy('createdAt', 'desc')));
+    const payments = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        const parsed: PaymentEntry = {
+            id: docSnap.id,
+            advisorId: data.advisorId,
+            advisorName: data.advisorName,
+            company: data.company,
+            tipo: data.tipo,
+            comprobanteNumber: data.comprobanteNumber,
+            razonSocial: data.razonSocial,
+            amount: typeof data.amount === 'number' ? data.amount : Number(data.amount) || undefined,
+            pendingAmount: typeof data.pendingAmount === 'number' ? data.pendingAmount : Number(data.pendingAmount) || undefined,
+            issueDate: timestampToISO((data as any).issueDate) || data.issueDate,
+            dueDate: timestampToISO((data as any).dueDate) || data.dueDate,
+            daysLate: computeDaysLate(timestampToISO((data as any).dueDate) || data.dueDate),
+            status: (data.status as PaymentStatus) || 'Pendiente',
+            notes: data.notes,
+            nextContactAt: timestampToISO((data as any).nextContactAt) || data.nextContactAt || null,
+            lastExplanationRequestAt:
+                timestampToISO((data as any).lastExplanationRequestAt) || (data as any).lastExplanationRequestAt,
+            lastExplanationRequestById: (data as any).lastExplanationRequestById,
+            lastExplanationRequestByName: (data as any).lastExplanationRequestByName,
+            explanationRequestNote: (data as any).explanationRequestNote,
+            createdAt: timestampToISO((data as any).createdAt) || new Date().toISOString(),
+            updatedAt: timestampToISO((data as any).updatedAt),
+        };
+        return parsed;
+    });
+
+    setInCache('paymentEntries', payments);
+    return payments;
+};
+
 export const getPendingPaymentEntries = async (): Promise<PaymentEntry[]> => {
     const cached = getFromCache('pendingPaymentEntries');
     if (cached) return cached;
