@@ -24,14 +24,16 @@ import {
 import type { Opportunity, Client, ClientActivity, User, Invoice, PaymentEntry } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
-  getOpportunities, // 🟢 CAMBIO: Usamos la versión que lee del caché
+  getOpportunities,
   getClients,
   getAllClientActivities,
   updateClientActivity,
   getAllUsers,
-  getDashboardInvoices, // 🟢 CAMBIO: Trae solo los últimos 13 meses
+  getDashboardInvoices,
   getPaymentEntries,
-  updateOpportunity 
+  updateOpportunity,
+  getAgencies, // 🟢 PREFETCH
+  cleanupOldActivities // 🟢 LIMPIEZA
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
@@ -227,21 +229,25 @@ export default function DashboardPage() {
     let isMounted = true;
     setLoadingData(true);
 
-    Promise.all([getAllUsers(), getClients(), getAllClientActivities()]).then(([u, c, t]) => {
+    // 🟢 PREFETCH de Agencias (se guardan en caché para acelerar los popups)
+    Promise.all([getAllUsers(), getClients(), getAllClientActivities(), getAgencies()]).then(([u, c, t, _]) => {
         if (!isMounted) return;
         setUsers(u);
         setAdvisors(u.filter(x => x.role === 'Asesor'));
         setClients(c);
         setTasks(t);
         
+        // 🟢 LIMPIEZA SILENCIOSA de tareas viejas
+        cleanupOldActivities();
+
         if (isLightWeightArea && !isBoss) {
             setLoadingData(false);
             return;
         }
 
         Promise.all([
-            getOpportunities(), // 🟢 Se trae desde el caché (ahorra miles de lecturas)
-            getDashboardInvoices(), // 🟢 Trae solo 13 meses
+            getOpportunities(),
+            getDashboardInvoices(),
             getPaymentEntries()
         ]).then(([o, i, p]) => {
             if (!isMounted) return;
