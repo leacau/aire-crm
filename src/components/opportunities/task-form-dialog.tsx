@@ -77,45 +77,48 @@ export function TaskFormDialog({ isOpen, onOpenChange, opportunity, client, user
     };
 
     let calendarEventId: string | undefined = undefined;
-    const token = await ensureGoogleAccessToken();
-    if (!token) {
-      toast({ title: "Reinicia sesión para conectar Google", description: "Perdimos el acceso a tu cuenta de Google. Iniciá sesión nuevamente para agendar la tarea en tu calendario." , variant: 'destructive' });
-      setIsSaving(false);
-      return;
-    }
-
+    
+    // 🟢 BURBUJA DE SEGURIDAD PARA GOOGLE CALENDAR
     try {
-      const calendarEvent = {
-        summary: `CRM: ${opportunity.title}`,
-        description: `Tarea registrada en el CRM.\n\nObservación: ${observation}`,
-        start: { dateTime: finalDueDate.toISOString() },
-        end: { dateTime: finalDueDate.toISOString() },
-        reminders: {
-          useDefault: false,
-          overrides: [
-            { method: 'popup', minutes: 10 },
-            { method: 'popup', minutes: 60 * 24 }, // 24 hours
-          ],
-        },
-      };
-      const createdEvent = await createCalendarEvent(token, calendarEvent);
-      calendarEventId = createdEvent.id;
+      const token = await ensureGoogleAccessToken();
+      
+      if (token) {
+        const calendarEvent = {
+          summary: `CRM: ${opportunity.title}`,
+          description: `Tarea registrada en el CRM.\n\nObservación: ${observation}`,
+          start: { dateTime: finalDueDate.toISOString() },
+          end: { dateTime: finalDueDate.toISOString() },
+          reminders: {
+            useDefault: false,
+            overrides: [
+              { method: 'popup', minutes: 10 },
+              { method: 'popup', minutes: 60 * 24 }, // 24 hours
+            ],
+          },
+        };
+        const createdEvent = await createCalendarEvent(token, calendarEvent);
+        calendarEventId = createdEvent.id;
+      } else {
+         // Falla por falta de token de acceso, pero NO abortamos.
+         toast({ title: "Sin acceso a Calendar", description: "La tarea se guardará en el CRM, pero reconectá tu cuenta de Google para sincronizarla.", variant: 'destructive' });
+      }
     } catch (e) {
-      console.error("Failed to create calendar event", e);
-      toast({ title: "Error al crear evento en calendario", description: "La tarea se guardará en el CRM, pero no se pudo crear el evento en Google Calendar.", variant: "destructive" });
+      console.error("Failed to create calendar event or get token", e);
+      toast({ title: "Error en Calendario", description: "Falló la sincronización con Google. La tarea se guardará sólo en el CRM.", variant: "destructive" });
     }
 
+    // 🟢 GUARDADO PRINCIPAL EN FIREBASE (Se ejecuta siempre)
     try {
       if (calendarEventId) {
         activityPayload.googleCalendarEventId = calendarEventId;
       }
       await createClientActivity(activityPayload);
-      toast({ title: "Tarea Creada", description: "El recordatorio ha sido guardado." });
+      toast({ title: "Tarea Creada", description: "El recordatorio ha sido guardado correctamente en el sistema." });
       resetForm();
       onOpenChange(false);
     } catch (error) {
       console.error("Error saving task:", error);
-      toast({ title: "Error al guardar la tarea", variant: "destructive" });
+      toast({ title: "Error al guardar la tarea en el CRM", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
