@@ -39,24 +39,22 @@ const collections = {
 };
 
 const cache: { [key: string]: { data: any; timestamp: number } } = {};
-const CACHE_DURATION_MS = 60 * 60 * 1000;
+const CACHE_DURATION_MS = 12 * 60 * 60 * 1000;
 
 const getFromCache = (key: string) => {
-    // 1. Buscamos en la memoria RAM rápida
     let cached = cache[key];
     
-    // 2. Si no está en RAM (ej. apretó F5), buscamos en el sessionStorage del navegador
+    // 🟢 CAMBIAMOS A LOCALSTORAGE PARA COMPARTIR CACHÉ ENTRE MÚLTIPLES PESTAÑAS ABIERTAS
     if (!cached && typeof window !== 'undefined') {
-        const sessionStr = sessionStorage.getItem(`crm_cache_${key}`);
-        if (sessionStr) {
+        const localStr = localStorage.getItem(`crm_cache_${key}`);
+        if (localStr) {
             try {
-                cached = JSON.parse(sessionStr);
-                cache[key] = cached; // Lo subimos de nuevo a la RAM
+                cached = JSON.parse(localStr);
+                cache[key] = cached; 
             } catch (e) {}
         }
     }
 
-    // 3. Verificamos que no esté vencido (1 hora de vida)
     if (cached && (Date.now() - cached.timestamp < CACHE_DURATION_MS)) {
         return cached.data;
     }
@@ -68,13 +66,13 @@ const setInCache = (key: string, data: any) => {
     cache[key] = cacheData;
     if (typeof window !== 'undefined') {
         try {
-            sessionStorage.setItem(`crm_cache_${key}`, JSON.stringify(cacheData));
+            // 🟢 GUARDAMOS EN LOCALSTORAGE
+            localStorage.setItem(`crm_cache_${key}`, JSON.stringify(cacheData));
         } catch (e) {
-            // Ignoramos si el navegador del usuario está sin espacio
+            // Ignoramos si el navegador está lleno
         }
     }
 };
-
 const timestampToISO = (value: any): string | undefined => {
     if (!value) return undefined;
     if (typeof value === 'string') return value;
@@ -84,17 +82,16 @@ const timestampToISO = (value: any): string | undefined => {
 export const invalidateCache = (key?: string) => {
     if (key) {
         delete cache[key];
-        if (typeof window !== 'undefined') sessionStorage.removeItem(`crm_cache_${key}`);
+        if (typeof window !== 'undefined') localStorage.removeItem(`crm_cache_${key}`);
     } else {
-        // Borramos todo
         Object.keys(cache).forEach(k => delete cache[k]);
         if (typeof window !== 'undefined') {
             const keysToRemove = [];
-            for (let i = 0; i < sessionStorage.length; i++) {
-                const k = sessionStorage.key(i);
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
                 if (k && k.startsWith('crm_cache_')) keysToRemove.push(k);
             }
-            keysToRemove.forEach(k => sessionStorage.removeItem(k));
+            keysToRemove.forEach(k => localStorage.removeItem(k));
         }
     }
 };
@@ -4555,6 +4552,7 @@ export const cleanupOldActivities = async (): Promise<void> => {
         console.error("Error during cleanup of old activities:", e);
     }
 };
+
 // 🟢 Función para obtener toda la data necesaria para reportes consolidados
 export const getReportDataForAdvisors = async (advisorIds: string[]): Promise<any[]> => {
     const allOpps = await getOpportunities();
