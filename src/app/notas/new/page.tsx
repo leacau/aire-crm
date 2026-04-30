@@ -656,64 +656,10 @@ export default function NewCommercialNotePage() {
                 newNoteId = await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
             }
 
-            if (notifyOnSave && pdfRef.current && newNoteId) {
-                const accessToken = await getGoogleAccessToken();
-                if (accessToken) {
-                    try {
-                        const pdf = await generateMultiPagePdf(pdfRef.current);
-                        const pdfBase64 = pdf.output('datauristring').split(',')[1];
-                        const baseUrl = window.location.origin;
-                        
-                        const publicLink = `${baseUrl}/public/notas/${newNoteId}`;
-                        const detailLink = `${baseUrl}/notas/${newNoteId}`;
-                        
-                        let scheduleSummary = '';
-                        Object.entries(programSchedule).forEach(([progId, items]) => {
-                            const progName = programs.find(p => p.id === progId)?.name || 'Programa';
-                            items.forEach(item => {
-                                scheduleSummary += `<li><strong>${progName}</strong>: ${format(new Date(item.date), 'dd/MM/yyyy')} ${item.time}hs</li>`;
-                            });
-                        });
-
-                        const emailBody = `
-                            <div style="font-family: Arial, sans-serif; color: #333;">
-                                <h2 style="color: #cc0000;">Nota Comercial Registrada / Editada</h2>
-                                <p>El usuario <strong>${userInfo!.name}</strong> ha cargado o actualizado una nota a nombre de <strong>${advisorName}</strong>.</p>
-                                <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #cc0000; margin: 20px 0;">
-                                    <p><strong>Cliente:</strong> ${client?.denominacion || 'Desconocido'}</p>
-                                    <p><strong>Título:</strong> ${title}</p>
-                                    <p><strong>Cronograma:</strong></p>
-                                    <ul>${scheduleSummary || '<li>Sin fecha definida</li>'}</ul>
-                                </div>
-                                <div style="margin-top: 20px; padding: 20px; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; text-align: center;">
-                                    <h3 style="color: #1d4ed8; margin-top: 0;">🎥 Acceso para Producción</h3>
-                                    <p style="margin-bottom: 15px;">Para ver los detalles completos, copiar los Zócalos/Grafs y exportar el PDF, ingresa al siguiente enlace (no requiere contraseña):</p>
-                                    <a href="${publicLink}" style="display: inline-block; padding: 12px 24px; background-color: #1d4ed8; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">ABRIR DETALLE DE LA NOTA</a>
-                                </div>
-                                <p style="margin-top: 30px; font-size: 12px; color: #666;">Enlace interno administrativo: <a href="${detailLink}">${detailLink}</a></p>
-                            </div>
-                        `;
-
-                        await sendEmail({
-                            accessToken,
-                            to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email], 
-                            subject: `Nota Comercial: ${title} - ${client?.denominacion}`,
-                            body: emailBody,
-                            attachments: [{
-                                filename: `Nota_${title.replace(/ /g, "_")}.pdf`,
-                                content: pdfBase64,
-                                encoding: 'base64'
-                            }]
-                        });
-                        toast({ title: 'Nota guardada y notificada a Producción.' });
-                    } catch (emailError) {
-                        console.error("Error sending email", emailError);
-                        toast({ title: 'Nota guardada, pero falló el envío del correo.', variant: 'default' });
-                    }
-                }
-            } else {
-                toast({ title: 'Nota guardada correctamente.' });
-            }
+            toast({ 
+    title: 'Nota guardada correctamente', 
+    description: 'Enviada a la bandeja de pendientes para su revisión.' 
+});
             
             localStorage.removeItem('commercial_note_draft');
             router.push('/notas');
