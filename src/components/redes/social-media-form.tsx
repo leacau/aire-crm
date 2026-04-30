@@ -72,6 +72,15 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     
     const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
 
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            if (e.target instanceof HTMLTextAreaElement) {
+                return;
+            }
+            e.preventDefault();
+        }
+    };
+
     useEffect(() => {
         const init = async () => {
             try {
@@ -232,6 +241,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
             
             // 🟢 ARMAMOS LOS DATOS LIMPIOS SEGÚN EL FORMATO
             const dataToSaveRaw: Partial<SocialMediaRequest> = {
+                status: 'Pendiente', // 🟢 ESTADO INICIAL
                 clientId,
                 clientName: client?.denominacion || 'Unknown',
                 advisorId: advisorId || userInfo!.id,
@@ -274,44 +284,18 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 await updateSocialMediaRequest(editId, dataToSave, userInfo!.id, userInfo!.name);
             } else {
                 finalId = await saveSocialMediaRequest(dataToSave, userInfo!.id, userInfo!.name);
-            }
+            }        
 
-            if (notifyOnSave && pdfRef.current && finalId) {
-                const token = await getGoogleAccessToken();
-                if (token) {
-                    try {
-                        const pdf = await generateMultiPagePdf(pdfRef.current);
-                        const base64 = pdf.output('datauristring').split(',')[1];
-                        const link = `${window.location.origin}/redes/${finalId}`;
-                        
-                        const emailBody = `
-                            <h2>Pedido de Material para Redes (${contentType})</h2>
-                            <p>El usuario <strong>${userInfo!.name}</strong> ha cargado o modificado un pedido a nombre de <strong>${advisorName}</strong>.</p>
-                            <p>Cliente: <strong>${client?.denominacion}</strong></p>
-                            <p><a href="${link}">Ver Detalles del Pedido en el CRM</a></p>
-                        `;
-
-                        await sendEmail({
-                            accessToken: token,
-                            to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email],
-                            subject: `Pedido Redes: ${contentType} - ${client?.denominacion}`,
-                            body: emailBody,
-                            attachments: [{ filename: `Redes_${client?.denominacion}.pdf`, content: base64, encoding: 'base64' }]
-                        });
-                        toast({ title: 'Pedido guardado y notificado correctamente' });
-                    } catch (notificationError) {
-                        console.error("Error al generar PDF o enviar email:", notificationError);
-                        toast({ title: 'Pedido guardado', description: 'Ocurrió un error al enviar el correo, pero el pedido se guardó.', variant: 'default' });
-                    }
-                } else {
-                    toast({ title: 'Pedido guardado correctamente' });
-                }
+            let finalId = editId;
+            if (editId) {
+                await updateSocialMediaRequest(editId, dataToSave, userInfo!.id, userInfo!.name);
             } else {
-                 toast({ title: 'Pedido guardado correctamente' });
+                finalId = await saveSocialMediaRequest(dataToSave, userInfo!.id, userInfo!.name);
             }
 
+            // 🟢 CORREOS ELIMINADOS
+            toast({ title: 'Pedido guardado', description: 'Enviado a revisión exitosamente.' });
             router.push('/redes');
-
         } catch (error) {
             console.error("Error crítico al guardar el pedido:", error);
             toast({ title: 'Error al guardar', variant: 'destructive' });
@@ -320,16 +304,15 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
         }
     };
 
-    if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
-
+if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
     return (
-        <div className="space-y-6 pb-10">
-            <div className="flex justify-between items-center bg-white p-4 rounded shadow-sm">
+<div className="space-y-6 pb-10" onKeyDown={handleKeyDown}>
+    <div className="flex justify-between items-center bg-white p-4 rounded shadow-sm">
                 <Button variant="ghost" onClick={() => router.back()}><ArrowLeft className="mr-2 h-4 w-4"/> Volver</Button>
                 <div className="flex gap-4 items-center">
                     <Button variant="outline" onClick={handleDownloadPdf} disabled={!clientId}><ExternalLink className="mr-2 h-4 w-4"/> Exportar PDF</Button>
                     <div className="flex items-center gap-2 border p-2 rounded bg-gray-50"><Switch checked={notifyOnSave} onCheckedChange={setNotifyOnSave} /><Label className="text-sm">Notificar</Label></div>
-                    <Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4"/>} Guardar</Button>
+<Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4"/>} Guardar</Button>
                 </div>
             </div>
 
