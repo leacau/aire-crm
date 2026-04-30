@@ -569,6 +569,9 @@ export type Interviewee = {
   location: 'Piso' | 'Teléfono' | 'Video Llamada' | 'Móvil';
 };
 
+// 🟢 ESTADO COMPARTIDO DE APROBACIÓN
+export type ApprovalStatus = 'Pendiente' | 'Aprobado' | 'Devuelto';
+
 export type CommercialNote = {
   id: string;
   clientId: string;
@@ -628,6 +631,13 @@ export type CommercialNote = {
   financialObservations?: string; 
   noteObservations?: string; 
   createdAt: string;
+
+  // 🟢 CAMPOS DE APROBACIÓN
+  status?: ApprovalStatus;
+  adminComments?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByName?: string;
 };
 
 export type SocialMediaType = 'Reel' | 'Story' | 'Carrusel';
@@ -674,6 +684,13 @@ export type SocialMediaRequest = {
 
   createdAt: string;
   updatedAt?: string;
+
+  // 🟢 CAMPOS DE APROBACIÓN
+  status?: ApprovalStatus;
+  adminComments?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByName?: string;
 };
 
 export type AdvertisingOrderItemSrl = {
@@ -750,6 +767,13 @@ export type AdvertisingOrder = {
   
   billingRequestsSrl?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
   billingRequestsSas?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
+
+  // 🟢 CAMPOS DE APROBACIÓN
+  status?: ApprovalStatus;
+  adminComments?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByName?: string;
 };
 
 export type ConvenioCanje = {
