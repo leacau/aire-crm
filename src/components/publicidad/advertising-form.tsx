@@ -580,7 +580,14 @@ export function AdvertisingForm() {
       if (errors.observations) missing.push("Observaciones (Obligatorio por desajuste)");
       toast({ title: "Faltan datos", description: `Por favor completa: ${missing.join(", ")}`, variant: "destructive" });
   };
-
+const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+          if (e.target instanceof HTMLTextAreaElement) {
+              return;
+          }
+          e.preventDefault();
+      }
+  };
   async function onSubmit(data: AdvertisingOrderFormValues) {
     if (!userInfo) return;
     setIsSubmitting(true);
@@ -612,6 +619,7 @@ export function AdvertisingForm() {
       const preview = getPreviewOrder();
       const orderPayload = {
         ...preview,
+          status: 'Pendiente',
         clientId: data.clientId,
         clientName: selectedClient?.razonSocial || selectedClient?.denominacion || "Desconocido",
         agencyId: data.agencyId === "none" ? undefined : data.agencyId,
@@ -640,50 +648,14 @@ export function AdvertisingForm() {
           finalOrderId = await createAdvertisingOrder(cleanPayload);
       }
 
-      if (notifyOnSave && pdfRef.current && finalOrderId) {
-          const accessToken = await getGoogleAccessToken();
-          if (accessToken) {
-              try {
-                  const pdf = await generatePdfBase64(pdfRef.current);
-                  const pdfBase64 = pdf.output('datauristring').split(',')[1];
-                  const baseUrl = window.location.origin;
-                  const detailLink = `${baseUrl}/publicidad/${finalOrderId}`;
-                  
-                  const clientDisplayName = selectedClient?.razonSocial || selectedClient?.denominacion || 'Desconocido';
-
-                  const emailBody = `
-                      <div style="font-family: Arial, sans-serif; color: #333;">
-                          <h2 style="color: #1d4ed8;">Orden de Publicidad ${editModeId ? 'Editada' : 'Registrada'}</h2>
-                          <p>El usuario <strong>${userInfo!.name}</strong> ha ${editModeId ? 'actualizado' : 'cargado'} una orden a nombre de <strong>${data.accountExecutive}</strong>.</p>
-                          <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #1d4ed8; margin: 20px 0;">
-                              <p><strong>Cliente:</strong> ${clientDisplayName}</p>
-                              <p><strong>Producto:</strong> ${oppTitle}</p>
-                              <p><strong>Vigencia:</strong> ${format(new Date(data.startDate), "dd/MM/yyyy")} al ${format(new Date(data.endDate), "dd/MM/yyyy")}</p>
-                          </div>
-                          <p>Puede ver el detalle ingresando al siguiente enlace:</p>
-                          <p><a href="${detailLink}">Ver Detalles de la Orden</a></p>
-                      </div>
-                  `;
-
-                  await sendEmail({
-                      accessToken,
-                      to: ['lchena@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'materiales@airedesantafe.com.ar', userInfo.email], 
-                      subject: `${editModeId ? 'Modificación' : 'Nueva'} OP: ${oppTitle} - ${clientDisplayName}`,
-                      body: emailBody,
-                      attachments: [{
-                          filename: `OP_${oppTitle.replace(/ /g, "_")}.pdf`,
-                          content: pdfBase64,
-                          encoding: 'base64'
-                      }]
-                  });
-              } catch (emailErr) {
-                  console.error("Error al enviar correo de la orden:", emailErr);
-              }
-          }
+     if (editModeId) {
+          await updateAdvertisingOrder(editModeId, cleanPayload, userInfo.id, userInfo.name);
+      } else {
+          finalOrderId = await createAdvertisingOrder(cleanPayload);
       }
 
       localStorage.removeItem('advertising_order_draft'); 
-      toast({ title: "Guardado", description: "Orden guardada exitosamente." });
+      toast({ title: "Guardado", description: "Orden enviada a la bandeja de pendientes." });
       router.push(`/publicidad`);
     } catch (error) {
       console.error(error);
@@ -709,20 +681,12 @@ export function AdvertisingForm() {
           </div>
           
           <div className="flex flex-wrap items-center gap-4">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={handleExportPdf}
-              disabled={isExporting || !showSections}
-            >
+            <Button type="button" variant="outline" onClick={handleExportPdf} disabled={isExporting || !showSections}>
                {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
                {isExporting ? "Generando..." : "Exportar PDF"}
             </Button>
 
-            <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white h-10">
-                <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
-                <Label htmlFor="notify" className="cursor-pointer text-sm">Notificar por email</Label>
-            </div>
+            {/* 🟢 SWITCH DE NOTIFICAR ELIMINADO */}
 
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando...</> : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
@@ -733,7 +697,7 @@ export function AdvertisingForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8 pb-10">
+      <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} onKeyDown={handleKeyDown} className="space-y-8 pb-10">
         
         <div className="bg-white p-4 border rounded-md shadow-sm">
             <ActionButtons />
