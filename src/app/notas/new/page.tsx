@@ -99,7 +99,6 @@ export default function NewCommercialNotePage() {
     const [graphicLinks, setGraphicLinks] = useState<string[]>(['']);
     const [noteObservations, setNoteObservations] = useState('');
 
-    const [notifyOnSave, setNotifyOnSave] = useState(true);
     const [isRestored, setIsRestored] = useState(false);
     const [draftLoaded, setDraftLoaded] = useState(false); 
 
@@ -403,6 +402,15 @@ export default function NewCommercialNotePage() {
     };
 
     const handleClearDraft = () => {
+            const handleKeyDown = (e: React.KeyboardEvent) => {
+                if (e.key === 'Enter') {
+                    // Permitir Enter solo si el usuario está escribiendo en un campo de texto grande (Textarea)
+                    if (e.target instanceof HTMLTextAreaElement) {
+                        return;
+                    }
+                    e.preventDefault();
+                }
+            };
         if (!window.confirm("¿Estás seguro de que quieres limpiar todos los datos y empezar una nueva nota?")) return;
         localStorage.removeItem('commercial_note_draft');
         setSelectedClientId('');
@@ -576,6 +584,7 @@ export default function NewCommercialNotePage() {
             }
 
              const noteDataRaw: any = {
+                status: 'Pendiente',
                 clientId: selectedClientId,
                 clientName: client?.denominacion || 'Unknown',
                 cuit,
@@ -737,10 +746,7 @@ export default function NewCommercialNotePage() {
                 <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title || hasGrafErrors}>
                     <ExternalLink className="mr-2 h-4 w-4" /> Exportar PDF
                 </Button>
-                <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white">
-                    <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
-                    <Label htmlFor="notify" className="cursor-pointer text-sm">Notificar por email</Label>
-                </div>
+                {/* 🟢 SWITCH DE NOTIFICAR ELIMINADO */}
                 <Button onClick={handleSave} disabled={saving || hasGrafErrors}>
                     {saving ? <Spinner size="small" /> : <Save className="mr-2 h-4 w-4" />} Guardar
                 </Button>
@@ -749,7 +755,7 @@ export default function NewCommercialNotePage() {
     );
 
     return (
-        <div className="flex flex-col h-full overflow-hidden bg-gray-50/50">
+        <div className="flex flex-col h-full overflow-hidden bg-gray-50/50" onKeyDown={handleKeyDown}>
             <Header title={editModeId ? "Editar Nota Comercial" : "Nueva Nota Comercial"}>
                 <div className="w-full"></div>
             </Header>
