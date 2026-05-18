@@ -402,16 +402,20 @@ export default function NewCommercialNotePage() {
         });
     };
 
+    
+
+    // 🟢 1. FUNCIÓN PARA BLOQUEAR EL ENTER (Sácada afuera de handleClearDraft)
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            if (e.target instanceof HTMLTextAreaElement) {
+                return;
+            }
+            e.preventDefault();
+        }
+    };
+
+    // 🟢 2. LIMPIAR BORRADOR (Ahora limpia y libre)
     const handleClearDraft = () => {
-            const handleKeyDown = (e: React.KeyboardEvent) => {
-                if (e.key === 'Enter') {
-                    // Permitir Enter solo si el usuario está escribiendo en un campo de texto grande (Textarea)
-                    if (e.target instanceof HTMLTextAreaElement) {
-                        return;
-                    }
-                    e.preventDefault();
-                }
-            };
         if (!window.confirm("¿Estás seguro de que quieres limpiar todos los datos y empezar una nueva nota?")) return;
         localStorage.removeItem('commercial_note_draft');
         setSelectedClientId('');
@@ -504,6 +508,7 @@ export default function NewCommercialNotePage() {
     const saleValueNum = parseFloat(saleValue) || 0;
     const mismatch = saleValueNum > 0 ? (totalValue - saleValueNum) : 0;
 
+    // 🟢 3. GUARDAR NOTA CON CONDICIONAL DE SWITCH Y AVISO SIMPLE
     const handleSave = async () => {
         if (!selectedClientId || !userInfo) { toast({ title: 'Datos incompletos', description: 'Seleccione un cliente.', variant: 'destructive' }); return; }
         if (!title.trim()) { toast({ title: 'Falta título', variant: 'destructive' }); return; }
@@ -572,7 +577,7 @@ export default function NewCommercialNotePage() {
             }
 
              const noteDataRaw: any = {
-                status: notifyOnSave ? 'Pendiente' : 'Borrador', // 🟢 CONTROLADO POR SWITCH
+                status: notifyOnSave ? 'Pendiente' : 'Borrador', // 🟢 'Pendiente' si pasa, 'Borrador' si es provisorio
                 clientId: selectedClientId,
                 clientName: client?.denominacion || 'Unknown',
                 cuit,
@@ -629,14 +634,13 @@ export default function NewCommercialNotePage() {
                 return acc;
             }, {} as Omit<CommercialNote, 'id' | 'createdAt'>);
 
-            let newNoteId = editModeId;
             if (editModeId) {
                 await updateCommercialNote(editModeId, noteData, userInfo!.id, userInfo!.name);
             } else {
-                newNoteId = await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
+                await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
             }
 
-            // 🟢 ENVÍO DE NOTIFICACIÓN ULTRA SIMPLE
+            // 🟢 ENVÍO DE NOTIFICACIÓN SIMPLE (SÓLO SI VA A LA BANDEJA DE PENDIENTES)
             if (notifyOnSave) {
                 const accessToken = await getGoogleAccessToken();
                 if (accessToken) {
