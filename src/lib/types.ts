@@ -154,7 +154,7 @@ export type Opportunity = {
   stageChangedAt?: string;
   bonificacionDetalle?: string;
   bonificacionEstado?: BonificacionEstado;
-  bonificacionAutorizadoPorId?: string;
+  bonificacionPorId?: string;
   bonificacionAutorizadoPorNombre?: string;
   bonificacionFechaAutorizacion?: string;
   bonificacionObservaciones?: string;
@@ -367,7 +367,6 @@ export type Canje = {
   historialMensual?: HistorialMensualItem[];
 };
 
-// 🟢 CORRECCIÓN: Se eliminó 'Admin' y quedó unificada en 'Administracion'
 export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Asesor Canjes';
 export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Import', 'Asesor Canjes'];
 
@@ -381,7 +380,6 @@ export const screenNames = [
 ] as const;
 
 export type ScreenName = typeof screenNames[number];
-
 
 export type ScreenPermission = {
     view: boolean;
@@ -562,15 +560,23 @@ export type ScheduleItem = {
     time?: string; 
 };
 
-// 🟢 NUEVO: TIPO INTERVIEWEE
 export type Interviewee = {
   name: string;
   role: string;
   location: 'Piso' | 'Teléfono' | 'Video Llamada' | 'Móvil';
 };
 
-// 🟢 ESTADO COMPARTIDO DE APROBACIÓN
-export type ApprovalStatus = 'Pendiente' | 'Aprobado' | 'Devuelto';
+export type ApprovalStatus = 'Borrador' | 'Pendiente' | 'Aprobado' | 'Devuelto';
+
+// 🟢 NUEVO: REGISTRO CRONOLÓGICO DE AUDITORÍA
+export type ApprovalHistoryItem = {
+  timestamp: string;
+  status: ApprovalStatus;
+  userId: string;
+  userName: string;
+  userRole: string;
+  comments?: string;
+};
 
 export type CommercialNote = {
   id: string;
@@ -592,26 +598,18 @@ export type CommercialNote = {
   contactPhone?: string; 
   contactName?: string; 
   title?: string;
-  
-  // 🔥 LOCATION: SE MANTIENE POR COMPATIBILIDAD CON DATOS VIEJOS
   location?: 'Estudio' | 'Móvil' | 'Meet' | 'Llamada';
   callPhone?: string; 
   mobileAddress?: string; 
-  
   primaryGraf?: string; 
   secondaryGraf?: string; 
   primaryGrafs?: string[];
   secondaryGrafs?: string[];
   questions?: string[];
   topicsToAvoid?: string[];
-  
-  // 🔥 ENTREVISTADOS VIEJOS (LEGACY)
   intervieweeName?: string;
   intervieweeRole?: string;
-  
-  // 🟢 NUEVA LISTA DE ENTREVISTADOS
   interviewees?: Interviewee[];
-  
   intervieweeBio?: string;
   instagram?: string; 
   website?: string;
@@ -632,12 +630,13 @@ export type CommercialNote = {
   noteObservations?: string; 
   createdAt: string;
 
-  // 🟢 CAMPOS DE APROBACIÓN
   status?: ApprovalStatus;
   adminComments?: string;
   approvedAt?: string;
   approvedBy?: string;
   approvedByName?: string;
+  // 🟢 ARRAY DE HISTORIAL COMPARTIDO
+  approvalHistory?: ApprovalHistoryItem[];
 };
 
 export type SocialMediaType = 'Reel' | 'Story' | 'Carrusel';
@@ -666,31 +665,25 @@ export type SocialMediaRequest = {
   script: string;
   observations?: string;
   materialUrl?: string;
-
-  // Story
   isWebReplication?: boolean;
   storyUrl?: string;
   storyCta?: string;
   storyTagClient?: boolean;
   storyTagHandle?: string;
-
-  // Reel
   reelCopy?: string;
   reelCollaboration?: boolean;
   reelCollabHandle?: string;
-  
-  // Carrusel
   carouselSlides?: CarouselSlide[];
-
   createdAt: string;
   updatedAt?: string;
 
-  // 🟢 CAMPOS DE APROBACIÓN
   status?: ApprovalStatus;
   adminComments?: string;
   approvedAt?: string;
   approvedBy?: string;
   approvedByName?: string;
+  // 🟢 ARRAY DE HISTORIAL COMPARTIDO
+  approvalHistory?: ApprovalHistoryItem[];
 };
 
 export type AdvertisingOrderItemSrl = {
@@ -764,16 +757,16 @@ export type AdvertisingOrder = {
   totalSrl?: number;
   totalSas?: number;
   totalOrder?: number;
-  
   billingRequestsSrl?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
   billingRequestsSas?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
 
-  // 🟢 CAMPOS DE APROBACIÓN
   status?: ApprovalStatus;
   adminComments?: string;
   approvedAt?: string;
   approvedBy?: string;
   approvedByName?: string;
+  // 🟢 ARRAY DE HISTORIAL COMPARTIDO
+  approvalHistory?: ApprovalHistoryItem[];
 };
 
 export type ConvenioCanje = {
@@ -783,15 +776,11 @@ export type ConvenioCanje = {
   advisorId: string;
   advisorName: string;
   opportunityId: string;
-  
   radioEntrega: string;
   clienteEntrega: string;
-  
   fechaInicio: string;
   fechaFin: string;
-  
   observaciones?: string;
-  
   createdAt: string;
   updatedAt?: string;
 };
