@@ -325,7 +325,7 @@ if (loading) return <div className="flex h-full items-center justify-center"><Sp
                 <Button variant="ghost" onClick={() => router.back()}><ArrowLeft className="mr-2 h-4 w-4"/> Volver</Button>
                 <div className="flex gap-4 items-center">
                     <Button variant="outline" onClick={handleDownloadPdf} disabled={!clientId}><ExternalLink className="mr-2 h-4 w-4"/> Exportar PDF</Button>
-                    <div className="flex items-center gap-2 border p-2 rounded bg-gray-50"><Switch checked={notifyOnSave} onCheckedChange={setNotifyOnSave} /><Label className="text-sm">Notificar</Label></div>
+                    <div className="flex items-center gap-2 border p-2 rounded bg-gray-50"><Switch checked={notifyOnSave} onCheckedChange={setNotifyOnSave} /><Label className="text-sm">Pasar a aprobación</Label></div>
 <Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4"/>} Guardar</Button>
                 </div>
             </div>
