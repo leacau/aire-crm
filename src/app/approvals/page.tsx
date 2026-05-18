@@ -15,11 +15,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Eye, CheckCircle2, XCircle, Clock, FileText, Share2, Film, Radio } from 'lucide-react';
+import { Eye, CheckCircle2, XCircle, Clock, Calendar, dollarSign, FileText, Share2, Film, Radio } from 'lucide-react';
 import type { ApprovalStatus } from '@/lib/types';
 
 type ApprovalItemType = 'Nota Comercial' | 'Pedido de Redes' | 'Orden de Publicidad';
@@ -137,7 +137,7 @@ export default function ApprovalsPage() {
           advisorName: data.accountExecutive,
           title: data.product || 'Publicidad Sin Título',
           createdAt: parseDate(data.createdAt),
-          status: data.status || 'Pendiente',
+          status: d.metadata ? d.data().status : (data.status || 'Pendiente'),
           adminComments: data.adminComments,
           collectionName: 'advertising_orders',
           rawData: data
@@ -171,7 +171,7 @@ export default function ApprovalsPage() {
     if (!selectedItem || !actionType || !userInfo) return;
     
     if (actionType === 'Devuelto' && !adminComments.trim()) {
-      toast({ title: "Falta justificación", description: "Debes escribir el motivo de la devolución.", variant: "destructive" });
+      toast({ title: "Falta justificación", description: "Debes escribir el motivo de la devolución para orientar al asesor.", variant: "destructive" });
       return;
     }
 
@@ -233,7 +233,7 @@ export default function ApprovalsPage() {
         </div>
         <div className="border rounded p-3 bg-white">
           <span className="font-bold text-slate-800 block mb-1">Cronograma de Salidas</span>
-          <div className="max-h-24 overflow-y-auto text-xs space-y-1">
+          <div className="max-h-24 overflow-y-auto text-xs space-y-1 pr-2">
             {Object.entries(raw.schedule || {}).map(([progId, dates]: any) => (
               <div key={progId} className="border-b pb-1 last:border-0">
                 <span className="font-semibold block text-slate-600">Programa ID: {progId}</span>
@@ -292,25 +292,26 @@ export default function ApprovalsPage() {
               });
 
               return Object.entries(itemsByMonth).map(([month, monthItems]) => (
-                <div key={month} className="space-y-1.5 border rounded-lg p-2.5 bg-white shadow-sm">
-                  <div className="font-bold text-[11px] bg-purple-50 border border-purple-100 text-purple-800 px-2 py-0.5 rounded inline-block uppercase font-sans">
+                <div key={month} className="space-y-1.5 border rounded-lg p-2.5 bg-white shadow-sm w-full overflow-hidden">
+                  <div className="font-bold text-[11px] bg-purple-50 border border-purple-100 text-purple-800 px-2 py-0.5 rounded inline-block uppercase font-sans mb-1">
                     Ciclo Mensual: {month}
                   </div>
                   
-                  <div className="overflow-x-auto border rounded-md">
-                    <Table className="min-w-[1000px] table-fixed text-center border-collapse">
+                  {/* Contenedor de scroll horizontal para evitar que se aprieten las columnas */}
+                  <ScrollArea className="w-full whitespace-nowrap rounded-md border">
+                    <Table className="w-full text-center border-collapse">
                       <TableHeader className="bg-slate-100/80 text-[10px] uppercase tracking-wider text-slate-700">
                         <TableRow className="h-7">
-                          <TableHead className="w-32 text-left py-0 h-7 font-bold pl-2">Programa</TableHead>
-                          <TableHead className="w-16 py-0 h-7 font-bold">Tipo</TableHead>
-                          <TableHead className="w-10 py-0 h-7 font-bold">TV</TableHead>
-                          <TableHead className="w-10 py-0 h-7 font-bold">Seg</TableHead>
+                          <TableHead className="min-w-[120px] text-left py-0 h-7 font-bold pl-2 sticky left-0 bg-slate-100/90 shadow-[1px_0_0_0_#cbd5e1] z-10">Programa</TableHead>
+                          <TableHead className="min-w-[70px] py-0 h-7 font-bold">Tipo</TableHead>
+                          <TableHead className="min-w-[40px] py-0 h-7 font-bold">TV</TableHead>
+                          <TableHead className="min-w-[40px] py-0 h-7 font-bold">Seg</TableHead>
                           {days.map(d => (
-                            <TableHead key={d} className="p-0 h-7 text-center font-bold w-6 border-l border-slate-200">{d}</TableHead>
+                            <TableHead key={d} className="p-0 h-7 text-center font-bold min-w-[28px] border-l border-slate-200">{d}</TableHead>
                           ))}
-                          <TableHead className="w-12 py-0 h-7 font-bold border-l border-slate-300 bg-slate-50">Cant</TableHead>
-                          <TableHead className="w-16 py-0 h-7 font-bold bg-slate-50">T. Unit</TableHead>
-                          <TableHead className="w-20 py-0 h-7 font-bold text-right pr-2 bg-purple-50/50">Neto</TableHead>
+                          <TableHead className="min-w-[40px] py-0 h-7 font-bold border-l border-slate-300 bg-slate-50">Cant</TableHead>
+                          <TableHead className="min-w-[60px] py-0 h-7 font-bold bg-slate-50">T. Unit</TableHead>
+                          <TableHead className="min-w-[80px] py-0 h-7 font-bold text-right pr-2 bg-purple-50/50">Neto</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody className="text-[11px] font-mono border-t">
@@ -320,20 +321,20 @@ export default function ApprovalsPage() {
                           const rowNet = (item.unitRate || 0) * totalSpots * multiplier;
 
                           return (
-                            <TableRow key={idx} className="hover:bg-slate-50/70 h-7">
-                              <TableCell className="text-left py-0.5 h-7 font-sans font-medium truncate max-w-[120px] pl-2">{item.programId}</TableCell>
+                            <TableRow key={idx} className="hover:bg-slate-50/70 h-7 group">
+                              <TableCell className="text-left py-0.5 h-7 font-sans font-medium truncate max-w-[150px] pl-2 sticky left-0 bg-white group-hover:bg-slate-50/70 shadow-[1px_0_0_0_#cbd5e1] z-10">{item.programId}</TableCell>
                               <TableCell className="py-0.5 h-7 font-sans">{item.adType}</TableCell>
                               <TableCell className="py-0.5 h-7 font-sans text-center">{item.hasTv ? 'SI' : 'NO'}</TableCell>
                               <TableCell className="py-0.5 h-7 text-slate-500">{item.seconds || '-'}</TableCell>
                               {days.map(d => {
                                 const val = item.dailySpots?.[d.toString()];
                                 return (
-                                  <TableCell key={d} className={`p-0 h-7 text-center border-l border-slate-100 ${val ? 'bg-amber-100/70 font-bold text-amber-950 text-xs' : 'text-slate-200'}`}>
+                                  <TableCell key={d} className={`p-0 h-7 text-center border-l border-slate-100 ${val ? 'bg-amber-100 font-bold text-amber-950 text-[11px]' : 'text-slate-200'}`}>
                                     {val || '-'}
                                   </TableCell>
                                 );
                               })}
-                              <TableCell className="py-0.5 h-7 font-sans font-bold bg-slate-100 border-l border-slate-300 text-slate-800 text-center">{totalSpots}</TableCell>
+                              <TableCell className="py-0.5 h-7 font-sans font-bold bg-slate-50 border-l border-slate-300 text-slate-800 text-center">{totalSpots}</TableCell>
                               <TableCell className="py-0.5 h-7 font-sans text-slate-600">${Number(item.unitRate || 0).toLocaleString('es-AR')}</TableCell>
                               <TableCell className="py-0.5 h-7 font-sans font-bold text-right pr-2 text-purple-950 bg-purple-50/30">${rowNet.toLocaleString('es-AR')}</TableCell>
                             </TableRow>
@@ -341,7 +342,8 @@ export default function ApprovalsPage() {
                         })}
                       </TableBody>
                     </Table>
-                  </div>
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
                 </div>
               ));
             })()}
@@ -393,7 +395,7 @@ export default function ApprovalsPage() {
           {raw.billingRequestsSrl && raw.billingRequestsSrl.length > 0 && (
             <div className="bg-slate-50 p-3 rounded-md border">
               <span className="font-bold text-slate-700 block text-[11px] uppercase mb-2 tracking-wide text-purple-900">Sugerencias Facturación SRL</span>
-              <div className="space-y-1 text-xs">
+              <div className="space-y-1 text-xs pr-2 max-h-24 overflow-y-auto">
                 {raw.billingRequestsSrl.map((br: any, i: number) => (
                   <div key={i} className="flex justify-between bg-white border px-2 py-1 rounded shadow-xs font-mono">
                     <span className="font-sans text-slate-600">F: {formatSafeDate(br.date)}</span>
@@ -406,7 +408,7 @@ export default function ApprovalsPage() {
           {raw.billingRequestsSas && raw.billingRequestsSas.length > 0 && (
             <div className="bg-slate-50 p-3 rounded-md border">
               <span className="font-bold text-slate-700 block text-[11px] uppercase mb-2 tracking-wide text-indigo-900">Sugerencias Facturación SAS (C/IVA)</span>
-              <div className="space-y-1 text-xs">
+              <div className="space-y-1 text-xs pr-2 max-h-24 overflow-y-auto">
                 {raw.billingRequestsSas.map((br: any, i: number) => (
                   <div key={i} className="flex justify-between bg-white border px-2 py-1 rounded shadow-xs font-mono">
                     <span className="font-sans text-slate-600">F: {formatSafeDate(br.date)}</span>
@@ -507,33 +509,33 @@ export default function ApprovalsPage() {
         </Tabs>
       </main>
 
-      {/* MODAL DE AUDITORÍA INTEGRAL EN PANTALLA ANCHA (MAX-W-4XL) */}
+      {/* MODAL DE AUDITORÍA CON SCROLL COMPLETO */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[92vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="px-6 py-4 border-b bg-white z-10 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-xl">
               Auditoría de Documento: <Badge className={getTypeColor(selectedItem?.type as any)}>{selectedItem?.type}</Badge>
             </DialogTitle>
             <DialogDescription>
-              Verifique minuciosamente la planilla de medios y las sugerencias de facturación antes de tomar una decisión.
+              Verifique minuciosamente la información antes de tomar una decisión.
             </DialogDescription>
           </DialogHeader>
           
-          {selectedItem && (
-            <ScrollArea className="flex-1 pr-2 max-h-[60vh]">
-              <div className="space-y-4 py-2">
+          <div className="flex-1 overflow-y-auto bg-white">
+            {selectedItem && (
+              <div className="p-6 space-y-6">
                 
                 {/* Metadatos Rápidos */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs bg-slate-100 p-3 rounded-md border">
-                  <div><span className="text-muted-foreground block text-[9px] uppercase font-bold">Razón Social</span><span className="font-semibold text-sm truncate block">{selectedItem.clientName}</span></div>
-                  <div><span className="text-muted-foreground block text-[9px] uppercase font-bold">Asesor Comercial</span><span className="font-semibold text-sm">{selectedItem.advisorName}</span></div>
-                  <div><span className="text-muted-foreground block text-[9px] uppercase font-bold">Campaña / Ref</span><span className="font-semibold text-sm text-slate-700 truncate block">{selectedItem.title}</span></div>
-                  <div><span className="text-muted-foreground block text-[9px] uppercase font-bold">Fecha Envío</span><span className="font-semibold text-sm">{format(selectedItem.createdAt, 'dd/MM/yyyy HH:mm')}</span></div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm bg-slate-100/80 p-4 rounded-md border border-slate-200">
+                  <div><span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide mb-1">Anunciante</span><span className="font-bold text-slate-800 truncate block">{selectedItem.clientName}</span></div>
+                  <div><span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide mb-1">Asesor Comercial</span><span className="font-semibold text-slate-700">{selectedItem.advisorName}</span></div>
+                  <div><span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide mb-1">Campaña / Ref</span><span className="font-semibold text-slate-700 truncate block">{selectedItem.title}</span></div>
+                  <div><span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide mb-1">Fecha Envío</span><span className="font-semibold text-slate-700">{format(selectedItem.createdAt, 'dd/MM/yyyy HH:mm')}</span></div>
                 </div>
 
                 <Separator />
 
-                {/* INYECCIÓN DE LA PLANILLA COMPLETA SEGÚN EL FORMULARIO */}
+                {/* INYECCIÓN DE LA PLANILLA COMPLETA */}
                 {selectedItem.type === 'Nota Comercial' && <RenderNotaComercialDetails raw={selectedItem.rawData} />}
                 {selectedItem.type === 'Pedido de Redes' && <RenderPedidoRedesDetails raw={selectedItem.rawData} />}
                 {selectedItem.type === 'Orden de Publicidad' && <RenderOrdenPublicidadDetails raw={selectedItem.rawData} />}
@@ -541,24 +543,24 @@ export default function ApprovalsPage() {
                 <Separator />
 
                 {/* Panel Operativo de Aprobación */}
-                <div className="space-y-2 bg-slate-50 p-3 rounded-md border">
+                <div className="space-y-3 bg-slate-50 p-4 rounded-md border border-slate-200">
                   <Label htmlFor="comments" className="font-bold text-slate-800 text-sm">
-                    Devolución / Observaciones Administrativas (Obligatorio en Devoluciones)
+                    Devolución / Observaciones Administrativas <span className="text-red-500 font-normal">(Obligatorio en Devoluciones)</span>
                   </Label>
                   <Textarea 
                     id="comments" 
                     placeholder="Escriba los motivos del rechazo técnico para notificar al asesor, o comentarios internos para el departamento de pautado..." 
                     value={adminComments}
                     onChange={(e) => setAdminComments(e.target.value)}
-                    className="min-h-[60px] bg-white text-xs"
+                    className="min-h-[80px] bg-white text-sm"
                   />
                   {actionType === 'Devuelto' && !adminComments.trim() && (
-                    <span className="text-xs text-red-500 font-bold block">⚠️ Debe ingresar la justificación para proceder con la devolución.</span>
+                    <span className="text-sm text-red-600 font-bold flex items-center gap-1 mt-1">⚠️ Debe ingresar la justificación para proceder con la devolución.</span>
                   )}
                 </div>
 
                 {actionType && (
-                  <div className={`p-2.5 rounded border text-xs font-semibold ${actionType === 'Aprobado' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                  <div className={`p-3 rounded-md border text-sm font-semibold ${actionType === 'Aprobado' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
                     {actionType === 'Aprobado' 
                       ? '✓ Confirmar aprobación: El pedido será validado e ingresará formalmente en las grillas finales del sistema.' 
                       : '✕ Confirmar devolución: El trámite regresará al panel del asesor comercial en estado corregible.'
@@ -566,30 +568,30 @@ export default function ApprovalsPage() {
                   </div>
                 )}
               </div>
-            </ScrollArea>
-          )}
+            )}
+          </div>
 
-          <DialogFooter className="flex-col sm:flex-row gap-2 mt-2 border-t pt-3">
+          <DialogFooter className="px-6 py-4 border-t bg-slate-50 shrink-0">
             {!actionType ? (
-              <>
+              <div className="flex flex-col sm:flex-row gap-3 w-full justify-between items-center">
                 <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cerrar Auditoría</Button>
-                <div className="flex gap-2 w-full sm:w-auto justify-end ml-auto">
+                <div className="flex gap-2">
                   <Button type="button" variant="destructive" onClick={() => setActionType('Devuelto')}>Devolver al Asesor</Button>
                   <Button type="button" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => setActionType('Aprobado')}>Aprobar y Registrar</Button>
                 </div>
-              </>
+              </div>
             ) : (
-              <>
+              <div className="flex flex-col sm:flex-row gap-3 w-full justify-between items-center">
                 <Button type="button" variant="outline" onClick={() => setActionType(null)} disabled={isSaving}>Atrás</Button>
                 <Button 
                   type="button" 
                   onClick={submitEvaluation} 
                   disabled={isSaving || (actionType === 'Devuelto' && !adminComments.trim())} 
-                  className={actionType === 'Aprobado' ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}
+                  className={actionType === 'Aprobado' ? 'bg-green-600 hover:bg-green-700 text-white px-8' : 'bg-red-600 hover:bg-red-700 text-white px-8'}
                 >
                   {isSaving ? <Spinner size="small" className="mr-2" /> : `Confirmar Registro`}
                 </Button>
-              </>
+              </div>
             )}
           </DialogFooter>
         </DialogContent>
