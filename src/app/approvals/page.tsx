@@ -287,9 +287,9 @@ export default function ApprovalsPage() {
         </Tabs>
       </main>
 
-      {/* 🟢 MODAL DE AUDITORÍA CON EL VISOR ORIGINAL DE PDF INCRUSTADO */}
+      {/* 🟢 MODAL SÚPER ANCHO Y RESPONSIVO (max-w-[96vw]) */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[1200px] h-[95vh] flex flex-col p-0 overflow-hidden bg-slate-200 border-0">
+        <DialogContent className="max-w-[96vw] xl:max-w-[1400px] h-[95vh] flex flex-col p-0 overflow-hidden bg-slate-200 border-0">
           
           <DialogHeader className="px-6 py-4 bg-white z-10 shrink-0 shadow-sm flex flex-row items-center justify-between">
             <div>
@@ -303,21 +303,19 @@ export default function ApprovalsPage() {
             </div>
           </DialogHeader>
           
-          {/* CONTENEDOR DEL DOCUMENTO ORIGINAL */}
-          <div className="flex-1 overflow-y-auto overflow-x-auto bg-slate-300 flex justify-center py-8 px-4 relative shadow-inner">
-            {selectedItem && (
-              <div className="bg-white shadow-xl min-w-max mx-auto border" style={{ transformOrigin: 'top center' }}>
-                 {selectedItem.type === 'Nota Comercial' && (
+          {/* 🟢 CONTENEDOR DEL DOCUMENTO ORIGINAL (Corregido para Scroll Perfecto) */}
+          <div className="flex-1 overflow-auto bg-slate-400/50 p-4 md:p-8 shadow-inner block">
+            <div className="w-fit mx-auto bg-white shadow-2xl border border-slate-300 relative">
+                 {selectedItem?.type === 'Nota Comercial' && (
                     <NotePdf note={selectedItem.rawData} programs={programs} />
                  )}
-                 {selectedItem.type === 'Pedido de Redes' && (
+                 {selectedItem?.type === 'Pedido de Redes' && (
                     <SocialMediaPdf request={selectedItem.rawData} />
                  )}
-                 {selectedItem.type === 'Orden de Publicidad' && (
+                 {selectedItem?.type === 'Orden de Publicidad' && (
                     <AdvertisingOrderPdf order={selectedItem.rawData} programs={programs} />
                  )}
-              </div>
-            )}
+            </div>
           </div>
 
           <DialogFooter className="px-6 py-4 bg-white shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-10">
