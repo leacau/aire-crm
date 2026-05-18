@@ -666,7 +666,7 @@ export default function NewCommercialNotePage() {
         } catch (error) {
             console.error(error);
             toast({ title: 'Error al guardar', variant: 'destructive' });
-        } bits {
+        } finally {
             setSaving(false);
         }
     };
