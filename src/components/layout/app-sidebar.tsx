@@ -117,7 +117,6 @@ export function AppSidebar() {
         { title: 'Tareas', href: '/tasks', icon: ListTodo, screenName: 'Tasks' },
         { title: 'Canjes', href: '/canjes', icon: Repeat, screenName: 'Canjes' },
         { title: 'Cotizador', href: '/quotes', icon: FileSpreadsheet, screenName: 'Quotes' },
-        { title: 'Aprobaciones', href: '/approvals', icon: CheckSquare, screenName: 'Approvals' },
         { title: 'Seguimiento', href: '/coaching', icon: ClipboardList, screenName: 'Coaching' },
       ]
     },
@@ -129,7 +128,8 @@ export function AppSidebar() {
         { title: 'PNTs', href: '/pnts', icon: Megaphone, screenName: 'PNTs' },
         { title: 'Nota Comercial', href: '/notas', icon: StickyNote, screenName: 'Notas' },
         { title: 'Pedido de Redes', href: '/redes', icon: Share2, screenName: 'Redes' }, 
-        { title: 'Orden de Publicidad', href: '/publicidad', icon: ScrollText, screenName: 'Publicidad' }, 
+        { title: 'Orden de Publicidad', href: '/publicidad', icon: ScrollText, screenName: 'Publicidad' },
+        { title: 'Aprobaciones', href: '/approvals', icon: CheckSquare, screenName: 'Approvals' },
       ]
     },
     { title: 'Calendario', href: '/calendar', icon: Calendar, screenName: 'Calendar' },
@@ -182,7 +182,7 @@ export function AppSidebar() {
          allowedScreens.push('Dashboard', 'AppCanjes', 'Clients', 'Prospectos', 'Canjes', 'Grilla', 'Notas');
       } 
       else if (userInfo.area === 'Pautado' || userInfo.area === 'Programación') {
-         allowedScreens.push('Dashboard', 'Grilla', 'PNTs', 'Notas', 'Publicidad', 'Clients');
+         allowedScreens.push('Dashboard', 'Grilla', 'PNTs', 'Notas', 'Publicidad', 'Clients', 'Approvals');
       }
       else if (userInfo.area === 'Redacción' || userInfo.area === 'Redes' || userInfo.area === 'Audiovisual') {
          allowedScreens.push('Dashboard', 'Redes', 'Notas');
@@ -193,7 +193,7 @@ export function AppSidebar() {
       else if (userInfo.role === 'Asesor' || userInfo.area === 'Comercial') {
          allowedScreens.push(
           'Dashboard', 'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
-          'Canjes', 'Quotes', 'Approvals', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
+          'Canjes', 'Quotes', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
           'Calendar', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes'
          );
       }
