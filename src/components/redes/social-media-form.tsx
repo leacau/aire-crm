@@ -219,7 +219,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     };
 
     const handleSave = async () => {
-        // 🟢 NUEVAS REGLAS DE VALIDACIÓN MÁS FLEXIBLES
+        // 🟢 Validaciones mandatorias
         if (!clientId || !contactName || !objective) {
             toast({ title: 'Datos incompletos', description: 'Por favor complete los campos obligatorios marcados con *', variant: 'destructive' });
             return;
@@ -239,9 +239,9 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
         try {
             const client = clients.find(c => c.id === clientId);
             
-            // 🟢 ARMAMOS LOS DATOS LIMPIOS SEGÚN EL FORMATO
+            // 🟢 ARMAMOS LOS DATOS LIMPIOS SEGÚN EL FORMATO Y EL SWITCH
             const dataToSaveRaw: Partial<SocialMediaRequest> = {
-                status: 'Pendiente', // 🟢 ESTADO INICIAL
+                status: notifyOnSave ? 'Pendiente' : 'Borrador', // 🟢 CONTROLADO POR SWITCH
                 clientId,
                 clientName: client?.denominacion || 'Unknown',
                 advisorId: advisorId || userInfo!.id,
@@ -279,14 +279,36 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 return acc;
             }, {} as Record<string, any>) as Omit<SocialMediaRequest, 'id' | 'createdAt'>;
 
-            let finalId = editId;
             if (editId) {
                 await updateSocialMediaRequest(editId, dataToSave, userInfo!.id, userInfo!.name);
             } else {
-                finalId = await saveSocialMediaRequest(dataToSave, userInfo!.id, userInfo!.name);
+                await saveSocialMediaRequest(dataToSave, userInfo!.id, userInfo!.name);
             }        
-            // 🟢 CORREOS ELIMINADOS
-            toast({ title: 'Pedido guardado', description: 'Enviado a revisión exitosamente.' });
+
+            // 🟢 ENVÍO DE NOTIFICACIÓN ULTRA SIMPLE
+            if (notifyOnSave) {
+                const token = await getGoogleAccessToken();
+                if (token) {
+                    try {
+                        const clientDisplayName = client?.denominacion || 'Desconocido';
+                        const emailBody = `<p>Se ha cargado un pedido de revisión de un pedido de redes para el cliente <strong>${clientDisplayName}</strong>.</p>`;
+                        
+                        await sendEmail({
+                            accessToken: token,
+                            to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar'],
+                            subject: `Pedido de Revisión de Pedido de Redes - ${clientDisplayName}`,
+                            body: emailBody
+                        });
+                    } catch (emailErr) {
+                        console.error("Error al enviar notificación simple de redes:", emailErr);
+                    }
+                }
+            }
+
+            toast({ 
+              title: notifyOnSave ? 'Enviado a Revisión' : 'Guardado Provisorio', 
+              description: notifyOnSave ? 'Pedido enviado a revisión exitosamente.' : 'Guardado en modo Borrador (No enviado).' 
+            });
             router.push('/redes');
         } catch (error) {
             console.error("Error crítico al guardar el pedido:", error);
