@@ -11,16 +11,19 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { format, parseISO, isValid } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { Eye, CheckCircle2, XCircle, Clock, Calendar, dollarSign, FileText, Share2, Film, Radio } from 'lucide-react';
-import type { ApprovalStatus } from '@/lib/types';
+import { format } from 'date-fns';
+import { Eye, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import type { ApprovalStatus, Program } from '@/lib/types';
+import { getPrograms } from '@/lib/firebase-service';
+
+// 🟢 IMPORTAMOS LOS VISORES ORIGINALES DEL PDF
+import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
+import { NotePdf } from '@/components/notas/note-pdf';
+import { SocialMediaPdf } from '@/components/redes/social-media-pdf';
 
 type ApprovalItemType = 'Nota Comercial' | 'Pedido de Redes' | 'Orden de Publicidad';
 
@@ -44,9 +47,9 @@ export default function ApprovalsPage() {
   const router = useRouter();
 
   const [items, setItems] = useState<UnifiedApprovalItem[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Estados para el Modal de Evaluación Avanzada
   const [selectedItem, setSelectedItem] = useState<UnifiedApprovalItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [adminComments, setAdminComments] = useState('');
@@ -69,28 +72,20 @@ export default function ApprovalsPage() {
     return new Date();
   };
 
-  const formatSafeDate = (dateStr: string, formatPattern: string = 'dd/MM/yyyy') => {
-    if (!dateStr) return '-';
-    try {
-      const parsed = parseISO(dateStr);
-      return isValid(parsed) ? format(parsed, formatPattern, { locale: es }) : dateStr;
-    } catch (e) {
-      return dateStr;
-    }
-  };
-
   const fetchData = async () => {
     if (!userInfo) return;
     setLoading(true);
     try {
       const statusesToFetch: ApprovalStatus[] = ['Pendiente', 'Aprobado', 'Devuelto'];
       
-      const [notesSnap, socialSnap, ordersSnap] = await Promise.all([
+      const [notesSnap, socialSnap, ordersSnap, programsData] = await Promise.all([
         getDocs(query(collection(db, 'commercial_notes'), where('status', 'in', statusesToFetch))),
         getDocs(query(collection(db, 'social_media_requests'), where('status', 'in', statusesToFetch))),
-        getDocs(query(collection(db, 'advertising_orders'), where('status', 'in', statusesToFetch)))
+        getDocs(query(collection(db, 'advertising_orders'), where('status', 'in', statusesToFetch))),
+        getPrograms() // 🟢 NECESARIO PARA RENDERIZAR LAS GRILLAS DE PUNTOS
       ]);
 
+      setPrograms(programsData);
       const unifiedList: UnifiedApprovalItem[] = [];
 
       notesSnap.forEach(d => {
@@ -171,7 +166,7 @@ export default function ApprovalsPage() {
     if (!selectedItem || !actionType || !userInfo) return;
     
     if (actionType === 'Devuelto' && !adminComments.trim()) {
-      toast({ title: "Falta justificación", description: "Debes escribir el motivo de la devolución para orientar al asesor.", variant: "destructive" });
+      toast({ title: "Falta justificación", description: "Debes escribir el motivo de la devolución.", variant: "destructive" });
       return;
     }
 
@@ -204,223 +199,6 @@ export default function ApprovalsPage() {
       case 'Orden de Publicidad': return 'bg-purple-100 text-purple-800 border-purple-200';
       default: return 'bg-gray-100 text-gray-800';
     }
-  };
-
-  // 🟢 VISUALIZADOR 1: NOTA COMERCIAL
-  const RenderNotaComercialDetails = ({ raw }: { raw: any }) => (
-    <div className="space-y-4 text-sm">
-      <div className="grid grid-cols-3 gap-4 bg-slate-50 p-3 rounded border">
-        <div><span className="text-muted-foreground text-xs block">VALOR TOTAL TARIFARIO</span><span className="font-bold">${Number(raw.totalValue || 0).toLocaleString('es-AR')}</span></div>
-        <div><span className="text-muted-foreground text-xs block">VALOR VENTA REAL</span><span className="font-bold text-blue-600">${Number(raw.saleValue || 0).toLocaleString('es-AR')}</span></div>
-        <div><span className="text-muted-foreground text-xs block">DESAJUSTE / BONIF.</span><span className={`font-bold ${raw.mismatch > 0 ? 'text-red-500' : 'text-slate-700'}`}>${Number(raw.mismatch || 0).toLocaleString('es-AR')}</span></div>
-      </div>
-      {raw.financialObservations && <div className="bg-amber-50 p-2 border border-amber-200 rounded text-xs text-amber-900"><strong>Obs. Financieras:</strong> {raw.financialObservations}</div>}
-      <div>
-        <h4 className="font-bold text-slate-800 flex items-center gap-1 mb-2"><Film className="w-4 h-4 text-blue-500"/> Zócalos / Grafs de Pantalla</h4>
-        <div className="space-y-2">
-          <div className="p-2 bg-slate-900 text-slate-100 font-mono rounded text-xs"><span className="text-yellow-400 block text-[10px]">TITULAR PRINCIPAL (Max 84 chr):</span>{raw.primaryGrafs?.join(' / ') || raw.primaryGraf || '-'}</div>
-          <div className="p-2 bg-slate-900 text-slate-100 font-mono rounded text-xs"><span className="text-yellow-400 block text-[10px]">NOMBRE / FUNCIÓN (Max 55 chr):</span>{raw.secondaryGrafs?.join(' / ') || raw.secondaryGraf || '-'}</div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="border rounded p-3 bg-white">
-          <span className="font-bold text-slate-800 block mb-1">Entrevistados</span>
-          <ul className="list-disc pl-4 space-y-1 text-xs">
-            {raw.interviewees?.map((i: any, idx: number) => (
-              <li key={idx}><strong>{i.name}</strong> ({i.role}) - <Badge variant="secondary" className="text-[10px] py-0">{i.location}</Badge></li>
-            )) || <li>{raw.intervieweeName} ({raw.intervieweeRole})</li>}
-          </ul>
-        </div>
-        <div className="border rounded p-3 bg-white">
-          <span className="font-bold text-slate-800 block mb-1">Cronograma de Salidas</span>
-          <div className="max-h-24 overflow-y-auto text-xs space-y-1 pr-2">
-            {Object.entries(raw.schedule || {}).map(([progId, dates]: any) => (
-              <div key={progId} className="border-b pb-1 last:border-0">
-                <span className="font-semibold block text-slate-600">Programa ID: {progId}</span>
-                {dates.map((d: any, i: number) => <span key={i} className="inline-block bg-slate-100 px-1.5 py-0.5 rounded mr-1 mb-1">{formatSafeDate(d.date)} {d.time}hs</span>)}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // 🟢 VISUALIZADOR 2: PEDIDO DE REDES
-  const RenderPedidoRedesDetails = ({ raw }: { raw: any }) => (
-    <div className="space-y-4 text-sm">
-      <div className="grid grid-cols-3 gap-2 text-xs">
-        <div className="p-2 border rounded bg-slate-50"><strong>FORMATO:</strong> {raw.contentType}</div>
-        <div className="p-2 border rounded bg-slate-50"><strong>EQUIPO CREADOR:</strong> {raw.creator}</div>
-        <div className="p-2 border rounded bg-slate-50"><strong>PUBLICA SUGERIDA:</strong> {formatSafeDate(raw.publishDate)}</div>
-      </div>
-      {raw.contentType === 'Reel' && <div className="grid grid-cols-3 gap-2 bg-amber-50/50 p-2 border border-dashed rounded text-xs"><div><strong>Lugar Grabación:</strong> {raw.recordingLocation || '-'}</div><div><strong>Fecha Grabación:</strong> {formatSafeDate(raw.recordingDate)}</div><div><strong>Hora:</strong> {raw.recordingTime || '-'}</div></div>}
-      <div><Label className="font-bold text-slate-700 block mb-1">Objetivo Estratégico de la Publicación</Label><div className="p-2.5 bg-slate-50 rounded border text-xs text-slate-700 whitespace-pre-wrap">{raw.objective}</div></div>
-      <div><Label className="font-bold text-slate-700 block mb-1">Idea de Guion / Instrucciones</Label><div className="p-2.5 bg-slate-50 rounded border text-xs text-slate-700 whitespace-pre-wrap">{raw.script || 'Sin detalles'}</div></div>
-      {(raw.contentType === 'Reel' || raw.contentType === 'Carrusel') && raw.reelCopy && (<div><Label className="font-bold text-pink-700 block mb-1">Texto del Copy (Feed)</Label><div className="p-2.5 bg-pink-50/30 border border-pink-100 rounded text-xs text-slate-800 whitespace-pre-wrap font-mono">{raw.reelCopy}</div></div>)}
-    </div>
-  );
-
-  // 🟢 VISUALIZADOR 3: MATRIZ COMPLETA DE ORDEN DE PUBLICIDAD (Estilo Planilla de Medios)
-  const RenderOrdenPublicidadDetails = ({ raw }: { raw: any }) => {
-    const days = Array.from({ length: 31 }, (_, i) => i + 1);
-
-    return (
-      <div className="space-y-5 text-sm">
-        {/* Ficha Principal */}
-        <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/60 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-          <div><span className="text-muted-foreground block text-[10px] uppercase">Anunciante</span><span className="font-bold text-slate-800 text-sm">{raw.clientName}</span></div>
-          <div><span className="text-muted-foreground block text-[10px] uppercase">Agencia</span><span className="font-semibold text-slate-700">{raw.agencyName || 'Directo'}</span></div>
-          <div><span className="text-muted-foreground block text-[10px] uppercase">Orden Tango</span><span className="font-mono font-bold text-blue-600 text-sm">{raw.tangoOrderNo || 'PENDIENTE'}</span></div>
-          <div><span className="text-muted-foreground block text-[10px] uppercase">Vigencia Campaña</span><span className="font-semibold text-slate-700">{formatSafeDate(raw.startDate)} al {formatSafeDate(raw.endDate)}</span></div>
-          <div className="sm:col-span-2"><span className="text-muted-foreground block text-[10px] uppercase">Enlaces de Materiales</span><span className="block truncate font-mono text-blue-500 text-[11px]">{raw.materialUrls?.join(' , ') || raw.materialUrl || 'No enviados'}</span></div>
-        </div>
-
-        {/* Planilla de Medios SRL (Matriz Horizontal Completa del 1 al 31) */}
-        {raw.srlItems && raw.srlItems.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between border-b pb-1">
-              <span className="font-bold text-slate-900 flex items-center gap-1 text-xs uppercase tracking-wider text-purple-800"><Radio className="w-4 h-4"/> Pauta Radial / Tanda - AIRE SRL</span>
-            </div>
-
-            {(() => {
-              // Agrupar pautas por mes de emisión
-              const itemsByMonth: Record<string, any[]> = {};
-              raw.srlItems.forEach((item: any) => {
-                if (!itemsByMonth[item.month]) itemsByMonth[item.month] = [];
-                itemsByMonth[item.month].push(item);
-              });
-
-              return Object.entries(itemsByMonth).map(([month, monthItems]) => (
-                <div key={month} className="space-y-1.5 border rounded-lg p-2.5 bg-white shadow-sm w-full overflow-hidden">
-                  <div className="font-bold text-[11px] bg-purple-50 border border-purple-100 text-purple-800 px-2 py-0.5 rounded inline-block uppercase font-sans mb-1">
-                    Ciclo Mensual: {month}
-                  </div>
-                  
-                  {/* Contenedor de scroll horizontal para evitar que se aprieten las columnas */}
-                  <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-                    <Table className="w-full text-center border-collapse">
-                      <TableHeader className="bg-slate-100/80 text-[10px] uppercase tracking-wider text-slate-700">
-                        <TableRow className="h-7">
-                          <TableHead className="min-w-[120px] text-left py-0 h-7 font-bold pl-2 sticky left-0 bg-slate-100/90 shadow-[1px_0_0_0_#cbd5e1] z-10">Programa</TableHead>
-                          <TableHead className="min-w-[70px] py-0 h-7 font-bold">Tipo</TableHead>
-                          <TableHead className="min-w-[40px] py-0 h-7 font-bold">TV</TableHead>
-                          <TableHead className="min-w-[40px] py-0 h-7 font-bold">Seg</TableHead>
-                          {days.map(d => (
-                            <TableHead key={d} className="p-0 h-7 text-center font-bold min-w-[28px] border-l border-slate-200">{d}</TableHead>
-                          ))}
-                          <TableHead className="min-w-[40px] py-0 h-7 font-bold border-l border-slate-300 bg-slate-50">Cant</TableHead>
-                          <TableHead className="min-w-[60px] py-0 h-7 font-bold bg-slate-50">T. Unit</TableHead>
-                          <TableHead className="min-w-[80px] py-0 h-7 font-bold text-right pr-2 bg-purple-50/50">Neto</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody className="text-[11px] font-mono border-t">
-                        {monthItems.map((item: any, idx: number) => {
-                          const totalSpots = Object.values(item.dailySpots || {}).reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
-                          const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
-                          const rowNet = (item.unitRate || 0) * totalSpots * multiplier;
-
-                          return (
-                            <TableRow key={idx} className="hover:bg-slate-50/70 h-7 group">
-                              <TableCell className="text-left py-0.5 h-7 font-sans font-medium truncate max-w-[150px] pl-2 sticky left-0 bg-white group-hover:bg-slate-50/70 shadow-[1px_0_0_0_#cbd5e1] z-10">{item.programId}</TableCell>
-                              <TableCell className="py-0.5 h-7 font-sans">{item.adType}</TableCell>
-                              <TableCell className="py-0.5 h-7 font-sans text-center">{item.hasTv ? 'SI' : 'NO'}</TableCell>
-                              <TableCell className="py-0.5 h-7 text-slate-500">{item.seconds || '-'}</TableCell>
-                              {days.map(d => {
-                                const val = item.dailySpots?.[d.toString()];
-                                return (
-                                  <TableCell key={d} className={`p-0 h-7 text-center border-l border-slate-100 ${val ? 'bg-amber-100 font-bold text-amber-950 text-[11px]' : 'text-slate-200'}`}>
-                                    {val || '-'}
-                                  </TableCell>
-                                );
-                              })}
-                              <TableCell className="py-0.5 h-7 font-sans font-bold bg-slate-50 border-l border-slate-300 text-slate-800 text-center">{totalSpots}</TableCell>
-                              <TableCell className="py-0.5 h-7 font-sans text-slate-600">${Number(item.unitRate || 0).toLocaleString('es-AR')}</TableCell>
-                              <TableCell className="py-0.5 h-7 font-sans font-bold text-right pr-2 text-purple-950 bg-purple-50/30">${rowNet.toLocaleString('es-AR')}</TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                    <ScrollBar orientation="horizontal" />
-                  </ScrollArea>
-                </div>
-              ));
-            })()}
-          </div>
-        )}
-
-        {/* Planilla SAS - Banners Digitales */}
-        {raw.sasItems && raw.sasItems.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between border-b pb-1">
-              <span className="font-bold text-slate-900 flex items-center gap-1 text-xs uppercase tracking-wider text-indigo-800"><Share2 className="w-4 h-4"/> Cobertura Digital - AIRE SAS</span>
-            </div>
-            <div className="border rounded-md overflow-hidden bg-white shadow-sm text-xs">
-              <Table>
-                <TableHeader className="bg-slate-50 text-slate-700">
-                  <TableRow>
-                    <TableHead>Mes Ciclo</TableHead>
-                    <TableHead>Formato Comercial</TableHead>
-                    <TableHead>Dispositivos y Secciones</TableHead>
-                    <TableHead className="text-right pr-4">Monto Neto</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {raw.sasItems.map((item: any, idx: number) => {
-                    let net = item.format === "Banner" ? ((item.cpm || 0) * (item.unitRate || 0)) : (item.unitRate || 0);
-                    return (
-                      <TableRow key={idx} className="hover:bg-slate-50/50">
-                        <TableCell className="font-semibold text-slate-700">{item.month}</TableCell>
-                        <TableCell>
-                          <span className="font-bold text-slate-900">{item.format}</span>
-                          {item.detail && <span className="text-muted-foreground block text-[10px] italic">{item.detail}</span>}
-                        </TableCell>
-                        <TableCell className="text-[11px] text-slate-600">
-                          {[item.desktop && 'Escritorio', item.mobile && 'Móvil', item.home && 'Home Principal', item.interiores && 'Notas / Interiores'].filter(Boolean).join(' • ')}
-                          {item.url && <span className="text-blue-500 block font-mono text-[10px] truncate max-w-xs">{item.url}</span>}
-                        </TableCell>
-                        <TableCell className="text-right font-mono font-bold pr-4 text-indigo-950">${net.toLocaleString('es-AR')}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        )}
-
-        {/* Facturaciones Cronológicas */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
-          {raw.billingRequestsSrl && raw.billingRequestsSrl.length > 0 && (
-            <div className="bg-slate-50 p-3 rounded-md border">
-              <span className="font-bold text-slate-700 block text-[11px] uppercase mb-2 tracking-wide text-purple-900">Sugerencias Facturación SRL</span>
-              <div className="space-y-1 text-xs pr-2 max-h-24 overflow-y-auto">
-                {raw.billingRequestsSrl.map((br: any, i: number) => (
-                  <div key={i} className="flex justify-between bg-white border px-2 py-1 rounded shadow-xs font-mono">
-                    <span className="font-sans text-slate-600">F: {formatSafeDate(br.date)}</span>
-                    <span className="font-bold text-slate-900">${Number(br.amount || 0).toLocaleString('es-AR')}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {raw.billingRequestsSas && raw.billingRequestsSas.length > 0 && (
-            <div className="bg-slate-50 p-3 rounded-md border">
-              <span className="font-bold text-slate-700 block text-[11px] uppercase mb-2 tracking-wide text-indigo-900">Sugerencias Facturación SAS (C/IVA)</span>
-              <div className="space-y-1 text-xs pr-2 max-h-24 overflow-y-auto">
-                {raw.billingRequestsSas.map((br: any, i: number) => (
-                  <div key={i} className="flex justify-between bg-white border px-2 py-1 rounded shadow-xs font-mono">
-                    <span className="font-sans text-slate-600">F: {formatSafeDate(br.date)}</span>
-                    <span className="font-bold text-slate-900">${Number(br.amount || 0).toLocaleString('es-AR')}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
   };
 
   const renderTable = (data: UnifiedApprovalItem[], showActions: boolean = true) => (
@@ -509,90 +287,90 @@ export default function ApprovalsPage() {
         </Tabs>
       </main>
 
-      {/* MODAL DE AUDITORÍA CON SCROLL COMPLETO */}
+      {/* 🟢 MODAL DE AUDITORÍA CON EL VISOR ORIGINAL DE PDF INCRUSTADO */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="px-6 py-4 border-b bg-white z-10 shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              Auditoría de Documento: <Badge className={getTypeColor(selectedItem?.type as any)}>{selectedItem?.type}</Badge>
-            </DialogTitle>
-            <DialogDescription>
-              Verifique minuciosamente la información antes de tomar una decisión.
-            </DialogDescription>
+        <DialogContent className="sm:max-w-[1200px] h-[95vh] flex flex-col p-0 overflow-hidden bg-slate-200 border-0">
+          
+          <DialogHeader className="px-6 py-4 bg-white z-10 shrink-0 shadow-sm flex flex-row items-center justify-between">
+            <div>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                Auditoría: <Badge className={getTypeColor(selectedItem?.type as any)}>{selectedItem?.type}</Badge>
+              </DialogTitle>
+            </div>
+            {/* Panel superior de acciones (Devolver/Aprobar) para fácil acceso */}
+            <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cerrar</Button>
+            </div>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto bg-white">
+          {/* CONTENEDOR DEL DOCUMENTO ORIGINAL */}
+          <div className="flex-1 overflow-y-auto overflow-x-auto bg-slate-300 flex justify-center py-8 px-4 relative shadow-inner">
             {selectedItem && (
-              <div className="p-6 space-y-6">
-                
-                {/* Metadatos Rápidos */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm bg-slate-100/80 p-4 rounded-md border border-slate-200">
-                  <div><span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide mb-1">Anunciante</span><span className="font-bold text-slate-800 truncate block">{selectedItem.clientName}</span></div>
-                  <div><span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide mb-1">Asesor Comercial</span><span className="font-semibold text-slate-700">{selectedItem.advisorName}</span></div>
-                  <div><span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide mb-1">Campaña / Ref</span><span className="font-semibold text-slate-700 truncate block">{selectedItem.title}</span></div>
-                  <div><span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide mb-1">Fecha Envío</span><span className="font-semibold text-slate-700">{format(selectedItem.createdAt, 'dd/MM/yyyy HH:mm')}</span></div>
-                </div>
-
-                <Separator />
-
-                {/* INYECCIÓN DE LA PLANILLA COMPLETA */}
-                {selectedItem.type === 'Nota Comercial' && <RenderNotaComercialDetails raw={selectedItem.rawData} />}
-                {selectedItem.type === 'Pedido de Redes' && <RenderPedidoRedesDetails raw={selectedItem.rawData} />}
-                {selectedItem.type === 'Orden de Publicidad' && <RenderOrdenPublicidadDetails raw={selectedItem.rawData} />}
-
-                <Separator />
-
-                {/* Panel Operativo de Aprobación */}
-                <div className="space-y-3 bg-slate-50 p-4 rounded-md border border-slate-200">
-                  <Label htmlFor="comments" className="font-bold text-slate-800 text-sm">
-                    Devolución / Observaciones Administrativas <span className="text-red-500 font-normal">(Obligatorio en Devoluciones)</span>
-                  </Label>
-                  <Textarea 
-                    id="comments" 
-                    placeholder="Escriba los motivos del rechazo técnico para notificar al asesor, o comentarios internos para el departamento de pautado..." 
-                    value={adminComments}
-                    onChange={(e) => setAdminComments(e.target.value)}
-                    className="min-h-[80px] bg-white text-sm"
-                  />
-                  {actionType === 'Devuelto' && !adminComments.trim() && (
-                    <span className="text-sm text-red-600 font-bold flex items-center gap-1 mt-1">⚠️ Debe ingresar la justificación para proceder con la devolución.</span>
-                  )}
-                </div>
-
-                {actionType && (
-                  <div className={`p-3 rounded-md border text-sm font-semibold ${actionType === 'Aprobado' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-                    {actionType === 'Aprobado' 
-                      ? '✓ Confirmar aprobación: El pedido será validado e ingresará formalmente en las grillas finales del sistema.' 
-                      : '✕ Confirmar devolución: El trámite regresará al panel del asesor comercial en estado corregible.'
-                    }
-                  </div>
-                )}
+              <div className="bg-white shadow-xl min-w-max mx-auto border" style={{ transformOrigin: 'top center' }}>
+                 {selectedItem.type === 'Nota Comercial' && (
+                    <NotePdf note={selectedItem.rawData} programs={programs} />
+                 )}
+                 {selectedItem.type === 'Pedido de Redes' && (
+                    <SocialMediaPdf request={selectedItem.rawData} />
+                 )}
+                 {selectedItem.type === 'Orden de Publicidad' && (
+                    <AdvertisingOrderPdf order={selectedItem.rawData} programs={programs} />
+                 )}
               </div>
             )}
           </div>
 
-          <DialogFooter className="px-6 py-4 border-t bg-slate-50 shrink-0">
-            {!actionType ? (
-              <div className="flex flex-col sm:flex-row gap-3 w-full justify-between items-center">
-                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cerrar Auditoría</Button>
-                <div className="flex gap-2">
-                  <Button type="button" variant="destructive" onClick={() => setActionType('Devuelto')}>Devolver al Asesor</Button>
-                  <Button type="button" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => setActionType('Aprobado')}>Aprobar y Registrar</Button>
+          <DialogFooter className="px-6 py-4 bg-white shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-10">
+             <div className="flex flex-col w-full space-y-4">
+                
+                {/* Cuadro de devoluciones */}
+                <div className="flex flex-col sm:flex-row gap-4 items-start w-full bg-slate-50 p-4 border rounded-md">
+                    <div className="flex-1 w-full space-y-2">
+                        <Label htmlFor="comments" className="font-bold text-slate-800 text-sm">
+                            Observaciones de Devolución / Aprobación
+                        </Label>
+                        <Textarea 
+                            id="comments" 
+                            placeholder="Si rechaza el pedido, escriba los motivos técnicos para que el asesor corrija y reenvíe..." 
+                            value={adminComments}
+                            onChange={(e) => setAdminComments(e.target.value)}
+                            className="bg-white"
+                        />
+                    </div>
+                    
+                    {/* Botones de acción definitivos */}
+                    <div className="flex flex-col gap-2 w-full sm:w-64 pt-6">
+                        {!actionType ? (
+                            <>
+                                <Button type="button" variant="destructive" className="w-full" onClick={() => setActionType('Devuelto')}>
+                                    Devolver al Asesor
+                                </Button>
+                                <Button type="button" className="w-full bg-green-600 hover:bg-green-700 text-white" onClick={() => setActionType('Aprobado')}>
+                                    Aprobar Documento
+                                </Button>
+                            </>
+                        ) : (
+                            <div className="flex flex-col gap-2 p-3 border rounded-md shadow-sm bg-white">
+                                <span className="text-xs font-bold text-center block mb-1">
+                                    ¿Confirmar {actionType}?
+                                </span>
+                                <Button 
+                                    type="button" 
+                                    onClick={submitEvaluation} 
+                                    disabled={isSaving || (actionType === 'Devuelto' && !adminComments.trim())} 
+                                    className={actionType === 'Aprobado' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
+                                >
+                                    {isSaving ? <Spinner size="small" className="mr-2" /> : `SÍ, PROCESAR`}
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => setActionType(null)} disabled={isSaving}>
+                                    Cancelar
+                                </Button>
+                            </div>
+                        )}
+                    </div>
                 </div>
-              </div>
-            ) : (
-              <div className="flex flex-col sm:flex-row gap-3 w-full justify-between items-center">
-                <Button type="button" variant="outline" onClick={() => setActionType(null)} disabled={isSaving}>Atrás</Button>
-                <Button 
-                  type="button" 
-                  onClick={submitEvaluation} 
-                  disabled={isSaving || (actionType === 'Devuelto' && !adminComments.trim())} 
-                  className={actionType === 'Aprobado' ? 'bg-green-600 hover:bg-green-700 text-white px-8' : 'bg-red-600 hover:bg-red-700 text-white px-8'}
-                >
-                  {isSaving ? <Spinner size="small" className="mr-2" /> : `Confirmar Registro`}
-                </Button>
-              </div>
-            )}
+
+             </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
