@@ -619,7 +619,7 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
       const preview = getPreviewOrder();
       const orderPayload = {
         ...preview,
-          status: 'Pendiente',
+        status: notifyOnSave ? 'Pendiente' : 'Borrador', // 🟢 SE DEFINE POR SWITCH
         clientId: data.clientId,
         clientName: selectedClient?.razonSocial || selectedClient?.denominacion || "Desconocido",
         agencyId: data.agencyId === "none" ? undefined : data.agencyId,
@@ -632,7 +632,6 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
         sasItems: validSasItems,
         billingRequestsSrl: data.billingRequestsSrl, 
         billingRequestsSas: data.billingRequestsSas,
-        // 🟢 Asegurarnos de enviar el ID y Nombre del ejecutivo (preservado o reasignado)
         accountExecutive: data.accountExecutive,
         createdBy: orderCreatedBy || userInfo.id,
         id: undefined 
@@ -640,22 +639,37 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
 
       const cleanPayload = JSON.parse(JSON.stringify(orderPayload));
 
-      let finalOrderId = editModeId;
-
       if (editModeId) {
           await updateAdvertisingOrder(editModeId, cleanPayload, userInfo.id, userInfo.name);
       } else {
-          finalOrderId = await createAdvertisingOrder(cleanPayload);
+          await createAdvertisingOrder(cleanPayload);
       }
 
-     if (editModeId) {
-          await updateAdvertisingOrder(editModeId, cleanPayload, userInfo.id, userInfo.name);
-      } else {
-          finalOrderId = await createAdvertisingOrder(cleanPayload);
+      // 🟢 ENVÍO DE NOTIFICACIÓN ULTRA SIMPLE (SOLO SI PASA A APROBACIÓN)
+      if (notifyOnSave) {
+          const accessToken = await getGoogleAccessToken();
+          if (accessToken) {
+              try {
+                  const clientDisplayName = selectedClient?.razonSocial || selectedClient?.denominacion || 'Desconocido';
+                  const emailBody = `<p>Se ha cargado un pedido de revisión de una orden de publicidad para el cliente <strong>${clientDisplayName}</strong>.</p>`;
+                  
+                  await sendEmail({
+                      accessToken,
+                      to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar'],
+                      subject: `Pedido de Revisión de Orden de Publicidad - ${clientDisplayName}`,
+                      body: emailBody
+                  });
+              } catch (emailErr) {
+                  console.error("Error al enviar notificación inicial simple:", emailErr);
+              }
+          }
       }
 
       localStorage.removeItem('advertising_order_draft'); 
-      toast({ title: "Guardado", description: "Orden enviada a la bandeja de pendientes." });
+      toast({ 
+        title: notifyOnSave ? "Enviado a Revisión" : "Guardado Provisorio", 
+        description: notifyOnSave ? "Orden enviada a la bandeja de pendientes correctamente." : "Guardado en modo Borrador (No enviado)." 
+      });
       router.push(`/publicidad`);
     } catch (error) {
       console.error(error);
@@ -686,7 +700,11 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
                {isExporting ? "Generando..." : "Exportar PDF"}
             </Button>
 
-            {/* 🟢 SWITCH DE NOTIFICAR ELIMINADO */}
+            {/* 🟢 RE-INCORPORADO: SWITCH PASAR A APROBACIÓN */}
+            <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white h-10">
+                <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
+                <Label htmlFor="notify" className="cursor-pointer text-sm font-semibold">Pasar a aprobación</Label>
+            </div>
 
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando...</> : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
