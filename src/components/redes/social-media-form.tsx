@@ -285,14 +285,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
             } else {
                 finalId = await saveSocialMediaRequest(dataToSave, userInfo!.id, userInfo!.name);
             }        
-
-            let finalId = editId;
-            if (editId) {
-                await updateSocialMediaRequest(editId, dataToSave, userInfo!.id, userInfo!.name);
-            } else {
-                finalId = await saveSocialMediaRequest(dataToSave, userInfo!.id, userInfo!.name);
-            }
-
             // 🟢 CORREOS ELIMINADOS
             toast({ title: 'Pedido guardado', description: 'Enviado a revisión exitosamente.' });
             router.push('/redes');
