@@ -37,6 +37,7 @@ export default function NewCommercialNotePage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const pdfRef = useRef<HTMLDivElement>(null);
+    const [notifyOnSave, setNotifyOnSave] = useState(true); // 🟢 RE-INCORPORADO ESTADO DE SWITCH
     
     const [clients, setClients] = useState<Client[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
@@ -506,13 +507,9 @@ export default function NewCommercialNotePage() {
     const handleSave = async () => {
         if (!selectedClientId || !userInfo) { toast({ title: 'Datos incompletos', description: 'Seleccione un cliente.', variant: 'destructive' }); return; }
         if (!title.trim()) { toast({ title: 'Falta título', variant: 'destructive' }); return; }
-        
-        // 🟢 Validamos que al menos un entrevistado tenga nombre
         if (interviewees.filter(i => i.name.trim() !== '').length === 0) { toast({ title: 'Falta Entrevistado', description: 'Debe ingresar al menos un entrevistado.', variant: 'destructive' }); return; }
-
         if (!location) { toast({ title: 'Seleccione ubicación', variant: 'destructive' }); return; }
         if (location === 'Móvil' && !mobileAddress.trim()) { toast({ title: 'Falta dirección del móvil', variant: 'destructive' }); return; }
-        
         if (primaryGrafs.filter(g => g.trim() !== '').length === 0) { toast({ title: 'Falta TITULAR.Text', variant: 'destructive' }); return; }
         if (secondaryGrafs.filter(g => g.trim() !== '').length === 0) { toast({ title: 'Falta NOMBRE/FUNCION.Text', variant: 'destructive' }); return; }
         if (hasGrafErrors) { toast({ title: 'Error en Grafs', description: 'El texto excede el límite permitido.', variant: 'destructive' }); return; }
@@ -552,20 +549,11 @@ export default function NewCommercialNotePage() {
 
         if (!isExemptFromTimeLimit) {
             if (hasTodayError) {
-                toast({ 
-                    title: 'Límite excedido', 
-                    description: 'No se pueden cargar ni programar notas comerciales para el mismo día de hoy.', 
-                    variant: 'destructive' 
-                });
+                toast({ title: 'Límite excedido', description: 'No se pueden cargar ni programar notas comerciales para el mismo día de hoy.', variant: 'destructive' });
                 return;
             }
-
             if (hasNextBusinessDayError) {
-                toast({ 
-                    title: 'Límite de horario excedido', 
-                    description: 'Las notas para el próximo día hábil deben cargarse antes de las 10:00 a.m. Por favor, reprogramá la fecha de salida.', 
-                    variant: 'destructive' 
-                });
+                toast({ title: 'Límite de horario excedido', description: 'Las notas para el próximo día hábil deben cargarse antes de las 10:00 a.m. Por favor, reprogramá la fecha de salida.', variant: 'destructive' });
                 return;
             }
         }
@@ -584,7 +572,7 @@ export default function NewCommercialNotePage() {
             }
 
              const noteDataRaw: any = {
-                status: 'Pendiente',
+                status: notifyOnSave ? 'Pendiente' : 'Borrador', // 🟢 CONTROLADO POR SWITCH
                 clientId: selectedClientId,
                 clientName: client?.denominacion || 'Unknown',
                 cuit,
@@ -606,22 +594,15 @@ export default function NewCommercialNotePage() {
                 location,
                 callPhone: location === 'Llamada' ? callPhone : undefined,
                 mobileAddress: location === 'Móvil' ? mobileAddress : undefined,
-                
                 primaryGrafs: primaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
                 secondaryGrafs: secondaryGrafs.filter(g => g.trim()).map(g => g.toUpperCase()),
-                
                 primaryGraf: primaryGrafs[0]?.toUpperCase() || '', 
                 secondaryGraf: secondaryGrafs[0]?.toUpperCase() || '',
-
                 questions: questions.filter(q => q.trim() !== ''),
                 topicsToAvoid: topicsToAvoid.filter(t => t.trim() !== ''),
-                
-                // 🟢 Guardamos el array de entrevistados limpios
                 interviewees: interviewees.filter(i => i.name.trim() !== ''),
-                // 🔥 Guardamos el primero en los campos viejos POR COMPATIBILIDAD
                 intervieweeName: interviewees[0]?.name || '',
                 intervieweeRole: interviewees[0]?.role || '',
-                
                 intervieweeBio: intervieweeBio || undefined,
                 instagram: instagramHandle ? instagramHandle : undefined,
                 website: noWeb ? undefined : website,
@@ -649,28 +630,46 @@ export default function NewCommercialNotePage() {
             }, {} as Omit<CommercialNote, 'id' | 'createdAt'>);
 
             let newNoteId = editModeId;
-
             if (editModeId) {
                 await updateCommercialNote(editModeId, noteData, userInfo!.id, userInfo!.name);
             } else {
                 newNoteId = await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
             }
 
+            // 🟢 ENVÍO DE NOTIFICACIÓN ULTRA SIMPLE
+            if (notifyOnSave) {
+                const accessToken = await getGoogleAccessToken();
+                if (accessToken) {
+                    try {
+                        const clientDisplayName = client?.denominacion || 'Desconocido';
+                        const emailBody = `<p>Se ha cargado un pedido de revisión de una nota comercial para el cliente <strong>${clientDisplayName}</strong>.</p>`;
+                        
+                        await sendEmail({
+                            accessToken,
+                            to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar'],
+                            subject: `Pedido de Revisión de Nota Comercial - ${clientDisplayName}`,
+                            body: emailBody
+                        });
+                    } catch (emailErr) {
+                        console.error("Error al enviar notificación simple de nota:", emailErr);
+                    }
+                }
+            }
+
             toast({ 
-    title: 'Nota guardada correctamente', 
-    description: 'Enviada a la bandeja de pendientes para su revisión.' 
-});
+                title: notifyOnSave ? 'Enviado a Revisión' : 'Guardado Provisorio', 
+                description: notifyOnSave ? 'Enviada a la bandeja de pendientes para su revisión.' : 'Guardada en modo Borrador (No enviada).' 
+            });
             
             localStorage.removeItem('commercial_note_draft');
             router.push('/notas');
-
         } catch (error) {
             console.error(error);
             toast({ title: 'Error al guardar', variant: 'destructive' });
-        } finally {
+        } bits {
             setSaving(false);
         }
-    }; 
+    };
 
     if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
 
@@ -692,7 +691,13 @@ export default function NewCommercialNotePage() {
                 <Button variant="outline" onClick={handleDownloadPdf} disabled={!selectedClientId || !title || hasGrafErrors}>
                     <ExternalLink className="mr-2 h-4 w-4" /> Exportar PDF
                 </Button>
-                {/* 🟢 SWITCH DE NOTIFICAR ELIMINADO */}
+                
+                {/* 🟢 RE-INCORPORADO: SWITCH EN ACCIONES SUPERIORES */}
+                <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white h-10">
+                    <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
+                    <Label htmlFor="notify" className="cursor-pointer text-sm font-semibold">Pasar a aprobación</Label>
+                </div>
+
                 <Button onClick={handleSave} disabled={saving || hasGrafErrors}>
                     {saving ? <Spinner size="small" /> : <Save className="mr-2 h-4 w-4" />} Guardar
                 </Button>
