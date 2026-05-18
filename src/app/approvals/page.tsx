@@ -62,7 +62,6 @@ export default function ApprovalsPage() {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get('tab') || 'pending';
 
-  // Referencias para capturar los contenedores de los PDFs en tiempo real
   const documentContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -168,7 +167,6 @@ export default function ApprovalsPage() {
     setIsModalOpen(true);
   };
 
-  // Helper para generar el PDF del alta de cliente en formato base64
   const generateClientSummaryPdfBase64 = (client: Client): string => {
     const pdf = new jsPDF('p', 'mm', 'a4');
     pdf.setFont('helvetica', 'normal');
@@ -228,9 +226,8 @@ export default function ApprovalsPage() {
       const accessToken = await getGoogleAccessToken();
       if (!accessToken) throw new Error("No se pudo obtener la autorización de Google Gmail.");
 
-      // 1. Buscar la información del vendedor/asesor de origen para enviarle el mail
       const sellerId = selectedItem.rawData.advisorId || selectedItem.rawData.createdBy || selectedItem.rawData.creatorId;
-      let sellerEmail = userInfo.email; // Fallback por las dudas
+      let sellerEmail = userInfo.email; 
       if (sellerId) {
         const sellerProfile = await getUserById(sellerId);
         if (sellerProfile?.email) {
@@ -238,7 +235,6 @@ export default function ApprovalsPage() {
         }
       }
 
-      // 2. Ejecutar la actualización de estado en Firestore
       const docRef = doc(db, selectedItem.collectionName, selectedItem.id);
       await updateDoc(docRef, {
         status: actionType,
@@ -248,9 +244,7 @@ export default function ApprovalsPage() {
         approvedByName: userInfo.name
       });
 
-      // 3. FLUJO DE NOTIFICACIONES POR CORREO SEGÚN LA DECISIÓN
       if (actionType === 'Devuelto') {
-        // Notificación al vendedor de origen y a lchena@airedesantafe.com.ar
         const returnEmailBody = `
           <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
             <h2 style="color: #dc2626; margin-top: 0;">Pedido Devuelto con Correcciones</h2>
@@ -276,7 +270,6 @@ export default function ApprovalsPage() {
         toast({ title: 'Pedido devuelto y asesor notificado por email.' });
 
       } else if (actionType === 'Aprobado' && documentContainerRef.current) {
-        // Aprobación definitiva: Renderizar el PDF del pedido en vivo desde el DOM del modal
         const elementToCapture = documentContainerRef.current.firstChild as HTMLElement;
         const canvas = await html2canvas(elementToCapture, { scale: 1.5, useCORS: true, logging: false, backgroundColor: '#ffffff' });
         const imgData = canvas.toDataURL('image/jpeg', 0.8);
@@ -300,7 +293,6 @@ export default function ApprovalsPage() {
         }
         const orderBase64 = docPdf.output('datauristring').split(',')[1];
 
-        // Traer y renderizar el PDF de datos comerciales del cliente unificado
         let clientBase64 = '';
         if (selectedItem.clientId) {
           const clientObj = await getClient(selectedItem.clientId);
@@ -371,6 +363,50 @@ export default function ApprovalsPage() {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  // 🟢 FUNCIÓN RENDER TABLE RESTAURADA (Corrige el Client-Side Crash)
+  const renderTable = (data: UnifiedApprovalItem[], showActions: boolean = true) => (
+    <div className="rounded-md border bg-white shadow-sm overflow-hidden">
+      <Table>
+        <TableHeader className="bg-slate-50">
+          <TableRow>
+            <TableHead>Fecha</TableHead>
+            <TableHead>Tipo</TableHead>
+            <TableHead>Cliente</TableHead>
+            <TableHead>Asesor</TableHead>
+            <TableHead>Referencia</TableHead>
+            {showActions && <TableHead className="text-right">Acción</TableHead>}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.length === 0 ? (
+            <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">No hay documentos en esta bandeja.</TableCell></TableRow>
+          ) : (
+            data.map((item) => (
+              <TableRow key={item.id} className="hover:bg-slate-50 transition-colors">
+                <TableCell className="font-medium text-slate-700">
+                  {format(item.createdAt, 'dd/MM/yyyy HH:mm')}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={getTypeColorClass(item.type)}>{item.type}</Badge>
+                </TableCell>
+                <TableCell className="font-semibold">{item.clientName}</TableCell>
+                <TableCell>{item.advisorName}</TableCell>
+                <TableCell className="text-muted-foreground truncate max-w-xs">{item.title}</TableCell>
+                {showActions && (
+                  <TableCell className="text-right">
+                    <Button variant="secondary" size="sm" onClick={() => openEvaluationModal(item)}>
+                      <Eye className="w-4 h-4 mr-2" /> Evaluar
+                    </Button>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
 
   if (authLoading || loading) {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
