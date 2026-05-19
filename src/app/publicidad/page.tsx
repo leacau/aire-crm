@@ -5,12 +5,15 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { getRecentAdvertisingOrders, getClients } from '@/lib/firebase-service';
+import { db } from '@/lib/firebase';
+import { doc, deleteDoc } from 'firebase/firestore';
 import type { AdvertisingOrder } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Plus, Search, Eye } from 'lucide-react';
+import { Plus, Search, Eye, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { Card, CardContent } from '@/components/ui/card';
@@ -25,6 +28,7 @@ import {
 
 export default function AdvertisingOrdersListPage() {
     const { userInfo, loading: authLoading } = useAuth();
+    const { toast } = useToast();
     const [orders, setOrders] = useState<AdvertisingOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -58,6 +62,19 @@ export default function AdvertisingOrdersListPage() {
 
         if (!authLoading) fetchOrders();
     }, [userInfo, authLoading]);
+
+    // 🟢 FUNCIÓN DE BORRADO FÍSICO DIRECTO
+    const handleDeleteOrder = async (id: string) => {
+        if (!window.confirm("¿Estás completamente seguro de eliminar esta Orden de Publicidad de manera permanente? Esta acción no se puede deshacer.")) return;
+        try {
+            await deleteDoc(doc(db, 'advertising_orders', id));
+            setOrders(prev => prev.filter(o => o.id !== id));
+            toast({ title: "Orden de publicidad eliminada correctamente." });
+        } catch (error) {
+            console.error("Error deleting order:", error);
+            toast({ title: "Error al intentar eliminar la orden.", variant: "destructive" });
+        }
+    };
 
     const filteredOrders = orders.filter(order => {
         const term = searchTerm.toLowerCase();
@@ -101,7 +118,7 @@ export default function AdvertisingOrdersListPage() {
                                     <TableHead>Producto / Campaña</TableHead>
                                     <TableHead>Cliente</TableHead>
                                     <TableHead>Ejecutivo</TableHead>
-                                    <TableHead className="text-right w-[100px]"></TableHead>
+                                    <TableHead className="text-right w-[120px]"></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -115,11 +132,24 @@ export default function AdvertisingOrdersListPage() {
                                             <TableCell>{order.clientName}</TableCell>
                                             <TableCell>{order.accountExecutive}</TableCell>
                                             <TableCell className="text-right">
-                                                <Button variant="ghost" size="sm" asChild>
-                                                    <Link href={`/publicidad/${order.id}`}>
-                                                        <Eye className="h-4 w-4" />
-                                                    </Link>
-                                                </Button>
+                                                <div className="flex justify-end gap-1">
+                                                    <Button variant="ghost" size="sm" asChild>
+                                                        <Link href={`/publicidad/${order.id}`}>
+                                                            <Eye className="h-4 w-4" />
+                                                        </Link>
+                                                    </Button>
+                                                    {/* 🟢 ACCESIBILIDAD LIMITADA SÓLO A JEFES Y GERENTES */}
+                                                    {(userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia') && (
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                            onClick={() => handleDeleteOrder(order.id!)}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))
