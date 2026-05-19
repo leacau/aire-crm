@@ -8,7 +8,7 @@ import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocial
 import { Client, SocialMediaRequest, User, CarouselSlide } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
-
+import { arrayUnion } from "firebase/firestore";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -219,7 +219,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     };
 
     const handleSave = async () => {
-        // 🟢 Validaciones mandatorias
         if (!clientId || !contactName || !objective) {
             toast({ title: 'Datos incompletos', description: 'Por favor complete los campos obligatorios marcados con *', variant: 'destructive' });
             return;
@@ -239,9 +238,19 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
         try {
             const client = clients.find(c => c.id === clientId);
             
+            const targetStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
+            const historyItem = {
+                timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
+                status: targetStatus,
+                userId: userInfo.id,
+                userName: userInfo.name,
+                userRole: userInfo.role,
+                comments: editId ? 'Pedido de redes corregido y reenviado para evaluación.' : 'Carga inicial enviada a revisión.'
+            };
+
             // 🟢 ARMAMOS LOS DATOS LIMPIOS SEGÚN EL FORMATO Y EL SWITCH
             const dataToSaveRaw: Partial<SocialMediaRequest> = {
-                status: notifyOnSave ? 'Pendiente' : 'Borrador', // 🟢 CONTROLADO POR SWITCH
+                status: targetStatus,
                 clientId,
                 clientName: client?.denominacion || 'Unknown',
                 advisorId: advisorId || userInfo!.id,
@@ -271,6 +280,12 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 dataToSaveRaw.carouselSlides = carouselSlides.filter(s => s.text.trim() || s.link.trim());
             }
 
+            if (editId) {
+                dataToSaveRaw.approvalHistory = arrayUnion(historyItem);
+            } else {
+                dataToSaveRaw.approvalHistory = [historyItem];
+            }
+
             const dataToSave = Object.keys(dataToSaveRaw).reduce((acc, key) => {
                 const val = (dataToSaveRaw as any)[key];
                 if (val !== undefined) {
@@ -285,13 +300,20 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 await saveSocialMediaRequest(dataToSave, userInfo!.id, userInfo!.name);
             }        
 
-            // 🟢 ENVÍO DE NOTIFICACIÓN ULTRA SIMPLE
+            // 🟢 MAIL DE NOTIFICACIÓN SIMPLE CON LINK DIRECTO
             if (notifyOnSave) {
                 const token = await getGoogleAccessToken();
                 if (token) {
                     try {
                         const clientDisplayName = client?.denominacion || 'Desconocido';
-                        const emailBody = `<p>Se ha cargado un pedido de revisión de un pedido de redes para el cliente <strong>${clientDisplayName}</strong>.</p>`;
+                        const baseUrl = window.location.origin;
+                        const emailBody = `
+                            <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
+                                <p>Se ha cargado un pedido de revisión de un <strong>Pedido de Redes</strong> para el cliente <strong>${clientDisplayName}</strong>.</p>
+                                <p>Para evaluar el formato, objetivo y copy, ingresa desde el siguiente enlace directo:</p>
+                                <p style="margin-top: 15px;"><a href="${baseUrl}/approvals?tab=pending" style="display: inline-block; padding: 10px 20px; background-color: #1d4ed8; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px;">EVALUAR PEDIDO DE REDES</a></p>
+                            </div>
+                        `;
                         
                         await sendEmail({
                             accessToken: token,
