@@ -23,7 +23,7 @@ import { sendEmail } from '@/lib/google-gmail-service';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
-// 🟢 IMPORTAMOS LOS VISORES ORIGINALES DEL PDF
+// IMPORTAMOS LOS VISORES ORIGINALES DEL PDF
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import { NotePdf } from '@/components/notas/note-pdf';
 import { SocialMediaPdf } from '@/components/redes/social-media-pdf';
@@ -45,7 +45,8 @@ interface UnifiedApprovalItem {
   approvalHistory?: ApprovalHistoryItem[];
 }
 
-export default function ApprovalsPage() {
+// 🟢 COMPONENTE INTERNO CON TODA LA LÓGICA (Para que useSearchParams no rompa Next.js)
+function ApprovalsPageComponent() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
@@ -65,13 +66,6 @@ export default function ApprovalsPage() {
 
   const documentContainerRef = useRef<HTMLDivElement>(null);
 
-  // 🟢 PERMISOS AMPLIADOS: Cualquier usuario autenticado puede entrar a ver el componente
-  useEffect(() => {
-    if (!authLoading && !userInfo) {
-      router.push('/login');
-    }
-  }, [userInfo, authLoading, router]);
-
   const parseDate = (val: any): Date => {
     if (!val) return new Date();
     if (typeof val === 'string') return new Date(val);
@@ -83,7 +77,6 @@ export default function ApprovalsPage() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      // 🟢 LOS ASESORES VEN TAMBIÉN SUS BORRADORES EN ESTA PANTALLA
       const statusesToFetch: ApprovalStatus[] = ['Pendiente', 'Aprobado', 'Devuelto', 'Borrador'];
       const isReviewer = isBoss || userInfo.role === 'Administracion' || userInfo.area === 'Pautado' || userInfo.role === 'Gerencia' || userInfo.role === 'Jefe';
       
@@ -100,7 +93,6 @@ export default function ApprovalsPage() {
       notesSnap.forEach(d => {
         const data = d.data();
         const isOwner = data.advisorId === userInfo.id;
-        // 🟢 REGRA FILTRADO: Si es asesor y no es dueño de la nota, se descarta
         if (!isReviewer && !isOwner) return;
 
         unifiedList.push({
@@ -184,7 +176,6 @@ export default function ApprovalsPage() {
     setIsModalOpen(true);
   };
 
-  // Redirección directa a la pantalla de edición correspondiente
   const handleEditRedirect = (item: UnifiedApprovalItem) => {
     setIsModalOpen(false);
     if (item.type === 'Nota Comercial') {
@@ -240,7 +231,6 @@ export default function ApprovalsPage() {
         if (sellerProfile?.email) sellerEmail = sellerProfile.email;
       }
 
-      // 🟢 LOG CRONOLÓGICO: Creamos la nueva entrada para el array del historial
       const historyItem: ApprovalHistoryItem = {
         timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
         status: actionType,
@@ -257,14 +247,12 @@ export default function ApprovalsPage() {
         approvedAt: serverTimestamp(),
         approvedBy: userInfo.id,
         approvedByName: userInfo.name,
-        // 🟢 INYECCIÓN SIN SOBREESCRITURA CON ARRAYUNION
         approvalHistory: arrayUnion(historyItem)
       });
 
       const baseUrl = window.location.origin;
 
       if (actionType === 'Devuelto') {
-        // 🟢 MAIL DE DEVOLUCIÓN RE-CALIBRADO CON LINK DIRECTO
         const returnEmailBody = `
           <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
             <h2 style="color: #dc2626;">Corrección Requerida en tu Pedido</h2>
@@ -332,7 +320,7 @@ export default function ApprovalsPage() {
         });
       }
 
-      toast({ title: `Documento marcando como ${actionType} exitosamente.` });
+      toast({ title: `Documento marcado como ${actionType} exitosamente.` });
       setIsModalOpen(false);
       fetchData();
     } catch (error) {
@@ -342,6 +330,63 @@ export default function ApprovalsPage() {
       setIsSaving(false);
     }
   };
+
+  const getTypeColorClass = (type: ApprovalItemType) => {
+    switch(type) {
+      case 'Nota Comercial': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'Pedido de Redes': return 'bg-pink-100 text-pink-800 border-pink-200';
+      case 'Orden de Publicidad': return 'bg-purple-100 text-purple-800 border-purple-200';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Función interna para dibujar el listado
+  const renderTable = (data: UnifiedApprovalItem[], showActions: boolean = true) => (
+    <div className="rounded-md border bg-white shadow-sm overflow-hidden">
+      <Table>
+        <TableHeader className="bg-slate-50">
+          <TableRow>
+            <TableHead>Fecha</TableHead>
+            <TableHead>Tipo</TableHead>
+            <TableHead>Cliente</TableHead>
+            <TableHead>Asesor</TableHead>
+            <TableHead>Referencia</TableHead>
+            {showActions && <TableHead className="text-right">Acción</TableHead>}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.length === 0 ? (
+            <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">No hay documentos en esta bandeja.</TableCell></TableRow>
+          ) : (
+            data.map((item) => (
+              <TableRow key={item.id} className="hover:bg-slate-50 transition-colors">
+                <TableCell className="font-medium text-slate-700">
+                  {format(item.createdAt, 'dd/MM/yyyy HH:mm')}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={getTypeColorClass(item.type)}>{item.type}</Badge>
+                </TableCell>
+                <TableCell className="font-semibold">{item.clientName}</TableCell>
+                <TableCell>{item.advisorName}</TableCell>
+                <TableCell className="text-muted-foreground truncate max-w-xs">{item.title}</TableCell>
+                {showActions && (
+                  <TableCell className="text-right">
+                    <Button variant="secondary" size="sm" onClick={() => openEvaluationModal(item)}>
+                      <Eye className="w-4 h-4 mr-2" /> Evaluar
+                    </Button>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
+  if (authLoading || loading) {
+    return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
+  }
 
   const pendingItems = items.filter(i => i.status === 'Pendiente');
   const approvedItems = items.filter(i => i.status === 'Aprobado');
@@ -377,7 +422,7 @@ export default function ApprovalsPage() {
           </TabsList>
           
           <TabsContent value="pending" className="mt-0">{renderTable(pendingItems, true)}</TabsContent>
-          <TabsContent value="approved" className="mt-0">{renderTable(approvedItems, true)}</TabsContent>
+          <TabsContent value="approved" className="mt-0">{renderTable(approvedItems, false)}</TabsContent>
           <TabsContent value="returned" className="mt-0">{renderTable(returnedItems, true)}</TabsContent>
         </Tabs>
       </main>
@@ -391,9 +436,11 @@ export default function ApprovalsPage() {
                 Auditoría: <Badge className={getTypeColorClass(selectedItem?.type as any)}>{selectedItem?.type}</Badge>
                 {selectedItem?.status && <Badge variant="outline" className="text-xs uppercase">{selectedItem.status}</Badge>}
               </DialogTitle>
+              <DialogDescription>
+                Verifique minuciosamente la planilla oficial antes de validar o rechazar el registro.
+              </DialogDescription>
             </div>
             <div className="flex gap-2">
-                {/* 🟢 NUEVO: BOTÓN DIRECTO DE CORRECCIÓN PARA EL ASESOR */}
                 {selectedItem && (selectedItem.status === 'Devuelto' || selectedItem.status === 'Borrador') && (
                   <Button type="button" className="bg-blue-600 text-white hover:bg-blue-700 font-bold" onClick={() => handleEditRedirect(selectedItem)}>
                     <Edit3 className="w-4 h-4 mr-2" /> Corregir y Editar Pedido
@@ -410,7 +457,6 @@ export default function ApprovalsPage() {
                  {selectedItem?.type === 'Orden de Publicidad' && <AdvertisingOrderPdf order={selectedItem.rawData} programs={programs} />}
             </div>
             
-            {/* 🟢 NUEVA INTERFAZ VISUAL: RENDER DEL TIMELINE DE HISTORIAL */}
             {selectedItem?.approvalHistory && selectedItem.approvalHistory.length > 0 && (
               <div className="max-w-5xl mx-auto bg-white mt-6 rounded-lg p-5 border border-slate-300 shadow-xl">
                 <h3 className="font-bold text-sm text-slate-800 flex items-center gap-1.5 mb-4 uppercase tracking-wider">
@@ -440,7 +486,6 @@ export default function ApprovalsPage() {
             )}
           </div>
 
-          {/* ACCIONES OPERATIVAS: Sólo disponibles para el Revisor/Administrador */}
           <DialogFooter className="px-6 py-4 bg-white shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-10">
              <div className="flex flex-col w-full space-y-4">
                 {isReviewer ? (
@@ -498,5 +543,14 @@ export default function ApprovalsPage() {
       </Dialog>
 
     </div>
+  );
+}
+
+// 🟢 EXPORT PRINCIPAL CON BLINDAJE DE REACT.SUSPENSE OBLIGATORIO
+export default function ApprovalsPage() {
+  return (
+    <React.Suspense fallback={<div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>}>
+      <ApprovalsPageComponent />
+    </React.Suspense>
   );
 }
