@@ -616,7 +616,6 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
       const validSrlItems = data.srlItems;
       const validSasItems = data.sasItems;
 
-      // 🟢 PASO CO-SINO: REGISTRO DE PASO OPERATIVO DEL ASESOR
       const targetStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
       const historyItem = {
           timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
@@ -644,11 +643,18 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
         billingRequestsSrl: data.billingRequestsSrl, 
         billingRequestsSas: data.billingRequestsSas,
         accountExecutive: data.accountExecutive,
-        createdBy: orderCreatedBy || userInfo.id,
-        id: undefined 
+        createdBy: orderCreatedBy || userInfo.id
       };
 
-      // 🟢 ACUMULAR EN EL HISTORIAL USANDO ARRAYUNION AL EDITAR
+      // 🟢 CONTROL DE INYECCIÓN COMPATIBLE CON FIREBASE
+      // Eliminamos dinámicamente cualquier campo 'undefined' sin alterar los objetos especiales como arrayUnion
+      Object.keys(orderPayload).forEach(key => {
+          if (orderPayload[key] === undefined) {
+              delete orderPayload[key];
+          }
+      });
+      delete orderPayload.id; // Nos aseguramos de remover el campo id que generaba la excepción técnica
+
       if (editModeId) {
           orderPayload.approvalHistory = arrayUnion(historyItem);
           await updateAdvertisingOrder(editModeId, orderPayload, userInfo.id, userInfo.name);
@@ -657,7 +663,6 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
           await createAdvertisingOrder(orderPayload);
       }
 
-      // 🟢 MAIL DE NOTIFICACIÓN SIMPLE RE-DISEÑADO CON ENLACE DIRECTO
       if (notifyOnSave) {
           const accessToken = await getGoogleAccessToken();
           if (accessToken) {
@@ -692,7 +697,7 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
       router.push(`/publicidad`);
     } catch (error) {
       console.error(error);
-      toast({ title: "Error", description: "No se pudo guardar.", variant: "destructive" });
+      toast({ title: "Error", description: "No se pudo guardar la orden comercial.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
