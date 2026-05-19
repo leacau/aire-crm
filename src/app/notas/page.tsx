@@ -5,12 +5,15 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllCommercialNotes, getClients } from '@/lib/firebase-service'; // <-- Cambiamos la importación
+import { getAllCommercialNotes, getClients } from '@/lib/firebase-service';
+import { db } from '@/lib/firebase';
+import { doc, deleteDoc } from 'firebase/firestore';
 import type { CommercialNote } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Plus, Search, Eye } from 'lucide-react';
+import { Plus, Search, Eye, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { Card, CardContent } from '@/components/ui/card';
@@ -25,6 +28,7 @@ import {
 
 export default function CommercialNotesListPage() {
     const { userInfo, loading: authLoading } = useAuth();
+    const { toast } = useToast();
     const [notes, setNotes] = useState<CommercialNote[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -34,20 +38,16 @@ export default function CommercialNotesListPage() {
             if (!userInfo) return;
             setLoading(true);
             try {
-                // 1. Obtenemos TODAS las notas (evita el error de índices faltantes en Firebase)
                 const allNotes = await getAllCommercialNotes();
                 
-                // 2. Filtramos según los permisos
                 if (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion') {
                     setNotes(allNotes);
                 } else {
-                    // Para los asesores: buscamos cuáles son SUS clientes
                     const allClients = await getClients();
                     const myClientIds = new Set(
                         allClients.filter(c => c.ownerId === userInfo.id).map(c => c.id)
                     );
                     
-                    // Mostramos la nota si el asesor la creó ÉL MISMO, o si es de UNO DE SUS CLIENTES
                     const myNotes = allNotes.filter(note => 
                         note.advisorId === userInfo.id || myClientIds.has(note.clientId)
                     );
@@ -62,6 +62,19 @@ export default function CommercialNotesListPage() {
 
         if (!authLoading) fetchNotes();
     }, [userInfo, authLoading]);
+
+    // 🟢 ELIMINACIÓN DE NOTAS DESDE LA COMPAÑÍA PRINCIPAL
+    const handleDeleteNote = async (id: string) => {
+        if (!window.confirm("¿Seguro que deseas eliminar permanentemente esta Nota Comercial? No quedará registro en el CRM.")) return;
+        try {
+            await deleteDoc(doc(db, 'commercial_notes', id));
+            setNotes(prev => prev.filter(n => n.id !== id));
+            toast({ title: "Nota comercial eliminada del histórico." });
+        } catch (error) {
+            console.error("Error deleting note:", error);
+            toast({ title: "Error técnico al borrar nota.", variant: "destructive" });
+        }
+    };
 
     const filteredNotes = notes.filter(note => {
         const term = searchTerm.toLowerCase();
@@ -105,7 +118,7 @@ export default function CommercialNotesListPage() {
                                     <TableHead>Título</TableHead>
                                     <TableHead>Cliente</TableHead>
                                     <TableHead>Asesor</TableHead>
-                                    <TableHead className="w-[100px]"></TableHead>
+                                    <TableHead className="text-right w-[120px]"></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -118,12 +131,25 @@ export default function CommercialNotesListPage() {
                                             <TableCell>{note.title}</TableCell>
                                             <TableCell>{note.clientName}</TableCell>
                                             <TableCell>{note.advisorName}</TableCell>
-                                            <TableCell>
-                                                <Button variant="ghost" size="sm" asChild>
-                                                    <Link href={`/notas/${note.id}`}>
-                                                        <Eye className="h-4 w-4" />
-                                                    </Link>
-                                                </Button>
+                                            <TableCell className="text-right">
+                                                <div className="flex justify-end gap-1">
+                                                    <Button variant="ghost" size="sm" asChild>
+                                                        <Link href={`/notas/${note.id}`}>
+                                                            <Eye className="h-4 w-4" />
+                                                        </Link>
+                                                    </Button>
+                                                    {/* 🟢 RESTRICCIÓN DE SEGURIDAD OPERATIVA SÓLO JEFES Y GERENTES */}
+                                                    {(userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia') && (
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                            onClick={() => handleDeleteNote(note.id)}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))
