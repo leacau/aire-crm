@@ -29,6 +29,7 @@ import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { arrayUnion } from 'firebase/firestore';
 
 export default function NewCommercialNotePage() {
     const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
@@ -576,8 +577,18 @@ export default function NewCommercialNotePage() {
                 }
             }
 
+            const targetStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
+            const historyItem = {
+                timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
+                status: targetStatus,
+                userId: userInfo.id,
+                userName: userInfo.name,
+                userRole: userInfo.role,
+                comments: editModeId ? 'Nota comercial corregida y reenviada para evaluación.' : 'Carga inicial enviada a revisión.'
+            };
+
              const noteDataRaw: any = {
-                status: notifyOnSave ? 'Pendiente' : 'Borrador', // 🟢 'Pendiente' si pasa, 'Borrador' si es provisorio
+                status: targetStatus,
                 clientId: selectedClientId,
                 clientName: client?.denominacion || 'Unknown',
                 cuit,
@@ -628,6 +639,12 @@ export default function NewCommercialNotePage() {
                 noteObservations: noteObservations || undefined,
             };
 
+            if (editModeId) {
+                noteDataRaw.approvalHistory = arrayUnion(historyItem);
+            } else {
+                noteDataRaw.approvalHistory = [historyItem];
+            }
+
             const noteData = Object.keys(noteDataRaw).reduce((acc, key) => {
                 const value = noteDataRaw[key];
                 if (value !== undefined) (acc as any)[key] = value;
@@ -640,13 +657,20 @@ export default function NewCommercialNotePage() {
                 await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
             }
 
-            // 🟢 ENVÍO DE NOTIFICACIÓN SIMPLE (SÓLO SI VA A LA BANDEJA DE PENDIENTES)
+            // 🟢 MAIL DE NOTIFICACIÓN SIMPLE CON LINK DIRECTO
             if (notifyOnSave) {
                 const accessToken = await getGoogleAccessToken();
                 if (accessToken) {
                     try {
                         const clientDisplayName = client?.denominacion || 'Desconocido';
-                        const emailBody = `<p>Se ha cargado un pedido de revisión de una nota comercial para el cliente <strong>${clientDisplayName}</strong>.</p>`;
+                        const baseUrl = window.location.origin;
+                        const emailBody = `
+                            <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
+                                <p>Se ha cargado un pedido de revisión de una <strong>Nota Comercial</strong> para el cliente <strong>${clientDisplayName}</strong>.</p>
+                                <p>Para evaluar el guion, grafs y cronograma, ingresa desde el siguiente enlace directo:</p>
+                                <p style="margin-top: 15px;"><a href="${baseUrl}/approvals?tab=pending" style="display: inline-block; padding: 10px 20px; background-color: #1d4ed8; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px;">EVALUAR NOTA COMERCIAL</a></p>
+                            </div>
+                        `;
                         
                         await sendEmail({
                             accessToken,
