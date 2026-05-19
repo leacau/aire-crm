@@ -309,7 +309,7 @@ export default function ApprovalsPage() {
         }
 
         const attachments = [
-          { filename: `${selectedItem.type.replace(/ /g, '_')}_${selectedItem.clientName.replace(/ /g, '_')}.pdf', content: orderBase64, encoding: 'base64' }
+          { filename: `${selectedItem.type.replace(/ /g, '_')}_${selectedItem.clientName.replace(/ /g, '_')}.pdf`, content: orderBase64, encoding: 'base64' }
         ];
         if (clientBase64) {
           attachments.push({ filename: `Alta_Cliente_${selectedItem.clientName.replace(/ /g, '_')}.pdf`, content: clientBase64, encoding: 'base64' });
