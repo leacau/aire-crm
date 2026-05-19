@@ -8,7 +8,7 @@ import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2 } from "
 import { useRouter } from "next/navigation";
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-
+import { arrayUnion } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -616,10 +616,21 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
       const validSrlItems = data.srlItems;
       const validSasItems = data.sasItems;
 
+      // 🟢 PASO CO-SINO: REGISTRO DE PASO OPERATIVO DEL ASESOR
+      const targetStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
+      const historyItem = {
+          timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
+          status: targetStatus,
+          userId: userInfo.id,
+          userName: userInfo.name,
+          userRole: userInfo.role,
+          comments: editModeId ? 'Orden de publicidad corregida y reenviada para evaluación.' : 'Carga inicial enviada a revisión.'
+      };
+
       const preview = getPreviewOrder();
-      const orderPayload = {
+      const orderPayload: any = {
         ...preview,
-        status: notifyOnSave ? 'Pendiente' : 'Borrador', // 🟢 SE DEFINE POR SWITCH
+        status: targetStatus,
         clientId: data.clientId,
         clientName: selectedClient?.razonSocial || selectedClient?.denominacion || "Desconocido",
         agencyId: data.agencyId === "none" ? undefined : data.agencyId,
@@ -637,21 +648,29 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
         id: undefined 
       };
 
-      const cleanPayload = JSON.parse(JSON.stringify(orderPayload));
-
+      // 🟢 ACUMULAR EN EL HISTORIAL USANDO ARRAYUNION AL EDITAR
       if (editModeId) {
-          await updateAdvertisingOrder(editModeId, cleanPayload, userInfo.id, userInfo.name);
+          orderPayload.approvalHistory = arrayUnion(historyItem);
+          await updateAdvertisingOrder(editModeId, orderPayload, userInfo.id, userInfo.name);
       } else {
-          await createAdvertisingOrder(cleanPayload);
+          orderPayload.approvalHistory = [historyItem];
+          await createAdvertisingOrder(orderPayload);
       }
 
-      // 🟢 ENVÍO DE NOTIFICACIÓN ULTRA SIMPLE (SOLO SI PASA A APROBACIÓN)
+      // 🟢 MAIL DE NOTIFICACIÓN SIMPLE RE-DISEÑADO CON ENLACE DIRECTO
       if (notifyOnSave) {
           const accessToken = await getGoogleAccessToken();
           if (accessToken) {
               try {
                   const clientDisplayName = selectedClient?.razonSocial || selectedClient?.denominacion || 'Desconocido';
-                  const emailBody = `<p>Se ha cargado un pedido de revisión de una orden de publicidad para el cliente <strong>${clientDisplayName}</strong>.</p>`;
+                  const baseUrl = window.location.origin;
+                  const emailBody = `
+                      <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
+                          <p>Se ha cargado un pedido de revisión de una <strong>Orden de Publicidad</strong> para el cliente <strong>${clientDisplayName}</strong>.</p>
+                          <p>Para evaluar la pauta y ver los detalles completos en el Centro de Revisión, ingresa desde el siguiente enlace directo:</p>
+                          <p style="margin-top: 15px;"><a href="${baseUrl}/approvals?tab=pending" style="display: inline-block; padding: 10px 20px; background-color: #1d4ed8; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px;">EVALUAR ORDEN DE PUBLICIDAD</a></p>
+                      </div>
+                  `;
                   
                   await sendEmail({
                       accessToken,
@@ -660,7 +679,7 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
                       body: emailBody
                   });
               } catch (emailErr) {
-                  console.error("Error al enviar notificación inicial simple:", emailErr);
+                  console.error("Error al enviar notificación simple de orden:", emailErr);
               }
           }
       }
