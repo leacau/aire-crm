@@ -8,7 +8,7 @@ import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocial
 import { Client, SocialMediaRequest, User, CarouselSlide } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
-import { arrayUnion } from "firebase/firestore";
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -23,6 +23,10 @@ import { Save, ExternalLink, ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-rea
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { SocialMediaPdf } from './social-media-pdf';
+
+// 🟢 CORRECCIÓN: IMPORTS DE FIREBASE Y DATE-FNS PARA EL ID Y VUELTA
+import { arrayUnion } from 'firebase/firestore';
+import { format } from 'date-fns';
 
 export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?: string }) {
     const { userInfo, getGoogleAccessToken } = useAuth();
@@ -242,13 +246,12 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
             const historyItem = {
                 timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
                 status: targetStatus,
-                userId: userInfo.id,
-                userName: userInfo.name,
-                userRole: userInfo.role,
+                userId: userInfo!.id,
+                userName: userInfo!.name,
+                userRole: userInfo!.role,
                 comments: editId ? 'Pedido de redes corregido y reenviado para evaluación.' : 'Carga inicial enviada a revisión.'
             };
 
-            // 🟢 ARMAMOS LOS DATOS LIMPIOS SEGÚN EL FORMATO Y EL SWITCH
             const dataToSaveRaw: Partial<SocialMediaRequest> = {
                 status: targetStatus,
                 clientId,
@@ -300,7 +303,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 await saveSocialMediaRequest(dataToSave, userInfo!.id, userInfo!.name);
             }        
 
-            // 🟢 MAIL DE NOTIFICACIÓN SIMPLE CON LINK DIRECTO
             if (notifyOnSave) {
                 const token = await getGoogleAccessToken();
                 if (token) {
@@ -340,15 +342,19 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
         }
     };
 
-if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
+    if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
+
     return (
-<div className="space-y-6 pb-10" onKeyDown={handleKeyDown}>
-    <div className="flex justify-between items-center bg-white p-4 rounded shadow-sm">
+        <div className="space-y-6 pb-10" onKeyDown={handleKeyDown}>
+            <div className="flex justify-between items-center bg-white p-4 rounded shadow-sm">
                 <Button variant="ghost" onClick={() => router.back()}><ArrowLeft className="mr-2 h-4 w-4"/> Volver</Button>
                 <div className="flex gap-4 items-center">
                     <Button variant="outline" onClick={handleDownloadPdf} disabled={!clientId}><ExternalLink className="mr-2 h-4 w-4"/> Exportar PDF</Button>
-                    <div className="flex items-center gap-2 border p-2 rounded bg-gray-50"><Switch checked={notifyOnSave} onCheckedChange={setNotifyOnSave} /><Label className="text-sm">Pasar a aprobación</Label></div>
-<Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4"/>} Guardar</Button>
+                    <div className="flex items-center gap-2 border p-2 rounded bg-gray-50">
+                        <Switch checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
+                        <Label className="text-sm font-semibold">Pasar a aprobación</Label>
+                    </div>
+                    <Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4"/>} Guardar</Button>
                 </div>
             </div>
 
@@ -407,7 +413,6 @@ if (loading) return <div className="flex h-full items-center justify-center"><Sp
                         </div>
                     </div>
 
-                    {/* 🟢 NUEVO LUGAR PARA LOS CAMPOS DE GRABACIÓN */}
                     {contentType === 'Reel' && (
                         <div className="grid md:grid-cols-3 gap-4 border-b border-dashed pb-6 bg-slate-50 p-4 rounded-md">
                             <div className="space-y-2"><Label>Lugar de Grabación *</Label><Input value={recordingLocation} onChange={e=>setRecordingLocation(e.target.value)} placeholder="Ej: Estudio / Local del cliente" /></div>
@@ -428,7 +433,6 @@ if (loading) return <div className="flex h-full items-center justify-center"><Sp
                         </div>
                     </div>
 
-                    {/* 🟢 NUEVO LUGAR PARA EL COPY GENERAL */}
                     {(contentType === 'Reel' || contentType === 'Carrusel') && (
                         <div className="space-y-2 bg-blue-50/50 p-4 rounded-md border border-blue-100">
                             <Label>Copy de la publicación * <span className="text-xs text-muted-foreground font-normal">(Texto que acompaña al posteo en el feed)</span></Label>
