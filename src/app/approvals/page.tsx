@@ -45,7 +45,6 @@ interface UnifiedApprovalItem {
   approvalHistory?: ApprovalHistoryItem[];
 }
 
-// 🟢 COMPONENTE INTERNO CON TODA LA LÓGICA (Para que useSearchParams no rompa Next.js)
 function ApprovalsPageComponent() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
@@ -231,14 +230,19 @@ function ApprovalsPageComponent() {
         if (sellerProfile?.email) sellerEmail = sellerProfile.email;
       }
 
-      const historyItem: ApprovalHistoryItem = {
+      // 🟢 CORRECCIÓN DE SEGURIDAD OPERATIVA ANTI-UNDEFINED
+      const historyItem: any = {
         timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
         status: actionType,
         userId: userInfo.id,
         userName: userInfo.name,
-        userRole: userInfo.role,
-        comments: adminComments.trim() || undefined
+        userRole: userInfo.role
       };
+
+      // Solo si el revisor escribió algo, inyectamos la propiedad 'comments'
+      if (adminComments.trim()) {
+        historyItem.comments = adminComments.trim();
+      }
 
       const docRef = doc(db, selectedItem.collectionName, selectedItem.id);
       await updateDoc(docRef, {
@@ -340,7 +344,6 @@ function ApprovalsPageComponent() {
     }
   };
 
-  // Función interna para dibujar el listado
   const renderTable = (data: UnifiedApprovalItem[], showActions: boolean = true) => (
     <div className="rounded-md border bg-white shadow-sm overflow-hidden">
       <Table>
@@ -546,7 +549,6 @@ function ApprovalsPageComponent() {
   );
 }
 
-// 🟢 EXPORT PRINCIPAL CON BLINDAJE DE REACT.SUSPENSE OBLIGATORIO
 export default function ApprovalsPage() {
   return (
     <React.Suspense fallback={<div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>}>
