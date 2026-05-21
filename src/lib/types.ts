@@ -567,7 +567,7 @@ export type Interviewee = {
   location: 'Piso' | 'Teléfono' | 'Video Llamada' | 'Móvil';
 };
 
-export type ApprovalStatus = 'Borrador' | 'Pendiente' | 'Aprobado' | 'Devuelto';
+export type ApprovalStatus = 'Borrador' | 'Pendiente' | 'Aprobado' | 'Devuelto' | 'Pendiente de Modificación';
 
 // 🟢 NUEVO: REGISTRO CRONOLÓGICO DE AUDITORÍA
 export type ApprovalHistoryItem = {
