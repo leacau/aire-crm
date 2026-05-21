@@ -2,11 +2,11 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getAdvertisingOrder, getPrograms, getBillingRequestsByOrder } from '@/lib/firebase-service';
-import type { AdvertisingOrder, Program } from '@/lib/types';
+import { getAdvertisingOrder, getPrograms, getBillingRequestsByOrder, getSocialMediaRequests, getAllCommercialNotes } from '@/lib/firebase-service';
+import type { AdvertisingOrder, Program, CommercialNote, SocialMediaRequest } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
-import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2 } from 'lucide-react'; 
+import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2, Plus, Film, Share2, Eye } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import html2canvas from 'html2canvas';
@@ -16,15 +16,23 @@ import { useAuth } from '@/hooks/use-auth';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { format } from 'date-fns';
 import { hasManagementPrivileges } from '@/lib/role-utils';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import Link from 'next/link';
 
 export default function AdvertisingOrderDetailPage() {
     const { id } = useParams();
     const { toast } = useToast();
     const { userInfo, getGoogleAccessToken } = useAuth();
+    
     const [order, setOrder] = useState<AdvertisingOrder | null>(null);
     const [programs, setPrograms] = useState<Program[]>([]);
-    const [loading, setLoading] = useState(true);
     
+    // 🟢 ESTADOS PARA LAS EJECUCIONES "HIJAS"
+    const [linkedNotes, setLinkedNotes] = useState<CommercialNote[]>([]);
+    const [linkedSocial, setLinkedSocial] = useState<SocialMediaRequest[]>([]);
+    
+    const [loading, setLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
     const [isResending, setIsResending] = useState(false);
     const [isSendingToRedaccion, setIsSendingToRedaccion] = useState(false);
@@ -37,10 +45,12 @@ export default function AdvertisingOrderDetailPage() {
     useEffect(() => {
         const load = async () => {
             if (typeof id === 'string') {
-                const [o, p, brs] = await Promise.all([
+                const [o, p, brs, allNotes, allSocial] = await Promise.all([
                     getAdvertisingOrder(id),
                     getPrograms(),
-                    getBillingRequestsByOrder(id)
+                    getBillingRequestsByOrder(id),
+                    getAllCommercialNotes(),
+                    getSocialMediaRequests()
                 ]);
                 
                 if (o) {
@@ -66,6 +76,10 @@ export default function AdvertisingOrderDetailPage() {
                     o.billingRequestsSas = billingSas;
                     
                     setOrder(o);
+
+                    // 🟢 FILTRAMOS LOS HIJOS QUE PERTENECEN A ESTA ORDEN
+                    setLinkedNotes(allNotes.filter(n => n.orderId === id));
+                    setLinkedSocial(allSocial.filter(s => s.orderId === id));
                 }
                 setPrograms(p);
             }
@@ -274,6 +288,9 @@ export default function AdvertisingOrderDetailPage() {
     const hasGacetilla = order.sasItems?.some(s => s.format === 'Gacetilla de prensa');
     const canEdit = userInfo && (hasManagementPrivileges(userInfo) || userInfo.id === order.createdBy);
 
+    // 🟢 EL CANDADO: Si no está Aprobado, no pueden cargar notas o redes
+    const isOrderApproved = order.status === 'Aprobado';
+
     return (
         <div className="flex flex-col h-full overflow-hidden bg-gray-50/50">
             <Header title={`Orden de Publicidad: ${order.product || order.opportunityTitle}`}>
@@ -310,13 +327,83 @@ export default function AdvertisingOrderDetailPage() {
                     </Button>
                 </div>
             </Header>
-            <main className="flex-1 overflow-auto p-4 md:p-8 flex justify-center w-full bg-slate-200">
-                <div className="w-full max-w-5xl">
+            <main className="flex-1 overflow-auto p-4 md:p-8 w-full bg-slate-200">
+                <div className="w-full max-w-5xl mx-auto space-y-6">
+                    
                     <AdvertisingOrderPdf ref={pdfRef} order={order} programs={programs} />
+                    
+                    {/* 🟢 NUEVA SECCIÓN DE EJECUCIONES DE PAUTA (VINCULADAS) */}
+                    <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-300">
+                        <div className="flex justify-between items-center border-b pb-4 mb-4">
+                            <h3 className="text-xl font-bold text-slate-800">Ejecuciones de Pauta vinculadas</h3>
+                            <div className="flex gap-2">
+                                <Button 
+                                    size="sm" 
+                                    className="bg-blue-600 hover:bg-blue-700" 
+                                    disabled={!isOrderApproved}
+                                    onClick={() => router.push(`/notas/new?orderId=${order.id}`)}
+                                >
+                                    <Film className="w-4 h-4 mr-2" /> + Nota Comercial
+                                </Button>
+                                <Button 
+                                    size="sm" 
+                                    className="bg-pink-600 hover:bg-pink-700" 
+                                    disabled={!isOrderApproved}
+                                    onClick={() => router.push(`/redes/new?orderId=${order.id}`)}
+                                >
+                                    <Share2 className="w-4 h-4 mr-2" /> + Pedido Redes
+                                </Button>
+                            </div>
+                        </div>
+
+                        {!isOrderApproved && (
+                            <div className="bg-amber-50 text-amber-800 p-3 rounded text-sm mb-4 border border-amber-200">
+                                ⚠️ Para poder cargar Notas o Pedidos de Redes, la Orden de Publicidad Madre debe estar en estado <strong>Aprobado</strong>. (Estado actual: {order.status || 'Pendiente'})
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            {linkedNotes.length === 0 && linkedSocial.length === 0 && (
+                                <div className="text-center text-slate-500 py-6 text-sm">
+                                    No hay ejecuciones cargadas para esta orden todavía.
+                                </div>
+                            )}
+
+                            {linkedNotes.map(n => (
+                                <div key={n.id} className="flex justify-between items-center bg-blue-50/50 border border-blue-100 p-3 rounded-md">
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-blue-900 text-sm flex items-center gap-1.5"><Film className="w-4 h-4"/> {n.title}</span>
+                                        <span className="text-xs text-slate-600">Cargada el {format(new Date(n.createdAt), 'dd/MM/yyyy')}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Badge variant="outline" className={n.status === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>
+                                            {n.status || 'Borrador'}
+                                        </Badge>
+                                        <Button variant="ghost" size="sm" onClick={() => router.push(`/notas/${n.id}`)}><Eye className="w-4 h-4 mr-1"/> Ver</Button>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {linkedSocial.map(s => (
+                                <div key={s.id} className="flex justify-between items-center bg-pink-50/50 border border-pink-100 p-3 rounded-md">
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-pink-900 text-sm flex items-center gap-1.5"><Share2 className="w-4 h-4"/> {s.contentType} - {s.objective}</span>
+                                        <span className="text-xs text-slate-600">Sugerido para el {s.publishDate ? format(new Date(s.publishDate), 'dd/MM/yyyy') : 'Sin fecha'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Badge variant="outline" className={s.status === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>
+                                            {s.status || 'Borrador'}
+                                        </Badge>
+                                        <Button variant="ghost" size="sm" onClick={() => router.push(`/redes/${s.id}`)}><Eye className="w-4 h-4 mr-1"/> Ver</Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
                 </div>
             </main>
 
-            {/* 🟢 SE LE PASA hideSrl={true} AL PDF DE REDACCIÓN */}
             <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
                 <AdvertisingOrderPdf ref={hiddenPdfRef} order={order} programs={programs} hidePrices={true} hideSrl={true} />
             </div>
