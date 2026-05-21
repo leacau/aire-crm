@@ -629,6 +629,8 @@ export type CommercialNote = {
   financialObservations?: string; 
   noteObservations?: string; 
   createdAt: string;
+  orderId?: string;
+  orderTitle?: string;
 
   status?: ApprovalStatus;
   adminComments?: string;
@@ -676,6 +678,8 @@ export type SocialMediaRequest = {
   carouselSlides?: CarouselSlide[];
   createdAt: string;
   updatedAt?: string;
+  orderId?: string;
+  orderTitle?: string;
 
   status?: ApprovalStatus;
   adminComments?: string;
