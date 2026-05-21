@@ -78,7 +78,7 @@ function ApprovalsPageComponent() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      const statusesToFetch: ApprovalStatus[] = ['Pendiente', 'Aprobado', 'Devuelto', 'Borrador'];
+      const statusesToFetch: ApprovalStatus[] = ['Pendiente', 'Aprobado', 'Devuelto', 'Borrador', 'Pendiente de Modificación'];
       const isReviewer = isBoss || userInfo.role === 'Administracion' || userInfo.area === 'Pautado' || userInfo.role === 'Gerencia' || userInfo.role === 'Jefe';
       
       // 🟢 SUMAMOS LA TABLA WEB NOTES A LA BÚSQUEDA
@@ -412,7 +412,7 @@ function ApprovalsPageComponent() {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
   }
 
-  const pendingItems = items.filter(i => i.status === 'Pendiente');
+  const pendingItems = items.filter(i => i.status === 'Pendiente' || i.status === 'Pendiente de Modificación');
   const approvedItems = items.filter(i => i.status === 'Aprobado');
   const returnedItems = items.filter(i => i.status === 'Devuelto' || i.status === 'Borrador');
 
