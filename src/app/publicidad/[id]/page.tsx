@@ -16,6 +16,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { format } from 'date-fns';
 import { hasManagementPrivileges } from '@/lib/role-utils';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
 export default function AdvertisingOrderDetailPage() {
@@ -28,7 +29,7 @@ export default function AdvertisingOrderDetailPage() {
     
     const [linkedNotes, setLinkedNotes] = useState<CommercialNote[]>([]);
     const [linkedSocial, setLinkedSocial] = useState<SocialMediaRequest[]>([]);
-    const [linkedWebNotes, setLinkedWebNotes] = useState<WebNote[]>([]); // 🟢 NUEVO ESTADO
+    const [linkedWebNotes, setLinkedWebNotes] = useState<WebNote[]>([]);
     
     const [loading, setLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
@@ -78,7 +79,7 @@ export default function AdvertisingOrderDetailPage() {
 
                     setLinkedNotes(allNotes.filter(n => n.orderId === id));
                     setLinkedSocial(allSocial.filter(s => s.orderId === id));
-                    setLinkedWebNotes(allWebNotes.filter(w => w.orderId === id)); 
+                    setLinkedWebNotes(allWebNotes.filter(w => w.orderId === id));
                 }
                 setPrograms(p);
             }
@@ -270,10 +271,21 @@ export default function AdvertisingOrderDetailPage() {
     if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
     if (!order) return <div className="p-8 text-center">Orden no encontrada</div>;
 
-    const hasGacetilla = order.sasItems?.some(s => s.format === 'Gacetilla de prensa');
     const canEdit = userInfo && (hasManagementPrivileges(userInfo) || userInfo.id === order.createdBy);
 
+    // 🟢 EL CANDADO DE SEGURIDAD
     const isOrderApproved = !order.status || order.status === 'Aprobado';
+
+    // 🟢 DOBLE CANDADO: LÓGICA DE DETECCIÓN DE PRODUCTOS EN LA PAUTA
+    const hasSrlNota = order.srlItems?.some(i => (i.adType || '').toLowerCase().includes('nota'));
+    const hasSasNotaWeb = order.sasItems?.some(i => {
+        const fmt = (i.format || '').toLowerCase();
+        return fmt.includes('nota') || fmt.includes('gacetilla');
+    });
+    const hasSasRedes = order.sasItems?.some(i => (i.format || '').toLowerCase().includes('redes'));
+    
+    // Lo conservamos para el botón de enviar a redacción
+    const hasGacetilla = order.sasItems?.some(s => s.format === 'Gacetilla de prensa');
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-gray-50/50">
@@ -319,35 +331,49 @@ export default function AdvertisingOrderDetailPage() {
                     <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-300">
                         <div className="flex justify-between items-center border-b pb-4 mb-4">
                             <h3 className="text-xl font-bold text-slate-800">Ejecuciones de Pauta vinculadas</h3>
-                            <div className="flex gap-2">
-                                <Button 
-                                    size="sm" 
-                                    className="bg-blue-600 hover:bg-blue-700" 
-                                    disabled={!isOrderApproved}
-                                    onClick={() => router.push(`/notas/new?orderId=${order.id}`)}
-                                >
-                                    <Film className="w-4 h-4 mr-2" /> + Nota Comercial
-                                </Button>
-                                <Button 
-                                    size="sm" 
-                                    className="bg-orange-500 hover:bg-orange-600 text-white" 
-                                    disabled={!isOrderApproved}
-                                    onClick={() => router.push(`/notas-web/new?orderId=${order.id}`)}
-                                >
-                                    <Globe className="w-4 h-4 mr-2" /> + Nota Web
-                                </Button>
-                                <Button 
-                                    size="sm" 
-                                    className="bg-pink-600 hover:bg-pink-700" 
-                                    disabled={!isOrderApproved}
-                                    onClick={() => router.push(`/redes/new?orderId=${order.id}`)}
-                                >
-                                    <Share2 className="w-4 h-4 mr-2" /> + Pedido Redes
-                                </Button>
+                            
+                            {/* 🟢 RENDERIZADO CONDICIONAL DE BOTONES DE CREACIÓN */}
+                            <div className="flex gap-2 items-center">
+                                {!hasSrlNota && !hasSasNotaWeb && !hasSasRedes && (
+                                    <span className="text-xs text-slate-400 italic font-medium">
+                                        (No hay productos de ejecución facturados en la OP)
+                                    </span>
+                                )}
+                                
+                                {hasSrlNota && (
+                                    <Button 
+                                        size="sm" 
+                                        className="bg-blue-600 hover:bg-blue-700" 
+                                        disabled={!isOrderApproved}
+                                        onClick={() => router.push(`/notas/new?orderId=${order.id}`)}
+                                    >
+                                        <Film className="w-4 h-4 mr-2" /> + Nota Comercial
+                                    </Button>
+                                )}
+                                {hasSasNotaWeb && (
+                                    <Button 
+                                        size="sm" 
+                                        className="bg-orange-500 hover:bg-orange-600 text-white" 
+                                        disabled={!isOrderApproved}
+                                        onClick={() => router.push(`/notas-web/new?orderId=${order.id}`)}
+                                    >
+                                        <Globe className="w-4 h-4 mr-2" /> + Nota Web
+                                    </Button>
+                                )}
+                                {hasSasRedes && (
+                                    <Button 
+                                        size="sm" 
+                                        className="bg-pink-600 hover:bg-pink-700" 
+                                        disabled={!isOrderApproved}
+                                        onClick={() => router.push(`/redes/new?orderId=${order.id}`)}
+                                    >
+                                        <Share2 className="w-4 h-4 mr-2" /> + Pedido Redes
+                                    </Button>
+                                )}
                             </div>
                         </div>
 
-                        {!isOrderApproved && (
+                        {!isOrderApproved && (hasSrlNota || hasSasNotaWeb || hasSasRedes) && (
                             <div className="bg-amber-50 text-amber-800 p-3 rounded text-sm mb-4 border border-amber-200">
                                 ⚠️ Para poder cargar Ejecuciones, la Orden de Publicidad Madre debe estar en estado <strong>Aprobado</strong>. (Estado actual: {order.status || 'Pendiente'})
                             </div>
