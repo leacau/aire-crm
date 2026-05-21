@@ -23,12 +23,14 @@ import { sendEmail } from '@/lib/google-gmail-service';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
-// IMPORTAMOS LOS VISORES ORIGINALES DEL PDF
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import { NotePdf } from '@/components/notas/note-pdf';
 import { SocialMediaPdf } from '@/components/redes/social-media-pdf';
+// 🟢 IMPORTAMOS EL PDF DE NOTAS WEB
+import { WebNotePdf } from '@/components/notas-web/web-note-pdf';
 
-type ApprovalItemType = 'Nota Comercial' | 'Pedido de Redes' | 'Orden de Publicidad';
+// 🟢 AMPLIAMOS EL TYPE LOCAL
+type ApprovalItemType = 'Nota Comercial' | 'Pedido de Redes' | 'Orden de Publicidad' | 'Nota Web / Gacetilla';
 
 interface UnifiedApprovalItem {
   id: string;
@@ -79,10 +81,12 @@ function ApprovalsPageComponent() {
       const statusesToFetch: ApprovalStatus[] = ['Pendiente', 'Aprobado', 'Devuelto', 'Borrador'];
       const isReviewer = isBoss || userInfo.role === 'Administracion' || userInfo.area === 'Pautado' || userInfo.role === 'Gerencia' || userInfo.role === 'Jefe';
       
-      const [notesSnap, socialSnap, ordersSnap, programsData] = await Promise.all([
+      // 🟢 SUMAMOS LA TABLA WEB NOTES A LA BÚSQUEDA
+      const [notesSnap, socialSnap, ordersSnap, webNotesSnap, programsData] = await Promise.all([
         getDocs(query(collection(db, 'commercial_notes'), where('status', 'in', statusesToFetch))),
         getDocs(query(collection(db, 'social_media_requests'), where('status', 'in', statusesToFetch))),
         getDocs(query(collection(db, 'advertising_orders'), where('status', 'in', statusesToFetch))),
+        getDocs(query(collection(db, 'web_notes'), where('status', 'in', statusesToFetch))),
         getPrograms()
       ]);
 
@@ -152,6 +156,28 @@ function ApprovalsPageComponent() {
         });
       });
 
+      // 🟢 RECORREMOS E INSERTAMOS LAS NOTAS WEB
+      webNotesSnap.forEach(d => {
+          const data = d.data();
+          const isOwner = data.advisorId === userInfo.id;
+          if (!isReviewer && !isOwner) return;
+
+          unifiedList.push({
+            id: d.id,
+            type: 'Nota Web / Gacetilla',
+            clientId: data.clientId,
+            clientName: data.clientName,
+            advisorName: data.advisorName,
+            title: data.format || 'Nota Web',
+            createdAt: parseDate(data.createdAt),
+            status: data.status,
+            adminComments: data.adminComments,
+            collectionName: 'web_notes',
+            rawData: data,
+            approvalHistory: data.approvalHistory || []
+          });
+      });
+
       unifiedList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       setItems(unifiedList);
     } catch (error) {
@@ -183,6 +209,8 @@ function ApprovalsPageComponent() {
       router.push(`/redes/new?editId=${item.id}`);
     } else if (item.type === 'Orden de Publicidad') {
       router.push(`/publicidad/new?editId=${item.id}`);
+    } else if (item.type === 'Nota Web / Gacetilla') {
+      router.push(`/notas-web/new?editId=${item.id}`);
     }
   };
 
@@ -230,7 +258,6 @@ function ApprovalsPageComponent() {
         if (sellerProfile?.email) sellerEmail = sellerProfile.email;
       }
 
-      // 🟢 CORRECCIÓN DE SEGURIDAD OPERATIVA ANTI-UNDEFINED
       const historyItem: any = {
         timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
         status: actionType,
@@ -239,7 +266,6 @@ function ApprovalsPageComponent() {
         userRole: userInfo.role
       };
 
-      // Solo si el revisor escribió algo, inyectamos la propiedad 'comments'
       if (adminComments.trim()) {
         historyItem.comments = adminComments.trim();
       }
@@ -280,18 +306,11 @@ function ApprovalsPageComponent() {
         const canvas = await html2canvas(elementToCapture, { scale: 1.5, useCORS: true, logging: false, backgroundColor: '#ffffff' });
         const imgData = canvas.toDataURL('image/jpeg', 0.8);
         
-        const docPdf = new jsPDF('l', 'mm', 'a4', true);
-        const pdfWidth = 297; const pdfHeight = 210;
-        const ratio = canvas.width / canvas.height;
-        const mappedHeight = pdfWidth / ratio;
+        const docPdf = new jsPDF('p', 'mm', 'a4', true);
+        const pdfWidth = 210; 
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
         
-        let heightLeft = mappedHeight; let position = 0;
-        docPdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
-        heightLeft -= pdfHeight;
-        while (heightLeft > 0) {
-          position -= pdfHeight; docPdf.addPage(); docPdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, mappedHeight);
-          heightLeft -= pdfHeight;
-        }
+        docPdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
         const orderBase64 = docPdf.output('datauristring').split(',')[1];
 
         let clientBase64 = '';
@@ -340,6 +359,8 @@ function ApprovalsPageComponent() {
       case 'Nota Comercial': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'Pedido de Redes': return 'bg-pink-100 text-pink-800 border-pink-200';
       case 'Orden de Publicidad': return 'bg-purple-100 text-purple-800 border-purple-200';
+      // 🟢 COLOR NARANJA PARA NOTAS WEB
+      case 'Nota Web / Gacetilla': return 'bg-orange-100 text-orange-800 border-orange-200';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -458,6 +479,8 @@ function ApprovalsPageComponent() {
                  {selectedItem?.type === 'Nota Comercial' && <NotePdf note={selectedItem.rawData} programs={programs} />}
                  {selectedItem?.type === 'Pedido de Redes' && <SocialMediaPdf request={selectedItem.rawData} />}
                  {selectedItem?.type === 'Orden de Publicidad' && <AdvertisingOrderPdf order={selectedItem.rawData} programs={programs} />}
+                 {/* 🟢 AGREGADO DEL COMPONENTE DE NOTA WEB AL MODAL */}
+                 {selectedItem?.type === 'Nota Web / Gacetilla' && <WebNotePdf note={selectedItem.rawData} />}
             </div>
             
             {selectedItem?.approvalHistory && selectedItem.approvalHistory.length > 0 && (
