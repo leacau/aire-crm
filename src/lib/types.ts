@@ -641,6 +641,68 @@ export type CommercialNote = {
   approvalHistory?: ApprovalHistoryItem[];
 };
 
+// 🟢 TIPOS ESPECÍFICOS PARA NOTAS WEB / GACETILLAS
+export type WebNoteFormat = 
+  | 'Gacetilla de prensa enviada por la empresa'
+  | 'Nota en web con entrevista telefónica'
+  | 'Nota en web con entrevista presencial (sin video)'
+  | 'Nota en web con entrevista en empresa + video youtube'
+  | 'Nota en WEB a partir de Móvil o entrevista en Radio';
+
+export type WebNoteImageSupport = 
+  | 'Fotografías y/o videos enviados por el cliente'
+  | 'Fotografías y/o videos realizados por AIRE'
+  | 'No requiere';
+
+export type WebNote = {
+  id?: string;
+  clientId: string;
+  clientName: string;
+  advisorId: string;
+  advisorName: string;
+  
+  // Vínculo a la Orden Madre
+  orderId?: string;
+  orderTitle?: string;
+
+  // Datos de Contacto
+  contactName: string;
+  contactPhone: string;
+  clientWebOrSocial?: string;
+
+  // Especificaciones
+  objective: string;
+  format: WebNoteFormat;
+  imageSupport: WebNoteImageSupport;
+  inserts?: string; // Inserts de apoyo
+  
+  // Replicación en Redes (Checkboxes y selects)
+  repIgStory?: boolean;
+  repIgStoryProducer?: 'Produce Aire' | 'Envía Cte';
+  repIgReel?: boolean;
+  repIgReelProducer?: 'Produce Aire' | 'Envía Cte';
+  repFacebook?: boolean;
+  repTwitter?: boolean;
+  clientIgHandle?: string;
+  collaborateReel?: boolean;
+  
+  // Archivos/Material
+  materialUrl?: string;
+  observations?: string;
+
+  // Tiempos e Historial
+  createdAt: string;
+  updatedAt?: string;
+  
+  // Auditoría
+  status?: ApprovalStatus;
+  adminComments?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  approvalHistory?: ApprovalHistoryItem[];
+};
+
 export type SocialMediaType = 'Reel' | 'Story' | 'Carrusel';
 export type SocialMediaCreator = 'Redes' | 'Audiovisual';
 
