@@ -32,7 +32,7 @@ import {
     getAdvertisingOrder,
     updateAdvertisingOrder,
     getBillingRequestsByOrder,
-    getAllUsers // 🟢 Añadido para poder reasignar
+    getAllUsers 
 } from "@/lib/firebase-service";
 import { Client, Agency, AdvertisingOrder, User } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
@@ -43,6 +43,7 @@ import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
 import { AdvertisingOrderPdf } from "./advertising-pdf";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function AdvertisingForm() {
   const { toast } = useToast();
@@ -55,7 +56,7 @@ export function AdvertisingForm() {
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [programs, setPrograms] = useState<any[]>([]); 
   const [opportunities, setOpportunities] = useState<any[]>([]);
-  const [users, setUsers] = useState<User[]>([]); // 🟢 Estado para usuarios
+  const [users, setUsers] = useState<User[]>([]); 
 
   const [isNewOpp, setIsNewOpp] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -70,9 +71,11 @@ export function AdvertisingForm() {
   const [invoiceCountSas, setInvoiceCountSas] = useState(1);
   
   const [materialUrls, setMaterialUrls] = useState<string[]>(['']);
-  
-  // 🟢 Estado para preservar (o reasignar) al autor original
   const [orderCreatedBy, setOrderCreatedBy] = useState<string>('');
+
+  // 🟢 ESTADOS PARA MODIFICACIÓN DE CONTRATOS APROBADOS
+  const [wasApproved, setWasApproved] = useState(false);
+  const [modificationReason, setModificationReason] = useState('');
 
   const pdfRef = useRef<HTMLDivElement>(null);
 
@@ -161,6 +164,11 @@ export function AdvertisingForm() {
 
           getAdvertisingOrder(idToFetch).then(async order => {
               if (order) {
+                  // 🟢 DETECTAMOS SI ESTÁ APROBADA
+                  if (editId && order.status === 'Aprobado') {
+                      setWasApproved(true);
+                  }
+
                   if (order.clientId) {
                       getOpportunitiesByClientId(order.clientId).then(setOpportunities);
                   }
@@ -192,7 +200,6 @@ export function AdvertisingForm() {
                   
                   setMaterialUrls(order.materialUrls?.length ? order.materialUrls : (order.materialUrl ? [order.materialUrl] : ['']));
 
-                  // 🟢 Al editar o clonar, preservamos al creador original (o lo asignamos)
                   setOrderCreatedBy(order.createdBy || userInfo?.id || '');
 
                   form.reset({
@@ -580,7 +587,8 @@ export function AdvertisingForm() {
       if (errors.observations) missing.push("Observaciones (Obligatorio por desajuste)");
       toast({ title: "Faltan datos", description: `Por favor completa: ${missing.join(", ")}`, variant: "destructive" });
   };
-const handleKeyDown = (e: React.KeyboardEvent) => {
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
       if (e.key === 'Enter') {
           if (e.target instanceof HTMLTextAreaElement) {
               return;
@@ -588,6 +596,7 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
           e.preventDefault();
       }
   };
+
   async function onSubmit(data: AdvertisingOrderFormValues) {
     if (!userInfo) return;
     setIsSubmitting(true);
@@ -613,20 +622,30 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      const validSrlItems = data.srlItems;
-      const validSasItems = data.sasItems;
+      // 🟢 LÓGICA DE ESTADOS Y JUSTIFICACIÓN
+      let targetStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
 
-      const targetStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
+      if (wasApproved && notifyOnSave) {
+          if (!modificationReason.trim()) {
+              toast({ title: "Falta Justificación", description: "Debe indicar el motivo de la modificación del contrato.", variant: "destructive" });
+              setIsSubmitting(false); return;
+          }
+          targetStatus = 'Pendiente de Modificación';
+      }
+
       const historyItem = {
           timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
           status: targetStatus,
           userId: userInfo.id,
           userName: userInfo.name,
           userRole: userInfo.role,
-          comments: editModeId ? 'Orden de publicidad corregida y reenviada para evaluación.' : 'Carga inicial enviada a revisión.'
+          comments: wasApproved ? `Modificación de Contrato: ${modificationReason.trim()}` : (editModeId ? 'Orden de publicidad corregida y reenviada para evaluación.' : 'Carga inicial enviada a revisión.')
       };
 
+      const validSrlItems = data.srlItems;
+      const validSasItems = data.sasItems;
       const preview = getPreviewOrder();
+      
       const orderPayload: any = {
         ...preview,
         status: targetStatus,
@@ -646,14 +665,10 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
         createdBy: orderCreatedBy || userInfo.id
       };
 
-      // 🟢 CONTROL DE INYECCIÓN COMPATIBLE CON FIREBASE
-      // Eliminamos dinámicamente cualquier campo 'undefined' sin alterar los objetos especiales como arrayUnion
       Object.keys(orderPayload).forEach(key => {
-          if (orderPayload[key] === undefined) {
-              delete orderPayload[key];
-          }
+          if (orderPayload[key] === undefined) delete orderPayload[key];
       });
-      delete orderPayload.id; // Nos aseguramos de remover el campo id que generaba la excepción técnica
+      delete orderPayload.id;
 
       if (editModeId) {
           orderPayload.approvalHistory = arrayUnion(historyItem);
@@ -669,9 +684,11 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
               try {
                   const clientDisplayName = selectedClient?.razonSocial || selectedClient?.denominacion || 'Desconocido';
                   const baseUrl = window.location.origin;
+                  const emailSubject = wasApproved ? `REVISIÓN DE CONTRATO - Orden de Publicidad - ${clientDisplayName}` : `Pedido de Revisión de Orden de Publicidad - ${clientDisplayName}`;
                   const emailBody = `
                       <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
                           <p>Se ha cargado un pedido de revisión de una <strong>Orden de Publicidad</strong> para el cliente <strong>${clientDisplayName}</strong>.</p>
+                          ${wasApproved ? `<div style="background-color: #fef3c7; border-left: 4px solid #d97706; padding: 15px; margin: 15px 0;"><strong>Atención:</strong> Esta orden ya estaba aprobada y fue modificada.<br/><br/><strong>Motivo del Asesor:</strong> <i>"${modificationReason.trim()}"</i></div>` : ''}
                           <p>Para evaluar la pauta y ver los detalles completos en el Centro de Revisión, ingresa desde el siguiente enlace directo:</p>
                           <p style="margin-top: 15px;"><a href="${baseUrl}/approvals?tab=pending" style="display: inline-block; padding: 10px 20px; background-color: #1d4ed8; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px;">EVALUAR ORDEN DE PUBLICIDAD</a></p>
                       </div>
@@ -680,12 +697,10 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
                   await sendEmail({
                       accessToken,
                       to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar'],
-                      subject: `Pedido de Revisión de Orden de Publicidad - ${clientDisplayName}`,
+                      subject: emailSubject,
                       body: emailBody
                   });
-              } catch (emailErr) {
-                  console.error("Error al enviar notificación simple de orden:", emailErr);
-              }
+              } catch (emailErr) {}
           }
       }
 
@@ -723,13 +738,10 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
                {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
                {isExporting ? "Generando..." : "Exportar PDF"}
             </Button>
-
-            {/* 🟢 RE-INCORPORADO: SWITCH PASAR A APROBACIÓN */}
             <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white h-10">
                 <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
                 <Label htmlFor="notify" className="cursor-pointer text-sm font-semibold">Pasar a aprobación</Label>
             </div>
-
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando...</> : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
             </Button>
@@ -780,8 +792,6 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
                 )} />
               {isNewOpp && (<FormField control={form.control} name="newOpportunityTitle" render={({ field }) => (<div className="mt-2"><Input placeholder="Nombre del producto *" {...field} /></div>)} />)}
           </div>
-          
-          {/* 🟢 Selector de Ejecutivo o Campo de Texto según Permisos */}
           <div className="space-y-2 flex flex-col justify-end pb-1">
              <FormLabel>Ejecutivo / Autor de Orden</FormLabel>
              {canReassign ? (
@@ -801,7 +811,6 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
           </div>
         </div>
 
-        {/* --- RESTO DEL FORMULARIO INTACTO --- */}
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
           <div className="bg-slate-100 px-4 py-2 border-b"><h3 className="text-lg font-semibold text-slate-800">AIRE SRL</h3></div>
           <div className="p-4 grid gap-6">
@@ -888,6 +897,30 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
              )}
           </div>
         </div>
+
+        {/* 🟢 CUADRO OBLIGATORIO DE JUSTIFICACIÓN DE MODIFICACIÓN */}
+        {wasApproved && notifyOnSave && (
+            <Card className="border-amber-400 bg-amber-50 shadow-md animate-in fade-in zoom-in duration-300">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-amber-800 text-lg flex items-center">
+                        ⚠️ Modificación de Contrato Aprobado
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Label className="text-amber-900 font-bold mb-2 block">
+                        Esta Orden de Publicidad ya había sido aprobada y validada por la Administración.
+                        Al guardar, volverá a la bandeja de revisión. Debe justificar el motivo del cambio: *
+                    </Label>
+                    <Textarea
+                        value={modificationReason}
+                        onChange={e => setModificationReason(e.target.value)}
+                        placeholder="Ej: A pedido del cliente, reemplazamos en la facturación de Mayo la Nota Web por 1 Carrusel..."
+                        className="bg-white mt-1 border-amber-300 focus-visible:ring-amber-500"
+                        rows={3}
+                    />
+                </CardContent>
+            </Card>
+        )}
 
         {hasSrl && (
         <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
