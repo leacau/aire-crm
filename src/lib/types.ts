@@ -193,6 +193,7 @@ export type Person = {
 
 export type TipoEntidad = 'Pública' | 'Privada' | 'Mixta';
 export type CondicionIVA = 'Responsable Inscripto' | 'Monotributista' | 'Exento' | 'Consumidor Final';
+export type ApprovalItemType = 'Nota Comercial' | 'Pedido de Redes' | 'Orden de Publicidad' | 'Nota Web / Gacetilla';
 
 export type Client = {
   id: string;
