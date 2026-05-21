@@ -104,7 +104,6 @@ export default function RedesPage() {
     return (
         <div className="flex flex-col h-full bg-gray-50/50">
             <Header title="Pedidos para Redes">
-                <Button onClick={() => router.push('/redes/new')}><Plus className="h-4 w-4 mr-2" /> Nuevo Pedido</Button>
             </Header>
             <main className="flex-1 p-6 overflow-auto">
                 {loading ? <div className="flex justify-center p-8"><Spinner /></div> : (
