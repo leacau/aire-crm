@@ -288,8 +288,8 @@ export default function AdvertisingOrderDetailPage() {
     const hasGacetilla = order.sasItems?.some(s => s.format === 'Gacetilla de prensa');
     const canEdit = userInfo && (hasManagementPrivileges(userInfo) || userInfo.id === order.createdBy);
 
-    // 🟢 EL CANDADO: Si no está Aprobado, no pueden cargar notas o redes
-    const isOrderApproved = order.status === 'Aprobado';
+    // 🟢 EL CANDADO: Si no tiene estado (vieja) o es Aprobado, se permite crear hijos
+    const isOrderApproved = !order.status || order.status === 'Aprobado';
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-gray-50/50">
