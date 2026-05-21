@@ -8,12 +8,13 @@ export default function NewRedesPage() {
     const searchParams = useSearchParams();
     const editId = searchParams.get('editId') || undefined;
     const cloneId = searchParams.get('cloneId') || undefined;
+    const orderId = searchParams.get('orderId') || undefined; // 🟢 CAPTURAMOS LA ORDEN MADRE
 
     return (
         <div className="flex flex-col h-full bg-gray-50/50">
             <Header title={editId ? "Editar Pedido" : "Nuevo Pedido de Redes"} />
             <main className="flex-1 p-4 md:p-6 overflow-auto max-w-5xl mx-auto w-full">
-                <SocialMediaForm editId={editId} cloneId={cloneId} />
+                <SocialMediaForm editId={editId} cloneId={cloneId} orderId={orderId} />
             </main>
         </div>
     );
