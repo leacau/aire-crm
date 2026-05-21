@@ -2,11 +2,11 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getAdvertisingOrder, getPrograms, getBillingRequestsByOrder, getSocialMediaRequests, getAllCommercialNotes } from '@/lib/firebase-service';
-import type { AdvertisingOrder, Program, CommercialNote, SocialMediaRequest } from '@/lib/types';
+import { getAdvertisingOrder, getPrograms, getBillingRequestsByOrder, getSocialMediaRequests, getAllCommercialNotes, getWebNotes } from '@/lib/firebase-service';
+import type { AdvertisingOrder, Program, CommercialNote, SocialMediaRequest, WebNote } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
-import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2, Plus, Film, Share2, Eye } from 'lucide-react'; 
+import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2, Film, Share2, Eye, Globe } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import html2canvas from 'html2canvas';
@@ -16,9 +16,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { format } from 'date-fns';
 import { hasManagementPrivileges } from '@/lib/role-utils';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import Link from 'next/link';
 
 export default function AdvertisingOrderDetailPage() {
     const { id } = useParams();
@@ -28,9 +26,9 @@ export default function AdvertisingOrderDetailPage() {
     const [order, setOrder] = useState<AdvertisingOrder | null>(null);
     const [programs, setPrograms] = useState<Program[]>([]);
     
-    // 🟢 ESTADOS PARA LAS EJECUCIONES "HIJAS"
     const [linkedNotes, setLinkedNotes] = useState<CommercialNote[]>([]);
     const [linkedSocial, setLinkedSocial] = useState<SocialMediaRequest[]>([]);
+    const [linkedWebNotes, setLinkedWebNotes] = useState<WebNote[]>([]); // 🟢 NUEVO ESTADO
     
     const [loading, setLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
@@ -45,12 +43,13 @@ export default function AdvertisingOrderDetailPage() {
     useEffect(() => {
         const load = async () => {
             if (typeof id === 'string') {
-                const [o, p, brs, allNotes, allSocial] = await Promise.all([
+                const [o, p, brs, allNotes, allSocial, allWebNotes] = await Promise.all([
                     getAdvertisingOrder(id),
                     getPrograms(),
                     getBillingRequestsByOrder(id),
                     getAllCommercialNotes(),
-                    getSocialMediaRequests()
+                    getSocialMediaRequests(),
+                    getWebNotes() 
                 ]);
                 
                 if (o) {
@@ -77,9 +76,9 @@ export default function AdvertisingOrderDetailPage() {
                     
                     setOrder(o);
 
-                    // 🟢 FILTRAMOS LOS HIJOS QUE PERTENECEN A ESTA ORDEN
                     setLinkedNotes(allNotes.filter(n => n.orderId === id));
                     setLinkedSocial(allSocial.filter(s => s.orderId === id));
+                    setLinkedWebNotes(allWebNotes.filter(w => w.orderId === id)); 
                 }
                 setPrograms(p);
             }
@@ -104,7 +103,6 @@ export default function AdvertisingOrderDetailPage() {
         const topPaddingPx = topPaddingMm * mmToPx;
 
         const blocks = Array.from(containerElement.querySelectorAll('.pdf-block')) as HTMLElement[];
-        
         blocks.forEach(b => b.style.marginTop = '0px');
         void containerElement.offsetHeight; 
 
@@ -115,14 +113,12 @@ export default function AdvertisingOrderDetailPage() {
             const blockHeight = block.offsetHeight;
             const blockMarginBottom = parseFloat(window.getComputedStyle(block).marginBottom) || 0;
             const totalBlockHeight = blockHeight + blockMarginBottom;
-
             const pageBottomLimit = (currentPageIndex * pageHeightPx) + topPaddingPx + usableHeightPx;
 
             if (absoluteY + totalBlockHeight > pageBottomLimit && currentPageIndex >= 0) {
                 currentPageIndex++;
                 const targetY = (currentPageIndex * pageHeightPx) + topPaddingPx;
                 const marginToAdd = targetY - absoluteY;
-                
                 block.style.marginTop = `${marginToAdd}px`;
                 absoluteY = targetY + totalBlockHeight;
             } else {
@@ -130,20 +126,13 @@ export default function AdvertisingOrderDetailPage() {
             }
         });
 
-        const canvas = await html2canvas(containerElement, { 
-            scale: 1.5, 
-            useCORS: true, 
-            logging: false,
-            backgroundColor: '#ffffff' 
-        });
-        
+        const canvas = await html2canvas(containerElement, { scale: 1.5, useCORS: true, logging: false, backgroundColor: '#ffffff' });
         const imgData = canvas.toDataURL('image/jpeg', 0.8);
         const ratio = canvas.width / canvas.height;
         const mappedHeight = pdfWidthMm / ratio;
 
         let heightLeft = mappedHeight;
         let position = 0;
-        let currentPage = 1;
 
         pdf.addImage(imgData, 'JPEG', 0, position, pdfWidthMm, mappedHeight);
         heightLeft -= pdfHeightMm;
@@ -151,7 +140,6 @@ export default function AdvertisingOrderDetailPage() {
         while (heightLeft > 0) {
             position -= pdfHeightMm;
             pdf.addPage();
-            currentPage++;
             pdf.addImage(imgData, 'JPEG', 0, position, pdfWidthMm, mappedHeight);
             heightLeft -= pdfHeightMm;
         }
@@ -162,16 +150,13 @@ export default function AdvertisingOrderDetailPage() {
         links.forEach((link) => {
             const linkRect = link.getBoundingClientRect();
             if (linkRect.width === 0 || linkRect.height === 0) return;
-            
             const topInPx = linkRect.top - elementRect.top;
             const topInMm = (topInPx * mappedHeight) / elementRect.height;
             const sliceIndex = Math.floor(topInMm / pdfHeightMm);
             const topOnPage = topInMm - (sliceIndex * pdfHeightMm);
-
             const left = ((linkRect.left - elementRect.left) * pdfWidthMm) / elementRect.width;
             const width = (linkRect.width * pdfWidthMm) / elementRect.width;
             const linkH = (linkRect.height * mappedHeight) / elementRect.height;
-
             pdf.setPage(sliceIndex + 1);
             pdf.link(left, topOnPage, width, linkH, { url: link.href });
         });
@@ -237,7 +222,7 @@ export default function AdvertisingOrderDetailPage() {
             toast({ title: 'Orden reinformada exitosamente.' });
         } catch (error) {
             console.error("Error al reinformar", error);
-            toast({ title: 'Error al enviar el correo.', description: 'Puede que el PDF sea muy pesado. Intente de nuevo.', variant: 'destructive' });
+            toast({ title: 'Error al enviar el correo.', variant: 'destructive' });
         } finally {
             setIsResending(false);
         }
@@ -288,7 +273,6 @@ export default function AdvertisingOrderDetailPage() {
     const hasGacetilla = order.sasItems?.some(s => s.format === 'Gacetilla de prensa');
     const canEdit = userInfo && (hasManagementPrivileges(userInfo) || userInfo.id === order.createdBy);
 
-    // 🟢 EL CANDADO: Si no tiene estado (vieja) o es Aprobado, se permite crear hijos
     const isOrderApproved = !order.status || order.status === 'Aprobado';
 
     return (
@@ -332,7 +316,6 @@ export default function AdvertisingOrderDetailPage() {
                     
                     <AdvertisingOrderPdf ref={pdfRef} order={order} programs={programs} />
                     
-                    {/* 🟢 NUEVA SECCIÓN DE EJECUCIONES DE PAUTA (VINCULADAS) */}
                     <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-300">
                         <div className="flex justify-between items-center border-b pb-4 mb-4">
                             <h3 className="text-xl font-bold text-slate-800">Ejecuciones de Pauta vinculadas</h3>
@@ -347,6 +330,14 @@ export default function AdvertisingOrderDetailPage() {
                                 </Button>
                                 <Button 
                                     size="sm" 
+                                    className="bg-orange-500 hover:bg-orange-600 text-white" 
+                                    disabled={!isOrderApproved}
+                                    onClick={() => router.push(`/notas-web/new?orderId=${order.id}`)}
+                                >
+                                    <Globe className="w-4 h-4 mr-2" /> + Nota Web
+                                </Button>
+                                <Button 
+                                    size="sm" 
                                     className="bg-pink-600 hover:bg-pink-700" 
                                     disabled={!isOrderApproved}
                                     onClick={() => router.push(`/redes/new?orderId=${order.id}`)}
@@ -358,12 +349,12 @@ export default function AdvertisingOrderDetailPage() {
 
                         {!isOrderApproved && (
                             <div className="bg-amber-50 text-amber-800 p-3 rounded text-sm mb-4 border border-amber-200">
-                                ⚠️ Para poder cargar Notas o Pedidos de Redes, la Orden de Publicidad Madre debe estar en estado <strong>Aprobado</strong>. (Estado actual: {order.status || 'Pendiente'})
+                                ⚠️ Para poder cargar Ejecuciones, la Orden de Publicidad Madre debe estar en estado <strong>Aprobado</strong>. (Estado actual: {order.status || 'Pendiente'})
                             </div>
                         )}
 
                         <div className="space-y-4">
-                            {linkedNotes.length === 0 && linkedSocial.length === 0 && (
+                            {linkedNotes.length === 0 && linkedSocial.length === 0 && linkedWebNotes.length === 0 && (
                                 <div className="text-center text-slate-500 py-6 text-sm">
                                     No hay ejecuciones cargadas para esta orden todavía.
                                 </div>
@@ -379,7 +370,22 @@ export default function AdvertisingOrderDetailPage() {
                                         <Badge variant="outline" className={n.status === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>
                                             {n.status || 'Borrador'}
                                         </Badge>
-                                        <Button variant="ghost" size="sm" onClick={() => router.push(`/notas/${n.id}`)}><Eye className="w-4 h-4 mr-1"/> Ver</Button>
+                                        <Button variant="ghost" size="sm" onClick={() => router.push(`/notas/new?editId=${n.id}`)}><Eye className="w-4 h-4 mr-1"/> Ver</Button>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {linkedWebNotes.map(w => (
+                                <div key={w.id} className="flex justify-between items-center bg-orange-50/50 border border-orange-100 p-3 rounded-md">
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-orange-900 text-sm flex items-center gap-1.5"><Globe className="w-4 h-4"/> {w.format}</span>
+                                        <span className="text-xs text-slate-600">Cargada el {format(new Date(w.createdAt), 'dd/MM/yyyy')}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Badge variant="outline" className={w.status === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>
+                                            {w.status || 'Borrador'}
+                                        </Badge>
+                                        <Button variant="ghost" size="sm" onClick={() => router.push(`/notas-web/new?editId=${w.id}`)}><Eye className="w-4 h-4 mr-1"/> Ver</Button>
                                     </div>
                                 </div>
                             ))}
@@ -394,7 +400,7 @@ export default function AdvertisingOrderDetailPage() {
                                         <Badge variant="outline" className={s.status === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>
                                             {s.status || 'Borrador'}
                                         </Badge>
-                                        <Button variant="ghost" size="sm" onClick={() => router.push(`/redes/${s.id}`)}><Eye className="w-4 h-4 mr-1"/> Ver</Button>
+                                        <Button variant="ghost" size="sm" onClick={() => router.push(`/redes/new?editId=${s.id}`)}><Eye className="w-4 h-4 mr-1"/> Ver</Button>
                                     </div>
                                 </div>
                             ))}
