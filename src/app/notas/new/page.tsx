@@ -12,11 +12,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote, getCommercialNote, updateCommercialNote, getAllUsers } from '@/lib/firebase-service'; 
+// 🟢 AGREGAMOS getAdvertisingOrder
+import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote, getCommercialNote, updateCommercialNote, getAllUsers, getAdvertisingOrder } from '@/lib/firebase-service'; 
 import type { Client, Program, CommercialNote, ScheduleItem, User, Interviewee } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Save, Plus, ExternalLink, Trash2, MapPin, Minus, ArrowLeft } from 'lucide-react';
+import { CalendarIcon, Save, Plus, ExternalLink, Trash2, MapPin, Minus, ArrowLeft, Link as LinkIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -38,7 +39,7 @@ export default function NewCommercialNotePage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const pdfRef = useRef<HTMLDivElement>(null);
-    const [notifyOnSave, setNotifyOnSave] = useState(true); // 🟢 RE-INCORPORADO ESTADO DE SWITCH
+    const [notifyOnSave, setNotifyOnSave] = useState(true); 
     
     const [clients, setClients] = useState<Client[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
@@ -52,6 +53,9 @@ export default function NewCommercialNotePage() {
     const [advisorId, setAdvisorId] = useState('');
     const [advisorName, setAdvisorName] = useState('');
     
+    // 🟢 ESTADO PARA LA ORDEN MADRE
+    const [orderTitle, setOrderTitle] = useState('');
+
     const [saleValue, setSaleValue] = useState<string>('');
     const [financialObservations, setFinancialObservations] = useState('');
     
@@ -70,7 +74,6 @@ export default function NewCommercialNotePage() {
 
     const [title, setTitle] = useState('');
     
-    // 🔥 Ubiacación General (Dejamos de usarla pero la mantenemos por ahora si hay código viejo que lo exige, o lo dejamos como 'Móvil' gral)
     const [location, setLocation] = useState<'Estudio' | 'Móvil' | 'Meet' | 'Llamada' | undefined>(undefined);
     const [callPhone, setCallPhone] = useState('');
     const [mobileAddress, setMobileAddress] = useState(''); 
@@ -81,9 +84,7 @@ export default function NewCommercialNotePage() {
     const [questions, setQuestions] = useState<string[]>(['', '', '', '', '']);
     const [topicsToAvoid, setTopicsToAvoid] = useState<string[]>(['']);
 
-    // 🟢 NUEVO ESTADO: ARRAY DE ENTREVISTADOS
     const [interviewees, setInterviewees] = useState<Interviewee[]>([{ name: '', role: '', location: 'Piso' }]);
-
     const [intervieweeBio, setIntervieweeBio] = useState('');
 
     const [instagramHandle, setInstagramHandle] = useState('');
@@ -104,7 +105,10 @@ export default function NewCommercialNotePage() {
     const [isRestored, setIsRestored] = useState(false);
     const [draftLoaded, setDraftLoaded] = useState(false); 
 
-    const [editModeId, setEditModeId] = useState<string | null>(null);
+    const searchParams = useSearchParams();
+    const editModeId = searchParams.get('editId');
+    const cloneId = searchParams.get('cloneId');
+    const orderId = searchParams.get('orderId'); // 🟢 CAPTURAMOS LA ORDEN MADRE
 
     const primaryGrafError = primaryGrafs.some(g => g.length > 84);
     const secondaryGrafError = secondaryGrafs.some(g => g.length > 55);
@@ -151,7 +155,6 @@ export default function NewCommercialNotePage() {
 
         await processPage(page1, 1);
         await processPage(page2, 2);
-
         return pdf;
     };
 
@@ -171,18 +174,10 @@ export default function NewCommercialNotePage() {
     };
     
     useEffect(() => {
-        const search = window.location.search;
-        const params = new URLSearchParams(search);
-        const cloneId = params.get('cloneId');
-        const editId = params.get('editId'); 
-
-        const idToFetch = cloneId || editId;
+        const idToFetch = cloneId || editModeId;
 
         if (idToFetch) {
-            if (editId) {
-                setEditModeId(editId);
-                setNotifyOnSave(true); 
-            }
+            if (editModeId) setNotifyOnSave(true); 
 
             getCommercialNote(idToFetch).then(note => {
                 if (note) {
@@ -204,7 +199,6 @@ export default function NewCommercialNotePage() {
                     setContactName(note.contactName || '');
                     
                     setTitle(note.title ? (cloneId ? `${note.title} (Copia)` : note.title) : ''); 
-                    
                     setLocation(note.location);
                     setCallPhone(note.callPhone || '');
                     setMobileAddress(note.mobileAddress || '');
@@ -213,14 +207,12 @@ export default function NewCommercialNotePage() {
                     setQuestions(note.questions?.length ? note.questions : ['', '', '', '', '']);
                     setTopicsToAvoid(note.topicsToAvoid?.length ? note.topicsToAvoid : ['']);
                     
-                    // 🟢 MIGRACIÓN AL LEER (Si no tiene array, armamos uno con los datos viejos)
                     if (note.interviewees && note.interviewees.length > 0) {
                         setInterviewees(note.interviewees);
                     } else if (note.intervieweeName || note.intervieweeRole) {
                         setInterviewees([{
                             name: note.intervieweeName || '',
                             role: note.intervieweeRole || '',
-                            // Convertimos la locación vieja al nuevo formato. Si era 'Estudio' o 'Móvil' -> Piso. Meet -> Video. Llamada -> Teléfono.
                             location: (note.location === 'Meet' ? 'Video Llamada' : (note.location === 'Llamada' ? 'Teléfono' : 'Piso'))
                         }]);
                     } else {
@@ -244,6 +236,20 @@ export default function NewCommercialNotePage() {
 
                     setAdvisorId(note.advisorId || userInfo?.id || '');
                     setAdvisorName(note.advisorName || userInfo?.name || '');
+
+                    if (note.orderId) setOrderTitle(note.orderTitle || 'Orden Vinculada');
+                }
+                setIsRestored(true);
+            });
+        } else if (orderId) {
+            // 🟢 AUTOCOMPLETAR DESDE LA ORDEN MADRE
+            getAdvertisingOrder(orderId).then(order => {
+                if (order) {
+                    setSelectedClientId(order.clientId);
+                    // Los detalles del cliente se cargarán cuando terminen de llegar de `getClients`
+                    setAdvisorId(order.createdBy || userInfo?.id || '');
+                    setAdvisorName(order.accountExecutive || userInfo?.name || '');
+                    setOrderTitle(order.product || order.opportunityTitle || 'Orden sin título');
                 }
                 setIsRestored(true);
             });
@@ -312,7 +318,7 @@ export default function NewCommercialNotePage() {
             }
             setIsRestored(true);
         }
-    }, [toast, userInfo]);
+    }, [toast, userInfo, editModeId, cloneId, orderId]);
 
     useEffect(() => {
         if (!isRestored || editModeId) return; 
@@ -322,7 +328,7 @@ export default function NewCommercialNotePage() {
             collaboration, collaborationHandle, ctaText, ctaDestination,
             contactPhone, contactName, title, location, callPhone, mobileAddress,
             primaryGrafs, secondaryGrafs, questions, topicsToAvoid,
-            interviewees, intervieweeBio, // Guardamos el array en el borrador
+            interviewees, intervieweeBio,
             instagramHandle, noInstagram, website, noWeb, whatsapp, noWhatsapp,
             commercialPhone, noCommercialPhone, commercialAddresses, noCommercialAddress,
             graphicSupport, graphicLinks, noteObservations, advisorId, advisorName
@@ -348,6 +354,18 @@ export default function NewCommercialNotePage() {
                     }
                 }
                 setPrograms(fetchedPrograms);
+
+                // 🟢 SI AUTOCOMPLETAMOS EL CLIENTE POR ORDEN, CARGAMOS SUS DATOS
+                if (selectedClientId) {
+                    const client = fetchedClients.find(c => c.id === selectedClientId);
+                    if (client) {
+                        setCuit(client.cuit || '');
+                        setRazonSocial(client.razonSocial || '');
+                        setRubro(client.rubro || '');
+                        setCommercialPhone(client.phone || '');
+                    }
+                }
+
             } catch (e) {
                 console.error(e);
                 toast({ title: 'Error cargando datos', variant: 'destructive' });
@@ -356,7 +374,7 @@ export default function NewCommercialNotePage() {
             }
         };
         if (userInfo) loadData();
-    }, [userInfo, toast, canReassign]);
+    }, [userInfo, toast, canReassign, selectedClientId]); // Agregado selectedClientId como dependencia
 
     const handleClientSelect = (clientId: string) => {
         setSelectedClientId(clientId);
@@ -403,19 +421,13 @@ export default function NewCommercialNotePage() {
         });
     };
 
-    
-
-    // 🟢 1. FUNCIÓN PARA BLOQUEAR EL ENTER (Sácada afuera de handleClearDraft)
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
-            if (e.target instanceof HTMLTextAreaElement) {
-                return;
-            }
+            if (e.target instanceof HTMLTextAreaElement) return;
             e.preventDefault();
         }
     };
 
-    // 🟢 2. LIMPIAR BORRADOR (Ahora limpia y libre)
     const handleClearDraft = () => {
         if (!window.confirm("¿Estás seguro de que quieres limpiar todos los datos y empezar una nueva nota?")) return;
         localStorage.removeItem('commercial_note_draft');
@@ -487,7 +499,6 @@ export default function NewCommercialNotePage() {
     const handleGraphicLinkChange = (index: number, value: string) => { const n = [...graphicLinks]; n[index] = value; setGraphicLinks(n); };
     const handleRemoveGraphicLink = (index: number) => { const n = graphicLinks.filter((_, i) => i !== index); setGraphicLinks(n.length ? n : ['']); };
 
-    // 🟢 MÉTODOS PARA EL ARRAY DE ENTREVISTADOS
     const handleAddInterviewee = () => setInterviewees([...interviewees, { name: '', role: '', location: 'Piso' }]);
     const handleIntervieweeChange = (index: number, field: keyof Interviewee, value: string) => {
         const n = [...interviewees];
@@ -499,7 +510,6 @@ export default function NewCommercialNotePage() {
         setInterviewees(n.length ? n : [{ name: '', role: '', location: 'Piso' }]);
     };
 
-
     const totalValue = selectedProgramIds.reduce((acc, pid) => {
         const prog = programs.find(p => p.id === pid);
         const datesCount = programSchedule[pid]?.length || 0;
@@ -509,7 +519,6 @@ export default function NewCommercialNotePage() {
     const saleValueNum = parseFloat(saleValue) || 0;
     const mismatch = saleValueNum > 0 ? (totalValue - saleValueNum) : 0;
 
-    // 🟢 3. GUARDAR NOTA CON CONDICIONAL DE SWITCH Y AVISO SIMPLE
     const handleSave = async () => {
         if (!selectedClientId || !userInfo) { toast({ title: 'Datos incompletos', description: 'Seleccione un cliente.', variant: 'destructive' }); return; }
         if (!title.trim()) { toast({ title: 'Falta título', variant: 'destructive' }); return; }
@@ -578,7 +587,7 @@ export default function NewCommercialNotePage() {
             }
 
             const targetStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
-            const historyItem = {
+            const historyItem: any = {
                 timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
                 status: targetStatus,
                 userId: userInfo.id,
@@ -639,8 +648,14 @@ export default function NewCommercialNotePage() {
                 noteObservations: noteObservations || undefined,
             };
 
+            // 🟢 VINCULAMOS AL PADRE
+            if (orderId) {
+                noteDataRaw.orderId = orderId;
+                noteDataRaw.orderTitle = orderTitle;
+            }
+
             if (editModeId) {
-                noteDataRaw.approvalHistory = arrayUnion(historyItem);
+                noteDataRaw.approvalHistory = arrayUnion(historyItem) as any;
             } else {
                 noteDataRaw.approvalHistory = [historyItem];
             }
@@ -657,7 +672,6 @@ export default function NewCommercialNotePage() {
                 await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
             }
 
-            // 🟢 MAIL DE NOTIFICACIÓN SIMPLE CON LINK DIRECTO
             if (notifyOnSave) {
                 const accessToken = await getGoogleAccessToken();
                 if (accessToken) {
@@ -690,7 +704,12 @@ export default function NewCommercialNotePage() {
             });
             
             localStorage.removeItem('commercial_note_draft');
-            router.push('/notas');
+            // 🟢 REDIRECCIÓN INTELIGENTE AL PADRE
+            if (orderId) {
+                router.push(`/publicidad/${orderId}`);
+            } else {
+                router.push('/notas');
+            }
         } catch (error) {
             console.error(error);
             toast({ title: 'Error al guardar', variant: 'destructive' });
@@ -720,7 +739,6 @@ export default function NewCommercialNotePage() {
                     <ExternalLink className="mr-2 h-4 w-4" /> Exportar PDF
                 </Button>
                 
-                {/* 🟢 RE-INCORPORADO: SWITCH EN ACCIONES SUPERIORES */}
                 <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white h-10">
                     <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
                     <Label htmlFor="notify" className="cursor-pointer text-sm font-semibold">Pasar a aprobación</Label>
@@ -744,13 +762,21 @@ export default function NewCommercialNotePage() {
                     <ActionButtons />
                 </div>
 
+                {/* 🟢 BANNER INFORMATIVO SI ESTÁ VINCULADO */}
+                {(orderId || editModeId && orderTitle) && (
+                    <div className="bg-blue-50 border border-blue-200 p-3 rounded-md flex items-center gap-2 text-blue-800 text-sm font-medium">
+                        <LinkIcon className="w-4 h-4" />
+                        Ejecución vinculada a la Orden de Publicidad Madre: <strong>{orderTitle}</strong>
+                    </div>
+                )}
+
                 <Card>
                     <CardHeader><CardTitle>Datos de Cliente</CardTitle></CardHeader>
                     <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
                         <div className="space-y-2">
                             <Label>Cliente <span className="text-red-500">*</span></Label>
-                            <Select value={selectedClientId} onValueChange={handleClientSelect}>
-                                <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                            <Select value={selectedClientId} onValueChange={handleClientSelect} disabled={!!orderId}>
+                                <SelectTrigger className={orderId ? "bg-slate-50 opacity-100" : ""}><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                                 <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
@@ -760,7 +786,7 @@ export default function NewCommercialNotePage() {
                         
                         <div className="space-y-2">
                             <Label>Asesor / Ejecutivo</Label>
-                            {canReassign ? (
+                            {canReassign && !orderId ? (
                                 <Select value={advisorId} onValueChange={(val) => {
                                     setAdvisorId(val);
                                     const u = users.find(x => x.id === val);
@@ -858,7 +884,6 @@ export default function NewCommercialNotePage() {
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2"><Label>Título</Label><Input value={title} onChange={e => setTitle(e.target.value)} /></div>
                             
-                            {/* 🔥 Mantenemos ubicación general por las dudas, pero el campo importante será el individual */}
                             <div className="space-y-3"><Label>Ubicación (General de la nota)</Label><RadioGroup value={location} onValueChange={(v:any) => setLocation(v)} className="flex flex-wrap gap-4"><div className="flex items-center space-x-2"><RadioGroupItem value="Estudio" id="re" /><Label htmlFor="re">Estudio</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Móvil" id="rm" /><Label htmlFor="rm">Móvil</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Meet" id="mt" /><Label htmlFor="mt">Meet</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Llamada" id="rl" /><Label htmlFor="rl">Llamada</Label></div></RadioGroup>{location === 'Llamada' && <Input className="mt-2" value={callPhone} onChange={e => setCallPhone(e.target.value)} placeholder="Teléfono..." />}{location === 'Móvil' && <Input className="mt-2" value={mobileAddress} onChange={e => setMobileAddress(e.target.value)} placeholder="Dirección del móvil..." />}</div>
                         </div>
 
@@ -895,7 +920,6 @@ export default function NewCommercialNotePage() {
                             <div className="space-y-3 border p-4 rounded-md bg-red-50/50"><div className="flex justify-between"><Label>Temas a EVITAR</Label><Button type="button" variant="ghost" size="sm" onClick={handleAddTopic}><Plus className="h-4 w-4"/></Button></div>{topicsToAvoid.map((t, idx) => (<div key={idx} className="flex gap-2"><Input value={t} onChange={e => handleTopicChange(idx, e.target.value)} placeholder={`Tema ${idx+1}`} />{topicsToAvoid.length > 1 && <Button type="button" size="icon" variant="ghost" onClick={() => handleRemoveTopic(idx)}><Trash2 className="h-4 w-4"/></Button>}</div>))}</div>
                         </div>
 
-                        {/* 🟢 NUEVA SECCIÓN DE ENTREVISTADOS */}
                         <div className="space-y-4 border-t pt-4">
                             <div className="flex items-center justify-between mb-2">
                                 <Label className="text-lg font-bold">Entrevistados</Label>
