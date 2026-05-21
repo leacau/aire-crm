@@ -2,7 +2,7 @@
 
 import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays, AdvertisingOrder } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
@@ -36,6 +36,7 @@ const collections = {
     billingRequests: collection(db, 'billing_requests'),
     socialMediaRequests: collection(db, 'social_media_requests'),
     convenios: collection(db, 'convenios'),
+    webNotes: collection(db, 'web_notes'),
 };
 
 const cache: { [key: string]: { data: any; timestamp: number } } = {};
@@ -4553,7 +4554,122 @@ export const cleanupOldActivities = async (): Promise<void> => {
     }
 };
 
-// 🟢 Función para obtener toda la data necesaria para reportes consolidados
+// ============================================================================
+// --- WEB NOTES / GACETILLAS FUNCTIONS ---
+// ============================================================================
+
+export const saveWebNote = async (
+    noteData: Omit<WebNote, 'id' | 'createdAt'>,
+    userId: string,
+    userName: string
+): Promise<string> => {
+    const dataToSave = {
+        ...noteData,
+        createdAt: serverTimestamp(),
+    };
+
+    const docRef = await addDoc(collections.webNotes, dataToSave);
+    invalidateCache('webNotes');
+    
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'commercial_note' as any, // Mismo rubro conceptual
+        entityId: docRef.id,
+        entityName: noteData.clientName,
+        details: `cargó un pedido de Nota Web / Gacetilla para <strong>${noteData.clientName}</strong>`,
+        ownerName: noteData.advisorName,
+    });
+
+    return docRef.id;
+};
+
+export const getWebNotes = async (): Promise<WebNote[]> => {
+    const cachedData = getFromCache('webNotes');
+    if (cachedData) return cachedData;
+
+    const q = query(collections.webNotes, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const notes = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+        } as WebNote;
+    });
+    
+    setInCache('webNotes', notes);
+    return notes;
+};
+
+export const getWebNote = async (id: string): Promise<WebNote | null> => {
+    const docRef = doc(db, 'web_notes', id);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            ...data,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+        } as WebNote;
+    }
+    return null;
+};
+
+export const updateWebNote = async (
+    id: string, 
+    data: Partial<Omit<WebNote, 'id' | 'createdAt'>>,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(db, 'web_notes', id);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) throw new Error('Nota Web no encontrada');
+    
+    const originalData = docSnap.data() as WebNote;
+    const updateData: any = { ...data, updatedAt: serverTimestamp() }; 
+    
+    await updateDoc(docRef, updateData);
+    invalidateCache('webNotes');
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'commercial_note' as any,
+        entityId: id,
+        entityName: data.clientName || originalData.clientName,
+        details: `actualizó un pedido de Nota Web / Gacetilla de <strong>${data.clientName || originalData.clientName}</strong>`,
+        ownerName: data.advisorName || originalData.advisorName, 
+    });
+};
+
+export const deleteWebNote = async (id: string, userId: string, userName: string): Promise<void> => {
+    const docRef = doc(db, 'web_notes', id);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) return;
+    
+    const data = docSnap.data() as WebNote;
+    
+    await deleteDoc(docRef);
+    invalidateCache('webNotes');
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'commercial_note' as any,
+        entityId: id,
+        entityName: data.clientName,
+        details: `eliminó el pedido de Nota Web / Gacetilla de <strong>${data.clientName}</strong>`,
+        ownerName: data.advisorName,
+    });
+};
+
 export const getReportDataForAdvisors = async (advisorIds: string[]): Promise<any[]> => {
     const allOpps = await getOpportunities();
     const allPayments = await getPendingPaymentEntries();
