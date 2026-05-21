@@ -90,11 +90,6 @@ export default function CommercialNotesListPage() {
     return (
         <div className="flex flex-col h-full overflow-hidden">
             <Header title="Notas Comerciales">
-                <Button asChild>
-                    <Link href="/notas/new">
-                        <Plus className="mr-2 h-4 w-4" /> Nueva Nota
-                    </Link>
-                </Button>
             </Header>
             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
                 <div className="flex items-center space-x-2">
