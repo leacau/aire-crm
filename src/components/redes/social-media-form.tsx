@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocialMediaRequest, getAllUsers } from '@/lib/firebase-service'; 
+// 🟢 AGREGAMOS getAdvertisingOrder
+import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocialMediaRequest, getAllUsers, getAdvertisingOrder } from '@/lib/firebase-service'; 
 import { Client, SocialMediaRequest, User, CarouselSlide } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
@@ -19,16 +20,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { Spinner } from '@/components/ui/spinner';
-import { Save, ExternalLink, ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Save, ExternalLink, ArrowLeft, Loader2, Plus, Trash2, Link as LinkIcon } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { SocialMediaPdf } from './social-media-pdf';
 
-// 🟢 CORRECCIÓN: IMPORTS DE FIREBASE Y DATE-FNS PARA EL ID Y VUELTA
 import { arrayUnion } from 'firebase/firestore';
 import { format } from 'date-fns';
 
-export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?: string }) {
+// 🟢 AGREGAMOS orderId A LAS PROPS
+export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string, cloneId?: string, orderId?: string }) {
     const { userInfo, getGoogleAccessToken } = useAuth();
     const { toast } = useToast();
     const router = useRouter();
@@ -54,23 +55,23 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const [script, setScript] = useState('');
     const [observations, setObservations] = useState('');
 
-    // Específicos Story
     const [isWebReplication, setIsWebReplication] = useState(false);
     const [storyUrl, setStoryUrl] = useState('');
     const [storyCta, setStoryCta] = useState('');
     const [storyTagClient, setStoryTagClient] = useState(false);
     const [storyTagHandle, setStoryTagHandle] = useState('');
 
-    // Específicos Reel / Carrusel
     const [reelCopy, setReelCopy] = useState('');
     const [reelCollaboration, setReelCollaboration] = useState(false);
     const [reelCollabHandle, setReelCollabHandle] = useState('');
 
-    // Específicos Carrusel (Slides)
     const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([{ text: '', link: '' }]);
 
     const [advisorId, setAdvisorId] = useState('');
     const [advisorName, setAdvisorName] = useState('');
+    
+    // 🟢 ESTADO PARA GUARDAR EL TÍTULO DE LA ORDEN MADRE
+    const [orderTitle, setOrderTitle] = useState('');
 
     const [notifyOnSave, setNotifyOnSave] = useState(true);
     
@@ -132,6 +133,17 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
 
                         setAdvisorId(req.advisorId || userInfo?.id || '');
                         setAdvisorName(req.advisorName || userInfo?.name || '');
+                        
+                        if (req.orderId) setOrderTitle(req.orderTitle || 'Orden Vinculada');
+                    }
+                } else if (orderId) {
+                    // 🟢 SI VIENE DE UNA ORDEN MADRE, AUTO-COMPLETAMOS
+                    const parentOrder = await getAdvertisingOrder(orderId);
+                    if (parentOrder) {
+                        setClientId(parentOrder.clientId);
+                        setAdvisorId(parentOrder.createdBy || userInfo?.id || '');
+                        setAdvisorName(parentOrder.accountExecutive || userInfo?.name || '');
+                        setOrderTitle(parentOrder.product || parentOrder.opportunityTitle || 'Orden sin título');
                     }
                 } else {
                     setAdvisorId(userInfo?.id || '');
@@ -145,7 +157,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
             }
         };
         if (userInfo) init();
-    }, [userInfo, editId, cloneId, toast, canReassign]);
+    }, [userInfo, editId, cloneId, orderId, toast, canReassign]);
 
     const handleAddSlide = () => setCarouselSlides([...carouselSlides, { text: '', link: '' }]);
     const handleRemoveSlide = (idx: number) => {
@@ -173,41 +185,18 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
     const generateMultiPagePdf = async (element: HTMLElement) => {
         const page1 = element.querySelector('#social-pdf-page-1') as HTMLElement;
         const page2 = element.querySelector('#social-pdf-page-2') as HTMLElement;
-        
         if (!page1) throw new Error("No se encontraron las páginas del PDF");
-
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
-
         const processPage = async (pageElement: HTMLElement, pageNum: number) => {
             const canvas = await html2canvas(pageElement, { scale: 1.5, useCORS: true });
             const imgData = canvas.toDataURL('image/jpeg', 0.8);
-            
             if (pageNum > 1) pdf.addPage();
             pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-
-            const links = pageElement.querySelectorAll('a');
-            const elementRect = pageElement.getBoundingClientRect();
-
-            links.forEach((link) => {
-                const linkRect = link.getBoundingClientRect();
-                if (linkRect.width === 0 || linkRect.height === 0) return;
-                
-                const top = ((linkRect.top - elementRect.top) * pdfHeight) / elementRect.height;
-                const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
-                const width = (linkRect.width * pdfWidth) / elementRect.width;
-                const height = (linkRect.height * pdfHeight) / elementRect.height;
-                pdf.link(left, top, width, height, { url: link.href });
-            });
         };
-
         await processPage(page1, 1);
-        
-        if (page2) {
-            await processPage(page2, 2);
-        }
-
+        if (page2) await processPage(page2, 2);
         return pdf;
     };
 
@@ -243,7 +232,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
             const client = clients.find(c => c.id === clientId);
             
             const targetStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
-            const historyItem = {
+            const historyItem: any = {
                 timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
                 status: targetStatus,
                 userId: userInfo!.id,
@@ -262,6 +251,12 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 contentType, creator, publishDate, clientValidation,
                 objective, script, observations, materialUrl,
             };
+
+            // 🟢 VINCULAMOS AL PADRE
+            if (orderId) {
+                dataToSaveRaw.orderId = orderId;
+                dataToSaveRaw.orderTitle = orderTitle;
+            }
 
             if (contentType === 'Story') {
                 dataToSaveRaw.isWebReplication = isWebReplication;
@@ -284,7 +279,7 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
             }
 
             if (editId) {
-                dataToSaveRaw.approvalHistory = arrayUnion(historyItem);
+                dataToSaveRaw.approvalHistory = arrayUnion(historyItem) as any;
             } else {
                 dataToSaveRaw.approvalHistory = [historyItem];
             }
@@ -316,7 +311,6 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                                 <p style="margin-top: 15px;"><a href="${baseUrl}/approvals?tab=pending" style="display: inline-block; padding: 10px 20px; background-color: #1d4ed8; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px;">EVALUAR PEDIDO DE REDES</a></p>
                             </div>
                         `;
-                        
                         await sendEmail({
                             accessToken: token,
                             to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar'],
@@ -333,7 +327,12 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
               title: notifyOnSave ? 'Enviado a Revisión' : 'Guardado Provisorio', 
               description: notifyOnSave ? 'Pedido enviado a revisión exitosamente.' : 'Guardado en modo Borrador (No enviado).' 
             });
-            router.push('/redes');
+            // 🟢 REDIRECCIÓN INTELIGENTE AL PADRE
+            if (orderId) {
+                router.push(`/publicidad/${orderId}`);
+            } else {
+                router.push('/redes');
+            }
         } catch (error) {
             console.error("Error crítico al guardar el pedido:", error);
             toast({ title: 'Error al guardar', variant: 'destructive' });
@@ -358,18 +357,26 @@ export function SocialMediaForm({ editId, cloneId }: { editId?: string, cloneId?
                 </div>
             </div>
 
+            {/* 🟢 BANNER INFORMATIVO SI ESTÁ VINCULADO */}
+            {(orderId || editId && orderTitle) && (
+                <div className="bg-blue-50 border border-blue-200 p-3 rounded-md flex items-center gap-2 text-blue-800 text-sm font-medium">
+                    <LinkIcon className="w-4 h-4" />
+                    Ejecución vinculada a la Orden de Publicidad Madre: <strong>{orderTitle}</strong>
+                </div>
+            )}
+
             <Card>
                 <CardHeader><CardTitle>Datos Básicos</CardTitle></CardHeader>
                 <CardContent className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2"><Label>Cliente *</Label>
-                        <Select value={clientId} onValueChange={setClientId}>
-                            <SelectTrigger><SelectValue placeholder="Seleccione cliente..."/></SelectTrigger>
+                        <Select value={clientId} onValueChange={setClientId} disabled={!!orderId}>
+                            <SelectTrigger className={orderId ? "bg-slate-50 opacity-100" : ""}><SelectValue placeholder="Seleccione cliente..."/></SelectTrigger>
                             <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.razonSocial ? `${c.razonSocial} (${c.denominacion})` : c.denominacion}</SelectItem>)}</SelectContent>
                         </Select>
                     </div>
                     <div className="space-y-2">
                         <Label>Ejecutivo / Asesor</Label>
-                        {canReassign ? (
+                        {canReassign && !orderId ? (
                             <Select value={advisorId} onValueChange={(val) => {
                                 setAdvisorId(val);
                                 const u = users.find(x => x.id === val);
