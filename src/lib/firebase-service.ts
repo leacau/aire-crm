@@ -104,6 +104,40 @@ const parseDateWithTimezone = (dateString: string) => {
     return new Date(year, month - 1, day);
 };
 
+export const mutateCacheArray = (
+    cacheKey: string, 
+    itemId: string, 
+    newData: any | null, 
+    action: 'add' | 'update' | 'delete',
+    sortFn?: (a: any, b: any) => number // Opcional por si queremos reordenar tras agregar
+) => {
+    let cached = cache[cacheKey]?.data;
+    
+    // Si no está en RAM, probamos el localStorage
+    if (!cached && typeof window !== 'undefined') {
+        const localStr = localStorage.getItem(`crm_cache_${cacheKey}`);
+        if (localStr) {
+            try { cached = JSON.parse(localStr).data; } catch (e) {}
+        }
+    }
+
+    if (!cached || !Array.isArray(cached)) return; // Si no hay caché, no hacemos nada
+
+    let items = [...cached];
+
+    if (action === 'delete') {
+        items = items.filter(i => i.id !== itemId);
+    } else if (action === 'update') {
+        const index = items.findIndex(i => i.id === itemId);
+        if (index > -1) items[index] = { ...items[index], ...newData };
+    } else if (action === 'add' && newData) {
+        items.unshift({ id: itemId, ...newData }); // Insertamos primero
+        if (sortFn) items.sort(sortFn); // Reordenamos si hace falta
+    }
+
+    setInCache(cacheKey, items);
+};
+
 export type ClientTangoUpdate = {
     cuit?: string; tangoCompanyId?: string; idTango?: string; email?: string; phone?: string; rubro?: string; razonSocial?: string; denominacion?: string; idAireSrl?: string; idAireDigital?: string; condicionIVA?: string; provincia?: string; localidad?: string; tipoEntidad?: string; observaciones?: string;
 };
@@ -1088,7 +1122,7 @@ export const updateProspect = async (id: string, data: Partial<Omit<Prospect, 'i
     const prospectData = prospectSnap.data() as Prospect;
 
     await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
-    invalidateCache('prospects');
+    mutateCacheArray('prospects', id, updateData, 'update');
 
     let details = `actualizó el prospecto <strong>${prospectData.companyName}</strong>`;
     if (data.status && data.status !== prospectData.status) {
@@ -1114,7 +1148,7 @@ export const deleteProspect = async (id: string, userId: string, userName: strin
     const prospectData = prospectSnap.data() as Prospect;
 
     await deleteDoc(docRef);
-    invalidateCache('prospects');
+    mutateCacheArray('prospects', id, updateData, 'update');
 
     await logActivity({
         userId,
@@ -1945,7 +1979,7 @@ export const updateInvoice = async (id: string, data: Partial<Omit<Invoice, 'id'
     }
     
     await updateDoc(docRef, updateData);
-    invalidateCache('invoices');
+    mutateCacheArray('invoices', id, updateData, 'update');
 };
 
 export const deleteInvoice = async (id: string, userId: string, userName: string, ownerName: string): Promise<void> => {
@@ -2620,8 +2654,8 @@ export const updateClient = async (
         ...updateData,
         updatedAt: serverTimestamp()
     });
-    invalidateCache('clients');
-
+    mutateCacheArray('clients', id, updateData, 'update');
+    
     const newOwnerName = (data.ownerName !== undefined) ? data.ownerName : originalData.ownerName;
     const clientName = data.denominacion || originalData.denominacion;
 
@@ -3308,8 +3342,8 @@ export const updateOpportunity = async (
 
 
     await updateDoc(docRef, updateData);
-    invalidateCache('opportunities');
-
+mutateCacheArray('opportunities', id, updateData, 'update');
+    
      if (pendingInvoices && pendingInvoices.length > 0) {
         for (const invoiceData of pendingInvoices) {
             await createInvoice({
