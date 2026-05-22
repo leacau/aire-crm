@@ -597,7 +597,7 @@ export function AdvertisingForm() {
       }
   };
 
-  async function onSubmit(data: AdvertisingOrderFormValues) {
+ async function onSubmit(data: AdvertisingOrderFormValues) {
     if (!userInfo) return;
     setIsSubmitting(true);
     try {
@@ -646,11 +646,13 @@ export function AdvertisingForm() {
       const validSasItems = data.sasItems;
       const preview = getPreviewOrder();
       
-      const orderPayload: any = {
+      const rawPayload: any = {
         ...preview,
         status: targetStatus,
         clientId: data.clientId,
         clientName: selectedClient?.razonSocial || selectedClient?.denominacion || "Desconocido",
+        clientRazonSocial: selectedClient?.razonSocial || "",
+        clientCuit: selectedClient?.cuit || "",
         agencyId: data.agencyId === "none" ? undefined : data.agencyId,
         agencyName: data.agencyId === "none" ? undefined : selectedAgency?.name,
         opportunityId: finalOppId,
@@ -665,17 +667,17 @@ export function AdvertisingForm() {
         createdBy: orderCreatedBy || userInfo.id
       };
 
-      Object.keys(orderPayload).forEach(key => {
-          if (orderPayload[key] === undefined) delete orderPayload[key];
-      });
-      delete orderPayload.id;
+      // 🟢 LIMPIEZA PROFUNDA DE UNDEFINED (Evapora basura anidada en arrays o sub-objetos)
+      const cleanPayload = JSON.parse(JSON.stringify(rawPayload));
+      delete cleanPayload.id; // Limpiamos el ID falso que genera la vista previa
 
+      // Luego de limpiarlo de forma segura, le inyectamos los comandos especiales de Firebase
       if (editModeId) {
-          orderPayload.approvalHistory = arrayUnion(historyItem);
-          await updateAdvertisingOrder(editModeId, orderPayload, userInfo.id, userInfo.name);
+          cleanPayload.approvalHistory = arrayUnion(historyItem);
+          await updateAdvertisingOrder(editModeId, cleanPayload, userInfo.id, userInfo.name);
       } else {
-          orderPayload.approvalHistory = [historyItem];
-          await createAdvertisingOrder(orderPayload);
+          cleanPayload.approvalHistory = [historyItem];
+          await createAdvertisingOrder(cleanPayload);
       }
 
       if (notifyOnSave) {
