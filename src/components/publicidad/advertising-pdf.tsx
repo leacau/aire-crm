@@ -7,7 +7,7 @@ interface AdvertisingOrderPdfProps {
   order: AdvertisingOrder;
   programs: Program[];
   hidePrices?: boolean; 
-  hideSrl?: boolean; // 🟢 NUEVA PROPIEDAD PARA OCULTAR SRL A REDACCIÓN
+  hideSrl?: boolean;
 }
 
 export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPdfProps>(({ order, programs = [], hidePrices = false, hideSrl = false }, ref) => {
@@ -26,14 +26,12 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const srlItems = order.srlItems || [];
   const sasItems = order.sasItems || [];
   
-  // 🟢 ORDENAMOS LAS FACTURAS CRONOLÓGICAMENTE PARA EL PDF
   const sortedBrsSrl = [...(order.billingRequestsSrl || [])].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const sortedBrsSas = [...(order.billingRequestsSas || [])].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   
   const startDate = order.startDate ? new Date(order.startDate) : new Date();
   const endDate = order.endDate ? new Date(order.endDate) : new Date();
   
-  // 🟢 Calculamos los días del primer ciclo para la propuesta mensual
   let days: Date[] = [];
   try {
       const firstMonthStart = startDate;
@@ -47,7 +45,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       days = [new Date()];
   }
 
-  // 🟢 Cálculo de días y ciclos totales para mostrar en Vigencia
   const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
     ? Math.max(0, differenceInDays(endDate, startDate) + 1) : 0;
 
@@ -89,17 +86,16 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const sasAgencyAmount = sasBase * (sasCommissionPct / 100);
   const sasNetAction = sasTotalToInvoice - sasAgencyAmount;
 
-  // 🟢 SI HIDESRL ESTÁ ACTIVO, FORZAMOS HASSRL A FALSE PARA QUE NO DIBUJE NADA
   const hasSRL = !hideSrl && srlItems.length > 0;
   const hasSAS = sasItems.length > 0;
 
   const styles = {
       container: { width: '297mm', padding: '15mm', backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif', color: '#000', boxSizing: 'border-box' as const, fontSize: '11px' },
       header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #ccc', paddingBottom: '10px' },
-      clientInfoContainer: { marginBottom: '20px', backgroundColor: '#f9fafb', padding: '10px', borderRadius: '4px', border: '1px solid #e5e7eb' },
+      clientInfoContainer: { marginBottom: '20px', backgroundColor: '#eff6ff', padding: '10px', borderRadius: '4px', border: '1px solid #bfdbfe' },
       sectionTitle: { backgroundColor: '#e5e7eb', padding: '5px', fontWeight: 'bold', textTransform: 'uppercase' as const, fontSize: '12px', borderBottom: '2px solid #dc2626', marginBottom: '10px' },
-      dataRow: { display: 'flex', borderBottom: '1px solid #e5e7eb', padding: '4px 0', alignItems: 'flex-start' as const },
-      label: { fontWeight: 'bold', width: '100px' },
+      dataRow: { display: 'flex', borderBottom: '1px solid #bfdbfe', padding: '4px 0', alignItems: 'flex-start' as const },
+      label: { fontWeight: 'bold', width: '100px', color: '#1e3a8a' },
       table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '10px', marginBottom: '10px' },
       th: { border: '1px solid #9ca3af', padding: '5px 2px', backgroundColor: '#f3f4f6', textAlign: 'center' as const, fontWeight: 'bold' },
       td: { border: '1px solid #9ca3af', padding: '5px 2px', textAlign: 'center' as const },
@@ -111,7 +107,15 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     return (
         <div style={styles.clientInfoContainer}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div style={styles.dataRow}><span style={styles.label}>Cliente:</span><span>{order.clientName}</span></div>
+                <div style={{ ...styles.dataRow, gridColumn: 'span 2' }}>
+                    <span style={styles.label}>Anunciante:</span>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold' }}>
+                        {order.clientName}
+                        {order.clientRazonSocial ? ` / ${order.clientRazonSocial}` : ''}
+                        {order.clientCuit ? ` (CUIT: ${order.clientCuit})` : ''}
+                    </span>
+                </div>
+                
                 <div style={styles.dataRow}><span style={styles.label}>Agencia:</span><span>{order.agencyName || "-"}</span></div>
                 <div style={styles.dataRow}><span style={styles.label}>Producto:</span><span>{order.opportunityTitle || order.product || "-"}</span></div>
                 <div style={styles.dataRow}><span style={styles.label}>Orden Tango:</span><span>{order.tangoOrderNo || "-"}</span></div>
@@ -124,17 +128,19 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                         </span>
                     </span>
                 </div>
-                <div style={{ ...styles.dataRow, paddingBottom: '8px' }}>
+                <div style={{ ...styles.dataRow, paddingBottom: '8px', gridColumn: 'span 2' }}>
                     <span style={styles.label}>Materiales:</span>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
                         {(() => {
-                            // Compatibilidad con notas viejas y nuevas
                             const urls = order.materialUrls?.length ? order.materialUrls : (order.materialUrl ? [order.materialUrl] : []);
                             if (urls.length === 0) return <span>{order.materialSent ? "Sí (Adjunto)" : "Pendiente"}</span>;
                             
                             return urls.map((url, i) => {
-                                const isUrl = url.startsWith('http') || url.startsWith('www.');
-                                const linkHref = isUrl ? (url.startsWith('http') ? url : `https://${url}`) : undefined;
+                                const trimmedUrl = url.trim();
+                                // 🟢 Validación mejorada: si tiene un punto y no tiene espacios, asumimos que es un link
+                                const isUrl = trimmedUrl.includes('.') && !trimmedUrl.includes(' ');
+                                const linkHref = isUrl ? (trimmedUrl.startsWith('http') ? trimmedUrl : `https://${trimmedUrl}`) : undefined;
+                                
                                 if (isUrl) {
                                     return (
                                         <a key={i} href={linkHref} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '4px 8px', backgroundColor: '#eff6ff', borderRadius: '4px', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 'bold', textDecoration: 'none', fontSize: '10px' }}>
@@ -148,7 +154,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                     </div>
                 </div>
                 {order.observations && (
-                <div style={{ ...styles.dataRow, gridColumn: 'span 2' }}>
+                <div style={{ ...styles.dataRow, gridColumn: 'span 2', borderBottom: 'none' }}>
                     <span style={styles.label}>Obs:</span>
                     <span style={{ fontStyle: 'italic' }}>{order.observations}</span>
                 </div>
@@ -258,7 +264,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   const renderSRLSection = () => {
         if (!hasSRL) return null;
 
-        // 🟢 Filtramos solo los ítems mensuales por las dudas
         const itemsToRender = srlItems.filter(item => item.month === "Mensual" || !item.month);
         if (itemsToRender.length === 0) return null;
 
