@@ -3621,6 +3621,37 @@ export const getCoachingSessions = async (advisorId: string): Promise<CoachingSe
     });
 };
 
+export const getOpenCoachingSession = async (advisorId: string): Promise<CoachingSession | null> => {
+    const cacheKey = `open_session_${advisorId}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) return cached as CoachingSession;
+
+    // Si no está en caché, buscamos solo las últimas 5 para no consumir lecturas masivas
+    const q = query(
+        collections.coachingSessions, 
+        where('advisorId', '==', advisorId),
+        orderBy('date', 'desc'),
+        limit(5)
+    );
+    const snapshot = await getDocs(q);
+    
+    let openSession = null;
+    for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        if (data.status === 'Open') {
+            openSession = { 
+                id: docSnap.id, 
+                ...data,
+                createdAt: timestampToISO(data.createdAt) || new Date().toISOString(),
+            } as CoachingSession;
+            break;
+        }
+    }
+    
+    if (openSession) setInCache(cacheKey, openSession);
+    return openSession;
+};
+
 export const createCoachingSession = async (
     sessionData: Omit<CoachingSession, 'id' | 'createdAt' | 'status'>,
     userId: string, 
@@ -3630,7 +3661,6 @@ export const createCoachingSession = async (
         ...sessionData,
         status: 'Open',
         createdAt: serverTimestamp(),
-        // Generar IDs si no vienen (ej: al arrastrar tareas, ya vienen con ID y taskId)
         items: sessionData.items.map(item => ({
             ...item, 
             id: typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2),
@@ -3638,6 +3668,9 @@ export const createCoachingSession = async (
             originalCreatedAt: item.originalCreatedAt || new Date().toISOString()
         }))
     });
+    
+    // 🟢 LIMPIAMOS EL CACHÉ AL CREAR UNA NUEVA
+    invalidateCache(`open_session_${sessionData.advisorId}`);
     
     await logActivity({
         userId,
@@ -3657,6 +3690,8 @@ export const deleteCoachingSession = async (sessionId: string, userId: string, u
     const docRef = doc(db, 'coaching_sessions', sessionId);
     await deleteDoc(docRef);
     
+    invalidateCache(); // Limpieza global por seguridad
+
     await logActivity({
         userId,
         userName,
@@ -3672,6 +3707,10 @@ export const deleteCoachingSession = async (sessionId: string, userId: string, u
 export const updateCoachingSession = async (sessionId: string, data: Partial<CoachingSession>, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'coaching_sessions', sessionId);
     await updateDoc(docRef, data);
+    
+    // 🟢 Limpiamos caché de sesión abierta si se cierra
+    if (data.advisorId) invalidateCache(`open_session_${data.advisorId}`);
+    else invalidateCache(); 
 };
 
 export const updateCoachingItem = async (
@@ -4458,9 +4497,8 @@ export const autoUpdateCoachingSession = async (
 ) => {
     if (!advisorId || !entityId) return;
 
-    // 1. Buscar sesión abierta
-    const sessions = await getCoachingSessions(advisorId);
-    let openSession = sessions.find(s => s.status === 'Open');
+    // 1. Obtener sesión abierta optimizada (Costo: 0 lecturas de Firebase si ya está en caché local)
+    let openSession = await getOpenCoachingSession(advisorId);
 
     // 2. Crear sesión si no existe
     if (!openSession) {
@@ -4473,35 +4511,35 @@ export const autoUpdateCoachingSession = async (
             items: [],
             generalNotes: ''
         }, advisorId, 'Sistema');
-        openSession = { id: newSessionId, items: [] } as any;
+        openSession = { id: newSessionId, items: [], advisorId } as any;
     }
 
     const dateStr = format(new Date(), "dd/MM HH:mm");
     const newText = `[Agregado ${dateStr}] ${actionText}`;
 
-    // 3. Buscar si la entidad ya está en la sesión
-    const existingItemIndex = openSession!.items?.findIndex(i => 
+    // 3. Trabajar los arrays directamente en la memoria del navegador (Sin consultar a Firebase)
+    let updatedItems = [...(openSession!.items || [])];
+    
+    const existingItemIndex = updatedItems.findIndex(i => 
         i.entityId === entityId && 
         (i.status === 'Pendiente' || i.status === 'En Proceso')
-    ) ?? -1;
+    );
 
     if (existingItemIndex >= 0) {
-        // 4. Actualizar bitácora del ítem existente
-        const existingItem = openSession!.items[existingItemIndex];
+        // Modificar ítem existente
+        const existingItem = updatedItems[existingItemIndex];
         const updatedAdvisorNotes = existingItem.advisorNotes 
             ? `${existingItem.advisorNotes}\n\n${newText}` 
             : newText;
         
-        await updateCoachingItem(
-            openSession!.id, 
-            existingItem.id, 
-            { advisorNotes: updatedAdvisorNotes }, 
-            advisorId, 
-            advisorName
-        );
+        updatedItems[existingItemIndex] = {
+            ...existingItem,
+            advisorNotes: updatedAdvisorNotes,
+            lastUpdate: new Date().toISOString()
+        };
     } else {
-        // 5. Crear nuevo ítem en la sesión
-        const newItem: CoachingItem = {
+        // Crear nuevo ítem en la bitácora
+        updatedItems.push({
             id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
             taskId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
             originalCreatedAt: new Date().toISOString(),
@@ -4512,9 +4550,16 @@ export const autoUpdateCoachingSession = async (
             status: 'Pendiente',
             advisorNotes: '',
             origin: 'advisor'
-        };
-        await addItemsToSession(openSession!.id, [newItem]);
+        });
     }
+
+    // 4. GUARDADO DIRECTO (Costo: 1 escritura, 0 lecturas adicionales)
+    const sessionRef = doc(db, 'coaching_sessions', openSession!.id);
+    await updateDoc(sessionRef, { items: updatedItems });
+
+    // 5. Actualizar el caché en vivo para que el próximo prospecto sea inmediato
+    openSession!.items = updatedItems;
+    setInCache(`open_session_${advisorId}`, openSession);
 };
 
 // --- Mantenimiento Automático ---
