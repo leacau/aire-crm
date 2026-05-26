@@ -1097,8 +1097,14 @@ export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'create
         createdAt: serverTimestamp(),
     };
     const docRef = await addDoc(collections.prospects, dataToSave);
-    mutateCacheArray('prospects', docRef.id, newClientData, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
     
+    // 🟢 MUTADOR CORRECTO PARA PROSPECTOS (Usamos dataToSave y ordenamos por fecha)
+    mutateCacheArray('prospects', docRef.id, dataToSave, 'add', (a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+    });
+
     await logActivity({
         userId,
         userName,
@@ -1123,7 +1129,10 @@ export const updateProspect = async (id: string, data: Partial<Omit<Prospect, 'i
     if (!prospectSnap.exists()) throw new Error('Prospect not found');
     const prospectData = prospectSnap.data() as Prospect;
 
-    await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
+    const updateData = { ...data, updatedAt: serverTimestamp() };
+    await updateDoc(docRef, updateData);
+    
+    // 🟢 MUTADOR CORRECTO PARA EDICIÓN DE PROSPECTOS
     mutateCacheArray('prospects', id, updateData, 'update');
 
     let details = `actualizó el prospecto <strong>${prospectData.companyName}</strong>`;
@@ -1150,6 +1159,8 @@ export const deleteProspect = async (id: string, userId: string, userName: strin
     const prospectData = prospectSnap.data() as Prospect;
 
     await deleteDoc(docRef);
+    
+    // 🟢 MUTADOR CORRECTO PARA BORRADO DE PROSPECTOS
     mutateCacheArray('prospects', id, null, 'delete');
 
     await logActivity({
