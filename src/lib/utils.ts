@@ -21,3 +21,9 @@ export function cleanCuit(value: string | undefined | null): string {
     if (!value) return '';
     return value.replace(/\D/g, '');
 }
+
+// 🟢 Transforma nombres de clientes de "HOLA MUNDO" o "hola mundo" en "Hola Mundo"
+export function toTitleCase(str?: string): string {
+  if (!str) return '';
+  return str.toLowerCase().replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
+}
