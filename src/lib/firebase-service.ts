@@ -1953,18 +1953,19 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
       deletionMarkedAt: invoiceData.deletionMarkedAt ?? null,
       deletionMarkedById: invoiceData.deletionMarkedById ?? null,
       deletionMarkedByName: invoiceData.deletionMarkedByName ?? null,
-      // 🟢 Inserción de campos de carpeta
       periodStart: invoiceData.periodStart ?? null,
       periodEnd: invoiceData.periodEnd ?? null,
       orderDate: invoiceData.orderDate ?? null,
       orderNumber: invoiceData.orderNumber ?? null,
     };
     const docRef = await addDoc(collections.invoices, dataToSave);
-    mutateCacheArray('invoices', docRef.id, newClientData, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
     
+    // 🟢 MUTADOR CORRECTO PARA FACTURAS (Usamos dataToSave)
+    mutateCacheArray('invoices', docRef.id, dataToSave, 'add', (a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
+
    if (invoiceData.date && !invoiceData.isCreditNote) {
-        const monthKey = invoiceData.date.substring(0, 7); // Extrae "YYYY-MM"
-        const amountToLog = Math.abs(invoiceData.amount); // Tomamos el valor positivo
+        const monthKey = invoiceData.date.substring(0, 7);
+        const amountToLog = Math.abs(invoiceData.amount);
         
         await updateMonthlyBillingStat(monthKey, amountToLog, userId);
     }
@@ -1982,6 +1983,8 @@ export const updateInvoice = async (id: string, data: Partial<Omit<Invoice, 'id'
     }
     
     await updateDoc(docRef, updateData);
+    
+    // 🟢 MUTADOR CORRECTO PARA EDICIÓN DE FACTURAS
     mutateCacheArray('invoices', id, updateData, 'update');
 };
 
@@ -1991,6 +1994,8 @@ export const deleteInvoice = async (id: string, userId: string, userName: string
     const invoiceData = invoiceSnap.data();
 
     await deleteDoc(docRef);
+    
+    // 🟢 MUTADOR CORRECTO PARA BORRADO DE FACTURAS
     mutateCacheArray('invoices', id, null, 'delete');
 
     await logActivity({
