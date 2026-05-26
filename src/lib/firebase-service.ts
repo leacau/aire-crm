@@ -1094,12 +1094,17 @@ export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'create
         ownerName: userName,
         creatorId: userId,
         creatorName: userName,
-        createdAt: serverTimestamp(),
+        createdAt: serverTimestamp(), // Va a Firebase
     };
     const docRef = await addDoc(collections.prospects, dataToSave);
     
-    // 🟢 MUTADOR CORRECTO PARA PROSPECTOS (Usamos dataToSave y ordenamos por fecha)
-    mutateCacheArray('prospects', docRef.id, dataToSave, 'add', (a, b) => {
+    // 🟢 EL TRUCO: Para el caché visual, inyectamos un texto ISO real
+    const cacheData = {
+        ...dataToSave,
+        createdAt: new Date().toISOString()
+    };
+    
+    mutateCacheArray('prospects', docRef.id, cacheData, 'add', (a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return dateB - dateA;
@@ -1132,8 +1137,13 @@ export const updateProspect = async (id: string, data: Partial<Omit<Prospect, 'i
     const updateData = { ...data, updatedAt: serverTimestamp() };
     await updateDoc(docRef, updateData);
     
-    // 🟢 MUTADOR CORRECTO PARA EDICIÓN DE PROSPECTOS
-    mutateCacheArray('prospects', id, updateData, 'update');
+    // 🟢 Aplicamos la misma limpieza para la fecha de actualización
+    const cacheData = {
+        ...updateData,
+        updatedAt: new Date().toISOString()
+    };
+    
+    mutateCacheArray('prospects', id, cacheData, 'update');
 
     let details = `actualizó el prospecto <strong>${prospectData.companyName}</strong>`;
     if (data.status && data.status !== prospectData.status) {
@@ -2598,11 +2608,14 @@ export const createClient = async (
     userId?: string,
     userName?: string
 ): Promise<string> => {
+    // 🟢 NORMALIZAMOS LOS TEXTOS AQUÍ (Lo que hicimos antes)
     const denominacionLimpia = toTitleCase(clientData.denominacion);
     const razonSocialLimpia = clientData.razonSocial ? toTitleCase(clientData.razonSocial) : '';
-    
+
     const newClientData: any = {
         ...clientData,
+        denominacion: denominacionLimpia,
+        razonSocial: razonSocialLimpia,
         personIds: [],
         createdAt: serverTimestamp(),
         isDeactivated: false,
@@ -2624,7 +2637,14 @@ export const createClient = async (
     }
 
     const docRef = await addDoc(collections.clients, newClientData);
-    mutateCacheArray('clients', docRef.id, newClientData, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
+    
+    // 🟢 EL TRUCO EN APLICACIÓN PARA EL CLIENTE:
+    const cacheData = {
+        ...newClientData,
+        createdAt: new Date().toISOString(),
+        newClientDate: newClientData.isNewClient ? new Date().toISOString() : undefined
+    };
+    mutateCacheArray('clients', docRef.id, cacheData, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
     
     if (userId && userName) {
         await logActivity({
