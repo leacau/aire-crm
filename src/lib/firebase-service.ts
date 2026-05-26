@@ -1096,7 +1096,8 @@ export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'create
         createdAt: serverTimestamp(),
     };
     const docRef = await addDoc(collections.prospects, dataToSave);
-    invalidateCache('prospects');
+    mutateCacheArray('prospects', docRef.id, newClientData, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
+    
     await logActivity({
         userId,
         userName,
@@ -1148,7 +1149,7 @@ export const deleteProspect = async (id: string, userId: string, userName: strin
     const prospectData = prospectSnap.data() as Prospect;
 
     await deleteDoc(docRef);
-    mutateCacheArray('prospects', id, updateData, 'update');
+    mutateCacheArray('prospects', id, null, 'delete');
 
     await logActivity({
         userId,
@@ -1958,7 +1959,8 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
       orderNumber: invoiceData.orderNumber ?? null,
     };
     const docRef = await addDoc(collections.invoices, dataToSave);
-    invalidateCache('invoices');
+    mutateCacheArray('invoices', docRef.id, newClientData, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
+    
    if (invoiceData.date && !invoiceData.isCreditNote) {
         const monthKey = invoiceData.date.substring(0, 7); // Extrae "YYYY-MM"
         const amountToLog = Math.abs(invoiceData.amount); // Tomamos el valor positivo
@@ -1988,7 +1990,7 @@ export const deleteInvoice = async (id: string, userId: string, userName: string
     const invoiceData = invoiceSnap.data();
 
     await deleteDoc(docRef);
-    invalidateCache('invoices');
+    mutateCacheArray('invoices', id, null, 'delete');
 
     await logActivity({
         userId,
@@ -2602,7 +2604,7 @@ export const createClient = async (
     }
 
     const docRef = await addDoc(collections.clients, newClientData);
-    invalidateCache('clients');
+    mutateCacheArray('clients', docRef.id, newClientData, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
     
     if (userId && userName) {
         await logActivity({
@@ -2839,8 +2841,8 @@ export const deleteClient = async (
     batch.delete(clientRef);
 
     await batch.commit();
-    invalidateCache();
-
+    mutateCacheArray('clients', id, null, 'delete');
+    
     await logActivity({
         userId,
         userName,
@@ -2883,8 +2885,8 @@ export const bulkDeleteClients = async (clientIds: string[], userId: string, use
     }
   
     await batch.commit();
-    invalidateCache();
-  
+    mutateCacheArray('clients', id, null, 'delete');  
+    
     await logActivity({
       userId,
       userName,
@@ -3164,7 +3166,7 @@ export const createOpportunity = async (
 
 
     const docRef = await addDoc(collections.opportunities, dataToSave);
-    invalidateCache('opportunities');
+    mutateCacheArray('opportunities', docRef.id, newClientData, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
 
     await logActivity({
         userId,
@@ -3410,8 +3412,9 @@ export const deleteOpportunity = async (
     batch.delete(docRef);
 
     await batch.commit();
-    invalidateCache('opportunities');
-    invalidateCache('invoices');
+    mutateCacheArray('opportunities', id, null, 'delete');
+    mutateCacheArray('invoices', id, null, 'delete');
+   
 
     const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
     const clientOwnerName = clientSnap.exists() ? (clientSnap.data() as Client).ownerName : 'N/A';
