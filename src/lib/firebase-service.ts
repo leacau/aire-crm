@@ -9,6 +9,7 @@ import { defaultPermissions } from './data';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format } from 'date-fns';
+import { toTitleCase } from './utils';
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
@@ -2581,6 +2582,9 @@ export const createClient = async (
     userId?: string,
     userName?: string
 ): Promise<string> => {
+    const denominacionLimpia = toTitleCase(clientData.denominacion);
+    const razonSocialLimpia = clientData.razonSocial ? toTitleCase(clientData.razonSocial) : '';
+    
     const newClientData: any = {
         ...clientData,
         personIds: [],
@@ -2641,6 +2645,9 @@ export const updateClient = async (
     const originalData = originalDoc.data() as Client;
 
     const updateData: {[key: string]: any} = { ...data };
+
+    if (updateData.denominacion) updateData.denominacion = toTitleCase(updateData.denominacion);
+    if (updateData.razonSocial) updateData.razonSocial = toTitleCase(updateData.razonSocial);
     
     Object.keys(updateData).forEach(key => {
         if (updateData[key] === undefined) {
