@@ -3186,7 +3186,6 @@ export const getOpportunitiesForUser = async (userId: string): Promise<Opportuni
     return results.flatMap(snapshot => snapshot.docs.map(mapOpportunityDoc));
 };
 
-
 export const createOpportunity = async (
     opportunityData: Omit<Opportunity, 'id'>,
     userId: string,
@@ -3209,7 +3208,18 @@ export const createOpportunity = async (
 
 
     const docRef = await addDoc(collections.opportunities, dataToSave);
-    mutateCacheArray('opportunities', docRef.id, dataToSave, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
+    
+    // 🟢 MUTADOR CORRECTO PARA OPORTUNIDADES (Con el truco de la fecha local)
+    const cacheData = {
+        ...dataToSave,
+        createdAt: new Date().toISOString(),
+        stageChangedAt: new Date().toISOString()
+    };
+    mutateCacheArray('opportunities', docRef.id, cacheData, 'add', (a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+    });
 
     await logActivity({
         userId,
@@ -3312,7 +3322,6 @@ const createCommercialItemsFromOpportunity = async (opportunity: Opportunity, us
     }
 };
 
-
 export const updateOpportunity = async (
     id: string, 
     data: Partial<Omit<Opportunity, 'id'>>,
@@ -3328,7 +3337,6 @@ export const updateOpportunity = async (
 
     const clientSnap = await getDoc(doc(db, 'clients', originalData.clientId));
     if (!clientSnap.exists()) throw new Error("Client not found for opportunity update");
-    const clientData = clientSnap.data() as Client;
 
     const updateData: {[key: string]: any} = {
         ...data,
@@ -3367,7 +3375,6 @@ export const updateOpportunity = async (
         await createCommercialItemsFromOpportunity(fullOpportunityData, userId, userName);
     }
 
-
     if (data.bonificacionDetalle !== undefined && !data.bonificacionDetalle.trim()) {
         updateData.bonificacionEstado = deleteField();
         updateData.bonificacionAutorizadoPorId = deleteField();
@@ -3385,10 +3392,18 @@ export const updateOpportunity = async (
         updateData.createdAt = Timestamp.fromDate(new Date(updateData.createdAt));
     }
 
-
     await updateDoc(docRef, updateData);
-mutateCacheArray('opportunities', id, updateData, 'update');
     
+    // 🟢 MUTADOR CORRECTO PARA EDICIÓN DE OPORTUNIDADES (Con truco de fechas)
+    const cacheData = {
+        ...updateData,
+        updatedAt: new Date().toISOString(),
+    };
+    if (stageChanged) {
+        cacheData.stageChangedAt = new Date().toISOString();
+    }
+    mutateCacheArray('opportunities', id, cacheData, 'update');
+
      if (pendingInvoices && pendingInvoices.length > 0) {
         for (const invoiceData of pendingInvoices) {
             await createInvoice({
@@ -3397,7 +3412,6 @@ mutateCacheArray('opportunities', id, updateData, 'update');
             }, userId, userName, ownerName);
         }
     }
-
 
     const activityDetails = {
         userId,
@@ -3455,9 +3469,11 @@ export const deleteOpportunity = async (
     batch.delete(docRef);
 
     await batch.commit();
+    
+    // 🟢 MUTADOR CORRECTO PARA BORRADO DE OPORTUNIDADES
     mutateCacheArray('opportunities', id, null, 'delete');
-    mutateCacheArray('invoices', id, null, 'delete');
-   
+    // Las facturas las seguimos invalidando completas por precaución a desincronizaciones en cascada
+    invalidateCache('invoices');
 
     const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
     const clientOwnerName = clientSnap.exists() ? (clientSnap.data() as Client).ownerName : 'N/A';
