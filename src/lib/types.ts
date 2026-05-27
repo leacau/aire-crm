@@ -168,8 +168,8 @@ export type Opportunity = {
   proposalItems?: ProposalItem[];
   valorTarifario?: number; 
   finalizationDate?: string;
-  startDate?: string;       
-  endDate?: string;         
+  startDate?: string;        
+  endDate?: string;          
   periodHistory?: OpportunityPeriod[];
 };
 
@@ -469,6 +469,7 @@ export type ProgramSchedule = {
   endTime: string;   
 }
 
+// 🟢 CONFIGURACIÓN DINÁMICA DE TARIFAS
 export type ProgramRates = {
   spotRadio?: number;
   spotTv?: number;
@@ -476,6 +477,16 @@ export type ProgramRates = {
   pntMasBarrida?: number;
   auspicio?: number;
   notaComercial?: number;
+  [key: string]: number | undefined; // Permite infinitas columnas nuevas
+};
+
+export type SasProductConfig = {
+  id: string;
+  format: string;
+  type: string;
+  detail: string;
+  unitRate: number;
+  cpm: number;
 };
 
 export type Program = {
@@ -569,7 +580,6 @@ export type Interviewee = {
 
 export type ApprovalStatus = 'Borrador' | 'Pendiente' | 'Aprobado' | 'Devuelto' | 'Pendiente de Modificación';
 
-// 🟢 NUEVO: REGISTRO CRONOLÓGICO DE AUDITORÍA
 export type ApprovalHistoryItem = {
   timestamp: string;
   status: ApprovalStatus;
@@ -638,11 +648,9 @@ export type CommercialNote = {
   approvedAt?: string;
   approvedBy?: string;
   approvedByName?: string;
-  // 🟢 ARRAY DE HISTORIAL COMPARTIDO
   approvalHistory?: ApprovalHistoryItem[];
 };
 
-// 🟢 TIPOS ESPECÍFICOS PARA NOTAS WEB / GACETILLAS
 export type WebNoteFormat = 
   | 'Gacetilla de prensa enviada por la empresa'
   | 'Nota en web con entrevista telefónica'
@@ -662,22 +670,18 @@ export type WebNote = {
   advisorId: string;
   advisorName: string;
   
-  // Vínculo a la Orden Madre
   orderId?: string;
   orderTitle?: string;
 
-  // Datos de Contacto
   contactName: string;
   contactPhone: string;
   clientWebOrSocial?: string;
 
-  // Especificaciones
   objective: string;
   format: WebNoteFormat;
   imageSupport: WebNoteImageSupport;
-  inserts?: string; // Inserts de apoyo
+  inserts?: string; 
   
-  // Replicación en Redes (Checkboxes y selects)
   repIgStory?: boolean;
   repIgStoryProducer?: 'Produce Aire' | 'Envía Cte';
   repIgReel?: boolean;
@@ -687,15 +691,12 @@ export type WebNote = {
   clientIgHandle?: string;
   collaborateReel?: boolean;
   
-  // Archivos/Material
   materialUrl?: string;
   observations?: string;
 
-  // Tiempos e Historial
   createdAt: string;
   updatedAt?: string;
   
-  // Auditoría
   status?: ApprovalStatus;
   adminComments?: string;
   approvedAt?: string;
@@ -749,7 +750,6 @@ export type SocialMediaRequest = {
   approvedAt?: string;
   approvedBy?: string;
   approvedByName?: string;
-  // 🟢 ARRAY DE HISTORIAL COMPARTIDO
   approvalHistory?: ApprovalHistoryItem[];
 };
 
@@ -798,6 +798,8 @@ export type AdvertisingOrder = {
   id?: string;
   clientId: string;
   clientName?: string; 
+  clientRazonSocial?: string;
+  clientCuit?: string;
   agencyId?: string;
   agencyName?: string;
   product: string;
@@ -832,7 +834,6 @@ export type AdvertisingOrder = {
   approvedAt?: string;
   approvedBy?: string;
   approvedByName?: string;
-  // 🟢 ARRAY DE HISTORIAL COMPARTIDO
   approvalHistory?: ApprovalHistoryItem[];
 };
 
