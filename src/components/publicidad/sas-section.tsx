@@ -1,8 +1,9 @@
 // src/components/publicidad/sas-section.tsx
 "use client";
 
-import { useFieldArray, UseFormReturn } from "react-hook-form";
+import { useFieldArray, UseFormReturn, useWatch } from "react-hook-form";
 import { Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FormControl, FormField } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { sasFormats, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
+import { AdvertisingOrderFormValues } from "@/lib/validators/advertising";
+import { getSasProducts } from "@/lib/firebase-service";
+import { SasProductConfig } from "@/lib/types";
 
 interface SasSectionProps {
   form: UseFormReturn<AdvertisingOrderFormValues>;
@@ -25,11 +28,17 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
     name: "sasItems",
   });
 
-  const items = form.watch("sasItems");
+  const items = useWatch({ control: form.control, name: "sasItems" });
+
+  // 🟢 TRAEMOS EL INVENTARIO DINÁMICO
+  const [sasInventory, setSasInventory] = useState<SasProductConfig[]>([]);
+  useEffect(() => {
+      getSasProducts().then(setSasInventory);
+  }, []);
 
   if (!startDate || !endDate) return null;
 
-  const monthKey = "Mensual"; // Usamos una sola iteración
+  const monthKey = "Mensual";
 
   const subtotal = items.reduce((acc, item) => {
     let net = 0;
@@ -50,20 +59,23 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
   const agencyAmount = form.watch("agencySale") ? (taxableBase * (agencyCommissionPct / 100)) : 0;
   const netAction = totalToInvoice - agencyAmount;
 
-  const getTypeOptions = (format: string) => {
-    switch (format) {
-        case "Banner": return ["Display_tradicional", "RichMedia"];
-        case "Nota_Web": return ["Nota_Patrocinada_en_web", "Nota_patrocinada_en_web_con_video", "Gacetilla_de_prensa_enviada_por_la_empresa"];
-        case "Redes": return ["Reel", "Historia", "Carrusel"];
-        default: return [];
-    }
+  // 🟢 MOTORES DE FILTRADO DINÁMICOS BASADOS EN EL INVENTARIO
+  const activeFormats = Array.from(new Set(sasInventory.map(p => p.format))).filter(Boolean);
+  
+  const getTypesForFormat = (format: string) => {
+      return Array.from(new Set(sasInventory.filter(p => p.format === format).map(p => p.type))).filter(Boolean);
   };
 
-  const getDetailOptions = (format: string, type: string) => {
-      if (format === "Banner" && type === "Display_tradicional") return ["Banner 300 x 250", "Banner 300 x 600", "Banner 728 x 90", "Banner 970 x 200", "TopsiteBanner 300 x 600"];
-      if (format === "Banner" && type === "RichMedia") return ["Anuncio Previo (ITT)", "Zocalo", "Banner shopping (300*250)", "Banner shopping (300*600)", "Banner Full screen video"];
-      if (format === "Redes" && type === "Reel") return ["creador AIRE", "creador Cliente"];
-      return [];
+  const getDetailsForType = (format: string, type: string) => {
+      return Array.from(new Set(sasInventory.filter(p => p.format === format && p.type === type).map(p => p.detail))).filter(Boolean);
+  };
+
+  const applyProductRates = (index: number, format: string, type: string, detail: string) => {
+      const product = sasInventory.find(p => p.format === format && p.type === type && p.detail === detail);
+      if (product) {
+          form.setValue(`sasItems.${index}.unitRate`, product.unitRate || 0);
+          form.setValue(`sasItems.${index}.cpm`, product.cpm || 0);
+      }
   };
 
   return (
@@ -75,7 +87,7 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                     type="button" 
                     variant="outline" 
                     size="sm"
-                    onClick={() => append({ month: monthKey, format: "Banner", unitRate: 0, desktop: false, mobile: false, home: false, interiores: false })}
+                    onClick={() => append({ month: monthKey, format: activeFormats[0] || "", unitRate: 0, desktop: false, mobile: false, home: false, interiores: false })}
                 >
                     <Plus className="mr-2 h-4 w-4" /> Agregar Formato
                 </Button>
@@ -105,8 +117,8 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                             if (!item || item.month !== monthKey) return null;
 
                             const isCustom = item.format === "Personalizado";
-                            const typeOptions = getTypeOptions(item.format);
-                            const detailOptions = getDetailOptions(item.format, item.type || "");
+                            const typeOptions = getTypesForFormat(item.format);
+                            const detailOptions = getDetailsForType(item.format, item.type || "");
                             
                             let rowNet = 0;
                             if (item.format === "Banner") {
@@ -124,12 +136,14 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                                             render={({ field }) => (
                                                 <Select onValueChange={(val) => {
                                                     field.onChange(val);
-                                                    form.setValue(`sasItems.${index}.type`, undefined);
-                                                    form.setValue(`sasItems.${index}.detail`, undefined);
+                                                    form.setValue(`sasItems.${index}.type`, "");
+                                                    form.setValue(`sasItems.${index}.detail`, "");
+                                                    applyProductRates(index, val, "", "");
                                                 }} value={field.value}>
                                                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
-                                                        {sasFormats.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                                                        {activeFormats.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                                                        <SelectItem value="Personalizado" className="font-bold text-blue-600">Personalizado</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             )}
@@ -146,7 +160,8 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                                                     <Select 
                                                         onValueChange={(val) => {
                                                              field.onChange(val);
-                                                             form.setValue(`sasItems.${index}.detail`, undefined);
+                                                             form.setValue(`sasItems.${index}.detail`, "");
+                                                             applyProductRates(index, item.format, val, "");
                                                         }} 
                                                         value={field.value} 
                                                         disabled={typeOptions.length === 0}
@@ -174,7 +189,14 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                                                 control={form.control}
                                                 name={`sasItems.${index}.detail`}
                                                 render={({ field }) => (
-                                                     <Select onValueChange={field.onChange} value={field.value} disabled={detailOptions.length === 0}>
+                                                     <Select 
+                                                        onValueChange={(val) => {
+                                                            field.onChange(val);
+                                                            applyProductRates(index, item.format, item.type || "", val);
+                                                        }} 
+                                                        value={field.value} 
+                                                        disabled={detailOptions.length === 0}
+                                                     >
                                                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                                                         <SelectContent>
                                                             {detailOptions.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
