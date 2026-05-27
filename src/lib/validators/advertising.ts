@@ -1,31 +1,17 @@
-// src/lib/validators/advertising.ts
 import { z } from "zod";
 
 export const srlAdTypes = [
-  "Spot",
-  "PNT",
-  "Auspicio",
-  "Micro",
-  "Nota Comercial",
-  "Sorteo",
-  "Juego",
-  "Cobertura Festival",
-  "Personalizado" 
+  "Spot", "PNT", "Auspicio", "Micro", "Nota Comercial", "Sorteo", "Juego", "Cobertura Festival", "Personalizado" 
 ] as const;
 
 export const sasFormats = [
-  "Banner",
-  "Nota_Web",
-  "Redes",
-  "Cobertura Festival",
-  "Gacetilla de prensa",
-  "Personalizado" 
+  "Banner", "Nota_Web", "Redes", "Cobertura Festival", "Gacetilla de prensa", "Personalizado" 
 ] as const;
 
 export const srlItemSchema = z.object({
   month: z.string(), 
   programId: z.string().min(1, "Seleccione un programa"),
-  adType: z.enum(srlAdTypes),
+  adType: z.string().min(1, "Obligatorio"), // 🟢 AHORA ACEPTA TEXTOS DINÁMICOS
   customType: z.string().optional(), 
   hasTv: z.boolean().default(false),
   seconds: z.coerce.number().optional().default(0),
@@ -35,7 +21,7 @@ export const srlItemSchema = z.object({
 
 export const sasItemSchema = z.object({
   month: z.string(), 
-  format: z.enum(sasFormats),
+  format: z.string().min(1, "Obligatorio"), // 🟢 AHORA ACEPTA TEXTOS DINÁMICOS
   type: z.string().optional(),
   detail: z.string().optional(),
   customDetail: z.string().optional(), 
@@ -85,7 +71,6 @@ export const advertisingOrderSchema = z.object({
     amount: z.coerce.number().min(0).default(0)
   })).optional().default([]),
 }).superRefine((val, ctx) => {
-  // Validación de observación obligatoria si hay desajuste
   if ((val.adjustmentSrl > 0 || val.adjustmentSas > 0) && (!val.observations || val.observations.trim() === "")) {
       ctx.addIssue({
           code: z.ZodIssueCode.custom,
