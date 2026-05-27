@@ -4841,3 +4841,49 @@ export const getReportDataForAdvisors = async (advisorIds: string[]): Promise<an
     }
     return results;
 };
+// ============================================================================
+// --- DYNAMIC PRODUCTS CONFIG (SRL & SAS) ---
+// ============================================================================
+
+export const getSrlAdTypes = async (): Promise<string[]> => {
+    const cached = getFromCache('srl_ad_types');
+    if (cached) return cached as string[];
+    const snap = await getDoc(doc(collections.systemConfig, 'srl_ad_types'));
+    if (snap.exists()) {
+        const types = snap.data().types || [];
+        setInCache('srl_ad_types', types);
+        return types;
+    }
+    // Valores por defecto iniciales si la base de datos está vacía
+    return ["Spot", "PNT", "Auspicio", "Nota Comercial", "Sorteo", "Juego"];
+};
+
+export const saveSrlAdTypes = async (types: string[], userId: string, userName: string) => {
+    await setDoc(doc(collections.systemConfig, 'srl_ad_types'), { types });
+    invalidateCache('srl_ad_types');
+    await logActivity({
+        userId, userName, type: 'update', entityType: 'system_config' as any, entityId: 'srl_ad_types',
+        entityName: 'Tipos de Aviso SRL', details: 'actualizó la lista de formatos comerciales de Radio/TV.', ownerName: 'Sistema'
+    });
+};
+
+export const getSasProducts = async (): Promise<SasProductConfig[]> => {
+    const cached = getFromCache('sas_products');
+    if (cached) return cached as SasProductConfig[];
+    const snap = await getDoc(doc(collections.systemConfig, 'sas_products'));
+    if (snap.exists()) {
+        const prods = snap.data().products || [];
+        setInCache('sas_products', prods);
+        return prods;
+    }
+    return [];
+};
+
+export const saveSasProducts = async (products: SasProductConfig[], userId: string, userName: string) => {
+    await setDoc(doc(collections.systemConfig, 'sas_products'), { products });
+    invalidateCache('sas_products');
+    await logActivity({
+        userId, userName, type: 'update', entityType: 'system_config' as any, entityId: 'sas_products',
+        entityName: 'Productos Digitales SAS', details: 'actualizó el tarifario de productos digitales.', ownerName: 'Sistema'
+    });
+};
