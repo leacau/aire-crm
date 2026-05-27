@@ -3209,7 +3209,7 @@ export const createOpportunity = async (
 
 
     const docRef = await addDoc(collections.opportunities, dataToSave);
-    mutateCacheArray('opportunities', docRef.id, newClientData, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
+    mutateCacheArray('opportunities', docRef.id, dataToSave, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
 
     await logActivity({
         userId,
