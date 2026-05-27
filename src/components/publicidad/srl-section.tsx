@@ -5,7 +5,7 @@ import { useFieldArray, UseFormReturn, useWatch } from "react-hook-form";
 import { format, eachDayOfInterval, getDay, addDays, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import { Plus, Trash2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -14,25 +14,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FormControl, FormField } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
-import { srlAdTypes, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
+import { AdvertisingOrderFormValues } from "@/lib/validators/advertising";
+import { getSrlAdTypes } from "@/lib/firebase-service";
 
 interface Program {
     id: string;
     name: string;
-    schedules?: {
-        daysOfWeek: number[]; 
-        startTime: string;
-        endTime: string;
-    }[];
-    rates?: {
-        spotRadio?: number;
-        spotTv?: number;
-        pnt?: number;
-        pntMasBarrida?: number;
-        auspicio?: number;
-        notaComercial?: number;
-        [key: string]: number | undefined;
-    }
+    schedules?: { daysOfWeek: number[]; startTime: string; endTime: string; }[];
+    rates?: Record<string, number | undefined>;
 }
 
 interface SrlSectionProps {
@@ -49,6 +38,12 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
   });
 
   const items = useWatch({ control: form.control, name: "srlItems" });
+  
+  // 🟢 TRAEMOS LOS FORMATOS DIRECTO DE LA MATRIZ
+  const [dynamicAdTypes, setDynamicAdTypes] = useState<string[]>([]);
+  useEffect(() => {
+      getSrlAdTypes().then(setDynamicAdTypes);
+  }, []);
 
   useEffect(() => {
      items?.forEach((item, index) => {
@@ -61,12 +56,14 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
          let rate = 0;
          const hasTv = item.hasTv;
 
+         // 🟢 LOGICA HIBRIDA DE MAPEO
          if (item.adType === "Spot") rate = hasTv ? (program.rates.spotTv || 0) : (program.rates.spotRadio || 0);
          else if (item.adType === "PNT") rate = hasTv ? (program.rates.pntMasBarrida || 0) : (program.rates.pnt || 0);
+         else if (item.adType === "Auspicio") rate = program.rates.auspicio || program.rates['Auspicio'] || 0;
+         else if (item.adType === "Nota Comercial") rate = program.rates.notaComercial || program.rates['Nota Comercial'] || 0;
          else {
-             const keyMap: Record<string, string> = { "Auspicio": "auspicio", "Nota Comercial": "notaComercial" };
-             const rateKey = keyMap[item.adType];
-             if (rateKey) rate = program.rates[rateKey] || 0;
+             // Cualquier otro formato inventado ("Micro", "Móvil", etc.)
+             rate = program.rates[item.adType] || 0;
          }
 
          if (form.getValues(`srlItems.${index}.unitRate`) !== rate && rate > 0) {
@@ -77,13 +74,12 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
 
   if (!startDate || !endDate) return null;
 
-  // Calculamos las fechas del primer ciclo de 30/31 días exacto (Propuesta Mensual)
   const firstMonthStart = startDate;
   const firstMonthEnd = addDays(addMonths(startDate, 1), -1);
   const effectiveEnd = firstMonthEnd > endDate ? endDate : firstMonthEnd;
   const days = eachDayOfInterval({ start: firstMonthStart, end: effectiveEnd });
   
-  const monthKey = "Mensual"; // Usamos una key estática para la propuesta modelo
+  const monthKey = "Mensual";
 
   const subtotal = items?.reduce((acc, item) => {
     const dailySpots = item.dailySpots || {};
@@ -183,7 +179,10 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                                 <FormField control={form.control} name={`srlItems.${index}.adType`} render={({ field }) => (
                                     <Select onValueChange={field.onChange} value={field.value}>
                                         <SelectTrigger className="h-8 text-xs border-0 shadow-none focus:ring-1"><SelectValue /></SelectTrigger>
-                                        <SelectContent>{srlAdTypes.filter(t => t !== "Personalizado").map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                                        <SelectContent>
+                                            {/* 🟢 LLENADO DINÁMICO */}
+                                            {dynamicAdTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                        </SelectContent>
                                     </Select>
                                 )} />
                             )}
