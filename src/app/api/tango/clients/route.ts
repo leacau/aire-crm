@@ -10,14 +10,14 @@ export async function GET(request: Request) {
 
     try {
         // 🟢 CORRECCIÓN: Tango usa GET y los datos viajan en la URL (por el flag -G)
-        const tangoUrl = 'http://srv-tango-n:17000/Api/GetApiLiveQueryData?process=17961&fromDate=&toDate=&pageSize=2000&pageIndex=0&customQuery=0';
+        const tangoUrl = 'https://040896-002.connect.axoft.com/Api/GetApiLiveQueryData?process=17961&fromDate=&toDate=&pageSize=2000&pageIndex=0&customQuery=0';
 
         console.log(`Conectando a Tango (Company ${company})... URL: ${tangoUrl}`);
 
         const response = await fetch(tangoUrl, {
             method: 'GET',
             headers: {
-                'ApiAuthorization': '04f456ef-9fcc-4989-b8e8-efef61ff6d2b',
+                'ApiAuthorization': 'ab921495-0c29-4c12-a425-c507ee917228',
                 'Company': company,
             },
             // fetch en Next.js a veces cachea de forma agresiva. Le pedimos que siempre traiga datos frescos:
