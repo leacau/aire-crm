@@ -17,7 +17,7 @@ export async function GET(request: Request) {
         const response = await fetch(tangoUrl, {
             method: 'GET',
             headers: {
-                'ApiAuthorization': '995c8a42-bd4a-4f74-bcf3-88c826a954ec',
+                'ApiAuthorization': '04f456ef-9fcc-4989-b8e8-efef61ff6d2b',
                 'Company': company,
             },
             // fetch en Next.js a veces cachea de forma agresiva. Le pedimos que siempre traiga datos frescos:
