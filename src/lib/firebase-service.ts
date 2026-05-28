@@ -140,7 +140,7 @@ export const mutateCacheArray = (
 };
 
 export type ClientTangoUpdate = {
-    cuit?: string; tangoCompanyId?: string; idTango?: string; email?: string; phone?: string; rubro?: string; razonSocial?: string; denominacion?: string; idAireSrl?: string; idAireDigital?: string; condicionIVA?: string; provincia?: string; localidad?: string; tipoEntidad?: string; observaciones?: string;
+    cuit?: string; tangoCompanyId?: string; idTango?: string; email?: string; phone?: string; rubro?: string; razonSocial?: string; razonSocialTango?: string; denominacion?: string; idAireSrl?: string; idAireDigital?: string; condicionIVA?: string; provincia?: string; localidad?: string; tipoEntidad?: string; observaciones?: string;
 };
 
 // --- Commercial Notes Functions ---
@@ -2745,6 +2745,9 @@ export const updateClientTangoMapping = async (
 
     if (data.cuit && data.cuit.trim().length > 0) {
         updatePayload.cuit = data.cuit.trim();
+    }
+    if (data.razonSocialTango && data.razonSocialTango.trim().length > 0) {
+        updatePayload.razonSocialTango = data.razonSocialTango.trim();
     }
     if (data.tangoCompanyId && data.tangoCompanyId.toString().trim().length > 0) {
         updatePayload.tangoCompanyId = data.tangoCompanyId.toString().trim();
