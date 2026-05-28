@@ -199,6 +199,7 @@ export type Client = {
   id: string;
   denominacion: string;
   razonSocial: string;
+  razonSocialTango?: string;
   cuit?: string;
   idTango?: string;
   tangoCompanyId?: string;
