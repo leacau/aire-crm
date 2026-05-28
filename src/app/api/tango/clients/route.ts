@@ -9,15 +9,16 @@ export async function GET(request: Request) {
     }
 
     try {
-        const response = await fetch('http://srv-tango-n:17000/Api/GetApiLiveQueryData', {
-            method: 'POST', // Tango suele requerir POST si mandas body con --data, o lo pasamos por URL
+        // En un GET, los parámetros van directamente en la URL
+        const tangoUrl = 'http://srv-tango-n:17000/Api/GetApiLiveQueryData?process=17961&fromDate=&toDate=&pageSize=2000&pageIndex=0&customQuery=0';
+
+        const response = await fetch(tangoUrl, {
+            method: 'GET', // Usamos GET como en el curl original
             headers: {
                 'ApiAuthorization': '995c8a42-bd4a-4f74-bcf3-88c826a954ec',
                 'Company': company,
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: 'process=17961&fromDate=&toDate=&pageSize=2000&pageIndex=0&customQuery=0',
-            // Le pedimos hasta 2000 resultados de golpe para que traiga todos los clientes en 1 sola página
+                // Content-Type no es necesario en un GET porque no hay "body"
+            }
         });
 
         if (!response.ok) {
