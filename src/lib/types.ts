@@ -280,7 +280,8 @@ export type ActivityLog = {
     | 'opportunity_alerts_config'
     | 'payment'
     | 'commercial_note'
-    | 'social_media_request'; 
+    | 'social_media_request';
+    | 'pipeline_interaction';
   entityId: string;
   entityName: string;
   details: string; 
@@ -378,7 +379,7 @@ export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
-    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes', 'AppCanjes' 
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes', 'AppCanjes', 'Pipeline', 
 ] as const;
 
 export type ScreenName = typeof screenNames[number];
@@ -850,6 +851,24 @@ export type ConvenioCanje = {
   fechaInicio: string;
   fechaFin: string;
   observaciones?: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type PipelineInteraction = {
+  id?: string;
+  fecha: string;
+  empresa: string;
+  contacto?: string;
+  tipoInteraccion?: string;
+  resultado?: string;
+  montoHablado?: number;
+  proximoPaso?: string;
+  fechaFollowUp?: string;
+  estadoPipeline?: string;
+  observaciones?: string;
+  advisorId: string;
+  advisorName: string;
   createdAt: string;
   updatedAt?: string;
 };
