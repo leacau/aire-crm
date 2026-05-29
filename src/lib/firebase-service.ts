@@ -4937,3 +4937,53 @@ export const deletePipelineInteraction = async (id: string): Promise<void> => {
     await deleteDoc(docRef);
     mutateCacheArray('pipeline_interactions', id, null, 'delete');
 };
+
+export const bulkCreatePipelineInteractions = async (
+    interactions: Partial<PipelineInteraction>[],
+    userId: string,
+    userName: string
+): Promise<void> => {
+    if (!interactions || interactions.length === 0) return;
+    
+    const batch = writeBatch(db);
+    const createdItems: PipelineInteraction[] = [];
+
+    interactions.forEach(interaction => {
+        const docRef = doc(collection(db, 'pipeline_interactions'));
+        const dataToSave = {
+            ...interaction,
+            advisorId: userId,
+            advisorName: userName,
+            createdAt: serverTimestamp()
+        };
+        batch.set(docRef, dataToSave);
+        
+        createdItems.push({
+            id: docRef.id,
+            ...dataToSave,
+            createdAt: new Date().toISOString()
+        } as PipelineInteraction);
+    });
+
+    await batch.commit();
+    
+    // 🟢 Reflejamos todo en el caché masivamente al instante
+    createdItems.forEach(item => {
+        mutateCacheArray('pipeline_interactions', item.id!, item, 'add', (a, b) => {
+            const dateA = new Date(a.fecha).getTime();
+            const dateB = new Date(b.fecha).getTime();
+            return dateB - dateA;
+        });
+    });
+
+    await logActivity({
+        userId,
+        userName,
+        type: 'create',
+        entityType: 'pipeline_interaction' as any,
+        entityId: 'bulk_import',
+        entityName: `${interactions.length} interacciones`,
+        details: `importó <strong>${interactions.length}</strong> interacciones al pipeline desde un archivo`,
+        ownerName: userName
+    });
+};
