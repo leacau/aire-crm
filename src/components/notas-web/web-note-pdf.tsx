@@ -7,6 +7,24 @@ interface WebNotePdfProps {
 }
 
 export const WebNotePdf = forwardRef<HTMLDivElement, WebNotePdfProps>(({ note }, ref) => {
+  
+  // 🟢 ESCUDO ANTI-CRASHEOS DE FECHA
+  const getSafeDate = (dateVal: any) => {
+      if (!dateVal) return format(new Date(), 'dd/MM/yyyy HH:mm');
+      try {
+          // Si Firebase nos manda su objeto interno Timestamp "crudo"
+          if (typeof dateVal === 'object' && dateVal !== null && 'seconds' in dateVal) {
+              return format(new Date(dateVal.seconds * 1000), 'dd/MM/yyyy HH:mm');
+          }
+          // Si es un string o fecha normal
+          const d = new Date(dateVal);
+          if (isNaN(d.getTime())) return format(new Date(), 'dd/MM/yyyy HH:mm'); // Si no se puede leer, evita el crasheo
+          return format(d, 'dd/MM/yyyy HH:mm');
+      } catch (e) {
+          return format(new Date(), 'dd/MM/yyyy HH:mm'); // Fallback de emergencia
+      }
+  };
+
   return (
     <div ref={ref} className="bg-white text-black p-8 w-[210mm] min-h-[297mm] mx-auto text-sm font-sans pdf-block">
       {/* HEADER */}
@@ -17,7 +35,8 @@ export const WebNotePdf = forwardRef<HTMLDivElement, WebNotePdfProps>(({ note },
         </div>
         <div className="text-right">
           <p className="text-xs text-gray-500">Fecha de Carga</p>
-          <p className="font-bold">{note.createdAt ? format(new Date(note.createdAt), 'dd/MM/yyyy HH:mm') : format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+          {/* 🟢 APLICAMOS LA FUNCIÓN SEGURA */}
+          <p className="font-bold">{getSafeDate(note.createdAt)}</p>
         </div>
       </div>
 
