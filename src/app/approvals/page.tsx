@@ -26,10 +26,8 @@ import jsPDF from 'jspdf';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import { NotePdf } from '@/components/notas/note-pdf';
 import { SocialMediaPdf } from '@/components/redes/social-media-pdf';
-// 🟢 IMPORTAMOS EL PDF DE NOTAS WEB
 import { WebNotePdf } from '@/components/notas-web/web-note-pdf';
 
-// 🟢 AMPLIAMOS EL TYPE LOCAL
 type ApprovalItemType = 'Nota Comercial' | 'Pedido de Redes' | 'Orden de Publicidad' | 'Nota Web / Gacetilla';
 
 interface UnifiedApprovalItem {
@@ -81,7 +79,6 @@ function ApprovalsPageComponent() {
       const statusesToFetch: ApprovalStatus[] = ['Pendiente', 'Aprobado', 'Devuelto', 'Borrador', 'Pendiente de Modificación'];
       const isReviewer = isBoss || userInfo.role === 'Administracion' || userInfo.area === 'Pautado' || userInfo.role === 'Gerencia' || userInfo.role === 'Jefe';
       
-      // 🟢 SUMAMOS LA TABLA WEB NOTES A LA BÚSQUEDA
       const [notesSnap, socialSnap, ordersSnap, webNotesSnap, programsData] = await Promise.all([
         getDocs(query(collection(db, 'commercial_notes'), where('status', 'in', statusesToFetch))),
         getDocs(query(collection(db, 'social_media_requests'), where('status', 'in', statusesToFetch))),
@@ -156,7 +153,6 @@ function ApprovalsPageComponent() {
         });
       });
 
-      // 🟢 RECORREMOS E INSERTAMOS LAS NOTAS WEB
       webNotesSnap.forEach(d => {
           const data = d.data();
           const isOwner = data.advisorId === userInfo.id;
@@ -238,6 +234,103 @@ function ApprovalsPageComponent() {
     return pdf.output('datauristring').split(',')[1];
   };
 
+  // 🟢 MOTOR AVANZADO DE GENERACIÓN DE PDF PARA LA APROBACIÓN
+  const generateAdvancedPdf = async (containerElement: HTMLElement, itemType: ApprovalItemType) => {
+      // Configuramos la orientación de acuerdo a si es una Orden Comercial (Apaisada) o una Nota/Redes (Vertical)
+      const isLandscape = itemType === 'Orden de Publicidad';
+      const orientation = isLandscape ? 'l' : 'p';
+      const pdfWidthMm = isLandscape ? 297 : 210;
+      const pdfHeightMm = isLandscape ? 210 : 297;
+
+      const pdf = new jsPDF(orientation, 'mm', 'a4', true);
+
+      const topPaddingMm = 15;
+      const bottomPaddingMm = 15;
+      const usableHeightMm = pdfHeightMm - topPaddingMm - bottomPaddingMm;
+
+      const domWidthPx = containerElement.offsetWidth;
+      const mmToPx = domWidthPx / pdfWidthMm;
+      const pageHeightPx = pdfHeightMm * mmToPx;
+      const usableHeightPx = usableHeightMm * mmToPx;
+      const topPaddingPx = topPaddingMm * mmToPx;
+
+      const blocks = Array.from(containerElement.querySelectorAll('.pdf-block')) as HTMLElement[];
+      
+      blocks.forEach(b => b.style.marginTop = '0px');
+      void containerElement.offsetHeight;
+
+      let absoluteY = topPaddingPx;
+      let currentPageIndex = 0;
+
+      blocks.forEach((block) => {
+          const blockHeight = block.offsetHeight;
+          const blockMarginBottom = parseFloat(window.getComputedStyle(block).marginBottom) || 0;
+          const totalBlockHeight = blockHeight + blockMarginBottom;
+
+          const pageBottomLimit = (currentPageIndex * pageHeightPx) + topPaddingPx + usableHeightPx;
+
+          if (absoluteY + totalBlockHeight > pageBottomLimit && currentPageIndex >= 0) {
+              currentPageIndex++;
+              const targetY = (currentPageIndex * pageHeightPx) + topPaddingPx;
+              const marginToAdd = targetY - absoluteY;
+              
+              block.style.marginTop = `${marginToAdd}px`;
+              absoluteY = targetY + totalBlockHeight;
+          } else {
+              absoluteY += totalBlockHeight;
+          }
+      });
+
+      const canvas = await html2canvas(containerElement, { 
+          scale: 1.5, 
+          useCORS: true, 
+          logging: false,
+          backgroundColor: '#ffffff' 
+      });
+      
+      const imgData = canvas.toDataURL('image/jpeg', 0.8);
+      const ratio = canvas.width / canvas.height;
+      const mappedHeight = pdfWidthMm / ratio;
+
+      let heightLeft = mappedHeight;
+      let position = 0;
+      let currentPage = 1;
+
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidthMm, mappedHeight);
+      heightLeft -= pdfHeightMm;
+
+      while (heightLeft > 0) {
+          position -= pdfHeightMm;
+          pdf.addPage();
+          currentPage++;
+          pdf.addImage(imgData, 'JPEG', 0, position, pdfWidthMm, mappedHeight);
+          heightLeft -= pdfHeightMm;
+      }
+
+      // 🟢 MAPEO DE LINKS
+      const links = containerElement.querySelectorAll('a');
+      const elementRect = containerElement.getBoundingClientRect();
+
+      links.forEach((link) => {
+          const linkRect = link.getBoundingClientRect();
+          if (linkRect.width === 0 || linkRect.height === 0) return;
+          
+          const topInPx = linkRect.top - elementRect.top;
+          const topInMm = (topInPx * mappedHeight) / elementRect.height;
+          const sliceIndex = Math.floor(topInMm / pdfHeightMm);
+          const topOnPage = topInMm - (sliceIndex * pdfHeightMm);
+
+          const left = ((linkRect.left - elementRect.left) * pdfWidthMm) / elementRect.width;
+          const width = (linkRect.width * pdfWidthMm) / elementRect.width;
+          const linkH = (linkRect.height * mappedHeight) / elementRect.height;
+
+          pdf.setPage(sliceIndex + 1);
+          pdf.link(left, topOnPage, width, linkH, { url: link.href });
+      });
+
+      return pdf;
+  };
+
   const submitEvaluation = async () => {
     if (!selectedItem || !actionType || !userInfo) return;
     
@@ -303,14 +396,9 @@ function ApprovalsPageComponent() {
 
       } else if (actionType === 'Aprobado' && documentContainerRef.current) {
         const elementToCapture = documentContainerRef.current.firstChild as HTMLElement;
-        const canvas = await html2canvas(elementToCapture, { scale: 1.5, useCORS: true, logging: false, backgroundColor: '#ffffff' });
-        const imgData = canvas.toDataURL('image/jpeg', 0.8);
         
-        const docPdf = new jsPDF('p', 'mm', 'a4', true);
-        const pdfWidth = 210; 
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        
-        docPdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        // 🟢 USAMOS EL NUEVO GENERADOR AVANZADO PARA PRESERVAR LINKS Y PÁGINAS
+        const docPdf = await generateAdvancedPdf(elementToCapture, selectedItem.type);
         const orderBase64 = docPdf.output('datauristring').split(',')[1];
 
         let clientBase64 = '';
@@ -359,7 +447,6 @@ function ApprovalsPageComponent() {
       case 'Nota Comercial': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'Pedido de Redes': return 'bg-pink-100 text-pink-800 border-pink-200';
       case 'Orden de Publicidad': return 'bg-purple-100 text-purple-800 border-purple-200';
-      // 🟢 COLOR NARANJA PARA NOTAS WEB
       case 'Nota Web / Gacetilla': return 'bg-orange-100 text-orange-800 border-orange-200';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -479,7 +566,6 @@ function ApprovalsPageComponent() {
                  {selectedItem?.type === 'Nota Comercial' && <NotePdf note={selectedItem.rawData} programs={programs} />}
                  {selectedItem?.type === 'Pedido de Redes' && <SocialMediaPdf request={selectedItem.rawData} />}
                  {selectedItem?.type === 'Orden de Publicidad' && <AdvertisingOrderPdf order={selectedItem.rawData} programs={programs} />}
-                 {/* 🟢 AGREGADO DEL COMPONENTE DE NOTA WEB AL MODAL */}
                  {selectedItem?.type === 'Nota Web / Gacetilla' && <WebNotePdf note={selectedItem.rawData} />}
             </div>
             
