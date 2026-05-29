@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { Eye, CheckCircle2, XCircle, Clock, Edit3, ArrowRight, History } from 'lucide-react';
+import { Eye, CheckCircle2, XCircle, Clock, Edit3, ArrowRight, History, Send } from 'lucide-react';
 import type { ApprovalStatus, Program, Client, ApprovalHistoryItem } from '@/lib/types';
 import { getPrograms, getUserById, getClient } from '@/lib/firebase-service';
 import { sendEmail } from '@/lib/google-gmail-service';
@@ -59,6 +59,10 @@ function ApprovalsPageComponent() {
   const [adminComments, setAdminComments] = useState('');
   const [actionType, setActionType] = useState<'Aprobado' | 'Devuelto' | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // 🟢 ESTADOS PARA LA RENOTIFICACIÓN
+  const [renotifyingItem, setRenotifyingItem] = useState<UnifiedApprovalItem | null>(null);
+  const hiddenDocumentContainerRef = useRef<HTMLDivElement>(null);
 
   const searchParams = useSearchParams();
   const initialTab = searchParams.get('tab') || 'pending';
@@ -234,9 +238,8 @@ function ApprovalsPageComponent() {
     return pdf.output('datauristring').split(',')[1];
   };
 
-  // 🟢 MOTOR AVANZADO DE GENERACIÓN DE PDF PARA LA APROBACIÓN
+  // 🟢 MOTOR AVANZADO DE GENERACIÓN DE PDF PARA LA APROBACIÓN Y RENOTIFICACIÓN
   const generateAdvancedPdf = async (containerElement: HTMLElement, itemType: ApprovalItemType) => {
-      // Configuramos la orientación de acuerdo a si es una Orden Comercial (Apaisada) o una Nota/Redes (Vertical)
       const isLandscape = itemType === 'Orden de Publicidad';
       const orientation = isLandscape ? 'l' : 'p';
       const pdfWidthMm = isLandscape ? 297 : 210;
@@ -307,7 +310,7 @@ function ApprovalsPageComponent() {
           heightLeft -= pdfHeightMm;
       }
 
-      // 🟢 MAPEO DE LINKS
+      // MAPEO DE LINKS
       const links = containerElement.querySelectorAll('a');
       const elementRect = containerElement.getBoundingClientRect();
 
@@ -331,6 +334,55 @@ function ApprovalsPageComponent() {
       return pdf;
   };
 
+  // 🟢 ENCARGADO DE CONSTRUIR EL PDF Y DESPACHAR EL MAIL (REUTILIZABLE)
+  const dispatchApprovalEmail = async (item: UnifiedApprovalItem, containerElement: HTMLElement, isRenotification: boolean = false) => {
+    const accessToken = await getGoogleAccessToken();
+    if (!accessToken) throw new Error("No se pudo obtener la autorización de Gmail.");
+
+    const sellerId = item.rawData.advisorId || item.rawData.createdBy || item.rawData.creatorId;
+    let sellerEmail = userInfo!.email; 
+    if (sellerId) {
+      const sellerProfile = await getUserById(sellerId);
+      if (sellerProfile?.email) sellerEmail = sellerProfile.email;
+    }
+
+    const docPdf = await generateAdvancedPdf(containerElement, item.type);
+    const orderBase64 = docPdf.output('datauristring').split(',')[1];
+
+    let clientBase64 = '';
+    if (item.clientId) {
+      const clientObj = await getClient(item.clientId);
+      if (clientObj) clientBase64 = generateClientSummaryPdfBase64(clientObj);
+    }
+
+    const attachments = [
+      { filename: `${item.type.replace(/ /g, '_')}_${item.clientName.replace(/ /g, '_')}.pdf`, content: orderBase64, encoding: 'base64' }
+    ];
+    if (clientBase64) {
+      attachments.push({ filename: `Alta_Cliente_${item.clientName.replace(/ /g, '_')}.pdf`, content: clientBase64, encoding: 'base64' });
+    }
+
+    const titleHtml = isRenotification 
+      ? '<h2 style="color: #ea580c;">✓ Pedido Re-enviado (Renotificación)</h2>'
+      : '<h2 style="color: #16a34a;">✓ Pedido Ingresado Correctamente</h2>';
+
+    const approvalEmailBody = `
+      <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        ${titleHtml}
+        <p>Se informa que el Centro de Revisión ha aprobado de manera definitiva la carga de <strong>${item.type}</strong> para el cliente <strong>${item.clientName}</strong>.</p>
+        <p>Se adjuntan los PDFs finales de carga y alta comercial correspondientes.</p>
+      </div>
+    `;
+
+    await sendEmail({
+      accessToken,
+      to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar', sellerEmail],
+      subject: `INGRESO CORRECTO - ${item.type}: ${item.clientName}`,
+      body: approvalEmailBody,
+      attachments
+    });
+  };
+
   const submitEvaluation = async () => {
     if (!selectedItem || !actionType || !userInfo) return;
     
@@ -341,16 +393,6 @@ function ApprovalsPageComponent() {
 
     setIsSaving(true);
     try {
-      const accessToken = await getGoogleAccessToken();
-      if (!accessToken) throw new Error("No se pudo obtener la autorización de Gmail.");
-
-      const sellerId = selectedItem.rawData.advisorId || selectedItem.rawData.createdBy || selectedItem.rawData.creatorId;
-      let sellerEmail = userInfo.email; 
-      if (sellerId) {
-        const sellerProfile = await getUserById(sellerId);
-        if (sellerProfile?.email) sellerEmail = sellerProfile.email;
-      }
-
       const historyItem: any = {
         timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
         status: actionType,
@@ -373,62 +415,38 @@ function ApprovalsPageComponent() {
         approvalHistory: arrayUnion(historyItem)
       });
 
-      const baseUrl = window.location.origin;
-
       if (actionType === 'Devuelto') {
-        const returnEmailBody = `
-          <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-            <h2 style="color: #dc2626;">Corrección Requerida en tu Pedido</h2>
-            <p>Hola <strong>${selectedItem.advisorName}</strong>,</p>
-            <p>Tu solicitud de <strong>${selectedItem.type}</strong> para el cliente <strong>${selectedItem.clientName}</strong> requiere correcciones.</p>
-            <p><strong>Observaciones de Administración:</strong> "${adminComments.trim()}"</p>
-            <p>Para ingresar rápidamente a revisar las solicitudes devueltas y corregir los datos, haz clic en el siguiente enlace:</p>
-            <p><a href="${baseUrl}/approvals?tab=returned" style="display: inline-block; padding: 10px 20px; background-color: #dc2626; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">IR A CORREGIR PEDIDO</a></p>
-          </div>
-        `;
+        const accessToken = await getGoogleAccessToken();
+        if (accessToken) {
+            const sellerId = selectedItem.rawData.advisorId || selectedItem.rawData.createdBy || selectedItem.rawData.creatorId;
+            let sellerEmail = userInfo.email; 
+            if (sellerId) {
+                const sellerProfile = await getUserById(sellerId);
+                if (sellerProfile?.email) sellerEmail = sellerProfile.email;
+            }
 
-        await sendEmail({
-          accessToken,
-          to: [sellerEmail, 'lchena@airedesantafe.com.ar'],
-          subject: `Corrección Requerida - ${selectedItem.type}: ${selectedItem.clientName}`,
-          body: returnEmailBody
-        });
+            const baseUrl = window.location.origin;
+            const returnEmailBody = `
+            <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                <h2 style="color: #dc2626;">Corrección Requerida en tu Pedido</h2>
+                <p>Hola <strong>${selectedItem.advisorName}</strong>,</p>
+                <p>Tu solicitud de <strong>${selectedItem.type}</strong> para el cliente <strong>${selectedItem.clientName}</strong> requiere correcciones.</p>
+                <p><strong>Observaciones de Administración:</strong> "${adminComments.trim()}"</p>
+                <p>Para ingresar rápidamente a revisar las solicitudes devueltas y corregir los datos, haz clic en el siguiente enlace:</p>
+                <p><a href="${baseUrl}/approvals?tab=returned" style="display: inline-block; padding: 10px 20px; background-color: #dc2626; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">IR A CORREGIR PEDIDO</a></p>
+            </div>
+            `;
 
+            await sendEmail({
+            accessToken,
+            to: [sellerEmail, 'lchena@airedesantafe.com.ar'],
+            subject: `Corrección Requerida - ${selectedItem.type}: ${selectedItem.clientName}`,
+            body: returnEmailBody
+            });
+        }
       } else if (actionType === 'Aprobado' && documentContainerRef.current) {
         const elementToCapture = documentContainerRef.current.firstChild as HTMLElement;
-        
-        // 🟢 USAMOS EL NUEVO GENERADOR AVANZADO PARA PRESERVAR LINKS Y PÁGINAS
-        const docPdf = await generateAdvancedPdf(elementToCapture, selectedItem.type);
-        const orderBase64 = docPdf.output('datauristring').split(',')[1];
-
-        let clientBase64 = '';
-        if (selectedItem.clientId) {
-          const clientObj = await getClient(selectedItem.clientId);
-          if (clientObj) clientBase64 = generateClientSummaryPdfBase64(clientObj);
-        }
-
-        const attachments = [
-          { filename: `${selectedItem.type.replace(/ /g, '_')}_${selectedItem.clientName.replace(/ /g, '_')}.pdf`, content: orderBase64, encoding: 'base64' }
-        ];
-        if (clientBase64) {
-          attachments.push({ filename: `Alta_Cliente_${selectedItem.clientName.replace(/ /g, '_')}.pdf`, content: clientBase64, encoding: 'base64' });
-        }
-
-        const approvalEmailBody = `
-          <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-            <h2 style="color: #16a34a;">✓ Pedido Ingresado Correctamente</h2>
-            <p>Se informa que el Centro de Revisión ha aprobado de manera definitiva la carga de <strong>${selectedItem.type}</strong> para el cliente <strong>${selectedItem.clientName}</strong>.</p>
-            <p>Se adjuntan los PDFs finales de carga y alta comercial correspondientes.</p>
-          </div>
-        `;
-
-        await sendEmail({
-          accessToken,
-          to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar', sellerEmail],
-          subject: `INGRESO CORRECTO - ${selectedItem.type}: ${selectedItem.clientName}`,
-          body: approvalEmailBody,
-          attachments
-        });
+        await dispatchApprovalEmail(selectedItem, elementToCapture, false);
       }
 
       toast({ title: `Documento marcado como ${actionType} exitosamente.` });
@@ -442,6 +460,29 @@ function ApprovalsPageComponent() {
     }
   };
 
+  // 🟢 LÓGICA DE RENOTIFICACIÓN
+  const handleRenotify = async (item: UnifiedApprovalItem) => {
+    setRenotifyingItem(item);
+    
+    // Dejamos un pequeño delay para que React dibuje el PDF oculto en el DOM
+    setTimeout(async () => {
+      try {
+        if (hiddenDocumentContainerRef.current && hiddenDocumentContainerRef.current.firstChild) {
+          const elementToCapture = hiddenDocumentContainerRef.current.firstChild as HTMLElement;
+          await dispatchApprovalEmail(item, elementToCapture, true);
+          toast({ title: 'Notificación reenviada correctamente.' });
+        } else {
+          throw new Error("No se pudo generar el documento.");
+        }
+      } catch (error) {
+        console.error("Error al renotificar:", error);
+        toast({ title: 'Error al reenviar el correo', variant: 'destructive' });
+      } finally {
+        setRenotifyingItem(null);
+      }
+    }, 800);
+  };
+
   const getTypeColorClass = (type: ApprovalItemType) => {
     switch(type) {
       case 'Nota Comercial': return 'bg-blue-100 text-blue-800 border-blue-200';
@@ -452,7 +493,12 @@ function ApprovalsPageComponent() {
     }
   };
 
-  const renderTable = (data: UnifiedApprovalItem[], showActions: boolean = true) => (
+  const isReviewer = userInfo && (isBoss || userInfo.role === 'Administracion' || userInfo.area === 'Pautado' || userInfo.role === 'Gerencia' || userInfo.role === 'Jefe');
+  // Solo Admins/Jefes/Gerencia pueden renotificar
+  const canRenotify = userInfo && (isBoss || userInfo.role === 'Administracion' || userInfo.role === 'Jefe' || userInfo.role === 'Gerencia');
+
+  // 🟢 AGREGAMOS "isApprovedTab" A LOS PARÁMETROS PARA MOSTRAR ACCIONES EN LA PESTAÑA DE APROBADOS
+  const renderTable = (data: UnifiedApprovalItem[], showActions: boolean = true, isApprovedTab: boolean = false) => (
     <div className="rounded-md border bg-white shadow-sm overflow-hidden">
       <Table>
         <TableHeader className="bg-slate-50">
@@ -482,6 +528,19 @@ function ApprovalsPageComponent() {
                 <TableCell className="text-muted-foreground truncate max-w-xs">{item.title}</TableCell>
                 {showActions && (
                   <TableCell className="text-right">
+                    {/* 🟢 BOTÓN DE RENOTIFICACIÓN */}
+                    {isApprovedTab && canRenotify && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="mr-2 border-green-200 text-green-700 hover:bg-green-50" 
+                        onClick={() => handleRenotify(item)} 
+                        disabled={renotifyingItem?.id === item.id}
+                      >
+                        {renotifyingItem?.id === item.id ? <Spinner size="small" className="mr-2" /> : <Send className="w-4 h-4 mr-2" />} 
+                        {renotifyingItem?.id === item.id ? 'Enviando...' : 'Renotificar'}
+                      </Button>
+                    )}
                     <Button variant="secondary" size="sm" onClick={() => openEvaluationModal(item)}>
                       <Eye className="w-4 h-4 mr-2" /> Evaluar
                     </Button>
@@ -502,8 +561,6 @@ function ApprovalsPageComponent() {
   const pendingItems = items.filter(i => i.status === 'Pendiente' || i.status === 'Pendiente de Modificación');
   const approvedItems = items.filter(i => i.status === 'Aprobado');
   const returnedItems = items.filter(i => i.status === 'Devuelto' || i.status === 'Borrador');
-
-  const isReviewer = userInfo && (isBoss || userInfo.role === 'Administracion' || userInfo.area === 'Pautado');
 
   return (
     <div className="flex flex-col h-full bg-slate-50/50">
@@ -532,11 +589,21 @@ function ApprovalsPageComponent() {
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="pending" className="mt-0">{renderTable(pendingItems, true)}</TabsContent>
-          <TabsContent value="approved" className="mt-0">{renderTable(approvedItems, false)}</TabsContent>
-          <TabsContent value="returned" className="mt-0">{renderTable(returnedItems, true)}</TabsContent>
+          <TabsContent value="pending" className="mt-0">{renderTable(pendingItems, true, false)}</TabsContent>
+          <TabsContent value="approved" className="mt-0">{renderTable(approvedItems, true, true)}</TabsContent>
+          <TabsContent value="returned" className="mt-0">{renderTable(returnedItems, true, false)}</TabsContent>
         </Tabs>
       </main>
+
+      {/* 🟢 CONTENEDOR OCULTO PARA GENERAR PDF DE RENOTIFICACIÓN */}
+      <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
+        <div ref={hiddenDocumentContainerRef} className="w-fit mx-auto bg-white shadow-2xl border border-slate-300 relative">
+          {renotifyingItem?.type === 'Nota Comercial' && <NotePdf note={renotifyingItem.rawData} programs={programs} />}
+          {renotifyingItem?.type === 'Pedido de Redes' && <SocialMediaPdf request={renotifyingItem.rawData} />}
+          {renotifyingItem?.type === 'Orden de Publicidad' && <AdvertisingOrderPdf order={renotifyingItem.rawData} programs={programs} />}
+          {renotifyingItem?.type === 'Nota Web / Gacetilla' && <WebNotePdf note={renotifyingItem.rawData} />}
+        </div>
+      </div>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-[96vw] xl:max-w-[1400px] h-[95vh] flex flex-col p-0 overflow-hidden bg-slate-200 border-0">
