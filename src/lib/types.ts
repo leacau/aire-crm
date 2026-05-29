@@ -280,7 +280,7 @@ export type ActivityLog = {
     | 'opportunity_alerts_config'
     | 'payment'
     | 'commercial_note'
-    | 'social_media_request';
+    | 'social_media_request'
     | 'pipeline_interaction';
   entityId: string;
   entityName: string;
@@ -379,7 +379,7 @@ export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
-    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes', 'AppCanjes', 'Pipeline', 
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes', 'AppCanjes', 'Pipeline'
 ] as const;
 
 export type ScreenName = typeof screenNames[number];
