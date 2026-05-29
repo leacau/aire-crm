@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Copy, Loader2, Mail, Send } from "lucide-react";
-import { AdvertisingOrder, Program } from "@/lib/types";
+import { FileText, Download, Copy, Loader2, Mail, Send, Edit, Trash2 } from "lucide-react";
+import { AdvertisingOrder, Program, WebNote } from "@/lib/types";
 import { AdvertisingOrderPdf } from "./advertising-pdf";
 import { format } from "date-fns";
 import { useRouter } from "next/navigation";
@@ -13,7 +13,10 @@ import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
-import { getBillingRequestsByOrder, getClient } from "@/lib/firebase-service"; // 🟢 Añadido getClient
+import { getBillingRequestsByOrder, getClient } from "@/lib/firebase-service";
+import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Badge } from "@/components/ui/badge";
 
 export function AdvertisingOrderViewer({ order, programs = [] }: { order: AdvertisingOrder, programs?: Program[] }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -22,13 +25,14 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
   const [isSendingToRedaccion, setIsSendingToRedaccion] = useState(false);
   
   const [fullOrder, setFullOrder] = useState<AdvertisingOrder>(order);
+  const [linkedWebNotes, setLinkedWebNotes] = useState<WebNote[]>([]);
 
   const router = useRouter();
   
   const pdfRef = useRef<HTMLDivElement>(null);
   const hiddenPdfRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const { getGoogleAccessToken } = useAuth();
+  const { getGoogleAccessToken, userInfo } = useAuth();
 
   useEffect(() => {
         setFullOrder(order);
@@ -74,6 +78,13 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
                     }
                 });
             }
+
+            // 🟢 Buscar Notas Web Vinculadas
+            const qWebNotes = query(collection(db, 'web_notes'), where('orderId', '==', order.id));
+            getDocs(qWebNotes).then(snap => {
+                const notes = snap.docs.map(d => ({ id: d.id, ...d.data() } as WebNote));
+                setLinkedWebNotes(notes);
+            }).catch(err => console.error("Error fetching web notes:", err));
         }
   }, [isOpen, order]);
 
@@ -184,7 +195,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
   };
 
   const handleReinformar = async () => {
-        if (!pdfRef.current) return;
+        if (!pdfRef.current || !userInfo) return;
         setIsResending(true);
         try {
             const accessToken = await getGoogleAccessToken();
@@ -237,7 +248,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
   };
 
   const handleSendToRedaccion = async () => {
-      if (!hiddenPdfRef.current) return;
+      if (!hiddenPdfRef.current || !userInfo) return;
       setIsSendingToRedaccion(true);
       try {
           const accessToken = await getGoogleAccessToken();
@@ -272,6 +283,18 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
           toast({ title: 'Error al enviar a redacción.', variant: 'destructive' });
       } finally {
           setIsSendingToRedaccion(false);
+      }
+  };
+
+  const handleDeleteWebNote = async (noteId: string) => {
+      if (!window.confirm("¿Seguro que deseas eliminar permanentemente esta Nota Web / Gacetilla?")) return;
+      try {
+          await deleteDoc(doc(db, 'web_notes', noteId));
+          setLinkedWebNotes(prev => prev.filter(n => n.id !== noteId));
+          toast({ title: "Nota Web eliminada correctamente." });
+      } catch (e) {
+          console.error(e);
+          toast({ title: "Error al eliminar la nota.", variant: "destructive" });
       }
   };
 
@@ -313,13 +336,49 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
              </div>
          </div>
 
+         {/* 🟢 SECCIÓN DE NOTAS WEB VINCULADAS */}
+         {linkedWebNotes.length > 0 && (
+             <div className="mx-4 mb-4 bg-orange-50 border border-orange-200 rounded-lg p-4">
+                 <h3 className="font-bold text-orange-800 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4" /> Notas Web / Gacetillas Vinculadas a esta Orden
+                 </h3>
+                 <div className="flex flex-col gap-2">
+                     {linkedWebNotes.map(note => (
+                         <div key={note.id} className="flex flex-wrap sm:flex-nowrap justify-between items-center bg-white p-3 rounded border border-orange-100 shadow-sm gap-4">
+                             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                 <span className="font-semibold text-slate-700">{note.format}</span>
+                                 <Badge variant="outline" className={
+                                     note.status === 'Aprobado' ? 'bg-green-100 text-green-800 border-green-200' :
+                                     note.status === 'Pendiente' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                                     'bg-slate-100 text-slate-800 border-slate-200'
+                                 }>{note.status || 'Borrador'}</Badge>
+                                 <span className="text-xs text-slate-500 ml-2 hidden sm:inline-block">Contacto: {note.contactName}</span>
+                             </div>
+                             <div className="flex gap-2">
+                                 <Button variant="outline" size="sm" className="bg-white" onClick={() => {
+                                     setIsOpen(false);
+                                     router.push(`/notas-web/new?editId=${note.id}`);
+                                 }}>
+                                     <Edit className="w-4 h-4 mr-2"/> Editar
+                                 </Button>
+                                 {(userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia') && (
+                                     <Button variant="outline" size="sm" className="bg-white text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200" onClick={() => handleDeleteWebNote(note.id!)}>
+                                         <Trash2 className="w-4 h-4"/>
+                                     </Button>
+                                 )}
+                             </div>
+                         </div>
+                     ))}
+                 </div>
+             </div>
+         )}
+
          <div className="flex justify-center overflow-x-auto w-full p-4">
             <div className="w-full max-w-5xl">
                 <AdvertisingOrderPdf ref={pdfRef} order={fullOrder} programs={programs} />
             </div>
          </div>
 
-         {/* 🟢 SE LE PASA hideSrl={true} AL PDF DE REDACCIÓN */}
          <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
              <AdvertisingOrderPdf ref={hiddenPdfRef} order={fullOrder} programs={programs} hidePrices={true} hideSrl={true} />
          </div>
