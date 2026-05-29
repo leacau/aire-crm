@@ -38,6 +38,7 @@ const collections = {
     socialMediaRequests: collection(db, 'social_media_requests'),
     convenios: collection(db, 'convenios'),
     webNotes: collection(db, 'web_notes'),
+    pipelineInteractions: collection(db, 'pipeline_interactions'),
 };
 
 const cache: { [key: string]: { data: any; timestamp: number } } = {};
@@ -4889,4 +4890,50 @@ export const saveSasProducts = async (products: SasProductConfig[], userId: stri
         userId, userName, type: 'update', entityType: 'system_config' as any, entityId: 'sas_products',
         entityName: 'Productos Digitales SAS', details: 'actualizó el tarifario de productos digitales.', ownerName: 'Sistema'
     });
+};
+
+// ============================================================================
+// --- PIPELINE & INTERACCIONES ---
+// ============================================================================
+
+export const getPipelineInteractions = async (): Promise<PipelineInteraction[]> => {
+    const cached = getFromCache('pipeline_interactions');
+    if (cached) return cached as PipelineInteraction[];
+    
+    const q = query(collections.pipelineInteractions, orderBy('fecha', 'desc'));
+    const snap = await getDocs(q);
+    const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PipelineInteraction));
+    
+    setInCache('pipeline_interactions', data);
+    return data;
+};
+
+export const createPipelineInteraction = async (data: Omit<PipelineInteraction, 'id' | 'createdAt'>, userId: string, userName: string): Promise<string> => {
+    const dataToSave = { 
+        ...data, 
+        createdAt: serverTimestamp(), 
+        advisorId: userId, 
+        advisorName: userName 
+    };
+    const docRef = await addDoc(collections.pipelineInteractions, dataToSave);
+    
+    // Mutador de caché para velocidad instantánea
+    const cacheData = { ...dataToSave, createdAt: new Date().toISOString() };
+    mutateCacheArray('pipeline_interactions', docRef.id, cacheData, 'add', (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    
+    return docRef.id;
+};
+
+export const updatePipelineInteraction = async (id: string, data: Partial<PipelineInteraction>): Promise<void> => {
+    const docRef = doc(db, 'pipeline_interactions', id);
+    const updateData = { ...data, updatedAt: serverTimestamp() };
+    await updateDoc(docRef, updateData);
+    
+    mutateCacheArray('pipeline_interactions', id, { ...updateData, updatedAt: new Date().toISOString() }, 'update');
+};
+
+export const deletePipelineInteraction = async (id: string): Promise<void> => {
+    const docRef = doc(db, 'pipeline_interactions', id);
+    await deleteDoc(docRef);
+    mutateCacheArray('pipeline_interactions', id, null, 'delete');
 };
