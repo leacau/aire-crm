@@ -10,8 +10,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import { getClients, updateClientTangoMapping } from '@/lib/firebase-service';
 import { Client } from '@/lib/types';
-import { RefreshCcw, CheckCircle2, ArrowRight } from 'lucide-react';
+import { RefreshCcw, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+// 🟢 IMPORTAMOS FIRESTORE PARA GUARDAR LA MARCA DEL NUEVO MAPEO
+import { db } from '@/lib/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 
 // Tipado de la respuesta de Tango
 interface TangoClient {
@@ -70,6 +73,11 @@ export default function TangoMappingPage() {
         const results: MatchResult[] = [];
         
         crmData.forEach(crm => {
+            // 🟢 FILTRO DEL NUEVO MAPEO: 
+            // Si ya vinculamos este cliente manualmente en esta pantalla, lo ignoramos para siempre.
+            const isNewlySynced = isDigital ? (crm as any).isTangoSyncedSas : (crm as any).isTangoSyncedSrl;
+            if (isNewlySynced) return;
+
             let matchedTango: TangoClient | null = null;
             let matchType: MatchResult['matchType'] | null = null;
             let bestScore = 0;
@@ -117,7 +125,6 @@ export default function TangoMappingPage() {
             }
 
             if (matchedTango && matchType) {
-                // Comprobamos si el CRM ya tiene todos los datos clave de Tango copiados para marcarlo como "Sincronizado"
                 const isSynced = crmIdControl === matchedTango.COD_CLIENTE && 
                                  cleanCuit(crm.cuit) === cleanCuit(matchedTango.NUMERO) && 
                                  crm.razonSocialTango === matchedTango.RAZON_SOCIAL;
@@ -197,11 +204,19 @@ export default function TangoMappingPage() {
                 updates.idAireSrl = match.tangoClient.COD_CLIENTE;
             }
 
+            // Actualizamos los datos principales del cliente
             await updateClientTangoMapping(match.crmClient.id, updates, userInfo!.id, userInfo!.name);
             
+            // 🟢 GUARDAMOS LA MARCA DEL NUEVO MAPEO
+            // Dejamos asentado en la base de datos que este cliente ya fue validado en el nuevo sistema
+            // para la empresa correspondiente (SRL o Digital), así desaparece de la lista.
+            await updateDoc(doc(db, 'clients', match.crmClient.id), {
+                [isDigital ? 'isTangoSyncedSas' : 'isTangoSyncedSrl']: true
+            });
+
             toast({ title: 'Cliente sincronizado con éxito' });
             
-            // Actualizamos la fila en la pantalla sin recargar todo
+            // Dejamos la fila en verde por UX hasta que se recargue la página, momento en el que desaparecerá
             const updateState = (prev: MatchResult[]) => {
                 const list = [...prev];
                 const index = list.findIndex(m => m.crmClient.id === match.crmClient.id);
@@ -245,7 +260,7 @@ export default function TangoMappingPage() {
                 </TableHeader>
                 <TableBody>
                     {matches.length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center py-10">No se encontraron clientes para cruzar.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="text-center py-10">No hay clientes pendientes de validación en esta empresa.</TableCell></TableRow>
                     )}
                     {matches.map((match, i) => {
                         const isSyncing = syncingId === match.crmClient.id;
@@ -318,7 +333,7 @@ export default function TangoMappingPage() {
                     <h2 className="text-blue-900 font-bold text-lg">Mapeo de Clientes</h2>
                     <p className="text-sm text-blue-800 mt-1">
                         El sistema busca coincidencias entre los clientes cargados por los asesores y la base de datos oficial de Tango.<br/>
-                        Al <strong>Vincular</strong>, el CRM absorberá el ID, CUIT, Razón Social y Rubro oficial de Tango.
+                        Al <strong>Vincular</strong>, el CRM absorberá los datos oficiales y <strong>quitará a la empresa de esta lista de pendientes</strong>.
                     </p>
                 </div>
 
