@@ -69,11 +69,12 @@ export function AdvertisingForm() {
   
   const [invoiceCountSrl, setInvoiceCountSrl] = useState(1);
   const [invoiceCountSas, setInvoiceCountSas] = useState(1);
+  // 🟢 CONTADOR DE CUOTAS PARA AVIÓN
+  const [invoiceCountAvion, setInvoiceCountAvion] = useState(1);
   
   const [materialUrls, setMaterialUrls] = useState<string[]>(['']);
   const [orderCreatedBy, setOrderCreatedBy] = useState<string>('');
 
-  // 🟢 ESTADOS PARA MODIFICACIÓN DE CONTRATOS APROBADOS
   const [wasApproved, setWasApproved] = useState(false);
   const [modificationReason, setModificationReason] = useState('');
 
@@ -96,6 +97,7 @@ export function AdvertisingForm() {
       sasItems: [],
       billingRequestsSrl: [], 
       billingRequestsSas: [], 
+      billingRequestsAvion: [], 
       startDate: undefined,
       endDate: undefined,
     },
@@ -109,6 +111,12 @@ export function AdvertisingForm() {
   const { fields: brFieldsSas, append: brAppendSas, remove: brRemoveSas, replace: brReplaceSas } = useFieldArray({
       control: form.control,
       name: "billingRequestsSas"
+  });
+
+  // 🟢 VÍNCULO DE CAMPO PARA SUGERENCIAS EN AVIÓN
+  const { fields: brFieldsAvion, append: brAppendAvion, remove: brRemoveAvion, replace: brReplaceAvion } = useFieldArray({
+      control: form.control,
+      name: "billingRequestsAvion"
   });
 
   const { watch, setValue, getValues } = form;
@@ -164,7 +172,6 @@ export function AdvertisingForm() {
 
           getAdvertisingOrder(idToFetch).then(async order => {
               if (order) {
-                  // 🟢 DETECTAMOS SI ESTÁ APROBADA
                   if (editId && order.status === 'Aprobado') {
                       setWasApproved(true);
                   }
@@ -175,6 +182,7 @@ export function AdvertisingForm() {
 
                   let fetchedBillingRequestsSrl: any[] = [];
                   let fetchedBillingRequestsSas: any[] = [];
+                  let fetchedBillingRequestsAvion: any[] = [];
                   
                   if (editId) {
                       const brs = await getBillingRequestsByOrder(idToFetch);
@@ -184,22 +192,26 @@ export function AdvertisingForm() {
                               date: b.date, 
                               grossAmount: b.grossAmount || 0,
                               adjustment: b.adjustment || 0,
-                              amount: b.amount || 0 
+                              amount: b.amount || 0,
+                              paymentType: b.paymentType || "Se paga",
+                              canjeDescription: b.canjeDescription || ""
                           };
 
                           if (b.company === 'SRL') {
                               fetchedBillingRequestsSrl.push(mapped);
                           } else if (b.company === 'SAS') {
                               fetchedBillingRequestsSas.push({ ...mapped, ivaSas: b.ivaSas || 0 });
+                          } else if (b.company === 'AVIÓN' || b.company === 'AVION') {
+                              fetchedBillingRequestsAvion.push(mapped);
                           }
                       });
 
                       fetchedBillingRequestsSrl.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                       fetchedBillingRequestsSas.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                      fetchedBillingRequestsAvion.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                   }
                   
                   setMaterialUrls(order.materialUrls?.length ? order.materialUrls : (order.materialUrl ? [order.materialUrl] : ['']));
-
                   setOrderCreatedBy(order.createdBy || userInfo?.id || '');
 
                   form.reset({
@@ -223,7 +235,9 @@ export function AdvertisingForm() {
                       adjustmentSrl: order.adjustmentSrl || 0,
                       adjustmentSas: order.adjustmentSas || 0,
                       billingRequestsSrl: fetchedBillingRequestsSrl,
-                      billingRequestsSas: fetchedBillingRequestsSas
+                      billingRequestsSas: fetchedBillingRequestsSas,
+                      // @ts-ignore
+                      billingRequestsAvion: fetchedBillingRequestsAvion
                   });
               }
               setIsRestored(true);
@@ -244,7 +258,7 @@ export function AdvertisingForm() {
                   if (parsed.createdBy) setOrderCreatedBy(parsed.createdBy);
                   form.reset(parsed);
                   setDraftLoaded(true);
-                  toast({ title: "Borrador recuperado", description: "Se han restaurado los datos que estabas cargando." });
+                  toast({ title: "Borrador recuperado", description: "Se han restaurado los datos." });
               } catch (e) {
                   console.error("Error recuperando borrador", e);
               }
@@ -267,11 +281,11 @@ export function AdvertisingForm() {
           accountExecutive: userInfo?.name || "",
           materialSent: false, materialUrl: "", certReq: false, agencySale: false,
           commissionSrl: 0, adjustmentSrl: 0, adjustmentSas: 0,
-          srlItems: [], sasItems: [], billingRequestsSrl: [], billingRequestsSas: [], 
+          srlItems: [], sasItems: [], billingRequestsSrl: [], billingRequestsSas: [], billingRequestsAvion: [],
           startDate: undefined, endDate: undefined, clientId: "", agencyId: "none", opportunityId: "", newOpportunityTitle: "", product: "", tangoOrderNo: "", observations: ""
       });
       setDraftLoaded(false);
-      toast({ title: "Borrador limpiado", description: "Puedes comenzar de cero." });
+      toast({ title: "Borrador limpiado" });
   };
 
   useEffect(() => {
@@ -357,7 +371,7 @@ export function AdvertisingForm() {
       const newBrs = [];
       let curDate = startDate && isValid(startDate) ? new Date(startDate) : new Date();
       for (let i = 0; i < invoiceCountSrl; i++) {
-          newBrs.push({ date: format(curDate, 'yyyy-MM-dd'), grossAmount: Number(invGross.toFixed(2)), adjustment: Number(invAdj.toFixed(2)), amount: Number(invNet.toFixed(2)) });
+          newBrs.push({ date: format(curDate, 'yyyy-MM-dd'), grossAmount: Number(invGross.toFixed(2)), adjustment: Number(invAdj.toFixed(2)), amount: Number(invNet.toFixed(2)), paymentType: 'Se paga', canjeDescription: '' });
           curDate = addMonths(curDate, 1);
       }
       setValue("billingRequestsSrl", newBrs, { shouldValidate: true });
@@ -376,10 +390,22 @@ export function AdvertisingForm() {
       const newBrs = [];
       let curDate = startDate && isValid(startDate) ? new Date(startDate) : new Date();
       for (let i = 0; i < invoiceCountSas; i++) {
-          newBrs.push({ date: format(curDate, 'yyyy-MM-dd'), grossAmount: Number(invGross.toFixed(2)), adjustment: Number(invAdj.toFixed(2)), ivaSas: Number(invIva.toFixed(2)), amount: Number(invNet.toFixed(2)) });
+          newBrs.push({ date: format(curDate, 'yyyy-MM-dd'), grossAmount: Number(invGross.toFixed(2)), adjustment: Number(invAdj.toFixed(2)), ivaSas: Number(invIva.toFixed(2)), amount: Number(invNet.toFixed(2)), paymentType: 'Se paga', canjeDescription: '' });
           curDate = addMonths(curDate, 1);
       }
       setValue("billingRequestsSas", newBrs, { shouldValidate: true });
+  };
+
+  // 🟢 GENERACIÓN DE LÍNEAS PARA AVIÓN
+  const handleGenerateBillingAvion = () => {
+      if (invoiceCountAvion < 1) return;
+      const newBrs = [];
+      let curDate = startDate && isValid(startDate) ? new Date(startDate) : new Date();
+      for (let i = 0; i < invoiceCountAvion; i++) {
+          newBrs.push({ date: format(curDate, 'yyyy-MM-dd'), grossAmount: 0, adjustment: 0, amount: 0, paymentType: 'Canje', canjeDescription: '' });
+          curDate = addMonths(curDate, 1);
+      }
+      setValue("billingRequestsAvion", newBrs, { shouldValidate: true });
   };
 
   const sortSrlByDate = () => {
@@ -392,6 +418,13 @@ export function AdvertisingForm() {
       const current = getValues("billingRequestsSas");
       const sorted = [...current].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       brReplaceSas(sorted);
+  };
+
+  // 🟢 ORDENAR TABLA AVIÓN
+  const sortAvionByDate = () => {
+      const current = getValues("billingRequestsAvion") || [];
+      const sorted = [...current].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      brReplaceAvion(sorted);
   };
 
   const updateRowNetSrl = (index: number) => {
@@ -411,6 +444,16 @@ export function AdvertisingForm() {
           const iva = (gross - adj) * 0.05; 
           setValue(`billingRequestsSas.${index}.ivaSas`, iva, { shouldValidate: true });
           setValue(`billingRequestsSas.${index}.amount`, gross - adj + iva, { shouldValidate: true });
+      }, 50);
+  };
+
+  // 🟢 RECALCULAR FILA AVIÓN
+  const updateRowNetAvion = (index: number) => {
+      setTimeout(() => {
+          const row = form.getValues(`billingRequestsAvion.${index}`);
+          const gross = parseFloat(row.grossAmount as any) || 0;
+          const adj = parseFloat(row.adjustment as any) || 0;
+          setValue(`billingRequestsAvion.${index}.amount`, gross - adj, { shouldValidate: true });
       }, 50);
   };
 
@@ -470,7 +513,9 @@ export function AdvertisingForm() {
           totalSas: totalOrderSasNet,
           totalOrder: totalOrderSrlNet + totalOrderSasNet,
           billingRequestsSrl: values.billingRequestsSrl,
-          billingRequestsSas: values.billingRequestsSas
+          billingRequestsSas: values.billingRequestsSas,
+          // @ts-ignore
+          billingRequestsAvion: values.billingRequestsAvion
       };
   };
 
@@ -597,7 +642,7 @@ export function AdvertisingForm() {
       }
   };
 
- async function onSubmit(data: AdvertisingOrderFormValues) {
+  async function onSubmit(data: AdvertisingOrderFormValues) {
     if (!userInfo) return;
     setIsSubmitting(true);
     try {
@@ -622,7 +667,6 @@ export function AdvertisingForm() {
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      // 🟢 LÓGICA DE ESTADOS Y JUSTIFICACIÓN
       let targetStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
 
       if (wasApproved && notifyOnSave) {
@@ -663,15 +707,15 @@ export function AdvertisingForm() {
         sasItems: validSasItems,
         billingRequestsSrl: data.billingRequestsSrl, 
         billingRequestsSas: data.billingRequestsSas,
+        // @ts-ignore
+        billingRequestsAvion: data.billingRequestsAvion,
         accountExecutive: data.accountExecutive,
         createdBy: orderCreatedBy || userInfo.id
       };
 
-      // 🟢 LIMPIEZA PROFUNDA DE UNDEFINED (Evapora basura anidada en arrays o sub-objetos)
       const cleanPayload = JSON.parse(JSON.stringify(rawPayload));
-      delete cleanPayload.id; // Limpiamos el ID falso que genera la vista previa
+      delete cleanPayload.id;
 
-      // Luego de limpiarlo de forma segura, le inyectamos los comandos especiales de Firebase
       if (editModeId) {
           cleanPayload.approvalHistory = arrayUnion(historyItem);
           await updateAdvertisingOrder(editModeId, cleanPayload, userInfo.id, userInfo.name);
@@ -879,9 +923,9 @@ export function AdvertisingForm() {
                {showSections ? (
                   <SrlSection form={form} startDate={startDate} endDate={endDate} programs={programs} />
                ) : (
-                 <div className="text-center py-10 text-muted-foreground border-2 border-dashed rounded-md">
-                    {(!startDate || !endDate) ? "Seleccione fechas de Inicio y Fin." : "La fecha de Fin debe ser posterior a la de Inicio."}
-                 </div>
+                  <div className="text-center py-10 text-muted-foreground border-2 border-dashed rounded-md">
+                     {(!startDate || !endDate) ? "Seleccione fechas de Inicio y Fin." : "La fecha de Fin debe ser posterior a la de Inicio."}
+                  </div>
                )}
             </div>
           </div>
@@ -900,7 +944,6 @@ export function AdvertisingForm() {
           </div>
         </div>
 
-        {/* 🟢 CUADRO OBLIGATORIO DE JUSTIFICACIÓN DE MODIFICACIÓN */}
         {wasApproved && notifyOnSave && (
             <Card className="border-amber-400 bg-amber-50 shadow-md animate-in fade-in zoom-in duration-300">
                 <CardHeader className="pb-2">
@@ -963,6 +1006,32 @@ export function AdvertisingForm() {
                                 <FormControl><Input type="number" className="font-bold bg-white" {...field} readOnly /></FormControl>
                             </FormItem>
                         )} />
+                        
+                        {/* 🟢 TIPO DE PAGO SRL */}
+                        <FormField control={form.control} name={`billingRequestsSrl.${index}.paymentType`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[110px]">
+                                <FormLabel className="text-xs">Tipo Pago</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl><SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="Se paga">Se paga</SelectItem>
+                                        <SelectItem value="Canje">Canje</SelectItem>
+                                        <SelectItem value="Mixto">Mixto</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </FormItem>
+                        )} />
+
+                        {/* 🟢 DESCRIPCIÓN DE CANJE SRL */}
+                        {form.watch(`billingRequestsSrl.${index}.paymentType`) !== "Se paga" && (
+                            <FormField control={form.control} name={`billingRequestsSrl.${index}.canjeDescription`} render={({field}) => (
+                                <FormItem className="flex-[2] min-w-[150px]">
+                                    <FormLabel className="text-xs">Descripción Canje</FormLabel>
+                                    <FormControl><Input {...field} placeholder="Detalle de la contraprestación..." className="h-9 bg-white" /></FormControl>
+                                </FormItem>
+                            )} />
+                        )}
+
                         <Button type="button" variant="ghost" className="text-red-500 mb-0.5 hover:bg-red-100 px-2" onClick={() => brRemoveSrl(index)}>
                             <Trash2 className="h-5 w-5"/>
                         </Button>
@@ -984,7 +1053,7 @@ export function AdvertisingForm() {
                     </div>
                 )}
                 
-                <Button type="button" variant="outline" size="sm" onClick={() => brAppendSrl({ date: '', grossAmount: 0, adjustment: 0, amount: 0 })}>
+                <Button type="button" variant="outline" size="sm" onClick={() => brAppendSrl({ date: '', grossAmount: 0, adjustment: 0, amount: 0, paymentType: 'Se paga', canjeDescription: '' })}>
                     <Plus className="h-4 w-4 mr-2" /> Agregar cuota manual
                 </Button>
             </div>
@@ -1036,6 +1105,32 @@ export function AdvertisingForm() {
                                 <FormControl><Input type="number" className="font-bold bg-white" {...field} readOnly /></FormControl>
                             </FormItem>
                         )} />
+                        
+                        {/* 🟢 TIPO DE PAGO SAS */}
+                        <FormField control={form.control} name={`billingRequestsSas.${index}.paymentType`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[110px]">
+                                <FormLabel className="text-xs">Tipo Pago</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl><SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="Se paga">Se paga</SelectItem>
+                                        <SelectItem value="Canje">Canje</SelectItem>
+                                        <SelectItem value="Mixto">Mixto</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </FormItem>
+                        )} />
+
+                        {/* 🟢 DESCRIPCIÓN DE CANJE SAS */}
+                        {form.watch(`billingRequestsSas.${index}.paymentType`) !== "Se paga" && (
+                            <FormField control={form.control} name={`billingRequestsSas.${index}.canjeDescription`} render={({field}) => (
+                                <FormItem className="flex-[2] min-w-[150px]">
+                                    <FormLabel className="text-xs">Descripción Canje</FormLabel>
+                                    <FormControl><Input {...field} placeholder="Detalle del canje..." className="h-9 bg-white" /></FormControl>
+                                </FormItem>
+                            )} />
+                        )}
+
                         <Button type="button" variant="ghost" className="text-red-500 mb-0.5 hover:bg-red-100 px-2" onClick={() => brRemoveSas(index)}>
                             <Trash2 className="h-5 w-5"/>
                         </Button>
@@ -1058,8 +1153,84 @@ export function AdvertisingForm() {
                     </div>
                 )}
                 
-                <Button type="button" variant="outline" size="sm" onClick={() => brAppendSas({ date: '', grossAmount: 0, adjustment: 0, ivaSas: 0, amount: 0 })}>
+                <Button type="button" variant="outline" size="sm" onClick={() => brAppendSas({ date: '', grossAmount: 0, adjustment: 0, ivaSas: 0, amount: 0, paymentType: 'Se paga', canjeDescription: '' })}>
                     <Plus className="h-4 w-4 mr-2" /> Agregar cuota manual
+                </Button>
+            </div>
+        </div>
+        )}
+
+        {/* 🟢 NUEVO BLOQUE: SUGERENCIA DE FACTURACIÓN EN AVIÓN */}
+        {showSections && (
+        <div className="space-y-4 border rounded-md bg-white shadow-sm overflow-hidden">
+            <div className="bg-slate-100 px-4 py-2 border-b flex justify-between items-center flex-wrap gap-2">
+                <h3 className="text-lg font-semibold text-slate-800">Sugerencia de Facturación en AVIÓN (No se emite)</h3>
+                <div className="flex gap-2 items-center bg-white p-1 rounded border shadow-sm">
+                    <Label className="text-xs px-2 whitespace-nowrap">Dividir en N cuotas:</Label>
+                    <Input type="number" min={1} value={invoiceCountAvion} onChange={e => setInvoiceCountAvion(parseInt(e.target.value) || 1)} className="w-16 h-8 text-center" />
+                    <Button type="button" size="sm" variant="secondary" className="h-8" onClick={handleGenerateBillingAvion}>Generar</Button>
+                </div>
+            </div>
+            <div className="p-4 space-y-4">
+                {brFieldsAvion.map((field, index) => (
+                    <div key={field.id} className="flex gap-2 items-end bg-slate-50 p-3 rounded-md border border-slate-200 flex-wrap">
+                        <FormField control={form.control} name={`billingRequestsAvion.${index}.date`} render={({field}) => (
+                            <FormItem className="flex-[2] min-w-[120px]">
+                                <FormLabel className="text-xs">Fecha Estimada</FormLabel>
+                                <FormControl>
+                                    <Input type="date" {...field} onBlur={() => sortAvionByDate()} />
+                                </FormControl>
+                            </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`billingRequestsAvion.${index}.grossAmount`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[90px]">
+                                <FormLabel className="text-xs">Valor Bruto</FormLabel>
+                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetAvion(index); }} /></FormControl>
+                            </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`billingRequestsAvion.${index}.adjustment`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[90px]">
+                                <FormLabel className="text-xs">Desajuste</FormLabel>
+                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetAvion(index); }} /></FormControl>
+                            </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`billingRequestsAvion.${index}.amount`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[90px]">
+                                <FormLabel className="text-xs">Importe Neto</FormLabel>
+                                <FormControl><Input type="number" className="font-bold bg-white" {...field} readOnly /></FormControl>
+                            </FormItem>
+                        )} />
+                        
+                        <FormField control={form.control} name={`billingRequestsAvion.${index}.paymentType`} render={({field}) => (
+                            <FormItem className="flex-1 min-w-[110px]">
+                                <FormLabel className="text-xs">Tipo Pago</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl><SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="Se paga">Se paga</SelectItem>
+                                        <SelectItem value="Canje">Canje</SelectItem>
+                                        <SelectItem value="Mixto">Mixto</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </FormItem>
+                        )} />
+
+                        {form.watch(`billingRequestsAvion.${index}.paymentType`) !== "Se paga" && (
+                            <FormField control={form.control} name={`billingRequestsAvion.${index}.canjeDescription`} render={({field}) => (
+                                <FormItem className="flex-[2] min-w-[150px]">
+                                    <FormLabel className="text-xs">Descripción Canje</FormLabel>
+                                    <FormControl><Input {...field} placeholder="Detalle del canje..." className="h-9 bg-white" /></FormControl>
+                                </FormItem>
+                            )} />
+                        )}
+
+                        <Button type="button" variant="ghost" className="text-red-500 mb-0.5 hover:bg-red-100 px-2" onClick={() => brRemoveAvion(index)}>
+                            <Trash2 className="h-5 w-5"/>
+                        </Button>
+                    </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" onClick={() => brAppendAvion({ date: '', grossAmount: 0, adjustment: 0, amount: 0, paymentType: 'Canje', canjeDescription: '' })}>
+                    <Plus className="h-4 w-4 mr-2" /> Agregar cuota manual (AVIÓN)
                 </Button>
             </div>
         </div>
