@@ -11,6 +11,7 @@ import { getClients, mergeClients } from '@/lib/firebase-service';
 import { Client } from '@/lib/types';
 import { ArrowRight, AlertTriangle, ShieldAlert, ArrowLeftRight, Wand2, Search } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge'; // 🟢 ACÁ ESTÁ LA IMPORTACIÓN QUE FALTABA
 
 // 🟢 FUNCIÓN MATEMÁTICA DE SIMILITUD DE TEXTOS (FUZZY MATCHING)
 function stringSimilarity(s1: string, s2: string) {
