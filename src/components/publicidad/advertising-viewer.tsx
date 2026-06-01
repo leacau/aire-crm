@@ -375,8 +375,12 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
 
          <div className="flex justify-center overflow-x-auto w-full p-4">
             <div className="w-full max-w-5xl">
-                <AdvertisingOrderPdf ref={pdfRef} order={fullOrder} programs={programs} />
-            </div>
+<AdvertisingOrderPdf 
+    ref={pdfRef} 
+    order={fullOrder} 
+    programs={programs} 
+    hidePrices={!(userInfo?.role === 'Jefe' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Administracion' || userInfo?.area === 'Pautado' || fullOrder.createdBy === userInfo?.id)} 
+/>            </div>
          </div>
 
          <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
