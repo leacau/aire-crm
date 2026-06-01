@@ -44,20 +44,9 @@ const collections = {
 const cache: { [key: string]: { data: any; timestamp: number } } = {};
 const CACHE_DURATION_MS = 12 * 60 * 60 * 1000;
 
+// 🟢 CACHÉ OPTIMIZADO EN RAM (Previene QuotaExceededError en LocalStorage)
 const getFromCache = (key: string) => {
     let cached = cache[key];
-    
-    // 🟢 CAMBIAMOS A LOCALSTORAGE PARA COMPARTIR CACHÉ ENTRE MÚLTIPLES PESTAÑAS ABIERTAS
-    if (!cached && typeof window !== 'undefined') {
-        const localStr = localStorage.getItem(`crm_cache_${key}`);
-        if (localStr) {
-            try {
-                cached = JSON.parse(localStr);
-                cache[key] = cached; 
-            } catch (e) {}
-        }
-    }
-
     if (cached && (Date.now() - cached.timestamp < CACHE_DURATION_MS)) {
         return cached.data;
     }
@@ -65,39 +54,39 @@ const getFromCache = (key: string) => {
 };
 
 const setInCache = (key: string, data: any) => {
-    const cacheData = { data, timestamp: Date.now() };
-    cache[key] = cacheData;
+    cache[key] = { data, timestamp: Date.now() };
+    // Eliminamos basura vieja del localStorage si existiera para liberar espacio a Firebase
     if (typeof window !== 'undefined') {
-        try {
-            // 🟢 GUARDAMOS EN LOCALSTORAGE
-            localStorage.setItem(`crm_cache_${key}`, JSON.stringify(cacheData));
-        } catch (e) {
-            // Ignoramos si el navegador está lleno
-        }
+        try { localStorage.removeItem(`crm_cache_${key}`); } catch (e) {}
     }
 };
+
 const timestampToISO = (value: any): string | undefined => {
     if (!value) return undefined;
     if (typeof value === 'string') return value;
     if (value instanceof Timestamp) return value.toDate().toISOString();
     return undefined;
 };
+
 export const invalidateCache = (key?: string) => {
     if (key) {
         delete cache[key];
-        if (typeof window !== 'undefined') localStorage.removeItem(`crm_cache_${key}`);
     } else {
         Object.keys(cache).forEach(k => delete cache[k]);
-        if (typeof window !== 'undefined') {
+    }
+    // Vaciamos el localStorage problemático viejo
+    if (typeof window !== 'undefined') {
+        try {
             const keysToRemove = [];
             for (let i = 0; i < localStorage.length; i++) {
                 const k = localStorage.key(i);
                 if (k && k.startsWith('crm_cache_')) keysToRemove.push(k);
             }
             keysToRemove.forEach(k => localStorage.removeItem(k));
-        }
+        } catch(e) {}
     }
 };
+
 const parseDateWithTimezone = (dateString: string) => {
     if (!dateString || typeof dateString !== 'string') return null;
     const parts = dateString.split('-').map(Number);
@@ -111,19 +100,10 @@ export const mutateCacheArray = (
     itemId: string, 
     newData: any | null, 
     action: 'add' | 'update' | 'delete',
-    sortFn?: (a: any, b: any) => number // Opcional por si queremos reordenar tras agregar
+    sortFn?: (a: any, b: any) => number 
 ) => {
     let cached = cache[cacheKey]?.data;
-    
-    // Si no está en RAM, probamos el localStorage
-    if (!cached && typeof window !== 'undefined') {
-        const localStr = localStorage.getItem(`crm_cache_${cacheKey}`);
-        if (localStr) {
-            try { cached = JSON.parse(localStr).data; } catch (e) {}
-        }
-    }
-
-    if (!cached || !Array.isArray(cached)) return; // Si no hay caché, no hacemos nada
+    if (!cached || !Array.isArray(cached)) return;
 
     let items = [...cached];
 
@@ -133,12 +113,14 @@ export const mutateCacheArray = (
         const index = items.findIndex(i => i.id === itemId);
         if (index > -1) items[index] = { ...items[index], ...newData };
     } else if (action === 'add' && newData) {
-        items.unshift({ id: itemId, ...newData }); // Insertamos primero
-        if (sortFn) items.sort(sortFn); // Reordenamos si hace falta
+        items.unshift({ id: itemId, ...newData });
+        if (sortFn) items.sort(sortFn);
     }
 
     setInCache(cacheKey, items);
 };
+
+
 
 export type ClientTangoUpdate = {
     cuit?: string; tangoCompanyId?: string; idTango?: string; email?: string; phone?: string; rubro?: string; razonSocial?: string; razonSocialTango?: string; denominacion?: string; idAireSrl?: string; idAireDigital?: string; condicionIVA?: string; provincia?: string; localidad?: string; tipoEntidad?: string; observaciones?: string;
@@ -4989,7 +4971,7 @@ export const bulkCreatePipelineInteractions = async (
 };
 
 // ============================================================================
-// --- MANTENIMIENTO: FUSIÓN DE CLIENTES DUPLICADOS ---
+// --- MANTENIMIENTO: FUSIÓN DE CLIENTES DUPLICADOS (CON LOTES ANTI-CRASH) ---
 // ============================================================================
 
 export const mergeClients = async (
@@ -5010,65 +4992,64 @@ export const mergeClients = async (
     const sourceData = sourceSnap.data() as Client;
     const targetName = targetData.denominacion;
 
+    // 🟢 PREVENCIÓN DE CRASHEO: Usamos Lotes (Batches) en lugar de promesas paralelas
+    let batch = writeBatch(db);
+    let operationCount = 0;
+
+    const commitBatchIfNeeded = async () => {
+        if (operationCount >= 450) { // Firebase permite max 500 operaciones por lote
+            await batch.commit();
+            batch = writeBatch(db);
+            operationCount = 0;
+        }
+    };
+
+    const updateDocsBatch = async (querySnapshot: any, dataToUpdate: any) => {
+        for (const d of querySnapshot.docs) {
+            batch.update(d.ref, dataToUpdate);
+            operationCount++;
+            await commitBatchIfNeeded();
+        }
+    };
+
     // 1. Mover Oportunidades
-    const oppsSnap = await getDocs(query(collections.opportunities, where('clientId', '==', sourceClientId)));
-    const oppsPromises = oppsSnap.docs.map(d => updateDoc(d.ref, { clientId: targetClientId, clientName: targetName }));
-
-    // 2. Mover Ordenes de Publicidad
-    const ordersSnap = await getDocs(query(collection(db, 'advertising_orders'), where('clientId', '==', sourceClientId)));
-    const ordersPromises = ordersSnap.docs.map(d => updateDoc(d.ref, { clientId: targetClientId, clientName: targetName }));
-
-    // 3. Mover Peticiones de Facturación (Billing Requests)
-    const billingSnap = await getDocs(query(collections.billingRequests, where('clientId', '==', sourceClientId)));
-    const billingPromises = billingSnap.docs.map(d => updateDoc(d.ref, { clientId: targetClientId }));
-
-    // 4. Mover Actividades y Tareas
-    const activitiesSnap = await getDocs(query(collections.clientActivities, where('clientId', '==', sourceClientId)));
-    const activitiesPromises = activitiesSnap.docs.map(d => updateDoc(d.ref, { clientId: targetClientId, clientName: targetName }));
-
-    // 5. Mover Contactos (People)
+    await updateDocsBatch(await getDocs(query(collections.opportunities, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
+    // 2. Mover Ordenes
+    await updateDocsBatch(await getDocs(query(collection(db, 'advertising_orders'), where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
+    // 3. Billing
+    await updateDocsBatch(await getDocs(query(collections.billingRequests, where('clientId', '==', sourceClientId))), { clientId: targetClientId });
+    // 4. Actividades
+    await updateDocsBatch(await getDocs(query(collections.clientActivities, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
+    
+    // 5. Contactos
     const peopleSnap = await getDocs(query(collections.people, where('clientIds', 'array-contains', sourceClientId)));
-    const peoplePromises = peopleSnap.docs.map(d => {
+    for (const d of peopleSnap.docs) {
         const data = d.data();
         const newIds = data.clientIds.filter((id: string) => id !== sourceClientId);
         if (!newIds.includes(targetClientId)) newIds.push(targetClientId);
-        return updateDoc(d.ref, { clientIds: newIds });
-    });
+        batch.update(d.ref, { clientIds: newIds });
+        operationCount++;
+        await commitBatchIfNeeded();
+    }
 
-    // 6. Mover Notas Comerciales
-    const notesSnap = await getDocs(query(collections.commercialNotes, where('clientId', '==', sourceClientId)));
-    const notesPromises = notesSnap.docs.map(d => updateDoc(d.ref, { clientId: targetClientId, clientName: targetName }));
+    // 6. Notas
+    await updateDocsBatch(await getDocs(query(collections.commercialNotes, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
+    // 7. Redes
+    await updateDocsBatch(await getDocs(query(collections.socialMediaRequests, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
+    // 8. Notas Web
+    await updateDocsBatch(await getDocs(query(collections.webNotes, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
+    // 9. Canjes
+    await updateDocsBatch(await getDocs(query(collections.canjes, where('clienteId', '==', sourceClientId))), { clienteId: targetClientId, clienteName: targetName });
+    // 10. Convenios
+    await updateDocsBatch(await getDocs(query(collections.convenios, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
 
-    // 7. Mover Pedidos de Redes
-    const socialSnap = await getDocs(query(collections.socialMediaRequests, where('clientId', '==', sourceClientId)));
-    const socialPromises = socialSnap.docs.map(d => updateDoc(d.ref, { clientId: targetClientId, clientName: targetName }));
+    // 11. Eliminar el origen (duplicado)
+    batch.delete(sourceRef);
+    await batch.commit();
 
-    // 8. Mover Notas Web / Gacetillas
-    const webNotesSnap = await getDocs(query(collections.webNotes, where('clientId', '==', sourceClientId)));
-    const webNotesPromises = webNotesSnap.docs.map(d => updateDoc(d.ref, { clientId: targetClientId, clientName: targetName }));
-
-    // 9. Mover Canjes (Ojo: Aquí el campo se llama clienteId)
-    const canjesSnap = await getDocs(query(collections.canjes, where('clienteId', '==', sourceClientId)));
-    const canjesPromises = canjesSnap.docs.map(d => updateDoc(d.ref, { clienteId: targetClientId, clienteName: targetName }));
-
-    // 10. Mover Convenios
-    const conveniosSnap = await getDocs(query(collections.convenios, where('clientId', '==', sourceClientId)));
-    const conveniosPromises = conveniosSnap.docs.map(d => updateDoc(d.ref, { clientId: targetClientId, clientName: targetName }));
-
-    // Ejecutar todas las transferencias en paralelo para máxima velocidad
-    await Promise.all([
-        ...oppsPromises, ...ordersPromises, ...billingPromises, ...activitiesPromises,
-        ...peoplePromises, ...notesPromises, ...socialPromises, ...webNotesPromises,
-        ...canjesPromises, ...conveniosPromises
-    ]);
-
-    // 11. Eliminar el cliente origen (el duplicado)
-    await deleteDoc(sourceRef);
-
-    // 12. Limpiar todo el caché (Limpieza total ya que tocamos toda la BD)
     invalidateCache();
 
-    // 13. Registrar la acción en la bitácora
+    // 12. Registrar la acción
     await logActivity({
         userId,
         userName,
@@ -5076,7 +5057,7 @@ export const mergeClients = async (
         entityType: 'client',
         entityId: targetClientId,
         entityName: targetName,
-        details: `fusionó el cliente duplicado <strong>${sourceData.denominacion}</strong> hacia este cliente, migrando todo su historial y eliminando el duplicado.`,
+        details: `fusionó el cliente duplicado <strong>${sourceData.denominacion}</strong> hacia este cliente, migrando todo su historial.`,
         ownerName: targetData.ownerName || 'Sistema'
     });
 };
