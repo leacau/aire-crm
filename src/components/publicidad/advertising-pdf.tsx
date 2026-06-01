@@ -28,6 +28,8 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   
   const sortedBrsSrl = [...(order.billingRequestsSrl || [])].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const sortedBrsSas = [...(order.billingRequestsSas || [])].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  // @ts-ignore
+  const sortedBrsAvion = [...(order.billingRequestsAvion || [])].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   
   const startDate = order.startDate ? new Date(order.startDate) : new Date();
   const endDate = order.endDate ? new Date(order.endDate) : new Date();
@@ -137,7 +139,6 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                             
                             return urls.map((url, i) => {
                                 const trimmedUrl = url.trim();
-                                // 🟢 Validación mejorada: si tiene un punto y no tiene espacios, asumimos que es un link
                                 const isUrl = trimmedUrl.includes('.') && !trimmedUrl.includes(' ');
                                 const linkHref = isUrl ? (trimmedUrl.startsWith('http') ? trimmedUrl : `https://${trimmedUrl}`) : undefined;
                                 
@@ -184,79 +185,98 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
   };
 
   const renderBillingRequestsSrl = () => {
-      if (hidePrices || sortedBrsSrl.length === 0 || !hasSRL) {
-          return <div style={{ flex: 1 }} />; 
-      }
+      if (hidePrices || sortedBrsSrl.length === 0 || !hasSRL) return null;
 
       return (
-          <div style={{ flex: 1, marginRight: '20px' }}>
-              <div style={{ width: '260px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#fef3c7' }}>
-                  <div style={{ fontWeight: 'bold', marginBottom: '6px', borderBottom: '1px solid #d1d5db', paddingBottom: '4px', color: '#9a3412', fontSize: '10px' }}>
-                      FACTURACIÓN SRL (SUGERENCIA INTERNA)
-                  </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
-                        <thead>
-                            <tr>
-                                <th style={{ textAlign: 'left', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Fecha</th>
-                                <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Bruto</th>
-                                <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Desaj.</th>
-                                <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Neto</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {sortedBrsSrl.map((br, i) => (
-                                <tr key={i}>
-                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db' }}>{formatDate(br.date)}</td>
-                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right' }}>${Number(br.grossAmount || 0).toLocaleString('es-AR')}</td>
-                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right' }}>${Number(br.adjustment || 0).toLocaleString('es-AR')}</td>
-                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', fontWeight: 'bold' }}>
-                                        ${Number(br.amount || 0).toLocaleString('es-AR')}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                  </table>
+          <div style={{ minWidth: '320px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#fef3c7', borderRadius: '4px' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '6px', borderBottom: '1px solid #d1d5db', paddingBottom: '4px', color: '#9a3412', fontSize: '10px' }}>
+                  FACTURACIÓN SRL
               </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
+                    <thead>
+                        <tr>
+                            <th style={{ textAlign: 'left', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Fecha</th>
+                            <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Neto</th>
+                            <th style={{ textAlign: 'center', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Tipo</th>
+                            <th style={{ textAlign: 'left', borderBottom: '1px solid #9ca3af', paddingBottom: '2px', paddingLeft: '4px' }}>Descripción / Canje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sortedBrsSrl.map((br, i) => (
+                            <tr key={i}>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db' }}>{formatDate(br.date)}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', fontWeight: 'bold', paddingRight: '4px' }}>${Number(br.amount || 0).toLocaleString('es-AR')}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'center' }}><span style={{ backgroundColor: br.paymentType !== 'Se paga' ? '#fed7aa' : '#e2e8f0', padding: '1px 3px', borderRadius: '2px', fontSize: '8px' }}>{br.paymentType || 'Se paga'}</span></td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'left', paddingLeft: '4px', fontStyle: 'italic', color: '#4b5563' }}>{br.canjeDescription || '-'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+              </table>
           </div>
       );
   };
 
   const renderBillingRequestsSas = () => {
-      if (hidePrices || sortedBrsSas.length === 0 || !hasSAS) {
-          return <div style={{ flex: 1 }} />; 
-      }
+      if (hidePrices || sortedBrsSas.length === 0 || !hasSAS) return null;
 
       return (
-          <div style={{ flex: 1, marginRight: '20px' }}>
-              <div style={{ width: '340px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#fef3c7' }}>
-                  <div style={{ fontWeight: 'bold', marginBottom: '6px', borderBottom: '1px solid #d1d5db', paddingBottom: '4px', color: '#9a3412', fontSize: '10px' }}>
-                      FACTURACIÓN SAS (SUGERENCIA INTERNA)
-                  </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
-                        <thead>
-                            <tr>
-                                <th style={{ textAlign: 'left', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Fecha</th>
-                                <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Bruto</th>
-                                <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Desaj.</th>
-                                <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>IVA(5%)</th>
-                                <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Neto</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {sortedBrsSas.map((br, i) => (
-                                <tr key={i}>
-                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db' }}>{formatDate(br.date)}</td>
-                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right' }}>${Number(br.grossAmount || 0).toLocaleString('es-AR')}</td>
-                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right' }}>${Number(br.adjustment || 0).toLocaleString('es-AR')}</td>
-                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right' }}>${Number(br.ivaSas || 0).toLocaleString('es-AR')}</td>
-                                    <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', fontWeight: 'bold' }}>
-                                        ${Number(br.amount || 0).toLocaleString('es-AR')}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                  </table>
+          <div style={{ minWidth: '320px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#fef3c7', borderRadius: '4px' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '6px', borderBottom: '1px solid #d1d5db', paddingBottom: '4px', color: '#9a3412', fontSize: '10px' }}>
+                  FACTURACIÓN SAS
               </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
+                    <thead>
+                        <tr>
+                            <th style={{ textAlign: 'left', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Fecha</th>
+                            <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Neto</th>
+                            <th style={{ textAlign: 'center', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Tipo</th>
+                            <th style={{ textAlign: 'left', borderBottom: '1px solid #9ca3af', paddingBottom: '2px', paddingLeft: '4px' }}>Descripción / Canje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sortedBrsSas.map((br, i) => (
+                            <tr key={i}>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db' }}>{formatDate(br.date)}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', fontWeight: 'bold', paddingRight: '4px' }}>${Number(br.amount || 0).toLocaleString('es-AR')}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'center' }}><span style={{ backgroundColor: br.paymentType !== 'Se paga' ? '#fed7aa' : '#e2e8f0', padding: '1px 3px', borderRadius: '2px', fontSize: '8px' }}>{br.paymentType || 'Se paga'}</span></td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'left', paddingLeft: '4px', fontStyle: 'italic', color: '#4b5563' }}>{br.canjeDescription || '-'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+              </table>
+          </div>
+      );
+  };
+
+  // 🟢 TABLA DE EXPORTACIÓN PARA FACTURAS EN AVIÓN
+  const renderBillingRequestsAvion = () => {
+      if (hidePrices || sortedBrsAvion.length === 0) return null;
+
+      return (
+          <div style={{ minWidth: '320px', border: '1px solid #cbd5e1', padding: '8px', backgroundColor: '#f1f5f9', borderRadius: '4px' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '6px', borderBottom: '1px solid #cbd5e1', paddingBottom: '4px', color: '#334155', fontSize: '10px' }}>
+                  COMPROMISOS EN AVIÓN (NO SE EMITE)
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
+                    <thead>
+                        <tr>
+                            <th style={{ textAlign: 'left', borderBottom: '1px solid #94a3b8', paddingBottom: '2px' }}>Fecha</th>
+                            <th style={{ textAlign: 'right', borderBottom: '1px solid #94a3b8', paddingBottom: '2px' }}>Valor</th>
+                            <th style={{ textAlign: 'center', borderBottom: '1px solid #94a3b8', paddingBottom: '2px' }}>Tipo</th>
+                            <th style={{ textAlign: 'left', borderBottom: '1px solid #94a3b8', paddingBottom: '2px', paddingLeft: '4px' }}>Descripción / Canje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sortedBrsAvion.map((br, i) => (
+                            <tr key={i}>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #cbd5e1' }}>{formatDate(br.date)}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #cbd5e1', textAlign: 'right', fontWeight: 'bold', paddingRight: '4px' }}>${Number(br.amount || 0).toLocaleString('es-AR')}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #cbd5e1', textAlign: 'center' }}><span style={{ backgroundColor: '#fef08a', color: '#854d0e', padding: '1px 3px', borderRadius: '2px', fontSize: '8px' }}>{br.paymentType || 'Canje'}</span></td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #cbd5e1', textAlign: 'left', paddingLeft: '4px', fontStyle: 'italic', color: '#4b5563' }}>{br.canjeDescription || '-'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+              </table>
           </div>
       );
   };
@@ -333,7 +353,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                     <div style={styles.totalRow}><span>Subtotal Mensual:</span><span>${srlSubtotal.toLocaleString('es-AR')}</span></div>
                     <div style={styles.totalRow}><span>Desajuste:</span><span>${srlAdjustment.toLocaleString('es-AR')}</span></div>
                     <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
-                        <span>Total a Facturar (Mes):</span><span>${srlTotalToInvoice.toLocaleString('es-AR')}</span>
+                        <span>Total SRL (Mes):</span><span>${srlTotalToInvoice.toLocaleString('es-AR')}</span>
                     </div>
                     <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({srlCommissionPct}%):</span><span>${srlAgencyAmount.toLocaleString('es-AR')}</span></div>
                     <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
@@ -406,7 +426,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                     <div style={styles.totalRow}><span>Desajuste:</span><span>${sasAdjustment.toLocaleString('es-AR')}</span></div>
                     <div style={styles.totalRow}><span>IVA 5%:</span><span>${sasIva.toLocaleString('es-AR')}</span></div>
                     <div style={{ ...styles.totalRow, fontWeight: 'bold', borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>
-                        <span>Total a Facturar (Mes):</span><span>${sasTotalToInvoice.toLocaleString('es-AR')}</span>
+                        <span>Total SAS (Mes):</span><span>${sasTotalToInvoice.toLocaleString('es-AR')}</span>
                     </div>
                     <div style={{ ...styles.totalRow, color: '#6b7280' }}><span>Agencia ({sasCommissionPct}%):</span><span>${sasAgencyAmount.toLocaleString('es-AR')}</span></div>
                     <div style={{ ...styles.totalRow, fontWeight: 'bold', color: '#15803d', marginTop: '4px' }}>
@@ -418,11 +438,21 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
     );
   };
 
+  // 🟢 CONTENEDOR GRÁFICO GLOBAL PARA FACTURAS EN AVIÓN
+  const renderAvionTotalsSection = () => {
+      if (hidePrices || sortedBrsAvion.length === 0) return null;
+      return (
+          <div className="pdf-block" style={{ marginBottom: '30px', display: 'flex', justifyContent: 'flex-start' }}>
+              {renderBillingRequestsAvion()}
+          </div>
+      );
+  };
+
   const renderFooter = () => (
     <div className="pdf-block" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', paddingTop: '20px' }}>
       {!hidePrices && (
         <div style={{ width: '100%', borderTop: '2px solid #000', paddingTop: '10px', textAlign: 'right' }}>
-            <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>Total Sugerido Facturación: ${ (order.totalOrder || 0).toLocaleString('es-AR') }</p>
+            <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>Total Sugerido Facturación Contractual: ${ (order.totalOrder || 0).toLocaleString('es-AR') }</p>
         </div>
       )}
       <div style={{ marginTop: hidePrices ? '20px' : '40px', borderTop: '1px solid #000', width: '250px', textAlign: 'center', fontSize: '11px', paddingTop: '5px', marginLeft: 'auto' }}>
@@ -441,6 +471,9 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
 
         {renderSASSection()}
         {renderSASTotals()}
+
+        {/* 🟢 COMPROMISOS EN AVIÓN INYECTADOS EN EL CUERPO DEL PDF */}
+        {renderAvionTotalsSection()}
         
         {renderFooter()}
       </div>
