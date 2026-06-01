@@ -5061,3 +5061,125 @@ export const mergeClients = async (
         ownerName: targetData.ownerName || 'Sistema'
     });
 };
+
+// ============================================================================
+// --- GESTIÓN DINÁMICA DE TRABAJO (ROLES Y RESPONSABILIDADES) ---
+// ============================================================================
+
+export interface WorkflowAssignments {
+    approvers: string[];
+    billingReceptors: string[];
+    tangoInvoicers: string[];
+}
+
+export const getWorkflowAssignments = async (): Promise<WorkflowAssignments> => {
+    const docRef = doc(db, 'system_config', 'workflow_assignments');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+        const d = snap.data();
+        return {
+            approvers: d.approvers || [],
+            billingReceptors: d.billingReceptors || [],
+            tangoInvoicers: d.tangoInvoicers || []
+        };
+    }
+    return { approvers: [], billingReceptors: [], tangoInvoicers: [] };
+};
+
+export const saveWorkflowAssignments = async (assignments: WorkflowAssignments): Promise<void> => {
+    const docRef = doc(db, 'system_config', 'workflow_assignments');
+    await setDoc(docRef, assignments, { merge: true });
+    invalidateCache();
+};
+
+// ============================================================================
+// --- PROCESADOR DE BANDEJA DE FACTURACIÓN ---
+// ============================================================================
+
+export const getAllBillingRequestsWithMetadata = async (): Promise<any[]> => {
+    // 1. Traer todas las peticiones de facturación crudas
+    const snapRequests = await getDocs(collection(db, 'billing_requests'));
+    const requests = snapRequests.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // 2. Traer las órdenes asociadas para cruzar ejecutivos y títulos
+    const snapOrders = await getDocs(collection(db, 'advertising_orders'));
+    const ordersMap = new Map(snapOrders.docs.map(d => [d.id, { id: d.id, ...d.data() } as any]));
+
+    // 3. Traer los clientes para resolver Razones Sociales y CUITs en vivo
+    const snapClients = await getDocs(collection(db, 'clients'));
+    const clientsMap = new Map(snapClients.docs.map(d => [d.id, d.data() as any]));
+
+    return requests.map((br: any) => {
+        const order = ordersMap.get(br.orderId);
+        const client = clientsMap.get(br.clientId);
+
+        return {
+            ...br,
+            accountExecutive: order?.accountExecutive || 'Sistema',
+            advisorId: order?.createdBy || '',
+            opportunityTitle: order?.opportunityTitle || order?.product || 'Campaña',
+            clientDisplayName: client?.razonSocialTango || client?.razonSocial || client?.denominacion || 'Desconocido',
+            cuit: client?.cuit || '-',
+            billingStatus: br.billingStatus || 'Sugerido', // Default fallback
+            invoiceNumber: br.invoiceNumber || ''
+        };
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+};
+
+export const updateBillingRequestStatus = async (
+    requestId: string,
+    newStatus: 'Sugerido' | 'Solicitado' | 'Confeccionado',
+    metadata?: { invoiceNumber?: string; emailPayload?: { accessToken: string; loggedUser: string } }
+): Promise<void> => {
+    const docRef = doc(db, 'billing_requests', requestId);
+    const updates: Record<string, any> = { billingStatus: newStatus, updatedAt: serverTimestamp() };
+    
+    if (metadata?.invoiceNumber) {
+        updates.invoiceNumber = metadata.invoiceNumber;
+    }
+
+    await updateDoc(docRef, updates);
+
+    // Si el estado es "Solicitado", es el asesor pidiendo facturación; se despacha el mail estructurado
+    if (newStatus === 'Solicitado' && metadata?.emailPayload) {
+        const allData = await getAllBillingRequestsWithMetadata();
+        const fullRequest = allData.find(r => r.id === requestId);
+        
+        if (fullRequest) {
+            const configAssignments = await getWorkflowAssignments();
+            const recipients: string[] = ['lchena@airedesantafe.com.ar']; // Destinatario por defecto
+            
+            // Sumamos los correos de los contables asignados en la pantalla de administración
+            for (const id of configAssignments.tangoInvoicers) {
+                const u = await getUserById(id);
+                if (u?.email && !recipients.includes(u.email)) recipients.push(u.email);
+            }
+
+            const emailBody = `
+                <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #cbd5e1; padding: 20px; border-radius: 8px;">
+                    <h2 style="color: #1e3a8a; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px;">Solicitud de Facturación de Contrato</h2>
+                    <p>El asesor <strong>${fullRequest.accountExecutive}</strong> ha solicitado la confección de la siguiente factura:</p>
+                    <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px;">
+                        <tr><td style="padding: 6px; font-weight: bold; width: 140px; background: #f8fafc;">Anunciante:</td><td style="padding: 6px; background: #f8fafc;">${fullRequest.clientDisplayName}</td></tr>
+                        <tr><td style="padding: 6px; font-weight: bold;">CUIT:</td><td style="padding: 6px;">${fullRequest.cuit}</td></tr>
+                        <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Empresa Destino:</td><td style="padding: 6px; background: #f8fafc; font-weight: bold; color: #b45309;">${fullRequest.company}</td></tr>
+                        <tr><td style="padding: 6px; font-weight: bold;">Fecha Programada:</td><td style="padding: 6px;">${format(new Date(fullRequest.date + 'T12:00:00'), 'dd/MM/yyyy')}</td></tr>
+                        <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Monto Neto:</td><td style="padding: 6px; background: #f8fafc; font-weight: bold; color: #15803d;">$${Number(fullRequest.amount).toLocaleString('es-AR')}</td></tr>
+                        <tr><td style="padding: 6px; font-weight: bold;">Condición Comercial:</td><td style="padding: 6px; font-style: italic;">${fullRequest.paymentType || 'Se paga'} ${fullRequest.canjeDescription ? `(${fullRequest.canjeDescription})` : ''}</td></tr>
+                        <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Producto/Orden:</td><td style="padding: 6px; background: #f8fafc;">${fullRequest.opportunityTitle}</td></tr>
+                    </table>
+                    <p style="font-size: 11px; color: #64748b; margin-top: 20px; text-align: center; border-top: 1px dashed #cbd5e1; paddingTop: 10px;">
+                        Enviado de forma automática por el Centro de Gestión de Facturación - AIRE CRM.
+                    </p>
+                </div>
+            `;
+
+            await sendEmail({
+                accessToken: metadata.emailPayload.accessToken,
+                to: recipients,
+                subject: `SOLICITUD FACTURA - ${fullRequest.company} - ${fullRequest.clientDisplayName}`,
+                body: emailBody
+            });
+        }
+    }
+};
