@@ -5128,7 +5128,7 @@ export const getAllBillingRequestsWithMetadata = async (): Promise<any[]> => {
 
 export const updateBillingRequestStatus = async (
     requestId: string,
-    newStatus: 'Sugerido' | 'Solicitado' | 'Confeccionado',
+    newStatus: 'Sugerido' | 'Solicitado' | 'Elevado' | 'Confeccionado',
     metadata?: { invoiceNumber?: string; emailPayload?: { accessToken: string; loggedUser: string } }
 ): Promise<void> => {
     const docRef = doc(db, 'billing_requests', requestId);
@@ -5140,16 +5140,15 @@ export const updateBillingRequestStatus = async (
 
     await updateDoc(docRef, updates);
 
-    // Si el estado es "Solicitado", es el asesor pidiendo facturación; se despacha el mail estructurado
-    if (newStatus === 'Solicitado' && metadata?.emailPayload) {
+    // 🟢 EL CORREO AHORA SE DISPARA ÚNICAMENTE CUANDO EL RECEPTOR SELECCIONA "ELEVADO"
+    if (newStatus === 'Elevado' && metadata?.emailPayload) {
         const allData = await getAllBillingRequestsWithMetadata();
         const fullRequest = allData.find(r => r.id === requestId);
         
         if (fullRequest) {
             const configAssignments = await getWorkflowAssignments();
-            const recipients: string[] = ['lchena@airedesantafe.com.ar']; // Destinatario por defecto
+            const recipients: string[] = ['lchena@airedesantafe.com.ar']; 
             
-            // Sumamos los correos de los contables asignados en la pantalla de administración
             for (const id of configAssignments.tangoInvoicers) {
                 const u = await getUserById(id);
                 if (u?.email && !recipients.includes(u.email)) recipients.push(u.email);
@@ -5157,8 +5156,8 @@ export const updateBillingRequestStatus = async (
 
             const emailBody = `
                 <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #cbd5e1; padding: 20px; border-radius: 8px;">
-                    <h2 style="color: #1e3a8a; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px;">Solicitud de Facturación de Contrato</h2>
-                    <p>El asesor <strong>${fullRequest.accountExecutive}</strong> ha solicitado la confección de la siguiente factura:</p>
+                    <h2 style="color: #b45309; border-bottom: 2px solid #b45309; padding-bottom: 8px;">Pedido de Facturación Elevado a Contaduría</h2>
+                    <p>El coordinador/receptor <strong>${metadata.emailPayload.loggedUser}</strong> ha validado y elevado la siguiente solicitud de factura para su confección en Tango:</p>
                     <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px;">
                         <tr><td style="padding: 6px; font-weight: bold; width: 140px; background: #f8fafc;">Anunciante:</td><td style="padding: 6px; background: #f8fafc;">${fullRequest.clientDisplayName}</td></tr>
                         <tr><td style="padding: 6px; font-weight: bold;">CUIT:</td><td style="padding: 6px;">${fullRequest.cuit}</td></tr>
@@ -5166,9 +5165,10 @@ export const updateBillingRequestStatus = async (
                         <tr><td style="padding: 6px; font-weight: bold;">Fecha Programada:</td><td style="padding: 6px;">${format(new Date(fullRequest.date + 'T12:00:00'), 'dd/MM/yyyy')}</td></tr>
                         <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Monto Neto:</td><td style="padding: 6px; background: #f8fafc; font-weight: bold; color: #15803d;">$${Number(fullRequest.amount).toLocaleString('es-AR')}</td></tr>
                         <tr><td style="padding: 6px; font-weight: bold;">Condición Comercial:</td><td style="padding: 6px; font-style: italic;">${fullRequest.paymentType || 'Se paga'} ${fullRequest.canjeDescription ? `(${fullRequest.canjeDescription})` : ''}</td></tr>
-                        <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Producto/Orden:</td><td style="padding: 6px; background: #f8fafc;">${fullRequest.opportunityTitle}</td></tr>
+                        <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Asesor Comercial:</td><td style="padding: 6px; background: #f8fafc;">${fullRequest.accountExecutive}</td></tr>
+                        <tr><td style="padding: 6px; font-weight: bold;">Producto/Orden:</td><td style="padding: 6px;">${fullRequest.opportunityTitle}</td></tr>
                     </table>
-                    <p style="font-size: 11px; color: #64748b; margin-top: 20px; text-align: center; border-top: 1px dashed #cbd5e1; paddingTop: 10px;">
+                    <p style="font-size: 11px; color: #64748b; margin-top: 20px; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 10px;">
                         Enviado de forma automática por el Centro de Gestión de Facturación - AIRE CRM.
                     </p>
                 </div>
