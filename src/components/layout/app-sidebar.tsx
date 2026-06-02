@@ -39,6 +39,8 @@ import {
   ScrollText,
   Share2, 
   Smartphone,
+  Trash2,
+  Settings,  
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
