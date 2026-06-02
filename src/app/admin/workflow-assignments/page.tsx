@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { getWorkflowAssignments, saveWorkflowAssignments, getAllUsers } from '@/lib/firebase-service';
 import { User } from '@/lib/types';
-import { Save, ShieldAlert, Award, FileText, Landmark } from 'lucide-react';
+import { Save, ShieldAlert, Award, FileText, Landmark, Loader2 } from 'lucide-react'; // 🟢 CORREGIDO: Loader2 agregado aquí
 
 export default function WorkflowAssignmentsPage() {
     const { userInfo, isBoss } = useAuth();
@@ -31,9 +31,9 @@ export default function WorkflowAssignmentsPage() {
         if (canAccess) {
             Promise.all([getAllUsers(), getWorkflowAssignments()]).then(([allUsers, config]) => {
                 setUsers(allUsers);
-                setApprovers(config.approvers);
-                setBillingReceptors(config.billingReceptors);
-                setTangoInvoicers(config.tangoInvoicers);
+                setApprovers(config.approvers || []);
+                setBillingReceptors(config.billingReceptors || []);
+                setTangoInvoicers(config.tangoInvoicers || []);
                 setLoading(false);
             }).catch(() => toast({ title: 'Error al cargar datos', variant: 'destructive' }));
         }
@@ -53,7 +53,7 @@ export default function WorkflowAssignmentsPage() {
         setSaving(true);
         try {
             await saveWorkflowAssignments({ approvers, billingReceptors, tangoInvoicers });
-            toast({ title: 'Configuración guardada', description: 'La matriz de responsabilidades contables y comerciales ha sido actualizada.' });
+            toast({ title: 'Configuración guardada', description: 'La matriz de responsabilidades ha sido actualizada con éxito.' });
         } catch {
             toast({ title: 'Error al guardar', variant: 'destructive' });
         } finally {
@@ -62,11 +62,11 @@ export default function WorkflowAssignmentsPage() {
     };
 
     if (!userInfo) return <Spinner />;
-    if (!canAccess) return <div className="p-10 text-center text-red-500 font-bold text-xl">Acceso Denegado. Solo accesible para Gerencia General.</div>;
+    if (!canAccess) return <div className="p-10 text-center text-red-500 font-bold text-xl">Acceso Denegado. Pantalla exclusiva de la Dirección.</div>;
 
     return (
         <div className="flex flex-col h-full bg-slate-50">
-            <Header title="Configuración de Responsabilidades del Sistema">
+            <Header title="Responsabilidades del Sistema">
                 <Button onClick={handleSave} disabled={saving} className="bg-blue-600 hover:bg-blue-700 font-bold">
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                     {saving ? 'Guardando...' : 'Guardar Matriz'}
@@ -77,7 +77,7 @@ export default function WorkflowAssignmentsPage() {
                 <div className="mb-6 bg-blue-50 border-l-4 border-blue-600 p-4 rounded shadow-sm flex items-start gap-4">
                     <ShieldAlert className="text-blue-600 w-6 h-6 shrink-0 mt-0.5" />
                     <p className="text-sm text-blue-900 font-medium">
-                        Desde este panel centralizado puedes delegar facultades operativas específicas a los usuarios del CRM sin importar su rol nativo. Los cambios surten efecto de manera inmediata.
+                        Configura qué usuarios tienen permisos de Auditoría, quiénes reciben los pedidos de los asesores y qué correos de Administración contable recibirán las solicitudes automáticas de facturas Tango.
                     </p>
                 </div>
 
