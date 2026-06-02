@@ -46,12 +46,15 @@ export default function BillingRequestsPage() {
         }
     };
 
-    // 1. ASESOR: Pide la factura (Pasa de Sugerido a Solicitado - SIN CORREO)
+    // 1. ASESOR -> RECEPTOR (Pasa a Solicitado y notifica por mail)
     const handleRequestBilling = async (id: string) => {
         setProcessingId(id);
         try {
-            await updateBillingRequestStatus(id, 'Solicitado');
-            toast({ title: 'Factura Solicitada', description: 'El pedido fue enviado a la bandeja de coordinación.' });
+            const token = await getGoogleAccessToken();
+            await updateBillingRequestStatus(id, 'Solicitado', {
+                emailPayload: { accessToken: token || '', loggedUser: userInfo!.name }
+            });
+            toast({ title: 'Factura Solicitada', description: 'El pedido fue enviado a coordinación.' });
             loadData();
         } catch (e) {
             toast({ title: 'Error al solicitar facturación', variant: 'destructive' });
@@ -60,7 +63,7 @@ export default function BillingRequestsPage() {
         }
     };
 
-    // 2. RECEPTOR: Evalúa y Eleva a contaduría (Pasa de Solicitado a Elevado - DISPARA EL CORREO)
+    // 2. RECEPTOR -> FACTURADOR (Pasa a Elevado y envía correo a contabilidad)
     const handleElevateBilling = async (id: string) => {
         setProcessingId(id);
         try {
@@ -68,7 +71,7 @@ export default function BillingRequestsPage() {
             await updateBillingRequestStatus(id, 'Elevado', {
                 emailPayload: { accessToken: token || '', loggedUser: userInfo!.name }
             });
-            toast({ title: 'Pedido Elevado', description: 'Se aprobó el pedido y se notificó al área de administración contable.' });
+            toast({ title: 'Pedido Elevado', description: 'Se aprobó el pedido y se notificó a administración.' });
             loadData();
         } catch (e) {
             toast({ title: 'Error al elevar el pedido', variant: 'destructive' });
@@ -77,7 +80,7 @@ export default function BillingRequestsPage() {
         }
     };
 
-    // 3. RECEPTOR: Recibe el número de Tango y cierra el circuito (Pasa de Elevado a Confeccionado)
+    // 3. RECEPTOR -> ASESOR (Pasa a Confeccionado, asigna número de Tango y notifica al vendedor)
     const handleConfectInvoice = async (id: string) => {
         const noReal = invoiceNumbers[id]?.trim();
         if (!noReal) {
@@ -86,8 +89,12 @@ export default function BillingRequestsPage() {
         }
         setProcessingId(id);
         try {
-            await updateBillingRequestStatus(id, 'Confeccionado', { invoiceNumber: noReal });
-            toast({ title: 'Factura registrada con éxito' });
+            const token = await getGoogleAccessToken();
+            await updateBillingRequestStatus(id, 'Confeccionado', { 
+                invoiceNumber: noReal,
+                emailPayload: { accessToken: token || '', loggedUser: userInfo!.name }
+            });
+            toast({ title: 'Factura asentada', description: 'Se guardó el comprobante y se notificó al asesor.' });
             loadData();
         } catch (e) {
             toast({ title: 'Error al registrar', variant: 'destructive' });
@@ -101,7 +108,6 @@ export default function BillingRequestsPage() {
     const myRequests = allRequests.filter(r => isReceptor ? true : r.advisorId === userInfo.id);
 
     const bandSugeridas = myRequests.filter(r => r.billingStatus === 'Sugerido');
-    // 🟢 LA SOLAPA 2 COMPRIME TANTO LOS PENDIENTES DE ELEVACIÓN COMO LOS YA ELEVADOS
     const bandSolicitadas = myRequests.filter(r => r.billingStatus === 'Solicitado' || r.billingStatus === 'Elevado');
     const bandConfeccionadas = myRequests.filter(r => r.billingStatus === 'Confeccionado');
 
@@ -154,7 +160,6 @@ export default function BillingRequestsPage() {
                                         </Button>
                                     )}
                                     
-                                    {/* ACCIONES EXCLUSIVAS DEL RECEPTOR DENTRO DE LA SOLAPA 2 */}
                                     {tabType === 'solicitado' && isReceptor && row.billingStatus === 'Solicitado' && (
                                         <Button size="sm" className="bg-amber-600 hover:bg-amber-700 h-8 text-xs font-bold" onClick={() => handleElevateBilling(row.id)} disabled={isProcessing}>
                                             {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Send className="w-3 h-3 mr-1" />}
@@ -176,7 +181,6 @@ export default function BillingRequestsPage() {
                                         </div>
                                     )}
 
-                                    {/* VISTA DEL ASESOR DENTRO DE LA SOLAPA 2 */}
                                     {tabType === 'solicitado' && !isReceptor && (
                                         <Badge variant="outline" className={row.billingStatus === 'Solicitado' ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-blue-50 text-blue-700 border-blue-200"}>
                                             {row.billingStatus === 'Solicitado' ? "Recibido por Coordinación" : "Elevado a Contaduría"}
