@@ -141,7 +141,7 @@ export function AppSidebar() {
       items: [
         { title: 'Cobranzas', href: '/billing', icon: DollarSign, screenName: 'Billing' },
         { title: 'Facturas', href: '/invoices', icon: FileText, screenName: 'Invoices' },
-        { name: 'Control Facturación', href: '/billing-requests', icon: FileText },
+        { name: 'Control Facturación', href: '/billing-requests', icon: FileText, screenName: 'Billing-requests' },
       ]
     },
     {
@@ -161,8 +161,8 @@ export function AppSidebar() {
         { title: 'Importar', href: '/import', icon: Upload, screenName: 'Import' },
         { title: 'Mapeo Tango', href: '/tango-mapping', icon: Database, screenName: 'TangoMapping' },
         { title: 'Actividad', href: '/activity', icon: Activity, screenName: 'Activity' },
-        { name: 'Limpieza de Datos', href: '/data-cleanup', icon: Trash2 },
-        { name: 'Configuración Roles', href: '/admin/workflow-assignments', icon: Settings },
+        { name: 'Limpieza de Datos', href: '/data-cleanup', icon: Trash2, screenName: 'Data-cleanup' },
+        { name: 'Configuración Roles', href: '/admin/workflow-assignments', icon: Settings, screenName: 'Workflow-assignments' },
       ]
     },
   ];
@@ -199,7 +199,7 @@ export function AppSidebar() {
          allowedScreens.push(
           'Dashboard', 'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
           'Canjes', 'Quotes', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
-          'Calendar', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes'
+          'Calendar', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes', 'Billing-requests',
          );
       }
 
