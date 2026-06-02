@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { getAllBillingRequestsWithMetadata, updateBillingRequestStatus, getWorkflowAssignments } from '@/lib/firebase-service';
 import { format } from 'date-fns';
-import { Clock, Send, CheckCircle2, Link, FileCheck2, UserCheck } from 'lucide-react';
+import { Clock, Send, CheckCircle2, Link, FileCheck2, UserCheck, Loader2 } from 'lucide-react';
 import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer';
 
 export default function BillingRequestsPage() {
