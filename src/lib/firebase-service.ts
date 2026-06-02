@@ -5138,48 +5138,105 @@ export const updateBillingRequestStatus = async (
         updates.invoiceNumber = metadata.invoiceNumber;
     }
 
+    // 1. Impactamos el cambio de estado en la Base de Datos
     await updateDoc(docRef, updates);
 
-    // 🟢 EL CORREO AHORA SE DISPARA ÚNICAMENTE CUANDO EL RECEPTOR SELECCIONA "ELEVADO"
-    if (newStatus === 'Elevado' && metadata?.emailPayload) {
-        const allData = await getAllBillingRequestsWithMetadata();
-        const fullRequest = allData.find(r => r.id === requestId);
-        
-        if (fullRequest) {
+    // 2. Ejecución de notificaciones protegidas por correo
+    if (metadata?.emailPayload?.accessToken) {
+        try {
+            const allData = await getAllBillingRequestsWithMetadata();
+            const fullRequest = allData.find(r => r.id === requestId);
+            if (!fullRequest) return;
+
             const configAssignments = await getWorkflowAssignments();
-            const recipients: string[] = ['lchena@airedesantafe.com.ar']; 
-            
-            for (const id of configAssignments.tangoInvoicers) {
-                const u = await getUserById(id);
-                if (u?.email && !recipients.includes(u.email)) recipients.push(u.email);
+            let recipients: string[] = [];
+            let emailSubject = "";
+            let emailBody = "";
+
+            let formattedDate = fullRequest.date;
+            try { formattedDate = format(new Date(fullRequest.date + 'T12:00:00'), 'dd/MM/yyyy'); } catch(e) {}
+
+            // 🟢 CASO A: ASESOR -> RECEPTOR (Nueva solicitud entrante)
+            if (newStatus === 'Solicitado') {
+                emailSubject = `⚠️ NUEVO PEDIDO FACTURA - ${fullRequest.company} - ${fullRequest.clientDisplayName}`;
+                
+                // Se le envía a todos los marcados como "Receptores de pedidos"
+                for (const id of configAssignments.billingReceptors) {
+                    const u = await getUserById(id);
+                    if (u?.email && !recipients.includes(u.email)) recipients.push(u.email);
+                }
+
+                emailBody = `
+                    <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #cbd5e1; padding: 20px; border-radius: 8px;">
+                        <h2 style="color: #1d4ed8; border-bottom: 2px solid #1d4ed8; padding-bottom: 8px;">Nuevo Pedido de Facturación Entrante</h2>
+                        <p>El asesor <strong>${fullRequest.accountExecutive}</strong> solicita la validación del siguiente ítem:</p>
+                        <p><strong>Anunciante:</strong> ${fullRequest.clientDisplayName}<br/><strong>Monto Neto:</strong> $${Number(fullRequest.amount).toLocaleString('es-AR')}<br/><strong>Empresa:</strong> ${fullRequest.company}</p>
+                        <p>Ingresa a la bandeja de Pedidos Realizados para evaluarlo y elevarlo a contaduría.</p>
+                    </div>
+                `;
             }
 
-            const emailBody = `
-                <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #cbd5e1; padding: 20px; border-radius: 8px;">
-                    <h2 style="color: #b45309; border-bottom: 2px solid #b45309; padding-bottom: 8px;">Pedido de Facturación Elevado a Contaduría</h2>
-                    <p>El coordinador/receptor <strong>${metadata.emailPayload.loggedUser}</strong> ha validado y elevado la siguiente solicitud de factura para su confección en Tango:</p>
-                    <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px;">
-                        <tr><td style="padding: 6px; font-weight: bold; width: 140px; background: #f8fafc;">Anunciante:</td><td style="padding: 6px; background: #f8fafc;">${fullRequest.clientDisplayName}</td></tr>
-                        <tr><td style="padding: 6px; font-weight: bold;">CUIT:</td><td style="padding: 6px;">${fullRequest.cuit}</td></tr>
-                        <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Empresa Destino:</td><td style="padding: 6px; background: #f8fafc; font-weight: bold; color: #b45309;">${fullRequest.company}</td></tr>
-                        <tr><td style="padding: 6px; font-weight: bold;">Fecha Programada:</td><td style="padding: 6px;">${format(new Date(fullRequest.date + 'T12:00:00'), 'dd/MM/yyyy')}</td></tr>
-                        <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Monto Neto:</td><td style="padding: 6px; background: #f8fafc; font-weight: bold; color: #15803d;">$${Number(fullRequest.amount).toLocaleString('es-AR')}</td></tr>
-                        <tr><td style="padding: 6px; font-weight: bold;">Condición Comercial:</td><td style="padding: 6px; font-style: italic;">${fullRequest.paymentType || 'Se paga'} ${fullRequest.canjeDescription ? `(${fullRequest.canjeDescription})` : ''}</td></tr>
-                        <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Asesor Comercial:</td><td style="padding: 6px; background: #f8fafc;">${fullRequest.accountExecutive}</td></tr>
-                        <tr><td style="padding: 6px; font-weight: bold;">Producto/Orden:</td><td style="padding: 6px;">${fullRequest.opportunityTitle}</td></tr>
-                    </table>
-                    <p style="font-size: 11px; color: #64748b; margin-top: 20px; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 10px;">
-                        Enviado de forma automática por el Centro de Gestión de Facturación - AIRE CRM.
-                    </p>
-                </div>
-            `;
+            // 🟢 CASO B: RECEPTOR -> FACTURADOR (Elevado a Administración)
+            else if (newStatus === 'Elevado') {
+                emailSubject = `💰 SOLICITUD FACTURA TANGO - ${fullRequest.company} - ${fullRequest.clientDisplayName}`;
+                recipients = ['lchena@airedesantafe.com.ar'];
 
-            await sendEmail({
-                accessToken: metadata.emailPayload.accessToken,
-                to: recipients,
-                subject: `SOLICITUD FACTURA - ${fullRequest.company} - ${fullRequest.clientDisplayName}`,
-                body: emailBody
-            });
+                // Se le envía a todos los marcados como "Facturación Tango"
+                for (const id of configAssignments.tangoInvoicers) {
+                    const u = await getUserById(id);
+                    if (u?.email && !recipients.includes(u.email)) recipients.push(u.email);
+                }
+
+                emailBody = `
+                    <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #cbd5e1; padding: 20px; border-radius: 8px;">
+                        <h2 style="color: #b45309; border-bottom: 2px solid #b45309; padding-bottom: 8px;">Pedido de Facturación Elevado</h2>
+                        <p>El coordinador <strong>${metadata.emailPayload.loggedUser}</strong> solicita confeccionar la siguiente factura en Tango:</p>
+                        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px;">
+                            <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Anunciante:</td><td style="padding: 6px; background: #f8fafc;">${fullRequest.clientDisplayName}</td></tr>
+                            <tr><td style="padding: 6px; font-weight: bold;">CUIT:</td><td style="padding: 6px;">${fullRequest.cuit}</td></tr>
+                            <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Empresa:</td><td style="padding: 6px; background: #f8fafc; font-weight: bold;">${fullRequest.company}</td></tr>
+                            <tr><td style="padding: 6px; font-weight: bold;">Fecha Progr:</td><td style="padding: 6px;">${formattedDate}</td></tr>
+                            <tr><td style="padding: 6px; font-weight: bold; background: #f8fafc;">Monto Neto:</td><td style="padding: 6px; background: #f8fafc; font-weight: bold; color: #15803d;">$${Number(fullRequest.amount).toLocaleString('es-AR')}</td></tr>
+                            <tr><td style="padding: 6px; font-weight: bold;">Condición:</td><td style="padding: 6px;">${fullRequest.paymentType || 'Se paga'} ${fullRequest.canjeDescription ? `(${fullRequest.canjeDescription})` : ''}</td></tr>
+                        </table>
+                    </div>
+                `;
+            }
+
+            // 🟢 CASO C: RECEPTOR -> ASESOR (Factura finalizada con número de Tango)
+            else if (newStatus === 'Confeccionado') {
+                emailSubject = `✅ FACTURA DISPONIBLE - ${fullRequest.clientDisplayName}`;
+                
+                // Buscamos el correo electrónico real del asesor dueño del contrato
+                if (fullRequest.advisorId) {
+                    const sellerProfile = await getUserById(fullRequest.advisorId);
+                    if (sellerProfile?.email) recipients.push(sellerProfile.email);
+                }
+                if (recipients.length === 0) recipients.push('lchena@airedesantafe.com.ar');
+
+                emailBody = `
+                    <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #cbd5e1; padding: 20px; border-radius: 8px;">
+                        <h2 style="color: #15803d; border-bottom: 2px solid #15803d; padding-bottom: 8px;">Factura Confeccionada Correctamente</h2>
+                        <p>Hola <strong>${fullRequest.accountExecutive}</strong>,</p>
+                        <p>Administración informa que ya se ha emitido el comprobante oficial en Tango para tu cliente:</p>
+                        <p><strong>Anunciante:</strong> ${fullRequest.clientDisplayName}<br/>
+                        <strong>Importe Neto:</strong> $${Number(fullRequest.amount).toLocaleString('es-AR')}<br/>
+                        <strong>NÚMERO DE FACTURA ASIGNADO:</strong> <span style="font-family: monospace; font-size: 14px; background: #e1faf0; padding: 2px 6px; border-radius: 4px; font-weight: bold; color: #16a34a;">${metadata.invoiceNumber}</span></p>
+                        <p>Ya puedes consultar el registro cerrado desde tu panel de facturas confeccionadas.</p>
+                    </div>
+                `;
+            }
+
+            if (recipients.length > 0 && emailBody !== "") {
+                await sendEmail({
+                    accessToken: metadata.emailPayload.accessToken,
+                    to: recipients,
+                    subject: emailSubject,
+                    body: emailBody
+                });
+            }
+        } catch (err) {
+            console.error("Fallo controlado en el despachador de correos contables:", err);
         }
     }
 };
