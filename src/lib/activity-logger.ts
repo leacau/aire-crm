@@ -5,7 +5,10 @@ import type { ActivityLog } from './types';
 
 const activitiesCollection = collection(db, 'activities');
 
-type LogActivityPayload = Omit<ActivityLog, 'id' | 'timestamp'>;
+type LogActivityPayload = Omit<ActivityLog, 'id' | 'timestamp' | 'ownerName'> & {
+    ownerName?: string;
+    timestamp?: unknown;
+};
 
 export const logActivity = async (payload: LogActivityPayload): Promise<void> => {
     try {

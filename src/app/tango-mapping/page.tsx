@@ -13,7 +13,7 @@ import { Client } from '@/lib/types';
 import { RefreshCcw, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 // 🟢 IMPORTAMOS FIRESTORE PARA GUARDAR LA MARCA DEL NUEVO MAPEO
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 
 // Tipado de la respuesta de Tango
@@ -153,12 +153,21 @@ export default function TangoMappingPage() {
             const crmData = await getClients();
             setCrmClients(crmData);
 
+            const idToken = await auth.currentUser?.getIdToken();
+            if (!idToken) throw new Error('No se pudo validar la sesion.');
+
+            const requestOptions = {
+                headers: {
+                    Authorization: `Bearer ${idToken}`,
+                },
+            };
+
             // Traemos clientes de Tango SRL (Company 5)
-            const resSrl = await fetch('/api/tango/clients?company=5');
+            const resSrl = await fetch('/api/tango/clients?company=5', requestOptions);
             const dataSrl = await resSrl.json();
             
             // Traemos clientes de Tango SAS (Company 6)
-            const resSas = await fetch('/api/tango/clients?company=6');
+            const resSas = await fetch('/api/tango/clients?company=6', requestOptions);
             const dataSas = await resSas.json();
 
             if (dataSrl.resultData?.list) {

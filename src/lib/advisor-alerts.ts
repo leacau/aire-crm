@@ -143,7 +143,7 @@ export const buildAdvisorAlerts = ({
       entityHref: thread.entityType === 'client'
         ? `/clients/${thread.entityId}`
         : `/opportunities?opportunityId=${thread.entityId}`,
-      entityType: thread.entityType,
+      entityType: thread.entityType || 'opportunity',
       meta: [
         { label: 'Entidad', value: thread.entityName },
         thread.lastMessageAt ? { label: 'Última actividad', value: formatDate(thread.lastMessageAt ? safeParseDate(thread.lastMessageAt) : null) } : undefined,

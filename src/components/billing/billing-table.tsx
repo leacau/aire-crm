@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
-import type { ColumnDef, ColumnOrderState, ColumnVisibilityState, RowSelectionState, SortingState } from '@tanstack/react-table';
+import type { ColumnDef, ColumnOrderState, RowSelectionState, SortingState, VisibilityState } from '@tanstack/react-table';
 import { TableFooter, TableRow, TableCell } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '../ui/label';
@@ -48,8 +48,8 @@ export const BillingTable = ({
   showCreditNoteDate?: boolean;
   sorting?: SortingState;
   setSorting?: React.Dispatch<React.SetStateAction<SortingState>>;
-  columnVisibility?: ColumnVisibilityState;
-  setColumnVisibility?: React.Dispatch<React.SetStateAction<ColumnVisibilityState>>;
+  columnVisibility?: VisibilityState;
+  setColumnVisibility?: React.Dispatch<React.SetStateAction<VisibilityState>>;
   columnOrder?: ColumnOrderState;
   setColumnOrder?: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
   isReady?: boolean;
@@ -316,7 +316,7 @@ export const BillingTable = ({
         }
     }
 
-    return cols;
+    return cols as ColumnDef<Opportunity | Invoice>[];
 
   }, [
     allSelected,
@@ -365,8 +365,6 @@ export const BillingTable = ({
         columnOrder={columnOrder}
         setColumnOrder={setColumnOrder}
         onRowClick={onRowClick}
-        rowSelection={selectionEnabled ? rowSelection : undefined}
-        setRowSelection={selectionEnabled ? handleRowSelectionChange : undefined}
         getRowId={(row) => (type === 'invoices' ? (row as Invoice).id : (row as Opportunity).id)}
         emptyStateMessage="No hay items en esta sección."
         footerContent={footerContent}

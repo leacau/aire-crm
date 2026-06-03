@@ -138,7 +138,7 @@ export function AdvertisingForm() {
         const [clientsData, agenciesData, programsData] = await Promise.all([
           getClients(), getAgencies(), getPrograms()
         ]);
-        if ('clients' in clientsData) setClients(clientsData.clients);
+        if (clientsData && typeof clientsData === 'object' && 'clients' in clientsData) setClients((clientsData as { clients: Client[] }).clients);
         else if (Array.isArray(clientsData)) setClients(clientsData as Client[]);
         setAgencies(agenciesData);
         setPrograms(programsData);

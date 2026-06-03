@@ -38,7 +38,7 @@ export async function GET(request: Request) {
         const INACTIVITY_LIMIT_DAYS = 7;
         
         // Cambiamos a array de objetos para guardar el dueño actual
-        const prospectsToRelease: { id: string; currentOwnerId: string }[] = [];
+        const prospectsToRelease: { id: string; currentOwnerId: string; companyName: string }[] = [];
 
         for (const p of prospects) {
             // Ignorar los que ya no tienen dueño, o están convertidos/no prósperos
@@ -77,18 +77,13 @@ export async function GET(request: Request) {
             const businessDaysPassed = calculateBusinessDays(lastInteractionStr, todayStr, holidays);
 
             if (businessDaysPassed > INACTIVITY_LIMIT_DAYS) {
-                prospectsToRelease.push({ id: p.id, currentOwnerId: p.ownerId });
-            }
-        }
-
-        if (businessDaysPassed > INACTIVITY_LIMIT_DAYS) {
-                // CAMBIO: Agregamos companyName
-                prospectsToRelease.push({ 
-                    id: p.id, 
+                prospectsToRelease.push({
+                    id: p.id,
                     currentOwnerId: p.ownerId,
-                    companyName: p.companyName
+                    companyName: p.companyName,
                 });
             }
+        }
 
         if (prospectsToRelease.length > 0) {
             await bulkReleaseProspectsServer(prospectsToRelease, 'system-cron', 'Sistema Automático');

@@ -322,7 +322,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 <div className="pt-1 flex items-center justify-between">
                     <Select 
                         value={item.status} 
-                        onValueChange={(val) => handleUpdateItem(session, item, { status: val })}
+                        onValueChange={(val) => handleUpdateItem(session, item, { status: val as any })}
                         disabled={session.status === 'Closed' && !canManage && !(item.origin === 'advisor')}
                     >
                         <SelectTrigger className={`w-full md:w-[160px] h-8 text-xs font-medium border ${

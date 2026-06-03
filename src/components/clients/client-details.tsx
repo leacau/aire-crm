@@ -85,6 +85,7 @@ import { Calendar } from '../ui/calendar';
 import { format, set } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityHtml } from '@/lib/sanitize-html';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Spinner } from '../ui/spinner';
 import {
@@ -1219,7 +1220,7 @@ export function ClientDetails({
                             </div>
                             <div className="flex-1">
                             <div className="flex items-center justify-between">
-                                <p className="text-sm" dangerouslySetInnerHTML={{ __html: activity.details }} />
+                                <p className="text-sm" dangerouslySetInnerHTML={{ __html: sanitizeActivityHtml(activity.details) }} />
                                 <p className="text-sm text-muted-foreground whitespace-nowrap">
                                 {new Date(activity.timestamp).toLocaleDateString()}
                                 </p>
@@ -1271,7 +1272,7 @@ export function ClientDetails({
         <AlertDialogContent>
             <AlertDialogHeader>
             <AlertDialogTitle>{alertConfig?.title}</AlertDialogTitle>
-            <AlertDialogDescription dangerouslySetInnerHTML={{ __html: alertConfig?.description || '' }} />
+            <AlertDialogDescription dangerouslySetInnerHTML={{ __html: sanitizeActivityHtml(alertConfig?.description) }} />
             </AlertDialogHeader>
             <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setIsAlertOpen(false)}>Cancelar</AlertDialogCancel>

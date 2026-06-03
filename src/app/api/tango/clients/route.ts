@@ -1,11 +1,24 @@
 import { NextResponse } from 'next/server';
+import { isServerResponse, requireServerManagement } from '@/lib/server/auth';
 
 export async function GET(request: Request) {
+    const serverUser = await requireServerManagement(request);
+    if (isServerResponse(serverUser)) return serverUser;
+
     const { searchParams } = new URL(request.url);
     const company = searchParams.get('company');
+    const apiAuthorization = process.env.TANGO_API_AUTHORIZATION;
 
     if (!company) {
         return NextResponse.json({ error: 'Falta el ID de Company' }, { status: 400 });
+    }
+
+    if (!['5', '6'].includes(company)) {
+        return NextResponse.json({ error: 'Company no permitida' }, { status: 400 });
+    }
+
+    if (!apiAuthorization) {
+        return NextResponse.json({ error: 'Configuracion de Tango incompleta' }, { status: 500 });
     }
 
     try {
@@ -17,7 +30,7 @@ export async function GET(request: Request) {
         const response = await fetch(tangoUrl, {
             method: 'GET',
             headers: {
-                'ApiAuthorization': 'ab921495-0c29-4c12-a425-c507ee917228',
+                'ApiAuthorization': apiAuthorization,
                 'Company': company,
             },
             // fetch en Next.js a veces cachea de forma agresiva. Le pedimos que siempre traiga datos frescos:

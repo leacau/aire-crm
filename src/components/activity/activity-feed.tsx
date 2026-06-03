@@ -16,6 +16,7 @@ import { es } from 'date-fns/locale';
 import { ActivitySummary } from './activity-summary';
 import { CheckCircle2, Circle, User as UserIcon, Calendar, Clock } from 'lucide-react'; // Iconos
 import { cn } from '@/lib/utils';
+import { sanitizeActivityHtml } from '@/lib/sanitize-html';
 
 type CombinedActivity = (ActivityLog | ClientActivity) & { sortDate: Date };
 
@@ -216,7 +217,7 @@ export function ActivityFeed() {
                                     <div className="flex-1 space-y-1">
                                         <div className="flex justify-between items-start">
                                             <span className={cn("font-medium text-sm", isCompleted && "line-through text-muted-foreground")}>
-                                                {'title' in act ? act.title : act.details}
+                                                {'title' in act ? act.title : (act as any).details}
                                             </span>
                                             <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
                                                 {format(parseISO(act.timestamp), "P p", { locale: es })}
@@ -231,7 +232,7 @@ export function ActivityFeed() {
                                         </div>
 
                                         {'details' in act && (
-                                            <div className="text-xs text-muted-foreground/80 line-clamp-2" dangerouslySetInnerHTML={{ __html: act.details || '' }} />
+                                            <div className="text-xs text-muted-foreground/80 line-clamp-2" dangerouslySetInnerHTML={{ __html: sanitizeActivityHtml(act.details) }} />
                                         )}
                                         {'observation' in act && act.observation && (
                                             <p className="text-xs text-muted-foreground/80 line-clamp-2">{act.observation}</p>

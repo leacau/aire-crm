@@ -20,54 +20,32 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      
-      // Agregamos TODOS los scopes necesarios para que al loguearse ya tenga acceso a todo
+
       provider.addScope('https://www.googleapis.com/auth/calendar.events');
-      provider.addScope('https://www.googleapis.com/auth/drive.file');
-      provider.addScope('https://www.googleapis.com/auth/chat.messages');
-      provider.addScope('https://www.googleapis.com/auth/chat.spaces.readonly');
-      provider.addScope('https://www.googleapis.com/auth/gmail.send'); 
+      provider.addScope('https://www.googleapis.com/auth/gmail.send');
 
       provider.setCustomParameters({
-        prompt: 'select_account consent',
-        access_type: 'offline'
+        prompt: 'select_account',
+        include_granted_scopes: 'true',
       });
 
-      const result = await signInWithPopup(auth, provider);
-      
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const accessToken = credential?.accessToken;
-
-      // Guardamos el token inmediatamente con la nueva lógica de localStorage
-      if (accessToken) {
-        if (typeof window !== 'undefined') {
-            const STORAGE_TOKEN_KEY = 'google_api_token';
-            const STORAGE_EXPIRY_KEY = 'google_api_token_expiry';
-            
-            // Expiración por defecto 1 hora (3600s) - 5 min buffer
-            const expiresInSeconds = 3600; 
-            const expiryTime = Date.now() + (expiresInSeconds * 1000) - (5 * 60 * 1000);
-            
-            localStorage.setItem(STORAGE_TOKEN_KEY, accessToken);
-            localStorage.setItem(STORAGE_EXPIRY_KEY, expiryTime.toString());
-            
-            // Limpiamos sessionStorage antiguo por si acaso
-            sessionStorage.removeItem('google-access-token');
-        }
-      }
+      await signInWithPopup(auth, provider);
+      localStorage.removeItem('google_api_token');
+      localStorage.removeItem('google_api_token_expiry');
+      sessionStorage.removeItem('google-access-token');
 
       toast({
         title: 'Bienvenido a Aire CRM',
-        description: 'Sesión iniciada correctamente.',
+        description: 'Sesion iniciada correctamente.',
       });
-      
+
       router.push('/');
     } catch (error: any) {
       console.error('Login error:', error);
       toast({
         variant: 'destructive',
-        title: 'Error de inicio de sesión',
-        description: error.message || 'No se pudo iniciar sesión con Google.',
+        title: 'Error de inicio de sesion',
+        description: error.message || 'No se pudo iniciar sesion con Google.',
       });
     } finally {
       setLoading(false);
@@ -75,32 +53,26 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
-      <Card className="w-full max-w-md shadow-lg">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+      <Card className="w-full max-w-md border-slate-200 shadow-lg">
         <CardHeader className="space-y-4 text-center">
           <div className="flex justify-center">
-             <div className="relative h-16 w-40">
-                <Image src="/logo.webp" alt="Aire CRM" fill className="object-contain" priority />
-             </div>
+            <div className="relative h-16 w-40">
+              <Image src="/logo.webp" alt="Aire CRM" fill className="object-contain" priority />
+            </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Iniciar Sesión</CardTitle>
-          <CardDescription>
-            Accede a tu cuenta corporativa de Aire CRM
-          </CardDescription>
+          <CardTitle className="text-2xl font-bold">Iniciar sesion</CardTitle>
+          <CardDescription>Accede con tu cuenta autorizada de Aire.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button 
-            className="w-full py-6 text-lg" 
-            onClick={handleGoogleLogin} 
-            disabled={loading}
-          >
+          <Button className="w-full py-6 text-base" onClick={handleGoogleLogin} disabled={loading}>
             {loading ? (
               <>
                 <Spinner className="mr-2" /> Conectando...
               </>
             ) : (
               <>
-                <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
+                <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
                   <path
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                     fill="#4285F4"
@@ -123,17 +95,17 @@ export default function LoginPage() {
             )}
           </Button>
         </CardContent>
-        <CardFooter className="flex flex-col gap-2 justify-center text-xs text-muted-foreground pt-4 border-t">
+        <CardFooter className="flex flex-col gap-2 justify-center border-t pt-4 text-xs text-muted-foreground">
           <div className="flex gap-4">
-            <Link href="/privacy-policy" className="hover:underline hover:text-primary">
-              Política de Privacidad
+            <Link href="/privacy-policy" className="hover:text-primary hover:underline">
+              Politica de privacidad
             </Link>
-            <span>•</span>
-            <Link href="/terms-of-service" className="hover:underline hover:text-primary">
-              Términos del Servicio
+            <span>|</span>
+            <Link href="/terms-of-service" className="hover:text-primary hover:underline">
+              Terminos del servicio
             </Link>
           </div>
-          <p>© {new Date().getFullYear()} Aire de Santa Fe</p>
+          <p>(c) {new Date().getFullYear()} Aire de Santa Fe</p>
         </CardFooter>
       </Card>
     </div>

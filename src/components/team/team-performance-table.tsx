@@ -230,7 +230,7 @@ export function TeamPerformanceTable() {
 
     // APLICAR FILTROS (incluyendo usuarios nuevos sin área)
     const filteredUsers = users.filter(u => {
-        const matchesArea = filterArea === 'all' || u.area === filterArea || (!u.area && filterArea === 'all');
+        const matchesArea = (filterArea as string) === 'all' || u.area === filterArea || (!u.area && (filterArea as string) === 'all');
         const matchesRole = filterRole === 'all' || u.role === filterRole;
         return matchesArea && matchesRole;
     });

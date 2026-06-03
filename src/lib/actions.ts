@@ -1,9 +1,7 @@
 'use server';
 
-import { opportunities } from './data';
-
-
 export function getMockForecastingData() {
+  const opportunities: Array<{ value: number; stage: string }> = [];
   const pipelineData = JSON.stringify(
     opportunities.map((o) => ({
       deal_size: o.value,

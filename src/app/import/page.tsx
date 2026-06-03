@@ -80,7 +80,9 @@ export default function ImportPage() {
     }
 
     const advisorsMap = new Map(advisors.map(a => [a.name.toLowerCase(), a]));
-    const existingCuits = new Map(existingClients.map(c => c.cuit ? [c.cuit, c] : ['', null]).filter(c => c[0]));
+    const existingCuits = new Map<string, Client>(existingClients
+      .filter((c) => Boolean(c.cuit))
+      .map((c) => [c.cuit as string, c]));
     const existingDenominaciones = new Map(existingClients.map(c => [c.denominacion, c]));
 
 
@@ -170,7 +172,24 @@ export default function ImportPage() {
         if (clientData.denominacion) {
              try {
                 const { rawOwnerName, ...clientToSave } = clientData;
-                await createClient(clientToSave, owner?.id, owner?.name);
+                await createClient({
+                  denominacion: clientToSave.denominacion || '',
+                  razonSocial: clientToSave.razonSocial || clientToSave.denominacion || '',
+                  cuit: clientToSave.cuit || '',
+                  condicionIVA: clientToSave.condicionIVA || 'Consumidor Final',
+                  provincia: clientToSave.provincia || '',
+                  localidad: clientToSave.localidad || '',
+                  tipoEntidad: clientToSave.tipoEntidad || 'Privada',
+                  rubro: clientToSave.rubro || '',
+                  email: clientToSave.email || '',
+                  phone: clientToSave.phone || '',
+                  observaciones: clientToSave.observaciones,
+                  razonSocialTango: clientToSave.razonSocialTango,
+                  idTango: clientToSave.idTango,
+                  tangoCompanyId: clientToSave.tangoCompanyId,
+                  idAireSrl: clientToSave.idAireSrl,
+                  idAireDigital: clientToSave.idAireDigital,
+                }, owner?.id, owner?.name);
                 successCount++;
             } catch (error: any) {
                  console.error(`Error importing client ${clientData.denominacion}:`, error);

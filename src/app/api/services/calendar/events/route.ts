@@ -1,14 +1,22 @@
 import { NextResponse } from 'next/server';
+import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+
+function encodeCalendarId(calendarId: string) {
+    return encodeURIComponent(calendarId || 'primary');
+}
 
 export async function POST(req: Request) {
     try {
+        const serverUser = await requireServerUser(req);
+        if (isServerResponse(serverUser)) return serverUser;
+
         const { accessToken, event, calendarId = 'primary' } = await req.json();
 
         if (!accessToken) {
             return NextResponse.json({ error: 'Missing access token' }, { status: 401 });
         }
 
-        const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
+        const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeCalendarId(calendarId)}/events`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${accessToken}`,

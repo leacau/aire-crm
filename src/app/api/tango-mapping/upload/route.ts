@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
+import { isServerResponse, requireServerManagement } from '@/lib/server/auth';
 
 export const runtime = 'nodejs';
 const MAX_ROWS = 200;
 const MAX_MATCHES = 200;
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
+  const serverUser = await requireServerManagement(req);
+  if (isServerResponse(serverUser)) return serverUser;
+
   const formData = await req.formData();
   const file = formData.get('file');
   const searchTerm = (formData.get('q') as string | null)?.toLowerCase().trim();
 
   if (!file || !(file instanceof Blob)) {
     return NextResponse.json({ error: 'Archivo no recibido' }, { status: 400 });
+  }
+
+  if (file.size > MAX_FILE_BYTES) {
+    return NextResponse.json({ error: 'El archivo supera el limite permitido' }, { status: 413 });
   }
 
   const arrayBuffer = await file.arrayBuffer();

@@ -1083,7 +1083,15 @@ export default function DashboardPage() {
             onOpenChange={setIsOpportunityModalOpen}
             opportunity={editingOpportunity}
             onUpdate={handleUpdateOpportunity}
-            client={clients.find(c => c.id === editingOpportunity.clientId)}
+            client={(() => {
+              const client = clients.find(c => c.id === editingOpportunity.clientId);
+              return client ? {
+                id: client.id,
+                name: client.denominacion,
+                ownerId: client.ownerId,
+                ownerName: client.ownerName,
+              } : undefined;
+            })()}
         />
     )}
     </>

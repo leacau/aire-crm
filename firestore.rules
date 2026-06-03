@@ -1,70 +1,216 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-  
     function isSignedIn() {
       return request.auth != null;
     }
 
     function isSuperAdmin() {
-      return request.auth.token.email == 'lchena@airedesantafe.com.ar';
+      return isSignedIn() && request.auth.token.email == 'lchena@airedesantafe.com.ar';
     }
 
     function isManagement() {
-      let userRole = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-      return userRole in ['Jefe', 'Gerencia', 'Admin', 'Administracion'];
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+          in ['Jefe', 'Gerencia', 'Administracion', 'Admin'];
     }
 
-    function isOwner(resource) {
-      return request.auth.uid == resource.data.ownerId;
+    function createsOwnField(fieldName) {
+      return isSignedIn() && request.resource.data[fieldName] == request.auth.uid;
     }
 
     function isClientOwner(clientId) {
-      let clientDoc = get(/databases/$(database)/documents/clients/$(clientId));
-      return clientDoc.data.ownerId == request.auth.uid;
+      return isSignedIn()
+        && get(/databases/$(database)/documents/clients/$(clientId)).data.ownerId == request.auth.uid;
     }
-    
-    // System configuration is readable by all signed-in users, but only writable by super admins.
+
+    function ownsClientOnResource() {
+      return isSignedIn()
+        && resource.data.clientId is string
+        && isClientOwner(resource.data.clientId);
+    }
+
+    function ownsClientOnRequest() {
+      return isSignedIn()
+        && request.resource.data.clientId is string
+        && isClientOwner(request.resource.data.clientId);
+    }
+
+    function isActorOnResource() {
+      return isSignedIn() && (
+        resource.data.advisorId == request.auth.uid ||
+        resource.data.asesorId == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid
+      );
+    }
+
+    function isActorOnRequest() {
+      return isSignedIn() && (
+        request.resource.data.advisorId == request.auth.uid ||
+        request.resource.data.asesorId == request.auth.uid ||
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.createdBy == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid
+      );
+    }
+
+    function updatesSelfProfile(userId) {
+      return isSignedIn()
+        && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['role', 'area', 'managerId', 'permissions', 'sellerConfig', 'deletedAt', 'vacationDays', 'monthlyClosures', 'monthlyObjectives']);
+    }
+
     match /system_config/{docId} {
       allow read: if isSignedIn();
-      allow write: if isSuperAdmin();
+      allow write: if isManagement() || isSuperAdmin();
     }
 
-    // Users can read their own profile, managers can read all profiles.
-    // Only super admins can change roles or critical data.
     match /users/{userId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.email == request.auth.token.email;
-      allow update: if request.auth.uid == userId // Users can update their own profile (name, photo)
-                      || isManagement(); // Managers can update user details like roles
-    }
-
-    // Clients can be created by anyone. Read/write is restricted to owner or management.
-    match /clients/{clientId} {
-      allow read: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (isClientOwner(clientId) || isManagement());
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if updatesSelfProfile(userId) || isManagement();
       allow delete: if isManagement();
     }
-    
-    // Opportunities can be created if the user owns the client. 
-    // Updates are restricted to owner or management.
-    match /opportunities/{oppId} {
-      allow read: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isClientOwner(request.resource.data.clientId);
-      allow update: if isSignedIn() && (isClientOwner(resource.data.clientId) || isManagement());
-      allow delete: if isManagement() || isClientOwner(resource.data.clientId);
+
+    match /clients/{clientId} {
+      allow read, list: if isSignedIn();
+      allow create: if createsOwnField('ownerId') || isManagement();
+      allow update: if isClientOwner(clientId) || isManagement();
+      allow delete: if isManagement();
     }
-    
-    // All other collections are generally accessible by signed-in users for now.
-    // More granular rules can be added as needed.
+
+    match /people/{personId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
+
+    match /opportunities/{oppId} {
+      allow read, list: if isSignedIn();
+      allow create: if ownsClientOnRequest() || isManagement();
+      allow update, delete: if ownsClientOnResource() || isManagement();
+    }
+
+    match /commercial_notes/{noteId} {
+      allow get: if true;
+      allow list: if isSignedIn();
+      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
+      allow update, delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
+    }
+
+    match /programs/{programId} {
+      allow read: if true;
+      allow write, delete: if isManagement();
+    }
+
+    match /client-activities/{activityId} {
+      allow read: if isSignedIn();
+      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
+      allow update, delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
+    }
+
+    match /activities/{activityId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isManagement();
+    }
+
+    match /prospects/{prospectId} {
+      allow read: if isSignedIn();
+      allow create: if createsOwnField('ownerId') || isManagement();
+      allow update, delete: if isActorOnResource() || isManagement();
+    }
+
+    match /invoices/{invoiceId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isManagement();
+    }
+
+    match /payment_entries/{paymentId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isManagement();
+    }
+
+    match /billing_requests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isManagement();
+    }
+
+    match /advertising_orders/{orderId} {
+      allow read: if isSignedIn();
+      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
+      allow update, delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
+    }
+
+    match /social_media_requests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
+      allow update, delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
+    }
+
+    match /web_notes/{noteId} {
+      allow read: if isSignedIn();
+      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
+      allow update, delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
+    }
+
+    match /canjes/{canjeId} {
+      allow read: if isSignedIn();
+      allow create: if isActorOnRequest() || isManagement();
+      allow update, delete: if isActorOnResource() || isManagement();
+    }
+
+    match /convenios/{convenioId} {
+      allow read: if isSignedIn();
+      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
+      allow update, delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
+    }
+
+    match /licencias/{licenseId} {
+      allow read: if isSignedIn();
+      allow create: if isActorOnRequest() || isManagement();
+      allow update, delete: if isManagement();
+    }
+
+    match /agencies/{agencyId} {
+      allow read: if isSignedIn();
+      allow write, delete: if isManagement();
+    }
+
+    match /commercial_items/{itemId} {
+      allow read: if isSignedIn();
+      allow write, delete: if isManagement();
+    }
+
+    match /coaching_sessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow create: if isManagement();
+      allow update, delete: if isManagement() || isActorOnResource();
+    }
+
+    match /supervisor_comments/{commentId} {
+      allow read: if isSignedIn();
+      allow create: if isManagement();
+      allow update, delete: if isManagement() || isActorOnResource();
+    }
+
+    match /pipeline_interactions/{interactionId} {
+      allow read: if isSignedIn();
+      allow create: if isActorOnRequest() || isManagement();
+      allow update, delete: if isActorOnResource() || isManagement();
+    }
+
+    match /estadisticas_mensuales/{statId} {
+      allow read: if isSignedIn();
+      allow write: if isManagement();
+    }
+
     match /{collection}/{docId} {
-      allow read, write, delete: if isSignedIn();
+      allow read, write, delete: if false;
     }
   }
 }

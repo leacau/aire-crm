@@ -1,6 +1,6 @@
 import { dbAdmin } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
-import { isSaturday, isSunday, parseISO, format, addDays, isSameDay, isBefore, startOfDay } from 'date-fns';
+import { isSaturday, isSunday, parseISO, format, addDays, isSameDay, isBefore, startOfDay, startOfMonth, addMonths, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { Prospect, ClientActivity, SystemHolidays, User, Opportunity, Periodicidad } from '@/lib/types';
 import { sendServerEmail } from '@/lib/server/email'; // Nuevo servicio de email

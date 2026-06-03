@@ -39,7 +39,7 @@ export function hasManagementPrivileges(user?: { email?: string | null; role?: s
     if (!user.role) return false;
 
     // Check for specific high-level roles first
-    if (user.role === 'Jefe' || user.role === 'Gerencia' || user.role === 'Administracion') {
+    if (user.role === 'Jefe' || user.role === 'Gerencia' || user.role === 'Administracion' || user.role === 'Admin') {
         return true;
     }
 

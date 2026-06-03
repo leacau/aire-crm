@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { ColumnOrderState, ColumnVisibilityState, SortingState } from '@tanstack/react-table';
+import type { ColumnOrderState, SortingState, VisibilityState } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
@@ -203,10 +203,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   
   const [toCollectTableState, setToCollectTableState] = useState<{
     sorting: SortingState;
-    columnVisibility: ColumnVisibilityState;
+    columnVisibility: VisibilityState;
     columnOrder: ColumnOrderState;
     setSorting: React.Dispatch<React.SetStateAction<SortingState>>;
-    setColumnVisibility: React.Dispatch<React.SetStateAction<ColumnVisibilityState>>;
+    setColumnVisibility: React.Dispatch<React.SetStateAction<VisibilityState>>;
     setColumnOrder: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
   }>({
     sorting: [],
@@ -219,10 +219,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
   const [paidTableState, setPaidTableState] = useState<{
     sorting: SortingState;
-    columnVisibility: ColumnVisibilityState;
+    columnVisibility: VisibilityState;
     columnOrder: ColumnOrderState;
     setSorting: React.Dispatch<React.SetStateAction<SortingState>>;
-    setColumnVisibility: React.Dispatch<React.SetStateAction<ColumnVisibilityState>>;
+    setColumnVisibility: React.Dispatch<React.SetStateAction<VisibilityState>>;
     setColumnOrder: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
   }>({
     sorting: [],
@@ -235,10 +235,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
   const [creditNotesTableState, setCreditNotesTableState] = useState<{
     sorting: SortingState;
-    columnVisibility: ColumnVisibilityState;
+    columnVisibility: VisibilityState;
     columnOrder: ColumnOrderState;
     setSorting: React.Dispatch<React.SetStateAction<SortingState>>;
-    setColumnVisibility: React.Dispatch<React.SetStateAction<ColumnVisibilityState>>;
+    setColumnVisibility: React.Dispatch<React.SetStateAction<VisibilityState>>;
     setColumnOrder: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
   }>({
     sorting: [],
@@ -1139,7 +1139,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
     const canProceed = await ensureCanManageBillingDeletion({
       action: 'eliminar facturas duplicadas',
-      invoice: selectedInvoices[0],
+      invoice: rawSelectedInvoices[0],
     });
     if (!canProceed) return;
 
@@ -1546,7 +1546,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               setColumnOrder={toCollectTableState.setColumnOrder}
               isReady={prefsReady}
               selectedInvoiceIds={selectedInvoiceIds}
-              onSelectedInvoicesChange={handleInvoiceSelectionChange}
+              onToggleSelect={handleToggleInvoiceSelection}
+              onToggleSelectAll={(checked) => handleToggleAllInvoiceSelection(checked, filteredToCollectInvoices)}
             />
           </TabsContent>
            <TabsContent value="paid">
@@ -1566,7 +1567,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               setColumnOrder={paidTableState.setColumnOrder}
               isReady={prefsReady}
               selectedInvoiceIds={selectedInvoiceIds}
-              onSelectedInvoicesChange={handleInvoiceSelectionChange}
+              onToggleSelect={handleToggleInvoiceSelection}
+              onToggleSelectAll={(checked) => handleToggleAllInvoiceSelection(checked, filteredPaidInvoices)}
             />
           </TabsContent>
           <TabsContent value="credit-notes">
@@ -1587,7 +1589,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               setColumnOrder={creditNotesTableState.setColumnOrder}
               isReady={prefsReady}
               selectedInvoiceIds={selectedInvoiceIds}
-              onSelectedInvoicesChange={handleInvoiceSelectionChange}
+              onToggleSelect={handleToggleInvoiceSelection}
+              onToggleSelectAll={(checked) => handleToggleAllInvoiceSelection(checked, filteredCreditNoteInvoices)}
             />
           </TabsContent>
           <TabsContent value="payments">

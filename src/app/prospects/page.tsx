@@ -386,7 +386,7 @@ export default function ProspectsPage() {
     }
 
     // 1. "Bolsa" (Sin Asignar) - Visible para todos sin filtros de asesor
-    const unassigned = prospects.filter(p => !p.ownerId && p.status !== 'Convertido' && p.status !== 'No Próspero');
+    let unassigned = prospects.filter(p => !p.ownerId && p.status !== 'Convertido' && p.status !== 'No Próspero');
     
     // 2. Pendientes de aprobación (Solo para jefes)
     const pendingClaims = unassigned.filter(p => p.claimStatus === 'Pendiente');

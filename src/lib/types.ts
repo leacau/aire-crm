@@ -20,7 +20,7 @@ export type ProposalFile = {
   url: string;
 };
 
-export const invoiceStatusOptions = ['Generada', 'Enviada a Cobrar', 'Pagada'] as const;
+export const invoiceStatusOptions = ['Pendiente', 'Generada', 'Enviada a Cobrar', 'Pagada'] as const;
 export type InvoiceStatus = typeof invoiceStatusOptions[number];
 
 export type CarpetaBillingStatus = 'Pendiente de Pedido' | 'Pedido Realizado' | 'Facturado';
@@ -37,6 +37,7 @@ export type Invoice = {
   datePaid?: string;
   isCreditNote?: boolean;
   creditNoteMarkedAt?: string | null;
+  markedForDeletion?: boolean;
   deletionMarkedAt?: string | null;
   deletionMarkedById?: string;
   deletionMarkedByName?: string;
@@ -87,7 +88,7 @@ export type SupervisorCommentReply = {
 
 export type SupervisorComment = {
   id: string;
-  entityType: '' | 'opportunity';
+  entityType: '' | 'opportunity' | 'client' | 'prospect';
   entityId: string;
   entityName: string;
   ownerId: string;
@@ -171,6 +172,7 @@ export type Opportunity = {
   startDate?: string;        
   endDate?: string;          
   periodHistory?: OpportunityPeriod[];
+  ownerId?: string;
 };
 
 export type OpportunityPeriod = {
@@ -223,6 +225,7 @@ export type Client = {
   deactivationHistory?: string[];
   needsAttention?: boolean;
   allowCanjes?: boolean;
+  createdAt?: string;
 };
 
 export const prospectStatusOptions = ['Nuevo', 'Contactado', 'Calificado', 'No Próspero', 'Convertido'] as const;
@@ -277,6 +280,7 @@ export type ActivityLog = {
     | 'commercial_item_series'
     | 'licencia'
     | 'monthly_closure'
+    | 'system_config'
     | 'opportunity_alerts_config'
     | 'payment'
     | 'commercial_note'
@@ -316,8 +320,8 @@ export type ClientActivity = {
 export type CanjeEstado = 'Pedido' | 'En gestión' | 'Culminado' | 'Aprobado';
 export const canjeEstados: CanjeEstado[] = ['Pedido', 'En gestión', 'Culminado', 'Aprobado'];
 
-export type CanjeTipo = 'Una vez' | 'Mensual';
-export const canjeTipos: CanjeTipo[] = ['Una vez', 'Mensual'];
+export type CanjeTipo = 'Una vez' | 'Mensual' | 'Temporario';
+export const canjeTipos: CanjeTipo[] = ['Una vez', 'Mensual', 'Temporario'];
 
 export const canjeEstadoFinalOptions = ['Total', 'Parcial'] as const;
 export type CanjeEstadoFinal = typeof canjeEstadoFinalOptions[number];
@@ -370,16 +374,17 @@ export type Canje = {
   historialMensual?: HistorialMensualItem[];
 };
 
-export type UserRole = 'Asesor' | 'Administracion' | 'Jefe' | 'Gerencia' | 'Import' | 'Asesor Canjes';
-export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Jefe', 'Gerencia', 'Import', 'Asesor Canjes'];
+export type UserRole = 'Asesor' | 'Administracion' | 'Admin' | 'Jefe' | 'Gerencia' | 'Import' | 'Asesor Canjes';
+export const userRoles: UserRole[] = ['Asesor', 'Administracion', 'Admin', 'Jefe', 'Gerencia', 'Import', 'Asesor Canjes'];
 
-export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción' | 'Canjes';
-export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción', 'Canjes'];
+export type AreaType = 'Comercial' | 'Administración' | 'Recursos Humanos' | 'Pautado' | 'Programación' | 'Redacción' | 'Redes' | 'Audiovisual' | 'Canjes';
+export const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos', 'Pautado', 'Programación', 'Redacción', 'Redes', 'Audiovisual', 'Canjes'];
 
 export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
-    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes', 'AppCanjes', 'Pipeline'
+    'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes', 'AppCanjes', 'Pipeline',
+    'Tasks', 'BillingRequests', 'DataCleanup', 'WorkflowAssignments'
 ] as const;
 
 export type ScreenName = typeof screenNames[number];
@@ -495,7 +500,8 @@ export type Program = {
   id: string;
   name: string;
   description?: string;
-  schedules: ProgramSchedule[];
+  schedules?: ProgramSchedule[];
+  schedule?: ProgramSchedule;
   color: string; 
   conductores?: string;
   productores?: string;
@@ -505,7 +511,7 @@ export type Program = {
   daysOfWeek?: number[];
 };
 
-export const commercialItemTypes = ['Bloque temático', 'Auspicio', 'Nota', 'PNT', 'Pauta'] as const;
+export const commercialItemTypes = ['Bloque temático', 'Auspicio', 'Nota', 'PNT', 'Pauta', 'Sorteo'] as const;
 export type CommercialItemType = typeof commercialItemTypes[number];
 
 export const commercialItemStatus = ['Disponible', 'Vendido', 'Reservado'] as const;
@@ -625,6 +631,7 @@ export type CommercialNote = {
   interviewees?: Interviewee[];
   intervieweeBio?: string;
   instagram?: string; 
+  noInstagram?: boolean;
   website?: string;
   noWeb?: boolean;
   whatsapp?: string;
@@ -756,30 +763,30 @@ export type SocialMediaRequest = {
 };
 
 export type AdvertisingOrderItemSrl = {
-  month: string; 
-  programId: string;
-  adType: string;
+  month?: string; 
+  programId?: string;
+  adType?: string;
   customType?: string; 
-  hasTv: boolean; 
+  hasTv?: boolean; 
   seconds?: number;
-  dailySpots: Record<string, number>;
-  unitRate: number;
+  dailySpots?: Record<string, number>;
+  unitRate?: number;
 };
 
 export type AdvertisingOrderItemSas = {
-  month: string; 
-  format: string; 
+  month?: string; 
+  format?: string; 
   type?: string;
   detail?: string;
   customDetail?: string; 
   observations?: string;
-  desktop: boolean;
-  mobile: boolean;
-  home: boolean;
-  interiores: boolean;
+  desktop?: boolean;
+  mobile?: boolean;
+  home?: boolean;
+  interiores?: boolean;
   cpm?: number;
   url?: string;
-  unitRate: number;
+  unitRate?: number;
 };
 
 export type BillingRequest = {
@@ -787,12 +794,14 @@ export type BillingRequest = {
   orderId: string;
   opportunityId: string;
   clientId: string;
-  company: 'SRL' | 'SAS';
-  date: string;
-  grossAmount: number;
-  adjustment: number;
-  ivaSas: number;
-  amount: number;
+  company?: 'SRL' | 'SAS';
+  date?: string;
+  grossAmount?: number;
+  adjustment?: number;
+  ivaSas?: number;
+  amount?: number;
+  paymentType?: 'Se paga' | 'Canje' | 'Mixto';
+  canjeDescription?: string;
   createdAt?: string;
 };
 

@@ -54,7 +54,7 @@ export default function GrillaPage() {
 
   // PDF Export State
   const [isPdfDialogOpen, setIsPdfDialogOpen] = useState(false);
-  const [pdfOptions, setPdfOptions] = useState({ dateType: 'generic', includeItems: true });
+  const [pdfOptions, setPdfOptions] = useState<{ dateType: 'generic' | 'dated'; includeItems: boolean }>({ dateType: 'generic', includeItems: true });
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const canManage = userInfo ? hasPermission(userInfo, 'Grilla', 'edit') : false;
@@ -165,7 +165,9 @@ export default function GrillaPage() {
                 // If it wasn't a series but now is, create a new series
                 const newSeriesId = await saveCommercialItemSeries(item, dates, userInfo.id);
                 // Assign the new seriesId to the original item being edited
-                await updateCommercialItem(selectedItem.id, { seriesId: newSeriesId }, userInfo.id, userInfo.name);
+                if (newSeriesId) {
+                    await updateCommercialItem(selectedItem.id, { seriesId: newSeriesId }, userInfo.id, userInfo.name);
+                }
             } else {
                 // Single item update
                 await updateCommercialItem(selectedItem.id, item, userInfo.id, userInfo.name);
@@ -227,7 +229,7 @@ export default function GrillaPage() {
 
   if (authLoading || loading) {
     return (
-      <div class="flex h-full w-full items-center justify-center">
+      <div className="flex h-full w-full items-center justify-center">
         <Spinner size="large" />
       </div>
     );
@@ -293,45 +295,45 @@ export default function GrillaPage() {
             options={pdfOptions}
         />
       </div>
-      <div class="flex flex-col h-full">
+      <div className="flex flex-col h-full">
         <Header title="Grilla Comercial">
-            <div class="flex items-center gap-2 flex-wrap justify-end">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
               {view === 'diaria' ? (
-                  <Button variant="outline" onClick={handleBackToWeek} class="flex items-center gap-2">
-                      <ArrowLeft class="h-4 w-4" />
+                  <Button variant="outline" onClick={handleBackToWeek} className="flex items-center gap-2">
+                      <ArrowLeft className="h-4 w-4" />
                       Semana
                   </Button>
               ) : (
-                  <div class="flex items-center gap-2 md:gap-4">
-                      <div class="flex items-center gap-1">
-                          <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}><ArrowLeft class="h-4 w-4" /></Button>
-                          <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}><ArrowRight class="h-4 w-4" /></Button>
+                  <div className="flex items-center gap-2 md:gap-4">
+                      <div className="flex items-center gap-1">
+                          <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}><ArrowLeft className="h-4 w-4" /></Button>
+                          <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}><ArrowRight className="h-4 w-4" /></Button>
                       </div>
-                      <h3 class="text-base sm:text-lg font-semibold capitalize min-w-[120px] text-center">
+                      <h3 className="text-base sm:text-lg font-semibold capitalize min-w-[120px] text-center">
                           {format(currentDate, 'MMMM yyyy', { locale: es })}
                       </h3>
                   </div>
               )}
               
               {canManage && (
-                  <div class="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
                       <Button onClick={() => openProgramForm()} size="sm">
-                          <PlusCircle class="mr-2 h-4 w-4"/>
+                          <PlusCircle className="mr-2 h-4 w-4"/>
                           Programa
                       </Button>
                       <Button variant="secondary" onClick={() => { setSelectedItem(null); setPreselectedDataForItem(null); setIsItemFormOpen(true);}} size="sm">
-                          <PlusCircle class="mr-2 h-4 w-4"/>
+                          <PlusCircle className="mr-2 h-4 w-4"/>
                           Elemento
                       </Button>
                   </div>
               )}
               <Button onClick={() => setIsPdfDialogOpen(true)} size="sm" variant="outline">
-                <Download class="mr-2 h-4 w-4" />
+                <Download className="mr-2 h-4 w-4" />
                 Exportar PDF
               </Button>
             </div>
         </Header>
-        <main class="flex-1 overflow-auto p-2 sm:p-4 md:p-6">
+        <main className="flex-1 overflow-auto p-2 sm:p-4 md:p-6">
           {view === 'semanal' ? (
             <GrillaSemanal 
                 programs={programs} 
@@ -401,33 +403,33 @@ export default function GrillaPage() {
                     Elige las opciones para tu exportación.
                 </DialogDescription>
             </DialogHeader>
-            <div class="space-y-6 py-4">
-                <div class="space-y-3">
-                    <Label class="font-semibold">Tipo de Fecha</Label>
+            <div className="space-y-6 py-4">
+                <div className="space-y-3">
+                    <Label className="font-semibold">Tipo de Fecha</Label>
                     <RadioGroup 
                         defaultValue="generic" 
                         value={pdfOptions.dateType}
-                        onValueChange={(value) => setPdfOptions(prev => ({...prev, dateType: value}))}
+                        onValueChange={(value) => setPdfOptions(prev => ({...prev, dateType: value as 'generic' | 'dated'}))}
                     >
-                        <div class="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2">
                             <RadioGroupItem value="generic" id="date-generic" />
-                            <Label htmlFor="date-generic" class="font-normal">Semana Genérica (Lunes a Domingo)</Label>
+                            <Label htmlFor="date-generic" className="font-normal">Semana Genérica (Lunes a Domingo)</Label>
                         </div>
-                         <div class="flex items-center space-x-2">
+                         <div className="flex items-center space-x-2">
                             <RadioGroupItem value="dated" id="date-dated" />
-                            <Label htmlFor="date-dated" class="font-normal">Semana con Fechas (actualmente visible)</Label>
+                            <Label htmlFor="date-dated" className="font-normal">Semana con Fechas (actualmente visible)</Label>
                         </div>
                     </RadioGroup>
                 </div>
-                 <div class="space-y-3">
-                     <Label class="font-semibold">Contenido</Label>
-                     <div class="flex items-center space-x-2">
+                 <div className="space-y-3">
+                     <Label className="font-semibold">Contenido</Label>
+                     <div className="flex items-center space-x-2">
                         <Checkbox 
                             id="include-items"
                             checked={pdfOptions.includeItems}
                             onCheckedChange={(checked) => setPdfOptions(prev => ({...prev, includeItems: !!checked}))}
                         />
-                        <Label htmlFor="include-items" class="font-normal">Incluir Elementos Comerciales</Label>
+                        <Label htmlFor="include-items" className="font-normal">Incluir Elementos Comerciales</Label>
                     </div>
                 </div>
             </div>

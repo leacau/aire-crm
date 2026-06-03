@@ -15,10 +15,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 
+type ProgramRateKey = Extract<keyof ProgramRates, string>;
+
 type QuoteLine = {
   id: string;
   programId: string;
-  element: keyof ProgramRates | 'custom';
+  element: ProgramRateKey | 'custom';
   seconds: number;
   quantity: number;
   days: number;
@@ -26,7 +28,7 @@ type QuoteLine = {
   customUnitValue?: number;
 };
 
-const elementOptions: { key: keyof ProgramRates | 'custom'; label: string; requiresSeconds?: boolean }[] = [
+const elementOptions: { key: ProgramRateKey | 'custom'; label: string; requiresSeconds?: boolean }[] = [
   { key: 'spotRadio', label: 'Spot Radio (seg)', requiresSeconds: true },
   { key: 'spotTv', label: 'Spot TV (seg)', requiresSeconds: true },
   { key: 'pnt', label: 'PNT' },
@@ -304,7 +306,7 @@ export default function QuotesPage() {
                           value={line.element}
                           onValueChange={(value) =>
                             updateLine(line.id, {
-                              element: value as keyof ProgramRates | 'custom',
+                              element: value as ProgramRateKey | 'custom',
                               seconds: elementOptions.find((opt) => opt.key === value)?.requiresSeconds
                                 ? line.seconds || 30
                                 : 1,

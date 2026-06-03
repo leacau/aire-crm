@@ -43,6 +43,7 @@ export function QuickOpportunityFormDialog({ isOpen, onOpenChange, client, onSav
       clientName: client.name,
       stage: 'Cerrado - Ganado',
       closeDate: new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString(),
     };
     
     onSave(newOpportunity);

@@ -3,12 +3,6 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   images: {
     remotePatterns: [
       {
@@ -37,12 +31,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  devIndicators: {
-    allowedDevOrigins: [
-      'https://6000-firebase-studio-1758894286543.cluster-f73ibkkuije66wssuontdtbx6q.cloudworkstations.dev',
-      'https://9000-firebase-studio-1758894286543.cluster-f73ibkkuije66wssuontdtbx6q.cloudworkstations.dev',
-    ],
-  },
+  allowedDevOrigins: [
+    'https://6000-firebase-studio-1758894286543.cluster-f73ibkkuije66wssuontdtbx6q.cloudworkstations.dev',
+    'https://9000-firebase-studio-1758894286543.cluster-f73ibkkuije66wssuontdtbx6q.cloudworkstations.dev',
+  ],
 };
 
 export default nextConfig;

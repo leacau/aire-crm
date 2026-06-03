@@ -64,7 +64,7 @@ export function ActiveClientsReport({ selectedAdvisor }: ActiveClientsReportProp
     };
 
     const isOpportunityActive = (opp: Opportunity): boolean => {
-      const isClosedWon = opp.stage === 'Cerrado - Ganado' || opp.stage === 'Ganado (Recurrente)';
+      const isClosedWon = opp.stage === 'Cerrado - Ganado';
       if (!isClosedWon || !opp.createdAt) return false;
 
       const creationDate = parseISO(opp.createdAt);

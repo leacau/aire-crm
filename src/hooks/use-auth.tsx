@@ -31,8 +31,7 @@ const AuthContext = createContext<AuthContextType>({
   ensureGoogleAccessToken: async () => null,
 });
 
-const STORAGE_TOKEN_KEY = 'google_api_token';
-const STORAGE_EXPIRY_KEY = 'google_api_token_expiry';
+let googleAccessTokenMemory: { token: string; expiresAt: number } | null = null;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -55,31 +54,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, loading, pathname, router]);
 
   const saveTokenToStorage = (token: string, expiresInSeconds: number = 3600) => {
-    if (typeof window === 'undefined') return;
-    const expiryTime = Date.now() + (expiresInSeconds * 1000) - (5 * 60 * 1000); 
-    localStorage.setItem(STORAGE_TOKEN_KEY, token);
-    localStorage.setItem(STORAGE_EXPIRY_KEY, expiryTime.toString());
+    googleAccessTokenMemory = {
+      token,
+      expiresAt: Date.now() + (expiresInSeconds * 1000) - (5 * 60 * 1000),
+    };
   };
 
   const clearStoredToken = () => {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem(STORAGE_TOKEN_KEY);
-    localStorage.removeItem(STORAGE_EXPIRY_KEY);
+    googleAccessTokenMemory = null;
+    localStorage.removeItem('google_api_token');
+    localStorage.removeItem('google_api_token_expiry');
     sessionStorage.removeItem('google-access-validated');
   };
 
   const getStoredToken = (): string | null => {
-    if (typeof window === 'undefined') return null;
-    const token = localStorage.getItem(STORAGE_TOKEN_KEY);
-    const expiry = localStorage.getItem(STORAGE_EXPIRY_KEY);
-
-    if (!token || !expiry) return null;
-
-    if (Date.now() > parseInt(expiry, 10)) {
+    if (!googleAccessTokenMemory) return null;
+    if (Date.now() > googleAccessTokenMemory.expiresAt) {
         clearStoredToken();
         return null;
     }
-    return token;
+    return googleAccessTokenMemory.token;
   };
 
   useEffect(() => {

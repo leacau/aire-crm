@@ -27,8 +27,19 @@ const createClientTool = ai.defineTool(
     }),
   },
   async (input, context) => {
-    const { userId, userName } = context as { userId: string; userName: string };
-    const clientId = await createClient(input, userId, userName);
+    const { userId, userName } = context as unknown as { userId: string; userName: string };
+    const clientId = await createClient({
+      denominacion: input.denominacion,
+      razonSocial: input.razonSocial || input.denominacion,
+      cuit: input.cuit || '',
+      email: input.email || '',
+      phone: input.phone || '',
+      condicionIVA: 'Consumidor Final',
+      provincia: '',
+      localidad: '',
+      tipoEntidad: 'Privada',
+      rubro: '',
+    }, userId, userName);
     return { id: clientId, denominacion: input.denominacion };
   }
 );
@@ -50,8 +61,8 @@ const createProspectTool = ai.defineTool(
     }),
   },
   async (input, context) => {
-    const { userId, userName } = context as { userId: string, userName: string };
-    const prospectId = await createProspect(input, userId, userName);
+    const { userId, userName } = context as unknown as { userId: string, userName: string };
+    const prospectId = await createProspect({ ...input, companyName: input.companyName || '', status: 'Nuevo' }, userId, userName);
     return { id: prospectId, companyName: input.companyName };
   }
 );
@@ -70,7 +81,7 @@ const scheduleTaskTool = ai.defineTool(
     outputSchema: z.string(),
   },
   async (input, context) => {
-    const { userId, userName } = context as { userId: string, userName: string };
+    const { userId, userName } = context as unknown as { userId: string, userName: string };
     
     let entityId = '';
     let entityName = '';
@@ -154,29 +165,7 @@ const commanderFlow = ai.defineFlow(
             }
         );
 
-        const toolCalls = llmResponse.toolCalls();
-
-        // If Gemini didn't call any tools, just return its text response.
-        if (toolCalls.length === 0) {
-            return llmResponse.text;
-        }
-
-        const toolResponses = await llmResponse.callTools();
-        
-        // At this point, tools have been executed. We can either return a summary
-        // or send the tool output back to the model for a final summary.
-        // Let's go for the latter for a more natural response.
-        
-        const finalResponse = await commanderPrompt({
-           command,
-           currentDate: new Date().toString(),
-           history: [
-             llmResponse.message,
-             {role: 'tool', content: toolResponses}
-           ]
-        });
-
-        return finalResponse.text;
+        return llmResponse.text;
     }
 );
 

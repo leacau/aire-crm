@@ -141,7 +141,7 @@ export function AppSidebar() {
       items: [
         { title: 'Cobranzas', href: '/billing', icon: DollarSign, screenName: 'Billing' },
         { title: 'Facturas', href: '/invoices', icon: FileText, screenName: 'Invoices' },
-        { title: 'Control Facturación', href: '/billing-requests', icon: FileText, screenName: 'Billing-requests' },
+        { title: 'Control Facturación', href: '/billing-requests', icon: FileText, screenName: 'BillingRequests' },
       ]
     },
     {
@@ -161,8 +161,8 @@ export function AppSidebar() {
         { title: 'Importar', href: '/import', icon: Upload, screenName: 'Import' },
         { title: 'Mapeo Tango', href: '/tango-mapping', icon: Database, screenName: 'TangoMapping' },
         { title: 'Actividad', href: '/activity', icon: Activity, screenName: 'Activity' },
-        { title: 'Limpieza de Datos', href: '/data-cleanup', icon: Trash2, screenName: 'Data-cleanup' },
-        { title: 'Configuración Roles', href: '/admin/workflow-assignments', icon: Settings, screenName: 'Workflow-assignments' },
+        { title: 'Limpieza de Datos', href: '/data-cleanup', icon: Trash2, screenName: 'DataCleanup' },
+        { title: 'Configuración Roles', href: '/admin/workflow-assignments', icon: Settings, screenName: 'WorkflowAssignments' },
       ]
     },
   ];
@@ -184,7 +184,7 @@ export function AppSidebar() {
       const allowedScreens: ScreenName[] = [];
 
       if (userInfo.role === 'Asesor Canjes' || userInfo.area === 'Canjes') {
-         allowedScreens.push('Dashboard', 'AppCanjes', 'Clients', 'Prospectos', 'Canjes', 'Grilla', 'Notas');
+         allowedScreens.push('Dashboard', 'AppCanjes', 'Clients', 'Prospects', 'Canjes', 'Grilla', 'Notas');
       } 
       else if (userInfo.area === 'Pautado' || userInfo.area === 'Programación') {
          allowedScreens.push('Dashboard', 'Grilla', 'PNTs', 'Notas', 'Publicidad', 'Clients', 'Approvals');
@@ -199,7 +199,7 @@ export function AppSidebar() {
          allowedScreens.push(
           'Dashboard', 'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
           'Canjes', 'Quotes', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
-          'Calendar', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes', 'Billing-requests',
+          'Calendar', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes', 'BillingRequests',
          );
       }
 

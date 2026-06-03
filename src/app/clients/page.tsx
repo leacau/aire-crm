@@ -501,7 +501,7 @@ export default function ClientsPage() {
             header: ({ table }) => (
                 <Checkbox
                     id="select-all-clients-checkbox"
-                    checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+                    checked={table.getIsAllPageRowsSelected() ? true : table.getIsSomePageRowsSelected() ? 'indeterminate' : false}
                     onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
                     aria-label="Seleccionar todo"
                 />

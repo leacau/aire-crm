@@ -1,14 +1,15 @@
 'use client';
 
 import { db } from './firebase';
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote } from './types';
+import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format } from 'date-fns';
+import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format, parse } from 'date-fns';
+import { sendEmail } from './google-gmail-service';
 import { toTitleCase } from './utils';
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
@@ -42,6 +43,7 @@ const collections = {
 };
 
 const cache: { [key: string]: { data: any; timestamp: number } } = {};
+const pendingReads: { [key: string]: Promise<any> | undefined } = {};
 const CACHE_DURATION_MS = 12 * 60 * 60 * 1000;
 
 // 🟢 CACHÉ OPTIMIZADO EN RAM (Previene QuotaExceededError en LocalStorage)
@@ -59,6 +61,31 @@ const setInCache = (key: string, data: any) => {
     if (typeof window !== 'undefined') {
         try { localStorage.removeItem(`crm_cache_${key}`); } catch (e) {}
     }
+};
+
+const getDocsPreferCache = async (source: any) => {
+    try {
+        return await getDocsFromCache(source);
+    } catch {
+        return getDocs(source);
+    }
+};
+
+const getCachedOrLoad = async <T>(key: string, loader: () => Promise<T>): Promise<T> => {
+    const cached = getFromCache(key);
+    if (cached) return cached as T;
+    if (pendingReads[key]) return pendingReads[key] as Promise<T>;
+
+    pendingReads[key] = loader()
+        .then((data) => {
+            setInCache(key, data);
+            return data;
+        })
+        .finally(() => {
+            delete pendingReads[key];
+        });
+
+    return pendingReads[key] as Promise<T>;
 };
 
 const timestampToISO = (value: any): string | undefined => {
@@ -2468,19 +2495,16 @@ export async function updateUserProfile(uid: string, data: Partial<User>) {
 
 export const getAllUsers = async (role?: UserRole): Promise<User[]> => {
   const cacheKey = `all_users_${role || 'all'}`;
-  const cached = getFromCache(cacheKey);
-  if (cached) return cached;
-
-  const usersRef = collection(db, 'users');
-  const snapshot = await getDocs(usersRef);
-  let users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-  if (role) {
-      users = users.filter(u => u.role === role);
-  }
-  
-  const sortedUsers = users.sort((a, b) => a.name.localeCompare(b.name));
-  setInCache(cacheKey, sortedUsers);
-  return sortedUsers;
+  return getCachedOrLoad(cacheKey, async () => {
+    const usersRef = collection(db, 'users');
+    const snapshot = await getDocsPreferCache(usersRef);
+    let users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    if (role) {
+        users = users.filter(u => u.role === role);
+    }
+    
+    return users.sort((a, b) => a.name.localeCompare(b.name));
+  });
 };
 
 export const getUserById = async (userId: string): Promise<User | null> => {
@@ -2551,20 +2575,17 @@ export const deleteUserAndReassignEntities = async (
 // --- Client Functions ---
 
 export const getClients = async (): Promise<Client[]> => {
-    const cachedData = getFromCache('clients');
-    if (cachedData) return cachedData;
-    
-    const snapshot = await getDocs(query(collections.clients, orderBy("denominacion")));
-    const clients = snapshot.docs.map(doc => {
-      const data = doc.data();
-      return { 
-        id: doc.id, 
-        ...data,
-        newClientDate: data.newClientDate instanceof Timestamp ? data.newClientDate.toDate().toISOString() : data.newClientDate,
-      } as Client
+    return getCachedOrLoad('clients', async () => {
+      const snapshot = await getDocsPreferCache(query(collections.clients, orderBy("denominacion")));
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+          id: doc.id, 
+          ...data,
+          newClientDate: data.newClientDate instanceof Timestamp ? data.newClientDate.toDate().toISOString() : data.newClientDate,
+        } as Client
+      });
     });
-    setInCache('clients', clients);
-    return clients;
 };
 
 export const getClient = async (id: string): Promise<Client | null> => {
@@ -3118,14 +3139,14 @@ export const getOpportunities = async (): Promise<Opportunity[]> => {
     const activeStages = ['Nuevo', 'Propuesta', 'Negociación', 'Negociación a Aprobar', 'Cerrado - No Definido', 'Cerrado - Ganado'];
     
     // Ejecutamos las consultas de las activas en paralelo
-    const activeQueries = activeStages.map(stage => getDocs(query(collections.opportunities, where('stage', '==', stage))));
+    const activeQueries = activeStages.map(stage => getDocsPreferCache(query(collections.opportunities, where('stage', '==', stage))));
     
     // Traemos solo las Perdidas de los últimos 3 meses
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    const lostQuery = getDocs(query(collections.opportunities, where('stage', '==', 'Cerrado - Perdido'), where('createdAt', '>=', threeMonthsAgo.toISOString())));
+    const lostQuery = getDocsPreferCache(query(collections.opportunities, where('stage', '==', 'Cerrado - Perdido'), where('createdAt', '>=', threeMonthsAgo.toISOString())));
 
-    const snapshots = await Promise.all([...activeQueries, lostQuery]);
+    const snapshots = await Promise.all([...activeQueries, lostQuery]) as any[];
     
     const opportunities: Opportunity[] = [];
     snapshots.forEach(snap => {
@@ -3139,7 +3160,7 @@ export const getOpportunities = async (): Promise<Opportunity[]> => {
 };
 
 export const getAllOpportunities = async (): Promise<Opportunity[]> => {
-    const snapshot = await getDocs(collections.opportunities);
+    const snapshot = await getDocsPreferCache(collections.opportunities);
     return snapshot.docs.map(mapOpportunityDoc);
 };
 
@@ -3381,7 +3402,7 @@ export const updateOpportunity = async (
     await updateDoc(docRef, updateData);
     
     // 🟢 MUTADOR CORRECTO PARA EDICIÓN DE OPORTUNIDADES (Con truco de fechas)
-    const cacheData = {
+    const cacheData: Partial<Opportunity> & { updatedAt: string; stageChangedAt?: string } = {
         ...updateData,
         updatedAt: new Date().toISOString(),
     };
@@ -5097,19 +5118,22 @@ export const saveWorkflowAssignments = async (assignments: WorkflowAssignments):
 // ============================================================================
 
 export const getAllBillingRequestsWithMetadata = async (): Promise<any[]> => {
+    const cached = getFromCache('billing_requests_metadata');
+    if (cached) return cached;
+
     // 1. Traer todas las peticiones de facturación crudas
-    const snapRequests = await getDocs(collection(db, 'billing_requests'));
+    const snapRequests = await getDocsPreferCache(collection(db, 'billing_requests'));
     const requests = snapRequests.docs.map(d => ({ id: d.id, ...d.data() }));
 
     // 2. Traer las órdenes asociadas para cruzar ejecutivos y títulos
-    const snapOrders = await getDocs(collection(db, 'advertising_orders'));
-    const ordersMap = new Map(snapOrders.docs.map(d => [d.id, { id: d.id, ...d.data() } as any]));
+    const snapOrders = await getDocsPreferCache(collection(db, 'advertising_orders'));
+    const ordersMap = new Map<string, any>(snapOrders.docs.map(d => [d.id, { id: d.id, ...d.data() } as any]));
 
     // 3. Traer los clientes para resolver Razones Sociales y CUITs en vivo
-    const snapClients = await getDocs(collection(db, 'clients'));
-    const clientsMap = new Map(snapClients.docs.map(d => [d.id, d.data() as any]));
+    const snapClients = await getDocsPreferCache(collection(db, 'clients'));
+    const clientsMap = new Map<string, any>(snapClients.docs.map(d => [d.id, d.data() as any]));
 
-    return requests.map((br: any) => {
+    const mapped = requests.map((br: any) => {
         const order = ordersMap.get(br.orderId);
         const client = clientsMap.get(br.clientId);
 
@@ -5124,6 +5148,9 @@ export const getAllBillingRequestsWithMetadata = async (): Promise<any[]> => {
             invoiceNumber: br.invoiceNumber || ''
         };
     }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    setInCache('billing_requests_metadata', mapped);
+    return mapped;
 };
 
 export const updateBillingRequestStatus = async (
@@ -5140,6 +5167,7 @@ export const updateBillingRequestStatus = async (
 
     // 1. Impactamos el cambio de estado en la Base de Datos
     await updateDoc(docRef, updates);
+    invalidateCache('billing_requests_metadata');
 
     // 2. Ejecución de notificaciones protegidas por correo
     if (metadata?.emailPayload?.accessToken) {

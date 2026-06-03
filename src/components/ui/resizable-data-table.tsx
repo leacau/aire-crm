@@ -16,7 +16,7 @@ import {
   getFacetedRowModel,
   getFacetedUniqueValues,
   Row,
-  ColumnVisibilityState,
+  VisibilityState,
   ColumnOrderState,
 } from '@tanstack/react-table';
 import {
@@ -134,8 +134,8 @@ interface ResizableDataTableProps<TData, TValue> {
   setSorting?: React.Dispatch<React.SetStateAction<SortingState>>;
   rowSelection?: RowSelectionState;
   setRowSelection?: React.Dispatch<React.SetStateAction<RowSelectionState>>;
-  columnVisibility?: ColumnVisibilityState;
-  setColumnVisibility?: React.Dispatch<React.SetStateAction<ColumnVisibilityState>>;
+  columnVisibility?: VisibilityState;
+  setColumnVisibility?: React.Dispatch<React.SetStateAction<VisibilityState>>;
   columnOrder?: ColumnOrderState;
   setColumnOrder?: React.Dispatch<React.SetStateAction<ColumnOrderState>>;
   getRowId?: (originalRow: TData, index: number, parent?: Row<TData>) => string;

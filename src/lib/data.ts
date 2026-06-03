@@ -24,6 +24,10 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
         Import: { view: true, edit: true },
         TangoMapping: { view: true, edit: true },
         Coaching: { view: true, edit: true },
+        Tasks: { view: true, edit: true },
+        BillingRequests: { view: true, edit: true },
+        DataCleanup: { view: false, edit: false },
+        WorkflowAssignments: { view: false, edit: false },
     },
     'Recursos Humanos': {
         Licenses: { view: true, edit: true },
@@ -54,6 +58,9 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
         Import: { view: true, edit: true },
         TangoMapping: { view: true, edit: true },
         Coaching: { view: true, edit: true },
+        BillingRequests: { view: true, edit: true },
+        DataCleanup: { view: true, edit: true },
+        WorkflowAssignments: { view: true, edit: true },
     },
     'Programación': {
         Grilla: { view: true, edit: false },
@@ -63,6 +70,27 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
     'Redacción': {
          PNTs: { view: true, edit: false },
          Quotes: { view: true, edit: true },
+         Notas: { view: true, edit: true },
+         Redes: { view: true, edit: true },
+    },
+    'Redes': {
+        Dashboard: { view: true, edit: false },
+        Redes: { view: true, edit: true },
+        Notas: { view: true, edit: false },
+    },
+    'Audiovisual': {
+        Dashboard: { view: true, edit: false },
+        Redes: { view: true, edit: true },
+        Notas: { view: true, edit: false },
+    },
+    'Canjes': {
+        Dashboard: { view: true, edit: false },
+        AppCanjes: { view: true, edit: true },
+        Clients: { view: true, edit: true },
+        Prospects: { view: true, edit: true },
+        Canjes: { view: true, edit: true },
+        Grilla: { view: true, edit: false },
+        Notas: { view: true, edit: false },
     }
 };
 

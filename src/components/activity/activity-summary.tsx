@@ -17,6 +17,7 @@ import {
 import { Badge } from '../ui/badge';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityHtml } from '@/lib/sanitize-html';
 import { Button } from '../ui/button';
 
 export type CombinedActivity = (ActivityLog | ClientActivity) & { sortDate: Date };
@@ -44,7 +45,7 @@ export const ActivityDetailRow = ({ activity }: { activity: CombinedActivity }) 
     <div className="flex items-center justify-between text-sm py-2 border-b last:border-b-0">
       <div className="flex-1">
         {'entityType' in activity 
-          ? <span dangerouslySetInnerHTML={{ __html: activity.details }} />
+          ? <span dangerouslySetInnerHTML={{ __html: sanitizeActivityHtml(activity.details) }} />
           : <p>{activity.observation} en <Link href={`/clients/${activity.clientId}`} className="font-bold text-primary hover:underline">{activity.clientName}</Link></p>
         }
         <p className="text-xs text-muted-foreground">Por: {activity.userName}</p>
