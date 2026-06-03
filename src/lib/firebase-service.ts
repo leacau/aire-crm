@@ -1,7 +1,7 @@
 'use client';
 
 import { db } from './firebase';
-import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment, DocumentData } from 'firebase/firestore';
+import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, Query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment, DocumentData } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
