@@ -65,7 +65,12 @@ const setInCache = (key: string, data: any) => {
 
 const getDocsPreferCache = async (source: any): Promise<any> => {
     try {
-        return await getDocsFromCache(source);
+        const snapshot = await getDocsFromCache(source);
+        // SI EL CACHÉ ESTÁ VACÍO, FORZAMOS LA BÚSQUEDA EN EL SERVIDOR
+        if (snapshot.empty) {
+            return await getDocs(source);
+        }
+        return snapshot;
     } catch {
         return getDocs(source);
     }
@@ -2526,8 +2531,7 @@ export const getAllUsers = async (role?: UserRole): Promise<User[]> => {
         users = users.filter(u => u.role === role);
     }
     
-    return users.sort((a, b) => a.name.localeCompare(b.name));
-  });
+    return users.sort((a, b) => (a.name || '').localeCompare(b.name || ''));  });
 };
 
 export const getUserById = async (userId: string): Promise<User | null> => {
