@@ -63,11 +63,11 @@ const setInCache = (key: string, data: any) => {
     }
 };
 
-const getDocsPreferCache = async <T = DocumentData>(source: Query<T> | any) => {
+const getDocsPreferCache = async (source: any): Promise<any> => {
     try {
-        return await getDocsFromCache<T>(source);
+        return await getDocsFromCache(source);
     } catch {
-        return getDocs<T>(source);
+        return getDocs(source);
     }
 };
 
