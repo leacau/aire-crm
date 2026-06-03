@@ -102,7 +102,16 @@ const timestampToISO = (value: any): string | undefined => {
 
 export const invalidateCache = (key?: string) => {
     if (key) {
-        delete cache[key];
+        if (key === 'users') {
+            // 🟢 SOLUCIÓN: Eliminamos todas las variantes de claves de usuarios
+            Object.keys(cache).forEach(k => {
+                if (k.startsWith('all_users_') || k.startsWith('user_') || k === 'users') {
+                    delete cache[k];
+                }
+            });
+        } else {
+            delete cache[key];
+        }
     } else {
         Object.keys(cache).forEach(k => delete cache[k]);
     }
