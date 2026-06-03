@@ -147,6 +147,20 @@ export const mutateCacheArray = (
     setInCache(cacheKey, items);
 };
 
+const invalidateCacheByPrefix = (prefix: string) => {
+    Object.keys(cache).forEach((key) => {
+        if (key.startsWith(prefix)) {
+            delete cache[key];
+        }
+    });
+};
+
+const invalidateInvoiceDetailCaches = () => {
+    invalidateCacheByPrefix('invoices_opportunity_');
+    invalidateCacheByPrefix('invoices_client_');
+    delete cache.dashboard_invoices;
+};
+
 
 
 export type ClientTangoUpdate = {
@@ -1759,9 +1773,9 @@ export const getInvoices = async (): Promise<Invoice[]> => {
     const cachedData = getFromCache('invoices');
     if (cachedData) return cachedData;
 
-    const snapshot = await getDocs(query(collections.invoices, orderBy("dateGenerated", "desc")));
+    const snapshot = await getDocsPreferCache(query(collections.invoices, orderBy("dateGenerated", "desc")));
     const invoices = snapshot.docs.map(doc => {
-        const data = doc.data();
+        const data = doc.data() as any;
         
         const validDate = data.date && typeof data.date === 'string' ? parseDateWithTimezone(data.date) : null;
         const validDatePaid = data.datePaid && typeof data.datePaid === 'string' ? parseDateWithTimezone(data.datePaid) : null;
@@ -1814,10 +1828,10 @@ export const getDashboardInvoices = async (): Promise<Invoice[]> => {
         where("dateGenerated", ">=", dateStr), 
         orderBy("dateGenerated", "desc")
     );
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocsPreferCache(q);
     
     const invoices = snapshot.docs.map(doc => {
-        const data = doc.data();
+        const data = doc.data() as any;
         const validDate = data.date && typeof data.date === 'string' ? parseDateWithTimezone(data.date) : null;
         const validDatePaid = data.datePaid && typeof data.datePaid === 'string' ? parseDateWithTimezone(data.datePaid) : null;
 
@@ -1851,9 +1865,9 @@ export const getDashboardTasks = async (): Promise<ClientActivity[]> => {
         orderBy('timestamp', 'desc')
     );
     
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocsPreferCache(q);
     const tasks = snapshot.docs.map(doc => {
-        const data = doc.data();
+        const data = doc.data() as any;
         return {
             id: doc.id,
             ...data,
@@ -1890,7 +1904,7 @@ export const getInvoicesPaginated = async (
     const snapshot = await getDocs(q);
     
     const invoices = snapshot.docs.map(doc => {
-        const data = doc.data();
+        const data = doc.data() as Partial<Invoice>;
         const validDate = data.date && typeof data.date === 'string' ? parseDateWithTimezone(data.date) : null;
         const validDatePaid = data.datePaid && typeof data.datePaid === 'string' ? parseDateWithTimezone(data.datePaid) : null;
         return { id: doc.id, ...data } as Invoice;
@@ -1903,10 +1917,12 @@ export const getInvoicesPaginated = async (
 };
 
 export const getInvoicesForOpportunity = async (opportunityId: string): Promise<Invoice[]> => {
+    const cacheKey = `invoices_opportunity_${opportunityId}`;
+    return getCachedOrLoad(cacheKey, async () => {
     const q = query(collections.invoices, where("opportunityId", "==", opportunityId));
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocsPreferCache(q);
     const invoices = snapshot.docs.map(doc => {
-        const data = doc.data();
+        const data = doc.data() as any;
         const rawCreditNoteDate = data.creditNoteMarkedAt;
         const normalizedCreditNoteDate = rawCreditNoteDate instanceof Timestamp
             ? rawCreditNoteDate.toDate().toISOString()
@@ -1935,17 +1951,20 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
     });
     invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
     return invoices;
+    });
 };
 
 export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]> => {
-    const oppsSnapshot = await getDocs(query(collections.opportunities, where("clientId", "==", clientId)));
+    const cacheKey = `invoices_client_${clientId}`;
+    return getCachedOrLoad(cacheKey, async () => {
+    const oppsSnapshot = await getDocsPreferCache(query(collections.opportunities, where("clientId", "==", clientId)));
     const opportunityIds = oppsSnapshot.docs.map(doc => doc.id);
     if (opportunityIds.length === 0) return [];
     
     const q = query(collections.invoices, where("opportunityId", "in", opportunityIds));
-    const invoicesSnapshot = await getDocs(q);
+    const invoicesSnapshot = await getDocsPreferCache(q);
     return invoicesSnapshot.docs.map(doc => {
-        const data = doc.data();
+        const data = doc.data() as any;
         const rawCreditNoteDate = data.creditNoteMarkedAt;
         const normalizedCreditNoteDate = rawCreditNoteDate instanceof Timestamp
             ? rawCreditNoteDate.toDate().toISOString()
@@ -1972,6 +1991,7 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
             orderNumber: data.orderNumber,
         } as Invoice;
     });
+    });
 };
 
 export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: string, userName: string, ownerName: string): Promise<string> => {
@@ -1993,6 +2013,7 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
     
     // 🟢 MUTADOR CORRECTO PARA FACTURAS (Usamos dataToSave)
     mutateCacheArray('invoices', docRef.id, dataToSave, 'add', (a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
+    invalidateInvoiceDetailCaches();
 
    if (invoiceData.date && !invoiceData.isCreditNote) {
         const monthKey = invoiceData.date.substring(0, 7);
@@ -2017,6 +2038,7 @@ export const updateInvoice = async (id: string, data: Partial<Omit<Invoice, 'id'
     
     // 🟢 MUTADOR CORRECTO PARA EDICIÓN DE FACTURAS
     mutateCacheArray('invoices', id, updateData, 'update');
+    invalidateInvoiceDetailCaches();
 };
 
 export const deleteInvoice = async (id: string, userId: string, userName: string, ownerName: string): Promise<void> => {
@@ -2028,6 +2050,7 @@ export const deleteInvoice = async (id: string, userId: string, userName: string
     
     // 🟢 MUTADOR CORRECTO PARA BORRADO DE FACTURAS
     mutateCacheArray('invoices', id, null, 'delete');
+    invalidateInvoiceDetailCaches();
 
     await logActivity({
         userId,
