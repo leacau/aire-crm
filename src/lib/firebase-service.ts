@@ -176,6 +176,12 @@ const invalidateInvoiceDetailCaches = () => {
     delete cache.dashboard_invoices;
 };
 
+const invalidateOpportunityCaches = (clientIds: Array<string | undefined | null> = []) => {
+    invalidateCache('all_opportunities');
+    invalidateCacheByPrefix('opportunities_user_');
+    clientIds.filter(Boolean).forEach(clientId => invalidateCache(`opportunities_client_${clientId}`));
+};
+
 
 
 export type ClientTangoUpdate = {
@@ -3237,31 +3243,35 @@ export const getAllOpportunities = async (): Promise<Opportunity[]> => {
 
 
 export const getOpportunitiesByClientId = async (clientId: string): Promise<Opportunity[]> => {
-    const q = query(collections.opportunities, where('clientId', '==', clientId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(mapOpportunityDoc);
+    return getCachedOrLoad(`opportunities_client_${clientId}`, async () => {
+        const q = query(collections.opportunities, where('clientId', '==', clientId));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(mapOpportunityDoc);
+    });
 };
 
 export const getOpportunitiesForUser = async (userId: string): Promise<Opportunity[]> => {
-    const allClients = await getClients();
-    const userClientIds = new Set(allClients.filter(c => c.ownerId === userId).map(c => c.id));
+    return getCachedOrLoad(`opportunities_user_${userId}`, async () => {
+        const allClients = await getClients();
+        const userClientIds = new Set(allClients.filter(c => c.ownerId === userId).map(c => c.id));
 
-    if (userClientIds.size === 0) return [];
+        if (userClientIds.size === 0) return [];
 
-    // Firestore limits the `in` operator to 30 values, so chunk the client ids
-    // and merge the results to avoid query failures for advisors with many clients.
-    const clientIds = Array.from(userClientIds);
-    const chunks: string[][] = [];
+        // Firestore limits the `in` operator to 30 values, so chunk the client ids
+        // and merge the results to avoid query failures for advisors with many clients.
+        const clientIds = Array.from(userClientIds);
+        const chunks: string[][] = [];
 
-    for (let i = 0; i < clientIds.length; i += 30) {
-        chunks.push(clientIds.slice(i, i + 30));
-    }
+        for (let i = 0; i < clientIds.length; i += 30) {
+            chunks.push(clientIds.slice(i, i + 30));
+        }
 
-    const results = await Promise.all(
-        chunks.map(ids => getDocs(query(collections.opportunities, where('clientId', 'in', ids))))
-    );
+        const results = await Promise.all(
+            chunks.map(ids => getDocs(query(collections.opportunities, where('clientId', 'in', ids))))
+        );
 
-    return results.flatMap(snapshot => snapshot.docs.map(mapOpportunityDoc));
+        return results.flatMap(snapshot => snapshot.docs.map(mapOpportunityDoc));
+    });
 };
 
 export const createOpportunity = async (
@@ -3298,7 +3308,7 @@ export const createOpportunity = async (
         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return dateB - dateA;
     });
-    invalidateCache('all_opportunities');
+    invalidateOpportunityCaches([opportunityData.clientId]);
 
     await logActivity({
         userId,
@@ -3331,7 +3341,7 @@ export const createQuickOpportunity = async (title: string, clientId: string, cl
         createdAt: new Date().toISOString(),
         ownerId: userId
     });
-    invalidateCache('all_opportunities');
+    invalidateOpportunityCaches([clientId]);
     return docRef.id;
 }
 
@@ -3483,7 +3493,7 @@ export const updateOpportunity = async (
         cacheData.stageChangedAt = new Date().toISOString();
     }
     mutateCacheArray('opportunities', id, cacheData, 'update');
-    invalidateCache('all_opportunities');
+    invalidateOpportunityCaches([originalData.clientId, data.clientId]);
 
      if (pendingInvoices && pendingInvoices.length > 0) {
         for (const invoiceData of pendingInvoices) {
@@ -3553,7 +3563,7 @@ export const deleteOpportunity = async (
     
     // 🟢 MUTADOR CORRECTO PARA BORRADO DE OPORTUNIDADES
     mutateCacheArray('opportunities', id, null, 'delete');
-    invalidateCache('all_opportunities');
+    invalidateOpportunityCaches([opportunityData.clientId]);
     // Las facturas las seguimos invalidando completas por precaución a desincronizaciones en cascada
     invalidateCache('invoices');
 
