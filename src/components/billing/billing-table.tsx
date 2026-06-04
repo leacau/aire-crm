@@ -334,7 +334,6 @@ export const BillingTable = ({
     showCreditNoteDate,
     type,
     someSelected,
-    usersMap,
   ]);
 
   const total = items.reduce((acc, item) => {
