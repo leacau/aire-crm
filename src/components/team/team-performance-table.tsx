@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
-import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getProspects, getObjectiveVisibilityConfig, updateObjectiveVisibilityConfig } from '@/lib/firebase-service';
+import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getProspects, getObjectiveVisibilityConfig, updateObjectiveVisibilityConfig, syncRegisteredUsersFromAuth } from '@/lib/firebase-service';
 import type { Opportunity, User, Client, UserRole, Prospect, AreaType, ObjectiveVisibilityConfig, SellerCompanyConfig } from '@/lib/types';
 import { userRoles } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -88,13 +88,17 @@ export function TeamPerformanceTable() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [allOpps, allUsers, allClients, allProspects, visibilityConfig] = await Promise.all([
+      let [allOpps, allUsers, allClients, allProspects, visibilityConfig] = await Promise.all([
           getAllOpportunities(),
           getAllUsers(),
           getClients(),
           getProspects(),
           getObjectiveVisibilityConfig(),
       ]);
+      if (isBoss && allUsers.length === 0) {
+        await syncRegisteredUsersFromAuth();
+        allUsers = await getAllUsers();
+      }
       setOpportunities(allOpps);
       setUsers(allUsers);
       setClients(allClients);
@@ -110,7 +114,7 @@ export function TeamPerformanceTable() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [isBoss, toast]);
 
   useEffect(() => {
     fetchData();

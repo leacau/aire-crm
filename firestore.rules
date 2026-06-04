@@ -57,6 +57,15 @@ service cloud.firestore {
       );
     }
 
+    function advisorUpdatesOwnPaymentEntry() {
+      return isSignedIn()
+        && resource.data.advisorId == request.auth.uid
+        && request.resource.data.advisorId == resource.data.advisorId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['notes', 'nextContactAt', 'status', 'updatedAt'])
+        && request.resource.data.status in ['Pendiente', 'Reclamado'];
+    }
+
     function updatesSelfProfile(userId) {
       return isSignedIn()
         && request.auth.uid == userId
@@ -131,7 +140,8 @@ service cloud.firestore {
 
     match /payment_entries/{paymentId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isManagement();
+      allow create, delete: if isManagement();
+      allow update: if isManagement() || advisorUpdatesOwnPaymentEntry();
     }
 
     match /billing_requests/{requestId} {

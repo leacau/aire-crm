@@ -1,6 +1,6 @@
 'use client';
 
-import { db } from './firebase';
+import { auth, db } from './firebase';
 import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction } from './types';
 import { logActivity } from './activity-logger';
@@ -107,6 +107,9 @@ export const invalidateCache = (key?: string) => {
                     delete cache[k];
                 }
             });
+        } else if (key === PAYMENT_CACHE_KEY || key === PENDING_PAYMENT_CACHE_KEY) {
+            delete cache[PAYMENT_CACHE_KEY];
+            delete cache[PENDING_PAYMENT_CACHE_KEY];
         } else {
             delete cache[key];
         }
@@ -2143,6 +2146,7 @@ export const deleteInvoicesInBatches = async (
 // --- Payment entries ---
 
 const PAYMENT_CACHE_KEY = 'paymentEntries';
+const PENDING_PAYMENT_CACHE_KEY = 'pendingPaymentEntries';
 
 const PAYMENT_DATE_FORMATS = [
     'yyyy-MM-dd',
@@ -2229,7 +2233,7 @@ export const getPaymentEntries = async (): Promise<PaymentEntry[]> => {
 };
 
 export const getPendingPaymentEntries = async (): Promise<PaymentEntry[]> => {
-    const cached = getFromCache('pendingPaymentEntries');
+    const cached = getFromCache(PENDING_PAYMENT_CACHE_KEY);
     if (cached) return cached;
 
     // 🟢 ESTRATEGIA LIGERA: Traemos exclusivamente la mora
@@ -2269,7 +2273,7 @@ export const getPendingPaymentEntries = async (): Promise<PaymentEntry[]> => {
         return parsed;
     });
 
-    setInCache('pendingPaymentEntries', payments);
+    setInCache(PENDING_PAYMENT_CACHE_KEY, payments);
     return payments;
 };
 
@@ -2525,21 +2529,51 @@ export async function updateUserProfile(uid: string, data: Partial<User>) {
   const userRef = doc(db, 'users', uid);
   // Usamos set con merge: true para crear el documento si no existe, o actualizar si existe
   await setDoc(userRef, data, { merge: true });
+  invalidateCache('users');
 };
 
+export const syncRegisteredUsersFromAuth = async (): Promise<{ total: number; created: number; updated: number }> => {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error('No hay sesion activa para sincronizar usuarios.');
+
+  const response = await fetch('/api/admin/users/sync', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.error || 'No se pudo sincronizar usuarios registrados.');
+  }
+
+  const result = await response.json();
+  invalidateCache('users');
+  return result;
+};
 
 export const getAllUsers = async (role?: UserRole): Promise<User[]> => {
   const cacheKey = `all_users_${role || 'all'}`;
-  return getCachedOrLoad(cacheKey, async () => {
-    const usersRef = collection(db, 'users');
-    const snapshot = await getDocsPreferCache(usersRef);
+  const cached = getFromCache(cacheKey);
+  if (Array.isArray(cached) && cached.length > 0) return cached as User[];
+  if (pendingReads[cacheKey]) return pendingReads[cacheKey] as Promise<User[]>;
+
+  pendingReads[cacheKey] = (async () => {
+    const snapshot = await getDocs(collections.users);
     let users = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as User));
     if (role) {
         users = users.filter(u => u.role === role);
     }
     
-    return users.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const sorted = users.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    if (sorted.length > 0) setInCache(cacheKey, sorted);
+    return sorted;
+  })().finally(() => {
+    delete pendingReads[cacheKey];
   });
+
+  return pendingReads[cacheKey] as Promise<User[]>;
 };
 
 export const getUserById = async (userId: string): Promise<User | null> => {

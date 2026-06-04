@@ -44,7 +44,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
     // Estado local para los inputs de "Nueva Nota" y "Nueva Acción" por cada item
     const [inputStates, setInputStates] = useState<Record<string, { action?: string, note?: string }>>({});
 
-    const canManage = isBoss || userInfo?.role === 'Gerencia' || userInfo?.role === 'Jefe';
+    const canManage = isBoss || userInfo?.role === 'Gerencia' || userInfo?.role === 'Jefe' || userInfo?.role === 'Admin';
 
     const loadData = async () => {
         setLoading(true);

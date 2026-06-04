@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { getWorkflowAssignments, saveWorkflowAssignments, getAllUsers } from '@/lib/firebase-service';
+import { getWorkflowAssignments, saveWorkflowAssignments, getAllUsers, syncRegisteredUsersFromAuth } from '@/lib/firebase-service';
 import { User } from '@/lib/types';
 import { AlertCircle, Save, ShieldAlert, Award, FileText, Landmark, Loader2, RefreshCw } from 'lucide-react';
 
@@ -34,7 +34,11 @@ export default function WorkflowAssignmentsPage() {
         setLoading(true);
         setLoadError(null);
         try {
-            const [allUsers, config] = await Promise.all([getAllUsers(), getWorkflowAssignments()]);
+            let [allUsers, config] = await Promise.all([getAllUsers(), getWorkflowAssignments()]);
+            if (allUsers.length === 0) {
+                await syncRegisteredUsersFromAuth();
+                allUsers = await getAllUsers();
+            }
             setUsers(allUsers);
             setApprovers(config.approvers || []);
             setBillingReceptors(config.billingReceptors || []);
