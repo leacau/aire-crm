@@ -1791,8 +1791,7 @@ const normalizeInvoiceAmount = (rawAmount: unknown): number => {
 };
 
 export const getInvoices = async (): Promise<Invoice[]> => {
-    const cachedData = getFromCache('invoices');
-    if (cachedData) return cachedData;
+    return getCachedOrLoad('invoices', async () => {
 
     const snapshot = await getDocsPreferCache(query(collections.invoices, orderBy("dateGenerated", "desc")));
     const invoices = snapshot.docs.map(doc => {
@@ -1831,8 +1830,8 @@ export const getInvoices = async (): Promise<Invoice[]> => {
             orderNumber: data.orderNumber,
         } as Invoice;
     });
-    setInCache('invoices', invoices);
     return invoices;
+    });
 };
 
 export const getDashboardInvoices = async (): Promise<Invoice[]> => {
@@ -1978,13 +1977,19 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
 export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]> => {
     const cacheKey = `invoices_client_${clientId}`;
     return getCachedOrLoad(cacheKey, async () => {
-    const oppsSnapshot = await getDocsPreferCache(query(collections.opportunities, where("clientId", "==", clientId)));
-    const opportunityIds = oppsSnapshot.docs.map(doc => doc.id);
+    const opportunityIds = (await getOpportunitiesByClientId(clientId)).map(opp => opp.id);
     if (opportunityIds.length === 0) return [];
     
-    const q = query(collections.invoices, where("opportunityId", "in", opportunityIds));
-    const invoicesSnapshot = await getDocsPreferCache(q);
-    return invoicesSnapshot.docs.map(doc => {
+    const chunks: string[][] = [];
+    for (let i = 0; i < opportunityIds.length; i += 30) {
+        chunks.push(opportunityIds.slice(i, i + 30));
+    }
+
+    const snapshots = await Promise.all(
+        chunks.map(ids => getDocsPreferCache(query(collections.invoices, where("opportunityId", "in", ids))))
+    );
+
+    const invoices = snapshots.flatMap(snapshot => snapshot.docs.map(doc => {
         const data = doc.data() as any;
         const rawCreditNoteDate = data.creditNoteMarkedAt;
         const normalizedCreditNoteDate = rawCreditNoteDate instanceof Timestamp
@@ -2011,7 +2016,8 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
             orderDate: data.orderDate,
             orderNumber: data.orderNumber,
         } as Invoice;
-    });
+    }));
+    return invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
     });
 };
 
@@ -2201,8 +2207,7 @@ const computeDaysLate = (dueDate?: string | null) => {
 };
 
 export const getPaymentEntries = async (): Promise<PaymentEntry[]> => {
-    const cached = getFromCache('paymentEntries');
-    if (cached) return cached;
+    return getCachedOrLoad(PAYMENT_CACHE_KEY, async () => {
 
     const snapshot = await getDocs(query(collections.paymentEntries, orderBy('createdAt', 'desc')));
     const payments = snapshot.docs.map(docSnap => {
@@ -2234,13 +2239,12 @@ export const getPaymentEntries = async (): Promise<PaymentEntry[]> => {
         return parsed;
     });
 
-    setInCache('paymentEntries', payments);
     return payments;
+    });
 };
 
 export const getPendingPaymentEntries = async (): Promise<PaymentEntry[]> => {
-    const cached = getFromCache(PENDING_PAYMENT_CACHE_KEY);
-    if (cached) return cached;
+    return getCachedOrLoad(PENDING_PAYMENT_CACHE_KEY, async () => {
 
     // 🟢 ESTRATEGIA LIGERA: Traemos exclusivamente la mora
     const q = query(
@@ -2279,8 +2283,8 @@ export const getPendingPaymentEntries = async (): Promise<PaymentEntry[]> => {
         return parsed;
     });
 
-    setInCache(PENDING_PAYMENT_CACHE_KEY, payments);
     return payments;
+    });
 };
 
 export const replacePaymentEntriesForAdvisor = async (
