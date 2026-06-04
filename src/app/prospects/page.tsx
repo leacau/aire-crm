@@ -254,7 +254,7 @@ export default function ProspectsPage() {
     }
   };
 
-  const handleClaim = async (prospect: Prospect) => {
+  const handleClaim = useCallback(async (prospect: Prospect) => {
       if (!userInfo) return;
       try {
           await claimProspect(prospect, userInfo.id, userInfo.name);
@@ -263,9 +263,9 @@ export default function ProspectsPage() {
       } catch (error) {
           toast({ title: "No puedes reclamar aún", description: (error as Error).message, variant: "destructive" });
       }
-  };
+  }, [fetchData, toast, userInfo]);
 
-  const handleApproveClaim = async (prospect: Prospect) => {
+  const handleApproveClaim = useCallback(async (prospect: Prospect) => {
       if (!userInfo) return;
       try {
           await approveProspectClaim(prospect, userInfo.id, userInfo.name);
@@ -275,9 +275,9 @@ export default function ProspectsPage() {
           console.error(error);
           toast({ title: "Error", variant: "destructive" });
       }
-  };
+  }, [fetchData, toast, userInfo]);
 
-  const handleRejectClaim = async (prospect: Prospect) => {
+  const handleRejectClaim = useCallback(async (prospect: Prospect) => {
       if (!userInfo) return;
       try {
           await rejectProspectClaim(prospect, userInfo.id, userInfo.name);
@@ -287,7 +287,7 @@ export default function ProspectsPage() {
           console.error(error);
            toast({ title: "Error", variant: "destructive" });
       }
-  };
+  }, [fetchData, toast, userInfo]);
 
   // Nueva función para asignación manual
   const handleAssignProspect = async () => {
@@ -680,7 +680,7 @@ export default function ProspectsPage() {
               </div>
           )
       }
-  ], []);
+  ], [handleApproveClaim, handleRejectClaim]);
 
 
   if (authLoading || loading) {

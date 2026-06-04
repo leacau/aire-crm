@@ -363,7 +363,6 @@ export default function ClientsPage() {
     selectedAdvisor,
     selectedOpportunityStage,
     opportunities,
-    clientOpportunityData,
     selectedRubro,
   ]);
 
@@ -474,7 +473,7 @@ export default function ClientsPage() {
     setIsActivityFormOpen(true);
   };
   
-  const handleToggleAttention = async (client: Client) => {
+  const handleToggleAttention = useCallback(async (client: Client) => {
     if (!userInfo) return;
     const needsAttention = !client.needsAttention;
     try {
@@ -488,7 +487,7 @@ export default function ClientsPage() {
       console.error("Error toggling attention:", error);
       toast({ title: 'Error al cambiar la alerta', variant: 'destructive'});
     }
-  };
+  }, [fetchData, toast, userInfo]);
 
   const columns = useMemo<ColumnDef<Client>[]>(() => {
     const canViewDetails = (client: Client) => userInfo && client && (isBoss || client.ownerId === userInfo.id);
@@ -624,7 +623,7 @@ export default function ClientsPage() {
     ]);
     
     return cols;
-  }, [userInfo, isBoss, canManage, clientOpportunityData]);
+  }, [userInfo, isBoss, canManage, handleToggleAttention]);
 
   if (authLoading || loading) {
     return (
