@@ -1,7 +1,7 @@
 'use client';
 
 import { db } from './firebase';
-import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, Query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment, DocumentData } from 'firebase/firestore';
+import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
 import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
@@ -65,12 +65,11 @@ const setInCache = (key: string, data: any) => {
 
 const getDocsPreferCache = async (source: any): Promise<any> => {
     try {
-        const snapshot = await getDocsFromCache(source);
-        // SI EL CACHÉ ESTÁ VACÍO, FORZAMOS LA BÚSQUEDA EN EL SERVIDOR
-        if (snapshot.empty) {
+        const cachedSnapshot = await getDocsFromCache(source);
+        if (cachedSnapshot.empty && cachedSnapshot.metadata?.fromCache) {
             return await getDocs(source);
         }
-        return snapshot;
+        return cachedSnapshot;
     } catch {
         return getDocs(source);
     }
@@ -103,7 +102,6 @@ const timestampToISO = (value: any): string | undefined => {
 export const invalidateCache = (key?: string) => {
     if (key) {
         if (key === 'users') {
-            // 🟢 SOLUCIÓN: Eliminamos todas las variantes de claves de usuarios
             Object.keys(cache).forEach(k => {
                 if (k.startsWith('all_users_') || k.startsWith('user_') || k === 'users') {
                     delete cache[k];
@@ -2535,12 +2533,13 @@ export const getAllUsers = async (role?: UserRole): Promise<User[]> => {
   return getCachedOrLoad(cacheKey, async () => {
     const usersRef = collection(db, 'users');
     const snapshot = await getDocsPreferCache(usersRef);
-    let users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    let users = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as User));
     if (role) {
         users = users.filter(u => u.role === role);
     }
     
-    return users.sort((a, b) => (a.name || '').localeCompare(b.name || ''));  });
+    return users.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  });
 };
 
 export const getUserById = async (userId: string): Promise<User | null> => {
@@ -2614,7 +2613,7 @@ export const getClients = async (): Promise<Client[]> => {
     return getCachedOrLoad('clients', async () => {
       const snapshot = await getDocsPreferCache(query(collections.clients, orderBy("denominacion")));
       return snapshot.docs.map(doc => {
-        const data = doc.data();
+        const data = doc.data() as any;
         return { 
           id: doc.id, 
           ...data,
