@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import type { User, CoachingSession, CoachingItem } from '@/lib/types';
 import { getCoachingSessions, createCoachingSession, updateCoachingItem, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem } from '@/lib/firebase-service';
@@ -46,7 +46,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
 
     const canManage = isBoss || userInfo?.role === 'Gerencia' || userInfo?.role === 'Jefe' || userInfo?.role === 'Admin';
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         try {
             const data = await getCoachingSessions(advisor.id);
@@ -64,11 +64,11 @@ export function CoachingView({ advisor }: { advisor: User }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [advisor.id]);
 
     useEffect(() => {
         loadData();
-    }, [advisor.id]);
+    }, [loadData]);
 
     const handleCreateSession = async () => {
         if (!userInfo) return;

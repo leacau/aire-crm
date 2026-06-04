@@ -133,7 +133,7 @@ export function TeamPerformanceTable() {
     }
   }, [userForCodes]);
 
-  const handleUpdateUser = async (userId: string, data: Partial<User>) => {
+  const handleUpdateUser = useCallback(async (userId: string, data: Partial<User>) => {
      try {
         await updateUserProfile(userId, data);
         toast({ title: 'Usuario actualizado'});
@@ -147,7 +147,7 @@ export function TeamPerformanceTable() {
         console.error("Error updating user:", error);
         toast({ title: 'Error al actualizar usuario', variant: 'destructive' });
     }
-  };
+  }, [toast]);
 
   const handleSaveObjectiveVisibility = async () => {
     if (!userInfo || (!visibilityMonth && !visibilityDeadline)) return;
@@ -502,7 +502,7 @@ export function TeamPerformanceTable() {
             )
         }
     }
-  ], [isBoss, userInfo, managers, editedValues]);
+  ], [isBoss, userInfo, managers, editedValues, handleUpdateUser]);
 
   if (loading) {
     return (

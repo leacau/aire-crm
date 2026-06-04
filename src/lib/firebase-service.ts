@@ -3229,8 +3229,10 @@ export const getOpportunities = async (): Promise<Opportunity[]> => {
 };
 
 export const getAllOpportunities = async (): Promise<Opportunity[]> => {
-    const snapshot = await getDocsPreferCache(collections.opportunities);
-    return snapshot.docs.map(mapOpportunityDoc);
+    return getCachedOrLoad('all_opportunities', async () => {
+        const snapshot = await getDocsPreferCache(collections.opportunities);
+        return snapshot.docs.map(mapOpportunityDoc);
+    });
 };
 
 
@@ -3296,6 +3298,7 @@ export const createOpportunity = async (
         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return dateB - dateA;
     });
+    invalidateCache('all_opportunities');
 
     await logActivity({
         userId,
@@ -3328,6 +3331,7 @@ export const createQuickOpportunity = async (title: string, clientId: string, cl
         createdAt: new Date().toISOString(),
         ownerId: userId
     });
+    invalidateCache('all_opportunities');
     return docRef.id;
 }
 
@@ -3479,6 +3483,7 @@ export const updateOpportunity = async (
         cacheData.stageChangedAt = new Date().toISOString();
     }
     mutateCacheArray('opportunities', id, cacheData, 'update');
+    invalidateCache('all_opportunities');
 
      if (pendingInvoices && pendingInvoices.length > 0) {
         for (const invoiceData of pendingInvoices) {
@@ -3548,6 +3553,7 @@ export const deleteOpportunity = async (
     
     // 🟢 MUTADOR CORRECTO PARA BORRADO DE OPORTUNIDADES
     mutateCacheArray('opportunities', id, null, 'delete');
+    invalidateCache('all_opportunities');
     // Las facturas las seguimos invalidando completas por precaución a desincronizaciones en cascada
     invalidateCache('invoices');
 
