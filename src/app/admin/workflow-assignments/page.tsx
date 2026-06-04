@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { getWorkflowAssignments, saveWorkflowAssignments, getAllUsers } from '@/lib/firebase-service';
 import { User } from '@/lib/types';
-import { Save, ShieldAlert, Award, FileText, Landmark, Loader2 } from 'lucide-react'; // 🟢 CORREGIDO: Loader2 agregado aquí
+import { AlertCircle, Save, ShieldAlert, Award, FileText, Landmark, Loader2, RefreshCw } from 'lucide-react';
 
 export default function WorkflowAssignmentsPage() {
     const { userInfo, isBoss } = useAuth();
@@ -19,6 +19,7 @@ export default function WorkflowAssignmentsPage() {
 
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
     const [approvers, setApprovers] = useState<string[]>([]);
@@ -27,17 +28,32 @@ export default function WorkflowAssignmentsPage() {
 
     const canAccess = userInfo && (isBoss || userInfo.email === 'lchena@airedesantafe.com.ar' || userInfo.role === 'Gerencia');
 
-    useEffect(() => {
-        if (canAccess) {
-            Promise.all([getAllUsers(), getWorkflowAssignments()]).then(([allUsers, config]) => {
-                setUsers(allUsers);
-                setApprovers(config.approvers || []);
-                setBillingReceptors(config.billingReceptors || []);
-                setTangoInvoicers(config.tangoInvoicers || []);
-                setLoading(false);
-            }).catch(() => toast({ title: 'Error al cargar datos', variant: 'destructive' }));
+    const loadData = useCallback(async () => {
+        if (!canAccess) return;
+
+        setLoading(true);
+        setLoadError(null);
+        try {
+            const [allUsers, config] = await Promise.all([getAllUsers(), getWorkflowAssignments()]);
+            setUsers(allUsers);
+            setApprovers(config.approvers || []);
+            setBillingReceptors(config.billingReceptors || []);
+            setTangoInvoicers(config.tangoInvoicers || []);
+            if (allUsers.length === 0) {
+                setLoadError('No se encontraron usuarios registrados para configurar roles.');
+            }
+        } catch (error) {
+            console.error('Error loading workflow assignments', error);
+            setLoadError('No se pudieron cargar los usuarios ni la matriz de responsabilidades.');
+            toast({ title: 'Error al cargar datos', variant: 'destructive' });
+        } finally {
+            setLoading(false);
         }
-    }, [canAccess]);
+    }, [canAccess, toast]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     const togglePermission = (userId: string, type: 'approvers' | 'billingReceptors' | 'tangoInvoicers') => {
         if (type === 'approvers') {
@@ -62,12 +78,12 @@ export default function WorkflowAssignmentsPage() {
     };
 
     if (!userInfo) return <Spinner />;
-    if (!canAccess) return <div className="p-10 text-center text-red-500 font-bold text-xl">Acceso Denegado. Pantalla exclusiva de la Dirección.</div>;
+    if (!canAccess) return <div className="p-10 text-center text-red-500 font-bold text-xl">Acceso denegado. Pantalla exclusiva de la Dirección.</div>;
 
     return (
         <div className="flex flex-col h-full bg-slate-50">
             <Header title="Responsabilidades del Sistema">
-                <Button onClick={handleSave} disabled={saving} className="bg-blue-600 hover:bg-blue-700 font-bold">
+                <Button onClick={handleSave} disabled={saving || loading || !!loadError} className="bg-blue-600 hover:bg-blue-700 font-bold">
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                     {saving ? 'Guardando...' : 'Guardar Matriz'}
                 </Button>
@@ -81,7 +97,25 @@ export default function WorkflowAssignmentsPage() {
                     </p>
                 </div>
 
-                {loading ? <div className="py-20 flex justify-center"><Spinner size="large" /></div> : (
+                {loading ? (
+                    <div className="py-20 flex justify-center"><Spinner size="large" /></div>
+                ) : loadError ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-5 text-amber-950">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex items-start gap-3">
+                                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                                <div>
+                                    <p className="font-semibold">No se pudo completar la carga</p>
+                                    <p className="text-sm">{loadError}</p>
+                                </div>
+                            </div>
+                            <Button variant="outline" size="sm" onClick={loadData}>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Reintentar
+                            </Button>
+                        </div>
+                    </div>
+                ) : (
                     <div className="bg-white border rounded-md shadow-sm overflow-hidden">
                         <Table>
                             <TableHeader className="bg-slate-100">

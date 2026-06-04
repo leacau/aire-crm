@@ -11,7 +11,7 @@ import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useAuth } from '@/hooks/use-auth';
-import { MoreHorizontal, Trash2, Save, BarChartHorizontal, Pencil, Plus, X, Filter } from 'lucide-react';
+import { AlertCircle, MoreHorizontal, Trash2, Save, BarChartHorizontal, Pencil, Plus, X, Filter, RefreshCw } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -66,6 +66,7 @@ export function TeamPerformanceTable() {
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [editedValues, setEditedValues] = useState<Record<string, { monthlyObjective?: number | string; managerId?: string }>>({});
@@ -85,6 +86,7 @@ export function TeamPerformanceTable() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [allOpps, allUsers, allClients, allProspects, visibilityConfig] = await Promise.all([
           getAllOpportunities(),
@@ -98,8 +100,12 @@ export function TeamPerformanceTable() {
       setClients(allClients);
       setProspects(allProspects);
       setObjectiveVisibility(visibilityConfig);
+      if (allUsers.length === 0) {
+        setLoadError('No se encontraron usuarios registrados. Si existen en Firebase, revisa la sesion, reglas de Firestore o el cache del navegador.');
+      }
     } catch (error) {
       console.error("Error fetching team data:", error);
+      setLoadError('No se pudieron cargar los usuarios y metricas del equipo. Intenta nuevamente.');
       toast({ title: 'Error al cargar los datos del equipo', variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -504,6 +510,22 @@ export function TeamPerformanceTable() {
 
   return (
     <>
+      {loadError && (
+        <div className="mb-4 flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-semibold">Atencion con la carga de usuarios</p>
+              <p className="text-sm">{loadError}</p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchData} className="shrink-0">
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Reintentar
+          </Button>
+        </div>
+      )}
+
       {isBoss && (
         <div className="mb-4 rounded-lg border bg-card p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -591,7 +613,7 @@ export function TeamPerformanceTable() {
       <ResizableDataTable
         columns={columns}
         data={userStats}
-        emptyStateMessage="No se encontraron usuarios con los filtros seleccionados."
+        emptyStateMessage={users.length === 0 ? "No se cargaron usuarios registrados." : "No se encontraron usuarios con los filtros seleccionados."}
       />
 
       <AlertDialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
