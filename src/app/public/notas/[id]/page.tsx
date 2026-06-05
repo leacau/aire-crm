@@ -10,8 +10,7 @@ import { FileDown, Copy, Check, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 
 // Reutilizamos el componente NotePdf para la exportación a PDF
 import { NotePdf } from '@/components/notas/note-pdf';
@@ -49,23 +48,7 @@ export default function PublicNoteView() {
     const handleDownloadPdf = async () => {
         if (!pdfRef.current || !note) return;
         try {
-            const page1 = pdfRef.current.querySelector('#note-pdf-page-1') as HTMLElement;
-            const page2 = pdfRef.current.querySelector('#note-pdf-page-2') as HTMLElement;
-            if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
-
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-
-            const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-                const canvas = await html2canvas(pageElement, { scale: 2, useCORS: true });
-                const imgData = canvas.toDataURL('image/jpeg', 0.8);
-                if (pageNum > 1) pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-            };
-
-            await processPage(page1, 1);
-            await processPage(page2, 2);
+            const pdf = await generatePaginatedPdfFromElement(pdfRef.current);
             pdf.save(`Nota_${note.title?.replace(/ /g, "_")}.pdf`);
         } catch (error) {
             console.error(error);

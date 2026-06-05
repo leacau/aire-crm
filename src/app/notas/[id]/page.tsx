@@ -14,12 +14,11 @@ import { Badge } from '@/components/ui/badge';
 import { ExternalLink, FileDown, ArrowLeft, Copy, Mail, Edit } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { NotePdf } from '@/components/notas/note-pdf';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
+import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 
 export default function NoteDetailPage() {
     const { id } = useParams();
@@ -48,44 +47,7 @@ export default function NoteDetailPage() {
         load();
     }, [id]);
 
-    const generateMultiPagePdf = async (element: HTMLElement) => {
-        const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
-        const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
-
-        if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
-
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-
-        const processPage = async (pageElement: HTMLElement, pageNum: number) => {
-            const canvas = await html2canvas(pageElement, { scale: 2, useCORS: true });
-            const imgData = canvas.toDataURL('image/jpeg', 0.8);
-            
-            if (pageNum > 1) pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-
-            const links = pageElement.querySelectorAll('a');
-            const elementRect = pageElement.getBoundingClientRect();
-
-            links.forEach((link) => {
-                const linkRect = link.getBoundingClientRect();
-                if (linkRect.width === 0 || linkRect.height === 0) return;
-                
-                const top = ((linkRect.top - elementRect.top) * pdfHeight) / elementRect.height;
-                const left = ((linkRect.left - elementRect.left) * pdfWidth) / elementRect.width;
-                const width = (linkRect.width * pdfWidth) / elementRect.width;
-                const height = (linkRect.height * pdfHeight) / elementRect.height;
-
-                pdf.link(left, top, width, height, { url: link.href });
-            });
-        };
-
-        await processPage(page1, 1);
-        await processPage(page2, 2);
-
-        return pdf;
-    };
+    const generateMultiPagePdf = async (element: HTMLElement) => generatePaginatedPdfFromElement(element);
 
     const handleDownloadPdf = async () => {
         if (!pdfRef.current || !note) return;

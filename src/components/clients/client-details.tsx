@@ -105,6 +105,7 @@ import html2canvas from 'html2canvas';
 import { ClientPdf } from './client-pdf';
 import { CommentThread } from '@/components/comments/comment-thread';
 import { NotePdf } from '@/components/notas/note-pdf';
+import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'bg-blue-500',
@@ -628,29 +629,7 @@ export function ClientDetails({
   };
 
   // Función auxiliar para capturar y generar PDF multipágina
-  const generateMultiPagePdf = async (element: HTMLElement, title: string) => {
-    const page1 = element.querySelector('#note-pdf-page-1') as HTMLElement;
-    const page2 = element.querySelector('#note-pdf-page-2') as HTMLElement;
-
-    if (!page1 || !page2) throw new Error("No se encontraron las páginas del PDF");
-
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-
-    // Página 1
-    const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true });
-    const imgData1 = canvas1.toDataURL('image/jpeg', 0.8);
-    pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-
-    // Página 2
-    pdf.addPage();
-    const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true });
-    const imgData2 = canvas2.toDataURL('image/jpeg', 0.8);
-    pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-
-    return pdf;
-  };
+  const generateMultiPagePdf = async (element: HTMLElement, title: string) => generatePaginatedPdfFromElement(element);
 
   // Función para descargar PDF de Nota
   const handleDownloadNotePdf = async (note: CommercialNote) => {

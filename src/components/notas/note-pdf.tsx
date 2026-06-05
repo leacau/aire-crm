@@ -13,7 +13,7 @@ interface NotePdfProps {
 }
 
 const SectionTitle = ({ title }: { title: string }) => (
-    <div className="bg-gray-200 p-2 font-bold uppercase mb-2 text-sm border-b-2 border-red-600 w-full">
+    <div className="bg-gray-200 p-2 font-bold uppercase mb-2 text-sm border-b-2 border-red-600 w-full" data-pdf-keep-together="true">
         {title}
     </div>
 );
@@ -23,7 +23,7 @@ const Field = ({ label, value, fullWidth = false }: { label: string, value?: str
     const displayValue = isUrl ? (value.startsWith('http') ? value : `https://${value}`) : value;
 
     return (
-        <div className={`mb-2 ${fullWidth ? 'w-full' : ''}`}>
+        <div className={`mb-2 ${fullWidth ? 'w-full' : ''}`} data-pdf-keep-together="true">
             <span className="font-bold text-sm">{label}: </span>
             {isUrl ? (
                 <a 
@@ -89,13 +89,13 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     
                     <div className="mt-3 space-y-3">
                         {pGrafs.map((g, i) => (
-                            <div key={`p-${i}`} className="p-3 border border-gray-300 rounded bg-gray-50">
+                            <div key={`p-${i}`} className="p-3 border border-gray-300 rounded bg-gray-50" data-pdf-keep-together="true">
                                 <p className="text-xs font-bold text-gray-500 uppercase mb-1">TITULAR.Text (Max 84)</p>
                                 <p className="text-base font-medium uppercase">{g}</p>
                             </div>
                         ))}
                         {sGrafs.map((g, i) => (
-                            <div key={`s-${i}`} className="p-3 border border-gray-300 rounded bg-gray-50">
+                            <div key={`s-${i}`} className="p-3 border border-gray-300 rounded bg-gray-50" data-pdf-keep-together="true">
                                 <p className="text-xs font-bold text-gray-500 uppercase mb-1">NOMBRE/FUNCION.Text (Max 55)</p>
                                 <p className="text-base font-medium uppercase">{g}</p>
                             </div>
@@ -103,7 +103,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     </div>
 
                    {note.graphicSupport && (
-                      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded">
+                      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded" data-pdf-keep-together="true">
                           <p className="text-yellow-900 font-bold text-center mb-2">⚠️ REQUIERE SOPORTE GRÁFICO</p>
                           
                           {(() => {
@@ -148,7 +148,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                         <Field label="Teléfono Coord." value={note.contactPhone} />
                     </div>
                     
-                    <div className="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
+                    <div className="mb-4 bg-gray-50 p-3 rounded border border-gray-200" data-pdf-keep-together="true">
                         <span className="font-bold text-sm block mb-2 underline">Cronograma / Salidas:</span>
                         <ul className="text-sm space-y-2">
                             {Object.entries(note.schedule || {}).map(([progId, items]) => {
@@ -169,7 +169,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                         </ul>
                     </div>
 
-                    <div className="flex flex-col gap-2 text-sm border-t pt-2">
+                    <div className="flex flex-col gap-2 text-sm border-t pt-2" data-pdf-keep-together="true">
                         <div className="flex gap-8">
                             <div><span className="font-bold">Replica Web:</span> {note.replicateWeb ? 'SÍ' : 'NO'}</div>
                             <div><span className="font-bold">Replica Redes:</span> {note.replicateSocials && note.replicateSocials.length > 0 ? note.replicateSocials.join(', ') : 'Ninguna'}</div>
@@ -207,7 +207,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     <SectionTitle title="4. Entrevistado(s)" />
                     
                     {safeInterviewees.map((person, idx) => (
-                        <div key={idx} className="grid grid-cols-3 gap-4 mb-2 pb-2 border-b border-gray-100 last:border-0 last:pb-0">
+                        <div key={idx} className="grid grid-cols-3 gap-4 mb-2 pb-2 border-b border-gray-100 last:border-0 last:pb-0" data-pdf-keep-together="true">
                             <Field label="Nombre" value={person.name} />
                             <Field label="Cargo" value={person.role} />
                             <Field label="Locación" value={person.location} />
@@ -215,7 +215,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     ))}
 
                     {note.intervieweeBio && (
-                        <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-100">
+                        <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-100" data-pdf-keep-together="true">
                             <span className="font-bold text-sm block">Bio / Info Adicional:</span>
                             <p className="text-sm italic mt-1 text-gray-700">{note.intervieweeBio}</p>
                         </div>
@@ -232,11 +232,11 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     </div>
                     
                     {!note.noCommercialAddress && note.commercialAddresses && note.commercialAddresses.length > 0 && (
-                        <div className="mt-2 border-t pt-2">
+                        <div className="mt-2 border-t pt-2" data-pdf-keep-together="true">
                             <span className="font-bold text-sm block mb-1">Domicilio(s) Comercial(es):</span>
                             <ul className="list-disc list-inside text-sm pl-2">
                                 {note.commercialAddresses.map((addr, i) => (
-                                    <li key={i}>{addr}</li>
+                                <li key={i} data-pdf-keep-together="true">{addr}</li>
                                 ))}
                             </ul>
                         </div>
@@ -250,21 +250,21 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                 <div className="w-full">
                     <SectionTitle title="6. Contenido" />
                     
-                    <div className="mb-4">
+                    <div className="mb-4" data-pdf-keep-together="true">
                         <span className="font-bold text-sm block mb-2 underline">Preguntas Sugeridas:</span>
                         <ul className="list-decimal list-inside text-sm space-y-2">
                             {note.questions?.map((q, i) => (
-                                <li key={i} className="pl-2 py-1 border-b border-gray-100 last:border-0">{q}</li>
+                                <li key={i} className="pl-2 py-1 border-b border-gray-100 last:border-0" data-pdf-keep-together="true">{q}</li>
                             ))}
                         </ul>
                     </div>
 
                     {note.topicsToAvoid && note.topicsToAvoid.length > 0 && (
-                        <div className="p-3 bg-red-50 border border-red-200 rounded">
+                        <div className="p-3 bg-red-50 border border-red-200 rounded" data-pdf-keep-together="true">
                             <span className="font-bold text-sm block mb-2 text-red-700 underline">⚠️ TEMAS A EVITAR:</span>
                             <ul className="list-disc list-inside text-red-900 space-y-1">
                                 {note.topicsToAvoid.map((t, i) => (
-                                    <li key={i}>{t}</li>
+                                    <li key={i} data-pdf-keep-together="true">{t}</li>
                                 ))}
                             </ul>
                         </div>
@@ -273,7 +273,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
 
                 <div className="w-full">
                     <SectionTitle title="7. Observaciones Generales" />
-                    <div className="p-4 border border-gray-200 rounded min-h-[100px] bg-yellow-50/30">
+                    <div className="p-4 border border-gray-200 rounded min-h-[100px] bg-yellow-50/30" data-pdf-keep-together="true">
                         <p className="text-sm whitespace-pre-wrap">{note.noteObservations || 'Sin observaciones adicionales.'}</p>
                     </div>
                 </div>
