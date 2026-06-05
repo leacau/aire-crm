@@ -149,6 +149,12 @@ export type Opportunity = {
   closeDate: string;
   details?: string;
   observaciones?: string;
+  followUpDone?: string;
+  followUpDoneUpdatedAt?: string;
+  followUpCurrent?: string;
+  followUpCurrentUpdatedAt?: string;
+  followUpNext?: string;
+  followUpNextUpdatedAt?: string;
   createdAt: string;
   updatedAt?: string;
   manualUpdateDate?: string;
@@ -555,6 +561,12 @@ export type CoachingItem = {
   action: string; 
   status: CoachingItemStatus;
   advisorNotes?: string; 
+  followUpDone?: string;
+  followUpDoneUpdatedAt?: string;
+  followUpCurrent?: string;
+  followUpCurrentUpdatedAt?: string;
+  followUpNext?: string;
+  followUpNextUpdatedAt?: string;
   lastUpdate?: string; 
   origin?: 'manager' | 'advisor'; 
 };

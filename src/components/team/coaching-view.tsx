@@ -43,6 +43,11 @@ export function CoachingView({ advisor }: { advisor: User }) {
 
     // Estado local para los inputs de "Nueva Nota" y "Nueva Acción" por cada item
     const [inputStates, setInputStates] = useState<Record<string, { action?: string, note?: string }>>({});
+    const [followUpDrafts, setFollowUpDrafts] = useState<Record<string, {
+        followUpDone?: string;
+        followUpCurrent?: string;
+        followUpNext?: string;
+    }>>({});
 
     const canManage = isBoss || userInfo?.role === 'Gerencia' || userInfo?.role === 'Jefe' || userInfo?.role === 'Admin';
 
@@ -69,6 +74,20 @@ export function CoachingView({ advisor }: { advisor: User }) {
     useEffect(() => {
         loadData();
     }, [loadData]);
+
+    useEffect(() => {
+        const drafts: Record<string, { followUpDone?: string; followUpCurrent?: string; followUpNext?: string }> = {};
+        sessions.forEach(session => {
+            session.items.forEach(item => {
+                drafts[item.id] = {
+                    followUpDone: item.followUpDone ?? item.advisorNotes ?? '',
+                    followUpCurrent: item.followUpCurrent ?? '',
+                    followUpNext: item.followUpNext ?? '',
+                };
+            });
+        });
+        setFollowUpDrafts(drafts);
+    }, [sessions]);
 
     const handleCreateSession = async () => {
         if (!userInfo) return;
@@ -195,6 +214,53 @@ export function CoachingView({ advisor }: { advisor: User }) {
         } catch (error) {
             toast({ title: "Error al actualizar", variant: "destructive" });
         }
+    };
+
+    const statusOrder: Record<string, number> = {
+        Completado: 1,
+        'En Proceso': 2,
+        Pendiente: 3,
+        Cancelado: 4,
+    };
+
+    const sortItemsByStatus = (items: CoachingItem[]) => {
+        return [...items].sort((a, b) => {
+            const statusDiff = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
+            if (statusDiff !== 0) return statusDiff;
+            return a.entityName.localeCompare(b.entityName);
+        });
+    };
+
+    const formatUpdateDate = (value?: string) => {
+        if (!value) return 'Sin fecha registrada';
+        try {
+            return format(parseISO(value), "dd/MM HH:mm");
+        } catch {
+            return value;
+        }
+    };
+
+    const updateFollowUpDraft = (itemId: string, field: 'followUpDone' | 'followUpCurrent' | 'followUpNext', value: string) => {
+        setFollowUpDrafts(prev => ({
+            ...prev,
+            [itemId]: {
+                ...prev[itemId],
+                [field]: value,
+            },
+        }));
+    };
+
+    const saveFollowUpField = async (
+        session: CoachingSession,
+        item: CoachingItem,
+        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext'
+    ) => {
+        const updatedAtField = `${field}UpdatedAt` as keyof CoachingItem;
+        const value = followUpDrafts[item.id]?.[field] ?? '';
+        await handleUpdateItem(session, item, {
+            [field]: value,
+            [updatedAtField]: new Date().toISOString(),
+        } as Partial<CoachingItem>);
     };
 
     const commitNote = async (session: CoachingSession, item: CoachingItem) => {
@@ -349,39 +415,42 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 </div>
             </div>
 
-            <div className="space-y-2 flex flex-col h-full">
-                <Label className="text-xs text-muted-foreground flex items-center gap-2 font-medium">
-                    <Save className="h-3 w-3" /> Bitácora de Avance
-                </Label>
-                
-                {item.advisorNotes && (
-                    <div className="text-xs text-muted-foreground bg-yellow-50/50 p-2 rounded border border-yellow-100 whitespace-pre-wrap max-h-[120px] overflow-y-auto">
-                        {item.advisorNotes}
-                    </div>
-                )}
-
-                <div className="flex-1 flex flex-col gap-2">
-                    <Textarea 
-                        className="flex-1 min-h-[60px] text-sm resize-none bg-background focus:bg-white transition-colors"
-                        placeholder={session.status === 'Closed' ? "Sesión cerrada" : "Agregar nuevo avance..."}
-                        value={inputStates[item.id]?.note || ''}
-                        onChange={e => setInputStates(prev => ({...prev, [item.id]: {...prev[item.id], note: e.target.value}}))}
-                        disabled={session.status === 'Closed'}
-                    />
-                    {session.status === 'Open' && (
-                        <div className="flex justify-end">
-                            <Button 
-                                size="sm" 
-                                variant="outline" 
-                                className="h-7 text-xs"
-                                disabled={!inputStates[item.id]?.note}
-                                onClick={() => commitNote(session, item)}
-                            >
-                                Guardar Avance
-                            </Button>
+            <div className="space-y-3 flex flex-col h-full">
+                {[
+                    { field: 'followUpDone' as const, label: 'Qué hice', updatedAt: item.followUpDoneUpdatedAt, placeholder: 'Registrar lo realizado hasta ahora...' },
+                    { field: 'followUpCurrent' as const, label: 'En qué estamos', updatedAt: item.followUpCurrentUpdatedAt, placeholder: 'Estado actual de la gestión...' },
+                    { field: 'followUpNext' as const, label: 'Qué sigue', updatedAt: item.followUpNextUpdatedAt, placeholder: 'Próximo paso acordado...' },
+                ].map(({ field, label, updatedAt, placeholder }) => (
+                    <div key={field} className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                            <Label className="text-xs text-muted-foreground flex items-center gap-2 font-medium">
+                                <Save className="h-3 w-3" /> {label}
+                            </Label>
+                            <span className="text-[10px] text-muted-foreground">
+                                {formatUpdateDate(updatedAt)}
+                            </span>
                         </div>
-                    )}
-                </div>
+                        <Textarea
+                            className="min-h-[70px] text-sm resize-none bg-background focus:bg-white transition-colors"
+                            placeholder={session.status === 'Closed' ? "Reunión cerrada" : placeholder}
+                            value={followUpDrafts[item.id]?.[field] ?? ''}
+                            onChange={e => updateFollowUpDraft(item.id, field, e.target.value)}
+                            disabled={session.status === 'Closed'}
+                        />
+                        {session.status === 'Open' && (
+                            <div className="flex justify-end">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs"
+                                    onClick={() => saveFollowUpField(session, item, field)}
+                                >
+                                    Guardar
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                ))}
 
                 {item.lastUpdate && (
                     <p className="text-[10px] text-muted-foreground text-right italic">
@@ -422,8 +491,8 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 )}
 
                 {sessions.map((session) => {
-                    const managerItems = session.items.filter(i => !i.origin || i.origin === 'manager');
-                    const advisorItems = session.items.filter(i => i.origin === 'advisor');
+                    const managerItems = sortItemsByStatus(session.items.filter(i => !i.origin || i.origin === 'manager'));
+                    const advisorItems = sortItemsByStatus(session.items.filter(i => i.origin === 'advisor'));
 
                     return (
                     <Collapsible 

@@ -3908,7 +3908,7 @@ export const updateCoachingSession = async (sessionId: string, data: Partial<Coa
 export const updateCoachingItem = async (
     sessionId: string,
     itemId: string,
-    updates: { status?: string, advisorNotes?: string },
+    updates: Partial<Pick<CoachingItem, 'status' | 'advisorNotes' | 'followUpDone' | 'followUpDoneUpdatedAt' | 'followUpCurrent' | 'followUpCurrentUpdatedAt' | 'followUpNext' | 'followUpNextUpdatedAt'>>,
     userId: string,
     userName: string,
     taskId?: string, // Para sincronización

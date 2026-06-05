@@ -72,6 +72,9 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     stage: 'Nuevo',
     highCloseProbability: false,
     observaciones: '',
+    followUpDone: '',
+    followUpCurrent: '',
+    followUpNext: '',
     closeDate: new Date().toISOString().split('T')[0],
     createdAt: new Date().toISOString(), 
     clientName: client?.name || '',
@@ -348,10 +351,18 @@ export function OpportunityDetailsDialog({
         }, {} as Partial<Opportunity>);
 
         if (Object.keys(changes).length > 0) {
+            const now = new Date().toISOString();
+            if (changes.followUpDone !== undefined) changes.followUpDoneUpdatedAt = now;
+            if (changes.followUpCurrent !== undefined) changes.followUpCurrentUpdatedAt = now;
+            if (changes.followUpNext !== undefined) changes.followUpNextUpdatedAt = now;
             onUpdate(changes);
         }
     } else if (!isEditing) {
         const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
+        const now = new Date().toISOString();
+        if (newOpp.followUpDone?.trim()) newOpp.followUpDoneUpdatedAt = now;
+        if (newOpp.followUpCurrent?.trim()) newOpp.followUpCurrentUpdatedAt = now;
+        if (newOpp.followUpNext?.trim()) newOpp.followUpNextUpdatedAt = now;
         onCreate(newOpp, []);
     }
     onOpenChange(false);
@@ -587,6 +598,15 @@ export function OpportunityDetailsDialog({
       return <span className={cn(baseClasses, statusMap[status])}>{status}</span>;
   }
 
+  const formatFollowUpDate = (value?: string) => {
+      if (!value) return 'Sin fecha registrada';
+      try {
+          return format(parseISO(value), "dd/MM HH:mm");
+      } catch {
+          return value;
+      }
+  };
+
   const isInvoiceDateInvalid = editedOpportunity.finalizationDate && newInvoiceRow.date > editedOpportunity.finalizationDate;
 
   return (
@@ -653,7 +673,7 @@ export function OpportunityDetailsDialog({
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="details">Detalles</TabsTrigger>
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
-            <TabsTrigger value="bonus">Bonificación</TabsTrigger>
+            <TabsTrigger value="followup">Seguimiento</TabsTrigger>
             <TabsTrigger value="pautado">Pautado</TabsTrigger>
             <TabsTrigger value="invoicing">Facturación</TabsTrigger>
           </TabsList>
@@ -900,52 +920,27 @@ export function OpportunityDetailsDialog({
               </div>
           </TabsContent>
           
-          <TabsContent value="bonus" className="space-y-4 py-4">
-              <div className="space-y-2">
-                  <Label htmlFor="bonificacionDetalle">Detalle Bonificación</Label>
-                  <Textarea id="bonificacionDetalle" name="bonificacionDetalle" value={editedOpportunity.bonificacionDetalle || ''} onChange={handleChange} disabled={!canEditBonus} placeholder="Ej: 10% Descuento por pago anticipado..."/>
-              </div>
-
-              {hasBonusRequest && (
-                    <div className="grid grid-cols-1 gap-3 p-3 mt-2 border rounded-lg bg-muted/50 col-span-full">
-                        <h4 className="font-semibold text-sm">Gestión de Bonificación</h4>
-                        <div className="flex items-center justify-between">
-                            <Label>Estado</Label>
-                            {getBonusStatusPill(editedOpportunity.bonificacionEstado)}
-                        </div>
-                        
-                         <div className="space-y-2">
-                            <Label htmlFor="bonificacionObservaciones">Observaciones de la Decisión</Label>
-                            <Textarea
-                                id="bonificacionObservaciones"
-                                name="bonificacionObservaciones"
-                                value={editedOpportunity.bonificacionObservaciones || ''}
-                                onChange={handleChange}
-                                disabled={!isBoss}
-                                placeholder={!isBoss ? (editedOpportunity.bonificacionObservaciones || 'Sin observaciones') : 'Añadir observaciones...'}
-                            />
-                        </div>
-
-
-                        {editedOpportunity.bonificacionEstado === 'Pendiente' && isBoss && (
-                             <div className="flex gap-2 mt-2">
-                                <Button size="sm" variant="destructive" onClick={() => handleBonusDecision('Rechazado')}>
-                                    Rechazar
-                                </Button>
-                                <Button size="sm" onClick={() => handleBonusDecision('Autorizado')}>
-                                    Autorizar
-                                </Button>
-                            </div>
-                        )}
-
-                        {(editedOpportunity.bonificacionEstado === 'Autorizado' || editedOpportunity.bonificacionEstado === 'Rechazado') && (
-                            <div className="text-xs text-muted-foreground space-y-1 mt-1">
-                                <p>Decisión por: {editedOpportunity.bonificacionAutorizadoPorNombre}</p>
-                                <p>Fecha: {editedOpportunity.bonificacionFechaAutorizacion ? format(new Date(editedOpportunity.bonificacionFechaAutorizacion), "PPP p", { locale: es }) : '-'}</p>
-                            </div>
-                        )}
-                    </div>
-                )}
+          <TabsContent value="followup" className="space-y-4 py-4">
+              {[
+                  { name: 'followUpDone' as const, updatedAt: editedOpportunity.followUpDoneUpdatedAt, label: 'Qué hice', placeholder: 'Registrar lo realizado hasta ahora...' },
+                  { name: 'followUpCurrent' as const, updatedAt: editedOpportunity.followUpCurrentUpdatedAt, label: 'En qué estamos', placeholder: 'Estado actual de la oportunidad...' },
+                  { name: 'followUpNext' as const, updatedAt: editedOpportunity.followUpNextUpdatedAt, label: 'Qué sigue', placeholder: 'Próximo paso de seguimiento...' },
+              ].map(({ name, updatedAt, label, placeholder }) => (
+                  <div key={name} className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                          <Label htmlFor={name}>{label}</Label>
+                          <span className="text-xs text-muted-foreground">{formatFollowUpDate(updatedAt)}</span>
+                      </div>
+                      <Textarea
+                          id={name}
+                          name={name}
+                          value={editedOpportunity[name] || ''}
+                          onChange={handleChange}
+                          placeholder={placeholder}
+                          className="min-h-[110px]"
+                      />
+                  </div>
+              ))}
           </TabsContent>
           
           <TabsContent value="pautado" className="py-4 space-y-6">
