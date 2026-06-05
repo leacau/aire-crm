@@ -78,7 +78,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
 
             <div className="flex flex-col gap-6">
                 
-                <div className="w-full">
+                <div className="w-full" data-pdf-keep-together="true">
                     <SectionTitle title="1. Detalles de la Nota" />
                     <Field label="Título" value={note.title} fullWidth />
                     <div className="grid grid-cols-2 gap-4 mt-2">
@@ -131,7 +131,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     )}
                 </div>
 
-                <div className="w-full">
+                <div className="w-full" data-pdf-keep-together="true">
                     <SectionTitle title="2. Datos del Cliente" />
                     <div className="grid grid-cols-2 gap-4">
                         <Field label="Cliente" value={note.clientName} />
@@ -141,7 +141,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     </div>
                 </div>
 
-                <div className="w-full">
+                <div className="w-full" data-pdf-keep-together="true">
                     <SectionTitle title="3. Producción y Pautado" />
                     <div className="grid grid-cols-2 gap-4 mb-4">
                         <Field label="Coordinación (Cliente)" value={note.contactName} />
@@ -202,7 +202,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
 
             <div className="flex flex-col gap-6">
                 
-                <div className="w-full">
+                <div className="w-full" data-pdf-keep-together="true">
                     {/* 🟢 SECCIÓN DE ENTREVISTADOS ACTUALIZADA AL ARRAY */}
                     <SectionTitle title="4. Entrevistado(s)" />
                     
@@ -222,7 +222,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     )}
                 </div>
 
-                <div className="w-full">
+                <div className="w-full" data-pdf-keep-together="true">
                     <SectionTitle title="5. Canales de Contacto (A mostrar)" />
                     <div className="grid grid-cols-2 gap-y-2 gap-x-8 mb-3">
                         {!note.noWeb && <Field label="Web" value={note.website} />}
@@ -247,7 +247,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     )}
                 </div>
 
-                <div className="w-full">
+                <div className="w-full" data-pdf-keep-together="true">
                     <SectionTitle title="6. Contenido" />
                     
                     <div className="mb-4" data-pdf-keep-together="true">
@@ -271,7 +271,7 @@ export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, p
                     )}
                 </div>
 
-                <div className="w-full">
+                <div className="w-full" data-pdf-keep-together="true">
                     <SectionTitle title="7. Observaciones Generales" />
                     <div className="p-4 border border-gray-200 rounded min-h-[100px] bg-yellow-50/30" data-pdf-keep-together="true">
                         <p className="text-sm whitespace-pre-wrap">{note.noteObservations || 'Sin observaciones adicionales.'}</p>

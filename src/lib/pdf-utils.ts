@@ -83,12 +83,12 @@ export const generatePaginatedPdfFromElement = async (
     let endY = Math.min(startY + pageHeightPx, canvas.height);
 
     if (endY < canvas.height) {
-      const crossingRange = keepTogetherRanges.find(
-        (range) => range.top < endY && range.bottom > endY && range.top > startY
-      );
+      const sectionRange = keepTogetherRanges
+        .filter((range) => range.top < endY && range.bottom > endY && range.top > startY)
+        .sort((a, b) => a.top - b.top)[0];
 
-      if (crossingRange && crossingRange.top - startY >= MIN_PAGE_SLICE_HEIGHT) {
-        endY = crossingRange.top;
+      if (sectionRange && sectionRange.top - startY >= MIN_PAGE_SLICE_HEIGHT) {
+        endY = sectionRange.top;
       }
     }
 
