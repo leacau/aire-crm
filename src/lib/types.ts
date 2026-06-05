@@ -145,6 +145,7 @@ export type Opportunity = {
   clientId: string;
   value: number; 
   stage: OpportunityStage;
+  highCloseProbability?: boolean;
   closeDate: string;
   details?: string;
   observaciones?: string;

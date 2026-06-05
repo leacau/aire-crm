@@ -70,6 +70,7 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     details: '',
     value: 0,
     stage: 'Nuevo',
+    highCloseProbability: false,
     observaciones: '',
     closeDate: new Date().toISOString().split('T')[0],
     createdAt: new Date().toISOString(), 
@@ -425,7 +426,11 @@ export function OpportunityDetailsDialog({
   };
   
   const handleSelectChange = (name: keyof Opportunity, value: string) => {
-    setEditedOpportunity(prev => ({...prev, [name]: value }));
+    setEditedOpportunity(prev => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'stage' && value !== 'Negociación' ? { highCloseProbability: false } : {}),
+    }));
   }
 
   const handleDateChange = (name: keyof Opportunity, date: Date | undefined) => {
@@ -679,6 +684,23 @@ export function OpportunityDetailsDialog({
                         <SelectTrigger id="stage"><SelectValue/></SelectTrigger>
                         <SelectContent>{opportunityStages.map(stage => <SelectItem key={stage} value={stage}>{stage}</SelectItem>)}</SelectContent>
                     </Select>
+                    {editedOpportunity.stage === 'Negociación' && (
+                      <div className="flex items-start gap-3 rounded-md border bg-emerald-50/70 p-3">
+                        <Checkbox
+                          id="highCloseProbability"
+                          checked={!!editedOpportunity.highCloseProbability}
+                          onCheckedChange={(checked) => handleCheckboxChange('highCloseProbability', checked)}
+                        />
+                        <div className="space-y-1 leading-none">
+                          <Label htmlFor="highCloseProbability" className="cursor-pointer">
+                            Alta probabilidad de cierre
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Se mostrará en una columna destacada del kanban mientras siga en negociación.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                 </div>
                  <div className="space-y-2">
                     <Label htmlFor="value">Valor Final Propuesta</Label>

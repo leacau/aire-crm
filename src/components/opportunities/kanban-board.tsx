@@ -4,7 +4,7 @@ import {
   opportunityStages,
 } from '@/lib/data';
 import type { Opportunity, OpportunityStage, Client, User } from '@/lib/types';
-import { MoreHorizontal, FileCheck2 } from 'lucide-react';
+import { MoreHorizontal, FileCheck2, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -41,11 +41,15 @@ import { es } from 'date-fns/locale';
 import { Label } from '../ui/label';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 
+type KanbanStage = OpportunityStage | 'Negociación Alta' | 'Ganado (Recurrente)';
 
-const stageColors: Record<OpportunityStage | 'Ganado (Recurrente)', string> = {
+const HIGH_PROBABILITY_STAGE: KanbanStage = 'Negociación Alta';
+
+const stageColors: Record<KanbanStage, string> = {
   'Nuevo': 'border-blue-500',
   'Propuesta': 'border-yellow-500',
   'Negociación': 'border-orange-500',
+  'Negociación Alta': 'border-emerald-500',
   'Negociación a Aprobar': 'border-purple-500',
   'Cerrado - Ganado': 'border-green-500',
   'Ganado (Recurrente)': 'border-teal-500',
@@ -80,9 +84,9 @@ const KanbanColumn = ({
   focusedOpportunityId,
   onFocusedOpportunityHandled,
 }: {
-  stage: OpportunityStage | 'Ganado (Recurrente)';
+  stage: KanbanStage;
   opportunities: Opportunity[];
-  onCardDrop: (e: React.DragEvent<HTMLDivElement>, stage: OpportunityStage) => void;
+  onCardDrop: (e: React.DragEvent<HTMLDivElement>, stage: OpportunityStage, highCloseProbability?: boolean) => void;
   total?: number;
   focusedOpportunityId?: string;
   onFocusedOpportunityHandled?: () => void;
@@ -96,8 +100,12 @@ const KanbanColumn = ({
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if(stage !== 'Ganado (Recurrente)') {
-        onCardDrop(e, stage as OpportunityStage);
+    if(stage === 'Ganado (Recurrente)') return;
+
+    if (stage === HIGH_PROBABILITY_STAGE) {
+        onCardDrop(e, 'Negociación', true);
+    } else {
+        onCardDrop(e, stage, false);
     }
   };
   
@@ -246,6 +254,12 @@ const KanbanCard = ({
                 </DropdownMenu>
             </div>
             <CardContent className="p-0 pt-2">
+            {opportunity.stage === 'Negociación' && opportunity.highCloseProbability && (
+                <Badge variant="outline" className="mb-2 w-fit border-emerald-200 bg-emerald-50 text-emerald-700">
+                    <TrendingUp className="mr-1 h-3 w-3" />
+                    Alta probabilidad
+                </Badge>
+            )}
             <div className="flex justify-between items-center">
                 <span className="text-lg font-bold text-primary">
                     ${displayValue.toLocaleString('es-AR')}
@@ -454,10 +468,11 @@ export function KanbanBoard({
 
 
   const groupedOpportunities = useMemo(() => {
-    const groups: Record<OpportunityStage | 'Ganado (Recurrente)', Opportunity[]> = {
+    const groups: Record<KanbanStage, Opportunity[]> = {
       'Nuevo': [],
       'Propuesta': [],
       'Negociación': [],
+      'Negociación Alta': [],
       'Negociación a Aprobar': [],
       'Cerrado - Ganado': [],
       'Ganado (Recurrente)': [],
@@ -472,6 +487,8 @@ export function KanbanBoard({
         } else {
           groups['Ganado (Recurrente)'].push(opp);
         }
+      } else if (opp.stage === 'Negociación' && opp.highCloseProbability) {
+        groups[HIGH_PROBABILITY_STAGE].push(opp);
       } else if (groups[opp.stage]) {
         groups[opp.stage].push(opp);
       }
@@ -496,17 +513,24 @@ export function KanbanBoard({
 }, [filteredOpportunities, onClientListChange]);
 
 
-  const handleCardDrop = async (e: React.DragEvent<HTMLDivElement>, newStage: OpportunityStage) => {
+  const kanbanStages = useMemo<KanbanStage[]>(() => {
+    return opportunityStages.flatMap((stage) => (
+      stage === 'Negociación' ? [stage, HIGH_PROBABILITY_STAGE] : [stage]
+    ));
+  }, []);
+
+  const handleCardDrop = async (e: React.DragEvent<HTMLDivElement>, newStage: OpportunityStage, highCloseProbability = false) => {
     const opportunityId = e.dataTransfer.getData('opportunityId');
     const oppToMove = opportunities.find(opp => opp.id === opportunityId);
+    const nextHighCloseProbability = newStage === 'Negociación' ? highCloseProbability : false;
 
-    if (oppToMove && oppToMove.stage !== newStage) {
+    if (oppToMove && (oppToMove.stage !== newStage || !!oppToMove.highCloseProbability !== nextHighCloseProbability)) {
       if (userInfo?.role === 'Administracion') {
         toast({ title: "Acción no permitida", description: "Los administradores no pueden modificar las etapas.", variant: "destructive" });
         return;
       }
       
-      const updatedOpportunity = { ...oppToMove, stage: newStage };
+      const updatedOpportunity = { ...oppToMove, stage: newStage, highCloseProbability: nextHighCloseProbability };
       setOpportunities(prevOpps => 
           prevOpps.map(opp => opp.id === updatedOpportunity.id ? updatedOpportunity : opp)
       );
@@ -516,7 +540,7 @@ export function KanbanBoard({
         const client = clients.find(c => c.id === oppToMove.clientId);
         if (!client) throw new Error("Client not found for opportunity");
 
-        await updateOpportunity(opportunityId, { stage: newStage }, userInfo.id, userInfo.name, client.ownerName);
+        await updateOpportunity(opportunityId, { stage: newStage, highCloseProbability: nextHighCloseProbability }, userInfo.id, userInfo.name, client.ownerName);
         toast({ title: "Etapa actualizada", description: `"${oppToMove.title}" se movió a ${newStage}.` });
       } catch (error) {
         console.error("Error updating opportunity stage:", error);
@@ -538,7 +562,7 @@ export function KanbanBoard({
 
   return (
     <div className="p-4 md:p-6 lg:p-8 h-full flex gap-6 overflow-x-auto">
-      {opportunityStages.map((stage) => {
+      {kanbanStages.map((stage) => {
           if (stage === 'Ganado (Recurrente)') {
              return <KanbanColumn
               key={stage}
