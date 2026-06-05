@@ -496,6 +496,10 @@ export function KanbanBoard({
 
     const recurringTotal = groups['Ganado (Recurrente)'].reduce((sum, opp) => sum + Number(opp.value || 0), 0);
     const newWinsTotal = groups['Cerrado - Ganado'].reduce((sum, opp) => sum + Number(opp.value || 0), 0);
+
+    Object.values(groups).forEach(group => {
+      group.sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
+    });
     
     return { groups, recurringTotal, newWinsTotal };
   }, [filteredOpportunities, dateRange]);
