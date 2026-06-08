@@ -225,11 +225,12 @@ export function AdvertisingForm() {
                               canjeDescription: b.canjeDescription || ""
                           };
 
-                          if (b.company === 'SRL') {
+                          const billingCompany = String(b.company || '');
+                          if (billingCompany === 'SRL') {
                               fetchedBillingRequestsSrl.push(mapped);
-                          } else if (b.company === 'SAS') {
+                          } else if (billingCompany === 'SAS') {
                               fetchedBillingRequestsSas.push({ ...mapped, ivaSas: b.ivaSas || 0 });
-                          } else if (b.company === 'AVIÓN' || b.company === 'AVION') {
+                          } else if (billingCompany === 'AVIÓN' || billingCompany === 'AVION') {
                               fetchedBillingRequestsAvion.push(mapped);
                           }
                       });
