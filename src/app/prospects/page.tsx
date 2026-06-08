@@ -16,9 +16,7 @@ import {
     getAllClientActivities, 
     getOpportunityAlertsConfig, 
     recordProspectNotifications,
-    getCoachingSessions,
-    createCoachingSession,
-    addItemsToSession,
+    autoUpdateCoachingSession,
     claimProspect, 
     approveProspectClaim, 
     rejectProspectClaim
@@ -161,37 +159,15 @@ export default function ProspectsPage() {
 
       if (addToCoaching && prospectId) {
           try {
-              const sessions = await getCoachingSessions(userInfo.id);
-              let openSession = sessions.find(s => s.status === 'Open');
-
-              if (!openSession) {
-                  const newSessionId = await createCoachingSession({
-                      advisorId: userInfo.id,
-                      advisorName: userInfo.name,
-                      managerId: userInfo.managerId || userInfo.id, 
-                      managerName: 'Jefatura', 
-                      date: new Date().toISOString(),
-                      items: [],
-                      generalNotes: ''
-                  }, userInfo.id, userInfo.name);
-                  openSession = { id: newSessionId } as any;
-              }
-
-              if (openSession) {
-                  await addItemsToSession(openSession.id, [{
-                      id: '', 
-                      taskId: '', 
-                      originalCreatedAt: new Date().toISOString(),
-                      entityType: 'prospect',
-                      entityId: prospectId,
-                      entityName: prospectName,
-                      action: coachingNote || 'Ingreso de nuevo prospecto', 
-                      status: 'Pendiente',
-                      advisorNotes: '', 
-                      origin: 'advisor' 
-                  }]);
-                  toast({ title: "Agregado al seguimiento", description: "El prospecto se sumó a tu hoja de ruta semanal." });
-              }
+              await autoUpdateCoachingSession(
+                userInfo.id,
+                userInfo.name,
+                'prospect',
+                prospectId,
+                prospectName,
+                coachingNote || 'Ingreso de nuevo prospecto'
+              );
+              toast({ title: "Agregado al seguimiento", description: "El prospecto se sum� a tu hoja de ruta semanal." });
           } catch (coachingError) {
               console.error("Error adding to coaching:", coachingError);
               toast({ title: "Error parcial", description: "Se guardó el prospecto pero falló al agregarlo al seguimiento.", variant: "destructive" });

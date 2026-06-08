@@ -2,7 +2,7 @@
 
 import { auth, db } from './firebase';
 import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CoachingActiveIndex, CoachingActiveIndexEntry, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
@@ -34,6 +34,7 @@ const collections = {
     supervisorComments: collection(db, 'supervisor_comments'),
     paymentEntries: collection(db, 'payment_entries'),
     coachingSessions: collection(db, 'coaching_sessions'),
+    coachingActiveIndex: collection(db, 'coaching_active_index'),
     commercialNotes: collection(db, 'commercial_notes'),
     billingRequests: collection(db, 'billing_requests'),
     socialMediaRequests: collection(db, 'social_media_requests'),
@@ -1205,6 +1206,19 @@ export const updateProspect = async (id: string, data: Partial<Omit<Prospect, 'i
         details,
         ownerName: prospectData.ownerName,
     });
+
+    const coachingNotes = [
+        data.status && data.status !== prospectData.status ? `Estado: ${data.status}` : null,
+        data.notes && data.notes !== prospectData.notes ? `Notas: ${data.notes}` : null,
+    ].filter(Boolean).join(' - ');
+
+    if (coachingNotes) {
+        try {
+            await autoUpdateCoachingSession(userId, userName, 'prospect', id, prospectData.companyName, `Actualización de prospecto - ${coachingNotes}`);
+        } catch (e) {
+            console.error('Error auto-updating coaching:', e);
+        }
+    }
 };
 
 export const deleteProspect = async (id: string, userId: string, userName: string): Promise<void> => {
@@ -3325,7 +3339,8 @@ export const createOpportunity = async (
         ownerName: ownerName
     });
     try {
-        await autoUpdateCoachingSession(userId, userName, 'client', opportunityData.clientId, opportunityData.clientName, `Nueva propuesta: ${opportunityData.title} - Valor: $${opportunityData.value}`);
+        const observationText = opportunityData.observaciones?.trim() ? ` - Observación: ${opportunityData.observaciones.trim()}` : '';
+        await autoUpdateCoachingSession(userId, userName, 'client', opportunityData.clientId, opportunityData.clientName, `Nueva propuesta: ${opportunityData.title} - Valor: $${opportunityData.value}${observationText}`);
     } catch (e) {
         console.error('Error auto-updating coaching:', e);
     }
@@ -3542,6 +3557,22 @@ export const updateOpportunity = async (
             type: 'update',
             details: `actualizó la oportunidad <strong>${originalData.title}</strong> para el cliente <a href="/clients/${originalData.clientId}" class="font-bold text-primary hover:underline">${originalData.clientName}</a>`,
         });
+    }
+    const coachingChanges = [
+        stageChanged ? `Etapa: ${data.stage}` : null,
+        data.value !== undefined && data.value !== originalData.value ? `Valor: $${data.value}` : null,
+        data.observaciones !== undefined && data.observaciones !== originalData.observaciones ? `Observación: ${data.observaciones || 'sin observaciones'}` : null,
+        data.followUpDone !== undefined && data.followUpDone !== originalData.followUpDone ? `Qué hice: ${data.followUpDone || 'sin detalle'}` : null,
+        data.followUpCurrent !== undefined && data.followUpCurrent !== originalData.followUpCurrent ? `En qué estamos: ${data.followUpCurrent || 'sin detalle'}` : null,
+        data.followUpNext !== undefined && data.followUpNext !== originalData.followUpNext ? `Qué sigue: ${data.followUpNext || 'sin detalle'}` : null,
+    ].filter(Boolean).join(' - ');
+
+    if (coachingChanges) {
+        try {
+            await autoUpdateCoachingSession(userId, userName, 'client', originalData.clientId, originalData.clientName, `Actualización de propuesta: ${data.title || originalData.title} - ${coachingChanges}`);
+        } catch (e) {
+            console.error('Error auto-updating coaching:', e);
+        }
     }
 };
 
@@ -3844,25 +3875,99 @@ export const getOpenCoachingSession = async (advisorId: string): Promise<Coachin
     return openSession;
 };
 
+const getCoachingEntityKey = (entityType: 'client' | 'prospect', entityId: string) => `${entityType}_${entityId}`;
+
+const getCoachingActiveIndexRef = (advisorId: string) => doc(db, 'coaching_active_index', advisorId);
+
+const buildCoachingActiveIndex = (session: CoachingSession): CoachingActiveIndex => {
+    const entities = session.status === 'Open' ? (session.items || []).reduce((acc, item) => {
+        if (
+            (item.entityType === 'client' || item.entityType === 'prospect') &&
+            item.entityId &&
+            item.status !== 'Cancelado'
+        ) {
+            acc[getCoachingEntityKey(item.entityType, item.entityId)] = {
+                entityType: item.entityType,
+                entityId: item.entityId,
+                entityName: item.entityName,
+                sessionId: session.id,
+                itemId: item.id,
+                status: item.status,
+                lastUpdate: item.lastUpdate || item.originalCreatedAt,
+            };
+        }
+        return acc;
+    }, {} as Record<string, CoachingActiveIndexEntry>) : {};
+
+    return {
+        advisorId: session.advisorId,
+        advisorName: session.advisorName,
+        openSessionId: session.status === 'Open' ? session.id : undefined,
+        updatedAt: new Date().toISOString(),
+        entities,
+    };
+};
+
+const getCoachingActiveIndex = async (advisorId: string): Promise<CoachingActiveIndex | null> => {
+    const cacheKey = `coaching_active_index_${advisorId}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) return cached as CoachingActiveIndex;
+
+    const indexSnap = await getDoc(getCoachingActiveIndexRef(advisorId));
+    if (!indexSnap.exists()) return null;
+
+    const index = indexSnap.data() as CoachingActiveIndex;
+    setInCache(cacheKey, index);
+    return index;
+};
+
+const saveCoachingActiveIndex = async (index: CoachingActiveIndex) => {
+    const cacheIndex = { ...index, updatedAt: new Date().toISOString() };
+    const payload: Record<string, unknown> = {
+        advisorId: index.advisorId,
+        entities: index.entities || {},
+        updatedAt: serverTimestamp(),
+    };
+
+    if (index.advisorName) payload.advisorName = index.advisorName;
+    payload.openSessionId = index.openSessionId || deleteField();
+
+    await setDoc(getCoachingActiveIndexRef(index.advisorId), payload, { merge: true });
+    setInCache(`coaching_active_index_${index.advisorId}`, cacheIndex);
+};
+
+const syncCoachingActiveIndexFromSession = async (session: CoachingSession) => {
+    await saveCoachingActiveIndex(buildCoachingActiveIndex(session));
+};
+
 export const createCoachingSession = async (
     sessionData: Omit<CoachingSession, 'id' | 'createdAt' | 'status'>,
     userId: string, 
     userName: string
 ): Promise<string> => {
+    const preparedItems = sessionData.items.map(item => ({
+        ...item,
+        id: item.id || (typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
+        taskId: item.taskId || (typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
+        originalCreatedAt: item.originalCreatedAt || new Date().toISOString()
+    }));
+
     const docRef = await addDoc(collections.coachingSessions, {
         ...sessionData,
         status: 'Open',
         createdAt: serverTimestamp(),
-        items: sessionData.items.map(item => ({
-            ...item, 
-            id: typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2),
-            taskId: item.taskId || (typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
-            originalCreatedAt: item.originalCreatedAt || new Date().toISOString()
-        }))
+        items: preparedItems
     });
     
     // 🟢 LIMPIAMOS EL CACHÉ AL CREAR UNA NUEVA
     invalidateCache(`open_session_${sessionData.advisorId}`);
+    await syncCoachingActiveIndexFromSession({
+        ...sessionData,
+        id: docRef.id,
+        status: 'Open',
+        createdAt: new Date().toISOString(),
+        items: preparedItems,
+    });
     
     await logActivity({
         userId,
@@ -3880,9 +3985,18 @@ export const createCoachingSession = async (
 
 export const deleteCoachingSession = async (sessionId: string, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'coaching_sessions', sessionId);
+    const sessionSnap = await getDoc(docRef);
     await deleteDoc(docRef);
     
     invalidateCache(); // Limpieza global por seguridad
+    if (sessionSnap.exists()) {
+        await syncCoachingActiveIndexFromSession({
+            id: sessionSnap.id,
+            ...(sessionSnap.data() as CoachingSession),
+            status: 'Closed',
+            items: [],
+        });
+    }
 
     await logActivity({
         userId,
@@ -3898,11 +4012,18 @@ export const deleteCoachingSession = async (sessionId: string, userId: string, u
 
 export const updateCoachingSession = async (sessionId: string, data: Partial<CoachingSession>, userId: string, userName: string): Promise<void> => {
     const docRef = doc(db, 'coaching_sessions', sessionId);
+    const sessionSnap = await getDoc(docRef);
     await updateDoc(docRef, data);
     
     // 🟢 Limpiamos caché de sesión abierta si se cierra
-    if (data.advisorId) invalidateCache(`open_session_${data.advisorId}`);
-    else invalidateCache(); 
+    if (sessionSnap.exists()) {
+        const previousSession = { id: sessionSnap.id, ...sessionSnap.data() } as CoachingSession;
+        const updatedSession = { ...previousSession, ...data };
+        invalidateCache(`open_session_${updatedSession.advisorId}`);
+        await syncCoachingActiveIndexFromSession(updatedSession);
+    } else {
+        invalidateCache();
+    }
 };
 
 export const updateCoachingItem = async (
@@ -3933,41 +4054,12 @@ export const updateCoachingItem = async (
     });
 
     await updateDoc(sessionRef, { items: updatedItems });
+    await syncCoachingActiveIndexFromSession({
+        ...sessionData,
+        id: sessionId,
+        items: updatedItems,
+    });
 
-    // 2. Si hay cambio de estado y tenemos taskId y advisorId, propagar a otras sesiones
-    if (updates.status && taskId && advisorId) {
-        const historyQuery = query(
-            collections.coachingSessions, 
-            where('advisorId', '==', advisorId)
-        );
-        const historySnap = await getDocs(historyQuery);
-        
-        const batch = writeBatch(db);
-        let batchCount = 0;
-
-        historySnap.forEach((docSnap) => {
-            if (docSnap.id === sessionId) return; // Ya actualizada
-
-            const sData = docSnap.data() as CoachingSession;
-            const itemsToUpdate = sData.items.map(i => {
-                if (i.taskId === taskId) {
-                    return { ...i, status: updates.status! };
-                }
-                return i;
-            });
-
-            // Solo actualizar si hubo cambios
-            if (JSON.stringify(itemsToUpdate) !== JSON.stringify(sData.items)) {
-                batch.update(docSnap.ref, { items: itemsToUpdate });
-                batchCount++;
-            }
-        });
-
-        if (batchCount > 0) {
-            await batch.commit();
-        }
-    }
-    
     // Loguear solo si se completa
     if (updates.status === 'Completado') {
          await logActivity({
@@ -3993,10 +4085,16 @@ export const deleteCoachingItem = async (sessionId: string, itemId: string) => {
     const updatedItems = sessionData.items.filter(item => item.id !== itemId);
 
     await updateDoc(sessionRef, { items: updatedItems });
+    await syncCoachingActiveIndexFromSession({
+        ...sessionData,
+        id: sessionId,
+        items: updatedItems,
+    });
 };
 
 export const addItemsToSession = async (sessionId: string, newItems: CoachingItem[]) => {
     const sessionRef = doc(db, 'coaching_sessions', sessionId);
+    let sessionForIndex: CoachingSession | null = null;
     
     await runTransaction(db, async (transaction) => {
         const sessionSnap = await transaction.get(sessionRef);
@@ -4010,7 +4108,7 @@ export const addItemsToSession = async (sessionId: string, newItems: CoachingIte
             // Buscamos si ya existe un item para esta misma entidad que esté abierto ('Pendiente' o 'En Proceso')
             const existingItemIndex = currentItems.findIndex(i => 
                 i.entityId === newItem.entityId && 
-                (i.status === 'Pendiente' || i.status === 'En Proceso')
+                i.status !== 'Cancelado'
             );
 
             if (existingItemIndex >= 0) {
@@ -4028,6 +4126,10 @@ export const addItemsToSession = async (sessionId: string, newItems: CoachingIte
                     advisorNotes: newItem.origin === 'advisor'
                         ? (existingItem.advisorNotes ? `${existingItem.advisorNotes}\n\n${newText}` : newText)
                         : existingItem.advisorNotes,
+                    followUpDone: newItem.origin === 'advisor'
+                        ? (existingItem.followUpDone || existingItem.advisorNotes ? `${existingItem.followUpDone || existingItem.advisorNotes}\n\n${newText}` : newText)
+                        : existingItem.followUpDone,
+                    followUpDoneUpdatedAt: newItem.origin === 'advisor' ? new Date().toISOString() : existingItem.followUpDoneUpdatedAt,
                     lastUpdate: new Date().toISOString()
                 };
                 hasChanges = true;
@@ -4045,8 +4147,17 @@ export const addItemsToSession = async (sessionId: string, newItems: CoachingIte
 
         if (hasChanges) {
             transaction.update(sessionRef, { items: currentItems });
+            sessionForIndex = {
+                ...sessionData,
+                id: sessionId,
+                items: currentItems,
+            };
         }
     });
+
+    if (sessionForIndex) {
+        await syncCoachingActiveIndexFromSession(sessionForIndex);
+    }
 };
 
 export const claimProspect = async (prospect: Prospect, userId: string, userName: string): Promise<void> => {
@@ -4679,7 +4790,7 @@ export const deleteConvenioCanje = async (
     });
 };
 
-export const autoUpdateCoachingSession = async (
+const autoUpdateCoachingSessionLegacy = async (
     advisorId: string,
     advisorName: string,
     entityType: 'client' | 'prospect',
@@ -4755,6 +4866,120 @@ export const autoUpdateCoachingSession = async (
 };
 
 // --- Mantenimiento Automático ---
+export const autoUpdateCoachingSession = async (
+    advisorId: string,
+    advisorName: string,
+    entityType: 'client' | 'prospect',
+    entityId: string,
+    entityName: string,
+    actionText: string
+) => {
+    if (!advisorId || !entityId) return;
+
+    let activeIndex = await getCoachingActiveIndex(advisorId);
+    let openSession: CoachingSession | null = null;
+
+    if (activeIndex?.openSessionId) {
+        const cachedSession = getFromCache(`open_session_${advisorId}`) as CoachingSession | null;
+        if (cachedSession?.id === activeIndex.openSessionId) {
+            openSession = cachedSession;
+        } else {
+            const sessionSnap = await getDoc(doc(db, 'coaching_sessions', activeIndex.openSessionId));
+            if (sessionSnap.exists()) {
+                const data = sessionSnap.data();
+                openSession = {
+                    id: sessionSnap.id,
+                    ...data,
+                    createdAt: timestampToISO(data.createdAt) || new Date().toISOString(),
+                } as CoachingSession;
+                setInCache(`open_session_${advisorId}`, openSession);
+            }
+        }
+    }
+
+    if (!openSession) {
+        openSession = await getOpenCoachingSession(advisorId);
+        if (openSession) {
+            await syncCoachingActiveIndexFromSession(openSession);
+            activeIndex = buildCoachingActiveIndex(openSession);
+        }
+    }
+
+    if (!openSession) {
+        const newSessionId = await createCoachingSession({
+            advisorId,
+            advisorName,
+            managerId: advisorId,
+            managerName: 'Sistema Automático',
+            date: new Date().toISOString(),
+            items: [],
+            generalNotes: '',
+        }, advisorId, 'Sistema');
+
+        openSession = {
+            id: newSessionId,
+            advisorId,
+            advisorName,
+            managerId: advisorId,
+            managerName: 'Sistema Automático',
+            date: new Date().toISOString(),
+            items: [],
+            generalNotes: '',
+            createdAt: new Date().toISOString(),
+            status: 'Open',
+        };
+        activeIndex = buildCoachingActiveIndex(openSession);
+    }
+
+    const now = new Date().toISOString();
+    const dateStr = format(new Date(), "dd/MM HH:mm");
+    const newText = `[Agregado ${dateStr}] ${actionText}`;
+    const entityKey = getCoachingEntityKey(entityType, entityId);
+    const indexedItemId = activeIndex?.entities?.[entityKey]?.itemId;
+    const updatedItems = [...(openSession.items || [])];
+
+    const existingItemIndex = updatedItems.findIndex(item =>
+        (indexedItemId ? item.id === indexedItemId : item.entityId === entityId) &&
+        item.status !== 'Cancelado'
+    );
+
+    if (existingItemIndex >= 0) {
+        const existingItem = updatedItems[existingItemIndex];
+        const previousDone = existingItem.followUpDone || existingItem.advisorNotes || '';
+        const updatedDone = previousDone ? `${previousDone}\n\n${newText}` : newText;
+
+        updatedItems[existingItemIndex] = {
+            ...existingItem,
+            entityName,
+            followUpDone: updatedDone,
+            followUpDoneUpdatedAt: now,
+            advisorNotes: existingItem.advisorNotes || updatedDone,
+            lastUpdate: now,
+        };
+    } else {
+        updatedItems.push({
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+            taskId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+            originalCreatedAt: now,
+            entityType,
+            entityId,
+            entityName,
+            action: 'Seguimiento automático',
+            status: 'Pendiente',
+            advisorNotes: newText,
+            followUpDone: newText,
+            followUpDoneUpdatedAt: now,
+            lastUpdate: now,
+            origin: 'advisor',
+        });
+    }
+
+    const updatedSession = { ...openSession, items: updatedItems };
+    await updateDoc(doc(db, 'coaching_sessions', openSession.id), { items: updatedItems });
+    setInCache(`open_session_${advisorId}`, updatedSession);
+    await syncCoachingActiveIndexFromSession(updatedSession);
+};
+
 export const cleanupOldActivities = async (): Promise<void> => {
     // Ejecutar solo 1 vez por día por navegador para no saturar
     const lastCleanup = typeof window !== 'undefined' ? localStorage.getItem('last_activity_cleanup') : null;

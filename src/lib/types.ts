@@ -584,6 +584,24 @@ export type CoachingSession = {
   status: 'Open' | 'Closed'; 
 };
 
+export type CoachingActiveIndexEntry = {
+  entityType: 'client' | 'prospect';
+  entityId: string;
+  entityName: string;
+  sessionId: string;
+  itemId: string;
+  status: CoachingItemStatus;
+  lastUpdate?: string;
+};
+
+export type CoachingActiveIndex = {
+  advisorId: string;
+  advisorName?: string;
+  openSessionId?: string;
+  updatedAt?: string;
+  entities: Record<string, CoachingActiveIndexEntry>;
+};
+
 export type SystemHolidays = {
   dates: string[]; 
 };

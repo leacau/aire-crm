@@ -198,8 +198,13 @@ service cloud.firestore {
 
     match /coaching_sessions/{sessionId} {
       allow read: if isSignedIn();
-      allow create: if isManagement();
+      allow create: if isManagement() || isActorOnRequest();
       allow update, delete: if isManagement() || isActorOnResource();
+    }
+
+    match /coaching_active_index/{advisorId} {
+      allow read: if isSignedIn() && (request.auth.uid == advisorId || isManagement());
+      allow create, update, delete: if isSignedIn() && (request.auth.uid == advisorId || isManagement());
     }
 
     match /supervisor_comments/{commentId} {
