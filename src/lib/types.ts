@@ -825,7 +825,7 @@ export type BillingRequest = {
   orderId: string;
   opportunityId: string;
   clientId: string;
-  company?: 'SRL' | 'SAS';
+  company?: 'SRL' | 'SAS' | 'AVION';
   date?: string;
   grossAmount?: number;
   adjustment?: number;
@@ -870,6 +870,7 @@ export type AdvertisingOrder = {
   totalOrder?: number;
   billingRequestsSrl?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
   billingRequestsSas?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[]; 
+  billingRequestsAvion?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[];
 
   status?: ApprovalStatus;
   adminComments?: string;

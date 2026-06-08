@@ -23,7 +23,7 @@ interface SasSectionProps {
 }
 
 export function SasSection({ form, startDate, endDate }: SasSectionProps) {
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, replace } = useFieldArray({
     control: form.control,
     name: "sasItems",
   });
@@ -58,6 +58,10 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
   const agencyCommissionPct = form.watch("commissionSrl") || 0; 
   const agencyAmount = form.watch("agencySale") ? (taxableBase * (agencyCommissionPct / 100)) : 0;
   const netAction = totalToInvoice - agencyAmount;
+  const handleRemoveRow = (index: number) => {
+      const currentItems = form.getValues("sasItems") || [];
+      replace(currentItems.filter((_, itemIndex) => itemIndex !== index));
+  };
 
   // 🟢 MOTORES DE FILTRADO DINÁMICOS BASADOS EN EL INVENTARIO
   const activeFormats = Array.from(new Set(sasInventory.map(p => p.format))).filter(Boolean);
@@ -246,7 +250,7 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                                                 variant="ghost" 
                                                 size="icon" 
                                                 className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50" 
-                                                onClick={() => remove(index)}
+                                                onClick={() => handleRemoveRow(index)}
                                             >
                                                 <Trash2 className="h-3 w-3" />
                                             </Button>

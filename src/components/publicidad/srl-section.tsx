@@ -32,7 +32,7 @@ interface SrlSectionProps {
 }
 
 export function SrlSection({ form, startDate, endDate, programs }: SrlSectionProps) {
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, replace } = useFieldArray({
     control: form.control,
     name: "srlItems",
   });
@@ -78,11 +78,12 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
   const firstMonthEnd = addDays(addMonths(startDate, 1), -1);
   const effectiveEnd = firstMonthEnd > endDate ? endDate : firstMonthEnd;
   const days = eachDayOfInterval({ start: firstMonthStart, end: effectiveEnd });
+  const visibleDateKeys = new Set(days.map(day => format(day, "yyyy-MM-dd")));
   
   const monthKey = "Mensual";
 
   const subtotal = items?.reduce((acc, item) => {
-    const dailySpots = item.dailySpots || {};
+    const dailySpots = Object.fromEntries(Object.entries(item.dailySpots || {}).filter(([dateKey]) => visibleDateKeys.has(dateKey)));
     const totalAds = Object.values(dailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
     const multiplier = item.adType === "Spot" ? (item.seconds || 0) : 1;
     return acc + ((item.unitRate || 0) * totalAds * multiplier);
@@ -93,6 +94,10 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
   const agencyCommissionPct = form.watch("commissionSrl") || 0;
   const agencyAmount = form.watch("agencySale") ? (totalToInvoice * (agencyCommissionPct / 100)) : 0;
   const netAction = totalToInvoice - agencyAmount;
+  const handleRemoveRow = (index: number) => {
+    const currentItems = form.getValues("srlItems") || [];
+    replace(currentItems.filter((_, itemIndex) => itemIndex !== index));
+  };
 
   return (
     <div className="space-y-12">
@@ -146,7 +151,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
 
                     const adType = itemValues.adType;
                     const enableTv = adType === "Spot" || adType === "PNT";
-                    const currentDailySpots = itemValues.dailySpots || {};
+                    const currentDailySpots = Object.fromEntries(Object.entries(itemValues.dailySpots || {}).filter(([dateKey]) => visibleDateKeys.has(dateKey)));
                     const currentSeconds = itemValues.seconds || 0;
                     const currentUnitRate = itemValues.unitRate || 0;
                     const totalAdsGlobal = Object.values(currentDailySpots).reduce((sum, val) => sum + (Number(val) || 0), 0);
@@ -238,7 +243,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                                     size="icon" 
                                     className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50" 
                                     title="Eliminar fila"
-                                    onClick={() => remove(index)}
+                                     onClick={() => handleRemoveRow(index)}
                                 >
                                     <Trash2 className="h-3 w-3" />
                                 </Button>

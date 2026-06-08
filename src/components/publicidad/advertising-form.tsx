@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid, addMonths } from "date-fns";
@@ -125,8 +125,36 @@ export function AdvertisingForm() {
   const endDate = watch("endDate");
   const agencySale = watch("agencySale");
   const selectedClientId = watch("clientId");
+  const selectedOpportunityId = watch("opportunityId");
   const srlItemsCurrent = watch("srlItems");
   const sasItemsCurrent = watch("sasItems");
+  const showNewOpportunityTitle = selectedOpportunityId === "new_custom_opportunity";
+
+  const getCampaignDateKeys = useCallback((start?: Date, end?: Date) => {
+      if (!start || !end || !isValid(start) || !isValid(end) || end < start) return new Set<string>();
+      const keys = new Set<string>();
+      const cursor = new Date(start);
+      while (cursor <= end) {
+          keys.add(format(cursor, 'yyyy-MM-dd'));
+          cursor.setDate(cursor.getDate() + 1);
+      }
+      return keys;
+  }, []);
+
+  const cleanDailySpotsForRange = useCallback((dailySpots: Record<string, unknown> | undefined, validKeys: Set<string>) => {
+      return Object.entries(dailySpots || {}).reduce((acc, [dateKey, value]) => {
+          const numericValue = Number(value) || 0;
+          if (validKeys.has(dateKey) && numericValue > 0) acc[dateKey] = numericValue;
+          return acc;
+      }, {} as Record<string, number>);
+  }, []);
+
+  const normalizeSrlItemsForRange = useCallback((items: AdvertisingOrderFormValues['srlItems'] = [], start?: Date, end?: Date) => {
+      const validKeys = getCampaignDateKeys(start, end);
+      return items
+          .map(item => ({ ...item, dailySpots: cleanDailySpotsForRange(item.dailySpots, validKeys) }))
+          .filter(item => item.month && Object.keys(item.dailySpots || {}).length > 0 || item.programId || item.adType);
+  }, [cleanDailySpotsForRange, getCampaignDateKeys]);
 
   useEffect(() => {
     if (userInfo?.name && !editModeId && !draftLoaded) {
@@ -252,11 +280,12 @@ export function AdvertisingForm() {
           if (draft) {
               try {
                   const parsed = JSON.parse(draft);
-                  if (parsed.startDate) parsed.startDate = new Date(parsed.startDate);
-                  if (parsed.endDate) parsed.endDate = new Date(parsed.endDate);
-                  if (parsed.materialUrls) setMaterialUrls(parsed.materialUrls);
-                  if (parsed.createdBy) setOrderCreatedBy(parsed.createdBy);
-                  form.reset(parsed);
+                   if (parsed.startDate) parsed.startDate = new Date(parsed.startDate);
+                   if (parsed.endDate) parsed.endDate = new Date(parsed.endDate);
+                   if (parsed.materialUrls) setMaterialUrls(parsed.materialUrls);
+                   if (parsed.createdBy) setOrderCreatedBy(parsed.createdBy);
+                   setIsNewOpp(parsed.opportunityId === 'new_custom_opportunity');
+                   form.reset(parsed);
                   setDraftLoaded(true);
                   toast({ title: "Borrador recuperado", description: "Se han restaurado los datos." });
               } catch (e) {
@@ -300,6 +329,19 @@ export function AdvertisingForm() {
   }, [selectedClientId]);
 
   useEffect(() => {
+      setIsNewOpp(selectedOpportunityId === 'new_custom_opportunity');
+  }, [selectedOpportunityId]);
+
+  useEffect(() => {
+      if (!isRestored || !startDate || !endDate || !isValid(startDate) || !isValid(endDate)) return;
+      const currentItems = form.getValues("srlItems") || [];
+      const normalizedItems = normalizeSrlItemsForRange(currentItems, startDate, endDate);
+      if (JSON.stringify(currentItems) !== JSON.stringify(normalizedItems)) {
+          setValue("srlItems", normalizedItems, { shouldDirty: true, shouldValidate: true });
+      }
+  }, [startDate, endDate, isRestored, form, setValue, normalizeSrlItemsForRange]);
+
+  useEffect(() => {
       if (isRestored && srlItemsCurrent?.length === 0) {
           if (values.adjustmentSrl !== 0) setValue("adjustmentSrl", 0);
           if (values.billingRequestsSrl?.length > 0) setValue("billingRequestsSrl", []);
@@ -333,9 +375,16 @@ export function AdvertisingForm() {
       }
   }
 
+  useEffect(() => {
+      if (!isRestored || editModeId || totalMonthsCycle < 1) return;
+      setInvoiceCountSrl(totalMonthsCycle);
+      setInvoiceCountSas(totalMonthsCycle);
+      setInvoiceCountAvion(totalMonthsCycle);
+  }, [totalMonthsCycle, isRestored, editModeId]);
+
   const showSections = startDate && endDate && isValid(startDate) && isValid(endDate) && (endDate >= startDate);
 
-  const srlItemsValid = values.srlItems?.filter(item => item.month) || [];
+  const srlItemsValid = normalizeSrlItemsForRange(values.srlItems, startDate, endDate).filter(item => item.month) || [];
   const sasItemsValid = values.sasItems?.filter(item => item.month) || [];
 
   const srlSubtotal = srlItemsValid.reduce((acc, item) => {
@@ -362,9 +411,9 @@ export function AdvertisingForm() {
 
   const handleGenerateBillingSrl = () => {
       if (invoiceCountSrl < 1) return;
-      const campaignGross = srlSubtotal * totalMonthsCycle;
-      const campaignAdj = srlAdjustment * totalMonthsCycle;
-      const campaignNet = totalOrderSrlNet * totalMonthsCycle;
+      const campaignGross = srlSubtotal * Math.max(1, totalMonthsCycle);
+      const campaignAdj = srlAdjustment * Math.max(1, totalMonthsCycle);
+      const campaignNet = totalOrderSrlNet * Math.max(1, totalMonthsCycle);
       const invGross = campaignGross / invoiceCountSrl;
       const invAdj = campaignAdj / invoiceCountSrl;
       const invNet = campaignNet / invoiceCountSrl;
@@ -379,10 +428,10 @@ export function AdvertisingForm() {
 
   const handleGenerateBillingSas = () => {
       if (invoiceCountSas < 1) return;
-      const campaignGross = sasSubtotal * totalMonthsCycle;
-      const campaignAdj = sasAdjustment * totalMonthsCycle;
-      const campaignIva = sasIva * totalMonthsCycle;
-      const campaignNet = totalOrderSasNet * totalMonthsCycle;
+      const campaignGross = sasSubtotal * Math.max(1, totalMonthsCycle);
+      const campaignAdj = sasAdjustment * Math.max(1, totalMonthsCycle);
+      const campaignIva = sasIva * Math.max(1, totalMonthsCycle);
+      const campaignNet = totalOrderSasNet * Math.max(1, totalMonthsCycle);
       const invGross = campaignGross / invoiceCountSas;
       const invAdj = campaignAdj / invoiceCountSas;
       const invIva = campaignIva / invoiceCountSas;
@@ -430,6 +479,7 @@ export function AdvertisingForm() {
   const updateRowNetSrl = (index: number) => {
       setTimeout(() => {
           const row = form.getValues(`billingRequestsSrl.${index}`);
+          if (!row) return;
           const gross = parseFloat(row.grossAmount as any) || 0;
           const adj = parseFloat(row.adjustment as any) || 0;
           setValue(`billingRequestsSrl.${index}.amount`, gross - adj, { shouldValidate: true });
@@ -439,6 +489,7 @@ export function AdvertisingForm() {
   const updateRowNetSas = (index: number) => {
       setTimeout(() => {
           const row = form.getValues(`billingRequestsSas.${index}`);
+          if (!row) return;
           const gross = parseFloat(row.grossAmount as any) || 0;
           const adj = parseFloat(row.adjustment as any) || 0;
           const iva = (gross - adj) * 0.05; 
@@ -451,6 +502,7 @@ export function AdvertisingForm() {
   const updateRowNetAvion = (index: number) => {
       setTimeout(() => {
           const row = form.getValues(`billingRequestsAvion.${index}`);
+          if (!row) return;
           const gross = parseFloat(row.grossAmount as any) || 0;
           const adj = parseFloat(row.adjustment as any) || 0;
           setValue(`billingRequestsAvion.${index}.amount`, gross - adj, { shouldValidate: true });
@@ -460,8 +512,8 @@ export function AdvertisingForm() {
   const sumGrossSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.grossAmount)||0), 0) || 0;
   const sumAdjSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
   const sumNetSrl = values.billingRequestsSrl?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
-  const campaignSrlGross = srlSubtotal * totalMonthsCycle;
-  const campaignSrlNet = totalOrderSrlNet * totalMonthsCycle;
+  const campaignSrlGross = srlSubtotal * Math.max(1, totalMonthsCycle);
+  const campaignSrlNet = totalOrderSrlNet * Math.max(1, totalMonthsCycle);
   const hasGrossErrorSrl = Math.abs(sumGrossSrl - campaignSrlGross) > 5; 
   const hasNetErrorSrl = Math.abs(sumNetSrl - campaignSrlNet) > 5;
 
@@ -469,8 +521,8 @@ export function AdvertisingForm() {
   const sumAdjSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.adjustment)||0), 0) || 0;
   const sumIvaSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.ivaSas)||0), 0) || 0;
   const sumNetSas = values.billingRequestsSas?.reduce((sum, item) => sum + (Number(item.amount)||0), 0) || 0;
-  const campaignSasGross = sasSubtotal * totalMonthsCycle;
-  const campaignSasNet = totalOrderSasNet * totalMonthsCycle;
+  const campaignSasGross = sasSubtotal * Math.max(1, totalMonthsCycle);
+  const campaignSasNet = totalOrderSasNet * Math.max(1, totalMonthsCycle);
   const hasGrossErrorSas = Math.abs(sumGrossSas - campaignSasGross) > 5; 
   const hasNetErrorSas = Math.abs(sumNetSas - campaignSasNet) > 5;
 
@@ -686,7 +738,7 @@ export function AdvertisingForm() {
           comments: wasApproved ? `Modificación de Contrato: ${modificationReason.trim()}` : (editModeId ? 'Orden de publicidad corregida y reenviada para evaluación.' : 'Carga inicial enviada a revisión.')
       };
 
-      const validSrlItems = data.srlItems;
+      const validSrlItems = normalizeSrlItemsForRange(data.srlItems, data.startDate, data.endDate);
       const validSasItems = data.sasItems;
       const preview = getPreviewOrder();
       
@@ -836,7 +888,7 @@ export function AdvertisingForm() {
                     </Select>
                   </FormItem>
                 )} />
-              {isNewOpp && (<FormField control={form.control} name="newOpportunityTitle" render={({ field }) => (<div className="mt-2"><Input placeholder="Nombre del producto *" {...field} /></div>)} />)}
+              {showNewOpportunityTitle && (<FormField control={form.control} name="newOpportunityTitle" render={({ field }) => (<div className="mt-2"><Input placeholder="Nombre del producto *" {...field} /></div>)} />)}
           </div>
           <div className="space-y-2 flex flex-col justify-end pb-1">
              <FormLabel>Ejecutivo / Autor de Orden</FormLabel>

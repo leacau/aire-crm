@@ -275,6 +275,7 @@ export default function AdvertisingOrderDetailPage() {
 
     // 🟢 EL CANDADO DE SEGURIDAD
     const isOrderApproved = !order.status || order.status === 'Aprobado';
+    const canCreateUnplannedExecutions = !!userInfo && hasManagementPrivileges(userInfo);
 
     // 🟢 DOBLE CANDADO: LÓGICA DE DETECCIÓN DE PRODUCTOS EN LA PAUTA
     const hasSrlNota = order.srlItems?.some(i => (i.adType || '').toLowerCase().includes('nota'));
@@ -334,13 +335,13 @@ export default function AdvertisingOrderDetailPage() {
                             
                             {/* 🟢 RENDERIZADO CONDICIONAL DE BOTONES DE CREACIÓN */}
                             <div className="flex gap-2 items-center">
-                                {!hasSrlNota && !hasSasNotaWeb && !hasSasRedes && (
+                                {!hasSrlNota && !hasSasNotaWeb && !hasSasRedes && !canCreateUnplannedExecutions && (
                                     <span className="text-xs text-slate-400 italic font-medium">
                                         (No hay productos de ejecución facturados en la OP)
                                     </span>
                                 )}
                                 
-                                {hasSrlNota && (
+                                {(hasSrlNota || canCreateUnplannedExecutions) && (
                                     <Button 
                                         size="sm" 
                                         className="bg-blue-600 hover:bg-blue-700" 
@@ -350,7 +351,7 @@ export default function AdvertisingOrderDetailPage() {
                                         <Film className="w-4 h-4 mr-2" /> + Nota Comercial
                                     </Button>
                                 )}
-                                {hasSasNotaWeb && (
+                                {(hasSasNotaWeb || canCreateUnplannedExecutions) && (
                                     <Button 
                                         size="sm" 
                                         className="bg-orange-500 hover:bg-orange-600 text-white" 
@@ -360,7 +361,7 @@ export default function AdvertisingOrderDetailPage() {
                                         <Globe className="w-4 h-4 mr-2" /> + Nota Web
                                     </Button>
                                 )}
-                                {hasSasRedes && (
+                                {(hasSasRedes || canCreateUnplannedExecutions) && (
                                     <Button 
                                         size="sm" 
                                         className="bg-pink-600 hover:bg-pink-700" 
@@ -373,7 +374,13 @@ export default function AdvertisingOrderDetailPage() {
                             </div>
                         </div>
 
-                        {!isOrderApproved && (hasSrlNota || hasSasNotaWeb || hasSasRedes) && (
+                        {canCreateUnplannedExecutions && isOrderApproved && !hasSrlNota && !hasSasNotaWeb && !hasSasRedes && (
+                            <div className="bg-blue-50 text-blue-800 p-3 rounded text-sm mb-4 border border-blue-200">
+                                Como jefe/gerente podés cargar ejecuciones aunque la acción comercial no figure en los contenidos de esta orden.
+                            </div>
+                        )}
+
+                        {!isOrderApproved && (hasSrlNota || hasSasNotaWeb || hasSasRedes || canCreateUnplannedExecutions) && (
                             <div className="bg-amber-50 text-amber-800 p-3 rounded text-sm mb-4 border border-amber-200">
                                 ⚠️ Para poder cargar Ejecuciones, la Orden de Publicidad Madre debe estar en estado <strong>Aprobado</strong>. (Estado actual: {order.status || 'Pendiente'})
                             </div>

@@ -4258,7 +4258,7 @@ export const rejectProspectClaim = async (prospect: Prospect, managerId: string,
 
 export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, 'id' | 'createdAt'>) => {
   try {
-    const { billingRequestsSrl, billingRequestsSas, ...restOrderData } = orderData;
+    const { billingRequestsSrl, billingRequestsSas, billingRequestsAvion, ...restOrderData } = orderData as typeof orderData & { billingRequestsAvion?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[] };
     const docRef = await addDoc(collection(db, 'advertising_orders'), {
       ...restOrderData,
       createdAt: new Date().toISOString(),
@@ -4281,6 +4281,8 @@ export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, '
                 grossAmount: br.grossAmount,
                 adjustment: br.adjustment,
                 amount: br.amount,
+                paymentType: br.paymentType || 'Se paga',
+                canjeDescription: br.canjeDescription || '',
                 createdAt: serverTimestamp()
             });
         });
@@ -4301,6 +4303,28 @@ export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, '
                 adjustment: br.adjustment,
                 ivaSas: br.ivaSas,
                 amount: br.amount,
+                paymentType: br.paymentType || 'Se paga',
+                canjeDescription: br.canjeDescription || '',
+                createdAt: serverTimestamp()
+            });
+        });
+    }
+
+    if (billingRequestsAvion && billingRequestsAvion.length > 0) {
+        hasBilling = true;
+        billingRequestsAvion.forEach(br => {
+            const brRef = doc(collections.billingRequests);
+            batch.set(brRef, {
+                orderId: docRef.id,
+                opportunityId: restOrderData.opportunityId || '',
+                clientId: restOrderData.clientId,
+                company: 'AVION',
+                date: br.date,
+                grossAmount: br.grossAmount,
+                adjustment: br.adjustment,
+                amount: br.amount,
+                paymentType: br.paymentType || 'Canje',
+                canjeDescription: br.canjeDescription || '',
                 createdAt: serverTimestamp()
             });
         });
@@ -4438,7 +4462,7 @@ export const updateAdvertisingOrder = async (
     userId: string,
     userName: string
 ): Promise<void> => {
-    const { billingRequestsSrl, billingRequestsSas, ...restOrderData } = orderData;
+    const { billingRequestsSrl, billingRequestsSas, billingRequestsAvion, ...restOrderData } = orderData as typeof orderData & { billingRequestsAvion?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[] };
     const docRef = doc(db, 'advertising_orders', orderId);
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) throw new Error("Orden no encontrada");
@@ -4467,6 +4491,8 @@ export const updateAdvertisingOrder = async (
                 grossAmount: br.grossAmount,
                 adjustment: br.adjustment,
                 amount: br.amount,
+                paymentType: br.paymentType || 'Se paga',
+                canjeDescription: br.canjeDescription || '',
                 createdAt: serverTimestamp()
             });
         });
@@ -4485,6 +4511,27 @@ export const updateAdvertisingOrder = async (
                 adjustment: br.adjustment,
                 ivaSas: br.ivaSas,
                 amount: br.amount,
+                paymentType: br.paymentType || 'Se paga',
+                canjeDescription: br.canjeDescription || '',
+                createdAt: serverTimestamp()
+            });
+        });
+    }
+
+    if (billingRequestsAvion && billingRequestsAvion.length > 0) {
+        billingRequestsAvion.forEach(br => {
+            const brRef = doc(collections.billingRequests);
+            batch.set(brRef, {
+                orderId: orderId,
+                opportunityId: restOrderData.opportunityId || '',
+                clientId: restOrderData.clientId,
+                company: 'AVION',
+                date: br.date,
+                grossAmount: br.grossAmount,
+                adjustment: br.adjustment,
+                amount: br.amount,
+                paymentType: br.paymentType || 'Canje',
+                canjeDescription: br.canjeDescription || '',
                 createdAt: serverTimestamp()
             });
         });
