@@ -167,7 +167,7 @@ export default function ProspectsPage() {
                 prospectName,
                 coachingNote || 'Ingreso de nuevo prospecto'
               );
-              toast({ title: "Agregado al seguimiento", description: "El prospecto se sum� a tu hoja de ruta semanal." });
+              toast({ title: "Agregado al seguimiento", description: "El prospecto se sumó a tu hoja de ruta semanal." });
           } catch (coachingError) {
               console.error("Error adding to coaching:", coachingError);
               toast({ title: "Error parcial", description: "Se guardó el prospecto pero falló al agregarlo al seguimiento.", variant: "destructive" });
