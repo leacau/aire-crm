@@ -67,6 +67,53 @@ const getPeriodDurationInMonths = (period: string): number => {
     }
 }
 
+type ContractPeriod = {
+  startDate: Date;
+  endDate: Date;
+};
+
+const parseOpportunityDate = (value?: string): Date | null => {
+  if (!value) return null;
+  const parsed = parseISO(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const getContractPeriods = (opportunity: Opportunity): ContractPeriod[] => {
+  const rawPeriods = [
+    ...(opportunity.startDate && opportunity.endDate
+      ? [{ startDate: opportunity.startDate, endDate: opportunity.endDate }]
+      : []),
+    ...(opportunity.periodHistory || []),
+  ];
+  const finalizationDate = parseOpportunityDate(opportunity.finalizationDate);
+
+  return rawPeriods.flatMap(period => {
+    const startDate = parseOpportunityDate(period.startDate);
+    const originalEndDate = parseOpportunityDate(period.endDate);
+    if (!startDate || !originalEndDate || originalEndDate < startDate) return [];
+
+    const endDate = finalizationDate && finalizationDate < originalEndDate
+      ? finalizationDate
+      : originalEndDate;
+
+    return endDate >= startDate ? [{ startDate, endDate }] : [];
+  });
+};
+
+const getContractPeriodForMonth = (opportunity: Opportunity, month: Date): ContractPeriod | null => {
+  const filterMonth = startOfMonth(month);
+
+  return getContractPeriods(opportunity).find(period => (
+    filterMonth >= startOfMonth(period.startDate)
+    && filterMonth <= startOfMonth(period.endDate)
+  )) || null;
+};
+
+const getLegacyWonReferenceDate = (opportunity: Opportunity): Date | null => (
+  parseOpportunityDate(opportunity.manualUpdateDate)
+  || parseOpportunityDate(opportunity.closeDate)
+);
+
 interface KanbanBoardProps {
   dateRange?: DateRange;
   selectedAdvisor: string;
@@ -429,14 +476,19 @@ export function KanbanBoard({
             }
 
             if (opp.stage === 'Cerrado - Ganado') {
-                if (!opp.closeDate) return false;
-                
-                // LÓGICA MODIFICADA: manualUpdateDate tiene prioridad sobre closeDate
-                const referenceDate = opp.manualUpdateDate ? parseISO(opp.manualUpdateDate) : parseISO(opp.closeDate);
+                const contractPeriods = getContractPeriods(opp);
+                if (contractPeriods.length > 0) {
+                    return getContractPeriodForMonth(opp, filterDate) !== null;
+                }
 
+                // Compatibilidad para oportunidades antiguas sin vigencia contractual cargada.
+                const referenceDate = getLegacyWonReferenceDate(opp);
+                if (!referenceDate) return false;
                 if (opp.finalizationDate) {
                     const startDate = startOfMonth(referenceDate);
-                    const endDate = endOfMonth(parseISO(opp.finalizationDate));
+                    const finalizationDate = parseOpportunityDate(opp.finalizationDate);
+                    if (!finalizationDate) return false;
+                    const endDate = endOfMonth(finalizationDate);
                     return isWithinInterval(filterDate, { start: startDate, end: endDate });
                 }
                 
@@ -482,7 +534,10 @@ export function KanbanBoard({
 
     filteredOpportunities.forEach(opp => {
       if (opp.stage === 'Cerrado - Ganado' && dateRange?.from) {
-        if (isSameMonth(parseISO(opp.createdAt), dateRange.from)) {
+        const activeContractPeriod = getContractPeriodForMonth(opp, dateRange.from);
+        const wonReferenceDate = activeContractPeriod?.startDate || getLegacyWonReferenceDate(opp);
+
+        if (wonReferenceDate && isSameMonth(wonReferenceDate, dateRange.from)) {
           groups['Cerrado - Ganado'].push(opp);
         } else {
           groups['Ganado (Recurrente)'].push(opp);
