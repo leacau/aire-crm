@@ -557,6 +557,9 @@ export type CoachingFollowUpEntry = {
   createdAt: string;
   createdById: string;
   createdByName: string;
+  updatedAt?: string;
+  updatedById?: string;
+  updatedByName?: string;
 };
 
 export type CoachingItem = {

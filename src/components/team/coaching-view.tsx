@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import type { User, CoachingSession, CoachingItem, CoachingFollowUpEntry } from '@/lib/types';
-import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem } from '@/lib/firebase-service';
+import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, updateCoachingFollowUpEntry, deleteCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem } from '@/lib/firebase-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Briefcase } from 'lucide-react';
+import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Briefcase, Pencil, X, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -48,6 +48,27 @@ export function CoachingView({ advisor }: { advisor: User }) {
         followUpCurrent?: string;
         followUpNext?: string;
     }>>({});
+    const [editingEntry, setEditingEntry] = useState<{
+        sessionId: string;
+        itemId: string;
+        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext';
+        entryId: string;
+        text: string;
+    } | null>(null);
+    const [entryToDelete, setEntryToDelete] = useState<{
+        sessionId: string;
+        itemId: string;
+        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext';
+        entryId?: string;
+        legacy?: boolean;
+    } | null>(null);
+    const [editingLegacy, setEditingLegacy] = useState<{
+        session: CoachingSession;
+        item: CoachingItem;
+        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext';
+        text: string;
+    } | null>(null);
+    const [savingEntry, setSavingEntry] = useState(false);
 
     const canManage = isBoss || userInfo?.role === 'Gerencia' || userInfo?.role === 'Jefe' || userInfo?.role === 'Admin';
 
@@ -312,6 +333,90 @@ export function CoachingView({ advisor }: { advisor: User }) {
         return item[field] || '';
     };
 
+    const saveEditedEntry = async () => {
+        if (!editingEntry || !userInfo || !editingEntry.text.trim() || !canManage) return;
+        setSavingEntry(true);
+        try {
+            await updateCoachingFollowUpEntry(
+                editingEntry.sessionId,
+                editingEntry.itemId,
+                editingEntry.field,
+                editingEntry.entryId,
+                editingEntry.text,
+                userInfo.id,
+                userInfo.name,
+            );
+            setEditingEntry(null);
+            await loadData();
+            toast({ title: "Asiento actualizado" });
+        } catch (error) {
+            console.error("Error updating coaching entry:", error);
+            toast({ title: "No se pudo actualizar el asiento", variant: "destructive" });
+        } finally {
+            setSavingEntry(false);
+        }
+    };
+
+    const confirmDeleteEntry = async () => {
+        if (!entryToDelete || !userInfo || !canManage) return;
+        setSavingEntry(true);
+        try {
+            if (entryToDelete.legacy) {
+                const session = sessions.find(candidate => candidate.id === entryToDelete.sessionId);
+                const item = session?.items.find(candidate => candidate.id === entryToDelete.itemId);
+                if (!session || !item) throw new Error("Registro histórico no encontrado");
+                const updatedAtField = `${entryToDelete.field}UpdatedAt` as keyof CoachingItem;
+                await updateCoachingItem(
+                    session.id,
+                    item.id,
+                    {
+                        [entryToDelete.field]: '',
+                        [updatedAtField]: new Date().toISOString(),
+                        ...(entryToDelete.field === 'followUpDone' ? { advisorNotes: '' } : {}),
+                    },
+                    userInfo.id,
+                    userInfo.name,
+                    item.taskId,
+                    session.advisorId,
+                );
+            } else if (entryToDelete.entryId) {
+                await deleteCoachingFollowUpEntry(
+                    entryToDelete.sessionId,
+                    entryToDelete.itemId,
+                    entryToDelete.field,
+                    entryToDelete.entryId,
+                    userInfo.id,
+                    userInfo.name,
+                );
+            }
+            setEntryToDelete(null);
+            await loadData();
+            toast({ title: "Asiento eliminado" });
+        } catch (error) {
+            console.error("Error deleting coaching entry:", error);
+            toast({ title: "No se pudo eliminar el asiento", variant: "destructive" });
+        } finally {
+            setSavingEntry(false);
+        }
+    };
+
+    const saveEditedLegacy = async () => {
+        if (!editingLegacy || !userInfo || !canManage) return;
+        setSavingEntry(true);
+        try {
+            const updatedAtField = `${editingLegacy.field}UpdatedAt` as keyof CoachingItem;
+            await handleUpdateItem(editingLegacy.session, editingLegacy.item, {
+                [editingLegacy.field]: editingLegacy.text.trim(),
+                [updatedAtField]: new Date().toISOString(),
+                ...(editingLegacy.field === 'followUpDone' ? { advisorNotes: editingLegacy.text.trim() } : {}),
+            });
+            setEditingLegacy(null);
+            await loadData();
+        } finally {
+            setSavingEntry(false);
+        }
+    };
+
     const commitNote = async (session: CoachingSession, item: CoachingItem) => {
         const newVal = inputStates[item.id]?.note;
         if (!newVal?.trim()) return;
@@ -487,18 +592,103 @@ export function CoachingView({ advisor }: { advisor: User }) {
                             <div className="max-h-44 space-y-2 overflow-y-auto rounded-md border bg-muted/20 p-2">
                                 {entries.map(entry => (
                                     <div key={entry.id} className="rounded border bg-background px-3 py-2 text-sm">
-                                        <p className="whitespace-pre-wrap">{entry.text}</p>
-                                        <p className="mt-1 text-[10px] text-muted-foreground">
-                                            {formatUpdateDate(entry.createdAt)} · {entry.createdByName}
-                                        </p>
+                                        {editingEntry?.entryId === entry.id ? (
+                                            <div className="space-y-2">
+                                                <Textarea
+                                                    value={editingEntry.text}
+                                                    onChange={event => setEditingEntry({ ...editingEntry, text: event.target.value })}
+                                                    className="min-h-[72px] resize-y"
+                                                    autoFocus
+                                                />
+                                                <div className="flex justify-end gap-1">
+                                                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingEntry(null)} disabled={savingEntry} title="Cancelar edición">
+                                                        <X className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                    <Button size="icon" className="h-7 w-7" onClick={saveEditedEntry} disabled={savingEntry || !editingEntry.text.trim()} title="Guardar cambios">
+                                                        {savingEntry ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="flex items-start gap-2">
+                                                    <p className="min-w-0 flex-1 whitespace-pre-wrap">{entry.text}</p>
+                                                    {canManage && (
+                                                        <div className="flex shrink-0 gap-1">
+                                                            <Button
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                className="h-6 w-6"
+                                                                onClick={() => setEditingEntry({ sessionId: session.id, itemId: item.id, field, entryId: entry.id, text: entry.text })}
+                                                                title="Editar asiento"
+                                                            >
+                                                                <Pencil className="h-3 w-3" />
+                                                            </Button>
+                                                            <Button
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                className="h-6 w-6 text-destructive hover:text-destructive"
+                                                                onClick={() => setEntryToDelete({ sessionId: session.id, itemId: item.id, field, entryId: entry.id })}
+                                                                title="Eliminar asiento"
+                                                            >
+                                                                <Trash2 className="h-3 w-3" />
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <p className="mt-1 text-[10px] text-muted-foreground">
+                                                    {formatUpdateDate(entry.createdAt)} · {entry.createdByName}
+                                                    {entry.updatedAt && <> · Editado {formatUpdateDate(entry.updatedAt)} por {entry.updatedByName || 'Jefatura'}</>}
+                                                </p>
+                                            </>
+                                        )}
                                     </div>
                                 ))}
                                 {legacyText && (
                                     <div className="rounded border bg-background px-3 py-2 text-sm">
-                                        <p className="whitespace-pre-wrap">{legacyText}</p>
-                                        <p className="mt-1 text-[10px] text-muted-foreground">
-                                            Historial previo · {formatUpdateDate(updatedAt)}
-                                        </p>
+                                        {editingLegacy?.item.id === item.id && editingLegacy.field === field ? (
+                                            <div className="space-y-2">
+                                                <Textarea
+                                                    value={editingLegacy.text}
+                                                    onChange={event => setEditingLegacy({ ...editingLegacy, text: event.target.value })}
+                                                    className="min-h-[72px] resize-y"
+                                                    autoFocus
+                                                />
+                                                <div className="flex justify-end gap-1">
+                                                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingLegacy(null)} disabled={savingEntry}>
+                                                        <X className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                    <Button size="icon" className="h-7 w-7" onClick={saveEditedLegacy} disabled={savingEntry || !editingLegacy.text.trim()}>
+                                                        {savingEntry ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="flex items-start gap-2">
+                                                    <p className="min-w-0 flex-1 whitespace-pre-wrap">{legacyText}</p>
+                                                    {canManage && (
+                                                        <div className="flex shrink-0 gap-1">
+                                                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingLegacy({ session, item, field, text: legacyText })} title="Editar historial previo">
+                                                                <Pencil className="h-3 w-3" />
+                                                            </Button>
+                                                            <Button
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                className="h-6 w-6 text-destructive hover:text-destructive"
+                                                                onClick={() => setEntryToDelete({ sessionId: session.id, itemId: item.id, field, legacy: true })}
+                                                                title="Eliminar historial previo"
+                                                            >
+                                                                <Trash2 className="h-3 w-3" />
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <p className="mt-1 text-[10px] text-muted-foreground">
+                                                    Historial previo · {formatUpdateDate(updatedAt)}
+                                                </p>
+                                            </>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -707,6 +897,28 @@ export function CoachingView({ advisor }: { advisor: User }) {
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                         <AlertDialogAction onClick={handleDeleteSession} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Eliminar
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={!!entryToDelete} onOpenChange={(open) => !open && setEntryToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>¿Eliminar este asiento?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Se quitará de la bitácora del asesor. Esta acción no se puede deshacer.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={savingEntry}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDeleteEntry}
+                            disabled={savingEntry}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {savingEntry && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Eliminar
                         </AlertDialogAction>
                     </AlertDialogFooter>

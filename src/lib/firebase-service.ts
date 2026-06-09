@@ -4140,6 +4140,136 @@ export const appendCoachingFollowUpEntry = async (
     }
 };
 
+export const updateCoachingFollowUpEntry = async (
+    sessionId: string,
+    itemId: string,
+    field: 'followUpDone' | 'followUpCurrent' | 'followUpNext',
+    entryId: string,
+    text: string,
+    userId: string,
+    userName: string,
+): Promise<void> => {
+    const trimmedText = text.trim();
+    if (!trimmedText) throw new Error("El asiento no puede quedar vacío");
+
+    const sessionRef = doc(db, 'coaching_sessions', sessionId);
+    let sessionForIndex: CoachingSession | null = null;
+    let advisorName = '';
+
+    await runTransaction(db, async (transaction) => {
+        const sessionSnap = await transaction.get(sessionRef);
+        if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
+
+        const sessionData = sessionSnap.data() as CoachingSession;
+        const now = new Date().toISOString();
+        const entriesField = `${field}Entries` as 'followUpDoneEntries' | 'followUpCurrentEntries' | 'followUpNextEntries';
+        const updatedAtField = `${field}UpdatedAt` as 'followUpDoneUpdatedAt' | 'followUpCurrentUpdatedAt' | 'followUpNextUpdatedAt';
+        let entryFound = false;
+
+        const updatedItems = sessionData.items.map(item => {
+            if (item.id !== itemId) return item;
+            const entries = (item[entriesField] || []).map(entry => {
+                if (entry.id !== entryId) return entry;
+                entryFound = true;
+                return {
+                    ...entry,
+                    text: trimmedText,
+                    updatedAt: now,
+                    updatedById: userId,
+                    updatedByName: userName,
+                };
+            });
+            return {
+                ...item,
+                [entriesField]: entries,
+                [updatedAtField]: now,
+                lastUpdate: now,
+            };
+        });
+
+        if (!entryFound) throw new Error("Asiento de seguimiento no encontrado");
+        transaction.update(sessionRef, { items: updatedItems });
+        advisorName = sessionData.advisorName;
+        sessionForIndex = { ...sessionData, id: sessionId, items: updatedItems };
+    });
+
+    if (sessionForIndex) {
+        if (sessionForIndex.status === 'Open') {
+            setInCache(`open_session_${sessionForIndex.advisorId}`, sessionForIndex);
+        }
+        await syncCoachingActiveIndexFromSession(sessionForIndex);
+    }
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'user',
+        entityId: sessionId,
+        entityName: 'Bitácora de seguimiento',
+        details: `editó un asiento de seguimiento.`,
+        ownerName: advisorName,
+    });
+};
+
+export const deleteCoachingFollowUpEntry = async (
+    sessionId: string,
+    itemId: string,
+    field: 'followUpDone' | 'followUpCurrent' | 'followUpNext',
+    entryId: string,
+    userId: string,
+    userName: string,
+): Promise<void> => {
+    const sessionRef = doc(db, 'coaching_sessions', sessionId);
+    let sessionForIndex: CoachingSession | null = null;
+    let advisorName = '';
+
+    await runTransaction(db, async (transaction) => {
+        const sessionSnap = await transaction.get(sessionRef);
+        if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
+
+        const sessionData = sessionSnap.data() as CoachingSession;
+        const now = new Date().toISOString();
+        const entriesField = `${field}Entries` as 'followUpDoneEntries' | 'followUpCurrentEntries' | 'followUpNextEntries';
+        const updatedAtField = `${field}UpdatedAt` as 'followUpDoneUpdatedAt' | 'followUpCurrentUpdatedAt' | 'followUpNextUpdatedAt';
+        let entryFound = false;
+
+        const updatedItems = sessionData.items.map(item => {
+            if (item.id !== itemId) return item;
+            const previousEntries = item[entriesField] || [];
+            const entries = previousEntries.filter(entry => entry.id !== entryId);
+            entryFound = entries.length !== previousEntries.length;
+            return {
+                ...item,
+                [entriesField]: entries,
+                [updatedAtField]: now,
+                lastUpdate: now,
+            };
+        });
+
+        if (!entryFound) throw new Error("Asiento de seguimiento no encontrado");
+        transaction.update(sessionRef, { items: updatedItems });
+        advisorName = sessionData.advisorName;
+        sessionForIndex = { ...sessionData, id: sessionId, items: updatedItems };
+    });
+
+    if (sessionForIndex) {
+        if (sessionForIndex.status === 'Open') {
+            setInCache(`open_session_${sessionForIndex.advisorId}`, sessionForIndex);
+        }
+        await syncCoachingActiveIndexFromSession(sessionForIndex);
+    }
+    await logActivity({
+        userId,
+        userName,
+        type: 'delete',
+        entityType: 'user',
+        entityId: sessionId,
+        entityName: 'Bitácora de seguimiento',
+        details: `eliminó un asiento de seguimiento.`,
+        ownerName: advisorName,
+    });
+};
+
 export const deleteCoachingItem = async (sessionId: string, itemId: string) => {
     const sessionRef = doc(db, 'coaching_sessions', sessionId);
     const sessionSnap = await getDoc(sessionRef);
