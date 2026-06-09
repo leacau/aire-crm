@@ -63,7 +63,7 @@ service cloud.firestore {
         && request.resource.data.advisorId == resource.data.advisorId
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['notes', 'nextContactAt', 'status', 'updatedAt'])
-        && request.resource.data.status in ['Pendiente', 'Reclamado'];
+        && request.resource.data.status in ['Pendiente', 'Reclamado', 'Pagado', 'Incobrable'];
     }
 
     function updatesSelfProfile(userId) {

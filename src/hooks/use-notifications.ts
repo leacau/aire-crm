@@ -52,7 +52,7 @@ export function useNotifications() {
         if (permission === 'granted') {
             const notification = new Notification(title, {
                 ...options,
-                icon: '/aire-logo.png', // Optional: add your app icon
+                icon: '/aire-logo.svg',
             });
 
             notification.onclick = () => {
