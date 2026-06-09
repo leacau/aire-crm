@@ -4054,6 +4054,13 @@ export const updateCoachingItem = async (
     });
 
     await updateDoc(sessionRef, { items: updatedItems });
+    if (sessionData.status === 'Open') {
+        setInCache(`open_session_${sessionData.advisorId}`, {
+            ...sessionData,
+            id: sessionId,
+            items: updatedItems,
+        });
+    }
     await syncCoachingActiveIndexFromSession({
         ...sessionData,
         id: sessionId,
@@ -4075,6 +4082,64 @@ export const updateCoachingItem = async (
     }
 };
 
+export const appendCoachingFollowUpEntry = async (
+    sessionId: string,
+    itemId: string,
+    field: 'followUpDone' | 'followUpCurrent' | 'followUpNext',
+    text: string,
+    userId: string,
+    userName: string,
+): Promise<void> => {
+    const trimmedText = text.trim();
+    if (!trimmedText) return;
+
+    const sessionRef = doc(db, 'coaching_sessions', sessionId);
+    let sessionForIndex: CoachingSession | null = null;
+
+    await runTransaction(db, async (transaction) => {
+        const sessionSnap = await transaction.get(sessionRef);
+        if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
+
+        const sessionData = sessionSnap.data() as CoachingSession;
+        const now = new Date().toISOString();
+        const entriesField = `${field}Entries` as 'followUpDoneEntries' | 'followUpCurrentEntries' | 'followUpNextEntries';
+        const updatedAtField = `${field}UpdatedAt` as 'followUpDoneUpdatedAt' | 'followUpCurrentUpdatedAt' | 'followUpNextUpdatedAt';
+        let itemFound = false;
+
+        const updatedItems = sessionData.items.map(item => {
+            if (item.id !== itemId) return item;
+            itemFound = true;
+
+            const entry = {
+                id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+                text: trimmedText,
+                createdAt: now,
+                createdById: userId,
+                createdByName: userName,
+            };
+            const previousEntries = item[entriesField] || [];
+
+            return {
+                ...item,
+                [entriesField]: [...previousEntries, entry],
+                [updatedAtField]: now,
+                lastUpdate: now,
+            };
+        });
+
+        if (!itemFound) throw new Error("Ítem de seguimiento no encontrado");
+        transaction.update(sessionRef, { items: updatedItems });
+        sessionForIndex = { ...sessionData, id: sessionId, items: updatedItems };
+    });
+
+    if (sessionForIndex) {
+        if (sessionForIndex.status === 'Open') {
+            setInCache(`open_session_${sessionForIndex.advisorId}`, sessionForIndex);
+        }
+        await syncCoachingActiveIndexFromSession(sessionForIndex);
+    }
+};
+
 export const deleteCoachingItem = async (sessionId: string, itemId: string) => {
     const sessionRef = doc(db, 'coaching_sessions', sessionId);
     const sessionSnap = await getDoc(sessionRef);
@@ -4085,6 +4150,13 @@ export const deleteCoachingItem = async (sessionId: string, itemId: string) => {
     const updatedItems = sessionData.items.filter(item => item.id !== itemId);
 
     await updateDoc(sessionRef, { items: updatedItems });
+    if (sessionData.status === 'Open') {
+        setInCache(`open_session_${sessionData.advisorId}`, {
+            ...sessionData,
+            id: sessionId,
+            items: updatedItems,
+        });
+    }
     await syncCoachingActiveIndexFromSession({
         ...sessionData,
         id: sessionId,
@@ -4156,6 +4228,9 @@ export const addItemsToSession = async (sessionId: string, newItems: CoachingIte
     });
 
     if (sessionForIndex) {
+        if (sessionForIndex.status === 'Open') {
+            setInCache(`open_session_${sessionForIndex.advisorId}`, sessionForIndex);
+        }
         await syncCoachingActiveIndexFromSession(sessionForIndex);
     }
 };

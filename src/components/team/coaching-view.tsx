@@ -2,8 +2,8 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import type { User, CoachingSession, CoachingItem } from '@/lib/types';
-import { getCoachingSessions, createCoachingSession, updateCoachingItem, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem } from '@/lib/firebase-service';
+import type { User, CoachingSession, CoachingItem, CoachingFollowUpEntry } from '@/lib/types';
+import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem } from '@/lib/firebase-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -80,9 +80,9 @@ export function CoachingView({ advisor }: { advisor: User }) {
         sessions.forEach(session => {
             session.items.forEach(item => {
                 drafts[item.id] = {
-                    followUpDone: item.followUpDone ?? item.advisorNotes ?? '',
-                    followUpCurrent: item.followUpCurrent ?? '',
-                    followUpNext: item.followUpNext ?? '',
+                    followUpDone: '',
+                    followUpCurrent: '',
+                    followUpNext: '',
                 };
             });
         });
@@ -95,10 +95,18 @@ export function CoachingView({ advisor }: { advisor: User }) {
         let pendingItems: CoachingItem[] = [];
         const pendingMap = new Map<string, CoachingItem>();
         
-        [...sessions].reverse().forEach(session => {
+        const chronologicalSessions = [...sessions].sort(
+            (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+
+        chronologicalSessions.forEach(session => {
             const sessionDateStr = format(parseISO(session.date), 'dd/MM');
 
             session.items.forEach(item => {
+                const carryKey = item.entityId
+                    ? `${item.entityType}:${item.entityId}`
+                    : `task:${item.taskId}`;
+
                 if (item.status !== 'Completado' && item.status !== 'Cancelado') {
                     const isManagerOrigin = !item.origin || item.origin === 'manager';
                     let actionWithHistory = item.action;
@@ -107,7 +115,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                          actionWithHistory = `[Del ${sessionDateStr}] ${item.action}`;
                     }
 
-                    pendingMap.set(item.taskId, {
+                    pendingMap.set(carryKey, {
                         ...item,
                         id: '', // Se generará uno nuevo
                         action: actionWithHistory, 
@@ -116,7 +124,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                         origin: item.origin || 'manager' 
                     });
                 } else {
-                    pendingMap.delete(item.taskId);
+                    pendingMap.delete(carryKey);
                 }
             });
         });
@@ -204,9 +212,6 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 if (s.id === session.id) {
                     newItems = s.items.map(i => i.id === item.id ? { ...i, ...updates, lastUpdate: new Date().toISOString() } : i);
                 } 
-                else if (updates.status && item.taskId) {
-                    newItems = s.items.map(i => i.taskId === item.taskId ? { ...i, status: updates.status as any } : i);
-                }
                 return { ...s, items: newItems };
             }));
 
@@ -227,6 +232,24 @@ export function CoachingView({ advisor }: { advisor: User }) {
         return [...items].sort((a, b) => {
             const statusDiff = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
             if (statusDiff !== 0) return statusDiff;
+            const getLatestUpdate = (item: CoachingItem) => {
+                const entryDates = [
+                    ...(item.followUpDoneEntries || []),
+                    ...(item.followUpCurrentEntries || []),
+                    ...(item.followUpNextEntries || []),
+                ].map(entry => entry.createdAt);
+                const dates = [
+                    ...entryDates,
+                    item.followUpDoneUpdatedAt,
+                    item.followUpCurrentUpdatedAt,
+                    item.followUpNextUpdatedAt,
+                    item.lastUpdate,
+                    item.originalCreatedAt,
+                ].filter(Boolean) as string[];
+                return Math.max(...dates.map(value => new Date(value).getTime()).filter(Number.isFinite), 0);
+            };
+            const dateDiff = getLatestUpdate(b) - getLatestUpdate(a);
+            if (dateDiff !== 0) return dateDiff;
             return a.entityName.localeCompare(b.entityName);
         });
     };
@@ -255,12 +278,38 @@ export function CoachingView({ advisor }: { advisor: User }) {
         item: CoachingItem,
         field: 'followUpDone' | 'followUpCurrent' | 'followUpNext'
     ) => {
-        const updatedAtField = `${field}UpdatedAt` as keyof CoachingItem;
-        const value = followUpDrafts[item.id]?.[field] ?? '';
-        await handleUpdateItem(session, item, {
-            [field]: value,
-            [updatedAtField]: new Date().toISOString(),
-        } as Partial<CoachingItem>);
+        const value = followUpDrafts[item.id]?.[field]?.trim() ?? '';
+        if (!value || !userInfo) return;
+        try {
+            await appendCoachingFollowUpEntry(session.id, item.id, field, value, userInfo.id, userInfo.name);
+            setFollowUpDrafts(prev => ({
+                ...prev,
+                [item.id]: { ...prev[item.id], [field]: '' },
+            }));
+            await loadData();
+            toast({ title: "Asiento guardado" });
+        } catch (error) {
+            console.error("Error saving coaching entry:", error);
+            toast({ title: "No se pudo guardar el asiento", variant: "destructive" });
+        }
+    };
+
+    const getFollowUpEntries = (
+        item: CoachingItem,
+        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext'
+    ): CoachingFollowUpEntry[] => {
+        const entriesField = `${field}Entries` as 'followUpDoneEntries' | 'followUpCurrentEntries' | 'followUpNextEntries';
+        return [...(item[entriesField] || [])].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+    };
+
+    const getLegacyFollowUpText = (
+        item: CoachingItem,
+        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext'
+    ) => {
+        if (field === 'followUpDone') return item.followUpDone || item.advisorNotes || '';
+        return item[field] || '';
     };
 
     const commitNote = async (session: CoachingSession, item: CoachingItem) => {
@@ -420,8 +469,12 @@ export function CoachingView({ advisor }: { advisor: User }) {
                     { field: 'followUpDone' as const, label: 'Qué hice', updatedAt: item.followUpDoneUpdatedAt, placeholder: 'Registrar lo realizado hasta ahora...' },
                     { field: 'followUpCurrent' as const, label: 'En qué estamos', updatedAt: item.followUpCurrentUpdatedAt, placeholder: 'Estado actual de la gestión...' },
                     { field: 'followUpNext' as const, label: 'Qué sigue', updatedAt: item.followUpNextUpdatedAt, placeholder: 'Próximo paso acordado...' },
-                ].map(({ field, label, updatedAt, placeholder }) => (
-                    <div key={field} className="space-y-1">
+                ].map(({ field, label, updatedAt, placeholder }) => {
+                    const entries = getFollowUpEntries(item, field);
+                    const legacyText = getLegacyFollowUpText(item, field);
+
+                    return (
+                    <div key={field} className="space-y-2">
                         <div className="flex items-center justify-between gap-2">
                             <Label className="text-xs text-muted-foreground flex items-center gap-2 font-medium">
                                 <Save className="h-3 w-3" /> {label}
@@ -430,9 +483,29 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                 {formatUpdateDate(updatedAt)}
                             </span>
                         </div>
+                        {(legacyText || entries.length > 0) && (
+                            <div className="max-h-44 space-y-2 overflow-y-auto rounded-md border bg-muted/20 p-2">
+                                {entries.map(entry => (
+                                    <div key={entry.id} className="rounded border bg-background px-3 py-2 text-sm">
+                                        <p className="whitespace-pre-wrap">{entry.text}</p>
+                                        <p className="mt-1 text-[10px] text-muted-foreground">
+                                            {formatUpdateDate(entry.createdAt)} · {entry.createdByName}
+                                        </p>
+                                    </div>
+                                ))}
+                                {legacyText && (
+                                    <div className="rounded border bg-background px-3 py-2 text-sm">
+                                        <p className="whitespace-pre-wrap">{legacyText}</p>
+                                        <p className="mt-1 text-[10px] text-muted-foreground">
+                                            Historial previo · {formatUpdateDate(updatedAt)}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         <Textarea
                             className="min-h-[70px] text-sm resize-none bg-background focus:bg-white transition-colors"
-                            placeholder={session.status === 'Closed' ? "Reunión cerrada" : placeholder}
+                            placeholder={session.status === 'Closed' ? "Reunión cerrada" : `Nuevo asiento: ${placeholder}`}
                             value={followUpDrafts[item.id]?.[field] ?? ''}
                             onChange={e => updateFollowUpDraft(item.id, field, e.target.value)}
                             disabled={session.status === 'Closed'}
@@ -444,13 +517,15 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                     variant="outline"
                                     className="h-7 text-xs"
                                     onClick={() => saveFollowUpField(session, item, field)}
+                                    disabled={!followUpDrafts[item.id]?.[field]?.trim()}
                                 >
-                                    Guardar
+                                    Agregar asiento
                                 </Button>
                             </div>
                         )}
                     </div>
-                ))}
+                    );
+                })}
 
                 {item.lastUpdate && (
                     <p className="text-[10px] text-muted-foreground text-right italic">

@@ -551,6 +551,14 @@ export type OpportunityAlertsConfig = Partial<Record<OpportunityStage, number>> 
 
 export type CoachingItemStatus = 'Pendiente' | 'En Proceso' | 'Completado' | 'Cancelado';
 
+export type CoachingFollowUpEntry = {
+  id: string;
+  text: string;
+  createdAt: string;
+  createdById: string;
+  createdByName: string;
+};
+
 export type CoachingItem = {
   id: string;
   taskId: string; 
@@ -563,10 +571,13 @@ export type CoachingItem = {
   advisorNotes?: string; 
   followUpDone?: string;
   followUpDoneUpdatedAt?: string;
+  followUpDoneEntries?: CoachingFollowUpEntry[];
   followUpCurrent?: string;
   followUpCurrentUpdatedAt?: string;
+  followUpCurrentEntries?: CoachingFollowUpEntry[];
   followUpNext?: string;
   followUpNextUpdatedAt?: string;
+  followUpNextEntries?: CoachingFollowUpEntry[];
   lastUpdate?: string; 
   origin?: 'manager' | 'advisor'; 
 };
