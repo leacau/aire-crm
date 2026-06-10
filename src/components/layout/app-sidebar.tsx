@@ -184,7 +184,7 @@ export function AppSidebar() {
       const allowedScreens: ScreenName[] = [];
 
       if (userInfo.role === 'Asesor Canjes' || userInfo.area === 'Canjes') {
-         allowedScreens.push('Dashboard', 'AppCanjes', 'Clients', 'Prospects', 'Canjes', 'Grilla', 'Notas');
+         allowedScreens.push('Dashboard', 'AppCanjes', 'Canjes');
       } 
       else if (userInfo.area === 'Pautado' || userInfo.area === 'Programación') {
          allowedScreens.push('Dashboard', 'Grilla', 'PNTs', 'Notas', 'Publicidad', 'Clients', 'Approvals');

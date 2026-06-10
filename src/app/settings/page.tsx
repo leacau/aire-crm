@@ -16,7 +16,7 @@ import { ArrowLeft, Shield, UploadCloud, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useDropzone } from 'react-dropzone';
 import { uploadAvatarToDrive } from '@/lib/google-avatar-service';
-import { updateUserProfile, getEmailWhitelist, updateEmailWhitelist } from '@/lib/firebase-service';
+import { updateUserProfile, getEmailWhitelist, updateEmailWhitelist, createExternalCanjeUser } from '@/lib/firebase-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -32,6 +32,8 @@ export default function SettingsPage() {
   const [whitelist, setWhitelist] = useState<string[]>([]);
   const [newEmail, setNewEmail] = useState('');
   const [whitelistLoading, setWhitelistLoading] = useState(false);
+  const [externalAccount, setExternalAccount] = useState({ name: '', email: '', password: '' });
+  const [externalAccountLoading, setExternalAccountLoading] = useState(false);
 
   const canManageSystem = userInfo ? hasManagementPrivileges(userInfo) || userInfo.role === 'Admin' || userInfo.role === 'Administracion' : false;
 
@@ -97,6 +99,23 @@ export default function SettingsPage() {
           toast({ title: 'Error al actualizar la lista', variant: 'destructive' });
       } finally {
           setWhitelistLoading(false);
+      }
+  };
+
+  const handleCreateExternalAccount = async () => {
+      if (!externalAccount.name.trim() || !externalAccount.email.trim() || externalAccount.password.length < 8) {
+          toast({ title: 'Completá nombre, correo y una contraseña de al menos 8 caracteres.', variant: 'destructive' });
+          return;
+      }
+      setExternalAccountLoading(true);
+      try {
+          await createExternalCanjeUser(externalAccount);
+          setExternalAccount({ name: '', email: '', password: '' });
+          toast({ title: 'Cuenta externa creada', description: 'La persona ya puede ingresar con correo y contraseña.' });
+      } catch (error: any) {
+          toast({ title: 'No se pudo crear la cuenta', description: error.message, variant: 'destructive' });
+      } finally {
+          setExternalAccountLoading(false);
       }
   };
 
@@ -223,6 +242,37 @@ export default function SettingsPage() {
            )}
 
            {/* 🟢 PANEL DE LISTA BLANCA DE CORREOS */}
+           {canManageSystem && (
+               <Card>
+                   <CardHeader>
+                       <CardTitle>Crear acceso externo para Canjes</CardTitle>
+                       <CardDescription>
+                           Crea una cuenta restringida al circuito de canjes. No necesita una cuenta Google ni permisos de Gmail o Calendar.
+                       </CardDescription>
+                   </CardHeader>
+                   <CardContent className="space-y-4">
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                           <div className="space-y-1">
+                               <Label>Nombre</Label>
+                               <Input value={externalAccount.name} onChange={event => setExternalAccount(prev => ({ ...prev, name: event.target.value }))} />
+                           </div>
+                           <div className="space-y-1">
+                               <Label>Correo</Label>
+                               <Input type="email" value={externalAccount.email} onChange={event => setExternalAccount(prev => ({ ...prev, email: event.target.value }))} />
+                           </div>
+                       </div>
+                       <div className="space-y-1">
+                           <Label>Contraseña inicial</Label>
+                           <Input type="password" value={externalAccount.password} onChange={event => setExternalAccount(prev => ({ ...prev, password: event.target.value }))} />
+                       </div>
+                       <Button onClick={handleCreateExternalAccount} disabled={externalAccountLoading}>
+                           {externalAccountLoading ? <Spinner size="small" color="white" /> : <Plus className="h-4 w-4" />}
+                           Crear cuenta restringida
+                       </Button>
+                   </CardContent>
+               </Card>
+           )}
+
            {canManageSystem && (
                <Card className="border-red-200">
                    <CardHeader className="bg-red-50/50">

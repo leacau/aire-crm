@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { 
-    getClients, createClient, createOpportunity, saveConvenioCanje, createAdvertisingOrder, 
+    getClients, createClient, createOpportunity, saveConvenioCanje, createAdvertisingOrder, createCanje, updateCanje,
     getPrograms, getProspects, getConveniosCanje, getOpportunityById, getAdvertisingOrdersByOpportunity, 
     updateOpportunity, updateConvenioCanje, updateAdvertisingOrder, deleteConvenioCanje 
 } from '@/lib/firebase-service';
@@ -327,7 +327,8 @@ export default function AppCanjesMobile() {
                     title: oppTitle,
                     value: Number(oppValue),
                     clientId: finalClientId,
-                    clientName: finalClientName
+                    clientName: finalClientName,
+                    isCanje: true,
                 }, userInfo!.id, userInfo!.name, clientOwnerName);
 
                 await updateConvenioCanje(editId, {
@@ -354,6 +355,22 @@ export default function AppCanjesMobile() {
                         sasItems: validSasItems,
                     }, userInfo!.id, userInfo!.name);
                 }
+                if (selectedCanjeDetail?.masterCanjeId) {
+                    await updateCanje(selectedCanjeDetail.masterCanjeId, {
+                        titulo: oppTitle,
+                        clienteId: finalClientId,
+                        clienteName: finalClientName,
+                        pedido: clienteEntrega,
+                        necesidadOrganizacion: clienteEntrega,
+                        observaciones: radioEntrega,
+                        valorAsociado: Number(oppValue),
+                        valorCanje: Number(oppValue),
+                        valorAcordado: Number(oppValue),
+                        modalidad: billingType === 'AVION' ? 'AVION' : 'Factura contra factura',
+                        fechaInicio: new Date(fechaInicio).toISOString(),
+                        fechaFin: new Date(fechaFin).toISOString(),
+                    }, userInfo!.id, userInfo!.name);
+                }
 
             } else {
                 // 🟢 FLUJO DE CREACIÓN NUEVA
@@ -367,6 +384,7 @@ export default function AppCanjesMobile() {
                     createdAt: new Date().toISOString(),
                     formaDePago: [],
                     periodicidad: [],
+                    isCanje: true,
                 }, userInfo!.id, userInfo!.name, clientOwnerName);
 
                 const canjeId = await saveConvenioCanje({
@@ -405,7 +423,51 @@ export default function AppCanjesMobile() {
                     createdBy: userInfo!.id
                 };
 
-                await createAdvertisingOrder(JSON.parse(JSON.stringify(adOrderPayload)));
+                const advertisingOrderId = await createAdvertisingOrder(JSON.parse(JSON.stringify(adOrderPayload)));
+                const monthKey = fechaInicio.slice(0, 7);
+                const masterCanjeId = await createCanje({
+                    titulo: oppTitle,
+                    clienteId: finalClientId,
+                    clienteName: finalClientName,
+                    asesorId: userInfo!.id,
+                    asesorName: userInfo!.name,
+                    pedido: clienteEntrega,
+                    necesidadOrganizacion: clienteEntrega,
+                    observaciones: radioEntrega,
+                    valorAsociado: Number(oppValue),
+                    valorCanje: Number(oppValue),
+                    valorAcordado: Number(oppValue),
+                    estado: 'En gestión',
+                    tipo: fechaInicio.slice(0, 7) === fechaFin.slice(0, 7) ? 'Una vez' : 'Mensual',
+                    modalidad: billingType === 'AVION' ? 'AVION' : 'Factura contra factura',
+                    fechaInicio: new Date(fechaInicio).toISOString(),
+                    fechaFin: new Date(fechaFin).toISOString(),
+                    opportunityId: oppId,
+                    convenioId: canjeId,
+                    advertisingOrderIds: [advertisingOrderId],
+                    historialMensual: [{
+                        mes: monthKey,
+                        estado: 'En ejecución',
+                        fechaEstado: new Date().toISOString(),
+                        valorCanje: Number(oppValue),
+                        observaciones: radioEntrega,
+                        recepciones: [{
+                            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+                            descripcion: clienteEntrega,
+                            valorTotal: Number(oppValue),
+                            estado: 'Pendiente',
+                        }],
+                        ordenesPublicidad: [{
+                            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+                            orderId: advertisingOrderId,
+                            descripcion: oppTitle,
+                            valorTotal: Number(oppValue),
+                        }],
+                        facturasCliente: [],
+                        facturasAire: [],
+                    }],
+                }, userInfo!.id, userInfo!.name);
+                await updateConvenioCanje(canjeId, { masterCanjeId }, userInfo!.id, userInfo!.name);
             }
 
             // 🟢 Generar PDFs y Enviar Email

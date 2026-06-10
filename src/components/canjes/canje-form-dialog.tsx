@@ -16,8 +16,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { Canje, CanjeEstado, CanjeTipo, Client, User, CanjeEstadoFinal, HistorialMensualItem, HistorialMensualEstado } from '@/lib/types';
-import { canjeEstados, canjeTipos, canjeEstadoFinalOptions, historialMensualEstados } from '@/lib/types';
+import type { Canje, CanjeEstado, CanjeTipo, Client, User, CanjeEstadoFinal, HistorialMensualItem, HistorialMensualEstado, CanjeModalidad, CanjeFactura, CanjeRecepcionItem, CanjeOrdenVinculada } from '@/lib/types';
+import { canjeEstados, canjeTipos, canjeEstadoFinalOptions, historialMensualEstados, canjeModalidades } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
 import { PlusCircle, Trash2, CalendarIcon, Edit, Check, X } from 'lucide-react';
@@ -33,7 +33,7 @@ type CanjeFormData = Omit<Canje, 'id' | 'fechaCreacion'>;
 interface CanjeFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (canjeData: CanjeFormData) => void;
+  onSave: (canjeData: CanjeFormData) => Promise<void>;
   canje?: Canje | null;
   clients: Client[];
   users: User[];
@@ -59,6 +59,10 @@ const initialFormData = (user: User): CanjeFormData => {
         comentarioFinal: '',
         fechaCulminacion: undefined,
         historialMensual: [],
+        modalidad: 'Factura contra factura',
+        necesidadOrganizacion: '',
+        valorAcordado: 0,
+        diferenciaPermitida: 0,
     };
 };
 
@@ -95,7 +99,7 @@ export function CanjeFormDialog({
   const { toast } = useToast();
 
   const isEditing = canje !== null;
-  const canManageAll = currentUser.role === 'Jefe' || currentUser.role === 'Gerencia' || currentUser.role === 'Administracion';
+  const canManageAll = currentUser.role === 'Jefe' || currentUser.role === 'Gerencia' || currentUser.role === 'Administracion' || currentUser.role === 'Admin';
 
   useEffect(() => {
     if (isOpen) {
@@ -116,15 +120,19 @@ export function CanjeFormDialog({
       return;
     }
     setIsSaving(true);
-    onSave(formData);
-    // onOpenChange(false); // Let the parent component handle closing
+    try {
+      await onSave(formData);
+      onOpenChange(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: (name === 'valorAsociado' || name === 'valorCanje') ? Number(value) : value,
+      [name]: (name === 'valorAsociado' || name === 'valorCanje' || name === 'valorAcordado' || name === 'diferenciaPermitida') ? Number(value) : value,
     }));
   };
 
@@ -158,8 +166,12 @@ export function CanjeFormDialog({
     }
     const newEntry: HistorialMensualItem = {
         mes: selectedMonth,
-        estado: 'Pendiente',
+        estado: 'Abierto',
         fechaEstado: new Date().toISOString(),
+        recepciones: [],
+        facturasCliente: [],
+        ordenesPublicidad: [],
+        facturasAire: [],
     };
     const newHistory = [...(formData.historialMensual || []), newEntry].sort((a, b) => b.mes.localeCompare(a.mes));
     setFormData(prev => ({...prev, historialMensual: newHistory }));
@@ -187,6 +199,48 @@ export function CanjeFormDialog({
   const canEditPedido = canManageAll || !isEditing;
   const canEditAsignacion = canManageAll && !formData.clienteId;
   const canEditNegociacion = isAssignedAdvisor && ['En gestión', 'Pedido'].includes(formData.estado);
+
+  const createRowId = () => typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+
+  const addMonthlyRow = (mes: string, field: 'recepciones' | 'facturasCliente' | 'ordenesPublicidad' | 'facturasAire') => {
+      const defaults = {
+          recepciones: { id: createRowId(), descripcion: '', valorTotal: 0, estado: 'Pendiente' } as CanjeRecepcionItem,
+          facturasCliente: { id: createRowId(), numero: '', monto: 0, empresa: 'CLIENTE' } as CanjeFactura,
+          ordenesPublicidad: { id: createRowId(), descripcion: '', valorTotal: 0 } as CanjeOrdenVinculada,
+          facturasAire: { id: createRowId(), numero: '', monto: 0, empresa: 'SRL' } as CanjeFactura,
+      };
+      const current = formData.historialMensual?.find(item => item.mes === mes)?.[field] || [];
+      handleHistoryChange(mes, field, [...current, defaults[field]]);
+  };
+
+  const updateMonthlyRow = (
+      mes: string,
+      field: 'recepciones' | 'facturasCliente' | 'ordenesPublicidad' | 'facturasAire',
+      rowId: string,
+      key: string,
+      value: string | number,
+  ) => {
+      const current = formData.historialMensual?.find(item => item.mes === mes)?.[field] || [];
+      handleHistoryChange(mes, field, current.map((row: any) => row.id === rowId ? { ...row, [key]: value } : row));
+  };
+
+  const removeMonthlyRow = (mes: string, field: 'recepciones' | 'facturasCliente' | 'ordenesPublicidad' | 'facturasAire', rowId: string) => {
+      const current = formData.historialMensual?.find(item => item.mes === mes)?.[field] || [];
+      handleHistoryChange(mes, field, current.filter((row: any) => row.id !== rowId));
+  };
+
+  const getCloseTotals = (item: HistorialMensualItem) => {
+      const recibido = (item.recepciones || []).reduce((sum, row) => sum + Number(row.valorTotal || 0), 0);
+      const facturadoCliente = (item.facturasCliente || []).reduce((sum, row) => sum + Number(row.monto || 0), 0);
+      const comprometido = (item.ordenesPublicidad || []).reduce((sum, row) => sum + Number(row.valorTotal || 0), 0);
+      const facturadoAire = (item.facturasAire || []).reduce((sum, row) => sum + Number(row.monto || 0), 0);
+      const compensado = formData.modalidad === 'AVION' ? comprometido : facturadoAire;
+      const baseRecibida = formData.modalidad === 'AVION' ? recibido : facturadoCliente;
+      const diferencia = baseRecibida - compensado;
+      return { recibido, facturadoCliente, comprometido, facturadoAire, compensado, baseRecibida, diferencia };
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -232,8 +286,45 @@ export function CanjeFormDialog({
             </div>
           </fieldset>
 
+          <fieldset className="space-y-4 p-4 border rounded-md">
+            <legend className="font-semibold px-1 text-primary">2. Acuerdo económico</legend>
+            <div className="space-y-2">
+              <Label htmlFor="necesidadOrganizacion">Necesidad que origina el canje</Label>
+              <Textarea
+                id="necesidadOrganizacion"
+                name="necesidadOrganizacion"
+                value={formData.necesidadOrganizacion || ''}
+                onChange={handleChange}
+                placeholder="Qué necesita recibir la organización y por qué."
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Modalidad</Label>
+                <Select value={formData.modalidad || 'Factura contra factura'} onValueChange={(value: CanjeModalidad) => handleSelectChange('modalidad', value)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {canjeModalidades.map(modalidad => <SelectItem key={modalidad} value={modalidad}>{modalidad === 'AVION' ? 'AVIÓN - sin facturación' : modalidad}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="valorAcordado">Valor acordado total con IVA</Label>
+                <Input id="valorAcordado" name="valorAcordado" type="number" value={formData.valorAcordado || ''} onChange={handleChange} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fechaInicio">Inicio del acuerdo</Label>
+                <Input id="fechaInicio" name="fechaInicio" type="date" value={formData.fechaInicio?.split('T')[0] || ''} onChange={handleChange} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fechaFin">Fin del acuerdo</Label>
+                <Input id="fechaFin" name="fechaFin" type="date" value={formData.fechaFin?.split('T')[0] || ''} onChange={handleChange} />
+              </div>
+            </div>
+          </fieldset>
+
           <fieldset disabled={!canEditAsignacion && isEditing} className="space-y-4 p-4 border rounded-md">
-            <legend className="font-semibold px-1 text-primary">2. Asignación</legend>
+            <legend className="font-semibold px-1 text-primary">3. Asignación</legend>
              {!formData.clienteId ? ( 
                 <div className="space-y-2">
                   <Label htmlFor="clienteId">Cliente</Label>
@@ -315,9 +406,9 @@ export function CanjeFormDialog({
             </>
           )}
            
-          {isEditing && formData.tipo === 'Mensual' && (
+          {(
                 <fieldset className="space-y-4 p-4 border rounded-md">
-                    <legend className="font-semibold px-1 text-primary">3. Historial y Gestión Mensual</legend>
+                    <legend className="font-semibold px-1 text-primary">4. Cierres y conciliación</legend>
                     <div className="flex items-end gap-2">
                          <div className="flex-1 space-y-1">
                             <Label htmlFor="month-selector">Seleccionar Mes a Registrar</Label>
@@ -387,6 +478,21 @@ export function CanjeFormDialog({
                                                 <TableRow>
                                                     <TableCell colSpan={5} className="p-0">
                                                         <div className="p-4 bg-muted/50 space-y-4">
+                                                            {(() => {
+                                                                const totals = getCloseTotals(item);
+                                                                const withinAuthorizedDifference = Math.abs(totals.diferencia) <= Number(item.diferenciaAutorizada || 0);
+                                                                return (
+                                                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                                                                        <div className="rounded border bg-white p-3"><p className="text-xs text-muted-foreground">Recibido</p><p className="font-semibold">${totals.baseRecibida.toLocaleString('es-AR')}</p></div>
+                                                                        <div className="rounded border bg-white p-3"><p className="text-xs text-muted-foreground">Pauta comprometida</p><p className="font-semibold">${totals.comprometido.toLocaleString('es-AR')}</p></div>
+                                                                        <div className="rounded border bg-white p-3"><p className="text-xs text-muted-foreground">Compensado</p><p className="font-semibold">${totals.compensado.toLocaleString('es-AR')}</p></div>
+                                                                        <div className={cn("rounded border p-3", totals.diferencia === 0 || withinAuthorizedDifference ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")}>
+                                                                            <p className="text-xs text-muted-foreground">Saldo</p><p className="font-semibold">${totals.diferencia.toLocaleString('es-AR')}</p>
+                                                                        </div>
+                                                                        <div className="rounded border bg-white p-3"><p className="text-xs text-muted-foreground">Modalidad</p><p className="font-semibold text-sm">{formData.modalidad === 'AVION' ? 'AVIÓN' : 'Fiscal'}</p></div>
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                              <div className="grid grid-cols-2 gap-4">
                                                                 <div className="space-y-2">
                                                                     <Label>Valor Canje (Mes)</Label>
@@ -397,6 +503,92 @@ export function CanjeFormDialog({
                                                                     <Textarea value={item.observaciones || ''} onChange={(e) => handleHistoryChange(item.mes, 'observaciones', e.target.value)} disabled={!isAssignedAdvisor} />
                                                                 </div>
                                                              </div>
+                                                             <div className="space-y-3 rounded-md border bg-background p-4">
+                                                                <div className="flex items-center justify-between">
+                                                                    <h4 className="font-semibold text-sm">Productos y servicios recibidos</h4>
+                                                                    <Button type="button" variant="outline" size="sm" onClick={() => addMonthlyRow(item.mes, 'recepciones')}>
+                                                                        <PlusCircle className="mr-2 h-4 w-4" /> Agregar
+                                                                    </Button>
+                                                                </div>
+                                                                {(item.recepciones || []).map(row => (
+                                                                    <div key={row.id} className="grid grid-cols-[1fr_140px_36px] gap-2">
+                                                                        <Input value={row.descripcion} onChange={event => updateMonthlyRow(item.mes, 'recepciones', row.id, 'descripcion', event.target.value)} placeholder="Producto o servicio recibido" />
+                                                                        <Input type="number" value={row.valorTotal || ''} onChange={event => updateMonthlyRow(item.mes, 'recepciones', row.id, 'valorTotal', Number(event.target.value))} placeholder="Total con IVA" />
+                                                                        <Button type="button" size="icon" variant="ghost" className="text-destructive" onClick={() => removeMonthlyRow(item.mes, 'recepciones', row.id)}><Trash2 className="h-4 w-4" /></Button>
+                                                                    </div>
+                                                                ))}
+                                                             </div>
+                                                             {formData.modalidad !== 'AVION' && (
+                                                                <div className="space-y-3 rounded-md border bg-background p-4">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <h4 className="font-semibold text-sm">Facturas recibidas del cliente</h4>
+                                                                        <Button type="button" variant="outline" size="sm" onClick={() => addMonthlyRow(item.mes, 'facturasCliente')}><PlusCircle className="mr-2 h-4 w-4" /> Agregar</Button>
+                                                                    </div>
+                                                                    {(item.facturasCliente || []).map(row => (
+                                                                        <div key={row.id} className="grid grid-cols-[1fr_140px_36px] gap-2">
+                                                                            <Input value={row.numero} onChange={event => updateMonthlyRow(item.mes, 'facturasCliente', row.id || '', 'numero', event.target.value)} placeholder="Número de factura" />
+                                                                            <Input type="number" value={row.monto || ''} onChange={event => updateMonthlyRow(item.mes, 'facturasCliente', row.id || '', 'monto', Number(event.target.value))} placeholder="Total con IVA" />
+                                                                            <Button type="button" size="icon" variant="ghost" className="text-destructive" onClick={() => removeMonthlyRow(item.mes, 'facturasCliente', row.id || '')}><Trash2 className="h-4 w-4" /></Button>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                             )}
+                                                             <div className="space-y-3 rounded-md border bg-background p-4">
+                                                                <div className="flex items-center justify-between">
+                                                                    <h4 className="font-semibold text-sm">Órdenes de publicidad</h4>
+                                                                    <Button type="button" variant="outline" size="sm" onClick={() => addMonthlyRow(item.mes, 'ordenesPublicidad')}><PlusCircle className="mr-2 h-4 w-4" /> Vincular</Button>
+                                                                </div>
+                                                                {(item.ordenesPublicidad || []).map(row => (
+                                                                    <div key={row.id} className="grid grid-cols-[140px_1fr_140px_36px] gap-2">
+                                                                        <Input value={row.orderId || ''} onChange={event => updateMonthlyRow(item.mes, 'ordenesPublicidad', row.id, 'orderId', event.target.value)} placeholder="ID de orden" />
+                                                                        <Input value={row.descripcion} onChange={event => updateMonthlyRow(item.mes, 'ordenesPublicidad', row.id, 'descripcion', event.target.value)} placeholder="Descripción" />
+                                                                        <Input type="number" value={row.valorTotal || ''} onChange={event => updateMonthlyRow(item.mes, 'ordenesPublicidad', row.id, 'valorTotal', Number(event.target.value))} placeholder="Valor total" />
+                                                                        <Button type="button" size="icon" variant="ghost" className="text-destructive" onClick={() => removeMonthlyRow(item.mes, 'ordenesPublicidad', row.id)}><Trash2 className="h-4 w-4" /></Button>
+                                                                    </div>
+                                                                ))}
+                                                             </div>
+                                                             {formData.modalidad !== 'AVION' && (
+                                                                <div className="space-y-3 rounded-md border bg-background p-4">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <h4 className="font-semibold text-sm">Facturas emitidas por Aire</h4>
+                                                                        <Button type="button" variant="outline" size="sm" onClick={() => addMonthlyRow(item.mes, 'facturasAire')}><PlusCircle className="mr-2 h-4 w-4" /> Agregar</Button>
+                                                                    </div>
+                                                                    {(item.facturasAire || []).map(row => (
+                                                                        <div key={row.id} className="grid grid-cols-[100px_1fr_140px_36px] gap-2">
+                                                                            <Select value={row.empresa || 'SRL'} onValueChange={value => updateMonthlyRow(item.mes, 'facturasAire', row.id || '', 'empresa', value)}>
+                                                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                                                <SelectContent><SelectItem value="SRL">SRL</SelectItem><SelectItem value="SAS">SAS</SelectItem></SelectContent>
+                                                                            </Select>
+                                                                            <Input value={row.numero} onChange={event => updateMonthlyRow(item.mes, 'facturasAire', row.id || '', 'numero', event.target.value)} placeholder="Número de factura" />
+                                                                            <Input type="number" value={row.monto || ''} onChange={event => updateMonthlyRow(item.mes, 'facturasAire', row.id || '', 'monto', Number(event.target.value))} placeholder="Total con IVA" />
+                                                                            <Button type="button" size="icon" variant="ghost" className="text-destructive" onClick={() => removeMonthlyRow(item.mes, 'facturasAire', row.id || '')}><Trash2 className="h-4 w-4" /></Button>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                             )}
+                                                             {canManageAll && (
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+                                                                    <div className="space-y-2">
+                                                                        <Label>Diferencia autorizada</Label>
+                                                                        <Input type="number" value={item.diferenciaAutorizada || ''} onChange={event => handleHistoryChange(item.mes, 'diferenciaAutorizada', Number(event.target.value))} />
+                                                                    </div>
+                                                                    <div className="space-y-2">
+                                                                        <Label>Motivo de la diferencia</Label>
+                                                                        <Textarea value={item.motivoDiferencia || ''} onChange={event => handleHistoryChange(item.mes, 'motivoDiferencia', event.target.value)} />
+                                                                    </div>
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="sm"
+                                                                        onClick={() => {
+                                                                            handleHistoryChange(item.mes, 'diferenciaAutorizadaPorId', currentUser.id);
+                                                                            handleHistoryChange(item.mes, 'diferenciaAutorizadaPorName', currentUser.name);
+                                                                            handleHistoryChange(item.mes, 'diferenciaAutorizadaAt', new Date().toISOString());
+                                                                        }}
+                                                                    >
+                                                                        Autorizar diferencia
+                                                                    </Button>
+                                                                </div>
+                                                             )}
                                                              <div className="p-4 border rounded-md bg-background space-y-4">
                                                                 <h4 className="font-semibold text-sm">Aprobación del Mes</h4>
                                                                 <div className="grid grid-cols-2 gap-4">

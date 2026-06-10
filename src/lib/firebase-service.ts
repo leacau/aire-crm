@@ -1678,11 +1678,6 @@ export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>
         }
     });
     
-    if (dataToSave.historialMensual) {
-      delete dataToSave.historialMensual;
-    }
-
-
     const docRef = await addDoc(collections.canjes, dataToSave);
     invalidateCache('canjes');
     
@@ -2573,6 +2568,24 @@ export const syncRegisteredUsersFromAuth = async (): Promise<{ total: number; cr
   }
 
   const result = await response.json();
+  invalidateCache('users');
+  return result;
+};
+
+export const createExternalCanjeUser = async (data: { name: string; email: string; password: string }) => {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error('Debes iniciar sesión.');
+  const token = await currentUser.getIdToken();
+  const response = await fetch('/api/admin/users/external', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'No se pudo crear la cuenta externa.');
   invalidateCache('users');
   return result;
 };
@@ -5042,6 +5055,84 @@ export const deleteConvenioCanje = async (
         details: `eliminó un Convenio de Canje y su Orden de Publicidad asociada`,
         ownerName: userName,
     });
+};
+
+export const migrateLegacyConveniosToCanjes = async (
+    userId: string,
+    userName: string,
+): Promise<{ created: number; skipped: number }> => {
+    const [convenios, existingCanjes] = await Promise.all([getConveniosCanje(), getCanjes()]);
+    const existingConvenioIds = new Set(existingCanjes.map(canje => canje.convenioId).filter(Boolean));
+    let created = 0;
+    let skipped = 0;
+
+    for (const convenio of convenios) {
+        if (!convenio.id || existingConvenioIds.has(convenio.id) || convenio.masterCanjeId) {
+            skipped += 1;
+            continue;
+        }
+
+        const [opportunity, orders] = await Promise.all([
+            getOpportunityById(convenio.opportunityId),
+            getAdvertisingOrdersByOpportunity(convenio.opportunityId),
+        ]);
+        const value = Number(opportunity?.value || 0);
+        const month = (convenio.fechaInicio || convenio.createdAt).slice(0, 7);
+        const billingText = convenio.observaciones || '';
+        const modalidad = billingText.includes('AVION') || billingText.includes('AVIÓN')
+            ? 'AVION'
+            : 'Factura contra factura';
+
+        const masterCanjeId = await createCanje({
+            titulo: opportunity?.title || `Canje ${convenio.clientName}`,
+            clienteId: convenio.clientId,
+            clienteName: convenio.clientName,
+            asesorId: convenio.advisorId,
+            asesorName: convenio.advisorName,
+            pedido: convenio.clienteEntrega,
+            necesidadOrganizacion: convenio.clienteEntrega,
+            observaciones: convenio.radioEntrega,
+            valorAsociado: value,
+            valorCanje: value,
+            valorAcordado: value,
+            estado: 'En gestión',
+            tipo: convenio.fechaInicio.slice(0, 7) === convenio.fechaFin.slice(0, 7) ? 'Una vez' : 'Mensual',
+            modalidad,
+            fechaInicio: convenio.fechaInicio,
+            fechaFin: convenio.fechaFin,
+            opportunityId: convenio.opportunityId,
+            convenioId: convenio.id,
+            advertisingOrderIds: orders.map(order => order.id).filter((id): id is string => Boolean(id)),
+            migratedFromConvenio: true,
+            historialMensual: [{
+                mes: month,
+                estado: 'En ejecución',
+                fechaEstado: new Date().toISOString(),
+                valorCanje: value,
+                recepciones: [{
+                    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+                    descripcion: convenio.clienteEntrega,
+                    valorTotal: value,
+                    estado: 'Pendiente',
+                }],
+                ordenesPublicidad: orders.map(order => ({
+                    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+                    orderId: order.id,
+                    descripcion: order.product || opportunity?.title || 'Orden de publicidad',
+                    valorTotal: Number(order.totalOrder || value),
+                })),
+                facturasCliente: [],
+                facturasAire: [],
+            }],
+        }, userId, userName);
+
+        await updateConvenioCanje(convenio.id, { masterCanjeId }, userId, userName);
+        created += 1;
+    }
+
+    invalidateCache('canjes');
+    invalidateCache('convenios_canje');
+    return { created, skipped };
 };
 
 // --- Mantenimiento Automático ---

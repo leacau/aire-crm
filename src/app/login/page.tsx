@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithPopup, signInWithEmailAndPassword, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -13,6 +13,9 @@ import Image from 'next/image';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const [externalLoading, setExternalLoading] = useState(false);
+  const [externalEmail, setExternalEmail] = useState('');
+  const [externalPassword, setExternalPassword] = useState('');
   const router = useRouter();
   const { toast } = useToast();
 
@@ -21,12 +24,8 @@ export default function LoginPage() {
     try {
       const provider = new GoogleAuthProvider();
 
-      provider.addScope('https://www.googleapis.com/auth/calendar.events');
-      provider.addScope('https://www.googleapis.com/auth/gmail.send');
-
       provider.setCustomParameters({
         prompt: 'select_account',
-        include_granted_scopes: 'true',
       });
 
       await signInWithPopup(auth, provider);
@@ -49,6 +48,24 @@ export default function LoginPage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExternalLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!externalEmail.trim() || !externalPassword) return;
+    setExternalLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, externalEmail.trim().toLowerCase(), externalPassword);
+      router.push('/');
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'No se pudo iniciar sesión',
+        description: 'Revisá el correo y la contraseña asignados por administración.',
+      });
+    } finally {
+      setExternalLoading(false);
     }
   };
 
@@ -94,6 +111,39 @@ export default function LoginPage() {
               </>
             )}
           </Button>
+          <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            Acceso externo
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <form className="space-y-3" onSubmit={handleExternalLogin}>
+            <div className="space-y-1">
+              <label htmlFor="external-email" className="text-sm font-medium">Correo</label>
+              <input
+                id="external-email"
+                type="email"
+                autoComplete="email"
+                value={externalEmail}
+                onChange={event => setExternalEmail(event.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="external-password" className="text-sm font-medium">Contraseña</label>
+              <input
+                id="external-password"
+                type="password"
+                autoComplete="current-password"
+                value={externalPassword}
+                onChange={event => setExternalPassword(event.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <Button type="submit" variant="outline" className="w-full" disabled={externalLoading || !externalEmail || !externalPassword}>
+              {externalLoading ? <Spinner className="mr-2" /> : null}
+              Ingresar
+            </Button>
+          </form>
         </CardContent>
         <CardFooter className="flex flex-col gap-2 justify-center border-t pt-4 text-xs text-muted-foreground">
           <div className="flex gap-4">

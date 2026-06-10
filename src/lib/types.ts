@@ -180,6 +180,7 @@ export type Opportunity = {
   endDate?: string;          
   periodHistory?: OpportunityPeriod[];
   ownerId?: string;
+  isCanje?: boolean;
 };
 
 export type OpportunityPeriod = {
@@ -334,12 +335,40 @@ export const canjeEstadoFinalOptions = ['Total', 'Parcial'] as const;
 export type CanjeEstadoFinal = typeof canjeEstadoFinalOptions[number];
 
 export type CanjeFactura = {
+    id?: string;
     numero: string;
     monto: number;
+    fecha?: string;
+    empresa?: 'CLIENTE' | 'SRL' | 'SAS';
+    archivoUrl?: string;
 };
 
-export type HistorialMensualEstado = 'Pendiente' | 'Aprobado' | 'Rechazado';
-export const historialMensualEstados: HistorialMensualEstado[] = ['Pendiente', 'Aprobado', 'Rechazado'];
+export type CanjeModalidad = 'Factura contra factura' | 'AVION';
+export const canjeModalidades: CanjeModalidad[] = ['Factura contra factura', 'AVION'];
+
+export type CanjeCierreEstado = 'Abierto' | 'En ejecución' | 'Pendiente de conciliación' | 'Conciliado' | 'Conciliado con diferencia' | 'Observado';
+export const canjeCierreEstados: CanjeCierreEstado[] = ['Abierto', 'En ejecución', 'Pendiente de conciliación', 'Conciliado', 'Conciliado con diferencia', 'Observado'];
+
+export type CanjeRecepcionItem = {
+    id: string;
+    descripcion: string;
+    cantidad?: number;
+    valorUnitario?: number;
+    valorTotal: number;
+    fechaRecepcion?: string;
+    estado?: 'Pendiente' | 'Parcial' | 'Recibido';
+};
+
+export type CanjeOrdenVinculada = {
+    id: string;
+    orderId?: string;
+    descripcion: string;
+    valorTotal: number;
+    fecha?: string;
+};
+
+export type HistorialMensualEstado = CanjeCierreEstado | 'Pendiente' | 'Aprobado' | 'Rechazado';
+export const historialMensualEstados: HistorialMensualEstado[] = [...canjeCierreEstados, 'Pendiente', 'Aprobado', 'Rechazado'];
 
 export type HistorialMensualItem = {
     mes: string; 
@@ -355,6 +384,15 @@ export type HistorialMensualItem = {
     fechaCulminacion?: string;
     culminadoPorId?: string;
     culminadoPorName?: string;
+    recepciones?: CanjeRecepcionItem[];
+    facturasCliente?: CanjeFactura[];
+    ordenesPublicidad?: CanjeOrdenVinculada[];
+    facturasAire?: CanjeFactura[];
+    diferenciaAutorizada?: number;
+    motivoDiferencia?: string;
+    diferenciaAutorizadaPorId?: string;
+    diferenciaAutorizadaPorName?: string;
+    diferenciaAutorizadaAt?: string;
 };
 
 export type Canje = {
@@ -379,6 +417,16 @@ export type Canje = {
   culminadoPorId?: string;
   culminadoPorName?: string;
   historialMensual?: HistorialMensualItem[];
+  modalidad?: CanjeModalidad;
+  necesidadOrganizacion?: string;
+  fechaInicio?: string;
+  fechaFin?: string;
+  valorAcordado?: number;
+  diferenciaPermitida?: number;
+  opportunityId?: string;
+  convenioId?: string;
+  advertisingOrderIds?: string[];
+  migratedFromConvenio?: boolean;
 };
 
 export type UserRole = 'Asesor' | 'Administracion' | 'Admin' | 'Jefe' | 'Gerencia' | 'Import' | 'Asesor Canjes';
@@ -431,6 +479,7 @@ export type User = {
   role: UserRole;
   area?: AreaType;
   managerId?: string;
+  externalUser?: boolean;
   initials?: string;
   photoURL?: string;
   deletedAt?: string;
@@ -908,6 +957,7 @@ export type ConvenioCanje = {
   observaciones?: string;
   createdAt: string;
   updatedAt?: string;
+  masterCanjeId?: string;
 };
 
 export type PipelineInteraction = {

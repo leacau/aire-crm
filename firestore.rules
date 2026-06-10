@@ -16,6 +16,22 @@ service cloud.firestore {
           in ['Jefe', 'Gerencia', 'Administracion', 'Admin'];
     }
 
+    function isCanjeOperator() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Asesor Canjes';
+    }
+
+    function canOperateCanjeClient(clientId) {
+      return isSignedIn()
+        && (
+          isClientOwner(clientId)
+          || (
+            isCanjeOperator()
+            && get(/databases/$(database)/documents/clients/$(clientId)).data.allowCanjes == true
+          )
+        );
+    }
+
     function createsOwnField(fieldName) {
       return isSignedIn() && request.resource.data[fieldName] == request.auth.uid;
     }
@@ -99,8 +115,11 @@ service cloud.firestore {
 
     match /opportunities/{oppId} {
       allow read, list: if isSignedIn();
-      allow create: if ownsClientOnRequest() || isManagement();
-      allow update, delete: if ownsClientOnResource() || isManagement();
+      allow create: if ownsClientOnRequest() || isManagement()
+        || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId));
+      allow update: if ownsClientOnResource() || isManagement()
+        || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId));
+      allow delete: if ownsClientOnResource() || isManagement();
     }
 
     match /commercial_notes/{noteId} {
@@ -152,8 +171,11 @@ service cloud.firestore {
 
     match /advertising_orders/{orderId} {
       allow read: if isSignedIn();
-      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
-      allow update, delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
+      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement()
+        || (isCanjeOperator() && request.resource.data.canjeId is string && canOperateCanjeClient(request.resource.data.clientId));
+      allow update: if isActorOnResource() || ownsClientOnResource() || isManagement()
+        || (isCanjeOperator() && resource.data.canjeId is string && canOperateCanjeClient(resource.data.clientId));
+      allow delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
     }
 
     match /social_media_requests/{requestId} {

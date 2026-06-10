@@ -6,11 +6,11 @@ import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'reac
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Trash2 } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Trash2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Canje, Client, User } from '@/lib/types';
-import { getCanjes, getClients, getAllUsers, createCanje, updateCanje, deleteCanje } from '@/lib/firebase-service';
+import { getCanjes, getClients, getAllUsers, createCanje, updateCanje, deleteCanje, migrateLegacyConveniosToCanjes } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
@@ -50,6 +50,7 @@ function CanjesPageComponent() {
   
   const [sorting, setSorting] = useState<SortingState>([]);
   const [canjeToDelete, setCanjeToDelete] = useState<Canje | null>(null);
+  const [migrating, setMigrating] = useState(false);
   
   const canManageAll = isBoss || userInfo?.role === 'Administracion';
 
@@ -127,6 +128,24 @@ function CanjesPageComponent() {
       setCanjeToDelete(null);
     }
   };
+
+  const handleMigrateLegacy = async () => {
+    if (!userInfo || !canManageAll) return;
+    setMigrating(true);
+    try {
+      const result = await migrateLegacyConveniosToCanjes(userInfo.id, userInfo.name);
+      toast({
+        title: 'Integración finalizada',
+        description: `${result.created} canjes incorporados; ${result.skipped} ya estaban integrados.`,
+      });
+      await fetchData();
+    } catch (error) {
+      console.error('Error migrating legacy canjes:', error);
+      toast({ title: 'No se pudieron integrar los canjes anteriores', variant: 'destructive' });
+    } finally {
+      setMigrating(false);
+    }
+  };
   
   const filteredCanjes = useMemo(() => {
     if (!userInfo || !userInfo.id) return [];
@@ -164,9 +183,36 @@ function CanjesPageComponent() {
       cell: ({ row }) => <Badge variant={row.original.tipo === 'Temporario' ? 'secondary' : 'default'}>{row.original.tipo}</Badge>,
     },
     {
+      accessorKey: 'modalidad',
+      header: 'Modalidad',
+      cell: ({ row }) => (
+        <Badge variant="outline">
+          {row.original.modalidad === 'AVION' ? 'AVIÓN' : row.original.modalidad || 'Sin definir'}
+        </Badge>
+      ),
+    },
+    {
       accessorKey: 'valorCanje',
       header: () => <div className="text-right">Valor Canje</div>,
       cell: ({ row }) => <div className="text-right">${(row.original.valorCanje || 0).toLocaleString('es-AR')}</div>,
+    },
+    {
+      id: 'saldo',
+      header: () => <div className="text-right">Saldo</div>,
+      cell: ({ row }) => {
+        const canje = row.original;
+        const totals = (canje.historialMensual || []).reduce((acc, cierre) => {
+          const recibido = canje.modalidad === 'AVION'
+            ? (cierre.recepciones || []).reduce((sum, item) => sum + Number(item.valorTotal || 0), 0)
+            : (cierre.facturasCliente || []).reduce((sum, invoice) => sum + Number(invoice.monto || 0), 0);
+          const compensado = canje.modalidad === 'AVION'
+            ? (cierre.ordenesPublicidad || []).reduce((sum, order) => sum + Number(order.valorTotal || 0), 0)
+            : (cierre.facturasAire || []).reduce((sum, invoice) => sum + Number(invoice.monto || 0), 0);
+          return { recibido: acc.recibido + recibido, compensado: acc.compensado + compensado };
+        }, { recibido: 0, compensado: 0 });
+        const saldo = totals.recibido - totals.compensado;
+        return <div className={cn("text-right font-medium", saldo === 0 ? "text-green-700" : "text-amber-700")}>${saldo.toLocaleString('es-AR')}</div>;
+      },
     },
     {
       accessorKey: 'fechaCreacion',
@@ -220,6 +266,12 @@ function CanjesPageComponent() {
     <>
       <div className="flex flex-col h-full">
         <Header title="Canjes">
+          {canManageAll && (
+            <Button variant="outline" onClick={handleMigrateLegacy} disabled={migrating}>
+              <RefreshCw className={cn("mr-2 h-4 w-4", migrating && "animate-spin")} />
+              Integrar anteriores
+            </Button>
+          )}
           <Button onClick={() => handleOpenForm()}>
             <PlusCircle className="mr-2" />
             Nuevo Pedido de Canje

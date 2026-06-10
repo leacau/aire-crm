@@ -83,14 +83,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const email = firebaseUser.email?.toLowerCase() || '';
         const isAuthorizedDomain = email.endsWith('@airedesantafe.com.ar') || email.endsWith('@airedigital.com');
         const isHardcodedException = email === 'leandrochena@gmail.com';
+        const profile = await getUserProfile(firebaseUser.uid);
+        const isManagedExternalUser = profile?.externalUser === true && profile?.role === 'Asesor Canjes';
 
         let isWhitelisted = false;
-        if (!isAuthorizedDomain && !isHardcodedException) {
+        if (!isAuthorizedDomain && !isHardcodedException && !isManagedExternalUser) {
             const whitelist = await getEmailWhitelist();
             isWhitelisted = whitelist.some(w => w.toLowerCase().trim() === email);
         }
 
-        if (!isAuthorizedDomain && !isHardcodedException && !isWhitelisted) {
+        if (!isAuthorizedDomain && !isHardcodedException && !isWhitelisted && !isManagedExternalUser) {
             await auth.signOut();
             clearStoredToken();
             setUser(null);
@@ -108,10 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(firebaseUser);
         
         try {
-            const [profile] = await Promise.all([
-                getUserProfile(firebaseUser.uid),
-                initializePermissions()
-            ]);
+            await initializePermissions();
             
             if (profile) {
               const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';

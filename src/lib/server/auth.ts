@@ -42,7 +42,7 @@ export function isServerResponse(value: ServerUser | NextResponse): value is Nex
 
 export function hasServerManagementPrivileges(user: ServerUser): boolean {
   if (user.email?.toLowerCase() === 'lchena@airedesantafe.com.ar') return true;
-  return user.role === 'Jefe' || user.role === 'Gerencia' || user.role === 'Administracion';
+  return user.role === 'Jefe' || user.role === 'Gerencia' || user.role === 'Administracion' || user.role === 'Admin';
 }
 
 export async function requireServerManagement(request: Request): Promise<ServerUser | NextResponse> {
