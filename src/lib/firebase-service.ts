@@ -4314,25 +4314,27 @@ export const addItemsToSession = async (sessionId: string, newItems: CoachingIte
             );
 
             if (existingItemIndex >= 0) {
-                // El ítem ya existe y está activo: Agregamos a la bitácora de 'action' o 'advisorNotes'
+                // El ítem ya existe y está activo: agregamos una indicación o un asiento independiente.
                 const existingItem = currentItems[existingItemIndex];
-                const dateStr = format(new Date(), "dd/MM HH:mm");
-                const newText = `[Agregado ${dateStr}] ${newItem.action}`;
+                const now = new Date().toISOString();
+                const newEntry = {
+                    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+                    text: newItem.action,
+                    createdAt: now,
+                    createdById: sessionData.advisorId,
+                    createdByName: sessionData.advisorName,
+                };
                 
                 currentItems[existingItemIndex] = {
                     ...existingItem,
-                    // Si el origen es del manager, sumamos al action. Si es del asesor, sumamos a advisorNotes.
                     action: newItem.origin === 'manager' 
-                        ? (existingItem.action ? `${existingItem.action}\n\n${newText}` : newText)
+                        ? (existingItem.action ? `${existingItem.action}\n\n${newItem.action}` : newItem.action)
                         : existingItem.action,
-                    advisorNotes: newItem.origin === 'advisor'
-                        ? (existingItem.advisorNotes ? `${existingItem.advisorNotes}\n\n${newText}` : newText)
-                        : existingItem.advisorNotes,
-                    followUpDone: newItem.origin === 'advisor'
-                        ? (existingItem.followUpDone || existingItem.advisorNotes ? `${existingItem.followUpDone || existingItem.advisorNotes}\n\n${newText}` : newText)
-                        : existingItem.followUpDone,
-                    followUpDoneUpdatedAt: newItem.origin === 'advisor' ? new Date().toISOString() : existingItem.followUpDoneUpdatedAt,
-                    lastUpdate: new Date().toISOString()
+                    followUpDoneEntries: newItem.origin === 'advisor'
+                        ? [...(existingItem.followUpDoneEntries || []), newEntry]
+                        : existingItem.followUpDoneEntries,
+                    followUpDoneUpdatedAt: newItem.origin === 'advisor' ? now : existingItem.followUpDoneUpdatedAt,
+                    lastUpdate: now,
                 };
                 hasChanges = true;
             } else {
@@ -5042,81 +5044,6 @@ export const deleteConvenioCanje = async (
     });
 };
 
-const autoUpdateCoachingSessionLegacy = async (
-    advisorId: string,
-    advisorName: string,
-    entityType: 'client' | 'prospect',
-    entityId: string,
-    entityName: string,
-    actionText: string
-) => {
-    if (!advisorId || !entityId) return;
-
-    // 1. Obtener sesión abierta optimizada (Costo: 0 lecturas de Firebase si ya está en caché local)
-    let openSession = await getOpenCoachingSession(advisorId);
-
-    // 2. Crear sesión si no existe
-    if (!openSession) {
-        const newSessionId = await createCoachingSession({
-            advisorId: advisorId,
-            advisorName: advisorName,
-            managerId: advisorId,
-            managerName: 'Sistema Automático',
-            date: new Date().toISOString(),
-            items: [],
-            generalNotes: ''
-        }, advisorId, 'Sistema');
-        openSession = { id: newSessionId, items: [], advisorId } as any;
-    }
-
-    const dateStr = format(new Date(), "dd/MM HH:mm");
-    const newText = `[Agregado ${dateStr}] ${actionText}`;
-
-    // 3. Trabajar los arrays directamente en la memoria del navegador (Sin consultar a Firebase)
-    let updatedItems = [...(openSession!.items || [])];
-    
-    const existingItemIndex = updatedItems.findIndex(i => 
-        i.entityId === entityId && 
-        (i.status === 'Pendiente' || i.status === 'En Proceso')
-    );
-
-    if (existingItemIndex >= 0) {
-        // Modificar ítem existente
-        const existingItem = updatedItems[existingItemIndex];
-        const updatedAdvisorNotes = existingItem.advisorNotes 
-            ? `${existingItem.advisorNotes}\n\n${newText}` 
-            : newText;
-        
-        updatedItems[existingItemIndex] = {
-            ...existingItem,
-            advisorNotes: updatedAdvisorNotes,
-            lastUpdate: new Date().toISOString()
-        };
-    } else {
-        // Crear nuevo ítem en la bitácora
-        updatedItems.push({
-            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
-            taskId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
-            originalCreatedAt: new Date().toISOString(),
-            entityType: entityType,
-            entityId: entityId,
-            entityName: entityName,
-            action: actionText,
-            status: 'Pendiente',
-            advisorNotes: '',
-            origin: 'advisor'
-        });
-    }
-
-    // 4. GUARDADO DIRECTO (Costo: 1 escritura, 0 lecturas adicionales)
-    const sessionRef = doc(db, 'coaching_sessions', openSession!.id);
-    await updateDoc(sessionRef, { items: updatedItems });
-
-    // 5. Actualizar el caché en vivo para que el próximo prospecto sea inmediato
-    openSession!.items = updatedItems;
-    setInCache(`open_session_${advisorId}`, openSession);
-};
-
 // --- Mantenimiento Automático ---
 export const autoUpdateCoachingSession = async (
     advisorId: string,
@@ -5184,8 +5111,13 @@ export const autoUpdateCoachingSession = async (
     }
 
     const now = new Date().toISOString();
-    const dateStr = format(new Date(), "dd/MM HH:mm");
-    const newText = `[Agregado ${dateStr}] ${actionText}`;
+    const newEntry = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+        text: actionText,
+        createdAt: now,
+        createdById: advisorId,
+        createdByName: advisorName,
+    };
     const entityKey = getCoachingEntityKey(entityType, entityId);
     const indexedItemId = activeIndex?.entities?.[entityKey]?.itemId;
     const updatedItems = [...(openSession.items || [])];
@@ -5197,15 +5129,12 @@ export const autoUpdateCoachingSession = async (
 
     if (existingItemIndex >= 0) {
         const existingItem = updatedItems[existingItemIndex];
-        const previousDone = existingItem.followUpDone || existingItem.advisorNotes || '';
-        const updatedDone = previousDone ? `${previousDone}\n\n${newText}` : newText;
 
         updatedItems[existingItemIndex] = {
             ...existingItem,
             entityName,
-            followUpDone: updatedDone,
+            followUpDoneEntries: [...(existingItem.followUpDoneEntries || []), newEntry],
             followUpDoneUpdatedAt: now,
-            advisorNotes: existingItem.advisorNotes || updatedDone,
             lastUpdate: now,
         };
     } else {
@@ -5218,8 +5147,8 @@ export const autoUpdateCoachingSession = async (
             entityName,
             action: 'Seguimiento automático',
             status: 'Pendiente',
-            advisorNotes: newText,
-            followUpDone: newText,
+            advisorNotes: '',
+            followUpDoneEntries: [newEntry],
             followUpDoneUpdatedAt: now,
             lastUpdate: now,
             origin: 'advisor',

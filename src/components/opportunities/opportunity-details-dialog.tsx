@@ -268,6 +268,9 @@ export function OpportunityDetailsDialog({
   }
 
   const selectedManualDate = editedOpportunity.manualUpdateDate ? safeParseManualDate(editedOpportunity.manualUpdateDate) : null;
+  const hasPendingRenewal = isEditing && (
+    (editedOpportunity.periodHistory?.length || 0) > (opportunity?.periodHistory?.length || 0)
+  );
   
   const fetchInvoices = useCallback(async () => {
     if (opportunity) {
@@ -337,6 +340,34 @@ export function OpportunityDetailsDialog({
  const handleSave = async () => {
     if (!editedOpportunity.title) {
         toast({ title: "Falta el título", description: "Por favor ingresa un título para la oportunidad.", variant: "destructive" });
+        return;
+    }
+    if (!!editedOpportunity.startDate !== !!editedOpportunity.endDate) {
+        toast({
+            title: "Vigencia incompleta",
+            description: "La fecha de inicio y la fecha de fin deben cargarse juntas.",
+            variant: "destructive",
+        });
+        return;
+    }
+    if (hasPendingRenewal && (!editedOpportunity.startDate || !editedOpportunity.endDate)) {
+        toast({
+            title: "Renovación incompleta",
+            description: "Ingresá la nueva fecha de inicio y fin antes de guardar.",
+            variant: "destructive",
+        });
+        return;
+    }
+    if (
+        editedOpportunity.startDate
+        && editedOpportunity.endDate
+        && parseISO(editedOpportunity.endDate) < parseISO(editedOpportunity.startDate)
+    ) {
+        toast({
+            title: "Vigencia inválida",
+            description: "La fecha de fin no puede ser anterior a la fecha de inicio.",
+            variant: "destructive",
+        });
         return;
     }
 
@@ -449,8 +480,16 @@ export function OpportunityDetailsDialog({
   };
 
   const handleRenewPeriod = () => {
+    if (hasPendingRenewal) {
+        toast({ title: "Renovación en curso", description: "Completá las nuevas fechas y guardá los cambios." });
+        return;
+    }
     if (!editedOpportunity.startDate || !editedOpportunity.endDate) {
-        toast({ title: "Faltan fechas", description: "Debe haber un período activo para poder renovarlo y pasarlo al historial.", variant: "destructive" });
+        toast({ title: "Faltan fechas", description: "Primero cargá y guardá la vigencia actual. Luego podrás renovarla.", variant: "destructive" });
+        return;
+    }
+    if (parseISO(editedOpportunity.endDate) < parseISO(editedOpportunity.startDate)) {
+        toast({ title: "Vigencia inválida", description: "La fecha de fin no puede ser anterior a la fecha de inicio.", variant: "destructive" });
         return;
     }
     
@@ -799,9 +838,21 @@ export function OpportunityDetailsDialog({
               <div className="space-y-4 border p-4 rounded-md bg-slate-50/50">
                   <div className="flex justify-between items-center mb-2">
                       <Label className="text-base font-bold text-primary">Vigencia del Contrato</Label>
-                      {editedOpportunity.startDate && editedOpportunity.endDate && (
-                          <Button type="button" variant="outline" size="sm" onClick={handleRenewPeriod} className="h-8">
-                              <RefreshCw className="h-4 w-4 mr-2" /> Renovar Período
+                      {isEditing && (
+                          <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleRenewPeriod}
+                              className="h-8"
+                              disabled={hasPendingRenewal}
+                              title={!editedOpportunity.startDate || !editedOpportunity.endDate
+                                  ? 'Primero cargá y guardá la vigencia actual'
+                                  : undefined
+                              }
+                          >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              {hasPendingRenewal ? 'Renovación pendiente' : 'Renovar período'}
                           </Button>
                       )}
                   </div>
@@ -840,6 +891,12 @@ export function OpportunityDetailsDialog({
                   {(!editedOpportunity.startDate && editedOpportunity.periodicidad && editedOpportunity.periodicidad.length > 0) && (
                       <div className="text-sm text-amber-700 bg-amber-50 p-2 rounded mt-2 border border-amber-200">
                           <span className="font-bold">Aviso de migración:</span> Esta oportunidad tiene configurada una periodicidad antigua ({editedOpportunity.periodicidad.join(', ')}). Por favor, define las fechas exactas de Inicio y Fin arriba.
+                      </div>
+                  )}
+
+                  {hasPendingRenewal && (
+                      <div className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                          El período anterior ya quedó preparado para el historial. Cargá la nueva fecha de inicio y fin y guardá los cambios para completar la renovación.
                       </div>
                   )}
 

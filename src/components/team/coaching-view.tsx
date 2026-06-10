@@ -43,11 +43,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
 
     // Estado local para los inputs de "Nueva Nota" y "Nueva Acción" por cada item
     const [inputStates, setInputStates] = useState<Record<string, { action?: string, note?: string }>>({});
-    const [followUpDrafts, setFollowUpDrafts] = useState<Record<string, {
-        followUpDone?: string;
-        followUpCurrent?: string;
-        followUpNext?: string;
-    }>>({});
+    const [followUpDrafts, setFollowUpDrafts] = useState<Record<string, string>>({});
     const [editingEntry, setEditingEntry] = useState<{
         sessionId: string;
         itemId: string;
@@ -97,14 +93,10 @@ export function CoachingView({ advisor }: { advisor: User }) {
     }, [loadData]);
 
     useEffect(() => {
-        const drafts: Record<string, { followUpDone?: string; followUpCurrent?: string; followUpNext?: string }> = {};
+        const drafts: Record<string, string> = {};
         sessions.forEach(session => {
             session.items.forEach(item => {
-                drafts[item.id] = {
-                    followUpDone: '',
-                    followUpCurrent: '',
-                    followUpNext: '',
-                };
+                drafts[item.id] = '';
             });
         });
         setFollowUpDrafts(drafts);
@@ -284,29 +276,16 @@ export function CoachingView({ advisor }: { advisor: User }) {
         }
     };
 
-    const updateFollowUpDraft = (itemId: string, field: 'followUpDone' | 'followUpCurrent' | 'followUpNext', value: string) => {
-        setFollowUpDrafts(prev => ({
-            ...prev,
-            [itemId]: {
-                ...prev[itemId],
-                [field]: value,
-            },
-        }));
+    const updateFollowUpDraft = (itemId: string, value: string) => {
+        setFollowUpDrafts(prev => ({ ...prev, [itemId]: value }));
     };
 
-    const saveFollowUpField = async (
-        session: CoachingSession,
-        item: CoachingItem,
-        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext'
-    ) => {
-        const value = followUpDrafts[item.id]?.[field]?.trim() ?? '';
+    const saveFollowUpEntry = async (session: CoachingSession, item: CoachingItem) => {
+        const value = followUpDrafts[item.id]?.trim() ?? '';
         if (!value || !userInfo) return;
         try {
-            await appendCoachingFollowUpEntry(session.id, item.id, field, value, userInfo.id, userInfo.name);
-            setFollowUpDrafts(prev => ({
-                ...prev,
-                [item.id]: { ...prev[item.id], [field]: '' },
-            }));
+            await appendCoachingFollowUpEntry(session.id, item.id, 'followUpDone', value, userInfo.id, userInfo.name);
+            setFollowUpDrafts(prev => ({ ...prev, [item.id]: '' }));
             await loadData();
             toast({ title: "Asiento guardado" });
         } catch (error) {
@@ -315,22 +294,30 @@ export function CoachingView({ advisor }: { advisor: User }) {
         }
     };
 
-    const getFollowUpEntries = (
-        item: CoachingItem,
-        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext'
-    ): CoachingFollowUpEntry[] => {
-        const entriesField = `${field}Entries` as 'followUpDoneEntries' | 'followUpCurrentEntries' | 'followUpNextEntries';
-        return [...(item[entriesField] || [])].sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
+    type TimelineEntry = CoachingFollowUpEntry & {
+        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext';
+        legacy?: boolean;
     };
 
-    const getLegacyFollowUpText = (
-        item: CoachingItem,
-        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext'
-    ) => {
-        if (field === 'followUpDone') return item.followUpDone || item.advisorNotes || '';
-        return item[field] || '';
+    const getFollowUpTimeline = (item: CoachingItem): TimelineEntry[] => {
+        const fields = [
+            { field: 'followUpDone' as const, entries: item.followUpDoneEntries || [], text: item.followUpDone || item.advisorNotes || '', updatedAt: item.followUpDoneUpdatedAt },
+            { field: 'followUpCurrent' as const, entries: item.followUpCurrentEntries || [], text: item.followUpCurrent || '', updatedAt: item.followUpCurrentUpdatedAt },
+            { field: 'followUpNext' as const, entries: item.followUpNextEntries || [], text: item.followUpNext || '', updatedAt: item.followUpNextUpdatedAt },
+        ];
+
+        return fields.flatMap(({ field, entries, text, updatedAt }) => [
+            ...entries.map(entry => ({ ...entry, field })),
+            ...(text ? [{
+                id: `legacy-${field}`,
+                text,
+                createdAt: updatedAt || item.lastUpdate || item.originalCreatedAt,
+                createdById: '',
+                createdByName: 'Historial anterior',
+                field,
+                legacy: true,
+            }] : []),
+        ]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     };
 
     const saveEditedEntry = async () => {
@@ -500,7 +487,10 @@ export function CoachingView({ advisor }: { advisor: User }) {
         setOpenSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
     };
 
-    const renderItemRow = (session: CoachingSession, item: CoachingItem) => (
+    const renderItemRow = (session: CoachingSession, item: CoachingItem) => {
+        const timeline = getFollowUpTimeline(item);
+
+        return (
         <div key={item.id} className="grid grid-cols-1 md:grid-cols-[45%_55%] gap-4 p-4 border rounded-lg bg-card/50 shadow-sm transition-shadow">
             
             <div className="space-y-3 border-r md:pr-4 border-dashed md:border-solid border-border/50 relative">
@@ -569,30 +559,38 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 </div>
             </div>
 
-            <div className="space-y-3 flex flex-col h-full">
-                {[
-                    { field: 'followUpDone' as const, label: 'Qué hice', updatedAt: item.followUpDoneUpdatedAt, placeholder: 'Registrar lo realizado hasta ahora...' },
-                    { field: 'followUpCurrent' as const, label: 'En qué estamos', updatedAt: item.followUpCurrentUpdatedAt, placeholder: 'Estado actual de la gestión...' },
-                    { field: 'followUpNext' as const, label: 'Qué sigue', updatedAt: item.followUpNextUpdatedAt, placeholder: 'Próximo paso acordado...' },
-                ].map(({ field, label, updatedAt, placeholder }) => {
-                    const entries = getFollowUpEntries(item, field);
-                    const legacyText = getLegacyFollowUpText(item, field);
+            <div className="flex h-full flex-col space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                    <Label className="flex items-center gap-2 text-sm font-semibold">
+                        <History className="h-4 w-4" /> Bitácora
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground">
+                        {timeline.length} {timeline.length === 1 ? 'asiento' : 'asientos'}
+                    </span>
+                </div>
 
-                    return (
-                    <div key={field} className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                            <Label className="text-xs text-muted-foreground flex items-center gap-2 font-medium">
-                                <Save className="h-3 w-3" /> {label}
-                            </Label>
-                            <span className="text-[10px] text-muted-foreground">
-                                {formatUpdateDate(updatedAt)}
-                            </span>
-                        </div>
-                        {(legacyText || entries.length > 0) && (
-                            <div className="max-h-44 space-y-2 overflow-y-auto rounded-md border bg-muted/20 p-2">
-                                {entries.map(entry => (
-                                    <div key={entry.id} className="rounded border bg-background px-3 py-2 text-sm">
-                                        {editingEntry?.entryId === entry.id ? (
+                {timeline.length > 0 ? (
+                    <div className="max-h-72 space-y-2 overflow-y-auto rounded-md border bg-muted/20 p-2">
+                        {timeline.map(entry => (
+                            <div key={`${entry.field}-${entry.id}`} className="rounded border bg-background px-3 py-2 text-sm">
+                                {entry.legacy && editingLegacy?.item.id === item.id && editingLegacy.field === entry.field ? (
+                                    <div className="space-y-2">
+                                        <Textarea
+                                            value={editingLegacy.text}
+                                            onChange={event => setEditingLegacy({ ...editingLegacy, text: event.target.value })}
+                                            className="min-h-[72px] resize-y"
+                                            autoFocus
+                                        />
+                                        <div className="flex justify-end gap-1">
+                                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingLegacy(null)} disabled={savingEntry}>
+                                                <X className="h-3.5 w-3.5" />
+                                            </Button>
+                                            <Button size="icon" className="h-7 w-7" onClick={saveEditedLegacy} disabled={savingEntry || !editingLegacy.text.trim()}>
+                                                {savingEntry ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : editingEntry?.entryId === entry.id ? (
                                             <div className="space-y-2">
                                                 <Textarea
                                                     value={editingEntry.text}
@@ -619,7 +617,10 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                                                 size="icon"
                                                                 variant="ghost"
                                                                 className="h-6 w-6"
-                                                                onClick={() => setEditingEntry({ sessionId: session.id, itemId: item.id, field, entryId: entry.id, text: entry.text })}
+                                                                onClick={() => entry.legacy
+                                                                    ? setEditingLegacy({ session, item, field: entry.field, text: entry.text })
+                                                                    : setEditingEntry({ sessionId: session.id, itemId: item.id, field: entry.field, entryId: entry.id, text: entry.text })
+                                                                }
                                                                 title="Editar asiento"
                                                             >
                                                                 <Pencil className="h-3 w-3" />
@@ -628,7 +629,13 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                                                 size="icon"
                                                                 variant="ghost"
                                                                 className="h-6 w-6 text-destructive hover:text-destructive"
-                                                                onClick={() => setEntryToDelete({ sessionId: session.id, itemId: item.id, field, entryId: entry.id })}
+                                                                onClick={() => setEntryToDelete({
+                                                                    sessionId: session.id,
+                                                                    itemId: item.id,
+                                                                    field: entry.field,
+                                                                    entryId: entry.legacy ? undefined : entry.id,
+                                                                    legacy: entry.legacy,
+                                                                })}
                                                                 title="Eliminar asiento"
                                                             >
                                                                 <Trash2 className="h-3 w-3" />
@@ -637,85 +644,39 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                                     )}
                                                 </div>
                                                 <p className="mt-1 text-[10px] text-muted-foreground">
-                                                    {formatUpdateDate(entry.createdAt)} · {entry.createdByName}
+                                                    {formatUpdateDate(entry.createdAt)} · {entry.createdByName || 'Sistema'}
                                                     {entry.updatedAt && <> · Editado {formatUpdateDate(entry.updatedAt)} por {entry.updatedByName || 'Jefatura'}</>}
                                                 </p>
                                             </>
                                         )}
-                                    </div>
-                                ))}
-                                {legacyText && (
-                                    <div className="rounded border bg-background px-3 py-2 text-sm">
-                                        {editingLegacy?.item.id === item.id && editingLegacy.field === field ? (
-                                            <div className="space-y-2">
-                                                <Textarea
-                                                    value={editingLegacy.text}
-                                                    onChange={event => setEditingLegacy({ ...editingLegacy, text: event.target.value })}
-                                                    className="min-h-[72px] resize-y"
-                                                    autoFocus
-                                                />
-                                                <div className="flex justify-end gap-1">
-                                                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingLegacy(null)} disabled={savingEntry}>
-                                                        <X className="h-3.5 w-3.5" />
-                                                    </Button>
-                                                    <Button size="icon" className="h-7 w-7" onClick={saveEditedLegacy} disabled={savingEntry || !editingLegacy.text.trim()}>
-                                                        {savingEntry ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <div className="flex items-start gap-2">
-                                                    <p className="min-w-0 flex-1 whitespace-pre-wrap">{legacyText}</p>
-                                                    {canManage && (
-                                                        <div className="flex shrink-0 gap-1">
-                                                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingLegacy({ session, item, field, text: legacyText })} title="Editar historial previo">
-                                                                <Pencil className="h-3 w-3" />
-                                                            </Button>
-                                                            <Button
-                                                                size="icon"
-                                                                variant="ghost"
-                                                                className="h-6 w-6 text-destructive hover:text-destructive"
-                                                                onClick={() => setEntryToDelete({ sessionId: session.id, itemId: item.id, field, legacy: true })}
-                                                                title="Eliminar historial previo"
-                                                            >
-                                                                <Trash2 className="h-3 w-3" />
-                                                            </Button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <p className="mt-1 text-[10px] text-muted-foreground">
-                                                    Historial previo · {formatUpdateDate(updatedAt)}
-                                                </p>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
                             </div>
-                        )}
-                        <Textarea
-                            className="min-h-[70px] text-sm resize-none bg-background focus:bg-white transition-colors"
-                            placeholder={session.status === 'Closed' ? "Reunión cerrada" : `Nuevo asiento: ${placeholder}`}
-                            value={followUpDrafts[item.id]?.[field] ?? ''}
-                            onChange={e => updateFollowUpDraft(item.id, field, e.target.value)}
-                            disabled={session.status === 'Closed'}
-                        />
-                        {session.status === 'Open' && (
-                            <div className="flex justify-end">
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 text-xs"
-                                    onClick={() => saveFollowUpField(session, item, field)}
-                                    disabled={!followUpDrafts[item.id]?.[field]?.trim()}
-                                >
-                                    Agregar asiento
-                                </Button>
-                            </div>
-                        )}
+                        ))}
                     </div>
-                    );
-                })}
+                ) : (
+                    <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                        Todavía no hay movimientos registrados.
+                    </div>
+                )}
+
+                <Textarea
+                    className="min-h-[84px] resize-none bg-background text-sm"
+                    placeholder={session.status === 'Closed' ? "Reunión cerrada" : "Agregar un nuevo comentario a la bitácora..."}
+                    value={followUpDrafts[item.id] ?? ''}
+                    onChange={event => updateFollowUpDraft(item.id, event.target.value)}
+                    disabled={session.status === 'Closed'}
+                />
+                {session.status === 'Open' && (
+                    <div className="flex justify-end">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => saveFollowUpEntry(session, item)}
+                            disabled={!followUpDrafts[item.id]?.trim()}
+                        >
+                            <Save className="mr-2 h-3.5 w-3.5" /> Agregar a la bitácora
+                        </Button>
+                    </div>
+                )}
 
                 {item.lastUpdate && (
                     <p className="text-[10px] text-muted-foreground text-right italic">
@@ -724,7 +685,8 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 )}
             </div>
         </div>
-    );
+        );
+    };
 
     if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
 
