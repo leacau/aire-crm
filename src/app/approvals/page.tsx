@@ -635,6 +635,38 @@ function ApprovalsPageComponent() {
                  {selectedItem?.type === 'Orden de Publicidad' && <AdvertisingOrderPdf order={selectedItem.rawData} programs={programs} />}
                  {selectedItem?.type === 'Nota Web / Gacetilla' && <WebNotePdf note={selectedItem.rawData} />}
             </div>
+
+            {selectedItem?.type === 'Orden de Publicidad' && selectedItem.rawData.revisionHistory?.length > 0 && (
+              <div className="max-w-5xl mx-auto bg-white mt-6 rounded-lg p-5 border border-amber-300 shadow-xl">
+                <h3 className="font-bold text-sm text-slate-800 flex items-center gap-1.5 mb-4 uppercase tracking-wider">
+                  <Edit3 className="w-4 h-4 text-amber-600"/> Cambios que requieren reaprobación
+                </h3>
+                <div className="space-y-4">
+                  {[...selectedItem.rawData.revisionHistory].reverse().map((revision: any, revisionIndex: number) => (
+                    <div key={`${revision.timestamp}-${revisionIndex}`} className="border-l-4 border-amber-500 bg-amber-50/60 p-4">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <strong className="text-sm">{revision.userName}</strong>
+                        {revision.userRole && <Badge variant="outline">{revision.userRole}</Badge>}
+                        <span className="text-slate-500">{format(new Date(revision.timestamp), 'dd/MM/yyyy HH:mm')}</span>
+                      </div>
+                      <p className="mt-2 text-sm"><strong>Motivo declarado:</strong> {revision.reason}</p>
+                      <div className="mt-3 space-y-2">
+                        {revision.changes.map((change: any, changeIndex: number) => (
+                          <div key={`${change.field}-${changeIndex}`} className="rounded border bg-white p-3 text-xs">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">{change.kind}</Badge>
+                              <strong>{change.label}</strong>
+                            </div>
+                            {change.before && <p className="mt-2 text-red-700"><strong>Antes:</strong> {change.before}</p>}
+                            {change.after && <p className="mt-1 text-emerald-700"><strong>Después:</strong> {change.after}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             
             {selectedItem?.approvalHistory && selectedItem.approvalHistory.length > 0 && (
               <div className="max-w-5xl mx-auto bg-white mt-6 rounded-lg p-5 border border-slate-300 shadow-xl">

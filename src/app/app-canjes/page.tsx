@@ -57,6 +57,8 @@ export default function AppCanjesMobile() {
     const [editId, setEditId] = useState<string | undefined>();
     const [editOppId, setEditOppId] = useState<string | undefined>();
     const [editAdOrderId, setEditAdOrderId] = useState<string | undefined>();
+    const [editAdOrderWasApproved, setEditAdOrderWasApproved] = useState(false);
+    const [adOrderModificationReason, setAdOrderModificationReason] = useState('');
     
     // --- DATA ---
     const [myCanjes, setMyCanjes] = useState<ConvenioCanje[]>([]);
@@ -173,6 +175,8 @@ export default function AppCanjesMobile() {
         setEditId(undefined);
         setEditOppId(undefined);
         setEditAdOrderId(undefined);
+        setEditAdOrderWasApproved(false);
+        setAdOrderModificationReason('');
         form.reset();
     };
 
@@ -226,10 +230,15 @@ export default function AppCanjesMobile() {
                 setEditId(selectedCanjeDetail.id);
                 setEditOppId(selectedCanjeDetail.opportunityId);
                 setEditAdOrderId(adOrder?.id);
+                setEditAdOrderWasApproved(!!adOrder && (
+                    adOrder.status === 'Aprobado'
+                    || (adOrder.approvalHistory || []).some(item => item.status === 'Aprobado')
+                ));
             } else {
                 setEditId(undefined);
                 setEditOppId(undefined);
                 setEditAdOrderId(undefined);
+                setEditAdOrderWasApproved(false);
             }
 
             setStep(1);
@@ -302,6 +311,14 @@ export default function AppCanjesMobile() {
     };
 
     const handleFinalSubmit = async () => {
+        if (editAdOrderWasApproved && !adOrderModificationReason.trim()) {
+            toast({
+                title: 'Falta el motivo de la edición',
+                description: 'La orden de publicidad ya fue aprobada y debe volver al circuito de aprobación.',
+                variant: 'destructive',
+            });
+            return;
+        }
         setIsSubmitting(true);
         try {
             let finalClientId = selectedClient?.id || '';
@@ -353,7 +370,20 @@ export default function AppCanjesMobile() {
                         observations: formValues.observations ? `${formValues.observations}\nFacturación: ${billingType}` : `PAUTA POR CANJE.\nFacturación: ${billingType}`,
                         srlItems: validSrlItems,
                         sasItems: validSasItems,
-                    }, userInfo!.id, userInfo!.name);
+                    }, userInfo!.id, userInfo!.name, {
+                        modificationReason: editAdOrderWasApproved ? adOrderModificationReason : undefined,
+                        userRole: userInfo!.role,
+                        historyItem: {
+                            timestamp: format(new Date(), 'dd/MM/yyyy HH:mm'),
+                            status: editAdOrderWasApproved ? 'Pendiente de Modificación' : 'Pendiente',
+                            userId: userInfo!.id,
+                            userName: userInfo!.name,
+                            userRole: userInfo!.role,
+                            comments: editAdOrderWasApproved
+                                ? `Modificación de orden aprobada desde Canjes: ${adOrderModificationReason.trim()}`
+                                : 'Orden actualizada desde Canjes.',
+                        },
+                    });
                 }
                 if (selectedCanjeDetail?.masterCanjeId) {
                     await updateCanje(selectedCanjeDetail.masterCanjeId, {
@@ -887,6 +917,23 @@ export default function AppCanjesMobile() {
                                         <Label className="text-base font-bold">Observaciones (OP)</Label>
                                         <Textarea {...form.register('observations')} placeholder="Ej: Pauta por canje..." className="h-24 mt-2" />
                                     </div>
+
+                                    {editAdOrderWasApproved && (
+                                        <div className="space-y-2 bg-amber-50 p-4 rounded-xl border border-amber-300 shadow-sm">
+                                            <Label className="text-base font-bold text-amber-900">
+                                                Motivo de la edición de la orden aprobada *
+                                            </Label>
+                                            <p className="text-sm text-amber-800">
+                                                Esta modificación quedará auditada y enviará nuevamente la orden a aprobación.
+                                            </p>
+                                            <Textarea
+                                                value={adOrderModificationReason}
+                                                onChange={event => setAdOrderModificationReason(event.target.value)}
+                                                placeholder="Detallá por qué se modifica la pauta aprobada."
+                                                className="h-24 bg-white"
+                                            />
+                                        </div>
+                                    )}
                                     
                                     <div className="border border-red-100 rounded-xl p-3 sm:p-4 bg-white shadow-sm relative overflow-hidden">
                                         <div className="absolute top-0 left-0 w-1.5 h-full bg-red-500"></div>

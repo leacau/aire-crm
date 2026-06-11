@@ -2,7 +2,7 @@
 
 import { auth, db } from './firebase';
 import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CoachingActiveIndex, CoachingActiveIndexEntry, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CoachingActiveIndex, CoachingActiveIndexEntry, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction, ApprovalHistoryItem } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
@@ -11,6 +11,7 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format, parse } from 'date-fns';
 import { sendEmail } from './google-gmail-service';
 import { toTitleCase } from './utils';
+import { buildAdvertisingOrderChanges } from './advertising-order-history';
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
@@ -4697,26 +4698,109 @@ export const updateAdvertisingOrder = async (
     orderId: string,
     orderData: Partial<Omit<AdvertisingOrder, 'id' | 'createdAt'>>,
     userId: string,
-    userName: string
+    userName: string,
+    options?: {
+        modificationReason?: string;
+        userRole?: string;
+        historyItem?: ApprovalHistoryItem;
+    }
 ): Promise<void> => {
-    const { billingRequestsSrl, billingRequestsSas, billingRequestsAvion, ...restOrderData } = orderData as typeof orderData & { billingRequestsAvion?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[] };
+    const shouldReplaceBilling = ['billingRequestsSrl', 'billingRequestsSas', 'billingRequestsAvion']
+        .some(field => Object.prototype.hasOwnProperty.call(orderData, field));
+    const {
+        billingRequestsSrl,
+        billingRequestsSas,
+        billingRequestsAvion,
+        approvalHistory: _ignoredApprovalHistory,
+        revisionHistory: _ignoredRevisionHistory,
+        ...restOrderData
+    } = orderData as typeof orderData & { billingRequestsAvion?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[] };
     const docRef = doc(db, 'advertising_orders', orderId);
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) throw new Error("Orden no encontrada");
-
-    await updateDoc(docRef, {
-        ...restOrderData, // Aquí viajan "createdBy" y "accountExecutive"
-        updatedAt: serverTimestamp()
-    });
-
-    // 🟢 Reemplazar Fechas de Facturación
+    const previousOrder = { id: docSnap.id, ...docSnap.data() } as AdvertisingOrder;
     const existingBrQuery = query(collections.billingRequests, where('orderId', '==', orderId));
     const existingBrSnap = await getDocs(existingBrQuery);
-    
-    const batch = writeBatch(db);
-    existingBrSnap.forEach(doc => batch.delete(doc.ref));
+    const previousBillingSrl: AdvertisingOrder['billingRequestsSrl'] = [];
+    const previousBillingSas: AdvertisingOrder['billingRequestsSas'] = [];
+    const previousBillingAvion: AdvertisingOrder['billingRequestsAvion'] = [];
 
-    if (billingRequestsSrl && billingRequestsSrl.length > 0) {
+    existingBrSnap.forEach(billingDoc => {
+        const billing = billingDoc.data() as BillingRequest;
+        const comparable = {
+            date: billing.date,
+            grossAmount: billing.grossAmount || 0,
+            adjustment: billing.adjustment || 0,
+            ivaSas: billing.ivaSas || 0,
+            amount: billing.amount || 0,
+            paymentType: billing.paymentType || (billing.company === 'AVION' ? 'Canje' : 'Se paga'),
+            canjeDescription: billing.canjeDescription || '',
+        };
+        if (billing.company === 'SRL') previousBillingSrl.push(comparable);
+        else if (billing.company === 'SAS') previousBillingSas.push(comparable);
+        else if (billing.company === 'AVION') previousBillingAvion.push(comparable);
+    });
+
+    const wasEverApproved = previousOrder.status === 'Aprobado'
+        || (previousOrder.approvalHistory || []).some(item => item.status === 'Aprobado');
+    const updatePayload: Record<string, unknown> = {
+        ...restOrderData,
+        updatedAt: serverTimestamp(),
+    };
+
+    if (options?.historyItem) {
+        updatePayload.approvalHistory = arrayUnion(options.historyItem);
+    }
+
+    if (wasEverApproved) {
+        const reason = options?.modificationReason?.trim();
+        if (!reason) {
+            throw new Error('Debe indicar el motivo de la modificación de una orden aprobada.');
+        }
+
+        const changes = buildAdvertisingOrderChanges(
+            {
+                ...previousOrder,
+                billingRequestsSrl: previousBillingSrl,
+                billingRequestsSas: previousBillingSas,
+                billingRequestsAvion: previousBillingAvion,
+            },
+            {
+                ...previousOrder,
+                ...restOrderData,
+                billingRequestsSrl: shouldReplaceBilling ? (billingRequestsSrl || []) : previousBillingSrl,
+                billingRequestsSas: shouldReplaceBilling ? (billingRequestsSas || []) : previousBillingSas,
+                billingRequestsAvion: shouldReplaceBilling ? (billingRequestsAvion || []) : previousBillingAvion,
+            },
+        );
+
+        if (changes.length === 0) {
+            throw new Error('No se detectaron cambios para registrar en la orden.');
+        }
+
+        updatePayload.status = 'Pendiente de Modificación';
+        updatePayload.adminComments = deleteField();
+        updatePayload.approvedAt = deleteField();
+        updatePayload.approvedBy = deleteField();
+        updatePayload.approvedByName = deleteField();
+        updatePayload.revisionHistory = arrayUnion({
+            timestamp: new Date().toISOString(),
+            userId,
+            userName,
+            userRole: options?.userRole || '',
+            reason,
+            previousStatus: previousOrder.status || 'Aprobado',
+            changes,
+        });
+    }
+
+    const batch = writeBatch(db);
+    batch.update(docRef, updatePayload);
+    if (shouldReplaceBilling) {
+        existingBrSnap.forEach(doc => batch.delete(doc.ref));
+    }
+
+    if (shouldReplaceBilling && billingRequestsSrl && billingRequestsSrl.length > 0) {
         billingRequestsSrl.forEach(br => {
             const brRef = doc(collections.billingRequests);
             batch.set(brRef, {
@@ -4735,7 +4819,7 @@ export const updateAdvertisingOrder = async (
         });
     }
 
-    if (billingRequestsSas && billingRequestsSas.length > 0) {
+    if (shouldReplaceBilling && billingRequestsSas && billingRequestsSas.length > 0) {
         billingRequestsSas.forEach(br => {
             const brRef = doc(collections.billingRequests);
             batch.set(brRef, {
@@ -4755,7 +4839,7 @@ export const updateAdvertisingOrder = async (
         });
     }
 
-    if (billingRequestsAvion && billingRequestsAvion.length > 0) {
+    if (shouldReplaceBilling && billingRequestsAvion && billingRequestsAvion.length > 0) {
         billingRequestsAvion.forEach(br => {
             const brRef = doc(collections.billingRequests);
             batch.set(brRef, {

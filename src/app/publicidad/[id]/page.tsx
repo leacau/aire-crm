@@ -6,7 +6,7 @@ import { getAdvertisingOrder, getPrograms, getBillingRequestsByOrder, getSocialM
 import type { AdvertisingOrder, Program, CommercialNote, SocialMediaRequest, WebNote } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
-import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2, Film, Share2, Eye, Globe } from 'lucide-react'; 
+import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2, Film, Share2, Eye, Globe, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import html2canvas from 'html2canvas';
@@ -328,6 +328,59 @@ export default function AdvertisingOrderDetailPage() {
                 <div className="w-full max-w-5xl mx-auto space-y-6">
                     
                     <AdvertisingOrderPdf ref={pdfRef} order={order} programs={programs} />
+
+                    {((order.revisionHistory?.length || 0) > 0 || (order.approvalHistory?.length || 0) > 0) && (
+                        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-300">
+                            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2 border-b pb-4 mb-4">
+                                <History className="h-5 w-5" /> Historial completo de la orden
+                            </h3>
+
+                            {(order.revisionHistory?.length || 0) > 0 && (
+                                <div className="space-y-4">
+                                    {[...(order.revisionHistory || [])].reverse().map((revision, revisionIndex) => (
+                                        <div key={`${revision.timestamp}-${revisionIndex}`} className="border-l-4 border-amber-500 bg-amber-50/60 p-4">
+                                            <div className="flex flex-wrap items-center gap-2 text-sm">
+                                                <span className="font-bold text-slate-900">{revision.userName}</span>
+                                                {revision.userRole && <Badge variant="outline">{revision.userRole}</Badge>}
+                                                <span className="text-slate-500">
+                                                    {format(new Date(revision.timestamp), 'dd/MM/yyyy HH:mm')}
+                                                </span>
+                                            </div>
+                                            <p className="mt-2 text-sm text-slate-800">
+                                                <strong>Motivo:</strong> {revision.reason}
+                                            </p>
+                                            <div className="mt-3 space-y-2">
+                                                {revision.changes.map((change, changeIndex) => (
+                                                    <div key={`${change.field}-${changeIndex}`} className="rounded border bg-white p-3 text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge variant="outline">{change.kind}</Badge>
+                                                            <strong>{change.label}</strong>
+                                                        </div>
+                                                        {change.before && <p className="mt-2 text-red-700"><strong>Antes:</strong> {change.before}</p>}
+                                                        {change.after && <p className="mt-1 text-emerald-700"><strong>Después:</strong> {change.after}</p>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {(order.approvalHistory?.length || 0) > 0 && (
+                                <div className="mt-5 space-y-2 border-t pt-4">
+                                    <h4 className="font-semibold text-slate-800">Circuito de aprobación</h4>
+                                    {order.approvalHistory?.map((item, historyIndex) => (
+                                        <div key={`${item.timestamp}-${historyIndex}`} className="flex flex-wrap items-center gap-2 text-sm border-b py-2 last:border-0">
+                                            <span className="font-medium">{item.timestamp}</span>
+                                            <span>{item.userName}</span>
+                                            <Badge variant="outline">{item.status}</Badge>
+                                            {item.comments && <span className="w-full text-slate-600">{item.comments}</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                     
                     <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-300">
                         <div className="flex justify-between items-center border-b pb-4 mb-4">

@@ -8,7 +8,6 @@ import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2 } from "
 import { useRouter } from "next/navigation";
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { arrayUnion } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -34,7 +33,7 @@ import {
     getBillingRequestsByOrder,
     getAllUsers 
 } from "@/lib/firebase-service";
-import { Client, Agency, AdvertisingOrder, User } from "@/lib/types";
+import { Client, Agency, AdvertisingOrder, User, ApprovalStatus } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
 import { hasManagementPrivileges } from "@/lib/role-utils";
@@ -200,8 +199,12 @@ export function AdvertisingForm() {
 
           getAdvertisingOrder(idToFetch).then(async order => {
               if (order) {
-                  if (editId && order.status === 'Aprobado') {
+                  if (editId && (
+                      order.status === 'Aprobado'
+                      || (order.approvalHistory || []).some(item => item.status === 'Aprobado')
+                  )) {
                       setWasApproved(true);
+                      setNotifyOnSave(true);
                   }
 
                   if (order.clientId) {
@@ -720,9 +723,9 @@ export function AdvertisingForm() {
           oppTitle = existingOpp?.title || "Sin Asignar";
       }
 
-      let targetStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
+      let targetStatus: ApprovalStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
 
-      if (wasApproved && notifyOnSave) {
+      if (wasApproved) {
           if (!modificationReason.trim()) {
               toast({ title: "Falta Justificación", description: "Debe indicar el motivo de la modificación del contrato.", variant: "destructive" });
               setIsSubmitting(false); return;
@@ -770,8 +773,11 @@ export function AdvertisingForm() {
       delete cleanPayload.id;
 
       if (editModeId) {
-          cleanPayload.approvalHistory = arrayUnion(historyItem);
-          await updateAdvertisingOrder(editModeId, cleanPayload, userInfo.id, userInfo.name);
+          await updateAdvertisingOrder(editModeId, cleanPayload, userInfo.id, userInfo.name, {
+              modificationReason: wasApproved ? modificationReason : undefined,
+              userRole: userInfo.role,
+              historyItem,
+          });
       } else {
           cleanPayload.approvalHistory = [historyItem];
           await createAdvertisingOrder(cleanPayload);
@@ -811,7 +817,11 @@ export function AdvertisingForm() {
       router.push(`/publicidad`);
     } catch (error) {
       console.error(error);
-      toast({ title: "Error", description: "No se pudo guardar la orden comercial.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "No se pudo guardar la orden comercial.",
+        variant: "destructive"
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -838,8 +848,10 @@ export function AdvertisingForm() {
                {isExporting ? "Generando..." : "Exportar PDF"}
             </Button>
             <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white h-10">
-                <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
-                <Label htmlFor="notify" className="cursor-pointer text-sm font-semibold">Pasar a aprobación</Label>
+                <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} disabled={wasApproved} />
+                <Label htmlFor="notify" className={cn("text-sm font-semibold", wasApproved ? "cursor-not-allowed" : "cursor-pointer")}>
+                    {wasApproved ? "Reaprobación obligatoria" : "Pasar a aprobación"}
+                </Label>
             </div>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando...</> : <><Save className="mr-2 h-4 w-4" /> {editModeId ? 'Guardar Cambios' : 'Guardar Pedido'}</>}
@@ -997,7 +1009,7 @@ export function AdvertisingForm() {
           </div>
         </div>
 
-        {wasApproved && notifyOnSave && (
+        {wasApproved && (
             <Card className="border-amber-400 bg-amber-50 shadow-md animate-in fade-in zoom-in duration-300">
                 <CardHeader className="pb-2">
                     <CardTitle className="text-amber-800 text-lg flex items-center">

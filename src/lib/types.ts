@@ -691,6 +691,24 @@ export type ApprovalHistoryItem = {
   comments?: string;
 };
 
+export type AdvertisingOrderChange = {
+  field: string;
+  label: string;
+  kind: 'Agregado' | 'Modificado' | 'Quitado';
+  before?: string;
+  after?: string;
+};
+
+export type AdvertisingOrderRevision = {
+  timestamp: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  reason: string;
+  previousStatus: ApprovalStatus;
+  changes: AdvertisingOrderChange[];
+};
+
 export type CommercialNote = {
   id: string;
   clientId: string;
@@ -941,6 +959,7 @@ export type AdvertisingOrder = {
   approvedBy?: string;
   approvedByName?: string;
   approvalHistory?: ApprovalHistoryItem[];
+  revisionHistory?: AdvertisingOrderRevision[];
 };
 
 export type ConvenioCanje = {
