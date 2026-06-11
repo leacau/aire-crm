@@ -4381,26 +4381,43 @@ export const addItemsToSession = async (sessionId: string, newItems: CoachingIte
 };
 
 export const claimProspect = async (prospect: Prospect, userId: string, userName: string): Promise<void> => {
-    // 1. Validar regla de los 3 días si fue el dueño anterior
-    if (prospect.previousOwnerId === userId && prospect.unassignedAt) {
-        const unassignedDate = typeof prospect.unassignedAt === 'string' 
-            ? parseISO(prospect.unassignedAt) 
-            : (prospect.unassignedAt as any).toDate();
-            
-        const daysPassed = differenceInCalendarDays(new Date(), unassignedDate);
-        
-        if (daysPassed < 3) {
-            throw new Error(`Debes esperar ${3 - daysPassed} días más para volver a reclamar este prospecto.`);
-        }
-    }
-
     const docRef = doc(db, 'prospects', prospect.id);
-    await updateDoc(docRef, {
-        claimStatus: 'Pendiente',
-        claimantId: userId,
-        claimantName: userName,
-        claimedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+    await runTransaction(db, async transaction => {
+        const snapshot = await transaction.get(docRef);
+        if (!snapshot.exists()) throw new Error("El prospecto ya no existe.");
+
+        const currentProspect = { id: snapshot.id, ...snapshot.data() } as Prospect;
+        if (currentProspect.ownerId) {
+            throw new Error("El prospecto ya fue asignado a otro asesor.");
+        }
+        if (currentProspect.claimStatus === 'Pendiente') {
+            throw new Error(
+                currentProspect.claimantId === userId
+                    ? "Tu reclamo ya está pendiente de aprobación."
+                    : "Otro asesor ya reclamó este prospecto."
+            );
+        }
+
+        if (currentProspect.previousOwnerId === userId && currentProspect.unassignedAt) {
+            const rawUnassignedAt = currentProspect.unassignedAt as any;
+            const unassignedDate = typeof rawUnassignedAt === 'string'
+                ? parseISO(rawUnassignedAt)
+                : rawUnassignedAt?.toDate?.();
+            if (unassignedDate) {
+                const daysPassed = differenceInCalendarDays(new Date(), unassignedDate);
+                if (daysPassed < 3) {
+                    throw new Error(`Debes esperar ${3 - daysPassed} días más para volver a reclamar este prospecto.`);
+                }
+            }
+        }
+
+        transaction.update(docRef, {
+            claimStatus: 'Pendiente',
+            claimantId: userId,
+            claimantName: userName,
+            claimedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        });
     });
     
     invalidateCache('prospects');

@@ -82,6 +82,19 @@ service cloud.firestore {
         && request.resource.data.status in ['Pendiente', 'Reclamado', 'Pagado', 'Incobrable'];
     }
 
+    function advisorClaimsUnassignedProspect() {
+      return isSignedIn()
+        && resource.data.get('ownerId', '') in ['', null]
+        && resource.data.get('claimStatus', null) == null
+        && request.resource.data.claimStatus == 'Pendiente'
+        && request.resource.data.claimantId == request.auth.uid
+        && request.resource.data.claimantName is string
+        && request.resource.data.claimedAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['claimStatus', 'claimantId', 'claimantName', 'claimedAt', 'updatedAt']);
+    }
+
     function updatesSelfProfile(userId) {
       return isSignedIn()
         && request.auth.uid == userId
@@ -149,7 +162,8 @@ service cloud.firestore {
     match /prospects/{prospectId} {
       allow read: if isSignedIn();
       allow create: if createsOwnField('ownerId') || isManagement();
-      allow update, delete: if isActorOnResource() || isManagement();
+      allow update: if isActorOnResource() || isManagement() || advisorClaimsUnassignedProspect();
+      allow delete: if isActorOnResource() || isManagement();
     }
 
     match /invoices/{invoiceId} {
