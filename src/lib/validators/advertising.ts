@@ -57,6 +57,7 @@ export const billingRequestSasItemSchema = z.object({
 
 export const advertisingOrderSchema = z.object({
   clientId: z.string().min(1, "El cliente es obligatorio"),
+  canjeId: z.string().optional(),
   agencyId: z.string().optional(),
   opportunityId: z.string().optional(), 
   newOpportunityTitle: z.string().optional(),

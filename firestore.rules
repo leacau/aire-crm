@@ -206,8 +206,15 @@ service cloud.firestore {
 
     match /canjes/{canjeId} {
       allow read: if isSignedIn();
-      allow create: if isActorOnRequest() || isManagement();
-      allow update, delete: if isActorOnResource() || isManagement();
+      allow create: if isActorOnRequest() || isManagement()
+        || (isCanjeOperator()
+          && request.resource.data.clienteId is string
+          && canOperateCanjeClient(request.resource.data.clienteId));
+      allow update: if isActorOnResource() || isManagement()
+        || (isCanjeOperator()
+          && resource.data.clienteId is string
+          && canOperateCanjeClient(resource.data.clienteId));
+      allow delete: if isActorOnResource() || isManagement();
     }
 
     match /convenios/{convenioId} {

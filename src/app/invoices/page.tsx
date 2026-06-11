@@ -40,7 +40,26 @@ export default function InvoiceUploadPage() {
   const [isQuickOppOpen, setIsQuickOppOpen] = useState(false);
   const [clientForNewOpp, setClientForNewOpp] = useState<{id: string, name: string, ownerName: string} | null>(null);
   const [activeRowId, setActiveRowId] = useState<number | null>(null);
+  const [canjeRelation, setCanjeRelation] = useState<{ canjeId?: string; orderId?: string; clientId?: string; opportunityId?: string }>({});
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const canjeId = params.get('canjeId') || undefined;
+    const orderId = params.get('orderId') || undefined;
+    const clientId = params.get('clientId') || '';
+    const opportunityId = params.get('opportunityId') || '';
+    if (!canjeId || !orderId) return;
+
+    setCanjeRelation({ canjeId, orderId, clientId, opportunityId });
+    setInvoiceRows([{
+      id: Date.now(),
+      invoiceNumber: '',
+      date: new Date().toISOString().split('T')[0],
+      amount: '',
+      clientId,
+      opportunityId,
+    }]);
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!userInfo) return;
@@ -86,8 +105,8 @@ export default function InvoiceUploadPage() {
         invoiceNumber: '',
         date: new Date().toISOString().split('T')[0],
         amount: '',
-        clientId: '',
-        opportunityId: '',
+        clientId: canjeRelation.clientId || '',
+        opportunityId: canjeRelation.opportunityId || '',
       }
     ]);
   };
@@ -299,6 +318,8 @@ export default function InvoiceUploadPage() {
             await createInvoice(
                 {
                     opportunityId: row.opportunityId,
+                    canjeId: canjeRelation.canjeId,
+                    orderId: canjeRelation.orderId,
                     invoiceNumber: inputRaw,
                     amount: amountNum,
                     date: row.date,
@@ -315,6 +336,8 @@ export default function InvoiceUploadPage() {
               {
                 id: `temp-${Date.now()}-${Math.random()}`,
                 opportunityId: row.opportunityId,
+                canjeId: canjeRelation.canjeId,
+                orderId: canjeRelation.orderId,
                 invoiceNumber: inputRaw,
                 amount: amountNum,
                 date: row.date,
@@ -343,6 +366,9 @@ export default function InvoiceUploadPage() {
     if (successCount > 0) {
         if (successCount === validRows.length) {
              setInvoiceRows([]); 
+             if (canjeRelation.canjeId) {
+               router.push(`/canjes?id=${encodeURIComponent(canjeRelation.canjeId)}`);
+             }
         }
     }
   };
@@ -384,8 +410,9 @@ export default function InvoiceUploadPage() {
             <TableBody>
               {invoiceRows.length > 0 ? (
                 invoiceRows.map(row => {
-                  const clientOpportunities = opportunities.filter(
-                    opp => opp.clientId === row.clientId && opp.stage === 'Cerrado - Ganado'
+                  const clientOpportunities = opportunities.filter(opp =>
+                    opp.clientId === row.clientId
+                    && (opp.stage === 'Cerrado - Ganado' || opp.id === row.opportunityId)
                   );
                   return (
                     <TableRow key={row.id}>

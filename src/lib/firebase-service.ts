@@ -1678,6 +1678,32 @@ export const getCanjes = async (): Promise<Canje[]> => {
     return canjes;
 };
 
+export const getAdvertisingOrdersByCanjeId = async (canjeId: string, legacyOrderIds: string[] = []): Promise<AdvertisingOrder[]> => {
+    if (!canjeId) return [];
+    const snapshot = await getDocs(query(collection(db, 'advertising_orders'), where('canjeId', '==', canjeId)));
+    const orders = snapshot.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() } as AdvertisingOrder));
+    const foundIds = new Set(orders.map(order => order.id));
+    const missingLegacyIds = legacyOrderIds.filter(orderId => !foundIds.has(orderId));
+    const legacySnapshots = await Promise.all(
+        missingLegacyIds.map(orderId => getDoc(doc(db, 'advertising_orders', orderId)))
+    );
+    legacySnapshots.forEach(orderSnapshot => {
+        if (orderSnapshot.exists()) {
+            orders.push({ id: orderSnapshot.id, ...orderSnapshot.data() } as AdvertisingOrder);
+        }
+    });
+    return orders
+        .sort((a, b) => new Date(b.startDate || b.createdAt).getTime() - new Date(a.startDate || a.createdAt).getTime());
+};
+
+export const getInvoicesByCanjeId = async (canjeId: string): Promise<Invoice[]> => {
+    if (!canjeId) return [];
+    const snapshot = await getDocs(query(collections.invoices, where('canjeId', '==', canjeId)));
+    return snapshot.docs
+        .map(invoiceDoc => ({ id: invoiceDoc.id, ...invoiceDoc.data() } as Invoice))
+        .sort((a, b) => new Date(b.date || b.dateGenerated).getTime() - new Date(a.date || a.dateGenerated).getTime());
+};
+
 export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>, userId: string, userName: string): Promise<string> => {
     const dataToSave: { [key: string]: any } = {
         ...canjeData,
@@ -4583,6 +4609,13 @@ export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, '
 
     if (hasBilling) {
         await batch.commit();
+    }
+
+    if (restOrderData.canjeId) {
+        await updateDoc(doc(db, 'canjes', restOrderData.canjeId), {
+            advertisingOrderIds: arrayUnion(docRef.id),
+        });
+        invalidateCache('canjes');
     }
 
     await logActivity({

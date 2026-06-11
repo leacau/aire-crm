@@ -28,6 +28,8 @@ export type CarpetaBillingStatus = 'Pendiente de Pedido' | 'Pedido Realizado' | 
 export type Invoice = {
   id: string;
   opportunityId: string;
+  canjeId?: string;
+  orderId?: string;
   invoiceNumber: string;
   amount: number;
   date?: string;
@@ -341,6 +343,8 @@ export type CanjeFactura = {
     fecha?: string;
     empresa?: 'CLIENTE' | 'SRL' | 'SAS';
     archivoUrl?: string;
+    orderId?: string;
+    invoiceId?: string;
 };
 
 export type CanjeModalidad = 'Factura contra factura' | 'AVION';
@@ -402,6 +406,7 @@ export type Canje = {
   asesorId?: string;
   asesorName: string;
   titulo: string;
+  solicitanteCanje?: string;
   pedido: string;
   fechaResolucion?: string;
   facturas?: CanjeFactura[];

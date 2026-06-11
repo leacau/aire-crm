@@ -154,7 +154,9 @@ function CanjesPageComponent() {
     }
     // Asesores only see their clients' canjes
     const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
-    return canjes.filter(canje => userClientIds.has(canje.clienteId || ''));
+    return canjes.filter(canje =>
+      canje.asesorId === userInfo.id || userClientIds.has(canje.clienteId || '')
+    );
   }, [canjes, clients, userInfo, canManageAll]);
 
 
@@ -167,6 +169,11 @@ function CanjesPageComponent() {
     {
       accessorKey: 'clienteName',
       header: 'Cliente',
+    },
+    {
+      accessorKey: 'solicitanteCanje',
+      header: 'Solicitado por',
+      cell: ({ row }) => row.original.solicitanteCanje || '-',
     },
     {
       accessorKey: 'asesorName',

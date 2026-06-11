@@ -102,6 +102,7 @@ export function AdvertisingForm() {
       billingRequestsSrl: [], 
       billingRequestsSas: [], 
       billingRequestsAvion: [], 
+      canjeId: "",
       startDate: undefined,
       endDate: undefined,
     },
@@ -196,6 +197,7 @@ export function AdvertisingForm() {
       const editId = params.get('editId');
       const urlClientId = params.get('clientId');
       const urlOppId = params.get('opportunityId');
+      const urlCanjeId = params.get('canjeId');
 
       const idToFetch = cloneId || editId;
 
@@ -253,6 +255,7 @@ export function AdvertisingForm() {
 
                   form.reset({
                       clientId: order.clientId,
+                      canjeId: order.canjeId || "",
                       agencyId: order.agencyId || "none",
                       opportunityId: order.opportunityId,
                       newOpportunityTitle: "",
@@ -281,6 +284,7 @@ export function AdvertisingForm() {
           });
       } else if (urlClientId) {
            form.setValue("clientId", urlClientId);
+           if (urlCanjeId) form.setValue("canjeId", urlCanjeId);
            if (urlOppId) form.setValue("opportunityId", urlOppId);
            getOpportunitiesByClientId(urlClientId).then(setOpportunities);
            setIsRestored(true);
@@ -320,7 +324,7 @@ export function AdvertisingForm() {
           materialSent: false, materialUrl: "", certReq: false, agencySale: false,
           commissionSrl: 0, adjustmentSrl: 0, adjustmentSas: 0,
           srlItems: [], sasItems: [], billingRequestsSrl: [], billingRequestsSas: [], billingRequestsAvion: [],
-          startDate: undefined, endDate: undefined, clientId: "", agencyId: "none", opportunityId: "", newOpportunityTitle: "", product: "", tangoOrderNo: "", observations: ""
+          startDate: undefined, endDate: undefined, clientId: "", canjeId: "", agencyId: "none", opportunityId: "", newOpportunityTitle: "", product: "", tangoOrderNo: "", observations: ""
       });
       setDraftLoaded(false);
       toast({ title: "Borrador limpiado" });
@@ -764,6 +768,7 @@ export function AdvertisingForm() {
         ...preview,
         status: targetStatus,
         clientId: data.clientId,
+        canjeId: data.canjeId || undefined,
         clientName: selectedClient?.razonSocial || selectedClient?.denominacion || "Desconocido",
         clientRazonSocial: selectedClient?.razonSocial || "",
         clientCuit: selectedClient?.cuit || "",
