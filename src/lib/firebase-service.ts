@@ -12,6 +12,7 @@ import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format, parse
 import { sendEmail } from './google-gmail-service';
 import { toTitleCase } from './utils';
 import { buildAdvertisingOrderChanges } from './advertising-order-history';
+import { getAdvertisingOrderFinancialSummary } from './advertising-order-utils';
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
@@ -4758,21 +4759,20 @@ export const updateAdvertisingOrder = async (
             throw new Error('Debe indicar el motivo de la modificación de una orden aprobada.');
         }
 
-        const changes = buildAdvertisingOrderChanges(
-            {
-                ...previousOrder,
-                billingRequestsSrl: previousBillingSrl,
-                billingRequestsSas: previousBillingSas,
-                billingRequestsAvion: previousBillingAvion,
-            },
-            {
-                ...previousOrder,
-                ...restOrderData,
-                billingRequestsSrl: shouldReplaceBilling ? (billingRequestsSrl || []) : previousBillingSrl,
-                billingRequestsSas: shouldReplaceBilling ? (billingRequestsSas || []) : previousBillingSas,
-                billingRequestsAvion: shouldReplaceBilling ? (billingRequestsAvion || []) : previousBillingAvion,
-            },
-        );
+        const previousComparableOrder = {
+            ...previousOrder,
+            billingRequestsSrl: previousBillingSrl,
+            billingRequestsSas: previousBillingSas,
+            billingRequestsAvion: previousBillingAvion,
+        };
+        const nextComparableOrder = {
+            ...previousOrder,
+            ...restOrderData,
+            billingRequestsSrl: shouldReplaceBilling ? (billingRequestsSrl || []) : previousBillingSrl,
+            billingRequestsSas: shouldReplaceBilling ? (billingRequestsSas || []) : previousBillingSas,
+            billingRequestsAvion: shouldReplaceBilling ? (billingRequestsAvion || []) : previousBillingAvion,
+        };
+        const changes = buildAdvertisingOrderChanges(previousComparableOrder, nextComparableOrder);
 
         if (changes.length === 0) {
             throw new Error('No se detectaron cambios para registrar en la orden.');
@@ -4791,6 +4791,10 @@ export const updateAdvertisingOrder = async (
             reason,
             previousStatus: previousOrder.status || 'Aprobado',
             changes,
+            financials: {
+                before: getAdvertisingOrderFinancialSummary(previousComparableOrder),
+                after: getAdvertisingOrderFinancialSummary(nextComparableOrder),
+            },
         });
     }
 

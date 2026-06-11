@@ -18,6 +18,8 @@ import { format } from 'date-fns';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { isSocialMediaSasItem } from '@/lib/advertising-order-utils';
+import { AdvertisingRevisionHistory } from '@/components/publicidad/advertising-revision-history';
 
 export default function AdvertisingOrderDetailPage() {
     const { id } = useParams();
@@ -283,7 +285,7 @@ export default function AdvertisingOrderDetailPage() {
         const fmt = (i.format || '').toLowerCase();
         return fmt.includes('nota') || fmt.includes('gacetilla');
     });
-    const hasSasRedes = order.sasItems?.some(i => (i.format || '').toLowerCase().includes('redes'));
+    const hasSasRedes = order.sasItems?.some(isSocialMediaSasItem);
     
     // Lo conservamos para el botón de enviar a redacción
     const hasGacetilla = order.sasItems?.some(s => s.format === 'Gacetilla de prensa');
@@ -335,36 +337,7 @@ export default function AdvertisingOrderDetailPage() {
                                 <History className="h-5 w-5" /> Historial completo de la orden
                             </h3>
 
-                            {(order.revisionHistory?.length || 0) > 0 && (
-                                <div className="space-y-4">
-                                    {[...(order.revisionHistory || [])].reverse().map((revision, revisionIndex) => (
-                                        <div key={`${revision.timestamp}-${revisionIndex}`} className="border-l-4 border-amber-500 bg-amber-50/60 p-4">
-                                            <div className="flex flex-wrap items-center gap-2 text-sm">
-                                                <span className="font-bold text-slate-900">{revision.userName}</span>
-                                                {revision.userRole && <Badge variant="outline">{revision.userRole}</Badge>}
-                                                <span className="text-slate-500">
-                                                    {format(new Date(revision.timestamp), 'dd/MM/yyyy HH:mm')}
-                                                </span>
-                                            </div>
-                                            <p className="mt-2 text-sm text-slate-800">
-                                                <strong>Motivo:</strong> {revision.reason}
-                                            </p>
-                                            <div className="mt-3 space-y-2">
-                                                {revision.changes.map((change, changeIndex) => (
-                                                    <div key={`${change.field}-${changeIndex}`} className="rounded border bg-white p-3 text-sm">
-                                                        <div className="flex items-center gap-2">
-                                                            <Badge variant="outline">{change.kind}</Badge>
-                                                            <strong>{change.label}</strong>
-                                                        </div>
-                                                        {change.before && <p className="mt-2 text-red-700"><strong>Antes:</strong> {change.before}</p>}
-                                                        {change.after && <p className="mt-1 text-emerald-700"><strong>Después:</strong> {change.after}</p>}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                            <AdvertisingRevisionHistory order={order} programs={programs} />
 
                             {(order.approvalHistory?.length || 0) > 0 && (
                                 <div className="mt-5 space-y-2 border-t pt-4">

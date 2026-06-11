@@ -697,6 +697,21 @@ export type AdvertisingOrderChange = {
   kind: 'Agregado' | 'Modificado' | 'Quitado';
   before?: string;
   after?: string;
+  beforeValue?: AdvertisingOrderItemSrl | AdvertisingOrderItemSas;
+  afterValue?: AdvertisingOrderItemSrl | AdvertisingOrderItemSas;
+};
+
+export type AdvertisingOrderFinancialSummary = {
+  srl: {
+    gross: number;
+    adjustment: number;
+    net: number;
+  };
+  sas: {
+    gross: number;
+    adjustment: number;
+    net: number;
+  };
 };
 
 export type AdvertisingOrderRevision = {
@@ -707,6 +722,10 @@ export type AdvertisingOrderRevision = {
   reason: string;
   previousStatus: ApprovalStatus;
   changes: AdvertisingOrderChange[];
+  financials?: {
+    before: AdvertisingOrderFinancialSummary;
+    after: AdvertisingOrderFinancialSummary;
+  };
 };
 
 export type CommercialNote = {

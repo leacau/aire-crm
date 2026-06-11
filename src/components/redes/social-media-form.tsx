@@ -9,6 +9,7 @@ import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocial
 import { Client, SocialMediaRequest, User, CarouselSlide } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
+import { getSuggestedSocialMediaType } from '@/lib/advertising-order-utils';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -144,6 +145,8 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
                         setAdvisorId(parentOrder.createdBy || userInfo?.id || '');
                         setAdvisorName(parentOrder.accountExecutive || userInfo?.name || '');
                         setOrderTitle(parentOrder.product || parentOrder.opportunityTitle || 'Orden sin título');
+                        const suggestedType = getSuggestedSocialMediaType(parentOrder.sasItems || []);
+                        if (suggestedType) setContentType(suggestedType);
                     }
                 } else {
                     setAdvisorId(userInfo?.id || '');

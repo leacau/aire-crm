@@ -107,6 +107,7 @@ const addArrayChanges = <T>(
   after: T[] = [],
   identity: (item: T) => string,
   summarize: (item: T) => string,
+  includeStructuredValue = false,
 ) => {
   const group = (items: T[]) => items.reduce((map, item) => {
     const key = identity(item);
@@ -125,20 +126,41 @@ const addArrayChanges = <T>(
 
     for (let index = 0; index < paired; index += 1) {
       if (stable(oldItems[index]) !== stable(newItems[index])) {
-        changes.push({
+        const change: AdvertisingOrderChange = {
           field,
           label,
           kind: 'Modificado',
           before: summarize(oldItems[index]),
           after: summarize(newItems[index]),
-        });
+        };
+        if (includeStructuredValue) {
+          change.beforeValue = oldItems[index] as AdvertisingOrderChange['beforeValue'];
+          change.afterValue = newItems[index] as AdvertisingOrderChange['afterValue'];
+        }
+        changes.push(change);
       }
     }
     for (let index = paired; index < oldItems.length; index += 1) {
-      changes.push({ field, label, kind: 'Quitado', before: summarize(oldItems[index]) });
+      changes.push({
+        field,
+        label,
+        kind: 'Quitado',
+        before: summarize(oldItems[index]),
+        ...(includeStructuredValue
+          ? { beforeValue: oldItems[index] as AdvertisingOrderChange['beforeValue'] }
+          : {}),
+      });
     }
     for (let index = paired; index < newItems.length; index += 1) {
-      changes.push({ field, label, kind: 'Agregado', after: summarize(newItems[index]) });
+      changes.push({
+        field,
+        label,
+        kind: 'Agregado',
+        after: summarize(newItems[index]),
+        ...(includeStructuredValue
+          ? { afterValue: newItems[index] as AdvertisingOrderChange['afterValue'] }
+          : {}),
+      });
     }
   });
 };
@@ -165,8 +187,8 @@ export const buildAdvertisingOrderChanges = (
   addScalarChange(changes, 'adjustmentSrl', 'Ajuste SRL', previous.adjustmentSrl, next.adjustmentSrl, money);
   addScalarChange(changes, 'adjustmentSas', 'Ajuste SAS', previous.adjustmentSas, next.adjustmentSas, money);
 
-  addArrayChanges(changes, 'srlItems', 'Contenido SRL', previous.srlItems, next.srlItems, item => `${item.month}|${item.programId}|${item.adType}`, summarizeSrl);
-  addArrayChanges(changes, 'sasItems', 'Contenido SAS', previous.sasItems, next.sasItems, item => `${item.month}|${item.format}|${item.type}`, summarizeSas);
+  addArrayChanges(changes, 'srlItems', 'Contenido SRL', previous.srlItems, next.srlItems, item => `${item.month}|${item.programId}|${item.adType}`, summarizeSrl, true);
+  addArrayChanges(changes, 'sasItems', 'Contenido SAS', previous.sasItems, next.sasItems, item => `${item.month}|${item.format}|${item.type}`, summarizeSas, true);
   addArrayChanges(changes, 'billingRequestsSrl', 'Facturación SRL', previous.billingRequestsSrl, next.billingRequestsSrl, item => `${item.date}`, item => summarizeBilling('SRL', item));
   addArrayChanges(changes, 'billingRequestsSas', 'Facturación SAS', previous.billingRequestsSas, next.billingRequestsSas, item => `${item.date}`, item => summarizeBilling('SAS', item));
   addArrayChanges(changes, 'billingRequestsAvion', 'Facturación AVIÓN', previous.billingRequestsAvion, next.billingRequestsAvion, item => `${item.date}`, item => summarizeBilling('AVIÓN', item));
