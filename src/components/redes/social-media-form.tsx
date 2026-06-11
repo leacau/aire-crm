@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
@@ -22,9 +23,12 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { Spinner } from '@/components/ui/spinner';
 import { Save, ExternalLink, ArrowLeft, Loader2, Plus, Trash2, Link as LinkIcon } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-import { SocialMediaPdf } from './social-media-pdf';
+import dynamic from 'next/dynamic';
+
+const SocialMediaPdf = dynamic(
+    () => import('./social-media-pdf').then(mod => mod.SocialMediaPdf),
+    { ssr: false }
+);
 
 import { arrayUnion } from 'firebase/firestore';
 import { format } from 'date-fns';
@@ -39,6 +43,7 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
     
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [isPdfMounted, setIsPdfMounted] = useState(false);
     const [clients, setClients] = useState<Client[]>([]);
     const [users, setUsers] = useState<User[]>([]); 
     
@@ -186,6 +191,10 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
     });
 
     const generateMultiPagePdf = async (element: HTMLElement) => {
+        const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+            import('html2canvas'),
+            import('jspdf'),
+        ]);
         const page1 = element.querySelector('#social-pdf-page-1') as HTMLElement;
         const page2 = element.querySelector('#social-pdf-page-2') as HTMLElement;
         if (!page1) throw new Error("No se encontraron las páginas del PDF");
@@ -204,13 +213,17 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
     };
 
     const handleDownloadPdf = async () => {
-        if (!pdfRef.current) return;
+        flushSync(() => setIsPdfMounted(true));
         try {
+            await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+            if (!pdfRef.current) throw new Error("No se pudo preparar la vista del PDF.");
             const pdf = await generateMultiPagePdf(pdfRef.current);
             pdf.save(`PedidoRedes_${clients.find(c => c.id === clientId)?.denominacion || 'Cliente'}.pdf`);
         } catch (error) {
             console.error(error);
             toast({ title: 'Error al exportar PDF', variant: 'destructive' });
+        } finally {
+            setIsPdfMounted(false);
         }
     };
 
@@ -521,9 +534,11 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
                 </CardContent>
             </Card>
             
-            <div style={{ position: 'absolute', top: -9999, left: -9999 }}>
-                <SocialMediaPdf ref={pdfRef} request={getPreviewData() as Partial<SocialMediaRequest>} />
-            </div>
+            {isPdfMounted && (
+                <div style={{ position: 'absolute', top: -9999, left: -9999 }}>
+                    <SocialMediaPdf ref={pdfRef} request={getPreviewData() as Partial<SocialMediaRequest>} />
+                </div>
+            )}
         </div>
     );
 }

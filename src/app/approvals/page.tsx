@@ -20,14 +20,13 @@ import { Eye, CheckCircle2, XCircle, Clock, Edit3, ArrowRight, History, Send } f
 import type { ApprovalStatus, Program, Client, ApprovalHistoryItem } from '@/lib/types';
 import { getPrograms, getUserById, getClient } from '@/lib/firebase-service';
 import { sendEmail } from '@/lib/google-gmail-service';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import dynamic from 'next/dynamic';
 
-import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
-import { AdvertisingRevisionHistory } from '@/components/publicidad/advertising-revision-history';
-import { NotePdf } from '@/components/notas/note-pdf';
-import { SocialMediaPdf } from '@/components/redes/social-media-pdf';
-import { WebNotePdf } from '@/components/notas-web/web-note-pdf';
+const AdvertisingOrderPdf = dynamic(() => import('@/components/publicidad/advertising-pdf').then(mod => mod.AdvertisingOrderPdf), { ssr: false });
+const AdvertisingRevisionHistory = dynamic(() => import('@/components/publicidad/advertising-revision-history').then(mod => mod.AdvertisingRevisionHistory), { ssr: false });
+const NotePdf = dynamic(() => import('@/components/notas/note-pdf').then(mod => mod.NotePdf), { ssr: false });
+const SocialMediaPdf = dynamic(() => import('@/components/redes/social-media-pdf').then(mod => mod.SocialMediaPdf), { ssr: false });
+const WebNotePdf = dynamic(() => import('@/components/notas-web/web-note-pdf').then(mod => mod.WebNotePdf), { ssr: false });
 
 type ApprovalItemType = 'Nota Comercial' | 'Pedido de Redes' | 'Orden de Publicidad' | 'Nota Web / Gacetilla';
 
@@ -84,15 +83,13 @@ function ApprovalsPageComponent() {
       const statusesToFetch: ApprovalStatus[] = ['Pendiente', 'Aprobado', 'Devuelto', 'Borrador', 'Pendiente de Modificación'];
       const isReviewer = isBoss || userInfo.role === 'Administracion' || userInfo.area === 'Pautado' || userInfo.role === 'Gerencia' || userInfo.role === 'Jefe';
       
-      const [notesSnap, socialSnap, ordersSnap, webNotesSnap, programsData] = await Promise.all([
+      const [notesSnap, socialSnap, ordersSnap, webNotesSnap] = await Promise.all([
         getDocs(query(collection(db, 'commercial_notes'), where('status', 'in', statusesToFetch))),
         getDocs(query(collection(db, 'social_media_requests'), where('status', 'in', statusesToFetch))),
         getDocs(query(collection(db, 'advertising_orders'), where('status', 'in', statusesToFetch))),
         getDocs(query(collection(db, 'web_notes'), where('status', 'in', statusesToFetch))),
-        getPrograms()
       ]);
 
-      setPrograms(programsData);
       const unifiedList: UnifiedApprovalItem[] = [];
 
       notesSnap.forEach(d => {
@@ -195,11 +192,19 @@ function ApprovalsPageComponent() {
     }
   }, [userInfo]);
 
-  const openEvaluationModal = (item: UnifiedApprovalItem) => {
+  const ensureProgramsLoaded = async () => {
+    if (programs.length > 0) return;
+    setPrograms(await getPrograms());
+  };
+
+  const openEvaluationModal = async (item: UnifiedApprovalItem) => {
     setSelectedItem(item);
     setAdminComments(item.adminComments || '');
     setActionType(null);
     setIsModalOpen(true);
+    if (item.type === 'Nota Comercial' || item.type === 'Orden de Publicidad') {
+      await ensureProgramsLoaded();
+    }
   };
 
   const handleEditRedirect = (item: UnifiedApprovalItem) => {
@@ -215,7 +220,8 @@ function ApprovalsPageComponent() {
     }
   };
 
-  const generateClientSummaryPdfBase64 = (client: Client): string => {
+  const generateClientSummaryPdfBase64 = async (client: Client): Promise<string> => {
+    const { default: jsPDF } = await import('jspdf');
     const pdf = new jsPDF('p', 'mm', 'a4');
     pdf.setFont('helvetica', 'normal');
     pdf.setFillColor(240, 244, 248);
@@ -241,6 +247,10 @@ function ApprovalsPageComponent() {
 
   // 🟢 MOTOR AVANZADO DE GENERACIÓN DE PDF PARA LA APROBACIÓN Y RENOTIFICACIÓN
   const generateAdvancedPdf = async (containerElement: HTMLElement, itemType: ApprovalItemType) => {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
       const isLandscape = itemType === 'Orden de Publicidad';
       const orientation = isLandscape ? 'l' : 'p';
       const pdfWidthMm = isLandscape ? 297 : 210;
@@ -353,7 +363,7 @@ function ApprovalsPageComponent() {
     let clientBase64 = '';
     if (item.clientId) {
       const clientObj = await getClient(item.clientId);
-      if (clientObj) clientBase64 = generateClientSummaryPdfBase64(clientObj);
+      if (clientObj) clientBase64 = await generateClientSummaryPdfBase64(clientObj);
     }
 
     const attachments = [
@@ -463,6 +473,9 @@ function ApprovalsPageComponent() {
 
   // 🟢 LÓGICA DE RENOTIFICACIÓN
   const handleRenotify = async (item: UnifiedApprovalItem) => {
+    if (item.type === 'Nota Comercial' || item.type === 'Orden de Publicidad') {
+      await ensureProgramsLoaded();
+    }
     setRenotifyingItem(item);
     
     // Dejamos un pequeño delay para que React dibuje el PDF oculto en el DOM
@@ -555,10 +568,6 @@ function ApprovalsPageComponent() {
     </div>
   );
 
-  if (authLoading || loading) {
-    return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
-  }
-
   const pendingItems = items.filter(i => i.status === 'Pendiente' || i.status === 'Pendiente de Modificación');
   const approvedItems = items.filter(i => i.status === 'Aprobado');
   const returnedItems = items.filter(i => i.status === 'Devuelto' || i.status === 'Borrador');
@@ -567,6 +576,17 @@ function ApprovalsPageComponent() {
     <div className="flex flex-col h-full bg-slate-50/50">
       <Header title="Bandeja de Aprobaciones" />
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+        {authLoading || loading ? (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <div className="h-8 w-64 animate-pulse rounded bg-muted" />
+              <div className="h-4 w-full max-w-2xl animate-pulse rounded bg-muted" />
+            </div>
+            <div className="h-10 w-full max-w-lg animate-pulse rounded bg-muted" />
+            <div className="h-72 w-full animate-pulse rounded border bg-muted/30" />
+          </div>
+        ) : (
+        <>
         
         <div className="mb-6">
           <h2 className="text-2xl font-bold tracking-tight">Centro de Revisión</h2>
@@ -594,6 +614,8 @@ function ApprovalsPageComponent() {
           <TabsContent value="approved" className="mt-0">{renderTable(approvedItems, true, true)}</TabsContent>
           <TabsContent value="returned" className="mt-0">{renderTable(returnedItems, true, false)}</TabsContent>
         </Tabs>
+        </>
+        )}
       </main>
 
       {/* 🟢 CONTENEDOR OCULTO PARA GENERAR PDF DE RENOTIFICACIÓN */}

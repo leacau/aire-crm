@@ -2,15 +2,13 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getAdvertisingOrder, getPrograms, getBillingRequestsByOrder, getSocialMediaRequests, getAllCommercialNotes, getWebNotes } from '@/lib/firebase-service';
+import { getAdvertisingOrder, getPrograms, getBillingRequestsByOrder, getSocialMediaRequestsByOrderId, getCommercialNotesByOrderId, getWebNotesByOrderId } from '@/lib/firebase-service';
 import type { AdvertisingOrder, Program, CommercialNote, SocialMediaRequest, WebNote } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
 import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2, Film, Share2, Eye, Globe, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { sendEmail } from '@/lib/google-gmail-service';
@@ -46,13 +44,13 @@ export default function AdvertisingOrderDetailPage() {
     useEffect(() => {
         const load = async () => {
             if (typeof id === 'string') {
-                const [o, p, brs, allNotes, allSocial, allWebNotes] = await Promise.all([
+                const [o, p, brs, linkedOrderNotes, linkedOrderSocial, linkedOrderWebNotes] = await Promise.all([
                     getAdvertisingOrder(id),
                     getPrograms(),
                     getBillingRequestsByOrder(id),
-                    getAllCommercialNotes(),
-                    getSocialMediaRequests(),
-                    getWebNotes() 
+                    getCommercialNotesByOrderId(id),
+                    getSocialMediaRequestsByOrderId(id),
+                    getWebNotesByOrderId(id),
                 ]);
                 
                 if (o) {
@@ -79,9 +77,9 @@ export default function AdvertisingOrderDetailPage() {
                     
                     setOrder(o);
 
-                    setLinkedNotes(allNotes.filter(n => n.orderId === id));
-                    setLinkedSocial(allSocial.filter(s => s.orderId === id));
-                    setLinkedWebNotes(allWebNotes.filter(w => w.orderId === id));
+                    setLinkedNotes(linkedOrderNotes);
+                    setLinkedSocial(linkedOrderSocial);
+                    setLinkedWebNotes(linkedOrderWebNotes);
                 }
                 setPrograms(p);
             }
@@ -91,6 +89,10 @@ export default function AdvertisingOrderDetailPage() {
     }, [id]);
 
     const generatePdf = async (containerElement: HTMLElement) => {
+        const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+            import('html2canvas'),
+            import('jspdf'),
+        ]);
         const pdf = new jsPDF('l', 'mm', 'a4', true); 
         const pdfWidthMm = 297;
         const pdfHeightMm = 210;

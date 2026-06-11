@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { flushSync } from "react-dom";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid, addMonths } from "date-fns";
 import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2 } from "lucide-react"; 
 import { useRouter } from "next/navigation";
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -40,9 +39,14 @@ import { hasManagementPrivileges } from "@/lib/role-utils";
 
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
-import { AdvertisingOrderPdf } from "./advertising-pdf";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import dynamic from "next/dynamic";
+
+const AdvertisingOrderPdf = dynamic(
+  () => import("./advertising-pdf").then(mod => mod.AdvertisingOrderPdf),
+  { ssr: false }
+);
 
 export function AdvertisingForm() {
   const { toast } = useToast();
@@ -50,6 +54,7 @@ export function AdvertisingForm() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isPdfMounted, setIsPdfMounted] = useState(false);
   
   const [clients, setClients] = useState<Client[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
@@ -576,6 +581,10 @@ export function AdvertisingForm() {
   };
 
   const generatePdfBase64 = async (containerElement: HTMLElement) => {
+        const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+            import('html2canvas'),
+            import('jspdf'),
+        ]);
         const pdf = new jsPDF('l', 'mm', 'a4', true); 
         const pdfWidthMm = 297;
         const pdfHeightMm = 210;
@@ -667,9 +676,13 @@ export function AdvertisingForm() {
   };
 
   const handleExportPdf = async () => {
-      if (!pdfRef.current) return;
-      setIsExporting(true);
+      flushSync(() => {
+        setIsExporting(true);
+        setIsPdfMounted(true);
+      });
       try {
+          await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+          if (!pdfRef.current) throw new Error("No se pudo preparar la vista del PDF.");
           const pdf = await generatePdfBase64(pdfRef.current);
           pdf.save(`OP-${format(new Date(), 'yyyyMMdd')}.pdf`);
           toast({ title: "PDF Exportado", description: "El archivo se ha descargado correctamente." });
@@ -678,6 +691,7 @@ export function AdvertisingForm() {
           toast({ title: "Error", description: "No se pudo generar el PDF.", variant: "destructive" });
       } finally {
           setIsExporting(false);
+          setIsPdfMounted(false);
       }
   };
 
@@ -868,9 +882,11 @@ export function AdvertisingForm() {
             <ActionButtons />
         </div>
 
-        <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
-            <AdvertisingOrderPdf ref={pdfRef} order={getPreviewOrder()} programs={programs} />
-        </div>
+        {isPdfMounted && (
+          <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
+              <AdvertisingOrderPdf ref={pdfRef} order={getPreviewOrder()} programs={programs} />
+          </div>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 p-4 border rounded-md bg-white shadow-sm">
           <FormField control={form.control} name="clientId" render={({ field }) => (

@@ -5,10 +5,8 @@ import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWit
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
-import { getUserProfile, getEmailWhitelist, createUserProfile } from '@/lib/firebase-service'; 
 import type { User } from '@/lib/types';
 import { validateGoogleServicesAccess } from '@/lib/google-service-check';
-import { initializePermissions } from '@/lib/permissions';
 import { useToast } from '@/hooks/use-toast';
 
 const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service', '/'];
@@ -80,6 +78,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        const [
+          { getUserProfile, getEmailWhitelist, createUserProfile },
+          { initializePermissions },
+        ] = await Promise.all([
+          import('@/lib/firebase-service'),
+          import('@/lib/permissions'),
+        ]);
         const email = firebaseUser.email?.toLowerCase() || '';
         const isAuthorizedDomain = email.endsWith('@airedesantafe.com.ar') || email.endsWith('@airedigital.com');
         const isHardcodedException = email === 'leandrochena@gmail.com';
@@ -160,17 +165,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => unsubscribe();
   }, [toast]);
-
-  useEffect(() => {
-    if (!loading) {
-      const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/public/');
-      if (!user && !isPublicRoute) {
-        router.push('/login');
-      } else if (user && pathname === '/login') {
-        router.push('/');
-      }
-    }
-  }, [user, loading, pathname, router]);
 
   useEffect(() => {
     if (loading || !user) return;

@@ -302,6 +302,18 @@ export const getAllCommercialNotes = async (): Promise<CommercialNote[]> => {
     }
 };
 
+export const getCommercialNotesByOrderId = async (orderId: string): Promise<CommercialNote[]> => {
+    const snapshot = await getDocs(query(collections.commercialNotes, where('orderId', '==', orderId)));
+    return snapshot.docs.map(noteDoc => {
+        const data = noteDoc.data();
+        return {
+            id: noteDoc.id,
+            ...data,
+            createdAt: timestampToISO(data.createdAt) || new Date().toISOString()
+        } as CommercialNote;
+    });
+};
+
 export const getCommercialNote = async (noteId: string): Promise<CommercialNote | null> => {
     try {
         const docRef = doc(db, 'commercial_notes', noteId);
@@ -4925,6 +4937,19 @@ export const getSocialMediaRequests = async (): Promise<SocialMediaRequest[]> =>
     return requests;
 };
 
+export const getSocialMediaRequestsByOrderId = async (orderId: string): Promise<SocialMediaRequest[]> => {
+    const snapshot = await getDocs(query(collections.socialMediaRequests, where('orderId', '==', orderId)));
+    return snapshot.docs.map(requestDoc => {
+        const data = requestDoc.data();
+        return {
+            id: requestDoc.id,
+            ...data,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+        } as SocialMediaRequest;
+    });
+};
+
 export const getSocialMediaRequest = async (id: string): Promise<SocialMediaRequest | null> => {
     const docRef = doc(db, 'social_media_requests', id);
     const docSnap = await getDoc(docRef);
@@ -5442,6 +5467,19 @@ export const getWebNotes = async (): Promise<WebNote[]> => {
     
     setInCache('webNotes', notes);
     return notes;
+};
+
+export const getWebNotesByOrderId = async (orderId: string): Promise<WebNote[]> => {
+    const snapshot = await getDocs(query(collections.webNotes, where('orderId', '==', orderId)));
+    return snapshot.docs.map(noteDoc => {
+        const data = noteDoc.data();
+        return {
+            id: noteDoc.id,
+            ...data,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+        } as WebNote;
+    });
 };
 
 export const getWebNote = async (id: string): Promise<WebNote | null> => {

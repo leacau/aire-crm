@@ -38,7 +38,6 @@ import {
   cleanupOldActivities,
   getReportDataForAdvisors // 🟢 IMPORTACIÓN NUEVA
 } from '@/lib/firebase-service';
-import { generateAdvisorsPdfReport } from '@/lib/report-generator'; // 🟢 IMPORTACIÓN NUEVA
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, eachMonthOfInterval, differenceInDays, startOfDay, addDays, isAfter, isBefore, addMonths } from 'date-fns';
@@ -53,7 +52,6 @@ import { Badge } from '@/components/ui/badge';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { TasksModal } from '@/components/dashboard/tasks-modal';
 import { TaskNotification } from '@/components/dashboard/task-notification';
 import { useRouter } from 'next/navigation';
 import {
@@ -77,7 +75,8 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { hasManagementPrivileges } from '@/lib/role-utils';
-import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
+const TasksModal = dynamic(() => import('@/components/dashboard/tasks-modal').then(mod => mod.TasksModal), { ssr: false });
+const OpportunityDetailsDialog = dynamic(() => import('@/components/opportunities/opportunity-details-dialog').then(mod => mod.OpportunityDetailsDialog), { ssr: false });
 
 type TaskStatus = 'overdue' | 'dueToday' | 'dueTomorrow';
 
@@ -457,6 +456,7 @@ export default function DashboardPage() {
     setIsGeneratingPdf(true);
     try {
       const data = await getReportDataForAdvisors([userInfo.id]);
+      const { generateAdvisorsPdfReport } = await import('@/lib/report-generator');
       generateAdvisorsPdfReport(data);
       toast({ title: "Reporte generado", description: "Tu informe se descargará en breve." });
     } catch (error) {
@@ -472,6 +472,7 @@ export default function DashboardPage() {
     try {
       const advisorIds = advisors.map(a => a.id);
       const data = await getReportDataForAdvisors(advisorIds);
+      const { generateAdvisorsPdfReport } = await import('@/lib/report-generator');
       generateAdvisorsPdfReport(data);
       toast({ title: "Reporte consolidado", description: "El informe del equipo se descargará en breve." });
     } catch (error) {

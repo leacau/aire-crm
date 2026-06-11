@@ -85,8 +85,6 @@ export default function AdvertisingOrdersListPage() {
         );
     });
 
-    if (authLoading || loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
-
     return (
         <div className="flex flex-col h-full overflow-hidden">
             <Header title="Órdenes de Publicidad (Últimos 2 meses)">
@@ -97,6 +95,13 @@ export default function AdvertisingOrdersListPage() {
                 </Button>
             </Header>
             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
+                {authLoading || loading ? (
+                    <>
+                        <div className="h-10 w-full max-w-md animate-pulse rounded bg-muted" />
+                        <div className="h-72 w-full animate-pulse rounded border bg-muted/30" />
+                    </>
+                ) : (
+                <>
                 <div className="flex items-center space-x-2">
                     <div className="relative w-full md:w-1/3">
                         <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -164,6 +169,8 @@ export default function AdvertisingOrdersListPage() {
                         </Table>
                     </CardContent>
                 </Card>
+                </>
+                )}
             </main>
         </div>
     );

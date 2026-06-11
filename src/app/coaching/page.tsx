@@ -4,13 +4,18 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { getAllUsers, syncRegisteredUsersFromAuth } from '@/lib/firebase-service';
 import type { User } from '@/lib/types';
-import { CoachingView } from '@/components/team/coaching-view';
 import { Header } from '@/components/layout/header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import dynamic from 'next/dynamic';
+
+const CoachingView = dynamic(
+  () => import('@/components/team/coaching-view').then(mod => mod.CoachingView),
+  { ssr: false, loading: () => <div className="h-full w-full animate-pulse rounded bg-muted/30" /> }
+);
 
 const advisorRoles = new Set(['Asesor', 'Asesor Canjes']);
 
@@ -75,18 +80,12 @@ export default function CoachingPage() {
     ? advisors.find(u => u.id === selectedAdvisorId)
     : userInfo;
 
-  if (authLoading || loading) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Spinner size="large" />
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Header title="Seguimiento Semanal">
-        {canManageCoaching && advisors.length > 0 && (
+        {(authLoading || loading) && canManageCoaching ? (
+          <div className="h-10 w-[280px] animate-pulse rounded bg-muted" />
+        ) : canManageCoaching && advisors.length > 0 && (
           <div className="w-[280px]">
             <Select value={selectedAdvisorId} onValueChange={setSelectedAdvisorId}>
               <SelectTrigger>
@@ -105,7 +104,9 @@ export default function CoachingPage() {
       </Header>
 
       <main className="flex-1 overflow-hidden p-4 md:p-6 lg:p-8">
-        {loadError ? (
+        {authLoading || loading ? (
+          <div className="h-full w-full animate-pulse rounded border bg-muted/30" />
+        ) : loadError ? (
           <Card className="h-full border-dashed bg-muted/20">
             <CardContent className="flex h-full flex-col items-center justify-center gap-4 text-center text-muted-foreground">
               <AlertCircle className="h-8 w-8 text-amber-600" />

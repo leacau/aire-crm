@@ -32,9 +32,13 @@ export function ObjectiveReminderBanner() {
     }
 
     let isMounted = true;
-    setLoading(true);
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    Promise.all([getClients(), getOpportunities(), getInvoices(), getObjectiveVisibilityConfig()])
+    const loadMetrics = () => {
+      if (!isMounted) return;
+      setLoading(true);
+      Promise.all([getClients(), getOpportunities(), getInvoices(), getObjectiveVisibilityConfig()])
       .then(([clients, opportunities, invoices, visibility]) => {
         if (!isMounted) return;
 
@@ -88,9 +92,18 @@ export function ObjectiveReminderBanner() {
             setLoading(false);
           }
         });
+    };
+
+    if ('requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(loadMetrics, { timeout: 1500 });
+    } else {
+      timeoutId = setTimeout(loadMetrics, 250);
+    }
 
     return () => {
       isMounted = false;
+      if (idleId !== undefined && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [shouldHide, userInfo?.id, userInfo?.monthlyObjective, userInfo?.monthlyObjectives]);
 
@@ -109,8 +122,20 @@ export function ObjectiveReminderBanner() {
     return { progress: totalProgress, paidProgress, pendingProgress, remaining };
   }, [metrics]);
 
-  if (shouldHide || (!metrics && !loading)) {
+  if (shouldHide) {
     return null;
+  }
+
+  if (!metrics) {
+    return (
+      <div className="sticky top-0 z-30 min-h-[132px] border-b border-primary/20 bg-background px-4 py-3 sm:min-h-[96px]">
+        <div className="mx-auto flex w-full max-w-5xl animate-pulse flex-col gap-3">
+          <div className="h-4 w-40 rounded bg-muted" />
+          <div className="h-2 w-full rounded-full bg-muted" />
+          <div className="h-3 w-64 max-w-full rounded bg-muted" />
+        </div>
+      </div>
+    );
   }
 
   const monthlyObjective = metrics?.monthlyObjective ?? 0;
@@ -120,7 +145,7 @@ export function ObjectiveReminderBanner() {
   const showObjectiveInfo = monthlyObjective > 0;
 
   return (
-    <div className="sticky top-0 z-30 border-b border-primary/20 bg-gradient-to-r from-primary/10 via-background to-primary/10 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+    <div className="sticky top-0 z-30 min-h-[132px] border-b border-primary/20 bg-gradient-to-r from-primary/10 via-background to-primary/10 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:min-h-[96px]">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
         <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 font-semibold text-primary">

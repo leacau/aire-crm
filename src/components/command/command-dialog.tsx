@@ -12,7 +12,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Wand2 } from 'lucide-react';
-import { executeCommanderFlow } from '@/ai/flows/commander-flow';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '../ui/spinner';
 import { useToast } from '@/hooks/use-toast';
@@ -31,6 +30,7 @@ export function CommandDialog() {
     setIsExecuting(true);
     setResponse('');
     try {
+      const { executeCommanderFlow } = await import('@/ai/flows/commander-flow');
       const result = await executeCommanderFlow(inputValue, userInfo);
       setResponse(result);
     } catch (error) {

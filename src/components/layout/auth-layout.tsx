@@ -2,7 +2,12 @@
 import { usePathname } from 'next/navigation';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/app-sidebar';
-import { ObjectiveReminderBanner } from '@/components/objectives/objective-reminder-banner';
+import dynamic from 'next/dynamic';
+
+const ObjectiveReminderBanner = dynamic(
+    () => import('@/components/objectives/objective-reminder-banner').then(mod => mod.ObjectiveReminderBanner),
+    { ssr: false }
+);
 
 const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service', '/'];
 
