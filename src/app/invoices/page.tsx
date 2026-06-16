@@ -318,8 +318,8 @@ export default function InvoiceUploadPage() {
             await createInvoice(
                 {
                     opportunityId: row.opportunityId,
-                    canjeId: canjeRelation.canjeId,
-                    orderId: canjeRelation.orderId,
+                    ...(canjeRelation.canjeId ? { canjeId: canjeRelation.canjeId } : {}),
+                    ...(canjeRelation.orderId ? { orderId: canjeRelation.orderId } : {}),
                     invoiceNumber: inputRaw,
                     amount: amountNum,
                     date: row.date,
@@ -336,8 +336,8 @@ export default function InvoiceUploadPage() {
               {
                 id: `temp-${Date.now()}-${Math.random()}`,
                 opportunityId: row.opportunityId,
-                canjeId: canjeRelation.canjeId,
-                orderId: canjeRelation.orderId,
+                ...(canjeRelation.canjeId ? { canjeId: canjeRelation.canjeId } : {}),
+                ...(canjeRelation.orderId ? { orderId: canjeRelation.orderId } : {}),
                 invoiceNumber: inputRaw,
                 amount: amountNum,
                 date: row.date,

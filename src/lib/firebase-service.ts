@@ -2085,6 +2085,11 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: st
       orderDate: invoiceData.orderDate ?? null,
       orderNumber: invoiceData.orderNumber ?? null,
     };
+    Object.keys(dataToSave).forEach(key => {
+      if ((dataToSave as Record<string, unknown>)[key] === undefined) {
+        delete (dataToSave as Record<string, unknown>)[key];
+      }
+    });
     const docRef = await addDoc(collections.invoices, dataToSave);
     
     // 🟢 MUTADOR CORRECTO PARA FACTURAS (Usamos dataToSave)
