@@ -188,7 +188,7 @@ const invalidateOpportunityCaches = (clientIds: Array<string | undefined | null>
 
 
 export type ClientTangoUpdate = {
-    cuit?: string; tangoCompanyId?: string; idTango?: string; email?: string; phone?: string; rubro?: string; razonSocial?: string; razonSocialTango?: string; denominacion?: string; idAireSrl?: string; idAireDigital?: string; condicionIVA?: string; provincia?: string; localidad?: string; tipoEntidad?: string; observaciones?: string;
+    cuit?: string; tangoCompanyId?: string; idTango?: string; email?: string; phone?: string; rubro?: string; razonSocial?: string; razonSocialTango?: string; denominacion?: string; idAireSrl?: string; idAireDigital?: string; idAire?: string; condicionIVA?: string; provincia?: string; localidad?: string; tipoEntidad?: string; observaciones?: string;
 };
 
 // --- Commercial Notes Functions ---
@@ -2927,6 +2927,9 @@ export const updateClientTangoMapping = async (
     if (data.idAireDigital && data.idAireDigital.toString().trim().length > 0) {
         updatePayload.idAireDigital = data.idAireDigital.toString().trim();
     }
+    if (data.idAire && data.idAire.toString().trim().length > 0) {
+        updatePayload.idAire = data.idAire.toString().trim();
+    }
     if (data.condicionIVA && data.condicionIVA.trim().length > 0) {
         updatePayload.condicionIVA = data.condicionIVA.trim() as any;
     }
@@ -2973,6 +2976,9 @@ export const updateClientTangoMapping = async (
     }
     if (updatePayload.idAireDigital && updatePayload.idAireDigital !== (originalData as any).idAireDigital) {
         detailsParts.push(`ID Aire Digital <strong>${updatePayload.idAireDigital}</strong>`);
+    }
+    if (updatePayload.idAire && updatePayload.idAire !== (originalData as any).idAire) {
+        detailsParts.push(`ID Aire <strong>${updatePayload.idAire}</strong>`);
     }
     if (updatePayload.condicionIVA && updatePayload.condicionIVA !== originalData.condicionIVA) {
         detailsParts.push(`Condición IVA <strong>${updatePayload.condicionIVA}</strong>`);

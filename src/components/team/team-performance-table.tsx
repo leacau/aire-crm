@@ -56,6 +56,7 @@ const areaTypes: AreaType[] = ['Comercial', 'Administración', 'Recursos Humanos
 const TANGO_COMPANIES = [
     { value: 'Aire SRL', label: 'Aire SRL' },
     { value: 'Aire Digital SAS', label: 'Aire Digital SAS' },
+    { value: 'Aire', label: 'Aire' },
 ];
 
 export function TeamPerformanceTable() {

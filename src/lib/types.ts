@@ -217,6 +217,7 @@ export type Client = {
   tangoCompanyId?: string;
   idAireSrl?: string;
   idAireDigital?: string;
+  idAire?: string;
   condicionIVA: CondicionIVA;
   provincia: string;
   localidad: string;

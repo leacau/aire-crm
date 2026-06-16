@@ -767,10 +767,11 @@ export function ClientDetails({
               <FileText className="h-4 w-4 text-muted-foreground" />
               <span>{client.condicionIVA}</span>
             </div>
-            {(client.idAireSrl || client.idAireDigital || client.idTango || client.tangoCompanyId) && (
+            {(client.idAire || client.idAireSrl || client.idAireDigital || client.idTango || client.tangoCompanyId) && (
               <div className="space-y-1">
                 <h4 className="font-medium text-sm">IDs Tango</h4>
                 <div className="flex flex-wrap gap-2">
+                  {client.idAire && <Badge variant="outline">Aire: {client.idAire}</Badge>}
                   {client.idAireSrl && <Badge variant="outline">Aire SRL: {client.idAireSrl}</Badge>}
                   {client.idAireDigital && <Badge variant="outline">Aire Digital: {client.idAireDigital}</Badge>}
                   {!client.idAireSrl && client.idTango && <Badge variant="outline">ID Tango: {client.idTango}</Badge>}

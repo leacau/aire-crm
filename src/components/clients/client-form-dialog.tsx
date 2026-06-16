@@ -50,6 +50,7 @@ const initialFormData: ClientFormData = {
   isNewClient: false,
   isDeactivated: false,
   allowCanjes: false,
+  idAire: '',
   idAireSrl: '',
   idAireDigital: '',
 };
@@ -128,6 +129,7 @@ export function ClientFormDialog({
       isNewClient: formData.isNewClient || false,
       isDeactivated: formData.isDeactivated || false,
       allowCanjes: formData.allowCanjes || false,
+      idAire: canEditIds ? (formData.idAire || '').trim() : client?.idAire || '',
       idAireSrl: canEditIds ? (formData.idAireSrl || '').trim() : client?.idAireSrl || '',
       idAireDigital: canEditIds ? (formData.idAireDigital || '').trim() : client?.idAireDigital || '',
     };
@@ -236,6 +238,18 @@ export function ClientFormDialog({
           </div>
           {isEditing && canEditIds && (
             <>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="idAire" className="text-right">
+                  ID Aire / Tango
+                </Label>
+                <Input
+                  id="idAire"
+                  name="idAire"
+                  value={formData.idAire || ''}
+                  onChange={handleChange}
+                  className="col-span-3"
+                />
+              </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="idAireSrl" className="text-right">
                   ID Aire SRL / Tango
