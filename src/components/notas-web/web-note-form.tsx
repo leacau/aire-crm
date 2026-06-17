@@ -20,11 +20,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { Spinner } from '@/components/ui/spinner';
 import { Save, ExternalLink, ArrowLeft, Loader2, Link as LinkIcon } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { WebNotePdf } from './web-note-pdf';
 import { ClientCombobox } from '@/components/clients/client-combobox';
 import { advertisingOrderSupportsExecution } from '@/lib/advertising-order-utils';
+import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 
 import { arrayUnion } from 'firebase/firestore';
 import { format as formatDate } from 'date-fns';
@@ -178,15 +177,7 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
         createdAt: new Date().toISOString()
     });
 
-    const generatePdf = async (containerElement: HTMLElement) => {
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const canvas = await html2canvas(containerElement, { scale: 1.5, useCORS: true });
-        const imgData = canvas.toDataURL('image/jpeg', 0.8);
-        const pdfWidth = 210;
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-        return pdf;
-    };
+    const generatePdf = async (containerElement: HTMLElement) => generatePaginatedPdfFromElement(containerElement);
 
     const handleDownloadPdf = async () => {
         if (!pdfRef.current) return;

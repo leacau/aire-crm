@@ -21,6 +21,7 @@ import type { ApprovalStatus, Program, Client, ApprovalHistoryItem } from '@/lib
 import { getPrograms, getUserById, getClient } from '@/lib/firebase-service';
 import { sendEmail } from '@/lib/google-gmail-service';
 import dynamic from 'next/dynamic';
+import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 
 const AdvertisingOrderPdf = dynamic(() => import('@/components/publicidad/advertising-pdf').then(mod => mod.AdvertisingOrderPdf), { ssr: false });
 const AdvertisingRevisionHistory = dynamic(() => import('@/components/publicidad/advertising-revision-history').then(mod => mod.AdvertisingRevisionHistory), { ssr: false });
@@ -247,6 +248,10 @@ function ApprovalsPageComponent() {
 
   // 🟢 MOTOR AVANZADO DE GENERACIÓN DE PDF PARA LA APROBACIÓN Y RENOTIFICACIÓN
   const generateAdvancedPdf = async (containerElement: HTMLElement, itemType: ApprovalItemType) => {
+      if (itemType !== 'Orden de Publicidad') {
+        return generatePaginatedPdfFromElement(containerElement);
+      }
+
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
         import('html2canvas'),
         import('jspdf'),
