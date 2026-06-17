@@ -2,11 +2,27 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getAdvertisingOrder, getPrograms, getBillingRequestsByOrder, getSocialMediaRequestsByOrderId, getCommercialNotesByOrderId, getWebNotesByOrderId } from '@/lib/firebase-service';
+import {
+    getAdvertisingOrder,
+    getPrograms,
+    getBillingRequestsByOrder,
+    getSocialMediaRequestsByOrderId,
+    getCommercialNotesByOrderId,
+    getWebNotesByOrderId,
+    getCommercialNotesByClientId,
+    getSocialMediaRequestsByClientId,
+    getWebNotesByClientId,
+    linkCommercialNoteToOrder,
+    linkSocialMediaRequestToOrder,
+    linkWebNoteToOrder,
+    unlinkCommercialNoteFromOrder,
+    unlinkSocialMediaRequestFromOrder,
+    unlinkWebNoteFromOrder,
+} from '@/lib/firebase-service';
 import type { AdvertisingOrder, Program, CommercialNote, SocialMediaRequest, WebNote } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
-import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2, Film, Share2, Eye, Globe, History } from 'lucide-react';
+import { ArrowLeft, Copy, Mail, FileDown, Send, Edit, Loader2, Film, Share2, Eye, Globe, History, Link as LinkIcon, Unlink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import { useToast } from '@/hooks/use-toast';
@@ -30,11 +46,15 @@ export default function AdvertisingOrderDetailPage() {
     const [linkedNotes, setLinkedNotes] = useState<CommercialNote[]>([]);
     const [linkedSocial, setLinkedSocial] = useState<SocialMediaRequest[]>([]);
     const [linkedWebNotes, setLinkedWebNotes] = useState<WebNote[]>([]);
+    const [unlinkedNotes, setUnlinkedNotes] = useState<CommercialNote[]>([]);
+    const [unlinkedSocial, setUnlinkedSocial] = useState<SocialMediaRequest[]>([]);
+    const [unlinkedWebNotes, setUnlinkedWebNotes] = useState<WebNote[]>([]);
     
     const [loading, setLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
     const [isResending, setIsResending] = useState(false);
     const [isSendingToRedaccion, setIsSendingToRedaccion] = useState(false);
+    const [linkingId, setLinkingId] = useState<string | null>(null);
     
     const router = useRouter();
 
@@ -80,6 +100,15 @@ export default function AdvertisingOrderDetailPage() {
                     setLinkedNotes(linkedOrderNotes);
                     setLinkedSocial(linkedOrderSocial);
                     setLinkedWebNotes(linkedOrderWebNotes);
+
+                    const [clientNotes, clientSocial, clientWebNotes] = await Promise.all([
+                        getCommercialNotesByClientId(o.clientId),
+                        getSocialMediaRequestsByClientId(o.clientId),
+                        getWebNotesByClientId(o.clientId),
+                    ]);
+                    setUnlinkedNotes(clientNotes.filter(note => !note.orderId));
+                    setUnlinkedSocial(clientSocial.filter(request => !request.orderId));
+                    setUnlinkedWebNotes(clientWebNotes.filter(note => !note.orderId));
                 }
                 setPrograms(p);
             }
@@ -272,6 +301,74 @@ export default function AdvertisingOrderDetailPage() {
         }
     };
 
+    const getOrderLinkTitle = () => order?.product || order?.opportunityTitle || 'Orden de publicidad';
+
+    const handleLinkExecution = async (
+        kind: 'note' | 'social' | 'web',
+        item: CommercialNote | SocialMediaRequest | WebNote,
+    ) => {
+        if (!order?.id || !userInfo || !item.id) return;
+        setLinkingId(`${kind}-${item.id}`);
+        try {
+            const orderTitle = getOrderLinkTitle();
+            if (kind === 'note') {
+                await linkCommercialNoteToOrder(item.id, order.id, orderTitle, userInfo.id, userInfo.name);
+                setUnlinkedNotes(prev => prev.filter(note => note.id !== item.id));
+                setLinkedNotes(prev => [{ ...(item as CommercialNote), orderId: order.id, orderTitle }, ...prev]);
+            } else if (kind === 'social') {
+                await linkSocialMediaRequestToOrder(item.id, order.id, orderTitle, userInfo.id, userInfo.name);
+                setUnlinkedSocial(prev => prev.filter(request => request.id !== item.id));
+                setLinkedSocial(prev => [{ ...(item as SocialMediaRequest), orderId: order.id, orderTitle }, ...prev]);
+            } else {
+                await linkWebNoteToOrder(item.id, order.id, orderTitle, userInfo.id, userInfo.name);
+                setUnlinkedWebNotes(prev => prev.filter(note => note.id !== item.id));
+                setLinkedWebNotes(prev => [{ ...(item as WebNote), orderId: order.id, orderTitle }, ...prev]);
+            }
+            toast({ title: 'AcciÃ³n vinculada a la orden.' });
+        } catch (error) {
+            console.error(error);
+            toast({ title: 'No se pudo vincular la acciÃ³n.', variant: 'destructive' });
+        } finally {
+            setLinkingId(null);
+        }
+    };
+
+    const handleUnlinkExecution = async (
+        kind: 'note' | 'social' | 'web',
+        item: CommercialNote | SocialMediaRequest | WebNote,
+    ) => {
+        if (!userInfo || !item.id) return;
+        if (!window.confirm('Â¿Quitar la vinculaciÃ³n de esta acciÃ³n con la orden?')) return;
+        setLinkingId(`${kind}-${item.id}`);
+        try {
+            if (kind === 'note') {
+                await unlinkCommercialNoteFromOrder(item.id, userInfo.id, userInfo.name);
+                setLinkedNotes(prev => prev.filter(note => note.id !== item.id));
+                setUnlinkedNotes(prev => [{ ...(item as CommercialNote), orderId: undefined, orderTitle: undefined }, ...prev]);
+            } else if (kind === 'social') {
+                await unlinkSocialMediaRequestFromOrder(item.id, userInfo.id, userInfo.name);
+                setLinkedSocial(prev => prev.filter(request => request.id !== item.id));
+                setUnlinkedSocial(prev => [{ ...(item as SocialMediaRequest), orderId: undefined, orderTitle: undefined }, ...prev]);
+            } else {
+                await unlinkWebNoteFromOrder(item.id, userInfo.id, userInfo.name);
+                setLinkedWebNotes(prev => prev.filter(note => note.id !== item.id));
+                setUnlinkedWebNotes(prev => [{ ...(item as WebNote), orderId: undefined, orderTitle: undefined }, ...prev]);
+            }
+            toast({ title: 'VinculaciÃ³n quitada.' });
+        } catch (error) {
+            console.error(error);
+            toast({ title: 'No se pudo quitar la vinculaciÃ³n.', variant: 'destructive' });
+        } finally {
+            setLinkingId(null);
+        }
+    };
+
+    const formatExecutionDate = (value?: string) => {
+        if (!value) return 'Sin fecha';
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? 'Sin fecha' : format(date, 'dd/MM/yyyy');
+    };
+
     if (loading) return <div className="flex h-full items-center justify-center"><Spinner size="large" /></div>;
     if (!order) return <div className="p-8 text-center">Orden no encontrada</div>;
 
@@ -414,6 +511,86 @@ export default function AdvertisingOrderDetailPage() {
                             </div>
                         )}
 
+                        {canEdit && isOrderApproved && (
+                            <div className="mb-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+                                <div className="mb-3">
+                                    <h4 className="font-semibold text-slate-800">Acciones sin orden asignada</h4>
+                                    <p className="text-xs text-slate-500">VinculÃ¡ acciones existentes de este cliente sin entrar a editarlas.</p>
+                                </div>
+
+                                <div className="grid gap-3 md:grid-cols-3">
+                                    <div className="rounded-md border bg-white p-3">
+                                        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-900">
+                                            <Film className="h-4 w-4" /> Notas Comerciales
+                                        </div>
+                                        {!hasSrlNota ? (
+                                            <p className="text-xs text-slate-500">Esta OP no tiene Nota Comercial pautada.</p>
+                                        ) : unlinkedNotes.length === 0 ? (
+                                            <p className="text-xs text-slate-500">No hay notas comerciales sin orden para este cliente.</p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {unlinkedNotes.map(note => (
+                                                    <div key={note.id} className="rounded border p-2 text-xs">
+                                                        <div className="font-semibold">{note.title || 'Nota comercial'}</div>
+                                                        <div className="text-slate-500">{formatExecutionDate(note.createdAt)}</div>
+                                                        <Button size="sm" variant="outline" className="mt-2 h-7 w-full" disabled={linkingId === `note-${note.id}`} onClick={() => handleLinkExecution('note', note)}>
+                                                            <LinkIcon className="mr-1 h-3 w-3" /> Vincular
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="rounded-md border bg-white p-3">
+                                        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-orange-900">
+                                            <Globe className="h-4 w-4" /> Notas Web
+                                        </div>
+                                        {!hasSasNotaWeb ? (
+                                            <p className="text-xs text-slate-500">Esta OP no tiene Nota Web/Gacetilla pautada.</p>
+                                        ) : unlinkedWebNotes.length === 0 ? (
+                                            <p className="text-xs text-slate-500">No hay notas web sin orden para este cliente.</p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {unlinkedWebNotes.map(note => (
+                                                    <div key={note.id} className="rounded border p-2 text-xs">
+                                                        <div className="font-semibold">{note.format || 'Nota web'}</div>
+                                                        <div className="text-slate-500">{formatExecutionDate(note.createdAt)}</div>
+                                                        <Button size="sm" variant="outline" className="mt-2 h-7 w-full" disabled={linkingId === `web-${note.id}`} onClick={() => handleLinkExecution('web', note)}>
+                                                            <LinkIcon className="mr-1 h-3 w-3" /> Vincular
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="rounded-md border bg-white p-3">
+                                        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-pink-900">
+                                            <Share2 className="h-4 w-4" /> Pedidos de Redes
+                                        </div>
+                                        {!hasSasRedes ? (
+                                            <p className="text-xs text-slate-500">Esta OP no tiene Redes pautado.</p>
+                                        ) : unlinkedSocial.length === 0 ? (
+                                            <p className="text-xs text-slate-500">No hay pedidos de redes sin orden para este cliente.</p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {unlinkedSocial.map(request => (
+                                                    <div key={request.id} className="rounded border p-2 text-xs">
+                                                        <div className="font-semibold">{request.contentType} - {request.objective || 'Pedido de redes'}</div>
+                                                        <div className="text-slate-500">{formatExecutionDate(request.createdAt)}</div>
+                                                        <Button size="sm" variant="outline" className="mt-2 h-7 w-full" disabled={linkingId === `social-${request.id}`} onClick={() => handleLinkExecution('social', request)}>
+                                                            <LinkIcon className="mr-1 h-3 w-3" /> Vincular
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="space-y-4">
                             {linkedNotes.length === 0 && linkedSocial.length === 0 && linkedWebNotes.length === 0 && (
                                 <div className="text-center text-slate-500 py-6 text-sm">
@@ -431,6 +608,11 @@ export default function AdvertisingOrderDetailPage() {
                                         <Badge variant="outline" className={n.status === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>
                                             {n.status || 'Borrador'}
                                         </Badge>
+                                        {canEdit && (
+                                            <Button variant="ghost" size="sm" className="text-slate-500" disabled={linkingId === `note-${n.id}`} onClick={() => handleUnlinkExecution('note', n)}>
+                                                <Unlink className="w-4 h-4 mr-1"/> Quitar
+                                            </Button>
+                                        )}
                                         <Button variant="ghost" size="sm" onClick={() => router.push(`/notas/new?editId=${n.id}`)}><Eye className="w-4 h-4 mr-1"/> Ver</Button>
                                     </div>
                                 </div>
@@ -446,6 +628,11 @@ export default function AdvertisingOrderDetailPage() {
                                         <Badge variant="outline" className={w.status === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>
                                             {w.status || 'Borrador'}
                                         </Badge>
+                                        {canEdit && (
+                                            <Button variant="ghost" size="sm" className="text-slate-500" disabled={linkingId === `web-${w.id}`} onClick={() => handleUnlinkExecution('web', w)}>
+                                                <Unlink className="w-4 h-4 mr-1"/> Quitar
+                                            </Button>
+                                        )}
                                         <Button variant="ghost" size="sm" onClick={() => router.push(`/notas-web/new?editId=${w.id}`)}><Eye className="w-4 h-4 mr-1"/> Ver</Button>
                                     </div>
                                 </div>
@@ -461,6 +648,11 @@ export default function AdvertisingOrderDetailPage() {
                                         <Badge variant="outline" className={s.status === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>
                                             {s.status || 'Borrador'}
                                         </Badge>
+                                        {canEdit && (
+                                            <Button variant="ghost" size="sm" className="text-slate-500" disabled={linkingId === `social-${s.id}`} onClick={() => handleUnlinkExecution('social', s)}>
+                                                <Unlink className="w-4 h-4 mr-1"/> Quitar
+                                            </Button>
+                                        )}
                                         <Button variant="ghost" size="sm" onClick={() => router.push(`/redes/new?editId=${s.id}`)}><Eye className="w-4 h-4 mr-1"/> Ver</Button>
                                     </div>
                                 </div>

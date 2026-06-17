@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { getSocialMediaRequests } from '@/lib/firebase-service';
+import { getClients, getSocialMediaRequests } from '@/lib/firebase-service';
 import { db } from '@/lib/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
 import type { SocialMediaRequest } from '@/lib/types';
@@ -27,7 +27,13 @@ export default function RedesPage() {
         try {
             const data = await getSocialMediaRequests();
             const isManagement = isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Admin';
-            setRequests(isManagement ? data : data.filter(d => d.advisorId === userInfo?.id));
+            if (isManagement) {
+                setRequests(data);
+            } else {
+                const allClients = await getClients();
+                const myClientIds = new Set(allClients.filter(client => client.ownerId === userInfo?.id).map(client => client.id));
+                setRequests(data.filter(d => d.advisorId === userInfo?.id || myClientIds.has(d.clientId)));
+            }
         } catch (e) {
             console.error(e);
         } finally {

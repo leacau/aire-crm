@@ -238,23 +238,19 @@ export const saveCommercialNote = async (
 
 export async function getCommercialNotesByClientId(clientId: string): Promise<CommercialNote[]> {
   try {
-    const q = query(
-      collections.commercialNotes,
-      where('clientId', '==', clientId),
-      orderBy('createdAt', 'desc')
-    );
+    const q = query(collections.commercialNotes, where('clientId', '==', clientId));
 
     const querySnapshot = await getDocs(q);
     const notes: CommercialNote[] = querySnapshot.docs.map(doc => {
       const data = doc.data();
       const createdAt = data.createdAt instanceof Timestamp 
           ? data.createdAt.toDate().toISOString() 
-          : data.createdAt;
+          : (data.createdAt || '');
 
       return { id: doc.id, ...data, createdAt } as CommercialNote;
     });
 
-    return notes;
+    return notes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   } catch (error) {
     console.error("Error al obtener las notas comerciales del cliente:", error);
     throw error;
@@ -286,16 +282,15 @@ export const getCommercialNotesForAdvisor = async (advisorId: string): Promise<C
 
 export const getAllCommercialNotes = async (): Promise<CommercialNote[]> => {
     try {
-        const q = query(collections.commercialNotes, orderBy('createdAt', 'desc'));
-        const querySnapshot = await getDocs(q);
+        const querySnapshot = await getDocs(collections.commercialNotes);
         return querySnapshot.docs.map(doc => {
             const data = doc.data();
             return {
                 id: doc.id,
                 ...data,
-                createdAt: timestampToISO(data.createdAt) || new Date().toISOString()
+                createdAt: timestampToISO(data.createdAt) || data.createdAt || ''
             } as CommercialNote;
-        });
+        }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     } catch (error) {
         console.error("Error getting all notes:", error);
         return [];
@@ -311,6 +306,54 @@ export const getCommercialNotesByOrderId = async (orderId: string): Promise<Comm
             ...data,
             createdAt: timestampToISO(data.createdAt) || new Date().toISOString()
         } as CommercialNote;
+    });
+};
+
+export const linkCommercialNoteToOrder = async (
+    noteId: string,
+    orderId: string,
+    orderTitle: string,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(collections.commercialNotes, noteId);
+    await updateDoc(docRef, {
+        orderId,
+        orderTitle,
+        updatedAt: serverTimestamp(),
+    });
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'commercial_note' as any,
+        entityId: noteId,
+        entityName: 'Nota Comercial',
+        details: `vinculÃ³ una nota comercial a la orden <strong>${orderTitle}</strong>`,
+        ownerName: userName,
+    });
+};
+
+export const unlinkCommercialNoteFromOrder = async (
+    noteId: string,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(collections.commercialNotes, noteId);
+    await updateDoc(docRef, {
+        orderId: deleteField(),
+        orderTitle: deleteField(),
+        updatedAt: serverTimestamp(),
+    });
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'commercial_note' as any,
+        entityId: noteId,
+        entityName: 'Nota Comercial',
+        details: 'quitÃ³ la vinculaciÃ³n de una nota comercial con una orden de publicidad',
+        ownerName: userName,
     });
 };
 
@@ -5006,17 +5049,16 @@ export const getSocialMediaRequests = async (): Promise<SocialMediaRequest[]> =>
     const cachedData = getFromCache('socialMediaRequests');
     if (cachedData) return cachedData;
 
-    const q = query(collections.socialMediaRequests, orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(collections.socialMediaRequests);
     const requests = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
             ...data,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : (data.createdAt || ''),
             updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
         } as SocialMediaRequest;
-    });
+    }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     
     setInCache('socialMediaRequests', requests);
     return requests;
@@ -5032,6 +5074,69 @@ export const getSocialMediaRequestsByOrderId = async (orderId: string): Promise<
             createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
             updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
         } as SocialMediaRequest;
+    });
+};
+
+export const getSocialMediaRequestsByClientId = async (clientId: string): Promise<SocialMediaRequest[]> => {
+    const snapshot = await getDocs(query(collections.socialMediaRequests, where('clientId', '==', clientId)));
+    return snapshot.docs.map(requestDoc => {
+        const data = requestDoc.data();
+        return {
+            id: requestDoc.id,
+            ...data,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : (data.createdAt || ''),
+            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+        } as SocialMediaRequest;
+    }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+};
+
+export const linkSocialMediaRequestToOrder = async (
+    requestId: string,
+    orderId: string,
+    orderTitle: string,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(collections.socialMediaRequests, requestId);
+    await updateDoc(docRef, {
+        orderId,
+        orderTitle,
+        updatedAt: serverTimestamp(),
+    });
+    invalidateCache('socialMediaRequests');
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'social_media_request' as any,
+        entityId: requestId,
+        entityName: 'Pedido de Redes',
+        details: `vinculÃ³ un pedido de redes a la orden <strong>${orderTitle}</strong>`,
+        ownerName: userName,
+    });
+};
+
+export const unlinkSocialMediaRequestFromOrder = async (
+    requestId: string,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(collections.socialMediaRequests, requestId);
+    await updateDoc(docRef, {
+        orderId: deleteField(),
+        orderTitle: deleteField(),
+        updatedAt: serverTimestamp(),
+    });
+    invalidateCache('socialMediaRequests');
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'social_media_request' as any,
+        entityId: requestId,
+        entityName: 'Pedido de Redes',
+        details: 'quitÃ³ la vinculaciÃ³n de un pedido de redes con una orden de publicidad',
+        ownerName: userName,
     });
 };
 
@@ -5538,17 +5643,16 @@ export const getWebNotes = async (): Promise<WebNote[]> => {
     const cachedData = getFromCache('webNotes');
     if (cachedData) return cachedData;
 
-    const q = query(collections.webNotes, orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(collections.webNotes);
     const notes = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
             ...data,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : (data.createdAt || ''),
             updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
         } as WebNote;
-    });
+    }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     
     setInCache('webNotes', notes);
     return notes;
@@ -5564,6 +5668,69 @@ export const getWebNotesByOrderId = async (orderId: string): Promise<WebNote[]> 
             createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
             updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
         } as WebNote;
+    });
+};
+
+export const getWebNotesByClientId = async (clientId: string): Promise<WebNote[]> => {
+    const snapshot = await getDocs(query(collections.webNotes, where('clientId', '==', clientId)));
+    return snapshot.docs.map(noteDoc => {
+        const data = noteDoc.data();
+        return {
+            id: noteDoc.id,
+            ...data,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : (data.createdAt || ''),
+            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+        } as WebNote;
+    }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+};
+
+export const linkWebNoteToOrder = async (
+    noteId: string,
+    orderId: string,
+    orderTitle: string,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(collections.webNotes, noteId);
+    await updateDoc(docRef, {
+        orderId,
+        orderTitle,
+        updatedAt: serverTimestamp(),
+    });
+    invalidateCache('webNotes');
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'commercial_note' as any,
+        entityId: noteId,
+        entityName: 'Nota Web',
+        details: `vinculÃ³ una nota web a la orden <strong>${orderTitle}</strong>`,
+        ownerName: userName,
+    });
+};
+
+export const unlinkWebNoteFromOrder = async (
+    noteId: string,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const docRef = doc(collections.webNotes, noteId);
+    await updateDoc(docRef, {
+        orderId: deleteField(),
+        orderTitle: deleteField(),
+        updatedAt: serverTimestamp(),
+    });
+    invalidateCache('webNotes');
+    await logActivity({
+        userId,
+        userName,
+        type: 'update',
+        entityType: 'commercial_note' as any,
+        entityId: noteId,
+        entityName: 'Nota Web',
+        details: 'quitÃ³ la vinculaciÃ³n de una nota web con una orden de publicidad',
+        ownerName: userName,
     });
 };
 
