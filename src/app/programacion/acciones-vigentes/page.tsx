@@ -21,6 +21,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getAdvertisingOrdersForDateRange, getPrograms } from '@/lib/firebase-service';
 import type { AdvertisingOrder, AdvertisingOrderItemSrl, Program } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 type ActiveAction = {
   id: string;
@@ -127,6 +128,7 @@ export default function ActiveProgrammingPage() {
   const [orders, setOrders] = useState<AdvertisingOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedDayKey, setSelectedDayKey] = useState(toDateKey(new Date()));
 
   const days = useMemo(() => getWeekDays(weekAnchor), [weekAnchor]);
   const rangeStart = days[0].date;
@@ -254,12 +256,23 @@ export default function ActiveProgrammingPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="sticky left-0 z-10 w-[220px] bg-muted font-semibold">Programa</TableHead>
-                    {days.map(day => (
-                      <TableHead key={day.key} className={isSameDay(day.date, new Date()) ? 'bg-primary/10' : ''}>
+                    {days.map(day => {
+                      const isSelected = selectedDayKey === day.key;
+                      return (
+                      <TableHead
+                        key={day.key}
+                        className={cn(
+                          'cursor-pointer select-none transition-colors',
+                          isSameDay(day.date, new Date()) && 'bg-primary/10',
+                          isSelected && 'bg-red-100 ring-1 ring-inset ring-red-300',
+                        )}
+                        onClick={() => setSelectedDayKey(day.key)}
+                      >
                         <div className="text-sm font-semibold capitalize">{format(day.date, 'EEEE', { locale: es })}</div>
                         <div className="text-xs text-muted-foreground">{format(day.date, 'dd/MM')}</div>
                       </TableHead>
-                    ))}
+                      );
+                    })}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -285,8 +298,16 @@ export default function ActiveProgrammingPage() {
                         {days.map(day => {
                           const dateKey = day.key;
                           const actions = actionsByProgramAndDay.get(program.id)?.get(dateKey) || [];
+                          const isSelected = selectedDayKey === dateKey;
                           return (
-                            <TableCell key={dateKey} className="min-w-[155px] align-top">
+                            <TableCell
+                              key={dateKey}
+                              className={cn(
+                                'min-w-[155px] align-top transition-colors',
+                                isSelected && 'bg-red-50/80 ring-1 ring-inset ring-red-100',
+                              )}
+                              onClick={() => setSelectedDayKey(dateKey)}
+                            >
                               <div className="space-y-3">
                                 {groupActionsByType(actions).map(([type, typeActions]) => (
                                   <div key={type} className="space-y-2 rounded-md border-l-4 border-l-primary/40 pl-2">

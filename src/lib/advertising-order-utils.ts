@@ -36,6 +36,42 @@ export const isSocialMediaSasItem = (item: AdvertisingOrderItemSas) => {
   ].some(keyword => searchable.includes(keyword));
 };
 
+const orderText = (order: Partial<AdvertisingOrder>) => normalize([
+  ...(order.srlItems || []).map(item => [
+    item.adType,
+    item.customType,
+    item.programId,
+  ].filter(Boolean).join(' ')),
+  ...(order.sasItems || []).map(item => [
+    item.format,
+    item.type,
+    item.detail,
+    item.customDetail,
+    item.observations,
+  ].filter(Boolean).join(' ')),
+].join(' '));
+
+export type ExecutionKind = 'commercial-note' | 'social-media' | 'web-note';
+
+export const advertisingOrderSupportsExecution = (
+  order: Partial<AdvertisingOrder>,
+  kind: ExecutionKind,
+) => {
+  const text = orderText(order);
+  if (kind === 'commercial-note') {
+    return (order.srlItems || []).some(item => normalize([item.adType, item.customType].join(' ')).includes('nota'));
+  }
+  if (kind === 'social-media') {
+    return (order.sasItems || []).some(isSocialMediaSasItem);
+  }
+  return [
+    'nota web',
+    'web',
+    'gacetilla',
+    'prensa',
+  ].some(keyword => text.includes(keyword));
+};
+
 export const getSuggestedSocialMediaType = (
   items: AdvertisingOrderItemSas[],
 ): 'Reel' | 'Story' | 'Carrusel' | undefined => {

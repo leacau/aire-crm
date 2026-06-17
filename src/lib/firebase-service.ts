@@ -4704,6 +4704,20 @@ export const getAdvertisingOrdersByOpportunity = async (opportunityId: string): 
     }
 };
 
+export const getAdvertisingOrdersByClientId = async (clientId: string): Promise<AdvertisingOrder[]> => {
+    try {
+        if (!clientId) return [];
+        const q = query(collection(db, 'advertising_orders'), where('clientId', '==', clientId));
+        const snapshot = await getDocsPreferCache(q);
+        return snapshot.docs
+            .map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() } as AdvertisingOrder))
+            .sort((a, b) => (b.startDate || b.createdAt || '').localeCompare(a.startDate || a.createdAt || ''));
+    } catch (error) {
+        console.error("Error fetching ad orders by client:", error);
+        return [];
+    }
+};
+
 export const getAdvertisingOrder = async (id: string): Promise<AdvertisingOrder | null> => {
     try {
         const docRef = doc(db, 'advertising_orders', id);

@@ -6,11 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 // 🟢 AGREGAMOS getAdvertisingOrder
-import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocialMediaRequest, getAllUsers, getAdvertisingOrder } from '@/lib/firebase-service'; 
-import { Client, SocialMediaRequest, User, CarouselSlide } from '@/lib/types';
+import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocialMediaRequest, getAllUsers, getAdvertisingOrder, getAdvertisingOrdersByClientId } from '@/lib/firebase-service'; 
+import { AdvertisingOrder, Client, SocialMediaRequest, User, CarouselSlide } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
-import { getSuggestedSocialMediaType } from '@/lib/advertising-order-utils';
+import { advertisingOrderSupportsExecution, getSuggestedSocialMediaType } from '@/lib/advertising-order-utils';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -79,10 +79,14 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
     
     // 🟢 ESTADO PARA GUARDAR EL TÍTULO DE LA ORDEN MADRE
     const [orderTitle, setOrderTitle] = useState('');
+    const [selectedOrderId, setSelectedOrderId] = useState('');
+    const [clientOrders, setClientOrders] = useState<AdvertisingOrder[]>([]);
 
     const [notifyOnSave, setNotifyOnSave] = useState(true);
     
     const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
+    const effectiveOrderId = orderId || selectedOrderId;
+    const compatibleOrders = clientOrders.filter(order => advertisingOrderSupportsExecution(order, 'social-media'));
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
@@ -168,6 +172,30 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
         if (userInfo) init();
     }, [userInfo, editId, cloneId, orderId, toast, canReassign]);
 
+    useEffect(() => {
+        const loadClientOrders = async () => {
+            if (!clientId || orderId) {
+                setClientOrders([]);
+                return;
+            }
+            const orders = await getAdvertisingOrdersByClientId(clientId);
+            setClientOrders(orders);
+        };
+        loadClientOrders();
+    }, [clientId, orderId]);
+
+    const handleOrderSelect = (value: string) => {
+        setSelectedOrderId(value);
+        const selectedOrder = clientOrders.find(order => order.id === value);
+        setOrderTitle(selectedOrder?.product || selectedOrder?.opportunityTitle || 'Orden vinculada');
+        if (selectedOrder) {
+            setAdvisorId(selectedOrder.createdBy || userInfo?.id || '');
+            setAdvisorName(selectedOrder.accountExecutive || userInfo?.name || '');
+            const suggestedType = getSuggestedSocialMediaType(selectedOrder.sasItems || []);
+            if (suggestedType) setContentType(suggestedType);
+        }
+    };
+
     const handleAddSlide = () => setCarouselSlides([...carouselSlides, { text: '', link: '' }]);
     const handleRemoveSlide = (idx: number) => {
         const newSlides = carouselSlides.filter((_, i) => i !== idx);
@@ -244,6 +272,11 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
             return;
         }
 
+        if (cloneId && !effectiveOrderId) {
+            toast({ title: 'Seleccione una Orden de Publicidad', description: 'Para duplicar un pedido de redes debe vincularlo a una OP con redes pautadas.', variant: 'destructive' });
+            return;
+        }
+
         setSaving(true);
         try {
             const client = clients.find(c => c.id === clientId);
@@ -270,8 +303,8 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
             };
 
             // 🟢 VINCULAMOS AL PADRE
-            if (orderId) {
-                dataToSaveRaw.orderId = orderId;
+            if (effectiveOrderId) {
+                dataToSaveRaw.orderId = effectiveOrderId;
                 dataToSaveRaw.orderTitle = orderTitle;
             }
 
@@ -345,8 +378,8 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
               description: notifyOnSave ? 'Pedido enviado a revisión exitosamente.' : 'Guardado en modo Borrador (No enviado).' 
             });
             // 🟢 REDIRECCIÓN INTELIGENTE AL PADRE
-            if (orderId) {
-                router.push(`/publicidad/${orderId}`);
+            if (effectiveOrderId) {
+                router.push(`/publicidad/${effectiveOrderId}`);
             } else {
                 router.push('/redes');
             }
@@ -375,7 +408,7 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
             </div>
 
             {/* 🟢 BANNER INFORMATIVO SI ESTÁ VINCULADO */}
-            {(orderId || editId && orderTitle) && (
+            {(effectiveOrderId || editId && orderTitle) && (
                 <div className="bg-blue-50 border border-blue-200 p-3 rounded-md flex items-center gap-2 text-blue-800 text-sm font-medium">
                     <LinkIcon className="w-4 h-4" />
                     Ejecución vinculada a la Orden de Publicidad Madre: <strong>{orderTitle}</strong>
@@ -385,6 +418,26 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
             <Card>
                 <CardHeader><CardTitle>Datos Básicos</CardTitle></CardHeader>
                 <CardContent className="grid md:grid-cols-2 gap-4">
+                    {cloneId && !orderId && (
+                        <div className="space-y-2 md:col-span-2">
+                            <Label>Orden con Pedido de Redes pautado <span className="text-red-500">*</span></Label>
+                            <Select value={selectedOrderId} onValueChange={handleOrderSelect} disabled={!clientId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder={clientId ? 'Seleccionar orden compatible...' : 'Seleccione primero un cliente'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {compatibleOrders.map(order => (
+                                        <SelectItem key={order.id} value={order.id || ''}>
+                                            {(order.product || order.opportunityTitle || 'Orden sin tÃ­tulo')} - {order.startDate?.slice(0, 10)} al {order.endDate?.slice(0, 10)}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {clientId && compatibleOrders.length === 0 && (
+                                <p className="text-sm text-destructive">Este cliente no tiene Ã³rdenes con redes pautadas.</p>
+                            )}
+                        </div>
+                    )}
                     <div className="space-y-2"><Label>Cliente *</Label>
                         <ClientCombobox
                             clients={clients}

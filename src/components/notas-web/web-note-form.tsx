@@ -4,8 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { getClients, saveWebNote, updateWebNote, getWebNote, getAllUsers, getAdvertisingOrder } from '@/lib/firebase-service'; 
-import { Client, WebNote, User, WebNoteFormat, WebNoteImageSupport } from '@/lib/types';
+import { getClients, saveWebNote, updateWebNote, getWebNote, getAllUsers, getAdvertisingOrder, getAdvertisingOrdersByClientId } from '@/lib/firebase-service'; 
+import { AdvertisingOrder, Client, WebNote, User, WebNoteFormat, WebNoteImageSupport } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 
@@ -24,6 +24,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { WebNotePdf } from './web-note-pdf';
 import { ClientCombobox } from '@/components/clients/client-combobox';
+import { advertisingOrderSupportsExecution } from '@/lib/advertising-order-utils';
 
 import { arrayUnion } from 'firebase/firestore';
 import { format as formatDate } from 'date-fns';
@@ -44,6 +45,8 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
     const [advisorId, setAdvisorId] = useState('');
     const [advisorName, setAdvisorName] = useState('');
     const [orderTitle, setOrderTitle] = useState('');
+    const [selectedOrderId, setSelectedOrderId] = useState('');
+    const [clientOrders, setClientOrders] = useState<AdvertisingOrder[]>([]);
     
     const [contactName, setContactName] = useState('');
     const [contactPhone, setContactPhone] = useState('');
@@ -69,6 +72,8 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
     const [notifyOnSave, setNotifyOnSave] = useState(true);
     
     const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
+    const effectiveOrderId = orderId || selectedOrderId;
+    const compatibleOrders = clientOrders.filter(order => advertisingOrderSupportsExecution(order, 'web-note'));
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement)) {
@@ -138,6 +143,28 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
         if (userInfo) init();
     }, [userInfo, editId, cloneId, orderId, toast, canReassign]);
 
+    useEffect(() => {
+        const loadClientOrders = async () => {
+            if (!clientId || orderId) {
+                setClientOrders([]);
+                return;
+            }
+            const orders = await getAdvertisingOrdersByClientId(clientId);
+            setClientOrders(orders);
+        };
+        loadClientOrders();
+    }, [clientId, orderId]);
+
+    const handleOrderSelect = (value: string) => {
+        setSelectedOrderId(value);
+        const selectedOrder = clientOrders.find(order => order.id === value);
+        setOrderTitle(selectedOrder?.product || selectedOrder?.opportunityTitle || 'Orden vinculada');
+        if (selectedOrder) {
+            setAdvisorId(selectedOrder.createdBy || userInfo?.id || '');
+            setAdvisorName(selectedOrder.accountExecutive || userInfo?.name || '');
+        }
+    };
+
     const getPreviewData = (): Partial<WebNote> => ({
         clientId,
         clientName: clients.find(c => c.id === clientId)?.denominacion || 'Cliente Desconocido',
@@ -177,6 +204,10 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
             toast({ title: 'Datos incompletos', description: 'Por favor complete los campos obligatorios (*)', variant: 'destructive' });
             return;
         }
+        if (cloneId && !effectiveOrderId) {
+            toast({ title: 'Seleccione una Orden de Publicidad', description: 'Para duplicar una nota web debe vincularla a una OP con Nota Web/Gacetilla pautada.', variant: 'destructive' });
+            return;
+        }
 
         setSaving(true);
         try {
@@ -204,8 +235,8 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
                 materialUrl, observations,
             };
 
-            if (orderId) {
-                dataToSaveRaw.orderId = orderId;
+            if (effectiveOrderId) {
+                dataToSaveRaw.orderId = effectiveOrderId;
                 dataToSaveRaw.orderTitle = orderTitle;
             }
 
@@ -250,7 +281,7 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
             }
 
             toast({ title: notifyOnSave ? 'Enviado a Revisión' : 'Guardado Provisorio' });
-            if (orderId) router.push(`/publicidad/${orderId}`);
+            if (effectiveOrderId) router.push(`/publicidad/${effectiveOrderId}`);
             else router.back();
 
         } catch (error) {
@@ -277,7 +308,7 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
                 </div>
             </div>
 
-            {(orderId || (editId && orderTitle)) && (
+            {(effectiveOrderId || (editId && orderTitle)) && (
                 <div className="bg-orange-50 border border-orange-200 p-3 rounded-md flex items-center gap-2 text-orange-800 text-sm font-medium">
                     <LinkIcon className="w-4 h-4" />
                     Ejecución vinculada a la Orden de Publicidad Madre: <strong>{orderTitle}</strong>
@@ -287,6 +318,26 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
             <Card>
                 <CardHeader><CardTitle>Datos Básicos y Contacto</CardTitle></CardHeader>
                 <CardContent className="grid md:grid-cols-2 gap-4">
+                    {cloneId && !orderId && (
+                        <div className="space-y-2 md:col-span-2">
+                            <Label>Orden con Nota Web/Gacetilla pautada <span className="text-red-500">*</span></Label>
+                            <Select value={selectedOrderId} onValueChange={handleOrderSelect} disabled={!clientId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder={clientId ? 'Seleccionar orden compatible...' : 'Seleccione primero un cliente'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {compatibleOrders.map(order => (
+                                        <SelectItem key={order.id} value={order.id || ''}>
+                                            {(order.product || order.opportunityTitle || 'Orden sin tÃ­tulo')} - {order.startDate?.slice(0, 10)} al {order.endDate?.slice(0, 10)}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {clientId && compatibleOrders.length === 0 && (
+                                <p className="text-sm text-destructive">Este cliente no tiene Ã³rdenes con Nota Web/Gacetilla pautada.</p>
+                            )}
+                        </div>
+                    )}
                     <div className="space-y-2"><Label>Cliente *</Label>
                         <ClientCombobox
                             clients={clients}
