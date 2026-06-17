@@ -36,18 +36,89 @@ type ActiveAction = {
   hasTv?: boolean;
 };
 
+type WeekDay = {
+  date: Date;
+  key: string;
+};
+
+type ActionTypeSummary = {
+  type: string;
+  quantity: number;
+  seconds: number;
+};
+
 const toDateKey = (date: Date) => format(date, 'yyyy-MM-dd');
+
+const dateValueToKey = (value?: string) => {
+  if (!value) return '';
+  const datePart = value.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return datePart;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '' : toDateKey(parsed);
+};
 
 const getWeekDays = (weekAnchor: Date) => {
   const weekStart = startOfWeek(weekAnchor, { weekStartsOn: 1 });
-  return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(weekStart, index);
+    return { date, key: toDateKey(date) };
+  });
 };
 
-const isOrderVisible = (order: AdvertisingOrder, day: Date) => {
-  const start = new Date(order.startDate);
-  const end = new Date(order.endDate);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
-  return day >= startOfWeek(start, { weekStartsOn: 1 }) && day <= end;
+const isOrderVisible = (order: AdvertisingOrder, dateKey: string) => {
+  const startKey = dateValueToKey(order.startDate);
+  const endKey = dateValueToKey(order.endDate || order.startDate);
+  if (!startKey || !endKey) return false;
+  return dateKey >= startKey && dateKey <= endKey;
+};
+
+const getActionType = (action: Pick<ActiveAction, 'adType'>) => {
+  const rawType = action.adType || 'Accion';
+  const normalized = rawType.toLowerCase();
+  if (normalized.includes('spot')) return 'Spot';
+  if (normalized.includes('pnt')) return 'PNT';
+  if (normalized.includes('nota')) return 'Nota Comercial';
+  return rawType;
+};
+
+const getTypeOrder = (type: string) => {
+  const normalized = type.toLowerCase();
+  if (normalized === 'spot') return 1;
+  if (normalized === 'pnt') return 2;
+  if (normalized.includes('nota')) return 3;
+  return 10;
+};
+
+const groupActionsByType = (actions: ActiveAction[]) => {
+  const grouped = new Map<string, ActiveAction[]>();
+  actions.forEach(action => {
+    const type = getActionType(action);
+    grouped.set(type, [...(grouped.get(type) || []), action]);
+  });
+  return Array.from(grouped.entries())
+    .sort(([left], [right]) => getTypeOrder(left) - getTypeOrder(right) || left.localeCompare(right));
+};
+
+const getProgramSummaries = (dayMap?: Map<string, ActiveAction[]>) => {
+  const summary = new Map<string, ActionTypeSummary>();
+  dayMap?.forEach(actions => {
+    actions.forEach(action => {
+      const type = getActionType(action);
+      const current = summary.get(type) || { type, quantity: 0, seconds: 0 };
+      current.quantity += action.quantity;
+      if (type === 'Spot') current.seconds += action.quantity * (Number(action.seconds) || 0);
+      summary.set(type, current);
+    });
+  });
+  return Array.from(summary.values())
+    .sort((left, right) => getTypeOrder(left.type) - getTypeOrder(right.type) || left.type.localeCompare(right.type));
+};
+
+const formatSummary = (summary: ActionTypeSummary) => {
+  if (summary.type === 'Spot') return `Spots: ${summary.quantity} (total ${summary.seconds}s)`;
+  if (summary.type === 'PNT') return `PNT's: ${summary.quantity}`;
+  if (summary.type === 'Nota Comercial') return `Nota Comercial: ${summary.quantity}`;
+  return `${summary.type}: ${summary.quantity}`;
 };
 
 export default function ActiveProgrammingPage() {
@@ -58,8 +129,8 @@ export default function ActiveProgrammingPage() {
   const [search, setSearch] = useState('');
 
   const days = useMemo(() => getWeekDays(weekAnchor), [weekAnchor]);
-  const rangeStart = days[0];
-  const rangeEnd = days[days.length - 1];
+  const rangeStart = days[0].date;
+  const rangeEnd = days[days.length - 1].date;
 
   const rangeStartKey = rangeStart.toISOString();
   const rangeEndKey = rangeEnd.toISOString();
@@ -93,9 +164,9 @@ export default function ActiveProgrammingPage() {
         const programName = program?.name || item.programId;
 
         days.forEach(day => {
-          const dateKey = toDateKey(day);
+          const dateKey = day.key;
           const quantity = Number(item.dailySpots?.[dateKey] || 0);
-          if (quantity <= 0 || !isOrderVisible(order, day)) return;
+          if (quantity <= 0 || !isOrderVisible(order, dateKey)) return;
 
           const action: ActiveAction = {
             id: `${order.id}-${itemIndex}-${dateKey}`,
@@ -128,7 +199,7 @@ export default function ActiveProgrammingPage() {
     return programsWithActions.filter(program => {
       const nameMatch = program.name.toLowerCase().includes(term);
       const actionMatch = days.some(day => {
-        const actions = actionsByProgramAndDay.get(program.id)?.get(toDateKey(day)) || [];
+        const actions = actionsByProgramAndDay.get(program.id)?.get(day.key) || [];
         return actions.some(action =>
           action.clientName.toLowerCase().includes(term)
           || action.product.toLowerCase().includes(term)
@@ -184,9 +255,9 @@ export default function ActiveProgrammingPage() {
                   <TableRow>
                     <TableHead className="sticky left-0 z-10 w-[220px] bg-muted font-semibold">Programa</TableHead>
                     {days.map(day => (
-                      <TableHead key={day.toISOString()} className={isSameDay(day, new Date()) ? 'bg-primary/10' : ''}>
-                        <div className="text-sm font-semibold capitalize">{format(day, 'EEEE', { locale: es })}</div>
-                        <div className="text-xs text-muted-foreground">{format(day, 'dd/MM')}</div>
+                      <TableHead key={day.key} className={isSameDay(day.date, new Date()) ? 'bg-primary/10' : ''}>
+                        <div className="text-sm font-semibold capitalize">{format(day.date, 'EEEE', { locale: es })}</div>
+                        <div className="text-xs text-muted-foreground">{format(day.date, 'dd/MM')}</div>
                       </TableHead>
                     ))}
                   </TableRow>
@@ -199,42 +270,55 @@ export default function ActiveProgrammingPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    visiblePrograms.map(program => (
+                    visiblePrograms.map(program => {
+                      const summaries = getProgramSummaries(actionsByProgramAndDay.get(program.id));
+                      return (
                       <TableRow key={program.id}>
-                        <TableCell className="sticky left-0 z-10 bg-background align-top font-medium">
-                          {program.name}
+                        <TableCell className="sticky left-0 z-10 bg-background align-top">
+                          <div className="font-semibold">{program.name}</div>
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            {summaries.map(summary => (
+                              <div key={summary.type}>{formatSummary(summary)}</div>
+                            ))}
+                          </div>
                         </TableCell>
                         {days.map(day => {
-                          const dateKey = toDateKey(day);
+                          const dateKey = day.key;
                           const actions = actionsByProgramAndDay.get(program.id)?.get(dateKey) || [];
                           return (
-                            <TableCell key={dateKey} className="min-w-[135px] align-top">
-                              <div className="space-y-2">
-                                {actions.map(action => (
-                                  <Link
-                                    key={action.id}
-                                    href={`/publicidad/${action.orderId}`}
-                                    className="block rounded-md border bg-card p-2 text-xs shadow-sm transition hover:border-primary hover:bg-primary/5"
-                                  >
-                                    <div className="mb-1 flex items-start justify-between gap-2">
-                                      <span className="font-semibold leading-tight">{action.clientName}</span>
-                                      <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
-                                    </div>
-                                    <div className="line-clamp-2 text-muted-foreground">{action.product}</div>
-                                    <div className="mt-2 flex flex-wrap gap-1">
-                                      <Badge variant="secondary" className="text-[10px]">{action.adType}</Badge>
-                                      {action.seconds ? <Badge variant="outline" className="text-[10px]">{action.seconds}s</Badge> : null}
-                                      {action.hasTv ? <Badge variant="outline" className="text-[10px]">TV</Badge> : null}
-                                      <Badge variant="outline" className="text-[10px]">x{action.quantity}</Badge>
-                                    </div>
-                                  </Link>
+                            <TableCell key={dateKey} className="min-w-[155px] align-top">
+                              <div className="space-y-3">
+                                {groupActionsByType(actions).map(([type, typeActions]) => (
+                                  <div key={type} className="space-y-2 rounded-md border-l-4 border-l-primary/40 pl-2">
+                                    <div className="text-[11px] font-semibold uppercase text-muted-foreground">{type}</div>
+                                    {typeActions.map(action => (
+                                      <Link
+                                        key={action.id}
+                                        href={`/publicidad/${action.orderId}`}
+                                        className="block rounded-md border bg-card p-2 text-xs shadow-sm transition hover:border-primary hover:bg-primary/5"
+                                      >
+                                        <div className="mb-1 flex items-start justify-between gap-2">
+                                          <span className="font-semibold leading-tight">{action.clientName}</span>
+                                          <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+                                        </div>
+                                        <div className="line-clamp-2 text-muted-foreground">{action.product}</div>
+                                        <div className="mt-2 flex flex-wrap gap-1">
+                                          <Badge variant="secondary" className="text-[10px]">{action.adType}</Badge>
+                                          {action.seconds ? <Badge variant="outline" className="text-[10px]">{action.seconds}s</Badge> : null}
+                                          {action.hasTv ? <Badge variant="outline" className="text-[10px]">TV</Badge> : null}
+                                          <Badge variant="outline" className="text-[10px]">x{action.quantity}</Badge>
+                                        </div>
+                                      </Link>
+                                    ))}
+                                  </div>
                                 ))}
                               </div>
                             </TableCell>
                           );
                         })}
                       </TableRow>
-                    ))
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
