@@ -27,6 +27,7 @@ import { NotePdf } from '@/components/notas/note-pdf';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
+import { ClientCombobox } from '@/components/clients/client-combobox';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { arrayUnion } from 'firebase/firestore';
@@ -740,10 +741,13 @@ export default function NewCommercialNotePage() {
                     <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
                         <div className="space-y-2">
                             <Label>Cliente <span className="text-red-500">*</span></Label>
-                            <Select value={selectedClientId} onValueChange={handleClientSelect} disabled={!!orderId}>
-                                <SelectTrigger className={orderId ? "bg-slate-50 opacity-100" : ""}><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                                <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}</SelectContent>
-                            </Select>
+                            <ClientCombobox
+                                clients={clients}
+                                value={selectedClientId}
+                                onChange={handleClientSelect}
+                                disabled={!!orderId}
+                                placeholder="Buscar cliente..."
+                            />
                         </div>
                         <div className="space-y-2"><Label>CUIT</Label><Input value={cuit} onChange={e => setCuit(e.target.value)} /></div>
                         <div className="space-y-2"><Label>Razón Social</Label><Input value={razonSocial} onChange={e => setRazonSocial(e.target.value)} /></div>

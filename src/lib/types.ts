@@ -445,7 +445,7 @@ export const screenNames = [
     'Dashboard', 'Opportunities', 'Prospects', 'Clients', 'Grilla', 'PNTs',
     'Canjes', 'Invoices', 'Billing', 'Calendar', 'Licenses', 'Approvals',
     'Activity', 'Team', 'Rates', 'Reports', 'Import', 'Objectives', 'Chat', 'TangoMapping', 'Quotes', 'Coaching', 'Notas', 'Publicidad', 'Carpeta', 'Redes', 'AppCanjes', 'Pipeline',
-    'Tasks', 'BillingRequests', 'DataCleanup', 'WorkflowAssignments'
+    'Tasks', 'BillingRequests', 'DataCleanup', 'WorkflowAssignments', 'ActiveProgramming'
 ] as const;
 
 export type ScreenName = typeof screenNames[number];

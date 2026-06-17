@@ -2733,6 +2733,9 @@ export const getClients = async (): Promise<Client[]> => {
         return { 
           id: doc.id, 
           ...data,
+          denominacion: data.denominacion ? toTitleCase(data.denominacion) : data.denominacion,
+          razonSocial: data.razonSocial ? toTitleCase(data.razonSocial) : data.razonSocial,
+          razonSocialTango: data.razonSocialTango ? toTitleCase(data.razonSocialTango) : data.razonSocialTango,
           newClientDate: data.newClientDate instanceof Timestamp ? data.newClientDate.toDate().toISOString() : data.newClientDate,
         } as Client
       });
@@ -2902,7 +2905,7 @@ export const updateClientTangoMapping = async (
         updatePayload.cuit = data.cuit.trim();
     }
     if (data.razonSocialTango && data.razonSocialTango.trim().length > 0) {
-        updatePayload.razonSocialTango = data.razonSocialTango.trim();
+        updatePayload.razonSocialTango = toTitleCase(data.razonSocialTango.trim());
     }
     if (data.tangoCompanyId && data.tangoCompanyId.toString().trim().length > 0) {
         updatePayload.tangoCompanyId = data.tangoCompanyId.toString().trim();
@@ -2921,10 +2924,10 @@ export const updateClientTangoMapping = async (
         updatePayload.rubro = data.rubro.trim();
     }
     if (data.razonSocial && data.razonSocial.trim().length > 0) {
-        updatePayload.razonSocial = data.razonSocial.trim();
+        updatePayload.razonSocial = toTitleCase(data.razonSocial.trim());
     }
     if (data.denominacion && data.denominacion.trim().length > 0) {
-        updatePayload.denominacion = data.denominacion.trim();
+        updatePayload.denominacion = toTitleCase(data.denominacion.trim());
     }
     if (data.idAireSrl && data.idAireSrl.toString().trim().length > 0) {
         updatePayload.idAireSrl = data.idAireSrl.toString().trim();
@@ -4747,6 +4750,30 @@ export const getRecentAdvertisingOrders = async (): Promise<AdvertisingOrder[]> 
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AdvertisingOrder));
     } catch (error) {
         console.error("Error fetching recent ad orders:", error);
+        return [];
+    }
+};
+
+export const getAdvertisingOrdersForDateRange = async (rangeStart: Date, rangeEnd: Date): Promise<AdvertisingOrder[]> => {
+    try {
+        const startIso = rangeStart.toISOString();
+        const endIso = rangeEnd.toISOString();
+        const q = query(
+            collection(db, 'advertising_orders'),
+            where('startDate', '<=', endIso),
+            orderBy('startDate', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs
+            .map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() } as AdvertisingOrder))
+            .filter(order => {
+                const orderEnd = order.endDate || order.startDate;
+                const status = order.status || 'Aprobado';
+                return orderEnd >= startIso
+                    && ['Aprobado', 'Pendiente de ModificaciÃ³n'].includes(status);
+            });
+    } catch (error) {
+        console.error('Error fetching advertising orders by date range:', error);
         return [];
     }
 };

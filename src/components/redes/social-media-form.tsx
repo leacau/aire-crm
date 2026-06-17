@@ -24,6 +24,7 @@ import { Switch } from '@/components/ui/switch';
 import { Spinner } from '@/components/ui/spinner';
 import { Save, ExternalLink, ArrowLeft, Loader2, Plus, Trash2, Link as LinkIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import { ClientCombobox } from '@/components/clients/client-combobox';
 
 const SocialMediaPdf = dynamic(
     () => import('./social-media-pdf').then(mod => mod.SocialMediaPdf),
@@ -385,10 +386,13 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
                 <CardHeader><CardTitle>Datos Básicos</CardTitle></CardHeader>
                 <CardContent className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2"><Label>Cliente *</Label>
-                        <Select value={clientId} onValueChange={setClientId} disabled={!!orderId}>
-                            <SelectTrigger className={orderId ? "bg-slate-50 opacity-100" : ""}><SelectValue placeholder="Seleccione cliente..."/></SelectTrigger>
-                            <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.razonSocial ? `${c.razonSocial} (${c.denominacion})` : c.denominacion}</SelectItem>)}</SelectContent>
-                        </Select>
+                        <ClientCombobox
+                            clients={clients}
+                            value={clientId}
+                            onChange={setClientId}
+                            disabled={!!orderId}
+                            placeholder="Buscar cliente..."
+                        />
                     </div>
                     <div className="space-y-2">
                         <Label>Ejecutivo / Asesor</Label>

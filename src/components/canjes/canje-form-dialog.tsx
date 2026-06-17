@@ -30,6 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { ClientCombobox } from '@/components/clients/client-combobox';
 import {
   getAdvertisingOrdersByCanjeId,
   getInvoicesByCanjeId,
@@ -289,10 +290,12 @@ export function CanjeFormDialog({
               </div>
               <div className="space-y-2">
                 <Label>Cliente del acuerdo</Label>
-                <Select value={formData.clienteId || ''} onValueChange={handleClientSelection}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar cliente" /></SelectTrigger>
-                  <SelectContent>{clients.map(client => <SelectItem key={client.id} value={client.id}>{client.denominacion}</SelectItem>)}</SelectContent>
-                </Select>
+                <ClientCombobox
+                  clients={clients}
+                  value={formData.clienteId || ''}
+                  onChange={handleClientSelection}
+                  placeholder="Buscar cliente..."
+                />
               </div>
             </div>
           </fieldset>

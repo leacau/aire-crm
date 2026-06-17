@@ -53,6 +53,17 @@ service cloud.firestore {
         && isClientOwner(request.resource.data.clientId);
     }
 
+    function canOperateOrder(orderId) {
+      return isSignedIn()
+        && (
+          get(/databases/$(database)/documents/advertising_orders/$(orderId)).data.createdBy == request.auth.uid
+          || (
+            get(/databases/$(database)/documents/advertising_orders/$(orderId)).data.clientId is string
+            && isClientOwner(get(/databases/$(database)/documents/advertising_orders/$(orderId)).data.clientId)
+          )
+        );
+    }
+
     function isActorOnResource() {
       return isSignedIn() && (
         resource.data.advisorId == request.auth.uid ||
@@ -180,7 +191,8 @@ service cloud.firestore {
     match /billing_requests/{requestId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update, delete: if isManagement();
+      allow update, delete: if isManagement()
+        || (resource.data.orderId is string && canOperateOrder(resource.data.orderId));
     }
 
     match /advertising_orders/{orderId} {

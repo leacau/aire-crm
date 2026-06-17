@@ -41,6 +41,7 @@ import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ClientCombobox } from "@/components/clients/client-combobox";
 import dynamic from "next/dynamic";
 
 const AdvertisingOrderPdf = dynamic(
@@ -896,10 +897,14 @@ export function AdvertisingForm() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 p-4 border rounded-md bg-white shadow-sm">
           <FormField control={form.control} name="clientId" render={({ field }) => (
               <FormItem><FormLabel>Anunciante (Cliente) <span className="text-red-500">*</span></FormLabel>
-                <Select onValueChange={(val) => { field.onChange(val); setValue("opportunityId", ""); }} value={field.value || undefined}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
-                  <SelectContent>{clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.razonSocial ? `${c.razonSocial} (${c.denominacion})` : c.denominacion}</SelectItem>))}</SelectContent>
-                </Select>
+                <FormControl>
+                  <ClientCombobox
+                    clients={clients}
+                    value={field.value}
+                    onChange={(val) => { field.onChange(val); setValue("opportunityId", ""); }}
+                    placeholder="Buscar cliente..."
+                  />
+                </FormControl>
               <FormMessage /></FormItem>
             )} />
           <FormField control={form.control} name="agencyId" render={({ field }) => (

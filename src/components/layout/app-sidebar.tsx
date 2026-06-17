@@ -33,6 +33,7 @@ import {
   Settings2,
   ChevronRight,
   ShieldCheck,
+  CalendarDays,
   Scale,
   ListTodo,
   StickyNote,
@@ -127,6 +128,7 @@ export function AppSidebar() {
       icon: Layers,
       items: [
         { title: 'Grilla', href: '/grilla', icon: Radio, screenName: 'Grilla' },
+        { title: 'Acciones Vigentes', href: '/programacion/acciones-vigentes', icon: CalendarDays, screenName: 'ActiveProgramming' },
         { title: 'PNTs', href: '/pnts', icon: Megaphone, screenName: 'PNTs' },
         { title: 'Nota Comercial', href: '/notas', icon: StickyNote, screenName: 'Notas' },
         { title: 'Pedido de Redes', href: '/redes', icon: Share2, screenName: 'Redes' }, 
@@ -187,7 +189,7 @@ export function AppSidebar() {
          allowedScreens.push('Dashboard', 'AppCanjes', 'Canjes');
       } 
       else if (userInfo.area === 'Pautado' || userInfo.area === 'Programación') {
-         allowedScreens.push('Dashboard', 'Grilla', 'PNTs', 'Notas', 'Publicidad', 'Clients', 'Approvals');
+         allowedScreens.push('Dashboard', 'Grilla', 'ActiveProgramming', 'PNTs', 'Notas', 'Publicidad', 'Clients', 'Approvals');
       }
       else if (userInfo.area === 'Redacción' || userInfo.area === 'Redes' || userInfo.area === 'Audiovisual') {
          allowedScreens.push('Dashboard', 'Redes', 'Notas');

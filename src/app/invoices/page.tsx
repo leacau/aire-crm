@@ -15,6 +15,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useRouter } from 'next/navigation';
 import { QuickOpportunityFormDialog } from '@/components/invoices/quick-opportunity-form-dialog';
 import { sanitizeInvoiceNumber } from '@/lib/invoice-utils';
+import { ClientCombobox } from '@/components/clients/client-combobox';
 
 type InvoiceRow = {
   id: number;
@@ -440,17 +441,12 @@ export default function InvoiceUploadPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        <Select
+                        <ClientCombobox
+                          clients={clients}
                           value={row.clientId}
-                          onValueChange={value => handleRowChange(row.id, 'clientId', value)}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Seleccionar cliente..." /></SelectTrigger>
-                          <SelectContent>
-                            {clients.map(client => (
-                              <SelectItem key={client.id} value={client.id}>{client.denominacion}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          onChange={value => handleRowChange(row.id, 'clientId', value)}
+                          placeholder="Buscar cliente..."
+                        />
                       </TableCell>
                       <TableCell>
                         <Select

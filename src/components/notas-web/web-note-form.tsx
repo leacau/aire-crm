@@ -23,6 +23,7 @@ import { Save, ExternalLink, ArrowLeft, Loader2, Link as LinkIcon } from 'lucide
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { WebNotePdf } from './web-note-pdf';
+import { ClientCombobox } from '@/components/clients/client-combobox';
 
 import { arrayUnion } from 'firebase/firestore';
 import { format as formatDate } from 'date-fns';
@@ -287,10 +288,13 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
                 <CardHeader><CardTitle>Datos Básicos y Contacto</CardTitle></CardHeader>
                 <CardContent className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2"><Label>Cliente *</Label>
-                        <Select value={clientId} onValueChange={setClientId} disabled={!!orderId}>
-                            <SelectTrigger className={orderId ? "bg-slate-50 opacity-100" : ""}><SelectValue placeholder="Seleccione cliente..."/></SelectTrigger>
-                            <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.razonSocial ? `${c.razonSocial} (${c.denominacion})` : c.denominacion}</SelectItem>)}</SelectContent>
-                        </Select>
+                        <ClientCombobox
+                            clients={clients}
+                            value={clientId}
+                            onChange={setClientId}
+                            disabled={!!orderId}
+                            placeholder="Buscar cliente..."
+                        />
                     </div>
                     <div className="space-y-2">
                         <Label>Ejecutivo / Asesor</Label>

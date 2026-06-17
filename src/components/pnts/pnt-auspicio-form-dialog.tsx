@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { CommercialItem, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
+import { ClientCombobox } from '@/components/clients/client-combobox';
 
 type ItemType = 'PNT' | 'Auspicio' | 'Nota';
 
@@ -116,13 +117,13 @@ export function PntAuspicioFormDialog({
 
           <div className="space-y-2">
             <Label htmlFor="cliente">Cliente (Opcional)</Label>
-            <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                <SelectTrigger id="cliente"><SelectValue placeholder="Asignar a un cliente..."/></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="none">Ninguno</SelectItem>
-                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
-                </SelectContent>
-            </Select>
+            <ClientCombobox
+              clients={clients}
+              value={selectedClientId}
+              onChange={value => setSelectedClientId(value || undefined)}
+              placeholder="Asignar a un cliente..."
+              clearLabel="Ninguno"
+            />
           </div>
         </div>
         <DialogFooter>

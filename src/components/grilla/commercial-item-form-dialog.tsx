@@ -26,6 +26,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Trash2 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { hasPermission } from '@/lib/permissions';
+import { ClientCombobox } from '@/components/clients/client-combobox';
 
 interface CommercialItemFormDialogProps {
   isOpen: boolean;
@@ -221,12 +222,12 @@ export function CommercialItemFormDialog({ isOpen, onOpenChange, onSave, onDelet
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="item-client">Cliente</Label>
-                  <Select value={clientId} onValueChange={setClientId}>
-                    <SelectTrigger id="item-client"><SelectValue placeholder="Asignar cliente..." /></SelectTrigger>
-                    <SelectContent>
-                      {filteredClients.map(c => <SelectItem key={c.id} value={c.id}>{c.denominacion}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <ClientCombobox
+                    clients={filteredClients}
+                    value={clientId}
+                    onChange={setClientId}
+                    placeholder="Buscar cliente..."
+                  />
                 </div>
                  <div className="space-y-2">
                   <Label htmlFor="item-opportunity">Oportunidad</Label>

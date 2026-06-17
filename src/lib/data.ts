@@ -8,6 +8,7 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
         Prospects: { view: true, edit: true },
         Clients: { view: true, edit: true },
         Grilla: { view: true, edit: true },
+        ActiveProgramming: { view: true, edit: true },
         PNTs: { view: true, edit: true },
         Canjes: { view: true, edit: true },
         Invoices: { view: true, edit: true },
@@ -40,6 +41,7 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
         Opportunities: { view: true, edit: false },
         PNTs: { view: true, edit: true },
         Grilla: { view: true, edit: true },
+        ActiveProgramming: { view: true, edit: true },
         Quotes: { view: true, edit: true },
     },
     'Administración': {
@@ -64,6 +66,7 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
     },
     'Programación': {
         Grilla: { view: true, edit: false },
+        ActiveProgramming: { view: true, edit: false },
         PNTs: { view: true, edit: false },
         Quotes: { view: true, edit: true },
     },
