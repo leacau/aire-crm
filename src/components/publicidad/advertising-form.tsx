@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid, addMonths } from "date-fns";
-import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2, Mic, MicOff, Wand2, Upload, FileSearch } from "lucide-react";
+import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2, Mic, MicOff, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -18,7 +18,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { advertisingOrderSchema, AdvertisingOrderFormValues, srlAdTypes } from "@/lib/validators/advertising";
+import { advertisingOrderSchema, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
 import { 
     createAdvertisingOrder, 
@@ -116,17 +116,6 @@ const parseSpanishDateText = (input: string): Date | null => {
   return isValid(date) ? date : null;
 };
 
-type PendingImportedItem = {
-  id: string;
-  rowText: string;
-  dailySpots: Record<string, number>;
-  seconds: number;
-  unitRate: number;
-  hasTv: boolean;
-  programId: string;
-  adType: string;
-};
-
 export function AdvertisingForm() {
   const { toast } = useToast();
   const { userInfo, getGoogleAccessToken } = useAuth();
@@ -159,10 +148,6 @@ export function AdvertisingForm() {
   const [orderCreatedBy, setOrderCreatedBy] = useState<string>('');
   const [voiceCommand, setVoiceCommand] = useState('');
   const [isListeningVoice, setIsListeningVoice] = useState(false);
-  const [importedOrderText, setImportedOrderText] = useState('');
-  const [importedOrderFileName, setImportedOrderFileName] = useState('');
-  const [importedOrderRows, setImportedOrderRows] = useState<string[][]>([]);
-  const [pendingImportedItems, setPendingImportedItems] = useState<PendingImportedItem[]>([]);
 
   const [wasApproved, setWasApproved] = useState(false);
   const [modificationReason, setModificationReason] = useState('');
@@ -513,231 +498,6 @@ export function AdvertisingForm() {
       return rates[actionType] || 0;
   }, []);
 
-  const parseImportNumber = (value: unknown) => {
-      const raw = String(value ?? '').trim();
-      if (!raw) return 0;
-      const cleaned = raw
-          .replace(/\$/g, '')
-          .replace(/\s/g, '')
-          .replace(/\.(?=\d{3}(?:\D|$))/g, '')
-          .replace(',', '.')
-          .replace(/[^\d.-]/g, '');
-      const numeric = Number(cleaned);
-      return Number.isFinite(numeric) ? numeric : 0;
-  };
-
-  const parseImportDate = (value: string) => {
-      const match = value.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
-      if (!match) return null;
-      const first = Number(match[1]);
-      const second = Number(match[2]);
-      const year = Number(match[3].length === 2 ? `20${match[3]}` : match[3]);
-      const day = first > 12 ? first : second > 12 ? second : first;
-      const month = first > 12 ? second - 1 : second > 12 ? first - 1 : second - 1;
-      const date = new Date(year, month, day);
-      return isValid(date) ? date : null;
-  };
-
-  const inferImportMonthYear = useCallback((rows: string[][], fallbackText: string) => {
-      const text = normalizeVoiceText(`${fallbackText} ${rows.flat().join(' ')} ${importedOrderFileName}`);
-      const rangeMatch = text.match(/(?:de\s*)?(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s*(?:a|al|-|hasta)\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/);
-      if (rangeMatch) {
-          const start = parseImportDate(rangeMatch[1]);
-          const end = parseImportDate(rangeMatch[2]);
-          if (start && end) return { month: start.getMonth(), year: start.getFullYear(), start, end };
-      }
-
-      for (const [monthName, monthIndex] of Object.entries(spanishMonths)) {
-          const monthMatch = text.match(new RegExp(`\\b${monthName}\\b(?:\\s+de)?\\s*(\\d{4})?`));
-          if (monthMatch) {
-              const yearMatch = text.match(/\b(20\d{2})\b/);
-              return { month: monthIndex, year: Number(monthMatch[1] || yearMatch?.[1] || new Date().getFullYear()), start: null, end: null };
-          }
-      }
-
-      const monthYearMatch = text.match(/\b(0?[1-9]|1[0-2])[/-](20\d{2})\b/);
-      if (monthYearMatch) return { month: Number(monthYearMatch[1]) - 1, year: Number(monthYearMatch[2]), start: null, end: null };
-
-      return { month: new Date().getMonth(), year: new Date().getFullYear(), start: null, end: null };
-  }, [importedOrderFileName]);
-
-  const findImportDateHeader = (rows: string[][]) => {
-      let best: { rowIndex: number; columns: Array<{ index: number; day: number }> } | null = null;
-      rows.forEach((row, rowIndex) => {
-          const columns = row
-              .map((cell, index) => ({ index, day: Number(String(cell).trim()) }))
-              .filter(item => Number.isInteger(item.day) && item.day >= 1 && item.day <= 31);
-          if (columns.length >= 3 && (!best || columns.length > best.columns.length)) {
-              best = { rowIndex, columns };
-          }
-      });
-      return best;
-  };
-
-  const findImportColumn = (rows: string[][], headerRowIndex: number, patterns: RegExp[]) => {
-      const nearbyRows = rows.slice(Math.max(0, headerRowIndex - 2), headerRowIndex + 1);
-      for (const row of nearbyRows) {
-          const index = row.findIndex(cell => {
-              const normalized = normalizeVoiceText(String(cell));
-              return patterns.some(pattern => pattern.test(normalized));
-          });
-          if (index >= 0) return index;
-      }
-      return -1;
-  };
-
-  const applyImportedOrder = useCallback(() => {
-      if (!importedOrderText.trim() && importedOrderRows.length === 0) {
-          toast({ title: 'No hay orden importada', description: 'Elegí un archivo o pegá el contenido antes de aplicar.', variant: 'destructive' });
-          return;
-      }
-
-      if (importedOrderRows.length === 0) {
-          const normalizedText = normalizeVoiceText(importedOrderText);
-          const program = findProgramFromCommand(importedOrderText);
-          const actionType = getActionTypeFromCommand(normalizedText);
-          if (!program || !actionType) {
-              toast({
-                  title: 'Necesita revisión manual',
-                  description: 'Leí el PDF, pero no pude reconocer un programa y tipo de pauta compatibles con el CRM. Podés usar el texto detectado para armar la línea manualmente.',
-                  variant: 'destructive',
-              });
-              return;
-          }
-          toast({
-              title: 'PDF leído',
-              description: 'El PDF no trae una grilla estructurada para aplicar automáticamente. El texto quedó disponible para copiarlo al asistente o cargar la línea manualmente.',
-          });
-          return;
-      }
-
-      const header = findImportDateHeader(importedOrderRows);
-      if (!header) {
-          toast({ title: 'No encontré grilla de días', description: 'No pude detectar columnas con días del mes en esta orden.', variant: 'destructive' });
-          return;
-      }
-
-      const { month, year, start: explicitStart, end: explicitEnd } = inferImportMonthYear(importedOrderRows, importedOrderText);
-      const firstDateColumn = Math.min(...header.columns.map(column => column.index));
-      const secondsColumn = findImportColumn(importedOrderRows, header.rowIndex, [/^dur/, /#\s*seg/, /\bseg\b/]);
-      const rateColumn = findImportColumn(importedOrderRows, header.rowIndex, [/tarifa/, /unitaria/, /unitario/, /costo/]);
-      const nextItems = [...(form.getValues('srlItems') || [])];
-      const importedDates: Date[] = [];
-      const pendingItems: PendingImportedItem[] = [];
-      let addedCount = 0;
-
-      importedOrderRows.slice(header.rowIndex + 1).forEach(row => {
-          const dailySpots = header.columns.reduce((acc, column) => {
-              const repetitions = parseImportNumber(row[column.index]);
-              if (repetitions > 0) {
-                  const date = new Date(year, month, column.day);
-                  if (isValid(date) && date.getMonth() === month) {
-                      acc[format(date, 'yyyy-MM-dd')] = repetitions;
-                      importedDates.push(date);
-                  }
-              }
-              return acc;
-          }, {} as Record<string, number>);
-
-          if (Object.keys(dailySpots).length === 0) return;
-
-          const rowText = row.slice(0, firstDateColumn).join(' ');
-          const normalizedRow = normalizeVoiceText(rowText);
-          if (/subtotal|total|observaciones|materiales/.test(normalizedRow)) return;
-
-          const program = findProgramFromCommand(rowText);
-          const actionType = getActionTypeFromCommand(normalizedRow);
-          const seconds = !actionType || actionType === 'Spot'
-              ? Math.max(0, Math.round(parseImportNumber(secondsColumn >= 0 ? row[secondsColumn] : rowText)))
-              : 0;
-          const hasTv = /\b(tv|pantalla|barrida)\b/.test(normalizedRow);
-          const importedRate = rateColumn >= 0 ? parseImportNumber(row[rateColumn]) : 0;
-          if (!program || !actionType) {
-              pendingItems.push({
-                  id: `${header.rowIndex}-${pendingItems.length}-${Object.keys(dailySpots).join('-')}`,
-                  rowText: rowText.trim() || 'Fila importada',
-                  dailySpots,
-                  seconds,
-                  unitRate: importedRate,
-                  hasTv,
-                  programId: program?.id || '',
-                  adType: actionType || '',
-              });
-              return;
-          }
-
-          nextItems.push({
-              month: 'Mensual',
-              programId: program.id,
-              adType: actionType,
-              hasTv,
-              seconds,
-              dailySpots,
-              unitRate: importedRate > 0 ? importedRate : getRateForVoiceItem(program, actionType, hasTv),
-          });
-          addedCount += 1;
-      });
-
-      setPendingImportedItems(pendingItems);
-
-      if (addedCount === 0 && pendingItems.length === 0) {
-          toast({
-              title: 'No pude mapear líneas',
-              description: 'No encontré cantidades válidas para cargar en la grilla.',
-              variant: 'destructive',
-          });
-          return;
-      }
-
-      if (importedDates.length > 0) {
-          const sortedDates = importedDates.sort((a, b) => a.getTime() - b.getTime());
-          setValue('startDate', explicitStart || sortedDates[0], { shouldDirty: true, shouldValidate: true });
-          setValue('endDate', explicitEnd || sortedDates[sortedDates.length - 1], { shouldDirty: true, shouldValidate: true });
-      }
-      setValue('srlItems', nextItems, { shouldDirty: true, shouldValidate: true });
-      toast({
-          title: 'Orden importada',
-          description: `${addedCount} línea(s) cargada(s) en SRL${pendingItems.length ? `. ${pendingItems.length} fila(s) quedaron pendientes de completar.` : '.'}`,
-      });
-  }, [findProgramFromCommand, form, getRateForVoiceItem, importedOrderRows, importedOrderText, inferImportMonthYear, setValue, toast]);
-
-  const updatePendingImportedItem = (id: string, patch: Partial<PendingImportedItem>) => {
-      setPendingImportedItems(items => items.map(item => item.id === id ? { ...item, ...patch } : item));
-  };
-
-  const applyPendingImportedItems = () => {
-      if (pendingImportedItems.length === 0) return;
-      const incomplete = pendingImportedItems.filter(item => !item.programId || !item.adType);
-      if (incomplete.length > 0) {
-          toast({
-              title: 'Faltan datos',
-              description: 'Elegí programa y elemento comercial en todas las filas pendientes.',
-              variant: 'destructive',
-          });
-          return;
-      }
-
-      const nextItems = [
-          ...(form.getValues('srlItems') || []),
-          ...pendingImportedItems.map(item => {
-              const program = programs.find(programItem => programItem.id === item.programId);
-              return {
-                  month: 'Mensual',
-                  programId: item.programId,
-                  adType: item.adType,
-                  hasTv: item.hasTv,
-                  seconds: item.adType === 'Spot' ? item.seconds : 0,
-                  dailySpots: item.dailySpots,
-                  unitRate: item.unitRate > 0 ? item.unitRate : getRateForVoiceItem(program, item.adType, item.hasTv),
-              };
-          }),
-      ];
-
-      setValue('srlItems', nextItems, { shouldDirty: true, shouldValidate: true });
-      toast({ title: 'Filas pendientes cargadas', description: `${pendingImportedItems.length} línea(s) agregada(s) a SRL.` });
-      setPendingImportedItems([]);
-  };
-
   const applyVoiceCommand = useCallback((rawCommand?: string) => {
       const command = (rawCommand || voiceCommand).trim();
       if (!command) {
@@ -853,94 +613,6 @@ export function AdvertisingForm() {
           applyVoiceCommand(transcript);
       };
       recognition.start();
-  };
-
-  const handleExternalOrderImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      event.target.value = '';
-      if (!file) return;
-
-      setImportedOrderFileName(file.name);
-      setImportedOrderRows([]);
-      setPendingImportedItems([]);
-      const lowerName = file.name.toLowerCase();
-      const isSpreadsheet = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
-      const isPdf = lowerName.endsWith('.pdf') || file.type === 'application/pdf';
-      const canReadAsText = file.type.startsWith('text/')
-          || lowerName.endsWith('.csv')
-          || lowerName.endsWith('.txt')
-          || lowerName.endsWith('.json');
-
-      if (isPdf) {
-          const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-          pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
-          const data = await file.arrayBuffer();
-          const pdf = await pdfjs.getDocument({
-              data: new Uint8Array(data),
-          }).promise;
-          const pages: string[] = [];
-
-          for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-              const page = await pdf.getPage(pageNumber);
-              const content = await page.getTextContent();
-              const text = content.items
-                  .map(item => ('str' in item ? item.str : ''))
-                  .filter(Boolean)
-                  .join(' ');
-              pages.push(`Pagina ${pageNumber}\n${text}`);
-          }
-
-          setImportedOrderText(pages.join('\n\n').slice(0, 12000));
-          setImportedOrderRows([]);
-          toast({ title: 'PDF leído', description: 'Revisá el texto detectado y usalo con el asistente.' });
-          return;
-      }
-
-      if (isSpreadsheet) {
-          const XLSX = await import('xlsx');
-          const data = await file.arrayBuffer();
-          const workbook = XLSX.read(data, { type: 'array' });
-          const text = workbook.SheetNames.map(sheetName => {
-              const sheet = workbook.Sheets[sheetName];
-              const csv = XLSX.utils.sheet_to_csv(sheet, { FS: ' | ' });
-              return `Hoja: ${sheetName}\n${csv}`;
-          }).join('\n\n');
-          const rows = workbook.SheetNames.flatMap(sheetName => {
-              const sheet = workbook.Sheets[sheetName];
-              return XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: '' });
-          }).map(row => row.map(cell => String(cell ?? '')));
-
-          setImportedOrderText(text.slice(0, 12000));
-          setImportedOrderRows(rows);
-          toast({ title: 'Excel leído', description: 'Revisá el contenido detectado y usalo con el asistente.' });
-          return;
-      }
-
-      if (!canReadAsText) {
-          setImportedOrderText('');
-          toast({
-              title: 'Importación asistida pendiente',
-              description: 'No pude leer este formato. Podés pegar el texto de la orden en el recuadro y mapearlo con el asistente.',
-              variant: 'destructive',
-          });
-          return;
-      }
-
-      const text = await file.text();
-      setImportedOrderText(text.slice(0, 8000));
-      if (lowerName.endsWith('.csv')) {
-          setImportedOrderRows(text.split(/\r?\n/).map(line => line.split(/,|;/).map(cell => cell.trim())));
-      }
-      toast({ title: 'Orden externa leída', description: 'Revisá el texto y usá el asistente para aplicar partes de la pauta.' });
-  };
-
-  const useImportedTextAsCommand = () => {
-      if (!importedOrderText.trim()) {
-          toast({ title: 'No hay texto importado', variant: 'destructive' });
-          return;
-      }
-      setVoiceCommand(importedOrderText.trim());
-      toast({ title: 'Texto enviado al asistente', description: 'Podés ajustarlo y tocar Aplicar.' });
   };
 
   const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
@@ -1543,102 +1215,6 @@ export function AdvertisingForm() {
                 <Wand2 className="mr-2 h-4 w-4" />
                 Aplicar
               </Button>
-            </div>
-          </div>
-        </div>
-
-        <div className="border rounded-md bg-white shadow-sm p-4">
-          <div className="space-y-2">
-            <Label>Importar orden externa</Label>
-            <div className="rounded-md border border-dashed bg-slate-50 p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" variant="outline" asChild>
-                  <label className="cursor-pointer">
-                    <Upload className="mr-2 h-4 w-4" />
-                    Elegir archivo
-                    <input className="hidden" type="file" accept=".txt,.csv,.json,.pdf,.xlsx,.xls" onChange={handleExternalOrderImport} />
-                  </label>
-                </Button>
-                {importedOrderFileName && <span className="text-sm text-muted-foreground">{importedOrderFileName}</span>}
-              </div>
-              <Textarea
-                value={importedOrderText}
-                onChange={event => setImportedOrderText(event.target.value)}
-                placeholder="Pegá acá el texto de una orden externa, o cargá un TXT/CSV para revisarlo antes de mapear."
-                className="mt-3 min-h-[84px] resize-none bg-white"
-              />
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Button type="button" onClick={applyImportedOrder}>
-                  <Wand2 className="mr-2 h-4 w-4" />
-                  Aplicar grilla
-                </Button>
-                <Button type="button" variant="secondary" onClick={useImportedTextAsCommand}>
-                  <FileSearch className="mr-2 h-4 w-4" />
-                  Llevar al asistente
-                </Button>
-              </div>
-              {pendingImportedItems.length > 0 && (
-                <div className="mt-4 space-y-3 rounded-md border bg-white p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium">Filas pendientes de completar</p>
-                      <p className="text-xs text-muted-foreground">Se detectaron días y repeticiones, pero falta confirmar programa o elemento comercial.</p>
-                    </div>
-                    <Button type="button" size="sm" onClick={applyPendingImportedItems}>
-                      Cargar pendientes
-                    </Button>
-                  </div>
-                  <div className="space-y-3">
-                    {pendingImportedItems.map(item => {
-                      const totalRepetitions = Object.values(item.dailySpots).reduce((sum, value) => sum + (Number(value) || 0), 0);
-                      const datesLabel = Object.keys(item.dailySpots)
-                        .sort()
-                        .map(dateKey => format(new Date(`${dateKey}T00:00:00`), 'dd/MM'))
-                        .slice(0, 8)
-                        .join(', ');
-                      return (
-                        <div key={item.id} className="grid gap-3 rounded-md border bg-slate-50 p-3 lg:grid-cols-[1.5fr_1fr_1fr_110px_130px]">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{item.rowText}</p>
-                            <p className="text-xs text-muted-foreground">{totalRepetitions} rep. en {Object.keys(item.dailySpots).length} día(s): {datesLabel}</p>
-                          </div>
-                          <Select value={item.programId || undefined} onValueChange={value => updatePendingImportedItem(item.id, { programId: value })}>
-                            <SelectTrigger><SelectValue placeholder="Programa" /></SelectTrigger>
-                            <SelectContent>
-                              {programs.map(program => (
-                                <SelectItem key={program.id} value={program.id}>{program.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Select value={item.adType || undefined} onValueChange={value => updatePendingImportedItem(item.id, { adType: value })}>
-                            <SelectTrigger><SelectValue placeholder="Elemento" /></SelectTrigger>
-                            <SelectContent>
-                              {srlAdTypes.map(type => (
-                                <SelectItem key={type} value={type}>{type}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={item.seconds}
-                            onChange={event => updatePendingImportedItem(item.id, { seconds: Number(event.target.value) || 0 })}
-                            placeholder="Seg."
-                          />
-                          <Input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={item.unitRate}
-                            onChange={event => updatePendingImportedItem(item.id, { unitRate: Number(event.target.value) || 0 })}
-                            placeholder="Tarifa"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
