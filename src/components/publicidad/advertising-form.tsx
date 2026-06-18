@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid, addMonths } from "date-fns";
-import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2, Mic, MicOff, Wand2 } from "lucide-react";
+import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2, Mic, MicOff, Wand2, Upload, FileSearch } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -148,6 +148,8 @@ export function AdvertisingForm() {
   const [orderCreatedBy, setOrderCreatedBy] = useState<string>('');
   const [voiceCommand, setVoiceCommand] = useState('');
   const [isListeningVoice, setIsListeningVoice] = useState(false);
+  const [importedOrderText, setImportedOrderText] = useState('');
+  const [importedOrderFileName, setImportedOrderFileName] = useState('');
 
   const [wasApproved, setWasApproved] = useState(false);
   const [modificationReason, setModificationReason] = useState('');
@@ -613,6 +615,58 @@ export function AdvertisingForm() {
           applyVoiceCommand(transcript);
       };
       recognition.start();
+  };
+
+  const handleExternalOrderImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) return;
+
+      setImportedOrderFileName(file.name);
+      const lowerName = file.name.toLowerCase();
+      const isSpreadsheet = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
+      const canReadAsText = file.type.startsWith('text/')
+          || lowerName.endsWith('.csv')
+          || lowerName.endsWith('.txt')
+          || lowerName.endsWith('.json');
+
+      if (isSpreadsheet) {
+          const XLSX = await import('xlsx');
+          const data = await file.arrayBuffer();
+          const workbook = XLSX.read(data, { type: 'array' });
+          const text = workbook.SheetNames.map(sheetName => {
+              const sheet = workbook.Sheets[sheetName];
+              const csv = XLSX.utils.sheet_to_csv(sheet, { FS: ' | ' });
+              return `Hoja: ${sheetName}\n${csv}`;
+          }).join('\n\n');
+
+          setImportedOrderText(text.slice(0, 12000));
+          toast({ title: 'Excel leído', description: 'Revisá el contenido detectado y usalo con el asistente.' });
+          return;
+      }
+
+      if (!canReadAsText) {
+          setImportedOrderText('');
+          toast({
+              title: 'Importación asistida pendiente',
+              description: 'Para PDF voy a necesitar el parser dedicado. Por ahora podés pegar el texto de la orden en el recuadro y mapearlo con el asistente.',
+              variant: 'destructive',
+          });
+          return;
+      }
+
+      const text = await file.text();
+      setImportedOrderText(text.slice(0, 8000));
+      toast({ title: 'Orden externa leída', description: 'Revisá el texto y usá el asistente para aplicar partes de la pauta.' });
+  };
+
+  const useImportedTextAsCommand = () => {
+      if (!importedOrderText.trim()) {
+          toast({ title: 'No hay texto importado', variant: 'destructive' });
+          return;
+      }
+      setVoiceCommand(importedOrderText.trim());
+      toast({ title: 'Texto enviado al asistente', description: 'Podés ajustarlo y tocar Aplicar.' });
   };
 
   const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
@@ -1211,14 +1265,40 @@ export function AdvertisingForm() {
               />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={startVoiceInput} disabled={isListeningVoice}>
-                {isListeningVoice ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
-                {isListeningVoice ? "Escuchando..." : "Dictar"}
-              </Button>
               <Button type="button" onClick={() => applyVoiceCommand()}>
                 <Wand2 className="mr-2 h-4 w-4" />
                 Aplicar
               </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="border rounded-md bg-white shadow-sm p-4">
+          <div className="space-y-2">
+            <Label>Importar orden externa</Label>
+            <div className="rounded-md border border-dashed bg-slate-50 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="outline" asChild>
+                  <label className="cursor-pointer">
+                    <Upload className="mr-2 h-4 w-4" />
+                    Elegir archivo
+                    <input className="hidden" type="file" accept=".txt,.csv,.json,.pdf,.xlsx,.xls" onChange={handleExternalOrderImport} />
+                  </label>
+                </Button>
+                {importedOrderFileName && <span className="text-sm text-muted-foreground">{importedOrderFileName}</span>}
+              </div>
+              <Textarea
+                value={importedOrderText}
+                onChange={event => setImportedOrderText(event.target.value)}
+                placeholder="Pegá acá el texto de una orden externa, o cargá un TXT/CSV para revisarlo antes de mapear."
+                className="mt-3 min-h-[84px] resize-none bg-white"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button type="button" variant="secondary" onClick={useImportedTextAsCommand}>
+                  <FileSearch className="mr-2 h-4 w-4" />
+                  Llevar al asistente
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -1605,6 +1685,15 @@ export function AdvertisingForm() {
         <div className="flex justify-between items-center pt-6 border-t mt-8 gap-4">
           <ActionButtons />
         </div>
+        <Button
+          type="button"
+          onClick={startVoiceInput}
+          disabled={isListeningVoice}
+          className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full p-0 shadow-lg"
+          title={isListeningVoice ? 'Escuchando...' : 'Dictar orden'}
+        >
+          {isListeningVoice ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+        </Button>
       </form>
     </Form>
   );
