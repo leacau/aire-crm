@@ -18,7 +18,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { advertisingOrderSchema, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
+import { advertisingOrderSchema, AdvertisingOrderFormValues, srlAdTypes } from "@/lib/validators/advertising";
 
 import { 
     createAdvertisingOrder, 
@@ -116,6 +116,17 @@ const parseSpanishDateText = (input: string): Date | null => {
   return isValid(date) ? date : null;
 };
 
+type PendingImportedItem = {
+  id: string;
+  rowText: string;
+  dailySpots: Record<string, number>;
+  seconds: number;
+  unitRate: number;
+  hasTv: boolean;
+  programId: string;
+  adType: string;
+};
+
 export function AdvertisingForm() {
   const { toast } = useToast();
   const { userInfo, getGoogleAccessToken } = useAuth();
@@ -151,6 +162,7 @@ export function AdvertisingForm() {
   const [importedOrderText, setImportedOrderText] = useState('');
   const [importedOrderFileName, setImportedOrderFileName] = useState('');
   const [importedOrderRows, setImportedOrderRows] = useState<string[][]>([]);
+  const [pendingImportedItems, setPendingImportedItems] = useState<PendingImportedItem[]>([]);
 
   const [wasApproved, setWasApproved] = useState(false);
   const [modificationReason, setModificationReason] = useState('');
@@ -611,8 +623,8 @@ export function AdvertisingForm() {
       const rateColumn = findImportColumn(importedOrderRows, header.rowIndex, [/tarifa/, /unitaria/, /unitario/, /costo/]);
       const nextItems = [...(form.getValues('srlItems') || [])];
       const importedDates: Date[] = [];
+      const pendingItems: PendingImportedItem[] = [];
       let addedCount = 0;
-      let skippedWithoutProgram = 0;
 
       importedOrderRows.slice(header.rowIndex + 1).forEach(row => {
           const dailySpots = header.columns.reduce((acc, column) => {
@@ -635,16 +647,25 @@ export function AdvertisingForm() {
 
           const program = findProgramFromCommand(rowText);
           const actionType = getActionTypeFromCommand(normalizedRow);
-          if (!program || !actionType) {
-              skippedWithoutProgram += 1;
-              return;
-          }
-
-          const seconds = actionType === 'Spot'
+          const seconds = !actionType || actionType === 'Spot'
               ? Math.max(0, Math.round(parseImportNumber(secondsColumn >= 0 ? row[secondsColumn] : rowText)))
               : 0;
           const hasTv = /\b(tv|pantalla|barrida)\b/.test(normalizedRow);
           const importedRate = rateColumn >= 0 ? parseImportNumber(row[rateColumn]) : 0;
+          if (!program || !actionType) {
+              pendingItems.push({
+                  id: `${header.rowIndex}-${pendingItems.length}-${Object.keys(dailySpots).join('-')}`,
+                  rowText: rowText.trim() || 'Fila importada',
+                  dailySpots,
+                  seconds,
+                  unitRate: importedRate,
+                  hasTv,
+                  programId: program?.id || '',
+                  adType: actionType || '',
+              });
+              return;
+          }
+
           nextItems.push({
               month: 'Mensual',
               programId: program.id,
@@ -657,12 +678,12 @@ export function AdvertisingForm() {
           addedCount += 1;
       });
 
-      if (addedCount === 0) {
+      setPendingImportedItems(pendingItems);
+
+      if (addedCount === 0 && pendingItems.length === 0) {
           toast({
               title: 'No pude mapear líneas',
-              description: skippedWithoutProgram > 0
-                  ? 'Encontré cantidades por día, pero no pude reconocer el programa o tipo de pauta en las filas.'
-                  : 'No encontré cantidades válidas para cargar en la grilla.',
+              description: 'No encontré cantidades válidas para cargar en la grilla.',
               variant: 'destructive',
           });
           return;
@@ -676,9 +697,46 @@ export function AdvertisingForm() {
       setValue('srlItems', nextItems, { shouldDirty: true, shouldValidate: true });
       toast({
           title: 'Orden importada',
-          description: `${addedCount} línea(s) cargada(s) en SRL${skippedWithoutProgram ? `. ${skippedWithoutProgram} fila(s) quedaron sin mapear.` : '.'}`,
+          description: `${addedCount} línea(s) cargada(s) en SRL${pendingItems.length ? `. ${pendingItems.length} fila(s) quedaron pendientes de completar.` : '.'}`,
       });
   }, [findProgramFromCommand, form, getRateForVoiceItem, importedOrderRows, importedOrderText, inferImportMonthYear, setValue, toast]);
+
+  const updatePendingImportedItem = (id: string, patch: Partial<PendingImportedItem>) => {
+      setPendingImportedItems(items => items.map(item => item.id === id ? { ...item, ...patch } : item));
+  };
+
+  const applyPendingImportedItems = () => {
+      if (pendingImportedItems.length === 0) return;
+      const incomplete = pendingImportedItems.filter(item => !item.programId || !item.adType);
+      if (incomplete.length > 0) {
+          toast({
+              title: 'Faltan datos',
+              description: 'Elegí programa y elemento comercial en todas las filas pendientes.',
+              variant: 'destructive',
+          });
+          return;
+      }
+
+      const nextItems = [
+          ...(form.getValues('srlItems') || []),
+          ...pendingImportedItems.map(item => {
+              const program = programs.find(programItem => programItem.id === item.programId);
+              return {
+                  month: 'Mensual',
+                  programId: item.programId,
+                  adType: item.adType,
+                  hasTv: item.hasTv,
+                  seconds: item.adType === 'Spot' ? item.seconds : 0,
+                  dailySpots: item.dailySpots,
+                  unitRate: item.unitRate > 0 ? item.unitRate : getRateForVoiceItem(program, item.adType, item.hasTv),
+              };
+          }),
+      ];
+
+      setValue('srlItems', nextItems, { shouldDirty: true, shouldValidate: true });
+      toast({ title: 'Filas pendientes cargadas', description: `${pendingImportedItems.length} línea(s) agregada(s) a SRL.` });
+      setPendingImportedItems([]);
+  };
 
   const applyVoiceCommand = useCallback((rawCommand?: string) => {
       const command = (rawCommand || voiceCommand).trim();
@@ -804,6 +862,7 @@ export function AdvertisingForm() {
 
       setImportedOrderFileName(file.name);
       setImportedOrderRows([]);
+      setPendingImportedItems([]);
       const lowerName = file.name.toLowerCase();
       const isSpreadsheet = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
       const isPdf = lowerName.endsWith('.pdf') || file.type === 'application/pdf';
@@ -1518,6 +1577,68 @@ export function AdvertisingForm() {
                   Llevar al asistente
                 </Button>
               </div>
+              {pendingImportedItems.length > 0 && (
+                <div className="mt-4 space-y-3 rounded-md border bg-white p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">Filas pendientes de completar</p>
+                      <p className="text-xs text-muted-foreground">Se detectaron días y repeticiones, pero falta confirmar programa o elemento comercial.</p>
+                    </div>
+                    <Button type="button" size="sm" onClick={applyPendingImportedItems}>
+                      Cargar pendientes
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {pendingImportedItems.map(item => {
+                      const totalRepetitions = Object.values(item.dailySpots).reduce((sum, value) => sum + (Number(value) || 0), 0);
+                      const datesLabel = Object.keys(item.dailySpots)
+                        .sort()
+                        .map(dateKey => format(new Date(`${dateKey}T00:00:00`), 'dd/MM'))
+                        .slice(0, 8)
+                        .join(', ');
+                      return (
+                        <div key={item.id} className="grid gap-3 rounded-md border bg-slate-50 p-3 lg:grid-cols-[1.5fr_1fr_1fr_110px_130px]">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{item.rowText}</p>
+                            <p className="text-xs text-muted-foreground">{totalRepetitions} rep. en {Object.keys(item.dailySpots).length} día(s): {datesLabel}</p>
+                          </div>
+                          <Select value={item.programId || undefined} onValueChange={value => updatePendingImportedItem(item.id, { programId: value })}>
+                            <SelectTrigger><SelectValue placeholder="Programa" /></SelectTrigger>
+                            <SelectContent>
+                              {programs.map(program => (
+                                <SelectItem key={program.id} value={program.id}>{program.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select value={item.adType || undefined} onValueChange={value => updatePendingImportedItem(item.id, { adType: value })}>
+                            <SelectTrigger><SelectValue placeholder="Elemento" /></SelectTrigger>
+                            <SelectContent>
+                              {srlAdTypes.map(type => (
+                                <SelectItem key={type} value={type}>{type}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={item.seconds}
+                            onChange={event => updatePendingImportedItem(item.id, { seconds: Number(event.target.value) || 0 })}
+                            placeholder="Seg."
+                          />
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={item.unitRate}
+                            onChange={event => updatePendingImportedItem(item.id, { unitRate: Number(event.target.value) || 0 })}
+                            placeholder="Tarifa"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
