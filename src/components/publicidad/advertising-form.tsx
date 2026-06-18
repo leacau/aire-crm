@@ -625,10 +625,35 @@ export function AdvertisingForm() {
       setImportedOrderFileName(file.name);
       const lowerName = file.name.toLowerCase();
       const isSpreadsheet = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
+      const isPdf = lowerName.endsWith('.pdf') || file.type === 'application/pdf';
       const canReadAsText = file.type.startsWith('text/')
           || lowerName.endsWith('.csv')
           || lowerName.endsWith('.txt')
           || lowerName.endsWith('.json');
+
+      if (isPdf) {
+          const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+          pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
+          const data = await file.arrayBuffer();
+          const pdf = await pdfjs.getDocument({
+              data: new Uint8Array(data),
+          }).promise;
+          const pages: string[] = [];
+
+          for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+              const page = await pdf.getPage(pageNumber);
+              const content = await page.getTextContent();
+              const text = content.items
+                  .map(item => ('str' in item ? item.str : ''))
+                  .filter(Boolean)
+                  .join(' ');
+              pages.push(`Pagina ${pageNumber}\n${text}`);
+          }
+
+          setImportedOrderText(pages.join('\n\n').slice(0, 12000));
+          toast({ title: 'PDF leído', description: 'Revisá el texto detectado y usalo con el asistente.' });
+          return;
+      }
 
       if (isSpreadsheet) {
           const XLSX = await import('xlsx');
@@ -649,7 +674,7 @@ export function AdvertisingForm() {
           setImportedOrderText('');
           toast({
               title: 'Importación asistida pendiente',
-              description: 'Para PDF voy a necesitar el parser dedicado. Por ahora podés pegar el texto de la orden en el recuadro y mapearlo con el asistente.',
+              description: 'No pude leer este formato. Podés pegar el texto de la orden en el recuadro y mapearlo con el asistente.',
               variant: 'destructive',
           });
           return;
