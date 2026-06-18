@@ -196,7 +196,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                             <FormField control={form.control} name={`srlItems.${index}.hasTv`} render={({ field }) => (<Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!enableTv && !isCustom} className="h-4 w-4 mx-auto" />)} />
                         </TableCell>
                         <TableCell className="p-1 border-r border-slate-300">
-                            {(adType === "Spot" || isCustom) && (<FormField control={form.control} name={`srlItems.${index}.seconds`} render={({ field }) => (<Input type="number" className="h-8 w-full text-center px-1 text-xs border-0 shadow-none focus-visible:ring-1" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />)} />)}
+                            {(adType === "Spot" || isCustom) && (<FormField control={form.control} name={`srlItems.${index}.seconds`} render={({ field }) => (<Input type="number" step="0.01" className="h-8 w-full text-center px-1 text-xs border-0 shadow-none focus-visible:ring-1" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />)} />)}
                         </TableCell>
                         
                         {days.map(day => {
@@ -231,7 +231,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
 
                         <TableCell className="p-1 border-r border-slate-300">
                             <FormField control={form.control} name={`srlItems.${index}.unitRate`} render={({ field }) => (
-                                <Input type="number" className="h-8 text-right px-2 text-xs border-0 shadow-none bg-transparent" readOnly={!isCustom} {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
+                                <Input type="number" step="0.01" className="h-8 text-right px-2 text-xs border-0 shadow-none bg-transparent" readOnly={!isCustom} {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                             )} />
                         </TableCell>
                         <TableCell className="text-right font-bold text-slate-800 text-xs pr-2 bg-slate-50 border-r border-slate-300">${netAmountGlobal.toLocaleString("es-AR")}</TableCell>
@@ -269,7 +269,8 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                 <span className="font-bold text-blue-700">Valor a Cobrar Deseado:</span>
                 <div className="w-32">
                     <Input 
-                        type="number" 
+                                type="number"
+                                step="0.01"
                         placeholder="Ej: 100000"
                         className="h-8 text-right font-mono border-blue-300 bg-blue-50"
                         onChange={(e) => {
@@ -286,7 +287,7 @@ export function SrlSection({ form, startDate, endDate, programs }: SrlSectionPro
                  <span className="font-bold text-slate-600">Desajuste (-):</span>
                  <div className="w-32">
                      <FormField control={form.control} name="adjustmentSrl" render={({ field }) => (
-                         <Input type="number" className="h-8 text-right font-mono" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
+                         <Input type="number" step="0.01" className="h-8 text-right font-mono" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                      )} />
                  </div>
             </div>

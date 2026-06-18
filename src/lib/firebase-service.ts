@@ -6072,6 +6072,8 @@ export interface WorkflowAssignments {
     approvers: string[];
     billingReceptors: string[];
     tangoInvoicers: string[];
+    needLoaders: string[];
+    needRequestReceivers: string[];
     canjeRequestReceivers: string[];
     canjeManagementApprovers: string[];
     canjeCommercialReferents: string[];
@@ -6086,6 +6088,8 @@ export const getWorkflowAssignments = async (): Promise<WorkflowAssignments> => 
             approvers: d.approvers || [],
             billingReceptors: d.billingReceptors || [],
             tangoInvoicers: d.tangoInvoicers || [],
+            needLoaders: d.needLoaders || [],
+            needRequestReceivers: d.needRequestReceivers || [],
             canjeRequestReceivers: d.canjeRequestReceivers || [],
             canjeManagementApprovers: d.canjeManagementApprovers || [],
             canjeCommercialReferents: d.canjeCommercialReferents || []
@@ -6095,6 +6099,8 @@ export const getWorkflowAssignments = async (): Promise<WorkflowAssignments> => 
         approvers: [],
         billingReceptors: [],
         tangoInvoicers: [],
+        needLoaders: [],
+        needRequestReceivers: [],
         canjeRequestReceivers: [],
         canjeManagementApprovers: [],
         canjeCommercialReferents: []

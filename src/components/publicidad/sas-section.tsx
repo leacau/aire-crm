@@ -223,7 +223,7 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                                             control={form.control}
                                             name={`sasItems.${index}.cpm`}
                                             render={({ field }) => (
-                                                <Input type="number" className="h-8 text-right text-xs" disabled={item.format !== "Banner"} {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
+                                                <Input type="number" step="0.01" className="h-8 text-right text-xs" disabled={item.format !== "Banner"} {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                                             )}
                                         />
                                     </TableCell>
@@ -235,7 +235,7 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                                             control={form.control}
                                             name={`sasItems.${index}.unitRate`}
                                             render={({ field }) => (
-                                                <Input type="number" className="h-8 text-right text-xs" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
+                                                <Input type="number" step="0.01" className="h-8 text-right text-xs" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                                             )}
                                         />
                                     </TableCell>
@@ -278,7 +278,8 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                         <span className="font-bold text-blue-700">Valor Vendido (sin IVA):</span>
                         <div className="w-32">
                             <Input 
-                                type="number" 
+                                type="number"
+                                step="0.01"
                                 placeholder="Ej: 50000"
                                 className="h-8 text-right font-mono border-blue-300 bg-blue-50"
                                 onChange={(e) => {
@@ -298,7 +299,7 @@ export function SasSection({ form, startDate, endDate }: SasSectionProps) {
                                 control={form.control}
                                 name="adjustmentSas"
                                 render={({ field }) => (
-                                    <Input type="number" className="h-8 text-right font-mono" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
+                                    <Input type="number" step="0.01" className="h-8 text-right font-mono" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                                 )}
                             />
                         </div>

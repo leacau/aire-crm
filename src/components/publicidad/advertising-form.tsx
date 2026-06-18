@@ -1272,7 +1272,7 @@ export function AdvertisingForm() {
 
                <FormField control={form.control} name="certReq" render={({ field }) => (<FormItem className="flex flex-row items-center h-10 space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Solicita Cert.</FormLabel></FormItem>)} />
                <FormField control={form.control} name="agencySale" render={({ field }) => (<FormItem className="flex flex-row items-center h-10 space-x-2 border p-3 bg-white rounded col-span-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="m-0">Venta Agencia</FormLabel></FormItem>)} />
-               {agencySale && (<FormField control={form.control} name="commissionSrl" render={({ field }) => (<FormItem className="col-span-2"><FormLabel>Comisión (%)</FormLabel><FormControl><Input type="number" {...field} onChange={e=>field.onChange(parseFloat(e.target.value)||0)}/></FormControl></FormItem>)} />)}
+               {agencySale && (<FormField control={form.control} name="commissionSrl" render={({ field }) => (<FormItem className="col-span-2"><FormLabel>Comisión (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} onChange={e=>field.onChange(parseFloat(e.target.value)||0)}/></FormControl></FormItem>)} />)}
             </div>
 
             <div className="grid grid-cols-1">
@@ -1357,19 +1357,19 @@ export function AdvertisingForm() {
                         <FormField control={form.control} name={`billingRequestsSrl.${index}.grossAmount`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Bruto</FormLabel>
-                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSrl(index); }} /></FormControl>
+                                <FormControl><Input type="number" step="0.01" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSrl(index); }} /></FormControl>
                             </FormItem>
                         )} />
                         <FormField control={form.control} name={`billingRequestsSrl.${index}.adjustment`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Desajuste</FormLabel>
-                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSrl(index); }} /></FormControl>
+                                <FormControl><Input type="number" step="0.01" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSrl(index); }} /></FormControl>
                             </FormItem>
                         )} />
                         <FormField control={form.control} name={`billingRequestsSrl.${index}.amount`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Neto Final</FormLabel>
-                                <FormControl><Input type="number" className="font-bold bg-white" {...field} readOnly /></FormControl>
+                                <FormControl><Input type="number" step="0.01" className="font-bold bg-white" {...field} readOnly /></FormControl>
                             </FormItem>
                         )} />
                         
@@ -1450,25 +1450,25 @@ export function AdvertisingForm() {
                         <FormField control={form.control} name={`billingRequestsSas.${index}.grossAmount`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Bruto</FormLabel>
-                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSas(index); }} /></FormControl>
+                                <FormControl><Input type="number" step="0.01" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSas(index); }} /></FormControl>
                             </FormItem>
                         )} />
                         <FormField control={form.control} name={`billingRequestsSas.${index}.adjustment`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Desajuste</FormLabel>
-                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSas(index); }} /></FormControl>
+                                <FormControl><Input type="number" step="0.01" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSas(index); }} /></FormControl>
                             </FormItem>
                         )} />
                         <FormField control={form.control} name={`billingRequestsSas.${index}.ivaSas`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">IVA (5%)</FormLabel>
-                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSas(index); }} /></FormControl>
+                                <FormControl><Input type="number" step="0.01" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetSas(index); }} /></FormControl>
                             </FormItem>
                         )} />
                         <FormField control={form.control} name={`billingRequestsSas.${index}.amount`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Neto Final</FormLabel>
-                                <FormControl><Input type="number" className="font-bold bg-white" {...field} readOnly /></FormControl>
+                                <FormControl><Input type="number" step="0.01" className="font-bold bg-white" {...field} readOnly /></FormControl>
                             </FormItem>
                         )} />
                         
@@ -1551,19 +1551,19 @@ export function AdvertisingForm() {
                         <FormField control={form.control} name={`billingRequestsAvion.${index}.grossAmount`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Valor Bruto</FormLabel>
-                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetAvion(index); }} /></FormControl>
+                                <FormControl><Input type="number" step="0.01" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetAvion(index); }} /></FormControl>
                             </FormItem>
                         )} />
                         <FormField control={form.control} name={`billingRequestsAvion.${index}.adjustment`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Desajuste</FormLabel>
-                                <FormControl><Input type="number" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetAvion(index); }} /></FormControl>
+                                <FormControl><Input type="number" step="0.01" {...field} onChange={e => { field.onChange(parseFloat(e.target.value)||0); updateRowNetAvion(index); }} /></FormControl>
                             </FormItem>
                         )} />
                         <FormField control={form.control} name={`billingRequestsAvion.${index}.amount`} render={({field}) => (
                             <FormItem className="flex-1 min-w-[90px]">
                                 <FormLabel className="text-xs">Importe Neto</FormLabel>
-                                <FormControl><Input type="number" className="font-bold bg-white" {...field} readOnly /></FormControl>
+                                <FormControl><Input type="number" step="0.01" className="font-bold bg-white" {...field} readOnly /></FormControl>
                             </FormItem>
                         )} />
                         

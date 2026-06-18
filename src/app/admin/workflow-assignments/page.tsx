@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { getWorkflowAssignments, saveWorkflowAssignments, getAllUsers, syncRegisteredUsersFromAuth } from '@/lib/firebase-service';
 import { User } from '@/lib/types';
-import { AlertCircle, Save, ShieldAlert, Award, FileText, Landmark, Loader2, RefreshCw, Inbox, ShieldCheck, Handshake } from 'lucide-react';
+import { AlertCircle, Save, ShieldAlert, Award, FileText, Landmark, Loader2, RefreshCw, Inbox, ShieldCheck, Handshake, ClipboardEdit, ClipboardCheck } from 'lucide-react';
 
 export default function WorkflowAssignmentsPage() {
     const { userInfo, isBoss } = useAuth();
@@ -25,6 +25,8 @@ export default function WorkflowAssignmentsPage() {
     const [approvers, setApprovers] = useState<string[]>([]);
     const [billingReceptors, setBillingReceptors] = useState<string[]>([]);
     const [tangoInvoicers, setTangoInvoicers] = useState<string[]>([]);
+    const [needLoaders, setNeedLoaders] = useState<string[]>([]);
+    const [needRequestReceivers, setNeedRequestReceivers] = useState<string[]>([]);
     const [canjeRequestReceivers, setCanjeRequestReceivers] = useState<string[]>([]);
     const [canjeManagementApprovers, setCanjeManagementApprovers] = useState<string[]>([]);
     const [canjeCommercialReferents, setCanjeCommercialReferents] = useState<string[]>([]);
@@ -46,6 +48,8 @@ export default function WorkflowAssignmentsPage() {
             setApprovers(config.approvers || []);
             setBillingReceptors(config.billingReceptors || []);
             setTangoInvoicers(config.tangoInvoicers || []);
+            setNeedLoaders(config.needLoaders || []);
+            setNeedRequestReceivers(config.needRequestReceivers || []);
             setCanjeRequestReceivers(config.canjeRequestReceivers || []);
             setCanjeManagementApprovers(config.canjeManagementApprovers || []);
             setCanjeCommercialReferents(config.canjeCommercialReferents || []);
@@ -67,7 +71,7 @@ export default function WorkflowAssignmentsPage() {
 
     const togglePermission = (
         userId: string,
-        type: 'approvers' | 'billingReceptors' | 'tangoInvoicers' | 'canjeRequestReceivers' | 'canjeManagementApprovers' | 'canjeCommercialReferents'
+        type: 'approvers' | 'billingReceptors' | 'tangoInvoicers' | 'needLoaders' | 'needRequestReceivers' | 'canjeRequestReceivers' | 'canjeManagementApprovers' | 'canjeCommercialReferents'
     ) => {
         if (type === 'approvers') {
             setApprovers(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]);
@@ -75,6 +79,10 @@ export default function WorkflowAssignmentsPage() {
             setBillingReceptors(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]);
         } else if (type === 'tangoInvoicers') {
             setTangoInvoicers(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]);
+        } else if (type === 'needLoaders') {
+            setNeedLoaders(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]);
+        } else if (type === 'needRequestReceivers') {
+            setNeedRequestReceivers(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]);
         } else if (type === 'canjeRequestReceivers') {
             setCanjeRequestReceivers(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]);
         } else if (type === 'canjeManagementApprovers') {
@@ -91,6 +99,8 @@ export default function WorkflowAssignmentsPage() {
                 approvers,
                 billingReceptors,
                 tangoInvoicers,
+                needLoaders,
+                needRequestReceivers,
                 canjeRequestReceivers,
                 canjeManagementApprovers,
                 canjeCommercialReferents,
@@ -142,7 +152,7 @@ export default function WorkflowAssignmentsPage() {
                         </div>
                     </div>
                 ) : (
-                    <div className="bg-white border rounded-md shadow-sm overflow-hidden">
+                    <div className="bg-white border rounded-md shadow-sm overflow-x-auto">
                         <Table>
                             <TableHeader className="bg-slate-100">
                                 <TableRow>
@@ -150,7 +160,9 @@ export default function WorkflowAssignmentsPage() {
                                     <TableHead className="text-center min-w-[160px] bg-purple-50/30"><div className="flex justify-center items-center gap-1 font-bold text-purple-900"><Award className="w-4 h-4" /> Aprobador OP</div></TableHead>
                                     <TableHead className="text-center min-w-[170px] bg-amber-50/30"><div className="flex justify-center items-center gap-1 font-bold text-amber-900"><FileText className="w-4 h-4" /> Receptor Facturas</div></TableHead>
                                     <TableHead className="text-center min-w-[170px] bg-green-50/30"><div className="flex justify-center items-center gap-1 font-bold text-green-900"><Landmark className="w-4 h-4" /> Facturacion Tango</div></TableHead>
-                                    <TableHead className="text-center min-w-[170px] bg-sky-50/30"><div className="flex justify-center items-center gap-1 font-bold text-sky-900"><Inbox className="w-4 h-4" /> Recibe Canjes</div></TableHead>
+                                    <TableHead className="text-center min-w-[170px] bg-indigo-50/30"><div className="flex justify-center items-center gap-1 font-bold text-indigo-900"><ClipboardEdit className="w-4 h-4" /> Carga Necesidad</div></TableHead>
+                                    <TableHead className="text-center min-w-[190px] bg-orange-50/30"><div className="flex justify-center items-center gap-1 font-bold text-orange-900"><ClipboardCheck className="w-4 h-4" /> Recibe Necesidad</div></TableHead>
+                                    <TableHead className="text-center min-w-[170px] bg-sky-50/30"><div className="flex justify-center items-center gap-1 font-bold text-sky-900"><Inbox className="w-4 h-4" /> Gestiona Canjes</div></TableHead>
                                     <TableHead className="text-center min-w-[170px] bg-rose-50/30"><div className="flex justify-center items-center gap-1 font-bold text-rose-900"><ShieldCheck className="w-4 h-4" /> Autoriza Gerencia</div></TableHead>
                                     <TableHead className="text-center min-w-[170px] bg-cyan-50/30"><div className="flex justify-center items-center gap-1 font-bold text-cyan-900"><Handshake className="w-4 h-4" /> Referente Comercial</div></TableHead>
                                 </TableRow>
@@ -174,6 +186,12 @@ export default function WorkflowAssignmentsPage() {
                                         </TableCell>
                                         <TableCell className="text-center bg-green-50/10">
                                             <Switch checked={tangoInvoicers.includes(u.id)} onCheckedChange={() => togglePermission(u.id, 'tangoInvoicers')} />
+                                        </TableCell>
+                                        <TableCell className="text-center bg-indigo-50/10">
+                                            <Switch checked={needLoaders.includes(u.id)} onCheckedChange={() => togglePermission(u.id, 'needLoaders')} />
+                                        </TableCell>
+                                        <TableCell className="text-center bg-orange-50/10">
+                                            <Switch checked={needRequestReceivers.includes(u.id)} onCheckedChange={() => togglePermission(u.id, 'needRequestReceivers')} />
                                         </TableCell>
                                         <TableCell className="text-center bg-sky-50/10">
                                             <Switch checked={canjeRequestReceivers.includes(u.id)} onCheckedChange={() => togglePermission(u.id, 'canjeRequestReceivers')} />
