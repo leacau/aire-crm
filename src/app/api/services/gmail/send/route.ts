@@ -7,12 +7,19 @@ function cleanHeader(value: unknown): string {
     return String(value || '').replace(/[\r\n]/g, ' ').trim();
 }
 
+function formatMailbox(name: unknown, email: unknown): string {
+    const safeEmail = cleanHeader(email);
+    if (!safeEmail) return '';
+    const safeName = cleanHeader(name).replace(/"/g, "'");
+    return safeName ? `"${safeName}" <${safeEmail}>` : safeEmail;
+}
+
 export async function POST(req: Request) {
     try {
         const serverUser = await requireServerUser(req);
         if (isServerResponse(serverUser)) return serverUser;
 
-        const { accessToken, to, subject, body, attachments } = await req.json();
+        const { accessToken, to, subject, body, attachments, fromName, fromEmail, replyTo } = await req.json();
 
         if (!accessToken) {
             return NextResponse.json({ error: 'Missing access token' }, { status: 401 });
@@ -29,7 +36,15 @@ export async function POST(req: Request) {
         let message = [];
 
         message.push(`MIME-Version: 1.0`);
+        const formattedFrom = formatMailbox(fromName, fromEmail);
+        if (formattedFrom) {
+            message.push(`From: ${formattedFrom}`);
+        }
         message.push(`To: ${safeTo}`);
+        const safeReplyTo = cleanHeader(replyTo);
+        if (safeReplyTo) {
+            message.push(`Reply-To: ${safeReplyTo}`);
+        }
         message.push(`Subject: ${safeSubject}`);
         message.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
         message.push(``);

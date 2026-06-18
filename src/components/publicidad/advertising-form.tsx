@@ -30,7 +30,8 @@ import {
     getAdvertisingOrder,
     updateAdvertisingOrder,
     getBillingRequestsByOrder,
-    getAllUsers 
+    getAllUsers,
+    getWorkflowAssignments
 } from "@/lib/firebase-service";
 import { Client, Agency, AdvertisingOrder, User, ApprovalStatus } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
@@ -808,11 +809,21 @@ export function AdvertisingForm() {
           if (accessToken) {
               try {
                   const clientDisplayName = selectedClient?.razonSocial || selectedClient?.denominacion || 'Desconocido';
+                  const ownerUser = users.find(u => u.id === (cleanPayload.createdBy || orderCreatedBy));
+                  const advisorDisplayName = ownerUser?.name || cleanPayload.accountExecutive || userInfo.name;
+                  const advisorEmail = ownerUser?.email || (advisorDisplayName === userInfo.name ? userInfo.email : undefined);
+                  const workflowAssignments = await getWorkflowAssignments();
+                  const configuredApproverEmails = workflowAssignments.approvers
+                      .map(userId => users.find(user => user.id === userId)?.email)
+                      .filter((email): email is string => Boolean(email));
+                  const recipients = configuredApproverEmails.length > 0
+                      ? Array.from(new Set(configuredApproverEmails))
+                      : ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar'];
                   const baseUrl = window.location.origin;
                   const emailSubject = wasApproved ? `REVISIÓN DE CONTRATO - Orden de Publicidad - ${clientDisplayName}` : `Pedido de Revisión de Orden de Publicidad - ${clientDisplayName}`;
                   const emailBody = `
                       <div style="font-family: Arial, sans-serif; color: #333; max-w: 600px; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
-                          <p>Se ha cargado un pedido de revisión de una <strong>Orden de Publicidad</strong> para el cliente <strong>${clientDisplayName}</strong>.</p>
+                          <p>El asesor <strong>${advisorDisplayName}</strong> cargó un pedido de revisión de una <strong>Orden de Publicidad</strong> para el cliente <strong>${clientDisplayName}</strong>.</p>
                           ${wasApproved ? `<div style="background-color: #fef3c7; border-left: 4px solid #d97706; padding: 15px; margin: 15px 0;"><strong>Atención:</strong> Esta orden ya estaba aprobada y fue modificada.<br/><br/><strong>Motivo del Asesor:</strong> <i>"${modificationReason.trim()}"</i></div>` : ''}
                           <p>Para evaluar la pauta y ver los detalles completos en el Centro de Revisión, ingresa desde el siguiente enlace directo:</p>
                           <p style="margin-top: 15px;"><a href="${baseUrl}/approvals?tab=pending" style="display: inline-block; padding: 10px 20px; background-color: #1d4ed8; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px;">EVALUAR ORDEN DE PUBLICIDAD</a></p>
@@ -821,9 +832,12 @@ export function AdvertisingForm() {
                   
                   await sendEmail({
                       accessToken,
-                      to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar'],
+                      to: recipients,
                       subject: emailSubject,
-                      body: emailBody
+                      body: emailBody,
+                      fromName: advisorDisplayName,
+                      fromEmail: userInfo.email,
+                      replyTo: advisorEmail,
                   });
               } catch (emailErr) {}
           }

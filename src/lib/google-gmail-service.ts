@@ -12,6 +12,9 @@ export interface EmailParams {
     subject: string;
     body: string;
     attachments?: EmailAttachment[];
+    fromName?: string;
+    fromEmail?: string;
+    replyTo?: string;
 }
 
 async function getCrmIdToken(): Promise<string> {

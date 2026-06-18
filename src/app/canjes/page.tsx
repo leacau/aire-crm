@@ -10,8 +10,9 @@ import { MoreHorizontal, PlusCircle, Trash2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Canje, Client, User } from '@/lib/types';
-import { getCanjes, getClients, getAllUsers, createCanje, updateCanje, deleteCanje, migrateLegacyConveniosToCanjes } from '@/lib/firebase-service';
+import { getCanjes, getClients, getAllUsers, createCanje, updateCanje, deleteCanje, migrateLegacyConveniosToCanjes, getWorkflowAssignments } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
+import { sendEmail } from '@/lib/google-gmail-service';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
@@ -35,7 +36,7 @@ const getStatusPill = (status?: string) => {
 };
 
 function CanjesPageComponent() {
-  const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const canjeIdFromUrl = searchParams.get('id');
@@ -96,6 +97,43 @@ function CanjesPageComponent() {
       fetchData();
     }
   }, [authLoading, userInfo, fetchData]);
+
+  const notifyCanjeReceivers = async (canjeId: string, canjeData: Omit<Canje, 'id' | 'fechaCreacion'>) => {
+    try {
+      const accessToken = await getGoogleAccessToken({ silent: true });
+      if (!accessToken || !userInfo) return;
+
+      const assignments = await getWorkflowAssignments();
+      const recipients = assignments.canjeRequestReceivers
+        .map(userId => users.find(user => user.id === userId)?.email)
+        .filter((email): email is string => Boolean(email));
+
+      if (recipients.length === 0) return;
+
+      const canjeUrl = `${window.location.origin}/canjes?id=${encodeURIComponent(canjeId)}`;
+      await sendEmail({
+        accessToken,
+        to: Array.from(new Set(recipients)),
+        subject: `Nuevo pedido de canje - ${canjeData.titulo}`,
+        body: `
+          <div style="font-family: Arial, sans-serif; color: #333; max-width: 640px; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
+            <h2 style="margin: 0 0 12px; color: #0f172a;">Nuevo pedido de canje</h2>
+            <p><strong>${userInfo.name}</strong> cargó un nuevo pedido para evaluación.</p>
+            <p><strong>Título:</strong> ${canjeData.titulo}<br/>
+            <strong>Solicitante:</strong> ${canjeData.solicitanteCanje || '-'}<br/>
+            <strong>Necesidad:</strong> ${canjeData.necesidadOrganizacion || '-'}</p>
+            <p><strong>Detalle:</strong><br/>${(canjeData.pedido || '').replace(/\n/g, '<br/>')}</p>
+            <p style="margin-top: 16px;"><a href="${canjeUrl}" style="display: inline-block; padding: 10px 16px; background: #1d4ed8; color: #fff; text-decoration: none; border-radius: 4px; font-weight: bold;">Ver pedido de canje</a></p>
+          </div>
+        `,
+        fromName: userInfo.name,
+        fromEmail: userInfo.email,
+        replyTo: userInfo.email,
+      });
+    } catch (error) {
+      console.error('Error notifying canje receivers:', error);
+    }
+  };
   
   const handleSaveCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>) => {
     if (!userInfo) return;
@@ -105,7 +143,8 @@ function CanjesPageComponent() {
         await updateCanje(selectedCanje.id, canjeData, userInfo.id, userInfo.name);
         toast({ title: "Canje Actualizado" });
       } else {
-        await createCanje(canjeData, userInfo.id, userInfo.name);
+        const canjeId = await createCanje(canjeData, userInfo.id, userInfo.name);
+        await notifyCanjeReceivers(canjeId, canjeData);
         toast({ title: "Canje Creado" });
       }
       fetchData(); // Refresh the list
