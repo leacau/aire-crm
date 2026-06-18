@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, differenceInDays, isValid, addMonths } from "date-fns";
-import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2 } from "lucide-react"; 
+import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2, Mic, MicOff, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -50,6 +50,72 @@ const AdvertisingOrderPdf = dynamic(
   { ssr: false }
 );
 
+const spanishMonths: Record<string, number> = {
+  enero: 0,
+  febrero: 1,
+  marzo: 2,
+  abril: 3,
+  mayo: 4,
+  junio: 5,
+  julio: 6,
+  agosto: 7,
+  septiembre: 8,
+  setiembre: 8,
+  octubre: 9,
+  noviembre: 10,
+  diciembre: 11,
+};
+
+const spanishNumbers: Record<string, number> = {
+  un: 1,
+  una: 1,
+  uno: 1,
+  dos: 2,
+  tres: 3,
+  cuatro: 4,
+  cinco: 5,
+  seis: 6,
+  siete: 7,
+  ocho: 8,
+  nueve: 9,
+  diez: 10,
+};
+
+const weekdayByText: Record<string, number> = {
+  lunes: 1,
+  martes: 2,
+  miercoles: 3,
+  miércoles: 3,
+  jueves: 4,
+  viernes: 5,
+  sabado: 6,
+  sábado: 6,
+  domingo: 7,
+};
+
+const normalizeVoiceText = (text: string) =>
+  text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const parseSpanishDateText = (input: string): Date | null => {
+  const normalized = normalizeVoiceText(input)
+    .replace(/^el\s+/, "")
+    .replace(/\bdel\b/g, "de")
+    .replace(/\bprimero\b/g, "1");
+  const match = normalized.match(/(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})/);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = spanishMonths[match[2]];
+  const year = Number(match[3]);
+  if (!day || month === undefined || !year) return null;
+  const date = new Date(year, month, day);
+  return isValid(date) ? date : null;
+};
+
 export function AdvertisingForm() {
   const { toast } = useToast();
   const { userInfo, getGoogleAccessToken } = useAuth();
@@ -80,6 +146,8 @@ export function AdvertisingForm() {
   
   const [materialUrls, setMaterialUrls] = useState<string[]>(['']);
   const [orderCreatedBy, setOrderCreatedBy] = useState<string>('');
+  const [voiceCommand, setVoiceCommand] = useState('');
+  const [isListeningVoice, setIsListeningVoice] = useState(false);
 
   const [wasApproved, setWasApproved] = useState(false);
   const [modificationReason, setModificationReason] = useState('');
@@ -376,6 +444,175 @@ export function AdvertisingForm() {
   const handleRemoveMaterialUrl = (index: number) => {
       const newUrls = materialUrls.filter((_, i) => i !== index);
       setMaterialUrls(newUrls.length ? newUrls : ['']);
+  };
+
+  const findProgramFromCommand = useCallback((command: string) => {
+      const normalizedCommand = normalizeVoiceText(command);
+      return [...programs]
+          .filter(program => program?.name)
+          .sort((a, b) => String(b.name).length - String(a.name).length)
+          .find(program => normalizedCommand.includes(normalizeVoiceText(String(program.name))));
+  }, [programs]);
+
+  const getCommandWeekdays = (normalizedCommand: string) => {
+      if (/\b(por dia|por día|todos los dias|todos los días|diario|diaria)\b/.test(normalizedCommand)) {
+          return [1, 2, 3, 4, 5, 6, 7];
+      }
+      const days = Object.entries(weekdayByText)
+          .filter(([dayName]) => normalizedCommand.includes(dayName.normalize("NFD").replace(/[\u0300-\u036f]/g, "")))
+          .map(([, dayValue]) => dayValue);
+      return Array.from(new Set(days));
+  };
+
+  const getActionTypeFromCommand = (normalizedCommand: string) => {
+      if (/\bnota comercial\b/.test(normalizedCommand)) return "Nota Comercial";
+      if (/\bauspicio\b/.test(normalizedCommand)) return "Auspicio";
+      if (/\bmicro\b/.test(normalizedCommand)) return "Micro";
+      if (/\bsorteo\b/.test(normalizedCommand)) return "Sorteo";
+      if (/\bjuego\b/.test(normalizedCommand)) return "Juego";
+      if (/\bpnt\b/.test(normalizedCommand)) return "PNT";
+      if (/\bspot\b/.test(normalizedCommand)) return "Spot";
+      return null;
+  };
+
+  const getRepetitionCountFromCommand = (normalizedCommand: string, actionType: string) => {
+      const actionWord = normalizeVoiceText(actionType).split(" ")[0];
+      const numericBeforeAction = normalizedCommand.match(new RegExp(`(\\d+)\\s+${actionWord}s?\\b`));
+      if (numericBeforeAction) return Math.max(1, Number(numericBeforeAction[1]) || 1);
+
+      const wordBeforeAction = normalizedCommand.match(new RegExp(`\\b(${Object.keys(spanishNumbers).join("|")})\\s+${actionWord}s?\\b`));
+      if (wordBeforeAction) return spanishNumbers[wordBeforeAction[1]] || 1;
+
+      const numericBeforeDay = normalizedCommand.match(/(\d+)\s+(?:por dia|por día|diarios|diarias)/);
+      if (numericBeforeDay) return Math.max(1, Number(numericBeforeDay[1]) || 1);
+
+      return 1;
+  };
+
+  const getRateForVoiceItem = (program: any, actionType: string, hasTv: boolean) => {
+      const rates = program?.rates || {};
+      if (actionType === "Spot") return hasTv ? (rates.spotTv || 0) : (rates.spotRadio || 0);
+      if (actionType === "PNT") return hasTv ? (rates.pntMasBarrida || 0) : (rates.pnt || 0);
+      if (actionType === "Auspicio") return rates.auspicio || rates.Auspicio || 0;
+      if (actionType === "Nota Comercial") return rates.notaComercial || rates["Nota Comercial"] || 0;
+      return rates[actionType] || 0;
+  };
+
+  const applyVoiceCommand = useCallback((rawCommand?: string) => {
+      const command = (rawCommand || voiceCommand).trim();
+      if (!command) {
+          toast({ title: "No hay instrucción", description: "Dictá o escribí un comando para aplicarlo.", variant: "destructive" });
+          return;
+      }
+
+      const normalizedCommand = normalizeVoiceText(command);
+      const dateMatch = normalizedCommand.match(/(?:desde|del)\s+(.+?)\s+(?:al|hasta)\s+(.+)$/);
+      if (dateMatch && /(periodo|período|fecha|vigencia|rango|desde|del)/.test(normalizedCommand)) {
+          const parsedStart = parseSpanishDateText(dateMatch[1]);
+          const parsedEnd = parseSpanishDateText(dateMatch[2]);
+          if (!parsedStart || !parsedEnd || parsedEnd < parsedStart) {
+              toast({ title: "No pude entender el período", description: "Probá: desde el primero de mayo de 2026 al 31 de agosto de 2026.", variant: "destructive" });
+              return;
+          }
+          setValue("startDate", parsedStart, { shouldDirty: true, shouldValidate: true });
+          setValue("endDate", parsedEnd, { shouldDirty: true, shouldValidate: true });
+          toast({ title: "Período cargado", description: `${format(parsedStart, "dd/MM/yyyy")} al ${format(parsedEnd, "dd/MM/yyyy")}` });
+          setVoiceCommand("");
+          return;
+      }
+
+      const program = findProgramFromCommand(command);
+      const actionType = getActionTypeFromCommand(normalizedCommand);
+      if (!program || !actionType) {
+          toast({
+              title: "No pude armar la pauta",
+              description: "Necesito reconocer un programa y una acción. Ej: cargá un spot de 20 segundos todos los martes en Ahora Vengo.",
+              variant: "destructive",
+          });
+          return;
+      }
+
+      const currentStart = form.getValues("startDate");
+      const currentEnd = form.getValues("endDate");
+      if (!currentStart || !currentEnd || !isValid(currentStart) || !isValid(currentEnd) || currentEnd < currentStart) {
+          toast({ title: "Falta el período", description: "Primero cargá fecha de inicio y fin de la orden.", variant: "destructive" });
+          return;
+      }
+
+      const weekdays = getCommandWeekdays(normalizedCommand);
+      if (weekdays.length === 0) {
+          toast({ title: "Faltan días", description: "Indicá todos los días, por día, o días específicos como martes y jueves.", variant: "destructive" });
+          return;
+      }
+
+      const secondsMatch = normalizedCommand.match(/(\d+)\s*(?:segundos|seg|")/);
+      const seconds = actionType === "Spot" ? Number(secondsMatch?.[1] || 0) : 0;
+      if (actionType === "Spot" && seconds <= 0) {
+          toast({ title: "Faltan segundos", description: "Para spots indicá la duración, por ejemplo: spot de 20 segundos.", variant: "destructive" });
+          return;
+      }
+
+      const repetitions = getRepetitionCountFromCommand(normalizedCommand, actionType);
+      const dailySpots: Record<string, number> = {};
+      const cursor = new Date(currentStart);
+      while (cursor <= currentEnd) {
+          const jsDay = cursor.getDay();
+          const isoDay = jsDay === 0 ? 7 : jsDay;
+          if (weekdays.includes(isoDay)) {
+              dailySpots[format(cursor, "yyyy-MM-dd")] = repetitions;
+          }
+          cursor.setDate(cursor.getDate() + 1);
+      }
+
+      if (Object.keys(dailySpots).length === 0) {
+          toast({ title: "No hay fechas para esa pauta", description: "El rango cargado no contiene los días indicados.", variant: "destructive" });
+          return;
+      }
+
+      const hasTv = /\b(tv|tele|pantalla|barrida)\b/.test(normalizedCommand);
+      const nextItems = [
+          ...(form.getValues("srlItems") || []),
+          {
+              month: "Mensual",
+              programId: program.id,
+              adType: actionType,
+              hasTv,
+              seconds,
+              dailySpots,
+              unitRate: getRateForVoiceItem(program, actionType, hasTv),
+          },
+      ];
+      setValue("srlItems", nextItems, { shouldDirty: true, shouldValidate: true });
+      toast({
+          title: "Pauta cargada",
+          description: `${actionType} en ${program.name}: ${Object.keys(dailySpots).length} día(s), ${repetitions} por día.`,
+      });
+      setVoiceCommand("");
+  }, [findProgramFromCommand, form, setValue, toast, voiceCommand]);
+
+  const startVoiceInput = () => {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+          toast({ title: "Dictado no disponible", description: "Tu navegador no permite reconocimiento de voz aquí. Podés escribir el comando y aplicarlo.", variant: "destructive" });
+          return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = "es-AR";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.onstart = () => setIsListeningVoice(true);
+      recognition.onerror = () => {
+          setIsListeningVoice(false);
+          toast({ title: "No se pudo escuchar", description: "Revisá permisos de micrófono o escribí el comando manualmente.", variant: "destructive" });
+      };
+      recognition.onend = () => setIsListeningVoice(false);
+      recognition.onresult = (event: any) => {
+          const transcript = String(event.results?.[0]?.[0]?.transcript || "");
+          setVoiceCommand(transcript);
+          applyVoiceCommand(transcript);
+      };
+      recognition.start();
   };
 
   const daysCount = (startDate && endDate && isValid(startDate) && isValid(endDate))
@@ -959,6 +1196,30 @@ export function AdvertisingForm() {
              ) : (
                  <Input value={form.watch('accountExecutive')} readOnly className="bg-slate-50" />
              )}
+          </div>
+        </div>
+
+        <div className="border rounded-md bg-white shadow-sm p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+            <div className="flex-1 space-y-2">
+              <Label>Asistente de carga por voz</Label>
+              <Textarea
+                value={voiceCommand}
+                onChange={event => setVoiceCommand(event.target.value)}
+                placeholder='Ej: "cargá el período desde el primero de mayo de 2026 al 31 de agosto de 2026" o "cargá un spot de 20 segundos todos los martes y jueves en Santa Siesta"'
+                className="min-h-[76px] resize-none"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={startVoiceInput} disabled={isListeningVoice}>
+                {isListeningVoice ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
+                {isListeningVoice ? "Escuchando..." : "Dictar"}
+              </Button>
+              <Button type="button" onClick={() => applyVoiceCommand()}>
+                <Wand2 className="mr-2 h-4 w-4" />
+                Aplicar
+              </Button>
+            </div>
           </div>
         </div>
 
