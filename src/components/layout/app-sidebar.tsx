@@ -118,7 +118,7 @@ export function AppSidebar() {
         { title: 'Oportunidades', href: '/opportunities', icon: Trophy, screenName: 'Opportunities' },
         { title: 'Prospectos', href: '/prospects', icon: Target, screenName: 'Prospects' },
         { title: 'Tareas', href: '/tasks', icon: ListTodo, screenName: 'Tasks' },
-        { title: 'Canjes', href: '/canjes', icon: Repeat, screenName: 'Canjes' },
+        { title: 'Necesidades', href: '/canjes', icon: Repeat, screenName: 'Canjes' },
         { title: 'Cotizador', href: '/quotes', icon: FileSpreadsheet, screenName: 'Quotes' },
         { title: 'Seguimiento', href: '/coaching', icon: ClipboardList, screenName: 'Coaching' },
       ]

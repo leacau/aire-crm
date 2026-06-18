@@ -328,8 +328,35 @@ export type ClientActivity = {
     googleCalendarEventId?: string;
 }
 
-export type CanjeEstado = 'Pedido' | 'En gestión' | 'Culminado' | 'Aprobado';
-export const canjeEstados: CanjeEstado[] = ['Pedido', 'En gestión', 'Culminado', 'Aprobado'];
+export type CanjeEstado =
+  | 'Necesidad cargada'
+  | 'En evaluación'
+  | 'Pendiente gerencia'
+  | 'Aprobado gerencia'
+  | 'Rechazado gerencia'
+  | 'En gestión comercial'
+  | 'Compra directa'
+  | 'Resuelto'
+  | 'Pedido'
+  | 'En gestión'
+  | 'Culminado'
+  | 'Aprobado';
+export const canjeEstados: CanjeEstado[] = [
+  'Necesidad cargada',
+  'En evaluación',
+  'Pendiente gerencia',
+  'Aprobado gerencia',
+  'Rechazado gerencia',
+  'En gestión comercial',
+  'Compra directa',
+  'Resuelto',
+  'Pedido',
+  'En gestión',
+  'Culminado',
+  'Aprobado'
+];
+export type NecesidadResolucion = 'Pendiente' | 'Compra directa' | 'Canje';
+export const necesidadResoluciones: NecesidadResolucion[] = ['Pendiente', 'Compra directa', 'Canje'];
 
 export type CanjeTipo = 'Una vez' | 'Mensual' | 'Temporario';
 export const canjeTipos: CanjeTipo[] = ['Una vez', 'Mensual', 'Temporario'];
@@ -428,11 +455,19 @@ export type Canje = {
   fechaInicio?: string;
   fechaFin?: string;
   valorAcordado?: number;
+  presupuestoValor?: number;
+  presupuestoDetalle?: string;
+  tipoResolucion?: NecesidadResolucion;
+  decisionComentario?: string;
+  gerenciaComentario?: string;
+  gestionComentario?: string;
   diferenciaPermitida?: number;
   opportunityId?: string;
   convenioId?: string;
   advertisingOrderIds?: string[];
   migratedFromConvenio?: boolean;
+  creadoPorId?: string;
+  creadoPorName?: string;
 };
 
 export type UserRole = 'Asesor' | 'Administracion' | 'Admin' | 'Jefe' | 'Gerencia' | 'Import' | 'Asesor Canjes';
