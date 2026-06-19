@@ -3704,7 +3704,22 @@ export const updateOpportunity = async (
 
     if (coachingChanges) {
         try {
-            await autoUpdateCoachingSession(userId, userName, 'client', originalData.clientId, originalData.clientName, `Actualización de propuesta: ${data.title || originalData.title} - ${coachingChanges}`);
+            const isClosingWonProposal = stageChanged && data.stage === 'Cerrado - Ganado';
+            await autoUpdateCoachingSession(
+                userId,
+                userName,
+                'client',
+                originalData.clientId,
+                originalData.clientName,
+                `Actualización de propuesta: ${data.title || originalData.title} - ${coachingChanges}`,
+                isClosingWonProposal
+                    ? {
+                        createIfMissing: false,
+                        completeIfActive: true,
+                        updateExistingIfMissing: true,
+                    }
+                    : undefined
+            );
         } catch (e) {
             console.error('Error auto-updating coaching:', e);
         }
@@ -5494,6 +5509,8 @@ export const autoUpdateCoachingSession = async (
     options?: {
         createIfMissing?: boolean;
         cancelIfActive?: boolean;
+        completeIfActive?: boolean;
+        updateExistingIfMissing?: boolean;
     }
 ) => {
     if (!advisorId || !entityId) return;
@@ -5501,6 +5518,8 @@ export const autoUpdateCoachingSession = async (
         && /Etapa:\s*Cerrado - (Perdido|No Definido)/i.test(actionText);
     const createIfMissing = options?.createIfMissing ?? !isClosingLostOrUndefinedProposal;
     const cancelIfActive = options?.cancelIfActive ?? isClosingLostOrUndefinedProposal;
+    const completeIfActive = options?.completeIfActive ?? false;
+    const updateExistingIfMissing = options?.updateExistingIfMissing ?? false;
 
     let activeIndex = await getCoachingActiveIndex(advisorId);
     let openSession: CoachingSession | null = null;
@@ -5557,8 +5576,6 @@ export const autoUpdateCoachingSession = async (
         activeIndex = buildCoachingActiveIndex(openSession);
     }
 
-    if (!openSession) return;
-
     const now = new Date().toISOString();
     const newEntry = {
         id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
@@ -5569,20 +5586,58 @@ export const autoUpdateCoachingSession = async (
     };
     const entityKey = getCoachingEntityKey(entityType, entityId);
     const indexedItemId = activeIndex?.entities?.[entityKey]?.itemId;
+
+    if (!openSession && updateExistingIfMissing) {
+        const recentSessionsSnap = await getDocs(query(
+            collections.coachingSessions,
+            where('advisorId', '==', advisorId),
+            orderBy('date', 'desc'),
+            limit(20)
+        ));
+
+        for (const sessionDoc of recentSessionsSnap.docs) {
+            const sessionData = sessionDoc.data() as CoachingSession;
+            const itemIndex = (sessionData.items || []).findIndex(item => item.entityType === entityType && item.entityId === entityId);
+            if (itemIndex < 0) continue;
+
+            const updatedItems = [...(sessionData.items || [])];
+            const existingItem = updatedItems[itemIndex];
+            updatedItems[itemIndex] = {
+                ...existingItem,
+                entityName,
+                followUpDoneEntries: [...(existingItem.followUpDoneEntries || []), newEntry],
+                followUpDoneUpdatedAt: now,
+                lastUpdate: now,
+            };
+
+            const updatedSession = { ...sessionData, id: sessionDoc.id, items: updatedItems };
+            await updateDoc(doc(db, 'coaching_sessions', sessionDoc.id), { items: updatedItems });
+            if (updatedSession.status === 'Open') {
+                setInCache(`open_session_${advisorId}`, updatedSession);
+                await syncCoachingActiveIndexFromSession(updatedSession);
+            }
+            return;
+        }
+    }
+
+    if (!openSession) return;
+
     const updatedItems = [...(openSession.items || [])];
+    const canUpdateClosedItem = updateExistingIfMissing && !createIfMissing;
 
     const existingItemIndex = updatedItems.findIndex(item =>
         (indexedItemId ? item.id === indexedItemId : item.entityId === entityId) &&
-        item.status !== 'Cancelado'
+        (canUpdateClosedItem || item.status !== 'Cancelado')
     );
 
     if (existingItemIndex >= 0) {
         const existingItem = updatedItems[existingItemIndex];
+        const shouldComplete = completeIfActive && existingItem.status !== 'Cancelado' && existingItem.status !== 'Completado';
 
         updatedItems[existingItemIndex] = {
             ...existingItem,
             entityName,
-            status: cancelIfActive ? 'Cancelado' : existingItem.status,
+            status: cancelIfActive ? 'Cancelado' : shouldComplete ? 'Completado' : existingItem.status,
             followUpDoneEntries: [...(existingItem.followUpDoneEntries || []), newEntry],
             followUpDoneUpdatedAt: now,
             lastUpdate: now,

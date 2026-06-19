@@ -61,6 +61,7 @@ export const defaultPermissions: Record<AreaType, Partial<Record<ScreenName, Scr
         TangoMapping: { view: true, edit: true },
         Coaching: { view: true, edit: true },
         BillingRequests: { view: true, edit: true },
+        ActiveProgramming: { view: true, edit: false },
         DataCleanup: { view: true, edit: true },
         WorkflowAssignments: { view: true, edit: true },
     },

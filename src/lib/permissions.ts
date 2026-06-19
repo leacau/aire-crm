@@ -60,6 +60,21 @@ export function hasPermission(user: User, screen: ScreenName, permissionType: 'v
         return true;
     }
 
+    if (
+        permissionType === 'view' &&
+        screen === 'ActiveProgramming' &&
+        (
+            user.role === 'Asesor' ||
+            user.role === 'Administracion' ||
+            user.area === 'Comercial' ||
+            user.area === 'Administración' ||
+            user.area === 'Pautado' ||
+            user.area === 'Programación'
+        )
+    ) {
+        return true;
+    }
+
     // User-specific overrides (if they exist) take precedence.
     if (user.permissions && user.permissions[screen]) {
         return user.permissions[screen]![permissionType] === true;

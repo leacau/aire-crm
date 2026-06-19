@@ -179,6 +179,17 @@ export function AppSidebar() {
           userInfo.role === 'Administracion'
       ) return true;
 
+      if (
+        item.screenName === 'ActiveProgramming' &&
+        (
+          userInfo.role === 'Asesor' ||
+          userInfo.area === 'Comercial' ||
+          userInfo.area === 'Administración' ||
+          userInfo.area === 'Pautado' ||
+          userInfo.area === 'Programación'
+        )
+      ) return true;
+
       if (userInfo.permissions && Object.keys(userInfo.permissions).length > 0) {
         return !!userInfo.permissions[item.screenName]?.view;
       }
@@ -201,7 +212,7 @@ export function AppSidebar() {
          allowedScreens.push(
           'Dashboard', 'Objectives', 'Clients', 'Opportunities', 'Prospects', 'Tasks', 
           'Canjes', 'Quotes', 'Coaching', 'Grilla', 'PNTs', 'Notas', 
-          'Calendar', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes', 'BillingRequests',
+          'Calendar', 'Billing', 'Invoices', 'Licenses', 'Publicidad', 'Redes', 'BillingRequests', 'ActiveProgramming',
          );
       }
 
