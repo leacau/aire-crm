@@ -102,6 +102,10 @@ const timestampToISO = (value: any): string | undefined => {
     return undefined;
 };
 
+type LoadOptions = {
+    forceServer?: boolean;
+};
+
 export const invalidateCache = (key?: string) => {
     if (key) {
         if (key === 'users') {
@@ -118,6 +122,15 @@ export const invalidateCache = (key?: string) => {
         }
     } else {
         Object.keys(cache).forEach(k => delete cache[k]);
+    }
+    if (key) {
+        Object.keys(pendingReads).forEach(k => {
+            if (k === key || (key === 'users' && (k.startsWith('all_users_') || k.startsWith('user_')))) {
+                delete pendingReads[k];
+            }
+        });
+    } else {
+        Object.keys(pendingReads).forEach(k => delete pendingReads[k]);
     }
     // Vaciamos el localStorage problemático viejo
     if (typeof window !== 'undefined') {
@@ -2768,9 +2781,10 @@ export const deleteUserAndReassignEntities = async (
 
 // --- Client Functions ---
 
-export const getClients = async (): Promise<Client[]> => {
-    return getCachedOrLoad('clients', async () => {
-      const snapshot = await getDocsPreferCache(query(collections.clients, orderBy("denominacion")));
+export const getClients = async (options: LoadOptions = {}): Promise<Client[]> => {
+    const loader = async () => {
+      const source = query(collections.clients, orderBy("denominacion"));
+      const snapshot = options.forceServer ? await getDocs(source) : await getDocsPreferCache(source);
       return snapshot.docs.map(doc => {
         const data = doc.data() as any;
         return { 
@@ -2782,7 +2796,16 @@ export const getClients = async (): Promise<Client[]> => {
           newClientDate: data.newClientDate instanceof Timestamp ? data.newClientDate.toDate().toISOString() : data.newClientDate,
         } as Client
       });
-    });
+    };
+
+    if (options.forceServer) {
+      invalidateCache('clients');
+      const clients = await loader();
+      setInCache('clients', clients);
+      return clients;
+    }
+
+    return getCachedOrLoad('clients', loader);
 };
 
 export const getClient = async (id: string): Promise<Client | null> => {
@@ -3334,20 +3357,22 @@ const mapOpportunityDoc = (doc: any): Opportunity => {
     return opp;
 };
 
-export const getOpportunities = async (): Promise<Opportunity[]> => {
-    const cachedData = getFromCache('opportunities');
+export const getOpportunities = async (options: LoadOptions = {}): Promise<Opportunity[]> => {
+    const cachedData = options.forceServer ? null : getFromCache('opportunities');
     if (cachedData) return cachedData;
 
     // 🟢 ESTRATEGIA LIGERA: Traemos etapas activas y solo las "Perdidas" recientes
     const activeStages = ['Nuevo', 'Propuesta', 'Negociación', 'Negociación a Aprobar', 'Cerrado - No Definido', 'Cerrado - Ganado'];
     
+    const readDocs = options.forceServer ? getDocs : getDocsPreferCache;
+
     // Ejecutamos las consultas de las activas en paralelo
-    const activeQueries = activeStages.map(stage => getDocsPreferCache(query(collections.opportunities, where('stage', '==', stage))));
+    const activeQueries = activeStages.map(stage => readDocs(query(collections.opportunities, where('stage', '==', stage))));
     
     // Traemos solo las Perdidas de los últimos 3 meses
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    const lostQuery = getDocsPreferCache(query(collections.opportunities, where('stage', '==', 'Cerrado - Perdido'), where('createdAt', '>=', threeMonthsAgo.toISOString())));
+    const lostQuery = readDocs(query(collections.opportunities, where('stage', '==', 'Cerrado - Perdido'), where('createdAt', '>=', threeMonthsAgo.toISOString())));
 
     const snapshots = await Promise.all([...activeQueries, lostQuery]) as any[];
     

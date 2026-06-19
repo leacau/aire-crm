@@ -4,7 +4,7 @@ import {
   opportunityStages,
 } from '@/lib/data';
 import type { Opportunity, OpportunityStage, Client, User } from '@/lib/types';
-import { MoreHorizontal, FileCheck2, TrendingUp } from 'lucide-react';
+import { MoreHorizontal, FileCheck2, TrendingUp, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -19,6 +19,7 @@ import { OpportunityDetailsDialog } from './opportunity-details-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { getOpportunities, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service'; // 🟢 Usamos la rápida
+import { invalidateCache } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval, addMonths, startOfMonth, parseISO, isSameMonth, endOfMonth, format } from 'date-fns';
@@ -407,23 +408,32 @@ export function KanbanBoard({
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // 🟢 ACÁ SE USA LA VERSIÓN RÁPIDA
-  const fetchOpportunities = useCallback(async () => {
+  const fetchOpportunities = useCallback(async (forceServer = false) => {
     setLoading(true);
+    if (forceServer) {
+      setRefreshing(true);
+      invalidateCache();
+    }
     try {
       const [allOpps, allClients] = await Promise.all([
-        getOpportunities(),
-        getClients(),
+        getOpportunities({ forceServer }),
+        getClients({ forceServer }),
       ]);
       setOpportunities(allOpps);
       setClients(allClients);
+      if (forceServer) {
+        toast({ title: 'Datos actualizados', description: 'Se descartó el caché local y se volvieron a leer las oportunidades.' });
+      }
 
     } catch (error) {
       console.error("Error fetching opportunities:", error);
       toast({ title: 'Error al cargar oportunidades', variant: 'destructive' });
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [toast]);
 
@@ -620,7 +630,14 @@ export function KanbanBoard({
   }
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 h-full flex gap-6 overflow-x-auto">
+    <div className="h-full flex flex-col">
+      <div className="px-4 pt-4 md:px-6 lg:px-8 flex justify-end shrink-0">
+        <Button variant="outline" size="sm" onClick={() => fetchOpportunities(true)} disabled={loading || refreshing}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          Recargar datos
+        </Button>
+      </div>
+      <div className="p-4 md:p-6 lg:p-8 flex-1 flex gap-6 overflow-x-auto">
       {kanbanStages.map((stage) => {
           if (stage === 'Ganado (Recurrente)') {
              return <KanbanColumn
@@ -655,6 +672,7 @@ export function KanbanBoard({
             />
           )
         })}
+      </div>
     </div>
   );
 }

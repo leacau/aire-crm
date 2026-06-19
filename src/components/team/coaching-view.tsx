@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import type { User, CoachingSession, CoachingItem, CoachingFollowUpEntry } from '@/lib/types';
-import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, updateCoachingFollowUpEntry, deleteCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem } from '@/lib/firebase-service';
+import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, updateCoachingFollowUpEntry, deleteCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem, invalidateCache } from '@/lib/firebase-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Briefcase, Pencil, X, Check } from 'lucide-react';
+import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Briefcase, Pencil, X, Check, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -40,6 +40,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const { toast } = useToast();
     const [sessions, setSessions] = useState<CoachingSession[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     
     // Estados para nueva sesión / items
     const [newItemEntity, setNewItemEntity] = useState('');
@@ -121,8 +122,12 @@ export function CoachingView({ advisor }: { advisor: User }) {
         }));
     };
 
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (forceRefresh = false) => {
         setLoading(true);
+        if (forceRefresh) {
+            setRefreshing(true);
+            invalidateCache();
+        }
         try {
             const data = normalizeLoadedSessions(await getCoachingSessions(advisor.id));
             setSessions(data);
@@ -133,17 +138,28 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 if (s.status === 'Open') initialOpenState[s.id] = true;
             });
             setOpenSessions(initialOpenState);
+            return true;
 
         } catch (error) {
             console.error("Error loading coaching sessions:", error);
+            toast({ title: "Error al actualizar seguimiento", variant: "destructive" });
+            return false;
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
-    }, [advisor.id, normalizeLoadedSessions]);
+    }, [advisor.id, normalizeLoadedSessions, toast]);
 
     useEffect(() => {
         loadData();
     }, [loadData]);
+
+    const handleForceRefresh = async () => {
+        const success = await loadData(true);
+        if (success) {
+            toast({ title: "Datos actualizados", description: "Se descartó el caché local y se volvió a leer el seguimiento." });
+        }
+    };
 
     useEffect(() => {
         const drafts: Record<string, string> = {};
@@ -828,14 +844,17 @@ export function CoachingView({ advisor }: { advisor: User }) {
 
     return (
         <div className="space-y-6 h-full flex flex-col pt-2"> 
-            <div className="flex justify-between items-center shrink-0 pb-4 pr-4">
-                <div>
+            <div className="flex items-center gap-2 shrink-0 pb-4 pr-4">
+                <div className="flex-1">
                     <h2 className="text-xl font-bold flex items-center gap-2">
                         <UserCheck className="h-5 w-5 text-primary"/> 
                         Historial de Reuniones
                     </h2>
                     <p className="text-muted-foreground text-sm">Compromisos con {advisor.name}</p>
                 </div>
+                <Button variant="outline" onClick={handleForceRefresh} size="sm" disabled={loading || refreshing}>
+                    <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Recargar datos
+                </Button>
                 {canManage && (
                     <Button onClick={handleCreateSession} size="sm">
                         <Plus className="mr-2 h-4 w-4" /> Nueva Reunión
