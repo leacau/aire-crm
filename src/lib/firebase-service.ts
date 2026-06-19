@@ -5465,9 +5465,17 @@ export const autoUpdateCoachingSession = async (
     entityType: 'client' | 'prospect',
     entityId: string,
     entityName: string,
-    actionText: string
+    actionText: string,
+    options?: {
+        createIfMissing?: boolean;
+        cancelIfActive?: boolean;
+    }
 ) => {
     if (!advisorId || !entityId) return;
+    const isClosingLostOrUndefinedProposal = /Actualizaci.n de propuesta/i.test(actionText)
+        && /Etapa:\s*Cerrado - (Perdido|No Definido)/i.test(actionText);
+    const createIfMissing = options?.createIfMissing ?? !isClosingLostOrUndefinedProposal;
+    const cancelIfActive = options?.cancelIfActive ?? isClosingLostOrUndefinedProposal;
 
     let activeIndex = await getCoachingActiveIndex(advisorId);
     let openSession: CoachingSession | null = null;
@@ -5490,7 +5498,7 @@ export const autoUpdateCoachingSession = async (
         }
     }
 
-    if (!openSession) {
+    if (!openSession && createIfMissing) {
         openSession = await getOpenCoachingSession(advisorId);
         if (openSession) {
             await syncCoachingActiveIndexFromSession(openSession);
@@ -5498,7 +5506,7 @@ export const autoUpdateCoachingSession = async (
         }
     }
 
-    if (!openSession) {
+    if (!openSession && createIfMissing) {
         const newSessionId = await createCoachingSession({
             advisorId,
             advisorName,
@@ -5524,6 +5532,8 @@ export const autoUpdateCoachingSession = async (
         activeIndex = buildCoachingActiveIndex(openSession);
     }
 
+    if (!openSession) return;
+
     const now = new Date().toISOString();
     const newEntry = {
         id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
@@ -5547,11 +5557,12 @@ export const autoUpdateCoachingSession = async (
         updatedItems[existingItemIndex] = {
             ...existingItem,
             entityName,
+            status: cancelIfActive ? 'Cancelado' : existingItem.status,
             followUpDoneEntries: [...(existingItem.followUpDoneEntries || []), newEntry],
             followUpDoneUpdatedAt: now,
             lastUpdate: now,
         };
-    } else {
+    } else if (createIfMissing) {
         updatedItems.push({
             id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
             taskId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
@@ -5567,6 +5578,8 @@ export const autoUpdateCoachingSession = async (
             lastUpdate: now,
             origin: 'advisor',
         });
+    } else {
+        return;
     }
 
     const updatedSession = { ...openSession, items: updatedItems };
