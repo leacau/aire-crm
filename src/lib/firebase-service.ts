@@ -2,7 +2,7 @@
 
 import { auth, db } from './firebase';
 import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CoachingActiveIndex, CoachingActiveIndexEntry, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction, ApprovalHistoryItem } from './types';
+import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CoachingFollowUpEntry, CoachingActiveIndex, CoachingActiveIndexEntry, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction, ApprovalHistoryItem } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
@@ -4199,12 +4199,13 @@ export const appendCoachingFollowUpEntry = async (
     text: string,
     userId: string,
     userName: string,
-): Promise<void> => {
+): Promise<CoachingFollowUpEntry | null> => {
     const trimmedText = text.trim();
-    if (!trimmedText) return;
+    if (!trimmedText) return null;
 
     const sessionRef = doc(db, 'coaching_sessions', sessionId);
     let sessionForIndex: CoachingSession | null = null;
+    let createdEntry: CoachingFollowUpEntry | null = null;
 
     await runTransaction(db, async (transaction) => {
         const sessionSnap = await transaction.get(sessionRef);
@@ -4227,6 +4228,7 @@ export const appendCoachingFollowUpEntry = async (
                 createdById: userId,
                 createdByName: userName,
             };
+            createdEntry = entry;
             const previousEntries = item[entriesField] || [];
 
             return {
@@ -4248,6 +4250,7 @@ export const appendCoachingFollowUpEntry = async (
         }
         await syncCoachingActiveIndexFromSession(sessionForIndex);
     }
+    return createdEntry;
 };
 
 export const updateCoachingFollowUpEntry = async (

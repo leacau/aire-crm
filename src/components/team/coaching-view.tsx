@@ -28,6 +28,13 @@ import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveR
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
+const COACHING_STATUS_ORDER: Record<string, number> = {
+    Completado: 1,
+    'En Proceso': 2,
+    Pendiente: 3,
+    Cancelado: 4,
+};
+
 export function CoachingView({ advisor }: { advisor: User }) {
     const { userInfo, isBoss } = useAuth();
     const { toast } = useToast();
@@ -54,24 +61,70 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const [entryToDelete, setEntryToDelete] = useState<{
         sessionId: string;
         itemId: string;
-        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext';
+        field: 'action' | 'followUpDone' | 'followUpCurrent' | 'followUpNext';
         entryId?: string;
+        legacyIndex?: number;
         legacy?: boolean;
     } | null>(null);
     const [editingLegacy, setEditingLegacy] = useState<{
         session: CoachingSession;
         item: CoachingItem;
-        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext';
+        field: 'action' | 'followUpDone' | 'followUpCurrent' | 'followUpNext';
+        legacyIndex?: number;
         text: string;
     } | null>(null);
     const [savingEntry, setSavingEntry] = useState(false);
 
     const canManage = isBoss || userInfo?.role === 'Gerencia' || userInfo?.role === 'Jefe' || userInfo?.role === 'Admin';
 
+    const getLatestItemUpdate = useCallback((item: CoachingItem) => {
+        const entryDates = [
+            ...(item.followUpDoneEntries || []),
+            ...(item.followUpCurrentEntries || []),
+            ...(item.followUpNextEntries || []),
+        ].map(entry => entry.createdAt);
+        const dates = [
+            ...entryDates,
+            item.followUpDoneUpdatedAt,
+            item.followUpCurrentUpdatedAt,
+            item.followUpNextUpdatedAt,
+            item.lastUpdate,
+            item.originalCreatedAt,
+        ].filter(Boolean) as string[];
+        return Math.max(...dates.map(value => new Date(value).getTime()).filter(Number.isFinite), 0);
+    }, []);
+
+    const sortItemsForInitialLoad = useCallback((items: CoachingItem[]) => {
+        return [...items].sort((a, b) => {
+            const statusDiff = (COACHING_STATUS_ORDER[a.status] ?? 99) - (COACHING_STATUS_ORDER[b.status] ?? 99);
+            if (statusDiff !== 0) return statusDiff;
+            const dateDiff = getLatestItemUpdate(b) - getLatestItemUpdate(a);
+            if (dateDiff !== 0) return dateDiff;
+            return a.entityName.localeCompare(b.entityName);
+        });
+    }, [getLatestItemUpdate]);
+
+    const normalizeLoadedSessions = useCallback((data: CoachingSession[]) => {
+        return data.map(session => ({
+            ...session,
+            items: sortItemsForInitialLoad(session.items),
+        }));
+    }, [sortItemsForInitialLoad]);
+
+    const updateLocalItem = (sessionId: string, itemId: string, updater: (item: CoachingItem) => CoachingItem) => {
+        setSessions(prev => prev.map(session => {
+            if (session.id !== sessionId) return session;
+            return {
+                ...session,
+                items: session.items.map(item => item.id === itemId ? updater(item) : item),
+            };
+        }));
+    };
+
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await getCoachingSessions(advisor.id);
+            const data = normalizeLoadedSessions(await getCoachingSessions(advisor.id));
             setSessions(data);
             
             // Expandir automáticamente solo las sesiones "Open"
@@ -86,7 +139,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
         } finally {
             setLoading(false);
         }
-    }, [advisor.id]);
+    }, [advisor.id, normalizeLoadedSessions]);
 
     useEffect(() => {
         loadData();
@@ -234,38 +287,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
         }
     };
 
-    const statusOrder: Record<string, number> = {
-        Completado: 1,
-        'En Proceso': 2,
-        Pendiente: 3,
-        Cancelado: 4,
-    };
-
-    const sortItemsByStatus = (items: CoachingItem[]) => {
-        return [...items].sort((a, b) => {
-            const statusDiff = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
-            if (statusDiff !== 0) return statusDiff;
-            const getLatestUpdate = (item: CoachingItem) => {
-                const entryDates = [
-                    ...(item.followUpDoneEntries || []),
-                    ...(item.followUpCurrentEntries || []),
-                    ...(item.followUpNextEntries || []),
-                ].map(entry => entry.createdAt);
-                const dates = [
-                    ...entryDates,
-                    item.followUpDoneUpdatedAt,
-                    item.followUpCurrentUpdatedAt,
-                    item.followUpNextUpdatedAt,
-                    item.lastUpdate,
-                    item.originalCreatedAt,
-                ].filter(Boolean) as string[];
-                return Math.max(...dates.map(value => new Date(value).getTime()).filter(Number.isFinite), 0);
-            };
-            const dateDiff = getLatestUpdate(b) - getLatestUpdate(a);
-            if (dateDiff !== 0) return dateDiff;
-            return a.entityName.localeCompare(b.entityName);
-        });
-    };
+    const keepCurrentItemOrder = (items: CoachingItem[]) => items;
 
     const formatUpdateDate = (value?: string) => {
         if (!value) return 'Sin fecha registrada';
@@ -284,9 +306,15 @@ export function CoachingView({ advisor }: { advisor: User }) {
         const value = followUpDrafts[item.id]?.trim() ?? '';
         if (!value || !userInfo) return;
         try {
-            await appendCoachingFollowUpEntry(session.id, item.id, 'followUpDone', value, userInfo.id, userInfo.name);
+            const entry = await appendCoachingFollowUpEntry(session.id, item.id, 'followUpDone', value, userInfo.id, userInfo.name);
+            const now = entry?.createdAt || new Date().toISOString();
             setFollowUpDrafts(prev => ({ ...prev, [item.id]: '' }));
-            await loadData();
+            updateLocalItem(session.id, item.id, current => ({
+                ...current,
+                followUpDoneEntries: entry ? [...(current.followUpDoneEntries || []), entry] : current.followUpDoneEntries,
+                followUpDoneUpdatedAt: now,
+                lastUpdate: now,
+            }));
             toast({ title: "Asiento guardado" });
         } catch (error) {
             console.error("Error saving coaching entry:", error);
@@ -295,28 +323,82 @@ export function CoachingView({ advisor }: { advisor: User }) {
     };
 
     type TimelineEntry = CoachingFollowUpEntry & {
-        field: 'followUpDone' | 'followUpCurrent' | 'followUpNext';
+        field: 'action' | 'followUpDone' | 'followUpCurrent' | 'followUpNext';
         legacy?: boolean;
+        legacyIndex?: number;
+        label?: string;
     };
 
-    const getFollowUpTimeline = (item: CoachingItem): TimelineEntry[] => {
-        const fields = [
-            { field: 'followUpDone' as const, entries: item.followUpDoneEntries || [], text: item.followUpDone || item.advisorNotes || '', updatedAt: item.followUpDoneUpdatedAt },
-            { field: 'followUpCurrent' as const, entries: item.followUpCurrentEntries || [], text: item.followUpCurrent || '', updatedAt: item.followUpCurrentUpdatedAt },
-            { field: 'followUpNext' as const, entries: item.followUpNextEntries || [], text: item.followUpNext || '', updatedAt: item.followUpNextUpdatedAt },
-        ];
+    const parseLegacyEntryDate = (text: string, fallback?: string) => {
+        const match = text.match(/\[(?:Jefatura\s+|Del\s+)?(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?\]/i);
+        if (!match) return fallback || new Date().toISOString();
+        const year = fallback ? new Date(fallback).getFullYear() : new Date().getFullYear();
+        const date = new Date(
+            year,
+            Number(match[2]) - 1,
+            Number(match[1]),
+            Number(match[3] || 0),
+            Number(match[4] || 0),
+        );
+        return Number.isNaN(date.getTime()) ? (fallback || new Date().toISOString()) : date.toISOString();
+    };
 
-        return fields.flatMap(({ field, entries, text, updatedAt }) => [
-            ...entries.map(entry => ({ ...entry, field })),
-            ...(text ? [{
-                id: `legacy-${field}`,
-                text,
-                createdAt: updatedAt || item.lastUpdate || item.originalCreatedAt,
+    const buildLegacyTimelineEntries = (
+        field: TimelineEntry['field'],
+        text: string,
+        updatedAt: string | undefined,
+        fallbackAt: string | undefined,
+        label: string,
+    ): TimelineEntry[] => {
+        if (!text?.trim()) return [];
+        const fallback = updatedAt || fallbackAt || new Date().toISOString();
+        return text
+            .split(/\n{2,}/)
+            .map(chunk => chunk.trim())
+            .filter(Boolean)
+            .map((chunk, index) => ({
+                id: `legacy-${field}-${index}`,
+                text: chunk,
+                createdAt: parseLegacyEntryDate(chunk, fallback),
                 createdById: '',
                 createdByName: 'Historial anterior',
                 field,
                 legacy: true,
-            }] : []),
+                legacyIndex: index,
+                label,
+            }));
+    };
+
+    const getLegacyFieldText = (item: CoachingItem, field: TimelineEntry['field']) => {
+        if (field === 'action') return item.action || '';
+        if (field === 'followUpDone') return item.followUpDone || item.advisorNotes || '';
+        if (field === 'followUpCurrent') return item.followUpCurrent || '';
+        return item.followUpNext || '';
+    };
+
+    const updateLegacyTextAtIndex = (item: CoachingItem, field: TimelineEntry['field'], index: number | undefined, nextText: string | null) => {
+        const parts = getLegacyFieldText(item, field)
+            .split(/\n{2,}/)
+            .map(chunk => chunk.trim())
+            .filter(Boolean);
+        if (index === undefined || index < 0 || index >= parts.length) return nextText ?? '';
+        const nextParts = nextText === null
+            ? parts.filter((_, partIndex) => partIndex !== index)
+            : parts.map((part, partIndex) => partIndex === index ? nextText.trim() : part);
+        return nextParts.filter(Boolean).join('\n\n');
+    };
+
+    const getFollowUpTimeline = (item: CoachingItem): TimelineEntry[] => {
+        const fields = [
+            { field: 'action' as const, entries: [], text: item.action || '', updatedAt: item.originalCreatedAt || item.lastUpdate, label: 'Acción / indicación' },
+            { field: 'followUpDone' as const, entries: item.followUpDoneEntries || [], text: item.followUpDone || item.advisorNotes || '', updatedAt: item.followUpDoneUpdatedAt, label: 'Bitácora' },
+            { field: 'followUpCurrent' as const, entries: item.followUpCurrentEntries || [], text: item.followUpCurrent || '', updatedAt: item.followUpCurrentUpdatedAt, label: 'En qué estamos' },
+            { field: 'followUpNext' as const, entries: item.followUpNextEntries || [], text: item.followUpNext || '', updatedAt: item.followUpNextUpdatedAt, label: 'Qué sigue' },
+        ];
+
+        return fields.flatMap(({ field, entries, text, updatedAt, label }) => [
+            ...entries.map(entry => ({ ...entry, field, label })),
+            ...buildLegacyTimelineEntries(field, text, updatedAt, item.lastUpdate || item.originalCreatedAt, label),
         ]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     };
 
@@ -333,8 +415,24 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 userInfo.id,
                 userInfo.name,
             );
+            const editedAt = new Date().toISOString();
+            updateLocalItem(editingEntry.sessionId, editingEntry.itemId, current => {
+                const entriesField = `${editingEntry.field}Entries` as 'followUpDoneEntries' | 'followUpCurrentEntries' | 'followUpNextEntries';
+                const updatedAtField = `${editingEntry.field}UpdatedAt` as keyof CoachingItem;
+                return {
+                    ...current,
+                    [entriesField]: (current[entriesField] || []).map(entry => entry.id === editingEntry.entryId ? {
+                        ...entry,
+                        text: editingEntry.text,
+                        updatedAt: editedAt,
+                        updatedById: userInfo.id,
+                        updatedByName: userInfo.name,
+                    } : entry),
+                    [updatedAtField]: editedAt,
+                    lastUpdate: editedAt,
+                };
+            });
             setEditingEntry(null);
-            await loadData();
             toast({ title: "Asiento actualizado" });
         } catch (error) {
             console.error("Error updating coaching entry:", error);
@@ -351,33 +449,61 @@ export function CoachingView({ advisor }: { advisor: User }) {
             if (entryToDelete.legacy) {
                 const session = sessions.find(candidate => candidate.id === entryToDelete.sessionId);
                 const item = session?.items.find(candidate => candidate.id === entryToDelete.itemId);
+                if (entryToDelete.field === 'action' && session && item) {
+                    const now = new Date().toISOString();
+                    const nextAction = updateLegacyTextAtIndex(item, 'action', entryToDelete.legacyIndex, null);
+                    await updateCoachingItem(session.id, item.id, { action: nextAction, lastUpdate: now } as any, userInfo.id, userInfo.name, item.taskId, session.advisorId);
+                    updateLocalItem(session.id, item.id, current => ({ ...current, action: nextAction, lastUpdate: now }));
+                    setEntryToDelete(null);
+                    toast({ title: "Asiento eliminado" });
+                    return;
+                }
                 if (!session || !item) throw new Error("Registro histórico no encontrado");
                 const updatedAtField = `${entryToDelete.field}UpdatedAt` as keyof CoachingItem;
+                const now = new Date().toISOString();
+                const nextLegacyText = updateLegacyTextAtIndex(item, entryToDelete.field, entryToDelete.legacyIndex, null);
                 await updateCoachingItem(
                     session.id,
                     item.id,
                     {
-                        [entryToDelete.field]: '',
-                        [updatedAtField]: new Date().toISOString(),
-                        ...(entryToDelete.field === 'followUpDone' ? { advisorNotes: '' } : {}),
+                        [entryToDelete.field]: nextLegacyText,
+                        [updatedAtField]: now,
+                        ...(entryToDelete.field === 'followUpDone' ? { advisorNotes: nextLegacyText } : {}),
                     },
                     userInfo.id,
                     userInfo.name,
                     item.taskId,
                     session.advisorId,
                 );
+                updateLocalItem(session.id, item.id, current => ({
+                    ...current,
+                    [entryToDelete.field]: nextLegacyText,
+                    [updatedAtField]: now,
+                    ...(entryToDelete.field === 'followUpDone' ? { advisorNotes: nextLegacyText } : {}),
+                    lastUpdate: now,
+                }));
             } else if (entryToDelete.entryId) {
                 await deleteCoachingFollowUpEntry(
                     entryToDelete.sessionId,
                     entryToDelete.itemId,
-                    entryToDelete.field,
+                    entryToDelete.field as 'followUpDone' | 'followUpCurrent' | 'followUpNext',
                     entryToDelete.entryId,
                     userInfo.id,
                     userInfo.name,
                 );
+                updateLocalItem(entryToDelete.sessionId, entryToDelete.itemId, current => {
+                    const entriesField = `${entryToDelete.field}Entries` as 'followUpDoneEntries' | 'followUpCurrentEntries' | 'followUpNextEntries';
+                    const updatedAtField = `${entryToDelete.field}UpdatedAt` as keyof CoachingItem;
+                    const now = new Date().toISOString();
+                    return {
+                        ...current,
+                        [entriesField]: (current[entriesField] || []).filter(entry => entry.id !== entryToDelete.entryId),
+                        [updatedAtField]: now,
+                        lastUpdate: now,
+                    };
+                });
             }
             setEntryToDelete(null);
-            await loadData();
             toast({ title: "Asiento eliminado" });
         } catch (error) {
             console.error("Error deleting coaching entry:", error);
@@ -391,14 +517,22 @@ export function CoachingView({ advisor }: { advisor: User }) {
         if (!editingLegacy || !userInfo || !canManage) return;
         setSavingEntry(true);
         try {
-            const updatedAtField = `${editingLegacy.field}UpdatedAt` as keyof CoachingItem;
-            await handleUpdateItem(editingLegacy.session, editingLegacy.item, {
-                [editingLegacy.field]: editingLegacy.text.trim(),
-                [updatedAtField]: new Date().toISOString(),
-                ...(editingLegacy.field === 'followUpDone' ? { advisorNotes: editingLegacy.text.trim() } : {}),
-            });
+            const now = new Date().toISOString();
+            const nextLegacyText = updateLegacyTextAtIndex(editingLegacy.item, editingLegacy.field, editingLegacy.legacyIndex, editingLegacy.text.trim());
+            if (editingLegacy.field === 'action') {
+                await handleUpdateItem(editingLegacy.session, editingLegacy.item, {
+                    action: nextLegacyText,
+                    lastUpdate: now,
+                } as any);
+            } else {
+                const updatedAtField = `${editingLegacy.field}UpdatedAt` as keyof CoachingItem;
+                await handleUpdateItem(editingLegacy.session, editingLegacy.item, {
+                    [editingLegacy.field]: nextLegacyText,
+                    [updatedAtField]: now,
+                    ...(editingLegacy.field === 'followUpDone' ? { advisorNotes: nextLegacyText } : {}),
+                });
+            }
             setEditingLegacy(null);
-            await loadData();
         } finally {
             setSavingEntry(false);
         }
@@ -510,10 +644,6 @@ export function CoachingView({ advisor }: { advisor: User }) {
                     </Button>
                 )}
 
-                <div className="bg-muted/30 p-2 rounded text-sm font-medium text-foreground/90 border whitespace-pre-wrap max-h-[150px] overflow-y-auto">
-                    {item.action}
-                </div>
-
                 {canManage && session.status === 'Open' && (
                      <div className="flex gap-2 items-center">
                         <Input 
@@ -573,7 +703,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                     <div className="max-h-72 space-y-2 overflow-y-auto rounded-md border bg-muted/20 p-2">
                         {timeline.map(entry => (
                             <div key={`${entry.field}-${entry.id}`} className="rounded border bg-background px-3 py-2 text-sm">
-                                {entry.legacy && editingLegacy?.item.id === item.id && editingLegacy.field === entry.field ? (
+                                {entry.legacy && editingLegacy?.item.id === item.id && editingLegacy.field === entry.field && editingLegacy.legacyIndex === entry.legacyIndex ? (
                                     <div className="space-y-2">
                                         <Textarea
                                             value={editingLegacy.text}
@@ -610,7 +740,12 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                         ) : (
                                             <>
                                                 <div className="flex items-start gap-2">
-                                                    <p className="min-w-0 flex-1 whitespace-pre-wrap">{entry.text}</p>
+                                                    <div className="min-w-0 flex-1">
+                                                        {entry.label && (
+                                                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{entry.label}</p>
+                                                        )}
+                                                        <p className="whitespace-pre-wrap">{entry.text}</p>
+                                                    </div>
                                                     {canManage && (
                                                         <div className="flex shrink-0 gap-1">
                                                             <Button
@@ -618,8 +753,8 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                                                 variant="ghost"
                                                                 className="h-6 w-6"
                                                                 onClick={() => entry.legacy
-                                                                    ? setEditingLegacy({ session, item, field: entry.field, text: entry.text })
-                                                                    : setEditingEntry({ sessionId: session.id, itemId: item.id, field: entry.field, entryId: entry.id, text: entry.text })
+                                                                    ? setEditingLegacy({ session, item, field: entry.field, legacyIndex: entry.legacyIndex, text: entry.text })
+                                                                    : setEditingEntry({ sessionId: session.id, itemId: item.id, field: entry.field as 'followUpDone' | 'followUpCurrent' | 'followUpNext', entryId: entry.id, text: entry.text })
                                                                 }
                                                                 title="Editar asiento"
                                                             >
@@ -634,6 +769,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                                                     itemId: item.id,
                                                                     field: entry.field,
                                                                     entryId: entry.legacy ? undefined : entry.id,
+                                                                    legacyIndex: entry.legacyIndex,
                                                                     legacy: entry.legacy,
                                                                 })}
                                                                 title="Eliminar asiento"
@@ -718,8 +854,8 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 )}
 
                 {sessions.map((session) => {
-                    const managerItems = sortItemsByStatus(session.items.filter(i => !i.origin || i.origin === 'manager'));
-                    const advisorItems = sortItemsByStatus(session.items.filter(i => i.origin === 'advisor'));
+                    const managerItems = keepCurrentItemOrder(session.items.filter(i => !i.origin || i.origin === 'manager'));
+                    const advisorItems = keepCurrentItemOrder(session.items.filter(i => i.origin === 'advisor'));
 
                     return (
                     <Collapsible 
