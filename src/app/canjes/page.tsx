@@ -148,8 +148,16 @@ function CanjesPageComponent() {
         const accessToken = await ensureGoogleAccessToken();
         if (!accessToken) throw new Error('No se autorizó el envío de correo con Google.');
         const needId = await createCanje(needData, userInfo.id, userInfo.name);
-        await notifyNeedReceivers(needId, needData, accessToken);
-        toast({ title: 'Necesidad creada', description: 'La notificación fue enviada a los receptores asignados.' });
+        try {
+          await notifyNeedReceivers(needId, needData, accessToken);
+          toast({ title: 'Necesidad creada', description: 'La notificación fue enviada a los receptores asignados.' });
+        } catch (notificationError) {
+          toast({
+            title: 'Necesidad creada, pero no notificada',
+            description: notificationError instanceof Error ? notificationError.message : 'Revisá los responsables configurados y el acceso a Gmail.',
+            variant: 'destructive',
+          });
+        }
       }
       fetchData();
     } catch (error) {
