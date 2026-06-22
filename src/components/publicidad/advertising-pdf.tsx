@@ -180,6 +180,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                 </div>
             </div>
             {renderClientInfo()}
+            {order.event && <div style={{ marginTop: '8px', padding: '7px 10px', border: '1px solid #93c5fd', backgroundColor: '#eff6ff', fontSize: '11px' }}><strong>EVENTO:</strong> {order.event}</div>}
         </div>
     );
   };

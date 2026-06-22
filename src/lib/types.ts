@@ -990,6 +990,7 @@ export type AdvertisingOrder = {
   agencyId?: string;
   agencyName?: string;
   product: string;
+  event?: string;
   accountExecutive: string;
   createdAt: string; 
   createdBy: string;  

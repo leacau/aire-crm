@@ -174,6 +174,7 @@ export const buildAdvertisingOrderChanges = (
   addScalarChange(changes, 'clientId', 'Cliente', previous.clientName || previous.clientId, next.clientName || next.clientId);
   addScalarChange(changes, 'agencyId', 'Agencia', previous.agencyName || previous.agencyId, next.agencyName || next.agencyId);
   addScalarChange(changes, 'opportunityId', 'Oportunidad', previous.opportunityTitle || previous.opportunityId, next.opportunityTitle || next.opportunityId);
+  addScalarChange(changes, 'event', 'Evento', previous.event, next.event);
   addScalarChange(changes, 'accountExecutive', 'Ejecutivo de cuenta', previous.accountExecutive, next.accountExecutive);
   addScalarChange(changes, 'tangoOrderNo', 'Número de orden Tango', previous.tangoOrderNo, next.tangoOrderNo);
   addScalarChange(changes, 'startDate', 'Inicio de vigencia', previous.startDate, next.startDate, date);

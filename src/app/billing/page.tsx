@@ -22,6 +22,7 @@ import { ToInvoiceTable } from '@/components/billing/to-invoice-table';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { PaymentsTable } from '@/components/billing/payments-table';
 import { PaymentsSummary, type PaymentSummaryRow } from '@/components/billing/payments-summary';
+import { EventSummary } from '@/components/billing/event-summary';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -1480,12 +1481,13 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <Tabs defaultValue={initialTab}>
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
             <TabsTrigger value="to-invoice">A Facturar</TabsTrigger>
             <TabsTrigger value="to-collect">A Cobrar</TabsTrigger>
             <TabsTrigger value="paid">Pagado</TabsTrigger>
             <TabsTrigger value="credit-notes">NC</TabsTrigger>
             <TabsTrigger value="payments">Mora</TabsTrigger>
+            <TabsTrigger value="events">Eventos</TabsTrigger>
           </TabsList>
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2">
@@ -1592,6 +1594,9 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
               onToggleSelect={handleToggleInvoiceSelection}
               onToggleSelectAll={(checked) => handleToggleAllInvoiceSelection(checked, filteredCreditNoteInvoices)}
             />
+          </TabsContent>
+          <TabsContent value="events">
+            <EventSummary />
           </TabsContent>
           <TabsContent value="payments">
             <div className="grid gap-4">

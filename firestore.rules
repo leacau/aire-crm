@@ -173,7 +173,7 @@ service cloud.firestore {
       allow read, list: if isSignedIn();
       allow create: if hasValidWonContractPeriod() && (ownsClientOnRequest() || isManagement()
         || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId)));
-      allow update: if canUpdateWonContractPeriod() && (ownsClientOnResource() || isManagement()
+      allow update: if (isManagement() || canUpdateWonContractPeriod()) && (ownsClientOnResource() || isManagement()
         || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId)));
       allow delete: if ownsClientOnResource() || isManagement();
     }

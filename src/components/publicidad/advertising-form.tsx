@@ -8,7 +8,7 @@ import { format, differenceInDays, isValid, addMonths } from "date-fns";
 import { CalendarIcon, Save, FileDown, Loader2, ArrowLeft, Plus, Trash2, Mic, MicOff, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -173,6 +173,7 @@ export function AdvertisingForm() {
       billingRequestsSas: [], 
       billingRequestsAvion: [], 
       canjeId: "",
+      event: "",
       startDate: undefined,
       endDate: undefined,
     },
@@ -330,6 +331,7 @@ export function AdvertisingForm() {
                       opportunityId: order.opportunityId,
                       newOpportunityTitle: "",
                       product: order.product || "",
+                      event: order.event || "",
                       accountExecutive: order.accountExecutive,
                       tangoOrderNo: editId ? order.tangoOrderNo : "", 
                       startDate: new Date(order.startDate),
@@ -394,7 +396,7 @@ export function AdvertisingForm() {
           materialSent: false, materialUrl: "", certReq: false, agencySale: false,
           commissionSrl: 0, adjustmentSrl: 0, adjustmentSas: 0,
           srlItems: [], sasItems: [], billingRequestsSrl: [], billingRequestsSas: [], billingRequestsAvion: [],
-          startDate: undefined, endDate: undefined, clientId: "", canjeId: "", agencyId: "none", opportunityId: "", newOpportunityTitle: "", product: "", tangoOrderNo: "", observations: ""
+          startDate: undefined, endDate: undefined, clientId: "", canjeId: "", agencyId: "none", opportunityId: "", newOpportunityTitle: "", product: "", event: "", tangoOrderNo: "", observations: ""
       });
       setDraftLoaded(false);
       toast({ title: "Borrador limpiado" });
@@ -794,6 +796,7 @@ export function AdvertisingForm() {
           agencyId: values.agencyId === "none" ? undefined : values.agencyId,
           agencyName: values.agencyId === "none" ? undefined : selectedAgency?.name,
           product: "", 
+          event: values.event || undefined,
           opportunityId: values.opportunityId,
           opportunityTitle: oppTitle || "Campaña",
           accountExecutive: values.accountExecutive || userInfo?.name || "",
@@ -1272,6 +1275,14 @@ export function AdvertisingForm() {
             </div>
 
             <div className="grid grid-cols-1">
+                <FormField control={form.control} name="event" render={({ field }) => (
+                  <FormItem className="mb-4">
+                    <FormLabel>Evento</FormLabel>
+                    <FormControl><Input placeholder="Ej: Maratón Santa Fe-Coronda" {...field} /></FormControl>
+                    <FormDescription>Agrupa órdenes de distintos clientes dentro de una misma acción o acontecimiento.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="observations" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Observaciones {(values.adjustmentSrl > 0 || values.adjustmentSas > 0) && <span className="text-red-500 text-xs ml-1">(Obligatorio por desajuste)</span>}</FormLabel>

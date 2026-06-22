@@ -22,7 +22,7 @@ import { getOpportunities, updateOpportunity, getClients, getUserProfile } from 
 import { invalidateCache } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
-import { isWithinInterval, addMonths, startOfMonth, parseISO, isSameMonth, endOfMonth, format } from 'date-fns';
+import { startOfMonth, parseISO, isSameMonth, format } from 'date-fns';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,16 +57,6 @@ const stageColors: Record<KanbanStage, string> = {
   'Cerrado - Perdido': 'border-red-500',
   'Cerrado - No Definido': 'border-gray-500',
 };
-
-const getPeriodDurationInMonths = (period: string): number => {
-    switch (period) {
-        case 'Mensual': return 1;
-        case 'Trimestral': return 3;
-        case 'Semestral': return 6;
-        case 'Anual': return 12;
-        default: return 1;
-    }
-}
 
 type ContractPeriod = {
   startDate: Date;
@@ -110,11 +100,6 @@ const getContractPeriodForMonth = (opportunity: Opportunity, month: Date): Contr
     && filterMonth <= startOfMonth(period.endDate)
   )) || null;
 };
-
-const getLegacyWonReferenceDate = (opportunity: Opportunity): Date | null => (
-  parseOpportunityDate(opportunity.manualUpdateDate)
-  || parseOpportunityDate(opportunity.closeDate)
-);
 
 interface KanbanBoardProps {
   dateRange?: DateRange;
@@ -276,6 +261,20 @@ const KanbanCard = ({
       throw error;
     }
   };
+
+  const handleManagePeriods = async (updatedOpp: Partial<Opportunity>) => {
+    if (!userInfo) throw new Error('Usuario no autenticado');
+    await updateOpportunity(
+      opportunity.id,
+      updatedOpp,
+      userInfo.id,
+      userInfo.name,
+      owner?.name || clientInfo?.ownerName || opportunity.clientName,
+      undefined,
+      { manageContractPeriods: true },
+    );
+    window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...updatedOpp } }));
+  };
   
   const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor' || userInfo?.role === 'Gerencia';
 
@@ -373,6 +372,7 @@ const KanbanCard = ({
           onOpenChange={setIsDetailsOpen}
           onUpdate={handleUpdate}
           onRenew={handleRenew}
+          onManagePeriods={handleManagePeriods}
           client={clientInfo ?? { id: opportunity.clientId, name: opportunity.clientName }}
         />
       )}
@@ -523,28 +523,7 @@ export function KanbanBoard({
                 if (contractPeriods.length > 0) {
                     return getContractPeriodForMonth(opp, filterDate) !== null;
                 }
-
-                // Compatibilidad para oportunidades antiguas sin vigencia contractual cargada.
-                const referenceDate = getLegacyWonReferenceDate(opp);
-                if (!referenceDate) return false;
-                if (opp.finalizationDate) {
-                    const startDate = startOfMonth(referenceDate);
-                    const finalizationDate = parseOpportunityDate(opp.finalizationDate);
-                    if (!finalizationDate) return false;
-                    const endDate = endOfMonth(finalizationDate);
-                    return isWithinInterval(filterDate, { start: startDate, end: endDate });
-                }
-                
-                const periodicity = Array.isArray(opp.periodicidad) ? opp.periodicidad[0] : (opp.periodicidad || 'Ocasional');
-                const durationMonths = getPeriodDurationInMonths(periodicity);
-
-                if (durationMonths > 1) {
-                    const startDate = startOfMonth(referenceDate);
-                    const endDate = addMonths(startDate, durationMonths -1);
-                    return isWithinInterval(filterDate, { start: startDate, end: endDate });
-                } else {
-                    return isSameMonth(filterDate, referenceDate);
-                }
+                return false;
             }
             
             if (opp.closeDate) {
@@ -578,7 +557,7 @@ export function KanbanBoard({
     filteredOpportunities.forEach(opp => {
       if (opp.stage === 'Cerrado - Ganado' && dateRange?.from) {
         const activeContractPeriod = getContractPeriodForMonth(opp, dateRange.from);
-        const wonReferenceDate = activeContractPeriod?.startDate || getLegacyWonReferenceDate(opp);
+        const wonReferenceDate = activeContractPeriod?.startDate;
 
         if ((!activeContractPeriod || activeContractPeriod.source === 'initial') && wonReferenceDate && isSameMonth(wonReferenceDate, dateRange.from)) {
           groups['Cerrado - Ganado'].push(opp);

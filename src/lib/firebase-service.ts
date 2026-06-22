@@ -3587,7 +3587,8 @@ export const updateOpportunity = async (
     userId: string,
     userName: string,
     ownerName: string,
-    pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[]
+    pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[],
+    options?: { manageContractPeriods?: boolean }
 ): Promise<void> => {
     const docRef = doc(db, 'opportunities', id);
     const docSnap = await getDoc(docRef);
@@ -3595,8 +3596,10 @@ export const updateOpportunity = async (
     const originalData = docSnap.data() as Opportunity;
 
     const resultingStage = data.stage || originalData.stage;
-    const nextStartDate = typeof data.startDate === 'string' ? data.startDate : originalData.startDate;
-    const nextEndDate = typeof data.endDate === 'string' ? data.endDate : originalData.endDate;
+    const hasStartDateUpdate = Object.prototype.hasOwnProperty.call(data, 'startDate');
+    const hasEndDateUpdate = Object.prototype.hasOwnProperty.call(data, 'endDate');
+    const nextStartDate = hasStartDateUpdate ? data.startDate : originalData.startDate;
+    const nextEndDate = hasEndDateUpdate ? data.endDate : originalData.endDate;
     const isTransitioningToWon = resultingStage === 'Cerrado - Ganado' && originalData.stage !== 'Cerrado - Ganado';
     if (isTransitioningToWon && (!nextStartDate || !nextEndDate)) {
             throw new Error('La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.');
@@ -3608,7 +3611,8 @@ export const updateOpportunity = async (
         throw new Error('La fecha de fin del contrato no puede ser anterior a la fecha de inicio.');
     }
     if (
-        originalData.startDate
+        !options?.manageContractPeriods
+        && originalData.startDate
         && originalData.endDate
         && ((typeof data.startDate === 'string' && data.startDate !== originalData.startDate)
           || (typeof data.endDate === 'string' && data.endDate !== originalData.endDate))
@@ -3623,19 +3627,27 @@ export const updateOpportunity = async (
         ...data,
         updatedAt: serverTimestamp()
     };
+    if (options?.manageContractPeriods && hasStartDateUpdate && !data.startDate) updateData.startDate = deleteField();
+    if (options?.manageContractPeriods && hasEndDateUpdate && !data.endDate) updateData.endDate = deleteField();
 
     const originalHistory = Array.isArray(originalData.periodHistory) ? originalData.periodHistory : [];
     const submittedHistory = Array.isArray(data.periodHistory) ? data.periodHistory : originalHistory;
-    const newRenewals = submittedHistory.filter(period => !originalHistory.some(existing => (
+    if (options?.manageContractPeriods && Array.isArray(data.periodHistory)) {
+        updateData.periodHistory = data.periodHistory;
+    }
+    const newRenewals = (options?.manageContractPeriods ? [] : submittedHistory.filter(period => !originalHistory.some(existing => (
         existing.startDate === period.startDate
         && existing.endDate === period.endDate
         && Number(existing.value || 0) === Number(period.value || 0)
-    )));
+    ))));
     const occupiedPeriods = [
         ...(nextStartDate && nextEndDate ? [{ startDate: nextStartDate, endDate: nextEndDate }] : []),
-        ...originalHistory,
+        ...(options?.manageContractPeriods ? [] : originalHistory),
     ];
-    newRenewals.forEach(period => {
+    const periodsToValidate = options?.manageContractPeriods && Array.isArray(data.periodHistory)
+        ? data.periodHistory
+        : newRenewals;
+    periodsToValidate.forEach(period => {
         if (!period.startDate || !period.endDate || parseISO(period.endDate) < parseISO(period.startDate)) {
             throw new Error('La renovación contiene una vigencia inválida.');
         }
@@ -3646,7 +3658,7 @@ export const updateOpportunity = async (
         occupiedPeriods.push(period);
     });
     const isRenewal = newRenewals.length > 0;
-    if (Array.isArray(data.periodHistory)) {
+    if (Array.isArray(data.periodHistory) && !options?.manageContractPeriods) {
         updateData.periodHistory = [...originalHistory, ...newRenewals];
     }
     if (isRenewal) {
@@ -4887,6 +4899,13 @@ export const getAdvertisingOrdersByClientId = async (clientId: string): Promise<
         console.error("Error fetching ad orders by client:", error);
         return [];
     }
+};
+
+export const getAdvertisingOrdersWithEvent = async (): Promise<AdvertisingOrder[]> => {
+    const snapshot = await getDocs(query(collection(db, 'advertising_orders'), where('event', '!=', '')));
+    return snapshot.docs
+        .map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() } as AdvertisingOrder))
+        .filter(order => Boolean(order.event?.trim()));
 };
 
 export const getAdvertisingOrder = async (id: string): Promise<AdvertisingOrder | null> => {

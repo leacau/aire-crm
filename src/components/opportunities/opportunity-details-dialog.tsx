@@ -63,6 +63,7 @@ interface OpportunityDetailsDialogProps {
   onUpdate: (opportunity: Partial<Opportunity>) => void | Promise<void>;
   onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[]) => void | Promise<void>;
   onRenew?: (opportunity: Partial<Opportunity>) => void | Promise<void>;
+  onManagePeriods?: (opportunity: Partial<Opportunity>) => void | Promise<void>;
   client?: {id: string, name: string, ownerName?: string, ownerId?: string}
   initialTab?: 'details' | 'conditions' | 'followup' | 'pautado' | 'invoicing';
   requireInitialValidity?: boolean;
@@ -161,6 +162,7 @@ export function OpportunityDetailsDialog({
   onCreate = () => {},
   client,
   onRenew,
+  onManagePeriods,
   initialTab = 'details',
   requireInitialValidity = false,
 }: OpportunityDetailsDialogProps) {
@@ -186,6 +188,7 @@ export function OpportunityDetailsDialog({
   const [renewalStartDate, setRenewalStartDate] = useState<string>();
   const [renewalEndDate, setRenewalEndDate] = useState<string>();
   const [isSavingRenewal, setIsSavingRenewal] = useState(false);
+  const [isEditingInitialValidity, setIsEditingInitialValidity] = useState(false);
 
   const isEditing = !!opportunity;
 
@@ -307,6 +310,7 @@ export function OpportunityDetailsDialog({
         setIsRenewingPeriod(false);
         setRenewalStartDate(undefined);
         setRenewalEndDate(undefined);
+        setIsEditingInitialValidity(false);
         
         setIsSendingToCoaching(false);
 
@@ -413,7 +417,8 @@ export function OpportunityDetailsDialog({
                 if (changes.followUpDone !== undefined) changes.followUpDoneUpdatedAt = now;
                 if (changes.followUpCurrent !== undefined) changes.followUpCurrentUpdatedAt = now;
                 if (changes.followUpNext !== undefined) changes.followUpNextUpdatedAt = now;
-                await onUpdate(changes);
+                const initialDatesChanged = changes.startDate !== undefined || changes.endDate !== undefined;
+                await (initialDatesChanged && isBoss && onManagePeriods ? onManagePeriods(changes) : onUpdate(changes));
             }
         } else if (!isEditing) {
             const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
@@ -581,6 +586,20 @@ export function OpportunityDetailsDialog({
     } finally {
       setIsSavingRenewal(false);
     }
+  };
+
+  const deleteInitialValidity = async () => {
+    if (!isBoss || !onManagePeriods || !window.confirm('¿Eliminar la vigencia inicial? La propuesta quedará con vigencia incierta.')) return;
+    await onManagePeriods({ startDate: undefined, endDate: undefined });
+    setEditedOpportunity(previous => ({ ...previous, startDate: undefined, endDate: undefined }));
+    setIsEditingInitialValidity(false);
+  };
+
+  const deleteRenewal = async (index: number) => {
+    if (!isBoss || !onManagePeriods || !window.confirm('¿Eliminar esta renovación del historial?')) return;
+    const periodHistory = (editedOpportunity.periodHistory || []).filter((_, periodIndex) => periodIndex !== index);
+    await onManagePeriods({ periodHistory });
+    setEditedOpportunity(previous => ({ ...previous, periodHistory }));
   };
 
   const handleSaveOrdenPautado = (orden: OrdenPautado) => {
@@ -899,7 +918,7 @@ export function OpportunityDetailsDialog({
               <div className="space-y-4 border p-4 rounded-md bg-slate-50/50">
                   <div className="flex justify-between items-center mb-2">
                       <Label className="text-base font-bold text-primary">Vigencia del Contrato</Label>
-                      {isEditing && editedOpportunity.stage === 'Cerrado - Ganado' && hasConfirmedInitialValidity && (
+                      {isEditing && hasConfirmedInitialValidity && (
                           <Button
                               type="button"
                               variant="outline"
@@ -913,6 +932,14 @@ export function OpportunityDetailsDialog({
                           </Button>
                       )}
                   </div>
+                  {isBoss && onManagePeriods && hasConfirmedInitialValidity && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="outline" onClick={() => setIsEditingInitialValidity(previous => !previous)}>
+                        {isEditingInitialValidity ? 'Cancelar edición inicial' : 'Editar vigencia inicial'}
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" className="text-destructive" onClick={deleteInitialValidity}>Eliminar vigencia inicial</Button>
+                    </div>
+                  )}
 
                   {editedOpportunity.stage === 'Cerrado - Ganado' && (
                       <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
@@ -925,7 +952,7 @@ export function OpportunityDetailsDialog({
                           <Label>Inicio de vigencia inicial</Label>
                           <Popover>
                               <PopoverTrigger asChild>
-                                  <Button variant={"outline"} disabled={hasConfirmedInitialValidity} className={cn("w-full justify-start text-left font-normal bg-white", !editedOpportunity.startDate && "text-muted-foreground")}>
+                                  <Button variant={"outline"} disabled={hasConfirmedInitialValidity && !(isBoss && onManagePeriods && isEditingInitialValidity)} className={cn("w-full justify-start text-left font-normal bg-white", !editedOpportunity.startDate && "text-muted-foreground")}>
                                       <CalendarIcon className="mr-2 h-4 w-4" />
                                       {editedOpportunity.startDate ? format(parseISO(editedOpportunity.startDate), "PPP", { locale: es }) : <span>Seleccionar inicio</span>}
                                   </Button>
@@ -939,7 +966,7 @@ export function OpportunityDetailsDialog({
                           <Label>Fin de vigencia inicial</Label>
                           <Popover>
                               <PopoverTrigger asChild>
-                                  <Button variant={"outline"} disabled={hasConfirmedInitialValidity} className={cn("w-full justify-start text-left font-normal bg-white", !editedOpportunity.endDate && "text-muted-foreground")}>
+                                  <Button variant={"outline"} disabled={hasConfirmedInitialValidity && !(isBoss && onManagePeriods && isEditingInitialValidity)} className={cn("w-full justify-start text-left font-normal bg-white", !editedOpportunity.endDate && "text-muted-foreground")}>
                                       <CalendarIcon className="mr-2 h-4 w-4" />
                                       {editedOpportunity.endDate ? format(parseISO(editedOpportunity.endDate), "PPP", { locale: es }) : <span>Seleccionar fin</span>}
                                   </Button>
@@ -990,7 +1017,7 @@ export function OpportunityDetailsDialog({
                       <div className="mt-4 pt-4 border-t border-slate-200">
                           <Label className="text-sm font-bold text-muted-foreground mb-2 block">Historial de renovaciones</Label>
                           <div className="space-y-2">
-                              {[...editedOpportunity.periodHistory].reverse().map((period, idx) => (
+                              {[...editedOpportunity.periodHistory].map((period, originalIndex) => ({ period, originalIndex })).reverse().map(({ period, originalIndex }, idx) => (
                                   <div key={`${period.startDate}-${period.endDate}-${idx}`} className="flex flex-wrap justify-between items-center gap-2 bg-white p-3 rounded border border-slate-200 text-sm shadow-sm">
                                       <div>
                                           <span className="font-medium text-slate-700">{format(parseISO(period.startDate), 'dd/MM/yyyy')}</span>
@@ -1002,6 +1029,7 @@ export function OpportunityDetailsDialog({
                                       </div>
                                       <div className="text-muted-foreground">
                                           <span>Valor: ${period.value.toLocaleString('es-AR')}</span>
+                                          {isBoss && onManagePeriods && <Button type="button" variant="ghost" size="icon" className="ml-2 text-destructive" onClick={() => deleteRenewal(originalIndex)}><Trash2 className="h-4 w-4" /></Button>}
                                       </div>
                                   </div>
                               ))}

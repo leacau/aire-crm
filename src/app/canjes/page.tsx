@@ -41,7 +41,7 @@ const getStatusPill = (status?: string) => {
 };
 
 function CanjesPageComponent() {
-  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
+  const { userInfo, loading: authLoading, isBoss, ensureGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const needIdFromUrl = searchParams.get('id');
@@ -101,16 +101,15 @@ function CanjesPageComponent() {
     if (!authLoading && userInfo) fetchData();
   }, [authLoading, userInfo, fetchData]);
 
-  const notifyNeedReceivers = async (needId: string, needData: Omit<Canje, 'id' | 'fechaCreacion'>) => {
+  const notifyNeedReceivers = async (needId: string, needData: Omit<Canje, 'id' | 'fechaCreacion'>, accessToken: string) => {
     try {
-      const accessToken = await getGoogleAccessToken({ silent: true });
-      if (!accessToken || !userInfo) return;
+      if (!userInfo) return false;
 
       const assignments = await getWorkflowAssignments();
       const recipients = assignments.needRequestReceivers
         .map(userId => users.find(user => user.id === userId)?.email)
         .filter((email): email is string => Boolean(email));
-      if (recipients.length === 0) return;
+      if (recipients.length === 0) throw new Error('No hay usuarios asignados como receptores de necesidades.');
 
       const needUrl = `${window.location.origin}/canjes?id=${encodeURIComponent(needId)}`;
       await sendEmail({
@@ -132,8 +131,10 @@ function CanjesPageComponent() {
         fromEmail: userInfo.email,
         replyTo: userInfo.email,
       });
+      return true;
     } catch (error) {
       console.error('Error notifying need receivers:', error);
+      throw error;
     }
   };
 
@@ -144,14 +145,16 @@ function CanjesPageComponent() {
         await updateCanje(selectedNeed.id, needData, userInfo.id, userInfo.name);
         toast({ title: 'Necesidad actualizada' });
       } else {
+        const accessToken = await ensureGoogleAccessToken();
+        if (!accessToken) throw new Error('No se autorizó el envío de correo con Google.');
         const needId = await createCanje(needData, userInfo.id, userInfo.name);
-        await notifyNeedReceivers(needId, needData);
-        toast({ title: 'Necesidad creada' });
+        await notifyNeedReceivers(needId, needData, accessToken);
+        toast({ title: 'Necesidad creada', description: 'La notificación fue enviada a los receptores asignados.' });
       }
       fetchData();
     } catch (error) {
       console.error('Error saving need:', error);
-      toast({ title: 'Error al guardar la necesidad', variant: 'destructive' });
+      toast({ title: 'Error al guardar o notificar la necesidad', description: error instanceof Error ? error.message : undefined, variant: 'destructive' });
     }
   };
 

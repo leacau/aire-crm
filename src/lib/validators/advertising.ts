@@ -62,6 +62,7 @@ export const advertisingOrderSchema = z.object({
   opportunityId: z.string().optional(), 
   newOpportunityTitle: z.string().optional(),
   product: z.string().optional(), 
+  event: z.string().optional(),
   accountExecutive: z.string().optional(),
   tangoOrderNo: z.string().optional(),
   startDate: z.date({ required_error: "Falta fecha de inicio" }),
