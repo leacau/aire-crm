@@ -79,6 +79,7 @@ import {
 
 import type { ScreenName } from '@/lib/types';
 import { hasManagementPrivileges } from '@/lib/role-utils';
+import { getWorkflowAssignments } from '@/lib/firebase-service';
 
 interface SidebarItem {
   title: string;
@@ -105,9 +106,33 @@ export function AppSidebar() {
   const { state } = useSidebar();
   
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [canAccessNeeds, setCanAccessNeeds] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!userInfo?.id) {
+      setCanAccessNeeds(false);
+      return;
+    }
+    getWorkflowAssignments()
+      .then(assignments => {
+        if (!active) return;
+        const assignedUsers = new Set([
+          ...assignments.needLoaders,
+          ...assignments.needRequestReceivers,
+          ...assignments.canjeRequestReceivers,
+          ...assignments.canjeManagementApprovers,
+          ...assignments.canjeCommercialReferents,
+        ]);
+        setCanAccessNeeds(assignedUsers.has(userInfo.id));
+      })
+      .catch(() => active && setCanAccessNeeds(false));
+    return () => { active = false; };
+  }, [userInfo?.id]);
 
   const rawSidebarEntries: SidebarEntry[] = [
     { title: 'Dashboard', href: '/', icon: LayoutDashboard, screenName: 'Dashboard' },
+    { title: 'Necesidades', href: '/canjes', icon: Repeat, screenName: 'Canjes' },
     { title: 'App Móvil Canjes', href: '/app-canjes', icon: Smartphone, screenName: 'AppCanjes' },
     {
       groupLabel: 'Comercial',
@@ -118,7 +143,6 @@ export function AppSidebar() {
         { title: 'Oportunidades', href: '/opportunities', icon: Trophy, screenName: 'Opportunities' },
         { title: 'Prospectos', href: '/prospects', icon: Target, screenName: 'Prospects' },
         { title: 'Tareas', href: '/tasks', icon: ListTodo, screenName: 'Tasks' },
-        { title: 'Necesidades', href: '/canjes', icon: Repeat, screenName: 'Canjes' },
         { title: 'Cotizador', href: '/quotes', icon: FileSpreadsheet, screenName: 'Quotes' },
         { title: 'Seguimiento', href: '/coaching', icon: ClipboardList, screenName: 'Coaching' },
       ]
@@ -173,6 +197,8 @@ export function AppSidebar() {
     if (!userInfo) return [];
 
     const hasPermission = (item: SidebarItem) => {
+      if (item.screenName === 'Canjes') return canAccessNeeds;
+
       if (
           userInfo.email === 'lchena@airedesantafe.com.ar' || 
           hasManagementPrivileges(userInfo) || 
@@ -230,7 +256,7 @@ export function AppSidebar() {
       }
       return acc;
     }, []);
-  }, [userInfo]);
+  }, [userInfo, canAccessNeeds]);
 
   useEffect(() => {
     if (state === 'collapsed') return; 

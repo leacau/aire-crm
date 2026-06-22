@@ -767,6 +767,10 @@ export type AdvertisingOrderRevision = {
     before: AdvertisingOrderFinancialSummary;
     after: AdvertisingOrderFinancialSummary;
   };
+  schedule?: {
+    before: Pick<AdvertisingOrder, 'startDate' | 'endDate' | 'srlItems' | 'sasItems'>;
+    after: Pick<AdvertisingOrder, 'startDate' | 'endDate' | 'srlItems' | 'sasItems'>;
+  };
 };
 
 export type CommercialNote = {

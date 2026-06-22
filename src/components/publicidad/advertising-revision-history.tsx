@@ -341,6 +341,119 @@ function SasItemView({ item }: { item: AdvertisingOrderItemSas }) {
   );
 }
 
+function FullSrlSchedule({ items, programs }: { items: AdvertisingOrderItemSrl[]; programs: Program[] }) {
+  const months = [...new Set(items.flatMap(item =>
+    Object.keys(item.dailySpots || {}).map(date => date.slice(0, 7)),
+  ))].sort();
+
+  if (!items.length) return null;
+  return (
+    <div className="space-y-3">
+      {months.map(month => {
+        const monthDate = parseISO(`${month}-01`);
+        const days = Array.from({ length: getDaysInMonth(monthDate) }, (_, index) => index + 1);
+        const monthItems = items.filter(item => Object.keys(item.dailySpots || {}).some(date => date.startsWith(month)));
+        return (
+          <div key={month} className="overflow-hidden rounded border">
+            <div className="bg-slate-100 px-3 py-2 text-xs font-bold capitalize text-slate-700">
+              {format(monthDate, "MMMM yyyy", { locale: es })}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-max border-collapse text-center text-xs">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="sticky left-0 z-10 min-w-40 border bg-slate-50 px-2 text-left">Programa</th>
+                    <th className="min-w-28 border px-2 text-left">Tipo</th>
+                    {days.map(day => <th key={day} className="h-8 min-w-8 border">{day}</th>)}
+                    <th className="min-w-16 border px-2">Cant.</th>
+                    <th className="min-w-24 border px-2 text-right">Tarifa</th>
+                    <th className="min-w-28 border px-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthItems.map((item, index) => {
+                    const repetitions = days.reduce((sum, day) => sum + Number(item.dailySpots?.[`${month}-${String(day).padStart(2, "0")}`] || 0), 0);
+                    const multiplier = item.adType === "Spot" ? Number(item.seconds || 0) : 1;
+                    const total = Number(item.unitRate || 0) * repetitions * multiplier;
+                    return (
+                      <tr key={`${item.programId}-${item.adType}-${index}`}>
+                        <td className="sticky left-0 z-10 border bg-white px-2 py-2 text-left font-semibold">{resolveProgramName(item.programId, programs)}</td>
+                        <td className="border px-2 text-left">{item.adType === "Personalizado" ? item.customType || item.adType : item.adType}{item.adType === "Spot" ? ` ${item.seconds || 0}s` : ""}</td>
+                        {days.map(day => {
+                          const quantity = item.dailySpots?.[`${month}-${String(day).padStart(2, "0")}`];
+                          return <td key={day} className={`h-8 border font-bold ${quantity ? "bg-blue-100 text-blue-800" : ""}`}>{quantity || ""}</td>;
+                        })}
+                        <td className="border px-2 font-bold">{repetitions}</td>
+                        <td className="border px-2 text-right">{currency(item.unitRate || 0)}</td>
+                        <td className="border px-2 text-right font-bold">{currency(total)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FullSasSchedule({ items }: { items: AdvertisingOrderItemSas[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="overflow-x-auto rounded border">
+      <table className="w-full min-w-[700px] text-xs">
+        <thead className="bg-slate-100 text-left">
+          <tr><th className="px-3 py-2">Formato</th><th className="px-3 py-2">Tipo / detalle</th><th className="px-3 py-2">Observaciones</th><th className="px-3 py-2 text-right">Neto</th></tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => {
+            const total = item.format === "Banner" ? Number(item.cpm || 0) * Number(item.unitRate || 0) : Number(item.unitRate || 0);
+            return (
+              <tr key={`${item.format}-${item.type}-${index}`} className="border-t">
+                <td className="px-3 py-2 font-bold">{item.format}</td>
+                <td className="px-3 py-2">{item.customDetail || item.detail || item.type || "-"}</td>
+                <td className="px-3 py-2">{item.observations || "-"}</td>
+                <td className="px-3 py-2 text-right font-bold">{currency(total)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ScheduleSnapshotView({
+  snapshot,
+  programs,
+  side,
+}: {
+  snapshot: Pick<AdvertisingOrder, "startDate" | "endDate" | "srlItems" | "sasItems">;
+  programs: Program[];
+  side: "before" | "after";
+}) {
+  const isBefore = side === "before";
+  return (
+    <div className={`overflow-hidden rounded border-2 ${isBefore ? "border-red-200" : "border-emerald-200"} bg-white`}>
+      <div className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 ${isBefore ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>
+        <strong>{isBefore ? "Calendario anterior completo" : "Calendario actual completo"}</strong>
+        <span className="text-xs">
+          Vigencia: {format(new Date(snapshot.startDate), "dd/MM/yyyy")} al {format(new Date(snapshot.endDate), "dd/MM/yyyy")}
+        </span>
+      </div>
+      <div className="space-y-3 p-3">
+        <FullSrlSchedule items={snapshot.srlItems || []} programs={programs} />
+        <FullSasSchedule items={snapshot.sasItems || []} />
+        {(snapshot.srlItems || []).length === 0 && (snapshot.sasItems || []).length === 0 && (
+          <p className="py-4 text-center text-sm text-slate-500">Sin pauta cargada.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RevisionChangeView({
   change,
   programs,
@@ -398,9 +511,16 @@ export function AdvertisingRevisionHistory({
           </div>
           <p className="mt-2 text-sm text-slate-800"><strong>Motivo:</strong> {revision.reason}</p>
           <FinancialComparison financials={financialsByRevision.get(revision)!} />
+          {revision.schedule && (
+            <div className="mt-4 grid gap-4">
+              <ScheduleSnapshotView snapshot={revision.schedule.before} programs={programs} side="before" />
+              <ScheduleSnapshotView snapshot={revision.schedule.after} programs={programs} side="after" />
+            </div>
+          )}
           <div className="mt-4 space-y-3">
             {revision.changes
               .filter(change => !["adjustmentSrl", "adjustmentSas"].includes(change.field))
+              .filter(change => !revision.schedule || !["srlItems", "sasItems"].includes(change.field))
               .map((change, changeIndex) => (
                 <RevisionChangeView
                   key={`${change.field}-${changeIndex}`}

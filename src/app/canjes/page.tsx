@@ -55,6 +55,7 @@ function CanjesPageComponent() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [needToDelete, setNeedToDelete] = useState<Canje | null>(null);
   const [migrating, setMigrating] = useState(false);
+  const [needAccess, setNeedAccess] = useState({ canAccess: false, canCreate: false, canViewAll: false });
 
   const canManageAll = isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Gerencia' || userInfo?.role === 'Admin';
 
@@ -67,6 +68,18 @@ function CanjesPageComponent() {
     if (!userInfo) return;
     setLoading(true);
     try {
+      const assignments = await getWorkflowAssignments();
+      const canCreate = assignments.needLoaders.includes(userInfo.id);
+      const canViewAll = [
+        ...assignments.needRequestReceivers,
+        ...assignments.canjeRequestReceivers,
+        ...assignments.canjeManagementApprovers,
+        ...assignments.canjeCommercialReferents,
+      ].includes(userInfo.id);
+      const canAccess = canCreate || canViewAll;
+      setNeedAccess({ canAccess, canCreate, canViewAll });
+      if (!canAccess) return;
+
       const [fetchedNeeds, fetchedClients, fetchedUsers] = await Promise.all([getCanjes(), getClients(), getAllUsers()]);
       setNeeds(fetchedNeeds);
       setClients(fetchedClients as Client[]);
@@ -173,10 +186,10 @@ function CanjesPageComponent() {
 
   const filteredNeeds = useMemo(() => {
     if (!userInfo?.id) return [];
-    if (canManageAll) return needs;
+    if (canManageAll || needAccess.canViewAll) return needs;
     const userClientIds = new Set(clients.filter(client => client.ownerId === userInfo.id).map(client => client.id));
     return needs.filter(need => need.asesorId === userInfo.id || need.creadoPorId === userInfo.id || userClientIds.has(need.clienteId || ''));
-  }, [needs, clients, userInfo, canManageAll]);
+  }, [needs, clients, userInfo, canManageAll, needAccess.canViewAll]);
 
   const columns = useMemo<ColumnDef<Canje>[]>(() => [
     { accessorKey: 'titulo', header: 'Necesidad', cell: ({ row }) => <div className="font-medium">{row.original.titulo}</div> },
@@ -213,6 +226,17 @@ function CanjesPageComponent() {
     return <div className="flex h-full w-full items-center justify-center"><Spinner size="large" /></div>;
   }
 
+  if (!needAccess.canAccess) {
+    return (
+      <div className="flex h-full flex-col">
+        <Header title="Necesidades" />
+        <main className="flex flex-1 items-center justify-center p-6 text-center text-muted-foreground">
+          No tenés un rol asignado para participar del circuito de Necesidades.
+        </main>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="flex flex-col h-full">
@@ -223,10 +247,12 @@ function CanjesPageComponent() {
               Integrar anteriores
             </Button>
           )}
-          <Button onClick={() => handleOpenForm()}>
-            <PlusCircle className="mr-2" />
-            Nueva necesidad
-          </Button>
+          {needAccess.canCreate && (
+            <Button onClick={() => handleOpenForm()}>
+              <PlusCircle className="mr-2" />
+              Nueva necesidad
+            </Button>
+          )}
         </Header>
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
           <ResizableDataTable

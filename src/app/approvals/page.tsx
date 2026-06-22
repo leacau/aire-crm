@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Eye, CheckCircle2, XCircle, Clock, Edit3, ArrowRight, History, Send } from 'lucide-react';
 import type { ApprovalStatus, Program, Client, ApprovalHistoryItem } from '@/lib/types';
-import { getPrograms, getUserById, getClient } from '@/lib/firebase-service';
+import { getPrograms, getUserById, getClient, getBillingRequestsByOrder } from '@/lib/firebase-service';
 import { sendEmail } from '@/lib/google-gmail-service';
 import dynamic from 'next/dynamic';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
@@ -198,8 +198,35 @@ function ApprovalsPageComponent() {
     setPrograms(await getPrograms());
   };
 
+  const withOrderBilling = async (item: UnifiedApprovalItem): Promise<UnifiedApprovalItem> => {
+    if (item.type !== 'Orden de Publicidad') return item;
+    const requests = await getBillingRequestsByOrder(item.id);
+    const billingRequestsSrl: any[] = [];
+    const billingRequestsSas: any[] = [];
+    const billingRequestsAvion: any[] = [];
+    requests.forEach(request => {
+      const value = {
+        date: request.date,
+        grossAmount: request.grossAmount || 0,
+        adjustment: request.adjustment || 0,
+        ivaSas: request.ivaSas || 0,
+        amount: request.amount || 0,
+        paymentType: request.paymentType,
+        canjeDescription: request.canjeDescription || '',
+      };
+      if (request.company === 'SRL') billingRequestsSrl.push(value);
+      else if (request.company === 'SAS') billingRequestsSas.push(value);
+      else if (request.company === 'AVION') billingRequestsAvion.push(value);
+    });
+    return {
+      ...item,
+      rawData: { ...item.rawData, billingRequestsSrl, billingRequestsSas, billingRequestsAvion },
+    };
+  };
+
   const openEvaluationModal = async (item: UnifiedApprovalItem) => {
-    setSelectedItem(item);
+    const hydratedItem = await withOrderBilling(item);
+    setSelectedItem(hydratedItem);
     setAdminComments(item.adminComments || '');
     setActionType(null);
     setIsModalOpen(true);
@@ -481,14 +508,15 @@ function ApprovalsPageComponent() {
     if (item.type === 'Nota Comercial' || item.type === 'Orden de Publicidad') {
       await ensureProgramsLoaded();
     }
-    setRenotifyingItem(item);
+    const hydratedItem = await withOrderBilling(item);
+    setRenotifyingItem(hydratedItem);
     
     // Dejamos un pequeño delay para que React dibuje el PDF oculto en el DOM
     setTimeout(async () => {
       try {
         if (hiddenDocumentContainerRef.current && hiddenDocumentContainerRef.current.firstChild) {
           const elementToCapture = hiddenDocumentContainerRef.current.firstChild as HTMLElement;
-          await dispatchApprovalEmail(item, elementToCapture, true);
+          await dispatchApprovalEmail(hydratedItem, elementToCapture, true);
           toast({ title: 'Notificación reenviada correctamente.' });
         } else {
           throw new Error("No se pudo generar el documento.");

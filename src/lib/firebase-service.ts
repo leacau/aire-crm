@@ -350,12 +350,19 @@ export const linkCommercialNoteToOrder = async (
 export const unlinkCommercialNoteFromOrder = async (
     noteId: string,
     userId: string,
-    userName: string
+    userName: string,
+    reason: string
 ): Promise<void> => {
+    const normalizedReason = reason.trim();
+    if (!normalizedReason) throw new Error('Debe indicar el motivo de la desvinculacion.');
     const docRef = doc(collections.commercialNotes, noteId);
     await updateDoc(docRef, {
         orderId: deleteField(),
         orderTitle: deleteField(),
+        orderUnlinkedAt: serverTimestamp(),
+        orderUnlinkedById: userId,
+        orderUnlinkedByName: userName,
+        orderUnlinkReason: normalizedReason,
         updatedAt: serverTimestamp(),
     });
     await logActivity({
@@ -4978,6 +4985,20 @@ export const updateAdvertisingOrder = async (
                 before: getAdvertisingOrderFinancialSummary(previousComparableOrder),
                 after: getAdvertisingOrderFinancialSummary(nextComparableOrder),
             },
+            schedule: {
+                before: {
+                    startDate: previousComparableOrder.startDate,
+                    endDate: previousComparableOrder.endDate,
+                    srlItems: previousComparableOrder.srlItems || [],
+                    sasItems: previousComparableOrder.sasItems || [],
+                },
+                after: {
+                    startDate: nextComparableOrder.startDate,
+                    endDate: nextComparableOrder.endDate,
+                    srlItems: nextComparableOrder.srlItems || [],
+                    sasItems: nextComparableOrder.sasItems || [],
+                },
+            },
         });
     }
 
@@ -5162,12 +5183,19 @@ export const linkSocialMediaRequestToOrder = async (
 export const unlinkSocialMediaRequestFromOrder = async (
     requestId: string,
     userId: string,
-    userName: string
+    userName: string,
+    reason: string
 ): Promise<void> => {
+    const normalizedReason = reason.trim();
+    if (!normalizedReason) throw new Error('Debe indicar el motivo de la desvinculacion.');
     const docRef = doc(collections.socialMediaRequests, requestId);
     await updateDoc(docRef, {
         orderId: deleteField(),
         orderTitle: deleteField(),
+        orderUnlinkedAt: serverTimestamp(),
+        orderUnlinkedById: userId,
+        orderUnlinkedByName: userName,
+        orderUnlinkReason: normalizedReason,
         updatedAt: serverTimestamp(),
     });
     invalidateCache('socialMediaRequests');
@@ -5809,12 +5837,19 @@ export const linkWebNoteToOrder = async (
 export const unlinkWebNoteFromOrder = async (
     noteId: string,
     userId: string,
-    userName: string
+    userName: string,
+    reason: string
 ): Promise<void> => {
+    const normalizedReason = reason.trim();
+    if (!normalizedReason) throw new Error('Debe indicar el motivo de la desvinculacion.');
     const docRef = doc(collections.webNotes, noteId);
     await updateDoc(docRef, {
         orderId: deleteField(),
         orderTitle: deleteField(),
+        orderUnlinkedAt: serverTimestamp(),
+        orderUnlinkedById: userId,
+        orderUnlinkedByName: userName,
+        orderUnlinkReason: normalizedReason,
         updatedAt: serverTimestamp(),
     });
     invalidateCache('webNotes');

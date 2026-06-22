@@ -34,6 +34,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { isSocialMediaSasItem } from '@/lib/advertising-order-utils';
 import { AdvertisingRevisionHistory } from '@/components/publicidad/advertising-revision-history';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 export default function AdvertisingOrderDetailPage() {
     const { id } = useParams();
@@ -55,6 +58,11 @@ export default function AdvertisingOrderDetailPage() {
     const [isResending, setIsResending] = useState(false);
     const [isSendingToRedaccion, setIsSendingToRedaccion] = useState(false);
     const [linkingId, setLinkingId] = useState<string | null>(null);
+    const [pendingUnlink, setPendingUnlink] = useState<{
+        kind: 'note' | 'social' | 'web';
+        item: CommercialNote | SocialMediaRequest | WebNote;
+    } | null>(null);
+    const [unlinkReason, setUnlinkReason] = useState('');
     
     const router = useRouter();
 
@@ -333,27 +341,32 @@ export default function AdvertisingOrderDetailPage() {
         }
     };
 
-    const handleUnlinkExecution = async (
-        kind: 'note' | 'social' | 'web',
-        item: CommercialNote | SocialMediaRequest | WebNote,
-    ) => {
+    const handleUnlinkExecution = async () => {
+        if (!pendingUnlink) return;
+        const { kind, item } = pendingUnlink;
         if (!userInfo || !item.id) return;
-        if (!window.confirm('Â¿Quitar la vinculaciÃ³n de esta acciÃ³n con la orden?')) return;
+        const reason = unlinkReason.trim();
+        if (!reason) {
+            toast({ title: 'Indicá el motivo para continuar.', variant: 'destructive' });
+            return;
+        }
         setLinkingId(`${kind}-${item.id}`);
         try {
             if (kind === 'note') {
-                await unlinkCommercialNoteFromOrder(item.id, userInfo.id, userInfo.name);
+                await unlinkCommercialNoteFromOrder(item.id, userInfo.id, userInfo.name, reason);
                 setLinkedNotes(prev => prev.filter(note => note.id !== item.id));
                 setUnlinkedNotes(prev => [{ ...(item as CommercialNote), orderId: undefined, orderTitle: undefined }, ...prev]);
             } else if (kind === 'social') {
-                await unlinkSocialMediaRequestFromOrder(item.id, userInfo.id, userInfo.name);
+                await unlinkSocialMediaRequestFromOrder(item.id, userInfo.id, userInfo.name, reason);
                 setLinkedSocial(prev => prev.filter(request => request.id !== item.id));
                 setUnlinkedSocial(prev => [{ ...(item as SocialMediaRequest), orderId: undefined, orderTitle: undefined }, ...prev]);
             } else {
-                await unlinkWebNoteFromOrder(item.id, userInfo.id, userInfo.name);
+                await unlinkWebNoteFromOrder(item.id, userInfo.id, userInfo.name, reason);
                 setLinkedWebNotes(prev => prev.filter(note => note.id !== item.id));
                 setUnlinkedWebNotes(prev => [{ ...(item as WebNote), orderId: undefined, orderTitle: undefined }, ...prev]);
             }
+            setPendingUnlink(null);
+            setUnlinkReason('');
             toast({ title: 'VinculaciÃ³n quitada.' });
         } catch (error) {
             console.error(error);
@@ -373,6 +386,11 @@ export default function AdvertisingOrderDetailPage() {
     if (!order) return <div className="p-8 text-center">Orden no encontrada</div>;
 
     const canEdit = userInfo && (hasManagementPrivileges(userInfo) || userInfo.id === order.createdBy);
+    const canUnlinkExecutions = !!userInfo && (
+        userInfo.role === 'Jefe'
+        || userInfo.role === 'Gerencia'
+        || userInfo.email?.toLowerCase() === 'lchena@airedesantafe.com.ar'
+    );
 
     // 🟢 EL CANDADO DE SEGURIDAD
     const isOrderApproved = !order.status || order.status === 'Aprobado';
@@ -608,8 +626,8 @@ export default function AdvertisingOrderDetailPage() {
                                         <Badge variant="outline" className={n.status === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>
                                             {n.status || 'Borrador'}
                                         </Badge>
-                                        {canEdit && (
-                                            <Button variant="ghost" size="sm" className="text-slate-500" disabled={linkingId === `note-${n.id}`} onClick={() => handleUnlinkExecution('note', n)}>
+                                        {canUnlinkExecutions && (
+                                            <Button variant="ghost" size="sm" className="text-slate-500" disabled={linkingId === `note-${n.id}`} onClick={() => setPendingUnlink({ kind: 'note', item: n })}>
                                                 <Unlink className="w-4 h-4 mr-1"/> Quitar
                                             </Button>
                                         )}
@@ -628,8 +646,8 @@ export default function AdvertisingOrderDetailPage() {
                                         <Badge variant="outline" className={w.status === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>
                                             {w.status || 'Borrador'}
                                         </Badge>
-                                        {canEdit && (
-                                            <Button variant="ghost" size="sm" className="text-slate-500" disabled={linkingId === `web-${w.id}`} onClick={() => handleUnlinkExecution('web', w)}>
+                                        {canUnlinkExecutions && (
+                                            <Button variant="ghost" size="sm" className="text-slate-500" disabled={linkingId === `web-${w.id}`} onClick={() => setPendingUnlink({ kind: 'web', item: w })}>
                                                 <Unlink className="w-4 h-4 mr-1"/> Quitar
                                             </Button>
                                         )}
@@ -648,8 +666,8 @@ export default function AdvertisingOrderDetailPage() {
                                         <Badge variant="outline" className={s.status === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>
                                             {s.status || 'Borrador'}
                                         </Badge>
-                                        {canEdit && (
-                                            <Button variant="ghost" size="sm" className="text-slate-500" disabled={linkingId === `social-${s.id}`} onClick={() => handleUnlinkExecution('social', s)}>
+                                        {canUnlinkExecutions && (
+                                            <Button variant="ghost" size="sm" className="text-slate-500" disabled={linkingId === `social-${s.id}`} onClick={() => setPendingUnlink({ kind: 'social', item: s })}>
                                                 <Unlink className="w-4 h-4 mr-1"/> Quitar
                                             </Button>
                                         )}
@@ -666,6 +684,40 @@ export default function AdvertisingOrderDetailPage() {
             <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
                 <AdvertisingOrderPdf ref={hiddenPdfRef} order={order} programs={programs} hidePrices={true} hideSrl={true} />
             </div>
+
+            <Dialog open={!!pendingUnlink} onOpenChange={(open) => {
+                if (!open && !linkingId) {
+                    setPendingUnlink(null);
+                    setUnlinkReason('');
+                }
+            }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Quitar ejecución de la orden</DialogTitle>
+                        <DialogDescription>
+                            La acción quedará sin orden asignada. El motivo, la fecha y tu usuario se conservarán en el historial.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2">
+                        <Label htmlFor="unlink-reason">Motivo</Label>
+                        <Textarea
+                            id="unlink-reason"
+                            value={unlinkReason}
+                            onChange={(event) => setUnlinkReason(event.target.value)}
+                            placeholder="Explicá por qué se quita esta ejecución"
+                            rows={4}
+                            autoFocus
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => { setPendingUnlink(null); setUnlinkReason(''); }} disabled={!!linkingId}>Cancelar</Button>
+                        <Button variant="destructive" onClick={handleUnlinkExecution} disabled={!unlinkReason.trim() || !!linkingId}>
+                            {linkingId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Unlink className="mr-2 h-4 w-4" />}
+                            Quitar ejecución
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
