@@ -2,7 +2,7 @@
 
 import { auth, db } from './firebase';
 import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
-import type { Client, Person, Opportunity, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CoachingFollowUpEntry, CoachingActiveIndex, CoachingActiveIndexEntry, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction, ApprovalHistoryItem } from './types';
+import type { Client, Person, Opportunity, OpportunityPeriod, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CoachingFollowUpEntry, CoachingActiveIndex, CoachingActiveIndexEntry, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction, ApprovalHistoryItem } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
@@ -3440,6 +3440,14 @@ export const createOpportunity = async (
     userName: string,
     ownerName: string
 ): Promise<string> => {
+    if (opportunityData.stage === 'Cerrado - Ganado') {
+        if (!opportunityData.startDate || !opportunityData.endDate) {
+            throw new Error('La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.');
+        }
+        if (parseISO(opportunityData.endDate) < parseISO(opportunityData.startDate)) {
+            throw new Error('La fecha de fin del contrato no puede ser anterior a la fecha de inicio.');
+        }
+    }
     const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
     if (!clientSnap.exists()) throw new Error("Client not found for opportunity creation");
 
@@ -3586,6 +3594,18 @@ export const updateOpportunity = async (
     if (!docSnap.exists()) throw new Error("Opportunity not found");
     const originalData = docSnap.data() as Opportunity;
 
+    const resultingStage = data.stage || originalData.stage;
+    const nextStartDate = typeof data.startDate === 'string' ? data.startDate : originalData.startDate;
+    const nextEndDate = typeof data.endDate === 'string' ? data.endDate : originalData.endDate;
+    if (resultingStage === 'Cerrado - Ganado') {
+        if (!nextStartDate || !nextEndDate) {
+            throw new Error('La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.');
+        }
+        if (parseISO(nextEndDate) < parseISO(nextStartDate)) {
+            throw new Error('La fecha de fin del contrato no puede ser anterior a la fecha de inicio.');
+        }
+    }
+
     const clientSnap = await getDoc(doc(db, 'clients', originalData.clientId));
     if (!clientSnap.exists()) throw new Error("Client not found for opportunity update");
 
@@ -3593,6 +3613,61 @@ export const updateOpportunity = async (
         ...data,
         updatedAt: serverTimestamp()
     };
+
+    const contractDatesChanged = Boolean(
+        originalData.startDate
+        && originalData.endDate
+        && nextStartDate
+        && nextEndDate
+        && (nextStartDate !== originalData.startDate || nextEndDate !== originalData.endDate)
+    );
+    if (contractDatesChanged) {
+        const originalHistory = Array.isArray(originalData.periodHistory) ? originalData.periodHistory : [];
+        const submittedHistory = Array.isArray(data.periodHistory) ? data.periodHistory : [];
+        const mergedHistory = [...originalHistory];
+        const addPeriodOnce = (period: OpportunityPeriod) => {
+            const exists = mergedHistory.some(item => (
+                item.startDate === period.startDate
+                && item.endDate === period.endDate
+                && Number(item.value || 0) === Number(period.value || 0)
+            ));
+            if (!exists) mergedHistory.push(period);
+        };
+        submittedHistory.forEach(addPeriodOnce);
+        addPeriodOnce({
+            startDate: originalData.startDate!,
+            endDate: originalData.endDate!,
+            value: Number(originalData.value || 0),
+            updatedAt: new Date().toISOString(),
+            updatedBy: userName,
+        });
+        updateData.periodHistory = mergedHistory;
+        updateData.lastRenewedAt = serverTimestamp();
+        updateData.lastRenewedById = userId;
+        updateData.lastRenewedByName = userName;
+        updateData.finalizationDate = deleteField();
+    } else if (Array.isArray(data.periodHistory)) {
+        // Los períodos archivados son parte de la auditoría y no se pueden eliminar al editar.
+        const originalHistory = Array.isArray(originalData.periodHistory) ? originalData.periodHistory : [];
+        const mergedHistory = [...originalHistory];
+        data.periodHistory.forEach(period => {
+            const exists = mergedHistory.some(item => (
+                item.startDate === period.startDate
+                && item.endDate === period.endDate
+                && Number(item.value || 0) === Number(period.value || 0)
+            ));
+            if (!exists) mergedHistory.push(period);
+        });
+        updateData.periodHistory = mergedHistory;
+    }
+
+    if ('finalizationDate' in data && !data.finalizationDate) {
+        updateData.finalizationDate = deleteField();
+    }
+
+    Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined) delete updateData[key];
+    });
 
     if ('manualUpdateHistory' in updateData) {
         delete updateData.manualUpdateHistory;
@@ -3653,6 +3728,9 @@ export const updateOpportunity = async (
     if (stageChanged) {
         cacheData.stageChangedAt = new Date().toISOString();
     }
+    if (contractDatesChanged || ('finalizationDate' in data && !data.finalizationDate)) {
+        cacheData.finalizationDate = undefined;
+    }
     mutateCacheArray('opportunities', id, cacheData, 'update');
     invalidateOpportunityCaches([originalData.clientId, data.clientId]);
 
@@ -3674,8 +3752,8 @@ export const updateOpportunity = async (
         ownerName: ownerName
     };
 
-    const isRenewal = data.periodHistory && originalData.periodHistory && (data.periodHistory.length > originalData.periodHistory.length);
-    const isFirstRenewal = data.periodHistory && (!originalData.periodHistory || originalData.periodHistory.length === 0);
+    const isRenewal = contractDatesChanged;
+    const isFirstRenewal = contractDatesChanged && (!originalData.periodHistory || originalData.periodHistory.length === 0);
     
     if (isRenewal || isFirstRenewal) {
          try {

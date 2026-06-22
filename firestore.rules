@@ -118,6 +118,13 @@ service cloud.firestore {
           && request.resource.data.orderId == resource.data.orderId);
     }
 
+    function hasValidWonContractPeriod() {
+      return request.resource.data.stage != 'Cerrado - Ganado'
+        || (request.resource.data.startDate is string
+          && request.resource.data.endDate is string
+          && request.resource.data.startDate <= request.resource.data.endDate);
+    }
+
     function updatesSelfProfile(userId) {
       return isSignedIn()
         && request.auth.uid == userId
@@ -151,10 +158,10 @@ service cloud.firestore {
 
     match /opportunities/{oppId} {
       allow read, list: if isSignedIn();
-      allow create: if ownsClientOnRequest() || isManagement()
-        || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId));
-      allow update: if ownsClientOnResource() || isManagement()
-        || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId));
+      allow create: if hasValidWonContractPeriod() && (ownsClientOnRequest() || isManagement()
+        || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId)));
+      allow update: if hasValidWonContractPeriod() && (ownsClientOnResource() || isManagement()
+        || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId)));
       allow delete: if ownsClientOnResource() || isManagement();
     }
 

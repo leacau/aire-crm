@@ -255,6 +255,7 @@ const KanbanCard = ({
      } catch (error) {
        console.error("Error updating opportunity", error);
        toast({ title: "Error al actualizar", variant: "destructive" });
+       throw error;
      }
   }
   
@@ -307,6 +308,13 @@ const KanbanCard = ({
                     <TrendingUp className="mr-1 h-3 w-3" />
                     Alta probabilidad
                 </Badge>
+            )}
+            {opportunity.stage === 'Cerrado - Ganado' && opportunity.startDate && opportunity.endDate && (
+                <div className="mb-2 flex items-center gap-1.5 rounded border border-teal-200 bg-teal-50 px-2 py-1.5 text-xs font-medium text-teal-800">
+                    <CalendarIcon className="h-3.5 w-3.5" />
+                    Vigencia: {format(parseISO(opportunity.startDate), 'dd/MM/yyyy')} al {format(parseISO(opportunity.endDate), 'dd/MM/yyyy')}
+                    {(opportunity.periodHistory?.length || 0) > 0 && <Badge variant="outline" className="ml-auto h-5 bg-white">{opportunity.periodHistory?.length} renov.</Badge>}
+                </div>
             )}
             <div className="flex justify-between items-center">
                 <span className="text-lg font-bold text-primary">
@@ -409,6 +417,7 @@ export function KanbanBoard({
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [pendingWonOpportunity, setPendingWonOpportunity] = useState<Opportunity | null>(null);
 
   // 🟢 ACÁ SE USA LA VERSIÓN RÁPIDA
   const fetchOpportunities = useCallback(async (forceServer = false) => {
@@ -598,6 +607,15 @@ export function KanbanBoard({
         toast({ title: "Acción no permitida", description: "Los administradores no pueden modificar las etapas.", variant: "destructive" });
         return;
       }
+
+      if (newStage === 'Cerrado - Ganado' && (!oppToMove.startDate || !oppToMove.endDate)) {
+        setPendingWonOpportunity({ ...oppToMove, stage: 'Cerrado - Ganado', highCloseProbability: false });
+        toast({
+          title: 'Completá la vigencia del contrato',
+          description: 'Antes de cerrar la oportunidad como ganada, indicá su fecha de inicio y fin.',
+        });
+        return;
+      }
       
       const updatedOpportunity = { ...oppToMove, stage: newStage, highCloseProbability: nextHighCloseProbability };
       setOpportunities(prevOpps => 
@@ -618,6 +636,33 @@ export function KanbanBoard({
           prevOpps.map(opp => opp.id === opportunityId ? oppToMove : opp)
         );
       }
+    }
+  };
+
+  const handlePendingWonUpdate = async (changes: Partial<Opportunity>) => {
+    if (!pendingWonOpportunity || !userInfo) return;
+    const client = clients.find(item => item.id === pendingWonOpportunity.clientId);
+    try {
+      const update = { ...changes, stage: 'Cerrado - Ganado' as OpportunityStage, highCloseProbability: false };
+      await updateOpportunity(
+        pendingWonOpportunity.id,
+        update,
+        userInfo.id,
+        userInfo.name,
+        client?.ownerName || pendingWonOpportunity.clientName,
+      );
+      setOpportunities(previous => previous.map(item => item.id === pendingWonOpportunity.id ? { ...item, ...update } : item));
+      window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: pendingWonOpportunity.id, ...update } }));
+      setPendingWonOpportunity(null);
+      toast({ title: 'Oportunidad cerrada como ganada', description: 'La vigencia quedó registrada correctamente.' });
+    } catch (error) {
+      console.error('Error closing won opportunity', error);
+      toast({
+        title: 'No se pudo guardar la oportunidad',
+        description: error instanceof Error ? error.message : 'Revisá los datos e intentá nuevamente.',
+        variant: 'destructive',
+      });
+      throw error;
     }
   };
 
@@ -673,6 +718,21 @@ export function KanbanBoard({
           )
         })}
       </div>
+      {pendingWonOpportunity && (
+        <OpportunityDetailsDialog
+          opportunity={pendingWonOpportunity}
+          isOpen={true}
+          onOpenChange={(open) => { if (!open) setPendingWonOpportunity(null); }}
+          onUpdate={handlePendingWonUpdate}
+          initialTab="conditions"
+          client={{
+            id: pendingWonOpportunity.clientId,
+            name: pendingWonOpportunity.clientName,
+            ownerId: clients.find(item => item.id === pendingWonOpportunity.clientId)?.ownerId,
+            ownerName: clients.find(item => item.id === pendingWonOpportunity.clientId)?.ownerName,
+          }}
+        />
+      )}
     </div>
   );
 }

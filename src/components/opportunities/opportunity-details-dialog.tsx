@@ -60,9 +60,10 @@ interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onUpdate: (opportunity: Partial<Opportunity>) => void;
-  onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
+  onUpdate: (opportunity: Partial<Opportunity>) => void | Promise<void>;
+  onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[]) => void | Promise<void>;
   client?: {id: string, name: string, ownerName?: string, ownerId?: string}
+  initialTab?: 'details' | 'conditions' | 'followup' | 'pautado' | 'invoicing';
 }
 
 const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
@@ -156,7 +157,8 @@ export function OpportunityDetailsDialog({
   onOpenChange,
   onUpdate,
   onCreate = () => {},
-  client
+  client,
+  initialTab = 'details'
 }: OpportunityDetailsDialogProps) {
   const { userInfo, isBoss, getGoogleAccessToken, ensureGoogleAccessToken } = useAuth();
   const { toast } = useToast();
@@ -174,6 +176,8 @@ export function OpportunityDetailsDialog({
   const [unreadCommentsCount, setUnreadCommentsCount] = useState(0);
 
   const [isSendingToCoaching, setIsSendingToCoaching] = useState(false);
+  const [isSavingOpportunity, setIsSavingOpportunity] = useState(false);
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   const isEditing = !!opportunity;
 
@@ -293,6 +297,7 @@ export function OpportunityDetailsDialog({
         if (!initialData.proposalItems) initialData.proposalItems = [];
         if (!initialData.createdAt && isEditing) initialData.createdAt = opportunity?.createdAt;
         setEditedOpportunity(initialData);
+        setActiveTab(initialTab);
         
         setIsSendingToCoaching(false);
 
@@ -308,7 +313,7 @@ export function OpportunityDetailsDialog({
             setAdvertisingOrders([]);
         }
     }
-  }, [opportunity, isOpen, client, toast, fetchInvoices, fetchAdOrders, isEditing]);
+  }, [opportunity, isOpen, client, toast, fetchInvoices, fetchAdOrders, isEditing, initialTab]);
   
   const handleAgencyCreated = (newAgency: Agency) => {
     setAgencies(prev => [...prev, newAgency].sort((a,b) => a.name.localeCompare(b.name)));
@@ -342,6 +347,15 @@ export function OpportunityDetailsDialog({
         toast({ title: "Falta el título", description: "Por favor ingresa un título para la oportunidad.", variant: "destructive" });
         return;
     }
+    if (editedOpportunity.stage === 'Cerrado - Ganado' && (!editedOpportunity.startDate || !editedOpportunity.endDate)) {
+        setActiveTab('conditions');
+        toast({
+            title: "Vigencia obligatoria",
+            description: "Para cerrar la oportunidad como ganada, cargá la fecha de inicio y fin del contrato.",
+            variant: "destructive",
+        });
+        return;
+    }
     if (!!editedOpportunity.startDate !== !!editedOpportunity.endDate) {
         toast({
             title: "Vigencia incompleta",
@@ -371,32 +385,44 @@ export function OpportunityDetailsDialog({
         return;
     }
 
-    if (isEditing && opportunity) {
-        const changes: Partial<Opportunity> = Object.keys(editedOpportunity).reduce((acc, key) => {
-            const oppKey = key as keyof Opportunity;
-            if (JSON.stringify(editedOpportunity[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
-                // @ts-ignore
-                acc[oppKey] = editedOpportunity[oppKey];
-            }
-            return acc;
-        }, {} as Partial<Opportunity>);
+    setIsSavingOpportunity(true);
+    try {
+        if (isEditing && opportunity) {
+            const changes: Partial<Opportunity> = Object.keys(editedOpportunity).reduce((acc, key) => {
+                const oppKey = key as keyof Opportunity;
+                if (JSON.stringify(editedOpportunity[oppKey]) !== JSON.stringify(opportunity[oppKey])) {
+                    // @ts-ignore
+                    acc[oppKey] = editedOpportunity[oppKey];
+                }
+                return acc;
+            }, {} as Partial<Opportunity>);
 
-        if (Object.keys(changes).length > 0) {
+            if (Object.keys(changes).length > 0) {
+                const now = new Date().toISOString();
+                if (changes.followUpDone !== undefined) changes.followUpDoneUpdatedAt = now;
+                if (changes.followUpCurrent !== undefined) changes.followUpCurrentUpdatedAt = now;
+                if (changes.followUpNext !== undefined) changes.followUpNextUpdatedAt = now;
+                await onUpdate(changes);
+            }
+        } else if (!isEditing) {
+            const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
             const now = new Date().toISOString();
-            if (changes.followUpDone !== undefined) changes.followUpDoneUpdatedAt = now;
-            if (changes.followUpCurrent !== undefined) changes.followUpCurrentUpdatedAt = now;
-            if (changes.followUpNext !== undefined) changes.followUpNextUpdatedAt = now;
-            onUpdate(changes);
+            if (newOpp.followUpDone?.trim()) newOpp.followUpDoneUpdatedAt = now;
+            if (newOpp.followUpCurrent?.trim()) newOpp.followUpCurrentUpdatedAt = now;
+            if (newOpp.followUpNext?.trim()) newOpp.followUpNextUpdatedAt = now;
+            await onCreate(newOpp, []);
         }
-    } else if (!isEditing) {
-        const newOpp = { ...editedOpportunity } as Omit<Opportunity, 'id'>;
-        const now = new Date().toISOString();
-        if (newOpp.followUpDone?.trim()) newOpp.followUpDoneUpdatedAt = now;
-        if (newOpp.followUpCurrent?.trim()) newOpp.followUpCurrentUpdatedAt = now;
-        if (newOpp.followUpNext?.trim()) newOpp.followUpNextUpdatedAt = now;
-        onCreate(newOpp, []);
+        onOpenChange(false);
+    } catch (error) {
+        console.error('Error saving opportunity', error);
+        toast({
+            title: 'No se pudo guardar la oportunidad',
+            description: error instanceof Error ? error.message : 'Revisá los datos e intentá nuevamente.',
+            variant: 'destructive',
+        });
+    } finally {
+        setIsSavingOpportunity(false);
     }
-    onOpenChange(false);
 };
 
   const handleDeleteAdOrder = async (orderId: string) => {
@@ -473,10 +499,14 @@ export function OpportunityDetailsDialog({
       [name]: value,
       ...(name === 'stage' && value !== 'Negociación' ? { highCloseProbability: false } : {}),
     }));
+    if (name === 'stage' && value === 'Cerrado - Ganado' && (!editedOpportunity.startDate || !editedOpportunity.endDate)) {
+      setActiveTab('conditions');
+      toast({ title: 'Completá la vigencia del contrato', description: 'Las fechas son obligatorias para cerrar la oportunidad como ganada.' });
+    }
   }
 
   const handleDateChange = (name: keyof Opportunity, date: Date | undefined) => {
-    setEditedOpportunity(prev => ({ ...prev, [name]: date ? date.toISOString().split('T')[0] : undefined }));
+    setEditedOpportunity(prev => ({ ...prev, [name]: date ? format(date, 'yyyy-MM-dd') : undefined }));
   };
 
   const handleRenewPeriod = () => {
@@ -507,7 +537,8 @@ export function OpportunityDetailsDialog({
         ...prev,
         periodHistory: [...(prev.periodHistory || []), newHistoryItem],
         startDate: undefined,
-        endDate: undefined
+        endDate: undefined,
+        finalizationDate: undefined,
     }));
     
     toast({ title: "Período archivado", description: "Ahora puedes ingresar las nuevas fechas de inicio y fin del nuevo período." });
@@ -708,7 +739,7 @@ export function OpportunityDetailsDialog({
           </div>
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto pr-4 -mr-4">
-        <Tabs defaultValue="details">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="details">Detalles</TabsTrigger>
             <TabsTrigger value="conditions">Cond. Comerciales</TabsTrigger>
@@ -856,6 +887,12 @@ export function OpportunityDetailsDialog({
                           </Button>
                       )}
                   </div>
+
+                  {editedOpportunity.stage === 'Cerrado - Ganado' && (
+                      <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                          Esta vigencia define en qué meses aparece la oportunidad en el Kanban. Al renovarla, el período anterior queda guardado automáticamente.
+                      </div>
+                  )}
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -904,18 +941,18 @@ export function OpportunityDetailsDialog({
                       <div className="mt-4 pt-4 border-t border-slate-200">
                           <Label className="text-sm font-bold text-muted-foreground mb-2 block">Historial de Períodos Anteriores</Label>
                           <div className="space-y-2">
-                              {editedOpportunity.periodHistory.map((period, idx) => (
-                                  <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border border-slate-200 text-sm shadow-sm">
+                              {[...editedOpportunity.periodHistory].reverse().map((period, idx) => (
+                                  <div key={`${period.startDate}-${period.endDate}-${idx}`} className="flex flex-wrap justify-between items-center gap-2 bg-white p-3 rounded border border-slate-200 text-sm shadow-sm">
                                       <div>
                                           <span className="font-medium text-slate-700">{format(parseISO(period.startDate), 'dd/MM/yyyy')}</span>
                                           <span className="mx-2 text-muted-foreground">al</span>
                                           <span className="font-medium text-slate-700">{format(parseISO(period.endDate), 'dd/MM/yyyy')}</span>
+                                          <p className="mt-1 text-xs text-muted-foreground">
+                                              Renovado {period.updatedAt ? format(parseISO(period.updatedAt), 'dd/MM/yyyy HH:mm') : 'sin fecha'}{period.updatedBy ? ` por ${period.updatedBy}` : ''}
+                                          </p>
                                       </div>
-                                      <div className="text-muted-foreground flex items-center gap-4">
+                                      <div className="text-muted-foreground">
                                           <span>Valor: ${period.value.toLocaleString('es-AR')}</span>
-                                          <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:bg-red-50" onClick={() => handleDeleteHistoryPeriod(idx)}>
-                                              <Trash2 className="h-3 w-3" />
-                                          </Button>
                                       </div>
                                   </div>
                               ))}
@@ -1195,7 +1232,10 @@ export function OpportunityDetailsDialog({
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <div className="flex gap-2 justify-end w-full sm:w-auto">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>Guardar Cambios</Button>
+            <Button onClick={handleSave} disabled={isSavingOpportunity}>
+              {isSavingOpportunity && <Spinner size="small" />}
+              {isSavingOpportunity ? 'Guardando...' : 'Guardar Cambios'}
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>
