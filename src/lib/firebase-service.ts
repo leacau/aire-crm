@@ -3597,13 +3597,23 @@ export const updateOpportunity = async (
     const resultingStage = data.stage || originalData.stage;
     const nextStartDate = typeof data.startDate === 'string' ? data.startDate : originalData.startDate;
     const nextEndDate = typeof data.endDate === 'string' ? data.endDate : originalData.endDate;
-    if (resultingStage === 'Cerrado - Ganado') {
-        if (!nextStartDate || !nextEndDate) {
+    const isTransitioningToWon = resultingStage === 'Cerrado - Ganado' && originalData.stage !== 'Cerrado - Ganado';
+    if (isTransitioningToWon && (!nextStartDate || !nextEndDate)) {
             throw new Error('La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.');
-        }
-        if (parseISO(nextEndDate) < parseISO(nextStartDate)) {
-            throw new Error('La fecha de fin del contrato no puede ser anterior a la fecha de inicio.');
-        }
+    }
+    if (!!nextStartDate !== !!nextEndDate) {
+        throw new Error('La fecha de inicio y fin de la vigencia deben cargarse juntas.');
+    }
+    if (nextStartDate && nextEndDate && parseISO(nextEndDate) < parseISO(nextStartDate)) {
+        throw new Error('La fecha de fin del contrato no puede ser anterior a la fecha de inicio.');
+    }
+    if (
+        originalData.startDate
+        && originalData.endDate
+        && ((typeof data.startDate === 'string' && data.startDate !== originalData.startDate)
+          || (typeof data.endDate === 'string' && data.endDate !== originalData.endDate))
+    ) {
+        throw new Error('La vigencia inicial ya fue confirmada. Para extenderla, usá Renovar período.');
     }
 
     const clientSnap = await getDoc(doc(db, 'clients', originalData.clientId));
@@ -3614,51 +3624,41 @@ export const updateOpportunity = async (
         updatedAt: serverTimestamp()
     };
 
-    const contractDatesChanged = Boolean(
-        originalData.startDate
-        && originalData.endDate
-        && nextStartDate
-        && nextEndDate
-        && (nextStartDate !== originalData.startDate || nextEndDate !== originalData.endDate)
-    );
-    if (contractDatesChanged) {
-        const originalHistory = Array.isArray(originalData.periodHistory) ? originalData.periodHistory : [];
-        const submittedHistory = Array.isArray(data.periodHistory) ? data.periodHistory : [];
-        const mergedHistory = [...originalHistory];
-        const addPeriodOnce = (period: OpportunityPeriod) => {
-            const exists = mergedHistory.some(item => (
-                item.startDate === period.startDate
-                && item.endDate === period.endDate
-                && Number(item.value || 0) === Number(period.value || 0)
-            ));
-            if (!exists) mergedHistory.push(period);
-        };
-        submittedHistory.forEach(addPeriodOnce);
-        addPeriodOnce({
-            startDate: originalData.startDate!,
-            endDate: originalData.endDate!,
-            value: Number(originalData.value || 0),
-            updatedAt: new Date().toISOString(),
-            updatedBy: userName,
-        });
-        updateData.periodHistory = mergedHistory;
+    const originalHistory = Array.isArray(originalData.periodHistory) ? originalData.periodHistory : [];
+    const submittedHistory = Array.isArray(data.periodHistory) ? data.periodHistory : originalHistory;
+    const newRenewals = submittedHistory.filter(period => !originalHistory.some(existing => (
+        existing.startDate === period.startDate
+        && existing.endDate === period.endDate
+        && Number(existing.value || 0) === Number(period.value || 0)
+    )));
+    const occupiedPeriods = [
+        ...(nextStartDate && nextEndDate ? [{ startDate: nextStartDate, endDate: nextEndDate }] : []),
+        ...originalHistory,
+    ];
+    newRenewals.forEach(period => {
+        if (!period.startDate || !period.endDate || parseISO(period.endDate) < parseISO(period.startDate)) {
+            throw new Error('La renovación contiene una vigencia inválida.');
+        }
+        const overlaps = occupiedPeriods.some(existing => (
+            period.startDate <= existing.endDate && period.endDate >= existing.startDate
+        ));
+        if (overlaps) throw new Error('La renovación se superpone con una vigencia ya registrada.');
+        occupiedPeriods.push(period);
+    });
+    const isRenewal = newRenewals.length > 0;
+    if (Array.isArray(data.periodHistory)) {
+        updateData.periodHistory = [...originalHistory, ...newRenewals];
+    }
+    if (isRenewal) {
         updateData.lastRenewedAt = serverTimestamp();
         updateData.lastRenewedById = userId;
         updateData.lastRenewedByName = userName;
         updateData.finalizationDate = deleteField();
-    } else if (Array.isArray(data.periodHistory)) {
-        // Los períodos archivados son parte de la auditoría y no se pueden eliminar al editar.
-        const originalHistory = Array.isArray(originalData.periodHistory) ? originalData.periodHistory : [];
-        const mergedHistory = [...originalHistory];
-        data.periodHistory.forEach(period => {
-            const exists = mergedHistory.some(item => (
-                item.startDate === period.startDate
-                && item.endDate === period.endDate
-                && Number(item.value || 0) === Number(period.value || 0)
-            ));
-            if (!exists) mergedHistory.push(period);
-        });
-        updateData.periodHistory = mergedHistory;
+    }
+    if (!originalData.startDate && !originalData.endDate && nextStartDate && nextEndDate) {
+        updateData.initialValidityConfirmedAt = serverTimestamp();
+        updateData.initialValidityConfirmedById = userId;
+        updateData.initialValidityConfirmedByName = userName;
     }
 
     if ('finalizationDate' in data && !data.finalizationDate) {
@@ -3728,7 +3728,7 @@ export const updateOpportunity = async (
     if (stageChanged) {
         cacheData.stageChangedAt = new Date().toISOString();
     }
-    if (contractDatesChanged || ('finalizationDate' in data && !data.finalizationDate)) {
+    if (isRenewal || ('finalizationDate' in data && !data.finalizationDate)) {
         cacheData.finalizationDate = undefined;
     }
     mutateCacheArray('opportunities', id, cacheData, 'update');
@@ -3752,13 +3752,13 @@ export const updateOpportunity = async (
         ownerName: ownerName
     };
 
-    const isRenewal = contractDatesChanged;
-    const isFirstRenewal = contractDatesChanged && (!originalData.periodHistory || originalData.periodHistory.length === 0);
+    const isFirstRenewal = isRenewal && originalHistory.length === 0;
     
     if (isRenewal || isFirstRenewal) {
          try {
-             const newStart = data.startDate ? format(parseISO(data.startDate), 'dd/MM/yyyy', { locale: es }) : '?';
-             const newEnd = data.endDate ? format(parseISO(data.endDate), 'dd/MM/yyyy', { locale: es }) : '?';
+             const latestRenewal = newRenewals[newRenewals.length - 1];
+             const newStart = latestRenewal ? format(parseISO(latestRenewal.startDate), 'dd/MM/yyyy', { locale: es }) : '?';
+             const newEnd = latestRenewal ? format(parseISO(latestRenewal.endDate), 'dd/MM/yyyy', { locale: es }) : '?';
              await autoUpdateCoachingSession(userId, userName, 'client', originalData.clientId, originalData.clientName, `Propuesta renovada: ${data.title || originalData.title} - Valor: $${data.value || originalData.value} - Período: ${newStart} al ${newEnd}`);
          } catch (e) {
              console.error('Error auto-updating coaching:', e);

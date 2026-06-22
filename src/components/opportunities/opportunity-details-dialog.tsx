@@ -28,7 +28,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder, getPrograms, autoUpdateCoachingSession } from '@/lib/firebase-service'; // 🟢 Importamos autoUpdateCoachingSession
 import { PlusCircle, Clock, Trash2, Save, CalendarIcon, Mail, Briefcase, ExternalLink, RefreshCw } from 'lucide-react';
@@ -62,8 +62,10 @@ interface OpportunityDetailsDialogProps {
   onOpenChange: (isOpen: boolean) => void;
   onUpdate: (opportunity: Partial<Opportunity>) => void | Promise<void>;
   onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[]) => void | Promise<void>;
+  onRenew?: (opportunity: Partial<Opportunity>) => void | Promise<void>;
   client?: {id: string, name: string, ownerName?: string, ownerId?: string}
   initialTab?: 'details' | 'conditions' | 'followup' | 'pautado' | 'invoicing';
+  requireInitialValidity?: boolean;
 }
 
 const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
@@ -158,7 +160,9 @@ export function OpportunityDetailsDialog({
   onUpdate,
   onCreate = () => {},
   client,
-  initialTab = 'details'
+  onRenew,
+  initialTab = 'details',
+  requireInitialValidity = false,
 }: OpportunityDetailsDialogProps) {
   const { userInfo, isBoss, getGoogleAccessToken, ensureGoogleAccessToken } = useAuth();
   const { toast } = useToast();
@@ -178,6 +182,10 @@ export function OpportunityDetailsDialog({
   const [isSendingToCoaching, setIsSendingToCoaching] = useState(false);
   const [isSavingOpportunity, setIsSavingOpportunity] = useState(false);
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [isRenewingPeriod, setIsRenewingPeriod] = useState(false);
+  const [renewalStartDate, setRenewalStartDate] = useState<string>();
+  const [renewalEndDate, setRenewalEndDate] = useState<string>();
+  const [isSavingRenewal, setIsSavingRenewal] = useState(false);
 
   const isEditing = !!opportunity;
 
@@ -272,9 +280,7 @@ export function OpportunityDetailsDialog({
   }
 
   const selectedManualDate = editedOpportunity.manualUpdateDate ? safeParseManualDate(editedOpportunity.manualUpdateDate) : null;
-  const hasPendingRenewal = isEditing && (
-    (editedOpportunity.periodHistory?.length || 0) > (opportunity?.periodHistory?.length || 0)
-  );
+  const hasConfirmedInitialValidity = Boolean(opportunity?.startDate && opportunity?.endDate);
   
   const fetchInvoices = useCallback(async () => {
     if (opportunity) {
@@ -298,6 +304,9 @@ export function OpportunityDetailsDialog({
         if (!initialData.createdAt && isEditing) initialData.createdAt = opportunity?.createdAt;
         setEditedOpportunity(initialData);
         setActiveTab(initialTab);
+        setIsRenewingPeriod(false);
+        setRenewalStartDate(undefined);
+        setRenewalEndDate(undefined);
         
         setIsSendingToCoaching(false);
 
@@ -347,7 +356,9 @@ export function OpportunityDetailsDialog({
         toast({ title: "Falta el título", description: "Por favor ingresa un título para la oportunidad.", variant: "destructive" });
         return;
     }
-    if (editedOpportunity.stage === 'Cerrado - Ganado' && (!editedOpportunity.startDate || !editedOpportunity.endDate)) {
+    const isTransitioningToWon = requireInitialValidity || (editedOpportunity.stage === 'Cerrado - Ganado'
+        && (!isEditing || opportunity?.stage !== 'Cerrado - Ganado'));
+    if (isTransitioningToWon && (!editedOpportunity.startDate || !editedOpportunity.endDate)) {
         setActiveTab('conditions');
         toast({
             title: "Vigencia obligatoria",
@@ -364,14 +375,6 @@ export function OpportunityDetailsDialog({
         });
         return;
     }
-    if (hasPendingRenewal && (!editedOpportunity.startDate || !editedOpportunity.endDate)) {
-        toast({
-            title: "Renovación incompleta",
-            description: "Ingresá la nueva fecha de inicio y fin antes de guardar.",
-            variant: "destructive",
-        });
-        return;
-    }
     if (
         editedOpportunity.startDate
         && editedOpportunity.endDate
@@ -384,6 +387,14 @@ export function OpportunityDetailsDialog({
         });
         return;
     }
+
+    const isConfirmingInitialValidity = editedOpportunity.stage === 'Cerrado - Ganado'
+        && !!editedOpportunity.startDate
+        && !!editedOpportunity.endDate
+        && !hasConfirmedInitialValidity;
+    if (isConfirmingInitialValidity && !window.confirm(
+        `¿Confirmás la vigencia inicial del ${format(parseISO(editedOpportunity.startDate!), 'dd/MM/yyyy')} al ${format(parseISO(editedOpportunity.endDate!), 'dd/MM/yyyy')}? Una vez guardada quedará como fecha inicial de la propuesta.`
+    )) return;
 
     setIsSavingOpportunity(true);
     try {
@@ -509,48 +520,67 @@ export function OpportunityDetailsDialog({
     setEditedOpportunity(prev => ({ ...prev, [name]: date ? format(date, 'yyyy-MM-dd') : undefined }));
   };
 
-  const handleRenewPeriod = () => {
-    if (hasPendingRenewal) {
-        toast({ title: "Renovación en curso", description: "Completá las nuevas fechas y guardá los cambios." });
-        return;
-    }
-    if (!editedOpportunity.startDate || !editedOpportunity.endDate) {
-        toast({ title: "Faltan fechas", description: "Primero cargá y guardá la vigencia actual. Luego podrás renovarla.", variant: "destructive" });
-        return;
-    }
-    if (parseISO(editedOpportunity.endDate) < parseISO(editedOpportunity.startDate)) {
-        toast({ title: "Vigencia inválida", description: "La fecha de fin no puede ser anterior a la fecha de inicio.", variant: "destructive" });
-        return;
-    }
-    
-    if (!window.confirm("¿Seguro que deseas renovar? El período actual pasará al historial y podrás configurar las nuevas fechas de la pauta.")) return;
-
-    const newHistoryItem: OpportunityPeriod = {
-        startDate: editedOpportunity.startDate,
-        endDate: editedOpportunity.endDate,
-        value: editedOpportunity.value || 0,
-        updatedAt: new Date().toISOString(),
-        updatedBy: userInfo?.name || 'Sistema'
-    };
-
-    setEditedOpportunity(prev => ({
-        ...prev,
-        periodHistory: [...(prev.periodHistory || []), newHistoryItem],
-        startDate: undefined,
-        endDate: undefined,
-        finalizationDate: undefined,
-    }));
-    
-    toast({ title: "Período archivado", description: "Ahora puedes ingresar las nuevas fechas de inicio y fin del nuevo período." });
+  const startRenewal = () => {
+    const periods = [
+      ...(editedOpportunity.startDate && editedOpportunity.endDate
+        ? [{ startDate: editedOpportunity.startDate, endDate: editedOpportunity.endDate }]
+        : []),
+      ...(editedOpportunity.periodHistory || []),
+    ];
+    const latestEnd = periods
+      .map(period => period.endDate)
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+    setRenewalStartDate(latestEnd ? format(addDays(parseISO(latestEnd), 1), 'yyyy-MM-dd') : undefined);
+    setRenewalEndDate(undefined);
+    setIsRenewingPeriod(true);
   };
 
-  const handleDeleteHistoryPeriod = (index: number) => {
-    if (!window.confirm("¿Seguro que deseas eliminar este período del historial? Esta acción no se guardará hasta que guardes la oportunidad.")) return;
-    setEditedOpportunity(prev => {
-        const newHistory = [...(prev.periodHistory || [])];
-        newHistory.splice(index, 1);
-        return { ...prev, periodHistory: newHistory };
-    });
+  const saveRenewal = async () => {
+    if (!renewalStartDate || !renewalEndDate) {
+      toast({ title: 'Renovación incompleta', description: 'Indicá la fecha de inicio y fin.', variant: 'destructive' });
+      return;
+    }
+    if (parseISO(renewalEndDate) < parseISO(renewalStartDate)) {
+      toast({ title: 'Vigencia inválida', description: 'La fecha de fin no puede ser anterior al inicio.', variant: 'destructive' });
+      return;
+    }
+    const existingPeriods = [
+      ...(editedOpportunity.startDate && editedOpportunity.endDate
+        ? [{ startDate: editedOpportunity.startDate, endDate: editedOpportunity.endDate }]
+        : []),
+      ...(editedOpportunity.periodHistory || []),
+    ];
+    const overlaps = existingPeriods.some(period => renewalStartDate <= period.endDate && renewalEndDate >= period.startDate);
+    if (overlaps) {
+      toast({ title: 'Las vigencias se superponen', description: 'La renovación debe comenzar después de los períodos ya registrados.', variant: 'destructive' });
+      return;
+    }
+    if (!window.confirm(`¿Guardar la renovación del ${format(parseISO(renewalStartDate), 'dd/MM/yyyy')} al ${format(parseISO(renewalEndDate), 'dd/MM/yyyy')}?`)) return;
+
+    const renewal: OpportunityPeriod = {
+      startDate: renewalStartDate,
+      endDate: renewalEndDate,
+      value: Number(editedOpportunity.value || 0),
+      updatedAt: new Date().toISOString(),
+      updatedBy: userInfo?.name || 'Sistema',
+    };
+    const periodHistory = [...(editedOpportunity.periodHistory || []), renewal];
+    setIsSavingRenewal(true);
+    try {
+      await (onRenew || onUpdate)({ periodHistory, finalizationDate: undefined });
+      setEditedOpportunity(previous => ({ ...previous, periodHistory, finalizationDate: undefined }));
+      setIsRenewingPeriod(false);
+      setRenewalStartDate(undefined);
+      setRenewalEndDate(undefined);
+      toast({ title: 'Renovación guardada', description: 'El nuevo período ya forma parte de la vigencia de la propuesta.' });
+    } catch (error) {
+      console.error('Error saving contract renewal', error);
+      toast({ title: 'No se pudo guardar la renovación', description: error instanceof Error ? error.message : 'Intentá nuevamente.', variant: 'destructive' });
+    } finally {
+      setIsSavingRenewal(false);
+    }
   };
 
   const handleSaveOrdenPautado = (orden: OrdenPautado) => {
@@ -869,37 +899,33 @@ export function OpportunityDetailsDialog({
               <div className="space-y-4 border p-4 rounded-md bg-slate-50/50">
                   <div className="flex justify-between items-center mb-2">
                       <Label className="text-base font-bold text-primary">Vigencia del Contrato</Label>
-                      {isEditing && (
+                      {isEditing && editedOpportunity.stage === 'Cerrado - Ganado' && hasConfirmedInitialValidity && (
                           <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              onClick={handleRenewPeriod}
+                              onClick={startRenewal}
                               className="h-8"
-                              disabled={hasPendingRenewal}
-                              title={!editedOpportunity.startDate || !editedOpportunity.endDate
-                                  ? 'Primero cargá y guardá la vigencia actual'
-                                  : undefined
-                              }
+                              disabled={isRenewingPeriod}
                           >
                               <RefreshCw className="h-4 w-4 mr-2" />
-                              {hasPendingRenewal ? 'Renovación pendiente' : 'Renovar período'}
+                              Renovar período
                           </Button>
                       )}
                   </div>
 
                   {editedOpportunity.stage === 'Cerrado - Ganado' && (
                       <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                          Esta vigencia define en qué meses aparece la oportunidad en el Kanban. Al renovarla, el período anterior queda guardado automáticamente.
+                          La vigencia inicial queda fija una vez confirmada. Las extensiones se agregan debajo como renovaciones independientes.
                       </div>
                   )}
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                          <Label>Fecha de Inicio</Label>
+                          <Label>Inicio de vigencia inicial</Label>
                           <Popover>
                               <PopoverTrigger asChild>
-                                  <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal bg-white", !editedOpportunity.startDate && "text-muted-foreground")}>
+                                  <Button variant={"outline"} disabled={hasConfirmedInitialValidity} className={cn("w-full justify-start text-left font-normal bg-white", !editedOpportunity.startDate && "text-muted-foreground")}>
                                       <CalendarIcon className="mr-2 h-4 w-4" />
                                       {editedOpportunity.startDate ? format(parseISO(editedOpportunity.startDate), "PPP", { locale: es }) : <span>Seleccionar inicio</span>}
                                   </Button>
@@ -910,10 +936,10 @@ export function OpportunityDetailsDialog({
                           </Popover>
                       </div>
                       <div className="space-y-2">
-                          <Label>Fecha de Fin</Label>
+                          <Label>Fin de vigencia inicial</Label>
                           <Popover>
                               <PopoverTrigger asChild>
-                                  <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal bg-white", !editedOpportunity.endDate && "text-muted-foreground")}>
+                                  <Button variant={"outline"} disabled={hasConfirmedInitialValidity} className={cn("w-full justify-start text-left font-normal bg-white", !editedOpportunity.endDate && "text-muted-foreground")}>
                                       <CalendarIcon className="mr-2 h-4 w-4" />
                                       {editedOpportunity.endDate ? format(parseISO(editedOpportunity.endDate), "PPP", { locale: es }) : <span>Seleccionar fin</span>}
                                   </Button>
@@ -925,21 +951,44 @@ export function OpportunityDetailsDialog({
                       </div>
                   </div>
 
+                  {editedOpportunity.stage === 'Cerrado - Ganado' && !editedOpportunity.startDate && !editedOpportunity.endDate && (
+                      <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                          <strong>Vigencia inicial incierta.</strong> Esta propuesta es anterior al nuevo control. Podés confirmar sus fechas cuando dispongas de la información.
+                      </div>
+                  )}
+
                   {(!editedOpportunity.startDate && editedOpportunity.periodicidad && editedOpportunity.periodicidad.length > 0) && (
                       <div className="text-sm text-amber-700 bg-amber-50 p-2 rounded mt-2 border border-amber-200">
                           <span className="font-bold">Aviso de migración:</span> Esta oportunidad tiene configurada una periodicidad antigua ({editedOpportunity.periodicidad.join(', ')}). Por favor, define las fechas exactas de Inicio y Fin arriba.
                       </div>
                   )}
 
-                  {hasPendingRenewal && (
-                      <div className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                          El período anterior ya quedó preparado para el historial. Cargá la nueva fecha de inicio y fin y guardá los cambios para completar la renovación.
+                  {isRenewingPeriod && (
+                      <div className="rounded border border-blue-200 bg-blue-50 p-4">
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                              <Label className="font-bold text-blue-900">Nueva renovación</Label>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => setIsRenewingPeriod(false)} disabled={isSavingRenewal}>Cancelar</Button>
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                              <div className="space-y-2">
+                                  <Label>Fecha de inicio</Label>
+                                  <Input type="date" value={renewalStartDate || ''} onChange={(event) => setRenewalStartDate(event.target.value || undefined)} />
+                              </div>
+                              <div className="space-y-2">
+                                  <Label>Fecha de fin</Label>
+                                  <Input type="date" value={renewalEndDate || ''} onChange={(event) => setRenewalEndDate(event.target.value || undefined)} />
+                              </div>
+                              <Button type="button" onClick={saveRenewal} disabled={isSavingRenewal || !renewalStartDate || !renewalEndDate}>
+                                  {isSavingRenewal ? <Spinner size="small" /> : <Save className="mr-2 h-4 w-4" />}
+                                  Guardar renovación
+                              </Button>
+                          </div>
                       </div>
                   )}
 
                   {editedOpportunity.periodHistory && editedOpportunity.periodHistory.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-slate-200">
-                          <Label className="text-sm font-bold text-muted-foreground mb-2 block">Historial de Períodos Anteriores</Label>
+                          <Label className="text-sm font-bold text-muted-foreground mb-2 block">Historial de renovaciones</Label>
                           <div className="space-y-2">
                               {[...editedOpportunity.periodHistory].reverse().map((period, idx) => (
                                   <div key={`${period.startDate}-${period.endDate}-${idx}`} className="flex flex-wrap justify-between items-center gap-2 bg-white p-3 rounded border border-slate-200 text-sm shadow-sm">

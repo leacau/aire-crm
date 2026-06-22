@@ -71,6 +71,7 @@ const getPeriodDurationInMonths = (period: string): number => {
 type ContractPeriod = {
   startDate: Date;
   endDate: Date;
+  source: 'initial' | 'renewal';
 };
 
 const parseOpportunityDate = (value?: string): Date | null => {
@@ -82,9 +83,9 @@ const parseOpportunityDate = (value?: string): Date | null => {
 const getContractPeriods = (opportunity: Opportunity): ContractPeriod[] => {
   const rawPeriods = [
     ...(opportunity.startDate && opportunity.endDate
-      ? [{ startDate: opportunity.startDate, endDate: opportunity.endDate }]
+      ? [{ startDate: opportunity.startDate, endDate: opportunity.endDate, source: 'initial' as const }]
       : []),
-    ...(opportunity.periodHistory || []),
+    ...(opportunity.periodHistory || []).map(period => ({ ...period, source: 'renewal' as const })),
   ];
   const finalizationDate = parseOpportunityDate(opportunity.finalizationDate);
 
@@ -97,7 +98,7 @@ const getContractPeriods = (opportunity: Opportunity): ContractPeriod[] => {
       ? finalizationDate
       : originalEndDate;
 
-    return endDate >= startDate ? [{ startDate, endDate }] : [];
+    return endDate >= startDate ? [{ startDate, endDate, source: period.source }] : [];
   });
 };
 
@@ -258,6 +259,23 @@ const KanbanCard = ({
        throw error;
      }
   }
+
+  const handleRenew = async (updatedOpp: Partial<Opportunity>) => {
+    if (!userInfo) throw new Error('Usuario no autenticado');
+    try {
+      await updateOpportunity(
+        opportunity.id,
+        updatedOpp,
+        userInfo.id,
+        userInfo.name,
+        owner?.name || clientInfo?.ownerName || opportunity.clientName,
+      );
+      window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...updatedOpp } }));
+    } catch (error) {
+      console.error('Error renewing opportunity', error);
+      throw error;
+    }
+  };
   
   const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor' || userInfo?.role === 'Gerencia';
 
@@ -312,8 +330,13 @@ const KanbanCard = ({
             {opportunity.stage === 'Cerrado - Ganado' && opportunity.startDate && opportunity.endDate && (
                 <div className="mb-2 flex items-center gap-1.5 rounded border border-teal-200 bg-teal-50 px-2 py-1.5 text-xs font-medium text-teal-800">
                     <CalendarIcon className="h-3.5 w-3.5" />
-                    Vigencia: {format(parseISO(opportunity.startDate), 'dd/MM/yyyy')} al {format(parseISO(opportunity.endDate), 'dd/MM/yyyy')}
+                    Vigencia inicial: {format(parseISO(opportunity.startDate), 'dd/MM/yyyy')} al {format(parseISO(opportunity.endDate), 'dd/MM/yyyy')}
                     {(opportunity.periodHistory?.length || 0) > 0 && <Badge variant="outline" className="ml-auto h-5 bg-white">{opportunity.periodHistory?.length} renov.</Badge>}
+                </div>
+            )}
+            {opportunity.stage === 'Cerrado - Ganado' && (!opportunity.startDate || !opportunity.endDate) && (
+                <div className="mb-2 flex items-center gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-800">
+                    <CalendarIcon className="h-3.5 w-3.5" /> Vigencia inicial incierta
                 </div>
             )}
             <div className="flex justify-between items-center">
@@ -349,6 +372,7 @@ const KanbanCard = ({
           isOpen={isDetailsOpen}
           onOpenChange={setIsDetailsOpen}
           onUpdate={handleUpdate}
+          onRenew={handleRenew}
           client={clientInfo ?? { id: opportunity.clientId, name: opportunity.clientName }}
         />
       )}
@@ -556,7 +580,7 @@ export function KanbanBoard({
         const activeContractPeriod = getContractPeriodForMonth(opp, dateRange.from);
         const wonReferenceDate = activeContractPeriod?.startDate || getLegacyWonReferenceDate(opp);
 
-        if (wonReferenceDate && isSameMonth(wonReferenceDate, dateRange.from)) {
+        if ((!activeContractPeriod || activeContractPeriod.source === 'initial') && wonReferenceDate && isSameMonth(wonReferenceDate, dateRange.from)) {
           groups['Cerrado - Ganado'].push(opp);
         } else {
           groups['Ganado (Recurrente)'].push(opp);
@@ -725,6 +749,7 @@ export function KanbanBoard({
           onOpenChange={(open) => { if (!open) setPendingWonOpportunity(null); }}
           onUpdate={handlePendingWonUpdate}
           initialTab="conditions"
+          requireInitialValidity={true}
           client={{
             id: pendingWonOpportunity.clientId,
             name: pendingWonOpportunity.clientName,
