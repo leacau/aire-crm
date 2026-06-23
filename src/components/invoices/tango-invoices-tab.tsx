@@ -138,7 +138,7 @@ export function TangoInvoicesTab() {
 
       {hasSearched && !loading && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-          <span>{invoices.length} comprobantes coincidentes de {sourceTotalCount} obtenidos para el rango.</span>
+          <span>{invoices.length} comprobantes coincidentes de {sourceTotalCount} consultados en Tango.</span>
           {invoices.length > ROWS_PER_PAGE && <span>Pagina {page} de {totalPages}</span>}
         </div>
       )}

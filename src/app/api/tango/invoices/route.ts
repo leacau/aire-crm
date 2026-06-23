@@ -6,7 +6,7 @@ const COMPANY_QUERIES: Record<string, { process: string; customQuery: string }> 
   '5': { process: '17942', customQuery: '0' },
   '6': { process: '17943', customQuery: '1233' },
 };
-const PAGE_SIZE = 500;
+const PAGE_SIZE = 10;
 const MAX_PAGES = 100;
 
 type TangoInvoice = {
@@ -71,14 +71,11 @@ export async function GET(request: Request) {
 
   try {
     const invoices: TangoInvoice[] = [];
-    let sourceTotalCount = 0;
-    let truncated = false;
-
-    for (let pageIndex = 0; pageIndex < MAX_PAGES; pageIndex++) {
+    const fetchPage = async (pageIndex: number) => {
       const tangoUrl = getTangoEndpoint();
       tangoUrl.searchParams.set('process', companyQuery.process);
-      tangoUrl.searchParams.set('fromDate', fromDate);
-      tangoUrl.searchParams.set('toDate', toDate);
+      tangoUrl.searchParams.set('fromDate', '');
+      tangoUrl.searchParams.set('toDate', '');
       tangoUrl.searchParams.set('pageSize', String(PAGE_SIZE));
       tangoUrl.searchParams.set('pageIndex', String(pageIndex));
       tangoUrl.searchParams.set('customQuery', companyQuery.customQuery);
@@ -102,19 +99,35 @@ export async function GET(request: Request) {
         throw new Error(payload?.message || payload?.exceptionInfo || 'Tango rechazo la consulta');
       }
 
-      const resultData = payload?.resultData || {};
-      const pageItems = Array.isArray(resultData.list) ? resultData.list as TangoInvoice[] : [];
-      invoices.push(...pageItems);
-      sourceTotalCount = Number(resultData.totalCount) || invoices.length;
+      return payload?.resultData || {};
+    };
 
-      if (!resultData.hasNextPage || pageItems.length === 0) break;
-      if (pageIndex === MAX_PAGES - 1) truncated = true;
+    const firstPage = await fetchPage(0);
+    const firstPageItems = Array.isArray(firstPage.list) ? firstPage.list as TangoInvoice[] : [];
+    invoices.push(...firstPageItems);
+    const sourceTotalCount = Number(firstPage.totalCount) || firstPageItems.length;
+    const reportedTotalPages = Math.max(1, Number(firstPage.totalPages) || Math.ceil(sourceTotalCount / PAGE_SIZE));
+    const pageLimit = Math.min(reportedTotalPages, MAX_PAGES);
+    const truncated = reportedTotalPages > MAX_PAGES;
+
+    for (let pageStart = 1; pageStart < pageLimit; pageStart += 5) {
+      const pageIndexes = Array.from(
+        { length: Math.min(5, pageLimit - pageStart) },
+        (_, index) => pageStart + index,
+      );
+      const pages = await Promise.all(pageIndexes.map(fetchPage));
+      pages.forEach(page => {
+        if (Array.isArray(page.list)) invoices.push(...page.list as TangoInvoice[]);
+      });
     }
 
     const filtered = invoices.filter(invoice => {
+      const issueDate = String(invoice.FECHA_DE_EMISION || '').slice(0, 10);
       const clientText = normalize(`${invoice.COD_CLIENTE || ''} ${invoice.RAZON_SOCIAL || ''}`);
       const sellerText = normalize(`${invoice.COD_VENDEDOR || ''} ${invoice.NOMBRE_VENDEDOR || ''}`);
-      return (!clientFilter || clientText.includes(clientFilter))
+      return (!fromDate || issueDate >= fromDate)
+        && (!toDate || issueDate <= toDate)
+        && (!clientFilter || clientText.includes(clientFilter))
         && (!sellerFilter || sellerText.includes(sellerFilter));
     });
 

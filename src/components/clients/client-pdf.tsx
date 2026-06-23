@@ -36,6 +36,7 @@ export const ClientPdf = React.forwardRef<HTMLDivElement, ClientPdfProps>(({ cli
             <table className="w-full border-collapse border border-black text-lg">
                 <tbody>
                     <TableRow label="Razón Social" value={client.razonSocial} />
+                    <TableRow label="Denominación" value={client.denominacion} />
                     <TableRow label="Cuit" value={client.cuit} />
                     <TableRow label="Dirección" value={`${client.localidad}, ${client.provincia}`} />
                     <TableRow label="Condición frente al IVA" value={client.condicionIVA} />
