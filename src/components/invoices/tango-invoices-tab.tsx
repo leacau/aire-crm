@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth } from 'date-fns';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { auth } from '@/lib/firebase';
@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/hooks/use-toast';
+import { getAllUsers } from '@/lib/firebase-service';
+import type { Client, User } from '@/lib/types';
 
 type TangoInvoice = {
   FECHA_DE_EMISION?: string;
@@ -37,9 +39,20 @@ const formatCurrency = (value?: number | null) => new Intl.NumberFormat('es-AR',
   style: 'currency',
   currency: 'ARS',
   maximumFractionDigits: 2,
-}).format(Number(value) || 0);
+}).format(Number(value));
 
-export function TangoInvoicesTab() {
+const normalizeCode = (value: unknown) => {
+  const normalized = String(value || '').trim().replace(/^0+/, '');
+  return normalized || (String(value || '').trim() ? '0' : '');
+};
+
+const normalizeText = (value: unknown) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .trim();
+
+export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
   const { toast } = useToast();
   const today = new Date();
   const [company, setCompany] = useState('6');
@@ -52,6 +65,11 @@ export function TangoInvoicesTab() {
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [page, setPage] = useState(1);
+  const [users, setUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    getAllUsers().then(setUsers).catch(error => console.error('Error loading CRM sellers:', error));
+  }, []);
 
   const totalPages = Math.max(1, Math.ceil(invoices.length / ROWS_PER_PAGE));
   const visibleInvoices = useMemo(() => invoices.slice(
@@ -159,25 +177,39 @@ export function TangoInvoicesTab() {
           <TableBody>
             {loading ? (
               <TableRow><TableCell colSpan={7} className="h-32 text-center"><Spinner size="large" /></TableCell></TableRow>
-            ) : visibleInvoices.length > 0 ? visibleInvoices.map((invoice, index) => (
-              <TableRow key={`${invoice.ID_GVA12 || invoice.NRO_COMPROBANTE || 'invoice'}-${index}`}>
+            ) : visibleInvoices.length > 0 ? visibleInvoices.map((invoice, index) => {
+              const clientCodeField = company === '5' ? 'idAireSrl' : 'idAireDigital';
+              const crmClient = clients.find(item => normalizeCode(item[clientCodeField]) === normalizeCode(invoice.COD_CLIENTE));
+              const sellerCompanyName = company === '5' ? 'Aire SRL' : 'Aire Digital SAS';
+              const crmSeller = users.find(user => user.sellerConfig?.some(config =>
+                config.companyName === sellerCompanyName
+                && config.codes.some(code => normalizeCode(code) === normalizeCode(invoice.COD_VENDEDOR))))
+                || users.find(user => normalizeText(user.name) === normalizeText(invoice.NOMBRE_VENDEDOR));
+
+              return <TableRow key={`${invoice.ID_GVA12 || invoice.NRO_COMPROBANTE || 'invoice'}-${index}`}>
                 <TableCell>{invoice.FECHA_DE_EMISION ? format(new Date(invoice.FECHA_DE_EMISION), 'dd/MM/yyyy') : '-'}</TableCell>
                 <TableCell>{invoice.TIPO_COMPROBANTE || '-'}</TableCell>
                 <TableCell className="font-medium">{invoice.NRO_COMPROBANTE || '-'}</TableCell>
                 <TableCell>
                   <div className="font-medium">{invoice.RAZON_SOCIAL || '-'}</div>
                   <div className="text-xs text-muted-foreground">{invoice.COD_CLIENTE || '-'}</div>
+                  <div className={`text-xs ${crmClient ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    CRM: {crmClient?.denominacion || crmClient?.razonSocial || 'Sin mapear'}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div>{invoice.NOMBRE_VENDEDOR || '-'}</div>
-                  <div className="text-xs text-muted-foreground">{invoice.COD_VENDEDOR || '-'}</div>
+                  <div className="text-xs text-muted-foreground">{invoice.COD_VENDEDOR || 'Codigo no informado por Tango'}</div>
+                  <div className={`text-xs ${crmSeller ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    CRM: {crmSeller?.name || 'Sin mapear'}
+                  </div>
                 </TableCell>
-                <TableCell className="text-right font-semibold">{formatCurrency(invoice.TOTAL)}</TableCell>
+                <TableCell className="text-right font-semibold">{invoice.TOTAL == null ? 'No informado' : formatCurrency(invoice.TOTAL)}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">
                   GVA14: {invoice.ID_GVA14 ?? '-'} | GVA12: {invoice.ID_GVA12 ?? '-'} | GVA23: {invoice.ID_GVA23 ?? '-'} | GVA38: {invoice.ID_GVA38 ?? '-'}
                 </TableCell>
-              </TableRow>
-            )) : (
+              </TableRow>;
+            }) : (
               <TableRow>
                 <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
                   {hasSearched ? 'No se encontraron comprobantes con esos filtros.' : 'Completa los filtros y consulta Tango.'}

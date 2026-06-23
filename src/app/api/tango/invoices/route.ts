@@ -6,12 +6,14 @@ const COMPANY_QUERIES: Record<string, { process: string; customQuery: string }> 
   '5': { process: '17942', customQuery: '0' },
   '6': { process: '17943', customQuery: '1233' },
 };
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 2000;
 const MAX_PAGES = 100;
 
 type TangoInvoice = {
   FECHA_DE_EMISION?: string;
   TIPO_COMPROBANTE?: string;
+  COD_TIPO_COMPROBANTE?: string;
+  DESC_TIPO_COMPROBANTE?: string;
   NRO_COMPROBANTE?: string;
   COD_VENDEDOR?: string;
   NOMBRE_VENDEDOR?: string;
@@ -129,7 +131,14 @@ export async function GET(request: Request) {
         && (!toDate || issueDate <= toDate)
         && (!clientFilter || clientText.includes(clientFilter))
         && (!sellerFilter || sellerText.includes(sellerFilter));
-    });
+    }).map(invoice => ({
+      ...invoice,
+      TIPO_COMPROBANTE: invoice.TIPO_COMPROBANTE
+        || invoice.DESC_TIPO_COMPROBANTE
+        || invoice.COD_TIPO_COMPROBANTE
+        || undefined,
+      TOTAL: typeof invoice.TOTAL === 'number' ? invoice.TOTAL : null,
+    }));
 
     return NextResponse.json({
       list: filtered,

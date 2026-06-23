@@ -34,6 +34,7 @@ export default function InvoiceUploadPage() {
   const router = useRouter();
 
   const [clients, setClients] = useState<Client[]>([]);
+  const [tangoClients, setTangoClients] = useState<Client[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [existingInvoices, setExistingInvoices] = useState<Invoice[]>([]);
   const [invoiceRows, setInvoiceRows] = useState<InvoiceRow[]>([]);
@@ -74,6 +75,7 @@ export default function InvoiceUploadPage() {
         getAllOpportunities(),
         getInvoices()
       ]);
+      setTangoClients(allClients);
 
       if (isBoss) {
         setClients(allClients);
@@ -497,7 +499,7 @@ export default function InvoiceUploadPage() {
           </div>
           </TabsContent>
           <TabsContent value="tango">
-            <TangoInvoicesTab />
+            <TangoInvoicesTab clients={tangoClients} />
           </TabsContent>
         </Tabs>
       </main>
