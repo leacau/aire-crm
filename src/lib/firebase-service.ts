@@ -3635,10 +3635,10 @@ export const updateOpportunity = async (
     if (options?.manageContractPeriods && Array.isArray(data.periodHistory)) {
         updateData.periodHistory = data.periodHistory;
     }
+    const periodDateKey = (period: { startDate: string; endDate: string }) =>
+        `${String(period.startDate).slice(0, 10)}|${String(period.endDate).slice(0, 10)}`;
     const newRenewals = (options?.manageContractPeriods ? [] : submittedHistory.filter(period => !originalHistory.some(existing => (
-        existing.startDate === period.startDate
-        && existing.endDate === period.endDate
-        && Number(existing.value || 0) === Number(period.value || 0)
+        periodDateKey(existing) === periodDateKey(period)
     ))));
     const occupiedPeriods = [
         ...(nextStartDate && nextEndDate ? [{ startDate: nextStartDate, endDate: nextEndDate }] : []),
@@ -3651,10 +3651,16 @@ export const updateOpportunity = async (
         if (!period.startDate || !period.endDate || parseISO(period.endDate) < parseISO(period.startDate)) {
             throw new Error('La renovación contiene una vigencia inválida.');
         }
-        const overlaps = occupiedPeriods.some(existing => (
-            period.startDate <= existing.endDate && period.endDate >= existing.startDate
-        ));
-        if (overlaps) throw new Error('La renovación se superpone con una vigencia ya registrada.');
+        const periodStart = String(period.startDate).slice(0, 10);
+        const periodEnd = String(period.endDate).slice(0, 10);
+        const conflict = occupiedPeriods.find(existing => {
+            const existingStart = String(existing.startDate).slice(0, 10);
+            const existingEnd = String(existing.endDate).slice(0, 10);
+            return periodStart <= existingEnd && periodEnd >= existingStart;
+        });
+        if (conflict) {
+            throw new Error(`La renovación se superpone con la vigencia ${String(conflict.startDate).slice(0, 10)} al ${String(conflict.endDate).slice(0, 10)}.`);
+        }
         occupiedPeriods.push(period);
     });
     const isRenewal = newRenewals.length > 0;

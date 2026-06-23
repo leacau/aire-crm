@@ -316,9 +316,8 @@ export function OpportunityDetailsDialog({
         if (!initialData.createdAt && isEditing) initialData.createdAt = opportunity?.createdAt;
         setEditedOpportunity(initialData);
         const incomingHistory = initialData.periodHistory || [];
-        if (!hasLocalPeriodMutation.current || JSON.stringify(incomingHistory) === JSON.stringify(visiblePeriodHistory)) {
+        if (!hasLocalPeriodMutation.current) {
           setVisiblePeriodHistory(incomingHistory);
-          hasLocalPeriodMutation.current = false;
         }
         setActiveTab(initialTab);
         setIsRenewingPeriod(false);
