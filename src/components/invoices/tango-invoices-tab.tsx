@@ -28,7 +28,6 @@ type TangoInvoice = {
 };
 
 const COMPANIES = [
-  { id: '4', label: 'Aire' },
   { id: '5', label: 'SRL' },
   { id: '6', label: 'SAS' },
 ];
