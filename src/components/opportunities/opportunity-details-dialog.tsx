@@ -61,10 +61,10 @@ interface OpportunityDetailsDialogProps {
   opportunity: Opportunity | null;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onUpdate: (opportunity: Partial<Opportunity>) => void | Promise<void>;
+  onUpdate: (opportunity: Partial<Opportunity>) => void | Partial<Opportunity> | Promise<void | Partial<Opportunity>>;
   onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[]) => void | Promise<void>;
-  onRenew?: (opportunity: Partial<Opportunity>) => void | Promise<void>;
-  onManagePeriods?: (opportunity: Partial<Opportunity>) => void | Promise<void>;
+  onRenew?: (opportunity: Partial<Opportunity>) => void | Partial<Opportunity> | Promise<void | Partial<Opportunity>>;
+  onManagePeriods?: (opportunity: Partial<Opportunity>) => void | Partial<Opportunity> | Promise<void | Partial<Opportunity>>;
   client?: {id: string, name: string, ownerName?: string, ownerId?: string}
   initialTab?: 'details' | 'conditions' | 'followup' | 'pautado' | 'invoicing';
   requireInitialValidity?: boolean;
@@ -188,6 +188,7 @@ export function OpportunityDetailsDialog({
   const [isRenewingPeriod, setIsRenewingPeriod] = useState(false);
   const [renewalStartDate, setRenewalStartDate] = useState<string>();
   const [renewalEndDate, setRenewalEndDate] = useState<string>();
+  const [renewalValue, setRenewalValue] = useState<string>('');
   const [isSavingRenewal, setIsSavingRenewal] = useState(false);
   const [isEditingInitialValidity, setIsEditingInitialValidity] = useState(false);
   const [editingRenewalIndex, setEditingRenewalIndex] = useState<number | null>(null);
@@ -323,6 +324,7 @@ export function OpportunityDetailsDialog({
         setIsRenewingPeriod(false);
         setRenewalStartDate(undefined);
         setRenewalEndDate(undefined);
+        setRenewalValue('');
         setIsEditingInitialValidity(false);
         setEditingRenewalIndex(null);
         
@@ -543,7 +545,7 @@ export function OpportunityDetailsDialog({
     if (management && onManagePeriods) return onManagePeriods(update);
     if (!management && onRenew) return onRenew(update);
     if (!opportunity || !userInfo) throw new Error('No se pudo identificar la oportunidad o el usuario.');
-    await persistOpportunity(
+    const persisted = await persistOpportunity(
       opportunity.id,
       update,
       userInfo.id,
@@ -552,7 +554,8 @@ export function OpportunityDetailsDialog({
       undefined,
       management ? { manageContractPeriods: true } : undefined,
     );
-    window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...update } }));
+    window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...persisted } }));
+    return persisted;
   };
 
   const startRenewal = () => {
@@ -569,6 +572,7 @@ export function OpportunityDetailsDialog({
       .at(-1);
     setRenewalStartDate(latestEnd ? format(addDays(parseISO(latestEnd), 1), 'yyyy-MM-dd') : undefined);
     setRenewalEndDate(undefined);
+    setRenewalValue(String(editedOpportunity.value || ''));
     setEditingRenewalIndex(null);
     setIsRenewingPeriod(true);
   };
@@ -578,6 +582,7 @@ export function OpportunityDetailsDialog({
     if (!period) return;
     setRenewalStartDate(period.startDate);
     setRenewalEndDate(period.endDate);
+    setRenewalValue(String(period.value || ''));
     setEditingRenewalIndex(index);
     setIsRenewingPeriod(true);
   };
@@ -589,6 +594,11 @@ export function OpportunityDetailsDialog({
     }
     if (parseISO(renewalEndDate) < parseISO(renewalStartDate)) {
       toast({ title: 'Vigencia inválida', description: 'La fecha de fin no puede ser anterior al inicio.', variant: 'destructive' });
+      return;
+    }
+    const parsedRenewalValue = Number(renewalValue);
+    if (!Number.isFinite(parsedRenewalValue) || parsedRenewalValue <= 0) {
+      toast({ title: 'Valor no valido', description: 'Indica un valor de pauta mayor a cero.', variant: 'destructive' });
       return;
     }
     const existingPeriods = [
@@ -607,22 +617,33 @@ export function OpportunityDetailsDialog({
     const renewal: OpportunityPeriod = {
       startDate: renewalStartDate,
       endDate: renewalEndDate,
-      value: Number(editedOpportunity.value || 0),
+      value: parsedRenewalValue,
       updatedAt: new Date().toISOString(),
       updatedBy: userInfo?.name || 'Sistema',
     };
     const periodHistory = [...visiblePeriodHistory];
     if (editingRenewalIndex === null) periodHistory.push(renewal);
     else periodHistory[editingRenewalIndex] = renewal;
+    const updatesCurrentValue = editingRenewalIndex === null || editingRenewalIndex === visiblePeriodHistory.length - 1;
     setIsSavingRenewal(true);
     try {
-      await persistPeriodUpdate({ periodHistory, finalizationDate: undefined }, editingRenewalIndex !== null);
+      await persistPeriodUpdate({
+        periodHistory,
+        finalizationDate: undefined,
+        ...(updatesCurrentValue ? { value: parsedRenewalValue } : {}),
+      }, editingRenewalIndex !== null);
       hasLocalPeriodMutation.current = true;
       setVisiblePeriodHistory(periodHistory);
-      setEditedOpportunity(previous => ({ ...previous, periodHistory, finalizationDate: undefined }));
+      setEditedOpportunity(previous => ({
+        ...previous,
+        periodHistory,
+        finalizationDate: undefined,
+        ...(updatesCurrentValue ? { value: parsedRenewalValue } : {}),
+      }));
       setIsRenewingPeriod(false);
       setRenewalStartDate(undefined);
       setRenewalEndDate(undefined);
+      setRenewalValue('');
       setEditingRenewalIndex(null);
       toast({ title: 'Renovación guardada', description: 'El nuevo período ya forma parte de la vigencia de la propuesta.' });
     } catch (error) {
@@ -1043,7 +1064,7 @@ export function OpportunityDetailsDialog({
                               <Label className="font-bold text-blue-900">{editingRenewalIndex === null ? 'Nueva renovación' : 'Editar renovación'}</Label>
                               <Button type="button" variant="ghost" size="sm" onClick={() => { setIsRenewingPeriod(false); setEditingRenewalIndex(null); }} disabled={isSavingRenewal}>Cancelar</Button>
                           </div>
-                          <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                          <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
                               <div className="space-y-2">
                                   <Label>Fecha de inicio</Label>
                                   <Input type="date" value={renewalStartDate || ''} onChange={(event) => setRenewalStartDate(event.target.value || undefined)} />
@@ -1052,7 +1073,11 @@ export function OpportunityDetailsDialog({
                                   <Label>Fecha de fin</Label>
                                   <Input type="date" value={renewalEndDate || ''} onChange={(event) => setRenewalEndDate(event.target.value || undefined)} />
                               </div>
-                              <Button type="button" onClick={saveRenewal} disabled={isSavingRenewal || !renewalStartDate || !renewalEndDate}>
+                              <div className="space-y-2">
+                                  <Label>Valor de la pauta</Label>
+                                  <Input type="number" min="0.01" step="0.01" value={renewalValue} onChange={(event) => setRenewalValue(event.target.value)} />
+                              </div>
+                              <Button type="button" onClick={saveRenewal} disabled={isSavingRenewal || !renewalStartDate || !renewalEndDate || !renewalValue}>
                                   {isSavingRenewal ? <Spinner size="small" /> : <Save className="mr-2 h-4 w-4" />}
                                   Guardar renovación
                               </Button>
@@ -1171,13 +1196,17 @@ export function OpportunityDetailsDialog({
                         <h3 className="font-bold text-lg text-primary">Órdenes de Publicidad (SRL / SAS)</h3>
                         <p className="text-xs text-muted-foreground">Listado de órdenes vinculadas a este producto.</p>
                     </div>
-                    <Button onClick={() => {
-                        onOpenChange(false);
-                        router.push(`/publicidad/new?clientId=${opportunity?.clientId || client?.id}&opportunityId=${opportunity?.id}`);
-                    }}>
-                        <PlusCircle className="mr-2 h-4 w-4"/>
-                        Crear Orden
-                    </Button>
+                    {editedOpportunity.stage === 'Cerrado - Ganado' ? (
+                      <Button onClick={() => {
+                          onOpenChange(false);
+                          router.push(`/publicidad/new?clientId=${opportunity?.clientId || client?.id}&opportunityId=${opportunity?.id}`);
+                      }}>
+                          <PlusCircle className="mr-2 h-4 w-4"/>
+                          Crear Orden
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Disponible al cerrar la oportunidad como ganada.</p>
+                    )}
                 </div>
                 
                 <div className="space-y-3">

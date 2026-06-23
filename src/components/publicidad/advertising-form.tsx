@@ -26,14 +26,13 @@ import {
     getAgencies, 
     getPrograms, 
     getOpportunitiesByClientId, 
-    createQuickOpportunity,
     getAdvertisingOrder,
     updateAdvertisingOrder,
     getBillingRequestsByOrder,
     getAllUsers,
     getWorkflowAssignments
 } from "@/lib/firebase-service";
-import { Client, Agency, AdvertisingOrder, User, ApprovalStatus } from "@/lib/types";
+import { Client, Agency, AdvertisingOrder, User, ApprovalStatus, Opportunity } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
 import { hasManagementPrivileges } from "@/lib/role-utils";
@@ -127,10 +126,9 @@ export function AdvertisingForm() {
   const [clients, setClients] = useState<Client[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [programs, setPrograms] = useState<any[]>([]); 
-  const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [users, setUsers] = useState<User[]>([]); 
 
-  const [isNewOpp, setIsNewOpp] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [editModeId, setEditModeId] = useState<string | null>(null);
@@ -201,10 +199,11 @@ export function AdvertisingForm() {
   const endDate = watch("endDate");
   const agencySale = watch("agencySale");
   const selectedClientId = watch("clientId");
-  const selectedOpportunityId = watch("opportunityId");
   const srlItemsCurrent = watch("srlItems");
   const sasItemsCurrent = watch("sasItems");
-  const showNewOpportunityTitle = selectedOpportunityId === "new_custom_opportunity";
+
+  const keepWonOpportunities = useCallback((items: Opportunity[]) =>
+      items.filter(opportunity => opportunity.stage === 'Cerrado - Ganado'), []);
 
   const getCampaignDateKeys = useCallback((start?: Date, end?: Date) => {
       if (!start || !end || !isValid(start) || !isValid(end) || end < start) return new Set<string>();
@@ -286,7 +285,7 @@ export function AdvertisingForm() {
                   }
 
                   if (order.clientId) {
-                      getOpportunitiesByClientId(order.clientId).then(setOpportunities);
+                      getOpportunitiesByClientId(order.clientId).then(items => setOpportunities(keepWonOpportunities(items)));
                   }
 
                   let fetchedBillingRequestsSrl: any[] = [];
@@ -358,7 +357,7 @@ export function AdvertisingForm() {
            form.setValue("clientId", urlClientId);
            if (urlCanjeId) form.setValue("canjeId", urlCanjeId);
            if (urlOppId) form.setValue("opportunityId", urlOppId);
-           getOpportunitiesByClientId(urlClientId).then(setOpportunities);
+           getOpportunitiesByClientId(urlClientId).then(items => setOpportunities(keepWonOpportunities(items)));
            setIsRestored(true);
       } else {
           const draft = localStorage.getItem('advertising_order_draft');
@@ -369,7 +368,6 @@ export function AdvertisingForm() {
                    if (parsed.endDate) parsed.endDate = new Date(parsed.endDate);
                    if (parsed.materialUrls) setMaterialUrls(parsed.materialUrls);
                    if (parsed.createdBy) setOrderCreatedBy(parsed.createdBy);
-                   setIsNewOpp(parsed.opportunityId === 'new_custom_opportunity');
                    form.reset(parsed);
                   setDraftLoaded(true);
                   toast({ title: "Borrador recuperado", description: "Se han restaurado los datos." });
@@ -379,7 +377,7 @@ export function AdvertisingForm() {
           }
           setIsRestored(true);
       }
-  }, [form, toast, userInfo]);
+  }, [form, toast, userInfo, keepWonOpportunities]);
 
   useEffect(() => {
       if (!isRestored || editModeId) return;
@@ -407,15 +405,11 @@ export function AdvertisingForm() {
     const fetchOpps = async () => {
         try {
             const opps = await getOpportunitiesByClientId(selectedClientId);
-            setOpportunities(opps);
+            setOpportunities(keepWonOpportunities(opps));
         } catch (error) { console.error(error); }
     };
     fetchOpps();
-  }, [selectedClientId]);
-
-  useEffect(() => {
-      setIsNewOpp(selectedOpportunityId === 'new_custom_opportunity');
-  }, [selectedOpportunityId]);
+  }, [selectedClientId, keepWonOpportunities]);
 
   useEffect(() => {
       if (!isRestored || !startDate || !endDate || !isValid(startDate) || !isValid(endDate)) return;
@@ -784,7 +778,7 @@ export function AdvertisingForm() {
       const selectedClient = clients.find(c => c.id === values.clientId);
       const selectedAgency = agencies.find(a => a.id === values.agencyId);
       const selectedOpp = opportunities.find(o => o.id === values.opportunityId);
-      const oppTitle = values.opportunityId === 'new_custom_opportunity' ? values.newOpportunityTitle : selectedOpp?.title;
+      const oppTitle = selectedOpp?.title;
 
       const safeStartDate = (values.startDate && isValid(values.startDate)) ? values.startDate.toISOString() : new Date().toISOString();
       const safeEndDate = (values.endDate && isValid(values.endDate)) ? values.endDate.toISOString() : new Date().toISOString();
@@ -944,6 +938,7 @@ export function AdvertisingForm() {
   const onInvalid = (errors: any) => {
       const missing = [];
       if (errors.clientId) missing.push("Cliente");
+      if (errors.opportunityId) missing.push("Oportunidad Cerrado - Ganado");
       if (errors.startDate || errors.endDate) missing.push("Fechas de Vigencia");
       if (errors.observations) missing.push("Observaciones (Obligatorio por desajuste)");
       toast({ title: "Faltan datos", description: `Por favor completa: ${missing.join(", ")}`, variant: "destructive" });
@@ -965,23 +960,18 @@ export function AdvertisingForm() {
       const selectedClient = clients.find(c => c.id === data.clientId);
       const selectedAgency = agencies.find(a => a.id === data.agencyId);
       
-      let finalOppId = data.opportunityId;
-      let oppTitle = "";
-
-      if (data.opportunityId === "new_custom_opportunity") {
-          if (!data.newOpportunityTitle) {
-              toast({ title: "Falta Nombre", description: "Ingrese nombre para la nueva oportunidad", variant: "destructive"});
-              setIsSubmitting(false); return;
-          }
-          finalOppId = await createQuickOpportunity(data.newOpportunityTitle, data.clientId, selectedClient?.razonSocial || selectedClient?.denominacion || "Cliente", userInfo.id);
-          oppTitle = data.newOpportunityTitle;
-      } else if (!data.opportunityId) {
-          toast({ title: "Falta Producto", description: "Seleccione una oportunidad o cree una nueva", variant: "destructive"});
-          setIsSubmitting(false); return;
-      } else {
-          const existingOpp = opportunities.find(o => o.id === finalOppId);
-          oppTitle = existingOpp?.title || "Sin Asignar";
+      const finalOppId = data.opportunityId;
+      const existingOpp = opportunities.find(o => o.id === finalOppId);
+      if (!existingOpp || existingOpp.stage !== 'Cerrado - Ganado') {
+          toast({
+              title: "Oportunidad no habilitada",
+              description: "La orden solo puede vincularse a una oportunidad Cerrado - Ganado.",
+              variant: "destructive"
+          });
+          setIsSubmitting(false);
+          return;
       }
+      const oppTitle = existingOpp.title;
 
       let targetStatus: ApprovalStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
 
@@ -1172,16 +1162,16 @@ export function AdvertisingForm() {
           <div className="col-span-1">
              <FormField control={form.control} name="opportunityId" render={({ field }) => (
                   <FormItem><FormLabel>Producto (Oportunidad) <span className="text-red-500">*</span></FormLabel>
-                    <Select onValueChange={(val) => { field.onChange(val); setIsNewOpp(val === "new_custom_opportunity"); }} value={field.value || undefined}>
-                      <FormControl><SelectTrigger><SelectValue placeholder={opportunities.length === 0 ? "Sin oportunidades" : "Seleccionar"} /></SelectTrigger></FormControl>
+                    <Select onValueChange={field.onChange} value={field.value || undefined}>
+                      <FormControl><SelectTrigger><SelectValue placeholder={opportunities.length === 0 ? "Sin oportunidades ganadas" : "Seleccionar"} /></SelectTrigger></FormControl>
                       <SelectContent>
                          {opportunities.map(opp => (<SelectItem key={opp.id} value={opp.id}>{opp.title} ({opp.stage})</SelectItem>))}
-                         <SelectItem value="new_custom_opportunity" className="font-bold text-blue-600">+ Crear Nueva</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormDescription>Solo se muestran oportunidades en estado Cerrado - Ganado.</FormDescription>
+                    <FormMessage />
                   </FormItem>
                 )} />
-              {showNewOpportunityTitle && (<FormField control={form.control} name="newOpportunityTitle" render={({ field }) => (<div className="mt-2"><Input placeholder="Nombre del producto *" {...field} /></div>)} />)}
           </div>
           <div className="space-y-2 flex flex-col justify-end pb-1">
              <FormLabel>Ejecutivo / Autor de Orden</FormLabel>

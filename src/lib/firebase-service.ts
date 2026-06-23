@@ -3440,6 +3440,9 @@ export const createOpportunity = async (
     userName: string,
     ownerName: string
 ): Promise<string> => {
+    if ((opportunityData.stage as string) === 'Ganado (Recurrente)') {
+        throw new Error('Ganado (Recurrente) es un estado visual del Kanban y no puede guardarse.');
+    }
     if (opportunityData.stage === 'Cerrado - Ganado') {
         if (!opportunityData.startDate || !opportunityData.endDate) {
             throw new Error('La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.');
@@ -3589,11 +3592,15 @@ export const updateOpportunity = async (
     ownerName: string,
     pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[],
     options?: { manageContractPeriods?: boolean }
-): Promise<void> => {
+): Promise<Partial<Opportunity>> => {
     const docRef = doc(db, 'opportunities', id);
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) throw new Error("Opportunity not found");
     const originalData = docSnap.data() as Opportunity;
+
+    if ((data.stage as string | undefined) === 'Ganado (Recurrente)') {
+        throw new Error('Ganado (Recurrente) es un estado visual del Kanban y no puede guardarse.');
+    }
 
     const resultingStage = data.stage || originalData.stage;
     const hasStartDateUpdate = Object.prototype.hasOwnProperty.call(data, 'startDate');
@@ -3739,16 +3746,24 @@ export const updateOpportunity = async (
     await updateDoc(docRef, updateData);
     
     // 🟢 MUTADOR CORRECTO PARA EDICIÓN DE OPORTUNIDADES (Con truco de fechas)
-    const cacheData: Partial<Opportunity> & { updatedAt: string; stageChangedAt?: string } = {
-        ...updateData,
-        updatedAt: new Date().toISOString(),
-    };
+    const savedAt = new Date().toISOString();
+    const cacheData: Partial<Opportunity> = { ...data, updatedAt: savedAt };
+    if (Array.isArray(updateData.periodHistory)) {
+        cacheData.periodHistory = updateData.periodHistory as OpportunityPeriod[];
+    }
+    if (typeof updateData.stage === 'string') {
+        cacheData.stage = updateData.stage as OpportunityStage;
+    }
     if (stageChanged) {
-        cacheData.stageChangedAt = new Date().toISOString();
+        cacheData.stageChangedAt = savedAt;
     }
     if (isRenewal || ('finalizationDate' in data && !data.finalizationDate)) {
         cacheData.finalizationDate = undefined;
     }
+    if (options?.manageContractPeriods && hasStartDateUpdate && !data.startDate) cacheData.startDate = undefined;
+    if (options?.manageContractPeriods && hasEndDateUpdate && !data.endDate) cacheData.endDate = undefined;
+    if (data.agencyId === '' || data.agencyId === undefined) cacheData.agencyId = undefined;
+    if (typeof data.manualUpdateDate !== 'undefined' && !data.manualUpdateDate) cacheData.manualUpdateDate = undefined;
     mutateCacheArray('opportunities', id, cacheData, 'update');
     invalidateOpportunityCaches([originalData.clientId, data.clientId]);
 
@@ -3827,6 +3842,7 @@ export const updateOpportunity = async (
             console.error('Error auto-updating coaching:', e);
         }
     }
+    return cacheData;
 };
 
 export const deleteOpportunity = async (
@@ -4736,9 +4752,27 @@ export const rejectProspectClaim = async (prospect: Prospect, managerId: string,
     });
 };
 
+const assertAdvertisingOpportunityIsWon = async (opportunityId?: string, clientId?: string) => {
+    if (!opportunityId) {
+        throw new Error('La orden debe estar vinculada a una oportunidad Cerrado - Ganado.');
+    }
+    const opportunitySnapshot = await getDoc(doc(db, 'opportunities', opportunityId));
+    if (!opportunitySnapshot.exists()) {
+        throw new Error('La oportunidad seleccionada ya no existe.');
+    }
+    const opportunity = opportunitySnapshot.data() as Opportunity;
+    if (opportunity.stage !== 'Cerrado - Ganado') {
+        throw new Error('La orden solo puede vincularse a una oportunidad Cerrado - Ganado.');
+    }
+    if (clientId && opportunity.clientId !== clientId) {
+        throw new Error('La oportunidad seleccionada no pertenece al cliente de la orden.');
+    }
+};
+
 export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, 'id' | 'createdAt'>) => {
   try {
     const { billingRequestsSrl, billingRequestsSas, billingRequestsAvion, ...restOrderData } = orderData as typeof orderData & { billingRequestsAvion?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[] };
+    await assertAdvertisingOpportunityIsWon(restOrderData.opportunityId, restOrderData.clientId);
     const docRef = await addDoc(collection(db, 'advertising_orders'), {
       ...restOrderData,
       createdAt: new Date().toISOString(),
@@ -5013,6 +5047,10 @@ export const updateAdvertisingOrder = async (
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) throw new Error("Orden no encontrada");
     const previousOrder = { id: docSnap.id, ...docSnap.data() } as AdvertisingOrder;
+    await assertAdvertisingOpportunityIsWon(
+        restOrderData.opportunityId || previousOrder.opportunityId,
+        restOrderData.clientId || previousOrder.clientId,
+    );
     const existingBrQuery = query(collections.billingRequests, where('orderId', '==', orderId));
     const existingBrSnap = await getDocs(existingBrQuery);
     const previousBillingSrl: AdvertisingOrder['billingRequestsSrl'] = [];

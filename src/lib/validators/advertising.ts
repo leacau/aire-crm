@@ -59,7 +59,7 @@ export const advertisingOrderSchema = z.object({
   clientId: z.string().min(1, "El cliente es obligatorio"),
   canjeId: z.string().optional(),
   agencyId: z.string().optional(),
-  opportunityId: z.string().optional(), 
+  opportunityId: z.string().min(1, "La oportunidad Cerrado - Ganado es obligatoria"),
   newOpportunityTitle: z.string().optional(),
   product: z.string().optional(), 
   event: z.string().optional(),

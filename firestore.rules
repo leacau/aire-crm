@@ -118,6 +118,17 @@ service cloud.firestore {
           && request.resource.data.orderId == resource.data.orderId);
     }
 
+    function hasPersistableOpportunityStage() {
+      return request.resource.data.stage != 'Ganado (Recurrente)';
+    }
+
+    function linksWonOpportunityForOrder() {
+      return request.resource.data.opportunityId is string
+        && exists(/databases/$(database)/documents/opportunities/$(request.resource.data.opportunityId))
+        && get(/databases/$(database)/documents/opportunities/$(request.resource.data.opportunityId)).data.stage == 'Cerrado - Ganado'
+        && get(/databases/$(database)/documents/opportunities/$(request.resource.data.opportunityId)).data.clientId == request.resource.data.clientId;
+    }
+
     function hasValidWonContractPeriod() {
       return request.resource.data.stage != 'Cerrado - Ganado'
         || (request.resource.data.startDate is string
@@ -171,9 +182,9 @@ service cloud.firestore {
 
     match /opportunities/{oppId} {
       allow read, list: if isSignedIn();
-      allow create: if hasValidWonContractPeriod() && (ownsClientOnRequest() || isManagement()
+      allow create: if hasPersistableOpportunityStage() && hasValidWonContractPeriod() && (ownsClientOnRequest() || isManagement()
         || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId)));
-      allow update: if (isManagement() || canUpdateWonContractPeriod()) && (ownsClientOnResource() || isManagement()
+      allow update: if hasPersistableOpportunityStage() && (isManagement() || canUpdateWonContractPeriod()) && (ownsClientOnResource() || isManagement()
         || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId)));
       allow delete: if ownsClientOnResource() || isManagement();
     }
@@ -232,10 +243,10 @@ service cloud.firestore {
 
     match /advertising_orders/{orderId} {
       allow read: if isSignedIn();
-      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement()
-        || (isCanjeOperator() && request.resource.data.canjeId is string && canOperateCanjeClient(request.resource.data.clientId));
-      allow update: if isActorOnResource() || ownsClientOnResource() || isManagement()
-        || (isCanjeOperator() && resource.data.canjeId is string && canOperateCanjeClient(resource.data.clientId));
+      allow create: if linksWonOpportunityForOrder() && (isActorOnRequest() || ownsClientOnRequest() || isManagement()
+        || (isCanjeOperator() && request.resource.data.canjeId is string && canOperateCanjeClient(request.resource.data.clientId)));
+      allow update: if linksWonOpportunityForOrder() && (isActorOnResource() || ownsClientOnResource() || isManagement()
+        || (isCanjeOperator() && resource.data.canjeId is string && canOperateCanjeClient(resource.data.clientId)));
       allow delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
     }
 

@@ -233,11 +233,12 @@ const KanbanCard = ({
   const handleUpdate = async (updatedOpp: Partial<Opportunity>) => {
      if (!userInfo || !owner) return;
      try {
-       await updateOpportunity(opportunity.id, updatedOpp, userInfo.id, userInfo.name, owner.name);
-       window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: {id: opportunity.id, ...updatedOpp} }));
+       const persisted = await updateOpportunity(opportunity.id, updatedOpp, userInfo.id, userInfo.name, owner.name);
+       window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: {id: opportunity.id, ...persisted} }));
        if (isDetailsOpen) setIsDetailsOpen(false);
        if (isFinalizeOpen) setIsFinalizeOpen(false);
        toast({ title: "Oportunidad Actualizada" });
+       return persisted;
      } catch (error) {
        console.error("Error updating opportunity", error);
        toast({ title: "Error al actualizar", variant: "destructive" });
@@ -248,14 +249,15 @@ const KanbanCard = ({
   const handleRenew = async (updatedOpp: Partial<Opportunity>) => {
     if (!userInfo) throw new Error('Usuario no autenticado');
     try {
-      await updateOpportunity(
+      const persisted = await updateOpportunity(
         opportunity.id,
         updatedOpp,
         userInfo.id,
         userInfo.name,
         owner?.name || clientInfo?.ownerName || opportunity.clientName,
       );
-      window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...updatedOpp } }));
+      window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...persisted } }));
+      return persisted;
     } catch (error) {
       console.error('Error renewing opportunity', error);
       throw error;
@@ -264,7 +266,7 @@ const KanbanCard = ({
 
   const handleManagePeriods = async (updatedOpp: Partial<Opportunity>) => {
     if (!userInfo) throw new Error('Usuario no autenticado');
-    await updateOpportunity(
+    const persisted = await updateOpportunity(
       opportunity.id,
       updatedOpp,
       userInfo.id,
@@ -273,7 +275,8 @@ const KanbanCard = ({
       undefined,
       { manageContractPeriods: true },
     );
-    window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...updatedOpp } }));
+    window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...persisted } }));
+    return persisted;
   };
   
   const canDrag = userInfo?.role === 'Jefe' || userInfo?.role === 'Asesor' || userInfo?.role === 'Gerencia';
@@ -595,9 +598,11 @@ export function KanbanBoard({
 
 
   const kanbanStages = useMemo<KanbanStage[]>(() => {
-    return opportunityStages.flatMap((stage) => (
-      stage === 'Negociación' ? [stage, HIGH_PROBABILITY_STAGE] : [stage]
-    ));
+    return opportunityStages.flatMap((stage) => {
+      if (stage === 'Negociación') return [stage, HIGH_PROBABILITY_STAGE];
+      if (stage === 'Cerrado - Ganado') return [stage, 'Ganado (Recurrente)' as const];
+      return [stage];
+    });
   }, []);
 
   const handleCardDrop = async (e: React.DragEvent<HTMLDivElement>, newStage: OpportunityStage, highCloseProbability = false) => {
@@ -630,7 +635,8 @@ export function KanbanBoard({
         const client = clients.find(c => c.id === oppToMove.clientId);
         if (!client) throw new Error("Client not found for opportunity");
 
-        await updateOpportunity(opportunityId, { stage: newStage, highCloseProbability: nextHighCloseProbability }, userInfo.id, userInfo.name, client.ownerName);
+        const persisted = await updateOpportunity(opportunityId, { stage: newStage, highCloseProbability: nextHighCloseProbability }, userInfo.id, userInfo.name, client.ownerName);
+        window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunityId, ...persisted } }));
         toast({ title: "Etapa actualizada", description: `"${oppToMove.title}" se movió a ${newStage}.` });
       } catch (error) {
         console.error("Error updating opportunity stage:", error);
@@ -647,15 +653,15 @@ export function KanbanBoard({
     const client = clients.find(item => item.id === pendingWonOpportunity.clientId);
     try {
       const update = { ...changes, stage: 'Cerrado - Ganado' as OpportunityStage, highCloseProbability: false };
-      await updateOpportunity(
+      const persisted = await updateOpportunity(
         pendingWonOpportunity.id,
         update,
         userInfo.id,
         userInfo.name,
         client?.ownerName || pendingWonOpportunity.clientName,
       );
-      setOpportunities(previous => previous.map(item => item.id === pendingWonOpportunity.id ? { ...item, ...update } : item));
-      window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: pendingWonOpportunity.id, ...update } }));
+      setOpportunities(previous => previous.map(item => item.id === pendingWonOpportunity.id ? { ...item, ...persisted } : item));
+      window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: pendingWonOpportunity.id, ...persisted } }));
       setPendingWonOpportunity(null);
       toast({ title: 'Oportunidad cerrada como ganada', description: 'La vigencia quedó registrada correctamente.' });
     } catch (error) {
