@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Dialog,
@@ -191,6 +191,8 @@ export function OpportunityDetailsDialog({
   const [isSavingRenewal, setIsSavingRenewal] = useState(false);
   const [isEditingInitialValidity, setIsEditingInitialValidity] = useState(false);
   const [editingRenewalIndex, setEditingRenewalIndex] = useState<number | null>(null);
+  const [visiblePeriodHistory, setVisiblePeriodHistory] = useState<OpportunityPeriod[]>(() => opportunity?.periodHistory || []);
+  const hasLocalPeriodMutation = useRef(false);
 
   const isEditing = !!opportunity;
   const canManageContractPeriods = hasManagementPrivileges(userInfo);
@@ -303,12 +305,21 @@ export function OpportunityDetailsDialog({
   }, [opportunity]);
 
   useEffect(() => {
+    if (!isOpen) {
+        hasLocalPeriodMutation.current = false;
+        return;
+    }
     if (isOpen) {
         const initialData = isEditing ? { ...opportunity } : getInitialOpportunityData(client);
         if (!initialData.ordenesPautado) initialData.ordenesPautado = [];
         if (!initialData.proposalItems) initialData.proposalItems = [];
         if (!initialData.createdAt && isEditing) initialData.createdAt = opportunity?.createdAt;
         setEditedOpportunity(initialData);
+        const incomingHistory = initialData.periodHistory || [];
+        if (!hasLocalPeriodMutation.current || JSON.stringify(incomingHistory) === JSON.stringify(visiblePeriodHistory)) {
+          setVisiblePeriodHistory(incomingHistory);
+          hasLocalPeriodMutation.current = false;
+        }
         setActiveTab(initialTab);
         setIsRenewingPeriod(false);
         setRenewalStartDate(undefined);
@@ -550,7 +561,7 @@ export function OpportunityDetailsDialog({
       ...(editedOpportunity.startDate && editedOpportunity.endDate
         ? [{ startDate: editedOpportunity.startDate, endDate: editedOpportunity.endDate }]
         : []),
-      ...(editedOpportunity.periodHistory || []),
+      ...visiblePeriodHistory,
     ];
     const latestEnd = periods
       .map(period => period.endDate)
@@ -564,7 +575,7 @@ export function OpportunityDetailsDialog({
   };
 
   const editRenewal = (index: number) => {
-    const period = editedOpportunity.periodHistory?.[index];
+    const period = visiblePeriodHistory[index];
     if (!period) return;
     setRenewalStartDate(period.startDate);
     setRenewalEndDate(period.endDate);
@@ -585,7 +596,7 @@ export function OpportunityDetailsDialog({
       ...(editedOpportunity.startDate && editedOpportunity.endDate
         ? [{ startDate: editedOpportunity.startDate, endDate: editedOpportunity.endDate }]
         : []),
-      ...(editedOpportunity.periodHistory || []).filter((_, index) => index !== editingRenewalIndex),
+      ...visiblePeriodHistory.filter((_, index) => index !== editingRenewalIndex),
     ];
     const overlaps = existingPeriods.some(period => renewalStartDate <= period.endDate && renewalEndDate >= period.startDate);
     if (overlaps) {
@@ -601,12 +612,14 @@ export function OpportunityDetailsDialog({
       updatedAt: new Date().toISOString(),
       updatedBy: userInfo?.name || 'Sistema',
     };
-    const periodHistory = [...(editedOpportunity.periodHistory || [])];
+    const periodHistory = [...visiblePeriodHistory];
     if (editingRenewalIndex === null) periodHistory.push(renewal);
     else periodHistory[editingRenewalIndex] = renewal;
     setIsSavingRenewal(true);
     try {
       await persistPeriodUpdate({ periodHistory, finalizationDate: undefined }, editingRenewalIndex !== null);
+      hasLocalPeriodMutation.current = true;
+      setVisiblePeriodHistory(periodHistory);
       setEditedOpportunity(previous => ({ ...previous, periodHistory, finalizationDate: undefined }));
       setIsRenewingPeriod(false);
       setRenewalStartDate(undefined);
@@ -630,8 +643,10 @@ export function OpportunityDetailsDialog({
 
   const deleteRenewal = async (index: number) => {
     if (!canManageContractPeriods || !window.confirm('¿Eliminar esta renovación del historial?')) return;
-    const periodHistory = (editedOpportunity.periodHistory || []).filter((_, periodIndex) => periodIndex !== index);
+    const periodHistory = visiblePeriodHistory.filter((_, periodIndex) => periodIndex !== index);
     await persistPeriodUpdate({ periodHistory }, true);
+    hasLocalPeriodMutation.current = true;
+    setVisiblePeriodHistory(periodHistory);
     setEditedOpportunity(previous => ({ ...previous, periodHistory }));
   };
 
@@ -1046,11 +1061,11 @@ export function OpportunityDetailsDialog({
                       </div>
                   )}
 
-                  {editedOpportunity.periodHistory && editedOpportunity.periodHistory.length > 0 && (
+                  {visiblePeriodHistory.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-slate-200">
                           <Label className="text-sm font-bold text-muted-foreground mb-2 block">Historial de renovaciones</Label>
                           <div className="space-y-2">
-                              {[...editedOpportunity.periodHistory].map((period, originalIndex) => ({ period, originalIndex })).reverse().map(({ period, originalIndex }, idx) => (
+                              {visiblePeriodHistory.map((period, originalIndex) => ({ period, originalIndex })).reverse().map(({ period, originalIndex }, idx) => (
                                   <div key={`${period.startDate}-${period.endDate}-${idx}`} className="flex flex-wrap justify-between items-center gap-2 bg-white p-3 rounded border border-slate-200 text-sm shadow-sm">
                                       <div>
                                           <span className="font-medium text-slate-700">{format(parseISO(period.startDate), 'dd/MM/yyyy')}</span>
@@ -1063,8 +1078,8 @@ export function OpportunityDetailsDialog({
                                       <div className="text-muted-foreground">
                                           <span>Valor: ${period.value.toLocaleString('es-AR')}</span>
                                           {canManageContractPeriods && <>
-                                            <Button type="button" variant="ghost" size="icon" className="ml-2" onClick={() => editRenewal(originalIndex)} title="Editar renovación"><Pencil className="h-4 w-4" /></Button>
-                                            <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteRenewal(originalIndex)} title="Eliminar renovación"><Trash2 className="h-4 w-4" /></Button>
+                                            <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => editRenewal(originalIndex)}><Pencil className="mr-1 h-3.5 w-3.5" />Editar</Button>
+                                            <Button type="button" variant="outline" size="sm" className="ml-1 text-destructive" onClick={() => deleteRenewal(originalIndex)}><Trash2 className="mr-1 h-3.5 w-3.5" />Eliminar</Button>
                                           </>}
                                       </div>
                                   </div>
