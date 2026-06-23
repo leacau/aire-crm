@@ -32,7 +32,7 @@ import { format } from 'date-fns';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { isSocialMediaSasItem } from '@/lib/advertising-order-utils';
+import { getAdvertisingOrderApprovalStatus, isSocialMediaSasItem } from '@/lib/advertising-order-utils';
 import { AdvertisingRevisionHistory } from '@/components/publicidad/advertising-revision-history';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -393,7 +393,7 @@ export default function AdvertisingOrderDetailPage() {
     );
 
     // 🟢 EL CANDADO DE SEGURIDAD
-    const isOrderApproved = !order.status || order.status === 'Aprobado';
+    const isOrderApproved = getAdvertisingOrderApprovalStatus(order) === 'Aprobado';
     const canCreateUnplannedExecutions = !!userInfo && hasManagementPrivileges(userInfo);
 
     // 🟢 DOBLE CANDADO: LÓGICA DE DETECCIÓN DE PRODUCTOS EN LA PAUTA

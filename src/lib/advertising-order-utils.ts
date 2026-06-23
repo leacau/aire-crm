@@ -1,8 +1,22 @@
 import type {
+  ApprovalStatus,
   AdvertisingOrder,
   AdvertisingOrderFinancialSummary,
   AdvertisingOrderItemSas,
 } from './types';
+
+export const isLegacyApprovedAdvertisingOrder = (order: Partial<AdvertisingOrder>) =>
+  !order.status && (!order.approvalHistory || order.approvalHistory.length === 0);
+
+export const hasAdvertisingOrderBeenApproved = (order: Partial<AdvertisingOrder>) =>
+  isLegacyApprovedAdvertisingOrder(order)
+  || order.status === 'Aprobado'
+  || (order.approvalHistory || []).some(item => item.status === 'Aprobado');
+
+export const getAdvertisingOrderApprovalStatus = (order: Partial<AdvertisingOrder>): ApprovalStatus => {
+  if (isLegacyApprovedAdvertisingOrder(order)) return 'Aprobado';
+  return order.status || 'Pendiente';
+};
 
 const normalize = (value: unknown) =>
   String(value || '')

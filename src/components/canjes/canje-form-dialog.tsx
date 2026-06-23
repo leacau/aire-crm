@@ -31,7 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ClientCombobox } from '@/components/clients/client-combobox';
 import { getAdvertisingOrdersByCanjeId, getInvoicesByCanjeId } from '@/lib/firebase-service';
-import { getAdvertisingOrderFinancialSummary } from '@/lib/advertising-order-utils';
+import { getAdvertisingOrderApprovalStatus, getAdvertisingOrderFinancialSummary } from '@/lib/advertising-order-utils';
 import type { AdvertisingOrder, Canje, CanjeEstado, CanjeModalidad, CanjeTipo, Client, Invoice, NecesidadResolucion, User } from '@/lib/types';
 import { canjeEstados, canjeModalidades, canjeTipos, necesidadResoluciones } from '@/lib/types';
 
@@ -88,7 +88,9 @@ const getLatestActiveOrder = (orders: AdvertisingOrder[]) => {
   return [...orders]
     .filter(order => {
       const endDate = new Date(order.endDate);
-      return !Number.isNaN(endDate.getTime()) && endDate >= today && (!order.status || ['Aprobado', 'Pendiente de Modificación'].includes(order.status));
+      return !Number.isNaN(endDate.getTime())
+        && endDate >= today
+        && ['Aprobado', 'Pendiente de Modificación'].includes(getAdvertisingOrderApprovalStatus(order));
     })
     .sort((a, b) => new Date(b.startDate || b.createdAt).getTime() - new Date(a.startDate || a.createdAt).getTime())[0];
 };

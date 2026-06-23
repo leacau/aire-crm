@@ -12,7 +12,7 @@ import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format, parse
 import { sendEmail } from './google-gmail-service';
 import { toTitleCase } from './utils';
 import { buildAdvertisingOrderChanges } from './advertising-order-history';
-import { getAdvertisingOrderFinancialSummary } from './advertising-order-utils';
+import { getAdvertisingOrderApprovalStatus, getAdvertisingOrderFinancialSummary, hasAdvertisingOrderBeenApproved } from './advertising-order-utils';
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
@@ -5012,7 +5012,7 @@ export const getAdvertisingOrdersForDateRange = async (rangeStart: Date, rangeEn
             .map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() } as AdvertisingOrder))
             .filter(order => {
                 const orderEnd = order.endDate || order.startDate;
-                const status = order.status || 'Aprobado';
+                const status = getAdvertisingOrderApprovalStatus(order);
                 return orderEnd >= startIso
                     && ['Aprobado', 'Pendiente de ModificaciÃ³n'].includes(status);
             });
@@ -5073,8 +5073,7 @@ export const updateAdvertisingOrder = async (
         else if (billing.company === 'AVION') previousBillingAvion.push(comparable);
     });
 
-    const wasEverApproved = previousOrder.status === 'Aprobado'
-        || (previousOrder.approvalHistory || []).some(item => item.status === 'Aprobado');
+    const wasEverApproved = hasAdvertisingOrderBeenApproved(previousOrder);
     const updatePayload: Record<string, unknown> = {
         ...restOrderData,
         updatedAt: serverTimestamp(),
@@ -5120,7 +5119,7 @@ export const updateAdvertisingOrder = async (
             userName,
             userRole: options?.userRole || '',
             reason,
-            previousStatus: previousOrder.status || 'Aprobado',
+            previousStatus: getAdvertisingOrderApprovalStatus(previousOrder),
             changes,
             financials: {
                 before: getAdvertisingOrderFinancialSummary(previousComparableOrder),

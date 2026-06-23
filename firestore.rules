@@ -129,6 +129,16 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/opportunities/$(request.resource.data.opportunityId)).data.clientId == request.resource.data.clientId;
     }
 
+    function legacyAdvertisingOrderEntersReapproval() {
+      return resource.data.get('status', null) != null
+        || resource.data.get('approvalHistory', []).size() > 0
+        || (request.resource.data.status == 'Pendiente de Modificación'
+          && request.resource.data.approvalHistory is list
+          && request.resource.data.approvalHistory.size() > 0
+          && request.resource.data.revisionHistory is list
+          && request.resource.data.revisionHistory.size() > 0);
+    }
+
     function hasValidWonContractPeriod() {
       return request.resource.data.stage != 'Cerrado - Ganado'
         || (request.resource.data.startDate is string
@@ -245,8 +255,9 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if linksWonOpportunityForOrder() && (isActorOnRequest() || ownsClientOnRequest() || isManagement()
         || (isCanjeOperator() && request.resource.data.canjeId is string && canOperateCanjeClient(request.resource.data.clientId)));
-      allow update: if linksWonOpportunityForOrder() && (isActorOnResource() || ownsClientOnResource() || isManagement()
-        || (isCanjeOperator() && resource.data.canjeId is string && canOperateCanjeClient(resource.data.clientId)));
+      allow update: if linksWonOpportunityForOrder() && legacyAdvertisingOrderEntersReapproval()
+        && (isActorOnResource() || ownsClientOnResource() || isManagement()
+          || (isCanjeOperator() && resource.data.canjeId is string && canOperateCanjeClient(resource.data.clientId)));
       allow delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
     }
 

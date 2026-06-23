@@ -36,6 +36,7 @@ import { Client, Agency, AdvertisingOrder, User, ApprovalStatus, Opportunity } f
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
 import { hasManagementPrivileges } from "@/lib/role-utils";
+import { hasAdvertisingOrderBeenApproved } from "@/lib/advertising-order-utils";
 
 import { SrlSection } from "./srl-section";
 import { SasSection } from "./sas-section";
@@ -276,10 +277,7 @@ export function AdvertisingForm() {
 
           getAdvertisingOrder(idToFetch).then(async order => {
               if (order) {
-                  if (editId && (
-                      order.status === 'Aprobado'
-                      || (order.approvalHistory || []).some(item => item.status === 'Aprobado')
-                  )) {
+                  if (editId && hasAdvertisingOrderBeenApproved(order)) {
                       setWasApproved(true);
                       setNotifyOnSave(true);
                   }

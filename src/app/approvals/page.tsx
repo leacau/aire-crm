@@ -22,6 +22,7 @@ import { getPrograms, getUserById, getClient, getBillingRequestsByOrder } from '
 import { sendEmail } from '@/lib/google-gmail-service';
 import dynamic from 'next/dynamic';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
+import { getAdvertisingOrderApprovalStatus } from '@/lib/advertising-order-utils';
 
 const AdvertisingOrderPdf = dynamic(() => import('@/components/publicidad/advertising-pdf').then(mod => mod.AdvertisingOrderPdf), { ssr: false });
 const AdvertisingRevisionHistory = dynamic(() => import('@/components/publicidad/advertising-revision-history').then(mod => mod.AdvertisingRevisionHistory), { ssr: false });
@@ -148,7 +149,7 @@ function ApprovalsPageComponent() {
           advisorName: data.accountExecutive,
           title: data.product || 'Publicidad Sin Título',
           createdAt: parseDate(data.createdAt),
-          status: data.status || 'Pendiente',
+          status: getAdvertisingOrderApprovalStatus(data),
           adminComments: data.adminComments,
           collectionName: 'advertising_orders',
           rawData: data,

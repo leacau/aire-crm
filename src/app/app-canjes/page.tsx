@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils';
 import { ConvenioPdf } from '@/components/canjes/convenio-pdf';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer'; // 🟢 Importamos el visor oficial
+import { hasAdvertisingOrderBeenApproved } from '@/lib/advertising-order-utils';
 import { ClientPdf } from '@/components/clients/client-pdf';
 import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/lib/data';
 
@@ -230,10 +231,7 @@ export default function AppCanjesMobile() {
                 setEditId(selectedCanjeDetail.id);
                 setEditOppId(selectedCanjeDetail.opportunityId);
                 setEditAdOrderId(adOrder?.id);
-                setEditAdOrderWasApproved(!!adOrder && (
-                    adOrder.status === 'Aprobado'
-                    || (adOrder.approvalHistory || []).some(item => item.status === 'Aprobado')
-                ));
+                setEditAdOrderWasApproved(!!adOrder && hasAdvertisingOrderBeenApproved(adOrder));
             } else {
                 setEditId(undefined);
                 setEditOppId(undefined);
