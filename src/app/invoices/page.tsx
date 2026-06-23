@@ -16,6 +16,8 @@ import { useRouter } from 'next/navigation';
 import { QuickOpportunityFormDialog } from '@/components/invoices/quick-opportunity-form-dialog';
 import { sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { ClientCombobox } from '@/components/clients/client-combobox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TangoInvoicesTab } from '@/components/invoices/tango-invoices-tab';
 
 type InvoiceRow = {
   id: number;
@@ -42,6 +44,7 @@ export default function InvoiceUploadPage() {
   const [clientForNewOpp, setClientForNewOpp] = useState<{id: string, name: string, ownerName: string} | null>(null);
   const [activeRowId, setActiveRowId] = useState<number | null>(null);
   const [canjeRelation, setCanjeRelation] = useState<{ canjeId?: string; orderId?: string; clientId?: string; opportunityId?: string }>({});
+  const [activeTab, setActiveTab] = useState('manual');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -385,18 +388,26 @@ export default function InvoiceUploadPage() {
   return (
     <>
     <div className="flex flex-col h-full">
-      <Header title="Carga de Facturas">
-        <Button onClick={addRow} size="sm">
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Añadir Fila
-        </Button>
-        <Button onClick={handleSaveAll} size="sm" disabled={isSaving || invoiceRows.length === 0}>
-            {isSaving ? <Spinner size="small" className="mr-2" /> : <Save className="mr-2 h-4 w-4" />}
-          Guardar Facturas
-        </Button>
+      <Header title="Facturas">
+        {activeTab === 'manual' && <>
+          <Button onClick={addRow} size="sm">
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Añadir Fila
+          </Button>
+          <Button onClick={handleSaveAll} size="sm" disabled={isSaving || invoiceRows.length === 0}>
+              {isSaving ? <Spinner size="small" className="mr-2" /> : <Save className="mr-2 h-4 w-4" />}
+            Guardar Facturas
+          </Button>
+        </>}
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-        <div className="rounded-md border">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="manual">Carga de facturas</TabsTrigger>
+            <TabsTrigger value="tango">Facturas de Tango</TabsTrigger>
+          </TabsList>
+          <TabsContent value="manual">
+          <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -483,7 +494,12 @@ export default function InvoiceUploadPage() {
               )}
             </TableBody>
           </Table>
-        </div>
+          </div>
+          </TabsContent>
+          <TabsContent value="tango">
+            <TangoInvoicesTab />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
     {clientForNewOpp && (
