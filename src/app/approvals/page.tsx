@@ -390,20 +390,46 @@ function ApprovalsPageComponent() {
       if (sellerProfile?.email) sellerEmail = sellerProfile.email;
     }
 
-    const docPdf = await generateAdvancedPdf(containerElement, item.type);
-    const orderBase64 = docPdf.output('datauristring').split(',')[1];
+    const attachments: Array<{ filename: string; content: string; encoding: 'base64' }> = [];
+    const attachmentErrors: string[] = [];
 
-    let clientBase64 = '';
-    if (item.clientId) {
-      const clientObj = await getClient(item.clientId);
-      if (clientObj) clientBase64 = await generateClientSummaryPdfBase64(clientObj);
+    try {
+      await document.fonts?.ready;
+      const images = Array.from(containerElement.querySelectorAll('img'));
+      await Promise.all(images.map(image => image.complete
+        ? Promise.resolve()
+        : new Promise<void>(resolve => {
+            image.addEventListener('load', () => resolve(), { once: true });
+            image.addEventListener('error', () => resolve(), { once: true });
+          })));
+
+      const docPdf = await generateAdvancedPdf(containerElement, item.type);
+      const orderBase64 = docPdf.output('datauristring').split(',')[1];
+      attachments.push({
+        filename: `${item.type.replace(/ /g, '_')}_${item.clientName.replace(/ /g, '_')}.pdf`,
+        content: orderBase64,
+        encoding: 'base64',
+      });
+    } catch (error) {
+      console.error(`Error generating ${item.type} approval PDF:`, error);
+      attachmentErrors.push(`el PDF de ${item.type}`);
     }
 
-    const attachments = [
-      { filename: `${item.type.replace(/ /g, '_')}_${item.clientName.replace(/ /g, '_')}.pdf`, content: orderBase64, encoding: 'base64' }
-    ];
-    if (clientBase64) {
-      attachments.push({ filename: `Alta_Cliente_${item.clientName.replace(/ /g, '_')}.pdf`, content: clientBase64, encoding: 'base64' });
+    if (item.clientId) {
+      try {
+        const clientObj = await getClient(item.clientId);
+        if (clientObj) {
+          const clientBase64 = await generateClientSummaryPdfBase64(clientObj);
+          attachments.push({
+            filename: `Alta_Cliente_${item.clientName.replace(/ /g, '_')}.pdf`,
+            content: clientBase64,
+            encoding: 'base64',
+          });
+        }
+      } catch (error) {
+        console.error('Error generating client approval PDF:', error);
+        attachmentErrors.push('el alta de cliente');
+      }
     }
 
     const titleHtml = isRenotification 
@@ -414,7 +440,12 @@ function ApprovalsPageComponent() {
       <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
         ${titleHtml}
         <p>Se informa que el Centro de Revisión ha aprobado de manera definitiva la carga de <strong>${item.type}</strong> para el cliente <strong>${item.clientName}</strong>.</p>
-        <p>Se adjuntan los PDFs finales de carga y alta comercial correspondientes.</p>
+        <p>${attachments.length > 0
+          ? 'Se adjuntan los PDFs finales disponibles de la carga y el alta comercial.'
+          : 'La aprobación quedó registrada correctamente. Los adjuntos no pudieron generarse y pueden descargarse desde el CRM.'}</p>
+        ${attachmentErrors.length > 0
+          ? `<p style="color: #b45309;"><strong>Atención:</strong> no se pudo adjuntar ${attachmentErrors.join(' ni ')}.</p>`
+          : ''}
       </div>
     `;
 
@@ -488,8 +519,9 @@ function ApprovalsPageComponent() {
             body: returnEmailBody
             });
         }
-      } else if (actionType === 'Aprobado' && documentContainerRef.current) {
-        const elementToCapture = documentContainerRef.current.firstChild as HTMLElement;
+      } else if (actionType === 'Aprobado') {
+        const elementToCapture = documentContainerRef.current?.firstElementChild as HTMLElement | null;
+        if (!elementToCapture) throw new Error('No se pudo preparar el documento aprobado para notificar.');
         await dispatchApprovalEmail(selectedItem, elementToCapture, false);
       }
 
