@@ -9,8 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocialMediaRequest, getAllUsers, getAdvertisingOrder, getAdvertisingOrdersByClientId } from '@/lib/firebase-service'; 
 import { AdvertisingOrder, Client, SocialMediaRequest, User, CarouselSlide } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
-import { hasManagementPrivileges } from '@/lib/role-utils';
-import { advertisingOrderSupportsExecution, getSuggestedSocialMediaType } from '@/lib/advertising-order-utils';
+import { hasExecutiveManagementPrivileges, hasManagementPrivileges } from '@/lib/role-utils';
+import { advertisingOrderSupportsExecution, getAdvertisingOrderApprovalStatus, getSuggestedSocialMediaType } from '@/lib/advertising-order-utils';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -86,7 +86,10 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
     
     const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
     const effectiveOrderId = orderId || selectedOrderId;
-    const compatibleOrders = clientOrders.filter(order => advertisingOrderSupportsExecution(order, 'social-media'));
+    const canUseUnapprovedOrder = hasExecutiveManagementPrivileges(userInfo);
+    const compatibleOrders = clientOrders.filter(order =>
+        advertisingOrderSupportsExecution(order, 'social-media')
+        && (getAdvertisingOrderApprovalStatus(order) === 'Aprobado' || canUseUnapprovedOrder));
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
@@ -151,6 +154,11 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
                     // 🟢 SI VIENE DE UNA ORDEN MADRE, AUTO-COMPLETAMOS
                     const parentOrder = await getAdvertisingOrder(orderId);
                     if (parentOrder) {
+                        if (getAdvertisingOrderApprovalStatus(parentOrder) !== 'Aprobado' && !canUseUnapprovedOrder) {
+                            toast({ title: 'Orden pendiente de aprobación', description: 'Solo Jefes o Gerencia pueden cargar ejecuciones antes de la aprobación.', variant: 'destructive' });
+                            router.replace(`/publicidad/${orderId}`);
+                            return;
+                        }
                         setClientId(parentOrder.clientId);
                         setAdvisorId(parentOrder.createdBy || userInfo?.id || '');
                         setAdvisorName(parentOrder.accountExecutive || userInfo?.name || '');
@@ -170,7 +178,7 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
             }
         };
         if (userInfo) init();
-    }, [userInfo, editId, cloneId, orderId, toast, canReassign]);
+    }, [userInfo, editId, cloneId, orderId, toast, canReassign, canUseUnapprovedOrder, router]);
 
     useEffect(() => {
         const loadClientOrders = async () => {

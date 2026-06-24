@@ -118,6 +118,19 @@ service cloud.firestore {
           && request.resource.data.orderId == resource.data.orderId);
     }
 
+    function requestedExecutionOrderIsApprovedOrExecutive() {
+      return !(request.resource.data.get('orderId', null) is string)
+        || isExecutiveManagement()
+        || get(/databases/$(database)/documents/advertising_orders/$(request.resource.data.orderId)).data.get('status', null) == 'Aprobado'
+        || (get(/databases/$(database)/documents/advertising_orders/$(request.resource.data.orderId)).data.get('status', null) == null
+          && get(/databases/$(database)/documents/advertising_orders/$(request.resource.data.orderId)).data.get('approvalHistory', []).size() == 0);
+    }
+
+    function executionOrderLinkUpdateAllowed() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['orderId'])
+        || requestedExecutionOrderIsApprovedOrExecutive();
+    }
+
     function hasPersistableOpportunityStage() {
       return request.resource.data.stage != 'Ganado (Recurrente)';
     }
@@ -202,10 +215,12 @@ service cloud.firestore {
     match /commercial_notes/{noteId} {
       allow get: if true;
       allow list: if isSignedIn();
-      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
-      allow update: if isExecutiveManagement()
-        || (preservesAdvertisingOrderLink()
-          && (isManagement() || isActorOnResource() || ownsClientOnResource()));
+      allow create: if requestedExecutionOrderIsApprovedOrExecutive()
+        && (isActorOnRequest() || ownsClientOnRequest() || isManagement());
+      allow update: if executionOrderLinkUpdateAllowed()
+        && (isExecutiveManagement()
+          || (preservesAdvertisingOrderLink()
+            && (isManagement() || isActorOnResource() || ownsClientOnResource())));
       allow delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
     }
 
@@ -263,19 +278,23 @@ service cloud.firestore {
 
     match /social_media_requests/{requestId} {
       allow read: if isSignedIn();
-      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
-      allow update: if isExecutiveManagement()
-        || (preservesAdvertisingOrderLink()
-          && (isManagement() || isActorOnResource() || ownsClientOnResource()));
+      allow create: if requestedExecutionOrderIsApprovedOrExecutive()
+        && (isActorOnRequest() || ownsClientOnRequest() || isManagement());
+      allow update: if executionOrderLinkUpdateAllowed()
+        && (isExecutiveManagement()
+          || (preservesAdvertisingOrderLink()
+            && (isManagement() || isActorOnResource() || ownsClientOnResource())));
       allow delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
     }
 
     match /web_notes/{noteId} {
       allow read: if isSignedIn();
-      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
-      allow update: if isExecutiveManagement()
-        || (preservesAdvertisingOrderLink()
-          && (isManagement() || isActorOnResource() || ownsClientOnResource()));
+      allow create: if requestedExecutionOrderIsApprovedOrExecutive()
+        && (isActorOnRequest() || ownsClientOnRequest() || isManagement());
+      allow update: if executionOrderLinkUpdateAllowed()
+        && (isExecutiveManagement()
+          || (preservesAdvertisingOrderLink()
+            && (isManagement() || isActorOnResource() || ownsClientOnResource())));
       allow delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
     }
 

@@ -29,7 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { format } from 'date-fns';
-import { hasManagementPrivileges } from '@/lib/role-utils';
+import { hasExecutiveManagementPrivileges, hasManagementPrivileges } from '@/lib/role-utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getAdvertisingOrderApprovalStatus, isSocialMediaSasItem } from '@/lib/advertising-order-utils';
@@ -395,6 +395,8 @@ export default function AdvertisingOrderDetailPage() {
     // 🟢 EL CANDADO DE SEGURIDAD
     const isOrderApproved = getAdvertisingOrderApprovalStatus(order) === 'Aprobado';
     const canCreateUnplannedExecutions = !!userInfo && hasManagementPrivileges(userInfo);
+    const canCreateBeforeApproval = hasExecutiveManagementPrivileges(userInfo);
+    const canCreateExecutions = isOrderApproved || canCreateBeforeApproval;
 
     // 🟢 DOBLE CANDADO: LÓGICA DE DETECCIÓN DE PRODUCTOS EN LA PAUTA
     const hasSrlNota = order.srlItems?.some(i => (i.adType || '').toLowerCase().includes('nota'));
@@ -488,7 +490,7 @@ export default function AdvertisingOrderDetailPage() {
                                     <Button 
                                         size="sm" 
                                         className="bg-blue-600 hover:bg-blue-700" 
-                                        disabled={!isOrderApproved}
+                                        disabled={!canCreateExecutions}
                                         onClick={() => router.push(`/notas/new?orderId=${order.id}`)}
                                     >
                                         <Film className="w-4 h-4 mr-2" /> + Nota Comercial
@@ -498,7 +500,7 @@ export default function AdvertisingOrderDetailPage() {
                                     <Button 
                                         size="sm" 
                                         className="bg-orange-500 hover:bg-orange-600 text-white" 
-                                        disabled={!isOrderApproved}
+                                        disabled={!canCreateExecutions}
                                         onClick={() => router.push(`/notas-web/new?orderId=${order.id}`)}
                                     >
                                         <Globe className="w-4 h-4 mr-2" /> + Nota Web
@@ -508,7 +510,7 @@ export default function AdvertisingOrderDetailPage() {
                                     <Button 
                                         size="sm" 
                                         className="bg-pink-600 hover:bg-pink-700" 
-                                        disabled={!isOrderApproved}
+                                        disabled={!canCreateExecutions}
                                         onClick={() => router.push(`/redes/new?orderId=${order.id}`)}
                                     >
                                         <Share2 className="w-4 h-4 mr-2" /> + Pedido Redes
@@ -517,19 +519,25 @@ export default function AdvertisingOrderDetailPage() {
                             </div>
                         </div>
 
-                        {canCreateUnplannedExecutions && isOrderApproved && !hasSrlNota && !hasSasNotaWeb && !hasSasRedes && (
+                        {canCreateUnplannedExecutions && canCreateExecutions && !hasSrlNota && !hasSasNotaWeb && !hasSasRedes && (
                             <div className="bg-blue-50 text-blue-800 p-3 rounded text-sm mb-4 border border-blue-200">
                                 Como jefe/gerente podés cargar ejecuciones aunque la acción comercial no figure en los contenidos de esta orden.
                             </div>
                         )}
 
-                        {!isOrderApproved && (hasSrlNota || hasSasNotaWeb || hasSasRedes || canCreateUnplannedExecutions) && (
+                        {!isOrderApproved && canCreateBeforeApproval && (
+                            <div className="bg-blue-50 text-blue-800 p-3 rounded text-sm mb-4 border border-blue-200">
+                                Como jefe/gerente podés cargar y vincular ejecuciones mientras esta orden completa su circuito de aprobación.
+                            </div>
+                        )}
+
+                        {!isOrderApproved && !canCreateBeforeApproval && (hasSrlNota || hasSasNotaWeb || hasSasRedes || canCreateUnplannedExecutions) && (
                             <div className="bg-amber-50 text-amber-800 p-3 rounded text-sm mb-4 border border-amber-200">
                                 ⚠️ Para poder cargar Ejecuciones, la Orden de Publicidad Madre debe estar en estado <strong>Aprobado</strong>. (Estado actual: {order.status || 'Pendiente'})
                             </div>
                         )}
 
-                        {canEdit && isOrderApproved && (
+                        {canEdit && canCreateExecutions && (
                             <div className="mb-5 rounded-md border border-slate-200 bg-slate-50 p-4">
                                 <div className="mb-3">
                                     <h4 className="font-semibold text-slate-800">Acciones sin orden asignada</h4>

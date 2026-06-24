@@ -25,13 +25,13 @@ import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { NotePdf } from '@/components/notas/note-pdf';
 import { sendEmail } from '@/lib/google-gmail-service';
-import { hasManagementPrivileges } from '@/lib/role-utils';
+import { hasExecutiveManagementPrivileges, hasManagementPrivileges } from '@/lib/role-utils';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 import { ClientCombobox } from '@/components/clients/client-combobox';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { arrayUnion } from 'firebase/firestore';
-import { advertisingOrderSupportsExecution } from '@/lib/advertising-order-utils';
+import { advertisingOrderSupportsExecution, getAdvertisingOrderApprovalStatus } from '@/lib/advertising-order-utils';
 
 export default function NewCommercialNotePage() {
     const { userInfo, isBoss, getGoogleAccessToken } = useAuth();
@@ -114,7 +114,10 @@ export default function NewCommercialNotePage() {
     const orderId = searchParams.get('orderId'); // 🟢 CAPTURAMOS LA ORDEN MADRE
 
     const effectiveOrderId = orderId || selectedOrderId;
-    const compatibleOrders = clientOrders.filter(order => advertisingOrderSupportsExecution(order, 'commercial-note'));
+    const canUseUnapprovedOrder = hasExecutiveManagementPrivileges(userInfo);
+    const compatibleOrders = clientOrders.filter(order =>
+        advertisingOrderSupportsExecution(order, 'commercial-note')
+        && (getAdvertisingOrderApprovalStatus(order) === 'Aprobado' || canUseUnapprovedOrder));
 
     const primaryGrafError = primaryGrafs.some(g => g.length > 84);
     const secondaryGrafError = secondaryGrafs.some(g => g.length > 55);
@@ -217,6 +220,11 @@ export default function NewCommercialNotePage() {
             // 🟢 AUTOCOMPLETAR DESDE LA ORDEN MADRE
             getAdvertisingOrder(orderId).then(order => {
                 if (order) {
+                    if (getAdvertisingOrderApprovalStatus(order) !== 'Aprobado' && !canUseUnapprovedOrder) {
+                        toast({ title: 'Orden pendiente de aprobación', description: 'Solo Jefes o Gerencia pueden cargar ejecuciones antes de la aprobación.', variant: 'destructive' });
+                        router.replace(`/publicidad/${orderId}`);
+                        return;
+                    }
                     setSelectedClientId(order.clientId);
                     // Los detalles del cliente se cargarán cuando terminen de llegar de `getClients`
                     setAdvisorId(order.createdBy || userInfo?.id || '');
@@ -290,7 +298,7 @@ export default function NewCommercialNotePage() {
             }
             setIsRestored(true);
         }
-    }, [toast, userInfo, editModeId, cloneId, orderId]);
+    }, [toast, userInfo, editModeId, cloneId, orderId, canUseUnapprovedOrder, router]);
 
     useEffect(() => {
         if (!isRestored || editModeId) return; 

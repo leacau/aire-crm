@@ -50,3 +50,9 @@ export function hasManagementPrivileges(user?: { email?: string | null; role?: s
 
     return false;
 }
+
+export function hasExecutiveManagementPrivileges(user?: { email?: string | null; role?: string | null } | null): boolean {
+    if (!user) return false;
+    if (user.email?.toLowerCase() === SUPER_ADMIN_EMAIL) return true;
+    return user.role === 'Jefe' || user.role === 'Gerencia';
+}
