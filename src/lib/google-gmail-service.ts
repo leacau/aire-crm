@@ -32,14 +32,27 @@ export async function sendEmail(params: EmailParams) {
     }
 
     const idToken = await getCrmIdToken();
-    const response = await fetch('/api/services/gmail/send', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
-        },
-        body: JSON.stringify(params),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    let response: Response;
+    try {
+        response = await fetch('/api/services/gmail/send', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`,
+            },
+            body: JSON.stringify(params),
+            signal: controller.signal,
+        });
+    } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new Error('El servicio de correo no respondió a tiempo.');
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
         const errorText = await response.text();
