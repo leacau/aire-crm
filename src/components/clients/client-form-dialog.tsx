@@ -148,7 +148,7 @@ export function ClientFormDialog({
            }
            const clientId = await createClient(finalData, ownerId, ownerName, createOptions);
            toast({ title: "Cliente Creado", description: `${finalData.denominacion} ha sido añadido a la lista.`});
-           onSaveSuccess({ id: clientId, ...finalData, ownerId, ownerName }); 
+           onSaveSuccess({ id: clientId, ...finalData, ownerId, ownerName });
         }
         onOpenChange(false);
     } catch (error: any) {
