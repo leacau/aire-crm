@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import type { User, CoachingSession, CoachingItem, CoachingFollowUpEntry } from '@/lib/types';
-import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, updateCoachingFollowUpEntry, deleteCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem, invalidateCache } from '@/lib/firebase-service';
+import type { User, CoachingSession, CoachingItem, CoachingFollowUpEntry, Client, Prospect } from '@/lib/types';
+import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, updateCoachingFollowUpEntry, deleteCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem, invalidateCache, getClients, getProspects } from '@/lib/firebase-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Briefcase, Pencil, X, Check, RefreshCw } from 'lucide-react';
+import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Briefcase, Pencil, X, Check, RefreshCw, Building2, Search, Target } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -33,6 +33,26 @@ const COACHING_STATUS_ORDER: Record<string, number> = {
     'En Proceso': 2,
     Pendiente: 3,
     Cancelado: 4,
+};
+
+type CommercialEntryMode = 'new_company' | 'existing_client' | 'existing_prospect' | 'general';
+type CommercialIntent = NonNullable<CoachingItem['commercialIntent']>;
+
+const COMMERCIAL_ENTRY_LABELS: Record<CommercialEntryMode, string> = {
+    new_company: 'Nueva empresa',
+    existing_client: 'Cliente existente',
+    existing_prospect: 'Prospecto existente',
+    general: 'Gestion general',
+};
+
+const COMMERCIAL_INTENT_LABELS: Record<CommercialIntent, string> = {
+    new_contact: 'Primer contacto',
+    renegotiation: 'Renegociar pauta/valores',
+    new_proposal: 'Presentar nueva propuesta',
+    renewal: 'Renovar acuerdo',
+    recovery: 'Recuperar cuenta',
+    follow_up: 'Seguimiento comercial',
+    general: 'Gestion general',
 };
 
 export function CoachingView({ advisor }: { advisor: User }) {
@@ -46,6 +66,18 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const [newItemEntity, setNewItemEntity] = useState('');
     const [newItemAction, setNewItemAction] = useState('');
     const [newItemType, setNewItemType] = useState<'client' | 'prospect' | 'general'>('client');
+    const [entryMode, setEntryMode] = useState<CommercialEntryMode>('new_company');
+    const [commercialIntent, setCommercialIntent] = useState<CommercialIntent>('new_contact');
+    const [selectedEntityId, setSelectedEntityId] = useState('');
+    const [entitySearch, setEntitySearch] = useState('');
+    const [contactName, setContactName] = useState('');
+    const [contactPhone, setContactPhone] = useState('');
+    const [contactEmail, setContactEmail] = useState('');
+    const [businessLine, setBusinessLine] = useState('');
+    const [nextActionDate, setNextActionDate] = useState('');
+    const [clients, setClients] = useState<Client[]>([]);
+    const [prospects, setProspects] = useState<Prospect[]>([]);
+    const [referenceLoading, setReferenceLoading] = useState(false);
     const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
     const [openSessions, setOpenSessions] = useState<Record<string, boolean>>({});
 
@@ -77,6 +109,51 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const [savingEntry, setSavingEntry] = useState(false);
 
     const canManage = isBoss || userInfo?.role === 'Gerencia' || userInfo?.role === 'Jefe' || userInfo?.role === 'Admin';
+    const selectedClient = useMemo(() => clients.find(client => client.id === selectedEntityId), [clients, selectedEntityId]);
+    const selectedProspect = useMemo(() => prospects.find(prospect => prospect.id === selectedEntityId), [prospects, selectedEntityId]);
+    const normalizedSearch = entitySearch.trim().toLowerCase();
+    const filteredClients = useMemo(() => {
+        if (!normalizedSearch) return clients.slice(0, 30);
+        return clients
+            .filter(client => `${client.denominacion || ''} ${client.razonSocial || ''}`.toLowerCase().includes(normalizedSearch))
+            .slice(0, 30);
+    }, [clients, normalizedSearch]);
+    const filteredProspects = useMemo(() => {
+        if (!normalizedSearch) return prospects.slice(0, 30);
+        return prospects
+            .filter(prospect => `${prospect.companyName || ''} ${prospect.contactName || ''}`.toLowerCase().includes(normalizedSearch))
+            .slice(0, 30);
+    }, [prospects, normalizedSearch]);
+
+    useEffect(() => {
+        const shouldLoadClients = entryMode === 'existing_client' && clients.length === 0;
+        const shouldLoadProspects = entryMode === 'existing_prospect' && prospects.length === 0;
+        if (!shouldLoadClients && !shouldLoadProspects) return;
+
+        let cancelled = false;
+        const loadReferences = async () => {
+            setReferenceLoading(true);
+            try {
+                if (shouldLoadClients) {
+                    const loadedClients = await getClients();
+                    if (!cancelled) setClients(loadedClients);
+                }
+                if (shouldLoadProspects) {
+                    const loadedProspects = await getProspects();
+                    if (!cancelled) setProspects(loadedProspects);
+                }
+            } catch (error) {
+                console.error('Error loading commercial references:', error);
+                toast({ title: 'No se pudieron cargar las opciones', variant: 'destructive' });
+            } finally {
+                if (!cancelled) setReferenceLoading(false);
+            }
+        };
+        loadReferences();
+        return () => {
+            cancelled = true;
+        };
+    }, [clients.length, entryMode, prospects.length, toast]);
 
     const getLatestItemUpdate = useCallback((item: CoachingItem) => {
         const entryDates = [
@@ -281,6 +358,124 @@ export function CoachingView({ advisor }: { advisor: User }) {
             toast({ title: canManage ? "Tarea asignada" : "Agregado a cartera" });
         } catch (error) {
             toast({ title: "Error al agregar", variant: "destructive" });
+        }
+    };
+
+    const resetCommercialEntryForm = () => {
+        setNewItemEntity('');
+        setNewItemAction('');
+        setSelectedEntityId('');
+        setEntitySearch('');
+        setContactName('');
+        setContactPhone('');
+        setContactEmail('');
+        setBusinessLine('');
+        setNextActionDate('');
+    };
+
+    const handleEntryModeChange = (value: CommercialEntryMode) => {
+        setEntryMode(value);
+        setSelectedEntityId('');
+        setEntitySearch('');
+        if (value === 'new_company') setCommercialIntent('new_contact');
+        if (value === 'general') setCommercialIntent('general');
+        if (value === 'existing_client' || value === 'existing_prospect') setCommercialIntent('follow_up');
+    };
+
+    const buildInitialActionText = () => {
+        const lines = [
+            `Tipo de gestion: ${COMMERCIAL_ENTRY_LABELS[entryMode]}`,
+            `Objetivo: ${COMMERCIAL_INTENT_LABELS[commercialIntent]}`,
+            newItemAction.trim() ? `Detalle inicial: ${newItemAction.trim()}` : '',
+            contactName.trim() ? `Contacto: ${contactName.trim()}` : '',
+            contactPhone.trim() ? `Telefono: ${contactPhone.trim()}` : '',
+            contactEmail.trim() ? `Correo: ${contactEmail.trim()}` : '',
+            businessLine.trim() ? `Rubro/actividad: ${businessLine.trim()}` : '',
+            nextActionDate ? `Proxima accion: ${format(parseISO(nextActionDate), 'dd/MM/yyyy')}` : '',
+        ].filter(Boolean);
+        return lines.join('\n');
+    };
+
+    const handleAddCommercialItem = async (sessionId: string) => {
+        if (!newItemAction.trim()) {
+            toast({ title: 'Falta el detalle de la gestion', variant: 'destructive' });
+            return;
+        }
+
+        const selectedExistingName = entryMode === 'existing_client'
+            ? (selectedClient?.denominacion || selectedClient?.razonSocial || '')
+            : (selectedProspect?.companyName || '');
+        const entityName = entryMode === 'general'
+            ? (newItemEntity.trim() || 'Gestion comercial general')
+            : entryMode === 'new_company'
+                ? newItemEntity.trim()
+                : selectedExistingName;
+
+        if (!entityName) {
+            toast({
+                title: entryMode === 'new_company' ? 'Falta el nombre de la empresa' : 'Selecciona una empresa',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        const entityType: CoachingItem['entityType'] = entryMode === 'existing_client'
+            ? 'client'
+            : entryMode === 'general'
+                ? 'general'
+                : 'prospect';
+        const entityId = entryMode === 'existing_client' || entryMode === 'existing_prospect'
+            ? selectedEntityId
+            : `manual_${entryMode}_${entityName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
+
+        const session = sessions.find(s => s.id === sessionId);
+        if (session) {
+            const existsOpen = session.items.some(i =>
+                (
+                    (entityId && i.entityId === entityId) ||
+                    i.entityName.toLowerCase() === entityName.toLowerCase()
+                ) &&
+                i.status !== 'Completado' &&
+                i.status !== 'Cancelado'
+            );
+
+            if (existsOpen) {
+                toast({
+                    title: 'Ya existe un seguimiento',
+                    description: `Ya hay una gestion abierta para "${entityName}". Agrega la novedad en ese mismo registro.`,
+                    variant: 'destructive',
+                });
+                return;
+            }
+        }
+
+        const item: CoachingItem = {
+            id: '',
+            taskId: '',
+            originalCreatedAt: new Date().toISOString(),
+            entityType,
+            entityId,
+            entityName,
+            action: buildInitialActionText(),
+            status: 'Pendiente',
+            advisorNotes: '',
+            commercialWorkType: entryMode,
+            commercialIntent,
+            contactName: contactName.trim() || undefined,
+            contactPhone: contactPhone.trim() || undefined,
+            contactEmail: contactEmail.trim() || undefined,
+            businessLine: businessLine.trim() || undefined,
+            nextActionDate: nextActionDate || undefined,
+            origin: canManage ? 'manager' : 'advisor',
+        };
+
+        try {
+            await addItemsToSession(sessionId, [item]);
+            resetCommercialEntryForm();
+            loadData();
+            toast({ title: canManage ? 'Gestion asignada' : 'Gestion agregada' });
+        } catch (error) {
+            toast({ title: 'Error al agregar', variant: 'destructive' });
         }
     };
 
@@ -645,9 +840,26 @@ export function CoachingView({ advisor }: { advisor: User }) {
             
             <div className="space-y-3 border-r md:pr-4 border-dashed md:border-solid border-border/50 relative">
                 <div className="flex flex-wrap items-center gap-2 pr-6">
-                    <Badge variant="outline" className="capitalize bg-background text-[10px]">{item.entityType === 'general' ? 'General' : 'Cliente/Prospecto'}</Badge>
+                    <Badge variant="outline" className="capitalize bg-background text-[10px]">
+                        {item.commercialWorkType ? COMMERCIAL_ENTRY_LABELS[item.commercialWorkType] : (item.entityType === 'general' ? 'General' : 'Cliente/Prospecto')}
+                    </Badge>
+                    {item.commercialIntent && (
+                        <Badge variant="secondary" className="text-[10px]">
+                            {COMMERCIAL_INTENT_LABELS[item.commercialIntent]}
+                        </Badge>
+                    )}
                     <span className="font-semibold text-sm truncate block max-w-full" title={item.entityName}>{item.entityName}</span>
                 </div>
+
+                {(item.contactName || item.contactPhone || item.contactEmail || item.businessLine || item.nextActionDate) && (
+                    <div className="grid gap-1 rounded-md border bg-background/80 p-2 text-[11px] text-muted-foreground">
+                        {item.businessLine && <span><strong>Rubro:</strong> {item.businessLine}</span>}
+                        {item.contactName && <span><strong>Contacto:</strong> {item.contactName}</span>}
+                        {item.contactPhone && <span><strong>Telefono:</strong> {item.contactPhone}</span>}
+                        {item.contactEmail && <span><strong>Correo:</strong> {item.contactEmail}</span>}
+                        {item.nextActionDate && <span><strong>Proxima accion:</strong> {format(parseISO(item.nextActionDate), 'dd/MM/yyyy')}</span>}
+                    </div>
+                )}
                 
                 {(canManage || (item.origin === 'advisor' && session.status === 'Open')) && (
                     <Button 
@@ -848,9 +1060,9 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 <div className="flex-1">
                     <h2 className="text-xl font-bold flex items-center gap-2">
                         <UserCheck className="h-5 w-5 text-primary"/> 
-                        Historial de Reuniones
+                        Centro de actividad comercial
                     </h2>
-                    <p className="text-muted-foreground text-sm">Compromisos con {advisor.name}</p>
+                    <p className="text-muted-foreground text-sm">Ingreso y seguimiento diario de gestiones de {advisor.name}</p>
                 </div>
                 <Button variant="outline" onClick={handleForceRefresh} size="sm" disabled={loading || refreshing}>
                     <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Recargar datos
@@ -866,7 +1078,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 {sessions.length === 0 && (
                     <Card className="bg-muted/50 border-dashed">
                         <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                            <p>No hay sesiones de seguimiento registradas.</p>
+                            <p>No hay actividad comercial registrada.</p>
                             {canManage && <p className="text-sm mt-2">Inicia una nueva reunión para comenzar a asignar tareas.</p>}
                         </CardContent>
                     </Card>
@@ -875,6 +1087,10 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 {sessions.map((session) => {
                     const managerItems = keepCurrentItemOrder(session.items.filter(i => !i.origin || i.origin === 'manager'));
                     const advisorItems = keepCurrentItemOrder(session.items.filter(i => i.origin === 'advisor'));
+                    const newCompanyItems = advisorItems.filter(item => item.commercialWorkType === 'new_company' || (!item.commercialWorkType && item.entityType === 'prospect'));
+                    const existingClientItems = advisorItems.filter(item => item.commercialWorkType === 'existing_client' || (!item.commercialWorkType && item.entityType === 'client'));
+                    const existingProspectItems = advisorItems.filter(item => item.commercialWorkType === 'existing_prospect');
+                    const generalCommercialItems = advisorItems.filter(item => item.commercialWorkType === 'general' || (!item.commercialWorkType && item.entityType === 'general'));
 
                     return (
                     <Collapsible 
@@ -945,12 +1161,39 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                     </div>
                                 )}
 
-                                {advisorItems.length > 0 && (
+                                {newCompanyItems.length > 0 && (
                                     <div className="space-y-3 mt-6">
                                         <h4 className="text-xs uppercase font-bold text-primary flex items-center gap-2 border-t pt-4">
-                                            <UserCheck className="h-3 w-3" /> Cartera Autogenerada (Asesor)
+                                            <Building2 className="h-3 w-3" /> Empresas nuevas / prospectos en gestion
                                         </h4>
-                                        {advisorItems.map(item => renderItemRow(session, item))}
+                                        {newCompanyItems.map(item => renderItemRow(session, item))}
+                                    </div>
+                                )}
+
+                                {existingClientItems.length > 0 && (
+                                    <div className="space-y-3 mt-6">
+                                        <h4 className="text-xs uppercase font-bold text-emerald-700 flex items-center gap-2 border-t pt-4">
+                                            <Briefcase className="h-3 w-3" /> Clientes existentes en gestion
+                                        </h4>
+                                        {existingClientItems.map(item => renderItemRow(session, item))}
+                                    </div>
+                                )}
+
+                                {existingProspectItems.length > 0 && (
+                                    <div className="space-y-3 mt-6">
+                                        <h4 className="text-xs uppercase font-bold text-sky-700 flex items-center gap-2 border-t pt-4">
+                                            <UserCheck className="h-3 w-3" /> Prospectos existentes en gestion
+                                        </h4>
+                                        {existingProspectItems.map(item => renderItemRow(session, item))}
+                                    </div>
+                                )}
+
+                                {generalCommercialItems.length > 0 && (
+                                    <div className="space-y-3 mt-6">
+                                        <h4 className="text-xs uppercase font-bold text-muted-foreground flex items-center gap-2 border-t pt-4">
+                                            <Target className="h-3 w-3" /> Gestiones comerciales generales
+                                        </h4>
+                                        {generalCommercialItems.map(item => renderItemRow(session, item))}
                                     </div>
                                 )}
 
@@ -961,40 +1204,127 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                 )}
 
                                 {session.status === 'Open' && (
-                                    <div className={`p-3 rounded-lg border border-dashed flex flex-col md:flex-row gap-3 items-end mt-4 ${canManage ? 'bg-muted/40' : 'bg-blue-50/50 border-blue-200'}`}>
-                                        <div className="w-full md:w-[120px] space-y-1">
-                                            <Label className="text-xs">Tipo</Label>
-                                            <Select value={newItemType} onValueChange={(v: any) => setNewItemType(v)}>
-                                                <SelectTrigger className="h-8 text-xs bg-background"><SelectValue /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="client">Cliente</SelectItem>
-                                                    <SelectItem value="prospect">Prospecto</SelectItem>
-                                                    <SelectItem value="general">General</SelectItem>
-                                                </SelectContent>
-                                            </Select>
+                                    <div className={`rounded-lg border border-dashed p-4 mt-4 ${canManage ? 'bg-muted/40' : 'bg-blue-50/50 border-blue-200'}`}>
+                                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                            <div>
+                                                <h4 className="flex items-center gap-2 text-sm font-semibold">
+                                                    <Target className="h-4 w-4 text-primary" />
+                                                    Nueva gestion comercial
+                                                </h4>
+                                                <p className="text-xs text-muted-foreground">Registra el inicio de una accion sobre una empresa nueva o una cuenta existente.</p>
+                                            </div>
+                                            {referenceLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                                         </div>
-                                        <div className="w-full md:w-[200px] space-y-1">
-                                            <Label className="text-xs">Nombre</Label>
-                                            <Input 
-                                                className="h-8 text-xs bg-background"
-                                                placeholder="Ej: Coca Cola" 
-                                                value={newItemEntity}
-                                                onChange={e => setNewItemEntity(e.target.value)}
-                                            />
+
+                                        <div className="grid gap-3 lg:grid-cols-4">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Origen</Label>
+                                                <Select value={entryMode} onValueChange={(value) => handleEntryModeChange(value as CommercialEntryMode)}>
+                                                    <SelectTrigger className="h-9 bg-background text-xs"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="new_company">Nueva empresa</SelectItem>
+                                                        <SelectItem value="existing_client">Cliente existente</SelectItem>
+                                                        <SelectItem value="existing_prospect">Prospecto existente</SelectItem>
+                                                        <SelectItem value="general">Gestion general</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Objetivo</Label>
+                                                <Select value={commercialIntent} onValueChange={(value) => setCommercialIntent(value as CommercialIntent)}>
+                                                    <SelectTrigger className="h-9 bg-background text-xs"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="new_contact">Primer contacto</SelectItem>
+                                                        <SelectItem value="renegotiation">Renegociar pauta/valores</SelectItem>
+                                                        <SelectItem value="new_proposal">Presentar nueva propuesta</SelectItem>
+                                                        <SelectItem value="renewal">Renovar acuerdo</SelectItem>
+                                                        <SelectItem value="recovery">Recuperar cuenta</SelectItem>
+                                                        <SelectItem value="follow_up">Seguimiento comercial</SelectItem>
+                                                        <SelectItem value="general">Gestion general</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            {(entryMode === 'new_company' || entryMode === 'general') ? (
+                                                <div className="space-y-1 lg:col-span-2">
+                                                    <Label className="text-xs">{entryMode === 'general' ? 'Titulo interno' : 'Empresa/persona'}</Label>
+                                                    <Input
+                                                        className="h-9 bg-background text-xs"
+                                                        placeholder={entryMode === 'general' ? 'Ej: Revision de cartera' : 'Ej: Nueva empresa a contactar'}
+                                                        value={newItemEntity}
+                                                        onChange={event => setNewItemEntity(event.target.value)}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-1 lg:col-span-2">
+                                                    <Label className="text-xs">{entryMode === 'existing_client' ? 'Buscar cliente' : 'Buscar prospecto'}</Label>
+                                                    <div className="relative">
+                                                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                        <Input
+                                                            className="h-9 bg-background pl-8 text-xs"
+                                                            placeholder="Escribi parte del nombre o razon social..."
+                                                            value={entitySearch}
+                                                            onChange={event => {
+                                                                setEntitySearch(event.target.value);
+                                                                setSelectedEntityId('');
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <Select value={selectedEntityId} onValueChange={setSelectedEntityId}>
+                                                        <SelectTrigger className="h-9 bg-background text-xs"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {(entryMode === 'existing_client' ? filteredClients : filteredProspects).map(entity => (
+                                                                <SelectItem key={entity.id} value={entity.id}>
+                                                                    {'denominacion' in entity
+                                                                        ? (entity.denominacion || entity.razonSocial)
+                                                                        : entity.companyName}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="flex-1 w-full space-y-1">
-                                            <Label className="text-xs">{canManage ? 'Solicitud / Pedido' : 'Propuesta / Tarea'}</Label>
-                                            <Input 
-                                                className="h-8 text-xs bg-background"
-                                                placeholder={canManage ? "Ej: Pedir propuesta..." : "Ej: Llamar para ofrecer..."}
-                                                value={newItemAction}
-                                                onChange={e => setNewItemAction(e.target.value)}
-                                                onKeyDown={e => e.key === 'Enter' && handleAddItem(session.id)}
-                                            />
+
+                                        <div className="mt-3 grid gap-3 md:grid-cols-4">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Contacto</Label>
+                                                <Input className="h-9 bg-background text-xs" value={contactName} onChange={event => setContactName(event.target.value)} placeholder="Nombre" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Telefono</Label>
+                                                <Input className="h-9 bg-background text-xs" value={contactPhone} onChange={event => setContactPhone(event.target.value)} placeholder="Telefono" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Correo</Label>
+                                                <Input className="h-9 bg-background text-xs" value={contactEmail} onChange={event => setContactEmail(event.target.value)} placeholder="mail@empresa.com" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Proxima accion</Label>
+                                                <Input className="h-9 bg-background text-xs" type="date" value={nextActionDate} onChange={event => setNextActionDate(event.target.value)} />
+                                            </div>
                                         </div>
-                                        <Button size="sm" onClick={() => handleAddItem(session.id)} className="shrink-0 h-8 px-3">
-                                            <Plus className="h-4 w-4" /> {canManage ? 'Asignar' : 'Agregar'}
-                                        </Button>
+
+                                        <div className="mt-3 grid gap-3 md:grid-cols-[220px_1fr_auto] md:items-end">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Rubro / actividad</Label>
+                                                <Input className="h-9 bg-background text-xs" value={businessLine} onChange={event => setBusinessLine(event.target.value)} placeholder="Rubro" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Detalle inicial</Label>
+                                                <Input
+                                                    className="h-9 bg-background text-xs"
+                                                    placeholder={canManage ? 'Ej: Pedir renegociacion de pauta...' : 'Ej: Llamar para presentar propuesta...'}
+                                                    value={newItemAction}
+                                                    onChange={event => setNewItemAction(event.target.value)}
+                                                    onKeyDown={event => event.key === 'Enter' && handleAddCommercialItem(session.id)}
+                                                />
+                                            </div>
+                                            <Button size="sm" onClick={() => handleAddCommercialItem(session.id)} className="h-9 shrink-0 px-3">
+                                                <Plus className="mr-2 h-4 w-4" /> {canManage ? 'Asignar gestion' : 'Agregar gestion'}
+                                            </Button>
+                                        </div>
                                     </div>
                                 )}
                             </div>
