@@ -133,11 +133,11 @@ export async function GET(request: Request) {
         && (!clientFilter || clientText.includes(clientFilter))
         && (!sellerFilter || sellerText.includes(sellerFilter));
     }).map((invoice: any) => {
-      // 1. Procesar el TOTAL de forma segura basado en los datos confirmados
+      // 1. Procesar el TOTAL de forma nativa (JavaScript entiende el punto como decimal por defecto)
       let parsedTotal = null;
       if (invoice.TOTAL != null) {
-        const cleanString = String(invoice.TOTAL).replace(/\./g, '').replace(',', '.');
-        const numericTotal = Number(cleanString);
+        // Convierte "33333.330000" o 33333.33 directamente a número
+        const numericTotal = Number(invoice.TOTAL);
         parsedTotal = isNaN(numericTotal) ? null : numericTotal;
       }
 
@@ -148,7 +148,6 @@ export async function GET(request: Request) {
           || invoice.COD_TIPO_COMPROBANTE
           || undefined,
         TOTAL: parsedTotal,
-        // Al usar el query 1235, los nombres ya vienen correctos, pero mantenemos fallbacks por seguridad
         COD_CLIENTE: invoice.COD_CLIENTE || invoice.CODIGO_CLIENTE || invoice.CLIENTE || '',
         COD_VENDEDOR: invoice.COD_VENDEDOR || invoice.COD_VEND || invoice.VENDEDOR || '',
         NOMBRE_VENDEDOR: invoice.NOMBRE_VENDEDOR || invoice.VENDEDOR_NOMBRE || invoice.NOMBRE_VEND || '',
