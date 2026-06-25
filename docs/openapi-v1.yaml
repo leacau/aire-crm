@@ -1,0 +1,739 @@
+openapi: 3.1.0
+info:
+  title: Aire CRM API
+  version: 1.0.0
+  description: Contrato compartido por la aplicación web y Android nativo.
+servers:
+  - url: /api/v1
+security:
+  - firebaseBearer: []
+paths:
+  /bootstrap:
+    get:
+      operationId: getBootstrap
+      tags: [Sistema]
+      parameters:
+        - name: platform
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [web, android]
+            default: web
+      responses:
+        '200':
+          description: Contexto autenticado, organización y módulos disponibles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Bootstrap'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /clients:
+    get:
+      operationId: listClients
+      tags: [Clientes]
+      responses:
+        '200':
+          description: Clientes visibles para la organización autenticada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Client' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createClient
+      tags: [Clientes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateClient' }
+      responses:
+        '201':
+          description: Cliente creado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /clients/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ClientId'
+    get:
+      operationId: getClient
+      tags: [Clientes]
+      responses:
+        '200':
+          description: Cliente encontrado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Client' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: updateClient
+      tags: [Clientes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateClient' }
+      responses:
+        '200':
+          description: Cliente actualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /clients/{id}/people:
+    parameters:
+      - $ref: '#/components/parameters/ClientId'
+    get:
+      operationId: listClientPeople
+      tags: [Contactos]
+      responses:
+        '200':
+          description: Contactos del cliente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Person' }
+    post:
+      operationId: createClientPerson
+      tags: [Contactos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PersonInput' }
+      responses:
+        '201':
+          description: Contacto creado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /clients/{id}/people/{personId}:
+    parameters:
+      - $ref: '#/components/parameters/ClientId'
+      - $ref: '#/components/parameters/PersonId'
+    patch:
+      operationId: updateClientPerson
+      tags: [Contactos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PersonInput' }
+      responses:
+        '200':
+          description: Contacto actualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteClientPerson
+      tags: [Contactos]
+      responses:
+        '204': { description: Contacto eliminado. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /opportunities:
+    get:
+      operationId: listOpportunities
+      tags: [Oportunidades]
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string, enum: [active, all], default: active }
+        - name: clientId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Oportunidades de la organización autenticada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Opportunity' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /opportunities/{id}:
+    parameters:
+      - $ref: '#/components/parameters/OpportunityId'
+    get:
+      operationId: getOpportunity
+      tags: [Oportunidades]
+      responses:
+        '200':
+          description: Oportunidad encontrada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Opportunity' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /tasks:
+    get:
+      operationId: listMyOpenTasks
+      tags: [Tareas]
+      responses:
+        '200':
+          description: Tareas abiertas del usuario autenticado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Task' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /tasks/{id}/complete:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      operationId: completeTask
+      tags: [Tareas]
+      responses:
+        '200':
+          description: Tarea finalizada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /tasks/{id}/reschedule:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      operationId: rescheduleTask
+      tags: [Tareas]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RescheduleTask' }
+      responses:
+        '200':
+          description: Tarea pospuesta.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /prospects:
+    get:
+      operationId: listProspects
+      tags: [Prospectos]
+      responses:
+        '200':
+          description: Prospectos visibles para la organización autenticada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Prospect'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createProspect
+      tags: [Prospectos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProspect'
+      responses:
+        '201':
+          description: Prospecto creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdResponse'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /prospects/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ProspectId'
+    patch:
+      operationId: updateProspect
+      tags: [Prospectos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProspect'
+      responses:
+        '200':
+          description: Prospecto actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdResponse'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteProspect
+      tags: [Prospectos]
+      responses:
+        '204': { description: Prospecto eliminado. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /prospects/{id}/claim:
+    parameters:
+      - $ref: '#/components/parameters/ProspectId'
+    post:
+      operationId: claimProspect
+      tags: [Prospectos]
+      responses:
+        '200':
+          description: Reclamo creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdResponse'
+        '409': { $ref: '#/components/responses/Conflict' }
+  /prospects/{id}/claim/approve:
+    parameters:
+      - $ref: '#/components/parameters/ProspectId'
+    post:
+      operationId: approveProspectClaim
+      tags: [Prospectos]
+      responses:
+        '200':
+          description: Reclamo aprobado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdResponse'
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /prospects/{id}/claim/reject:
+    parameters:
+      - $ref: '#/components/parameters/ProspectId'
+    post:
+      operationId: rejectProspectClaim
+      tags: [Prospectos]
+      responses:
+        '200':
+          description: Reclamo rechazado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdResponse'
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+components:
+  securitySchemes:
+    firebaseBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+  parameters:
+    ClientId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    PersonId:
+      name: personId
+      in: path
+      required: true
+      schema: { type: string }
+    OpportunityId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    ProspectId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    TaskId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    Bootstrap:
+      type: object
+      required: [platform, organization, user, modules]
+      properties:
+        platform: { type: string, enum: [web, android] }
+        organization:
+          type: object
+          required: [id]
+          properties:
+            id: { type: string }
+        user:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
+            email: { type: string, format: email }
+            role: { type: string }
+            area: { type: string }
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/BootstrapModule'
+    BootstrapModule:
+      type: object
+      required: [id, name, description, version, dependencies, capabilities]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        version: { type: string }
+        apiVersion: { type: string, enum: [v1] }
+        dependencies:
+          type: array
+          items: { type: string }
+        capabilities:
+          type: array
+          items: { type: string }
+    Client:
+      type: object
+      required: [id, denominacion, razonSocial, condicionIVA, provincia, localidad, tipoEntidad, rubro, email, phone, personIds, ownerId, ownerName]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        denominacion: { type: string }
+        razonSocial: { type: string }
+        razonSocialTango: { type: string }
+        cuit: { type: string }
+        idTango: { type: string }
+        tangoCompanyId: { type: string }
+        idAire: { type: string }
+        idAireSrl: { type: string }
+        idAireDigital: { type: string }
+        condicionIVA: { $ref: '#/components/schemas/CondicionIVA' }
+        provincia: { type: string }
+        localidad: { type: string }
+        tipoEntidad: { $ref: '#/components/schemas/TipoEntidad' }
+        rubro: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        observaciones: { type: string }
+        personIds:
+          type: array
+          items: { type: string }
+        ownerId: { type: string }
+        ownerName: { type: string }
+        agencyId: { type: string }
+        isNewClient: { type: boolean }
+        newClientDate: { type: string, format: date-time }
+        isDeactivated: { type: boolean }
+        needsAttention: { type: boolean }
+        allowCanjes: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CondicionIVA:
+      type: string
+      enum: [Responsable Inscripto, Monotributista, Exento, Consumidor Final]
+    TipoEntidad:
+      type: string
+      enum: [Pública, Privada, Mixta]
+    CreateClient:
+      type: object
+      additionalProperties: false
+      required: [denominacion]
+      properties:
+        denominacion: { type: string, minLength: 1, maxLength: 200 }
+        razonSocial: { type: string, maxLength: 200 }
+        razonSocialTango: { type: string, maxLength: 200 }
+        cuit: { type: string, maxLength: 20 }
+        idTango: { type: string }
+        tangoCompanyId: { type: string }
+        idAire: { type: string }
+        idAireSrl: { type: string }
+        idAireDigital: { type: string }
+        condicionIVA: { $ref: '#/components/schemas/CondicionIVA' }
+        provincia: { type: string }
+        localidad: { type: string }
+        tipoEntidad: { $ref: '#/components/schemas/TipoEntidad' }
+        rubro: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        observaciones: { type: string }
+        agencyId: { type: string }
+        isNewClient: { type: boolean }
+        isDeactivated: { type: boolean }
+        needsAttention: { type: boolean }
+        allowCanjes: { type: boolean }
+        ownerId: { type: string }
+        ownerName: { type: string }
+    UpdateClient:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        denominacion: { type: string, minLength: 1, maxLength: 200 }
+        razonSocial: { type: string, maxLength: 200 }
+        razonSocialTango: { type: string, maxLength: 200 }
+        cuit: { type: string, maxLength: 20 }
+        idTango: { type: string }
+        tangoCompanyId: { type: string }
+        idAire: { type: string }
+        idAireSrl: { type: string }
+        idAireDigital: { type: string }
+        condicionIVA: { $ref: '#/components/schemas/CondicionIVA' }
+        provincia: { type: string }
+        localidad: { type: string }
+        tipoEntidad: { $ref: '#/components/schemas/TipoEntidad' }
+        rubro: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        observaciones: { type: string }
+        agencyId: { type: string }
+        isNewClient: { type: boolean }
+        isDeactivated: { type: boolean }
+        needsAttention: { type: boolean }
+        allowCanjes: { type: boolean }
+        ownerId: { type: string }
+        ownerName: { type: string }
+        personIds:
+          type: array
+          items: { type: string }
+    Person:
+      type: object
+      required: [id, name, clientIds]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        cargo: { type: string }
+        observaciones: { type: string }
+        clientIds:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PersonInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        email: { type: string, format: email }
+        phone: { type: string, maxLength: 80 }
+        cargo: { type: string, maxLength: 500 }
+        observaciones: { type: string, maxLength: 5000 }
+    OpportunityStage:
+      type: string
+      enum: [Nuevo, Propuesta, Negociación, Negociación a Aprobar, Cerrado - No Definido, Cerrado - Ganado, Cerrado - Perdido]
+    Opportunity:
+      type: object
+      required: [id, title, clientName, clientId, value, stage, closeDate, createdAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        title: { type: string }
+        clientName: { type: string }
+        clientId: { type: string }
+        value: { type: number }
+        stage: { $ref: '#/components/schemas/OpportunityStage' }
+        highCloseProbability: { type: boolean }
+        closeDate: { type: string, format: date }
+        details: { type: string }
+        observaciones: { type: string }
+        followUpDone: { type: string }
+        followUpCurrent: { type: string }
+        followUpNext: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        stageChangedAt: { type: string, format: date-time }
+        periodicidad:
+          type: array
+          items: { type: string, enum: [Ocasional, Mensual, Trimestral, Semestral, Anual] }
+        formaDePago:
+          type: array
+          items: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        finalizationDate: { type: string, format: date }
+        ownerId: { type: string }
+        isCanje: { type: boolean }
+    Task:
+      type: object
+      required: [id, userId, userName, type, observation, timestamp, isTask]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        clientId: { type: string }
+        clientName: { type: string }
+        prospectId: { type: string }
+        prospectName: { type: string }
+        opportunityId: { type: string }
+        opportunityTitle: { type: string }
+        userId: { type: string }
+        userName: { type: string }
+        type: { type: string }
+        observation: { type: string }
+        timestamp: { type: string, format: date-time }
+        isTask: { type: boolean }
+        dueDate: { type: string, format: date-time }
+        completed: { type: boolean }
+        completedAt: { type: string, format: date-time }
+    RescheduleTask:
+      type: object
+      additionalProperties: false
+      required: [dueDate]
+      properties:
+        dueDate: { type: string, format: date-time }
+    ProspectStatus:
+      type: string
+      enum: [Nuevo, Contactado, Calificado, No Próspero, Convertido]
+    Prospect:
+      type: object
+      required: [id, companyName, createdAt, ownerId, ownerName, status]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        companyName: { type: string }
+        cuit: { type: string }
+        contactName: { type: string }
+        contactPhone: { type: string }
+        contactEmail: { type: string }
+        notes: { type: string }
+        sector: { type: string }
+        status: { $ref: '#/components/schemas/ProspectStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        statusChangedAt: { type: string, format: date-time }
+        ownerId: { type: string }
+        ownerName: { type: string }
+        creatorId: { type: string }
+        creatorName: { type: string }
+        previousOwnerId: { type: string }
+        unassignedAt: { type: [string, 'null'], format: date-time }
+        claimStatus: { type: [string, 'null'], enum: [Pendiente, null] }
+        claimantId: { type: [string, 'null'] }
+        claimantName: { type: [string, 'null'] }
+        claimedAt: { type: [string, 'null'], format: date-time }
+    CreateProspect:
+      type: object
+      additionalProperties: false
+      required: [companyName]
+      properties:
+        companyName: { type: string, minLength: 1, maxLength: 200 }
+        cuit: { type: string, maxLength: 20 }
+        contactName: { type: string, maxLength: 200 }
+        contactPhone: { type: string, maxLength: 80 }
+        contactEmail: { type: string, format: email }
+        notes: { type: string, maxLength: 10000 }
+        sector: { type: string, maxLength: 500 }
+        status: { $ref: '#/components/schemas/ProspectStatus' }
+        statusChangedAt: { type: string, format: date-time }
+    UpdateProspect:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        companyName: { type: string, minLength: 1, maxLength: 200 }
+        cuit: { type: string, maxLength: 20 }
+        contactName: { type: string, maxLength: 200 }
+        contactPhone: { type: string, maxLength: 80 }
+        contactEmail: { type: string, format: email }
+        notes: { type: string, maxLength: 10000 }
+        sector: { type: string, maxLength: 500 }
+        status: { $ref: '#/components/schemas/ProspectStatus' }
+        statusChangedAt: { type: string, format: date-time }
+        ownerId: { type: string }
+        ownerName: { type: string }
+        previousOwnerId: { type: string }
+        unassignedAt: { type: [string, 'null'], format: date-time }
+        claimStatus: { type: [string, 'null'], enum: [Pendiente, null] }
+        claimantId: { type: [string, 'null'] }
+        claimantName: { type: [string, 'null'] }
+        claimedAt: { type: [string, 'null'], format: date-time }
+    IdResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id]
+          properties:
+            id: { type: string }
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error: { type: string }
+        code: { type: string }
+  responses:
+    Unauthorized:
+      description: Autenticación ausente o inválida.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: El usuario no tiene la capacidad requerida.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: El recurso no existe en la organización autenticada.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: La operación entra en conflicto con el estado actual.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: La solicitud no cumple el contrato.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

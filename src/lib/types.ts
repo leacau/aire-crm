@@ -1,24 +1,8 @@
-export type OpportunityStage =
-  | 'Nuevo'
-  | 'Propuesta'
-  | 'Negociación'
-  | 'Negociación a Aprobar'
-  | 'Cerrado - No Definido'
-  | 'Cerrado - Ganado'
-  | 'Cerrado - Perdido';
+import type { Client } from '@/modules/clients/domain/client';
+import type { OpportunityStage } from '@/modules/opportunities/domain/opportunity';
 
-export type BonificacionEstado = 'Pendiente' | 'Autorizado' | 'Rechazado';
-
-export const periodicidadOptions = ['Ocasional', 'Mensual', 'Trimestral', 'Semestral', 'Anual'] as const;
-export type Periodicidad = typeof periodicidadOptions[number];
-
-export const formaDePagoOptions = ['Anticipado', 'A fecha', '30 días', '45 días', '60 días', '90 días'] as const;
-export type FormaDePago = typeof formaDePagoOptions[number];
-
-export type ProposalFile = {
-  name: string;
-  url: string;
-};
+export { formaDePagoOptions, pautaTypes, periodicidadOptions } from '@/modules/opportunities/domain/opportunity';
+export type { BonificacionEstado, FormaDePago, Opportunity, OpportunityPeriod, OpportunityStage, OrdenPautado, PautaType, Periodicidad, ProposalFile, ProposalItem } from '@/modules/opportunities/domain/opportunity';
 
 export const invoiceStatusOptions = ['Pendiente', 'Generada', 'Enviada a Cobrar', 'Pagada'] as const;
 export type InvoiceStatus = typeof invoiceStatusOptions[number];
@@ -111,160 +95,13 @@ export type SupervisorComment = {
   lastSeenAtBy?: Record<string, string>;
 };
 
-export type PautaType = 'Spot' | 'PNT' | 'Sorteo' | 'Nota';
-export const pautaTypes: PautaType[] = ['Spot', 'PNT', 'Sorteo', 'Nota'];
-
-export type OrdenPautado = {
-    id: string;
-    tipoPauta: PautaType;
-    programas?: string[];
-    dias?: number[]; 
-    fechaInicio?: string;
-    fechaFin?: string;
-    segundos?: number;
-    repeticiones?: number;
-    textoPNT?: string;
-    textoPNTaprobado?: boolean;
-};
-
-export type ProposalItem = {
-  id: string;
-  programId: string;
-  programName: string;
-  type: 'spotRadio' | 'spotTv' | 'pnt' | 'pntMasBarrida' | 'auspicio' | 'notaComercial';
-  label: string;
-  cantidadDia: number;
-  cantidadMes: number;
-  duracionSegundos?: number; 
-  valorUnitario: number;
-  subtotal: number;
-};
-
-export type Opportunity = {
-  id: string;
-  title: string;
-  clientName: string;
-  clientId: string;
-  value: number; 
-  stage: OpportunityStage;
-  highCloseProbability?: boolean;
-  closeDate: string;
-  details?: string;
-  observaciones?: string;
-  followUpDone?: string;
-  followUpDoneUpdatedAt?: string;
-  followUpCurrent?: string;
-  followUpCurrentUpdatedAt?: string;
-  followUpNext?: string;
-  followUpNextUpdatedAt?: string;
-  createdAt: string;
-  updatedAt?: string;
-  manualUpdateDate?: string;
-  manualUpdateHistory?: string[];
-  stageChangedAt?: string;
-  bonificacionDetalle?: string;
-  bonificacionEstado?: BonificacionEstado;
-  bonificacionPorId?: string;
-  bonificacionAutorizadoPorNombre?: string;
-  bonificacionFechaAutorizacion?: string;
-  bonificacionObservaciones?: string;
-  periodicidad?: Periodicidad[];
-  facturaPorAgencia?: boolean;
-  agencyId?: string;
-  formaDePago?: FormaDePago[];
-  fechaFacturacion?: string; 
-  proposalFiles?: ProposalFile[];
-  ordenesPautado?: OrdenPautado[];
-  proposalItems?: ProposalItem[];
-  valorTarifario?: number; 
-  finalizationDate?: string;
-  startDate?: string;        
-  endDate?: string;          
-  periodHistory?: OpportunityPeriod[];
-  ownerId?: string;
-  isCanje?: boolean;
-};
-
-export type OpportunityPeriod = {
-  startDate: string;
-  endDate: string;
-  value: number;
-  updatedAt: string;
-  updatedBy?: string;
-};
-
-export type Person = {
-  id: string;
-  name: string;
-  email?: string;
-  phone?: string;
-  cargo?: string;
-  observaciones?: string;
-  clientIds: string[];
-};
-
-export type TipoEntidad = 'Pública' | 'Privada' | 'Mixta';
-export type CondicionIVA = 'Responsable Inscripto' | 'Monotributista' | 'Exento' | 'Consumidor Final';
+export type { Person, TipoEntidad, CondicionIVA } from '@/modules/clients/domain/client';
 export type ApprovalItemType = 'Nota Comercial' | 'Pedido de Redes' | 'Orden de Publicidad' | 'Nota Web / Gacetilla';
 
-export type Client = {
-  id: string;
-  denominacion: string;
-  razonSocial: string;
-  razonSocialTango?: string;
-  cuit?: string;
-  idTango?: string;
-  tangoCompanyId?: string;
-  idAireSrl?: string;
-  idAireDigital?: string;
-  idAire?: string;
-  condicionIVA: CondicionIVA;
-  provincia: string;
-  localidad: string;
-  tipoEntidad: TipoEntidad;
-  rubro: string;
-  email: string;
-  phone: string;
-  observaciones?: string;
-  personIds: string[];
-  ownerId: string;
-  ownerName: string;
-  agencyId?: string;
-  isNewClient?: boolean;
-  newClientDate?: string;
-  isDeactivated?: boolean;
-  deactivationHistory?: string[];
-  needsAttention?: boolean;
-  allowCanjes?: boolean;
-  createdAt?: string;
-};
+export type { Client } from '@/modules/clients/domain/client';
 
-export const prospectStatusOptions = ['Nuevo', 'Contactado', 'Calificado', 'No Próspero', 'Convertido'] as const;
-export type ProspectStatus = typeof prospectStatusOptions[number];
-
-export type Prospect = {
-  id: string;
-  companyName: string;
-  contactName?: string;
-  contactPhone?: string;
-  contactEmail?: string;
-  createdAt: string;
-  creatorId?: string;
-  creatorName?: string;
-  lastProspectNotificationAt?: string;
-  notes?: string;
-  ownerId: string;
-  ownerName: string;
-  sector?: string;
-  statusChangedAt?: string;
-  status: ProspectStatus;
-  previousOwnerId?: string;
-  unassignedAt?: string;
-  claimStatus?: 'Pendiente';
-  claimantId?: string;
-  claimantName?: string;
-  claimedAt?: string;
-};
+export { prospectStatusOptions } from '@/modules/prospects/domain/prospect';
+export type { Prospect, ProspectStatus } from '@/modules/prospects/domain/prospect';
 
 export type Agency = {
   id: string;
@@ -303,30 +140,8 @@ export type ActivityLog = {
   timestamp: string;
 };
 
-export const clientActivityTypes = ['Llamada', 'WhatsApp', 'Meet', 'Reunión', 'Visita Aire', 'Visita a empresa', 'Mail', 'LinkedIn', 'Otra'] as const;
-export type ClientActivityType = typeof clientActivityTypes[number];
-
-export type ClientActivity = {
-    id: string;
-    clientId?: string;
-    clientName?: string;
-    prospectId?: string;
-    prospectName?: string;
-    opportunityId?: string;
-    opportunityTitle?: string;
-    userId: string;
-    userName: string;
-    type: ClientActivityType;
-    observation: string;
-    timestamp: string;
-    isTask: boolean;
-    dueDate?: string;
-    completed?: boolean;
-    completedAt?: string;
-    completedByUserId?: string;
-    completedByUserName?: string;
-    googleCalendarEventId?: string;
-}
+export { clientActivityTypes } from '@/modules/tasks/domain/task';
+export type { ClientActivity, ClientActivityType } from '@/modules/tasks/domain/task';
 
 export type CanjeEstado =
   | 'Necesidad cargada'
@@ -515,6 +330,7 @@ export interface SellerCompanyConfig {
 
 export type User = {
   id: string;
+  organizationId?: string;
   name:string;
   email: string;
   role: UserRole;

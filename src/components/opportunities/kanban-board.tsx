@@ -18,7 +18,9 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getOpportunities, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service'; // 🟢 Usamos la rápida
+import { getOpportunities } from '@/modules/opportunities/client';
+import { getClients } from '@/modules/clients/client';
+import { updateOpportunity, getUserProfile } from '@/lib/firebase-service';
 import { invalidateCache } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';

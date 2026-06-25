@@ -74,7 +74,9 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers, getInvoicesForClient, createInvoice, getCommercialNotesByClientId, getPrograms, deleteCommercialNote } from '@/lib/firebase-service';
+import { createPerson, deletePerson, getPeopleByClientId, updatePerson } from '@/modules/clients/client';
+import { getOpportunitiesByClientId } from '@/modules/opportunities/client';
+import { createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, getAllUsers, getInvoicesForClient, createInvoice, getCommercialNotesByClientId, getPrograms, deleteCommercialNote } from '@/lib/firebase-service';
 import { sendEmail, createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';

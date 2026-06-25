@@ -7,7 +7,8 @@ import type { DateRange } from 'react-day-picker';
 import { MonthYearPicker } from '@/components/ui/month-year-picker';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getAllUsers, getClients, getAgencies } from '@/lib/firebase-service'; // 🟢 PREFETCH
+import { getClients } from '@/modules/clients/client';
+import { getAllUsers, getAgencies } from '@/lib/firebase-service';
 import type { User, Client } from '@/lib/types';
 import { startOfMonth, endOfMonth } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';

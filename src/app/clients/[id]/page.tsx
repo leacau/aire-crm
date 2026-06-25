@@ -11,8 +11,10 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import type { Client, Opportunity, Invoice } from '@/lib/types';
-import { getClient, updateClient, getClients, createOpportunity, createInvoice } from '@/lib/firebase-service';
+import type { Opportunity, Invoice } from '@/lib/types';
+import type { Client } from '@/modules/clients/client';
+import { getClient, updateClient, getClients } from '@/modules/clients/client';
+import { createOpportunity, createInvoice } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ClientPage() {

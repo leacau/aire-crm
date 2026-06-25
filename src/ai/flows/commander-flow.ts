@@ -4,8 +4,10 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { createProspect, createClientActivity, getProspects, createClient } from '@/lib/firebase-service';
-import type { Prospect, ClientActivity, User, Client } from '@/lib/types';
+import { createClientActivity, createClient } from '@/lib/firebase-service';
+import { createProspect, getProspects } from '@/modules/prospects';
+import type { Prospect } from '@/modules/prospects';
+import type { ClientActivity, User, Client } from '@/lib/types';
 import { z } from 'zod';
 import { findBestMatch } from 'string-similarity';
 

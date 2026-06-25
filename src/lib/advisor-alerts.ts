@@ -1,6 +1,7 @@
 import { addMonths, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { Client, Invoice, Opportunity, OpportunityStage, Prospect, SupervisorComment, User } from './types';
+import type { Client, Invoice, Opportunity, OpportunityStage, SupervisorComment, User } from './types';
+import type { Prospect } from '@/modules/prospects';
 import { getManualInvoiceDate } from './invoice-utils';
 
 export type AdvisorAlertSeverity = 'info' | 'warning' | 'critical';

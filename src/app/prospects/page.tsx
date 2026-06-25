@@ -6,20 +6,22 @@ import { Button } from '@/components/ui/button';
 import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search, Activity, Clock, Bell, Hand, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import type { Prospect, User, Client, ClientActivity } from '@/lib/types';
+import type { User, Client, ClientActivity } from '@/lib/types';
+import type { Prospect } from '@/modules/prospects/client';
+import {
+    approveProspectClaim,
+    claimProspect,
+    createProspect,
+    deleteProspect,
+    getProspects,
+    rejectProspectClaim,
+    updateProspect,
+} from '@/modules/prospects/client';
 import { 
-    getProspects, 
-    createProspect, 
-    updateProspect, 
-    deleteProspect, 
     getAllUsers, 
     getAllClientActivities, 
     getOpportunityAlertsConfig, 
-    recordProspectNotifications,
     autoUpdateCoachingSession,
-    claimProspect, 
-    approveProspectClaim, 
-    rejectProspectClaim
 } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';

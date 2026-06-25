@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
-import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getProspects, getObjectiveVisibilityConfig, updateObjectiveVisibilityConfig, syncRegisteredUsersFromAuth } from '@/lib/firebase-service';
-import type { Opportunity, User, Client, UserRole, Prospect, AreaType, ObjectiveVisibilityConfig, SellerCompanyConfig } from '@/lib/types';
+import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getObjectiveVisibilityConfig, updateObjectiveVisibilityConfig, syncRegisteredUsersFromAuth } from '@/lib/firebase-service';
+import { getProspects } from '@/modules/prospects/client';
+import type { Opportunity, User, Client, UserRole, AreaType, ObjectiveVisibilityConfig, SellerCompanyConfig } from '@/lib/types';
+import type { Prospect } from '@/modules/prospects/client';
 import { userRoles } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';

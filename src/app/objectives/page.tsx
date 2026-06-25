@@ -8,8 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Target, CheckCircle, TrendingUp, TrendingDown } from 'lucide-react';
-import { getOpportunities, getInvoices, getClients, getAllUsers, getProspects, getSupervisorCommentThreadsForUser, getObjectiveVisibilityConfig } from '@/lib/firebase-service';
-import type { Opportunity, Invoice, Client, User, Prospect, SupervisorComment } from '@/lib/types';
+import { getOpportunities, getInvoices, getClients, getAllUsers, getSupervisorCommentThreadsForUser, getObjectiveVisibilityConfig } from '@/lib/firebase-service';
+import { getProspects } from '@/modules/prospects/client';
+import type { Opportunity, Invoice, Client, User, SupervisorComment } from '@/lib/types';
+import type { Prospect } from '@/modules/prospects/client';
 import { addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO, format, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';

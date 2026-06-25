@@ -4,10 +4,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { 
     getClients, createClient, createOpportunity, saveConvenioCanje, createAdvertisingOrder, createCanje, updateCanje,
-    getPrograms, getProspects, getConveniosCanje, getOpportunityById, getAdvertisingOrdersByOpportunity, 
+    getPrograms, getConveniosCanje, getOpportunityById, getAdvertisingOrdersByOpportunity, 
     updateOpportunity, updateConvenioCanje, updateAdvertisingOrder, deleteConvenioCanje 
 } from '@/lib/firebase-service';
-import type { Client, Program, Prospect, ConvenioCanje, CondicionIVA, TipoEntidad, AdvertisingOrder } from '@/lib/types';
+import { getProspects } from '@/modules/prospects/client';
+import type { Prospect } from '@/modules/prospects/client';
+import type { Client, Program, ConvenioCanje, CondicionIVA, TipoEntidad, AdvertisingOrder } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 
 import { useForm } from 'react-hook-form';
