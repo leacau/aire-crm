@@ -3,8 +3,9 @@ import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 
 const DEFAULT_TANGO_BASE_URL = 'https://040896-002.connect.axoft.com';
 const COMPANY_QUERIES: Record<string, { process: string; customQuery: string }> = {
-  '5': { process: '17942', customQuery: '0' },
-  '6': { process: '17943', customQuery: '1233' },
+  '4': { process: '17943', customQuery: '1235' }, // Aire (Avión)
+  '5': { process: '17943', customQuery: '1235' }, // SRL
+  '6': { process: '17943', customQuery: '1235' }, // SAS
 };
 const PAGE_SIZE = 2000;
 const MAX_PAGES = 100;
@@ -132,7 +133,7 @@ export async function GET(request: Request) {
         && (!clientFilter || clientText.includes(clientFilter))
         && (!sellerFilter || sellerText.includes(sellerFilter));
     }).map((invoice: any) => {
-      // 1. Procesar el TOTAL de forma segura (soporta número o string con formato)
+      // 1. Procesar el TOTAL de forma segura basado en los datos confirmados
       let parsedTotal = null;
       if (invoice.TOTAL != null) {
         const cleanString = String(invoice.TOTAL).replace(/\./g, '').replace(',', '.');
@@ -147,7 +148,7 @@ export async function GET(request: Request) {
           || invoice.COD_TIPO_COMPROBANTE
           || undefined,
         TOTAL: parsedTotal,
-        // 2. Fallbacks por si las columnas de SRL se llaman distinto
+        // Al usar el query 1235, los nombres ya vienen correctos, pero mantenemos fallbacks por seguridad
         COD_CLIENTE: invoice.COD_CLIENTE || invoice.CODIGO_CLIENTE || invoice.CLIENTE || '',
         COD_VENDEDOR: invoice.COD_VENDEDOR || invoice.COD_VEND || invoice.VENDEDOR || '',
         NOMBRE_VENDEDOR: invoice.NOMBRE_VENDEDOR || invoice.VENDEDOR_NOMBRE || invoice.NOMBRE_VEND || '',
