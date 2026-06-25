@@ -35,11 +35,23 @@ const COMPANIES = [
 ];
 const ROWS_PER_PAGE = 50;
 
-const formatCurrency = (value?: number | null) => new Intl.NumberFormat('es-AR', {
-  style: 'currency',
-  currency: 'ARS',
-  maximumFractionDigits: 2,
-}).format(Number(value));
+const formatCurrency = (value?: any) => {
+  let numericValue = 0;
+  
+  if (typeof value === 'number') {
+    numericValue = value;
+  } else if (typeof value === 'string') {
+    // Limpiamos el string: quitamos los puntos de miles y cambiamos la coma decimal por punto
+    const cleanString = value.replace(/\./g, '').replace(',', '.');
+    numericValue = Number(cleanString);
+  }
+
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    maximumFractionDigits: 2,
+  }).format(Number.isNaN(numericValue) ? 0 : numericValue);
+};
 
 const normalizeCode = (value: unknown) => {
   const normalized = String(value || '').trim().replace(/^0+/, '');
