@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import type { User, CoachingSession, CoachingItem, CoachingFollowUpEntry, Client, Prospect } from '@/lib/types';
-import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, updateCoachingFollowUpEntry, deleteCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem, invalidateCache, getClients, getProspects } from '@/lib/firebase-service';
+import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, updateCoachingFollowUpEntry, deleteCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem, invalidateCache, getClients, getProspects, createProspect } from '@/lib/firebase-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Briefcase, Pencil, X, Check, RefreshCw, Building2, Search, Target } from 'lucide-react';
+import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Briefcase, Pencil, X, Check, RefreshCw, Building2, Search, Target, UserPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -107,6 +107,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
         text: string;
     } | null>(null);
     const [savingEntry, setSavingEntry] = useState(false);
+    const [convertingItemId, setConvertingItemId] = useState<string | null>(null);
 
     const canManage = isBoss || userInfo?.role === 'Gerencia' || userInfo?.role === 'Jefe' || userInfo?.role === 'Admin';
     const selectedClient = useMemo(() => clients.find(client => client.id === selectedEntityId), [clients, selectedEntityId]);
@@ -498,6 +499,71 @@ export function CoachingView({ advisor }: { advisor: User }) {
         }
     };
 
+    const handleConvertToProspect = async (session: CoachingSession, item: CoachingItem) => {
+        if (!userInfo) return;
+        if (item.entityType !== 'prospect' || item.commercialWorkType !== 'new_company') return;
+
+        setConvertingItemId(item.id);
+        try {
+            const prospectId = await createProspect({
+                companyName: item.entityName,
+                contactName: item.contactName || '',
+                contactPhone: item.contactPhone || '',
+                contactEmail: item.contactEmail || '',
+                notes: `Creado desde Seguimiento.\n\n${item.action || ''}`.trim(),
+                sector: item.businessLine || '',
+                status: 'Nuevo',
+            }, userInfo.id, userInfo.name, { skipCoachingUpdate: true });
+
+            const now = new Date().toISOString();
+            await updateCoachingItem(session.id, item.id, {
+                entityId: prospectId,
+                entityType: 'prospect',
+                commercialWorkType: 'existing_prospect',
+                lastUpdate: now,
+            } as any, userInfo.id, userInfo.name, item.taskId, session.advisorId);
+
+            const entry = await appendCoachingFollowUpEntry(
+                session.id,
+                item.id,
+                'followUpDone',
+                `Se convirtio la empresa en prospecto del CRM.`,
+                userInfo.id,
+                userInfo.name,
+            );
+
+            updateLocalItem(session.id, item.id, current => ({
+                ...current,
+                entityId: prospectId,
+                entityType: 'prospect',
+                commercialWorkType: 'existing_prospect',
+                followUpDoneEntries: entry ? [...(current.followUpDoneEntries || []), entry] : current.followUpDoneEntries,
+                followUpDoneUpdatedAt: entry?.createdAt || now,
+                lastUpdate: entry?.createdAt || now,
+            }));
+            setProspects(prev => [{
+                id: prospectId,
+                companyName: item.entityName,
+                contactName: item.contactName,
+                contactPhone: item.contactPhone,
+                contactEmail: item.contactEmail,
+                createdAt: now,
+                creatorId: userInfo.id,
+                creatorName: userInfo.name,
+                ownerId: userInfo.id,
+                ownerName: userInfo.name,
+                sector: item.businessLine,
+                status: 'Nuevo',
+            }, ...prev]);
+            toast({ title: 'Prospecto creado', description: `${item.entityName} ya quedo vinculado al seguimiento.` });
+        } catch (error) {
+            console.error('Error converting coaching item to prospect:', error);
+            toast({ title: 'No se pudo crear el prospecto', variant: 'destructive' });
+        } finally {
+            setConvertingItemId(null);
+        }
+    };
+
     const keepCurrentItemOrder = (items: CoachingItem[]) => items;
 
     const formatUpdateDate = (value?: string) => {
@@ -834,6 +900,11 @@ export function CoachingView({ advisor }: { advisor: User }) {
 
     const renderItemRow = (session: CoachingSession, item: CoachingItem) => {
         const timeline = getFollowUpTimeline(item);
+        const canConvertToProspect = session.status === 'Open'
+            && item.entityType === 'prospect'
+            && item.commercialWorkType === 'new_company'
+            && item.status !== 'Cancelado'
+            && item.status !== 'Completado';
 
         return (
         <div key={item.id} className="grid grid-cols-1 md:grid-cols-[45%_55%] gap-4 p-4 border rounded-lg bg-card/50 shadow-sm transition-shadow">
@@ -859,6 +930,23 @@ export function CoachingView({ advisor }: { advisor: User }) {
                         {item.contactEmail && <span><strong>Correo:</strong> {item.contactEmail}</span>}
                         {item.nextActionDate && <span><strong>Proxima accion:</strong> {format(parseISO(item.nextActionDate), 'dd/MM/yyyy')}</span>}
                     </div>
+                )}
+
+                {canConvertToProspect && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-full justify-start text-xs"
+                        onClick={() => handleConvertToProspect(session, item)}
+                        disabled={convertingItemId === item.id}
+                    >
+                        {convertingItemId === item.id ? (
+                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                            <UserPlus className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        Convertir en prospecto
+                    </Button>
                 )}
                 
                 {(canManage || (item.origin === 'advisor' && session.status === 'Open')) && (
