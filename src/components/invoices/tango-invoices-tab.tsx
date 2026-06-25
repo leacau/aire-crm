@@ -37,21 +37,20 @@ const COMPANIES = [
 const ROWS_PER_PAGE = 50;
 
 const formatCurrency = (value?: any) => {
-  let numericValue = 0;
+  const numericValue = Number(value);
   
-  if (typeof value === 'number') {
-    numericValue = value;
-  } else if (typeof value === 'string') {
-    // Limpiamos el string: quitamos los puntos de miles y cambiamos la coma decimal por punto
-    const cleanString = value.replace(/\./g, '').replace(',', '.');
-    numericValue = Number(cleanString);
+  if (Number.isNaN(numericValue) || value == null) {
+    return 'No informado';
   }
 
+  // Intl.NumberFormat se encarga automáticamente de poner la coma para los decimales 
+  // y los puntos para los miles según la configuración de Argentina ('es-AR')
   return new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS',
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(Number.isNaN(numericValue) ? 0 : numericValue);
+  }).format(numericValue);
 };
 
 const normalizeCode = (value: unknown) => {
