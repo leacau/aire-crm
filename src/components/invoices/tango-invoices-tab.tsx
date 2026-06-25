@@ -30,6 +30,7 @@ type TangoInvoice = {
 };
 
 const COMPANIES = [
+  { id: '4', label: 'Aire (Avión)' },
   { id: '5', label: 'SRL' },
   { id: '6', label: 'SAS' },
 ];
@@ -190,13 +191,16 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
             {loading ? (
               <TableRow><TableCell colSpan={7} className="h-32 text-center"><Spinner size="large" /></TableCell></TableRow>
             ) : visibleInvoices.length > 0 ? visibleInvoices.map((invoice, index) => {
-              const clientCodeField = company === '5' ? 'idAireSrl' : 'idAireDigital';
-              const crmClient = clients.find(item => normalizeCode(item[clientCodeField]) === normalizeCode(invoice.COD_CLIENTE));
-              const sellerCompanyName = company === '5' ? 'Aire SRL' : 'Aire Digital SAS';
-              const crmSeller = users.find(user => user.sellerConfig?.some(config =>
-                config.companyName === sellerCompanyName
-                && config.codes.some(code => normalizeCode(code) === normalizeCode(invoice.COD_VENDEDOR))))
-                || users.find(user => normalizeText(user.name) === normalizeText(invoice.NOMBRE_VENDEDOR));
+              const clientCodeField = company === '5' ? 'idAireSrl' : company === '4' ? 'idAire' : 'idAireDigital';
+const crmClient = clients.find(item => normalizeCode(item[clientCodeField]) === normalizeCode(invoice.COD_CLIENTE));
+
+// Normalizamos la búsqueda de la empresa ('aire', 'srl', 'sas') para evitar problemas de tipeo exacto
+const sellerCompanySearch = company === '5' ? 'srl' : company === '4' ? 'aire' : 'sas';
+
+const crmSeller = users.find(user => user.sellerConfig?.some(config =>
+  config.companyName.toLowerCase().includes(sellerCompanySearch)
+  && config.codes.some(code => normalizeCode(code) === normalizeCode(invoice.COD_VENDEDOR))))
+  || users.find(user => normalizeText(user.name) === normalizeText(invoice.NOMBRE_VENDEDOR));
 
               return <TableRow key={`${invoice.ID_GVA12 || invoice.NRO_COMPROBANTE || 'invoice'}-${index}`}>
                 <TableCell>{invoice.FECHA_DE_EMISION ? format(new Date(invoice.FECHA_DE_EMISION), 'dd/MM/yyyy') : '-'}</TableCell>
