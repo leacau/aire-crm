@@ -2844,7 +2844,8 @@ export const getClient = async (id: string): Promise<Client | null> => {
 export const createClient = async (
     clientData: Omit<Client, 'id' | 'personIds' | 'ownerId' | 'ownerName' | 'deactivationHistory' | 'newClientDate'>,
     userId?: string,
-    userName?: string
+    userName?: string,
+    options?: { skipCoachingUpdate?: boolean },
 ): Promise<string> => {
     // 🟢 NORMALIZAMOS LOS TEXTOS AQUÍ (Lo que hicimos antes)
     const denominacionLimpia = toTitleCase(clientData.denominacion);
@@ -2896,7 +2897,7 @@ export const createClient = async (
             ownerName: userName
         });
     }
-    if (userId && userName) {
+    if (userId && userName && !options?.skipCoachingUpdate) {
         try {
             await autoUpdateCoachingSession(userId, userName, 'client', docRef.id, clientData.denominacion, 'Nuevo cliente cargado en el sistema.');
         } catch (e) {

@@ -32,6 +32,7 @@ interface ClientFormDialogProps {
   onSaveSuccess: (clientData?: any) => void;
   client?: Partial<Client> | null;
   onValidateCuit: (cuit: string, clientId?: string) => Promise<string | false>;
+  createOptions?: { skipCoachingUpdate?: boolean };
 }
 
 const initialFormData: ClientFormData = {
@@ -61,6 +62,7 @@ export function ClientFormDialog({
   onSaveSuccess,
   client = null,
   onValidateCuit,
+  createOptions,
 }: ClientFormDialogProps) {
   const { userInfo } = useAuth();
   const [formData, setFormData] = useState<ClientFormData>(initialFormData);
@@ -144,9 +146,9 @@ export function ClientFormDialog({
            if (!ownerId || !ownerName) {
                throw new Error("No se pudo determinar el propietario del cliente.");
            }
-           await createClient(finalData, ownerId, ownerName);
+           const clientId = await createClient(finalData, ownerId, ownerName, createOptions);
            toast({ title: "Cliente Creado", description: `${finalData.denominacion} ha sido añadido a la lista.`});
-           onSaveSuccess(); 
+           onSaveSuccess({ id: clientId, ...finalData, ownerId, ownerName }); 
         }
         onOpenChange(false);
     } catch (error: any) {
