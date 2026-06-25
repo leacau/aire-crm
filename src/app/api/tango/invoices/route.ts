@@ -131,14 +131,28 @@ export async function GET(request: Request) {
         && (!toDate || issueDate <= toDate)
         && (!clientFilter || clientText.includes(clientFilter))
         && (!sellerFilter || sellerText.includes(sellerFilter));
-    }).map(invoice => ({
-      ...invoice,
-      TIPO_COMPROBANTE: invoice.TIPO_COMPROBANTE
-        || invoice.DESC_TIPO_COMPROBANTE
-        || invoice.COD_TIPO_COMPROBANTE
-        || undefined,
-      TOTAL: typeof invoice.TOTAL === 'number' ? invoice.TOTAL : null,
-    }));
+    }).map((invoice: any) => {
+      // 1. Procesar el TOTAL de forma segura (soporta número o string con formato)
+      let parsedTotal = null;
+      if (invoice.TOTAL != null) {
+        const cleanString = String(invoice.TOTAL).replace(/\./g, '').replace(',', '.');
+        const numericTotal = Number(cleanString);
+        parsedTotal = isNaN(numericTotal) ? null : numericTotal;
+      }
+
+      return {
+        ...invoice,
+        TIPO_COMPROBANTE: invoice.TIPO_COMPROBANTE
+          || invoice.DESC_TIPO_COMPROBANTE
+          || invoice.COD_TIPO_COMPROBANTE
+          || undefined,
+        TOTAL: parsedTotal,
+        // 2. Fallbacks por si las columnas de SRL se llaman distinto
+        COD_CLIENTE: invoice.COD_CLIENTE || invoice.CODIGO_CLIENTE || invoice.CLIENTE || '',
+        COD_VENDEDOR: invoice.COD_VENDEDOR || invoice.COD_VEND || invoice.VENDEDOR || '',
+        NOMBRE_VENDEDOR: invoice.NOMBRE_VENDEDOR || invoice.VENDEDOR_NOMBRE || invoice.NOMBRE_VEND || '',
+      };
+    });
 
     return NextResponse.json({
       list: filtered,
