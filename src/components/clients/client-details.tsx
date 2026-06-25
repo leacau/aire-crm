@@ -43,6 +43,8 @@ import {
   ClipboardList,
   FileDown,
   Eye,
+  MoreHorizontal,
+  Receipt
 } from 'lucide-react';
 import {
   Table,
@@ -71,7 +73,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
 import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers, getInvoicesForClient, createInvoice, getCommercialNotesByClientId, getPrograms, deleteCommercialNote } from '@/lib/firebase-service';
@@ -106,6 +107,7 @@ import { ClientPdf } from './client-pdf';
 import { CommentThread } from '@/components/comments/comment-thread';
 import { NotePdf } from '@/components/notas/note-pdf';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
+import { ClientTangoInvoices } from './client-tango-invoices';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'bg-blue-500',
@@ -842,6 +844,7 @@ export function ClientDetails({
           <TabsTrigger value="activity">Actividad</TabsTrigger>
           <TabsTrigger value="notes">Notas Com.</TabsTrigger>
           <TabsTrigger value="history">Historial</TabsTrigger>
+          <TabsTrigger value="facturas-tango">Facturas</TabsTrigger>
         </TabsList>
         <TabsContent value="opportunities">
           <Card>
@@ -1216,6 +1219,9 @@ export function ClientDetails({
                 </CardContent>
             </Card>
         </TabsContent>
+        <TabsContent value="facturas-tango" className="mt-4 outline-none">
+  <ClientTangoInvoices client={client} />
+</TabsContent>
       </Tabs>
       
       {isOpportunityFormOpen && (
