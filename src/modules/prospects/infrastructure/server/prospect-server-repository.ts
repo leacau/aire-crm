@@ -85,6 +85,18 @@ export async function listProspectsForOrganization(organizationId: string): Prom
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
 }
 
+export async function listProspectIdsForOrganization(organizationId: string): Promise<Set<string>> {
+  const snapshot = organizationId === DEFAULT_ORGANIZATION_ID
+    ? await prospectsCollection.select().get()
+    : await prospectsCollection.where('organizationId', '==', organizationId).select().get();
+
+  return new Set(
+    snapshot.docs
+      .filter(document => belongsToOrganization(document.data(), organizationId))
+      .map(document => document.id),
+  );
+}
+
 export async function createProspectOnServer(
   input: CreateProspectRequest,
   user: ServerUser,

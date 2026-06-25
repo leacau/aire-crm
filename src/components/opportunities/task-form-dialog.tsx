@@ -20,7 +20,7 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { CalendarIcon, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { createClientActivity } from '@/lib/firebase-service';
+import { createClientActivity } from '@/modules/tasks/client';
 import { createCalendarEvent } from '@/lib/google-gmail-service';
 import type { Opportunity, ClientActivity, User } from '@/lib/types';
 import { Spinner } from '../ui/spinner';

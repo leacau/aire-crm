@@ -29,7 +29,6 @@ import {
   getOpportunities,
   getDashboardTasks,
   getClients,
-  updateClientActivity,
   getAllUsers,
   getDashboardInvoices,
   getPendingPaymentEntries,
@@ -38,6 +37,7 @@ import {
   cleanupOldActivities,
   getReportDataForAdvisors // 🟢 IMPORTACIÓN NUEVA
 } from '@/lib/firebase-service';
+import { updateClientActivity } from '@/modules/tasks/client';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, eachMonthOfInterval, differenceInDays, startOfDay, addDays, isAfter, isBefore, addMonths } from 'date-fns';

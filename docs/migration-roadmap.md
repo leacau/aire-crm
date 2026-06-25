@@ -19,6 +19,7 @@ Estado actual:
 - Prospectos fue el módulo piloto y ya usa API v1 para sus operaciones centrales.
 - Clientes/personas ya tiene lectura, alta y edición detrás de API v1.
 - Oportunidades ya tiene consultas de lectura detrás de API v1.
+- Actividades ya tiene lectura, alta y actualización detrás de API v1.
 - Tareas ya tiene lectura, finalización y reprogramación detrás de API v1.
 - Las operaciones destructivas o con cascadas complejas quedan pendientes hasta rediseñar sus efectos laterales.
 

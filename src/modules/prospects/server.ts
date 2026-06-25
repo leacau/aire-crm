@@ -3,6 +3,7 @@ export {
   claimProspectOnServer,
   createProspectOnServer,
   deleteProspectOnServer,
+  listProspectIdsForOrganization,
   listProspectsForOrganization,
   resolveProspectClaimOnServer,
   updateProspectOnServer,

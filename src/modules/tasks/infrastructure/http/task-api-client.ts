@@ -3,8 +3,64 @@
 import { apiRequest } from '@/core/http/api-client';
 import type { ClientActivity } from '../../domain/task';
 
+type CreateClientActivityInput = Omit<ClientActivity, 'id' | 'timestamp'>;
+type UpdateClientActivityInput = Partial<Omit<ClientActivity, 'id'>>;
+
+const ACTIVITIES_PATH = '/api/v1/activities';
+
 export function getMyOpenTasks(): Promise<ClientActivity[]> {
   return apiRequest<ClientActivity[]>('/api/v1/tasks');
+}
+
+export function getClientActivities(clientId: string): Promise<ClientActivity[]> {
+  const params = new URLSearchParams({ clientId });
+  return apiRequest<ClientActivity[]>(`${ACTIVITIES_PATH}?${params}`);
+}
+
+export function getProspectActivities(prospectId: string): Promise<ClientActivity[]> {
+  const params = new URLSearchParams({ prospectId });
+  return apiRequest<ClientActivity[]>(`${ACTIVITIES_PATH}?${params}`);
+}
+
+export function getAllClientActivities(): Promise<ClientActivity[]> {
+  return apiRequest<ClientActivity[]>(ACTIVITIES_PATH);
+}
+
+export async function createClientActivity(input: CreateClientActivityInput): Promise<string> {
+  const response = await apiRequest<{ id: string }>(ACTIVITIES_PATH, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+
+  if (input.userId && input.userName) {
+    try {
+      const { autoUpdateCoachingSession } = await import('@/lib/firebase-service');
+      const entityType = input.clientId ? 'client' : 'prospect';
+      const entityId = input.clientId || input.prospectId || '';
+      const entityName = input.clientName || input.prospectName || '';
+      if (entityId) {
+        await autoUpdateCoachingSession(
+          input.userId,
+          input.userName,
+          entityType,
+          entityId,
+          entityName,
+          `Actividad (${input.type}): ${input.observation}`,
+        );
+      }
+    } catch (error) {
+      console.error('Error auto-updating coaching:', error);
+    }
+  }
+
+  return response.id;
+}
+
+export function updateClientActivity(id: string, input: UpdateClientActivityInput): Promise<{ id: string }> {
+  return apiRequest<{ id: string }>(`${ACTIVITIES_PATH}/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
 }
 
 export function completeTask(id: string): Promise<{ id: string }> {

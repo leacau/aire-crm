@@ -204,6 +204,68 @@ paths:
                   data: { $ref: '#/components/schemas/Opportunity' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /activities:
+    get:
+      operationId: listActivities
+      tags: [Actividades]
+      parameters:
+        - name: clientId
+          in: query
+          schema: { type: string }
+        - name: prospectId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Actividades visibles para la organización autenticada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Activity' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createActivity
+      tags: [Actividades]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateActivity' }
+      responses:
+        '201':
+          description: Actividad creada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /activities/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ActivityId'
+    patch:
+      operationId: updateActivity
+      tags: [Actividades]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateActivity' }
+      responses:
+        '200':
+          description: Actividad actualizada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /tasks:
     get:
       operationId: listMyOpenTasks
@@ -391,6 +453,11 @@ components:
       required: true
       schema: { type: string }
     ProspectId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    ActivityId:
       name: id
       in: path
       required: true
@@ -603,7 +670,7 @@ components:
         finalizationDate: { type: string, format: date }
         ownerId: { type: string }
         isCanje: { type: boolean }
-    Task:
+    Activity:
       type: object
       required: [id, userId, userName, type, observation, timestamp, isTask]
       properties:
@@ -624,6 +691,40 @@ components:
         dueDate: { type: string, format: date-time }
         completed: { type: boolean }
         completedAt: { type: string, format: date-time }
+        completedByUserId: { type: string }
+        completedByUserName: { type: string }
+        googleCalendarEventId: { type: string }
+    Task:
+      allOf:
+        - $ref: '#/components/schemas/Activity'
+    CreateActivity:
+      type: object
+      additionalProperties: false
+      required: [type, observation]
+      properties:
+        clientId: { type: string }
+        clientName: { type: string }
+        prospectId: { type: string }
+        prospectName: { type: string }
+        opportunityId: { type: string }
+        opportunityTitle: { type: string }
+        type: { type: string }
+        observation: { type: string, minLength: 1, maxLength: 10000 }
+        isTask: { type: boolean, default: false }
+        dueDate: { type: string, format: date-time }
+        completed: { type: boolean, default: false }
+        googleCalendarEventId: { type: string }
+    UpdateActivity:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        isTask: { type: boolean }
+        dueDate: { type: string, format: date-time }
+        completed: { type: boolean }
+        completedByUserId: { type: string }
+        completedByUserName: { type: string }
+        googleCalendarEventId: { type: [string, 'null'] }
     RescheduleTask:
       type: object
       additionalProperties: false

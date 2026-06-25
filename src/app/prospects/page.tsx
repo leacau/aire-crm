@@ -19,10 +19,10 @@ import {
 } from '@/modules/prospects/client';
 import { 
     getAllUsers, 
-    getAllClientActivities, 
     getOpportunityAlertsConfig, 
     autoUpdateCoachingSession,
 } from '@/lib/firebase-service';
+import { getAllClientActivities } from '@/modules/tasks/client';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
