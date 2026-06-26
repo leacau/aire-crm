@@ -64,20 +64,21 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
 
 const waitForDocumentAssets = async (containerElement: HTMLElement) => {
   if (document.fonts?.ready) {
-    await withTimeout(document.fonts.ready, 5000, 'La carga de tipografías demoró demasiado.');
+    // 🟢 Evitamos que salte la excepción si una tipografía falla
+    await withTimeout(document.fonts.ready, 5000, 'La carga de tipografías demoró demasiado.').catch(() => {});
   }
 
   const images = Array.from(containerElement.querySelectorAll('img'));
   await withTimeout(
-    Promise.all(images.map(image => image.complete
+    Promise.all(images.map(image => (image.complete && image.naturalHeight !== 0)
       ? Promise.resolve()
       : new Promise<void>(resolve => {
-          image.addEventListener('load', () => resolve(), { once: true });
-          image.addEventListener('error', () => resolve(), { once: true });
+          image.onload = () => resolve();
+          image.onerror = () => resolve(); // 🟢 Resolvemos sin error para no bloquear
         }))),
     5000,
     'La carga de imágenes demoró demasiado.'
-  );
+  ).catch(() => {}); 
 };
 
 function ApprovalsPageComponent() {
@@ -286,15 +287,25 @@ function ApprovalsPageComponent() {
 
   const generateClientSummaryPdfBase64 = async (client: Client): Promise<string> => {
     const contacts = await getPeopleByClientId(client.id);
-    flushSync(() => setClientPdfData({ client, contact: contacts[0] || null }));
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    
+    // 🟢 Hacemos update del state sin bloquear con flushSync
+    setClientPdfData({ client, contact: contacts[0] || null });
+    
+    // 🟢 Polling: Esperamos dinámicamente hasta 2 segs a que el componente se monte
+    let attempts = 0;
+    while (!clientPdfRef.current && attempts < 20) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+    }
+
     if (!clientPdfRef.current) throw new Error('No se pudo preparar el alta de cliente.');
+    
     const images = Array.from(clientPdfRef.current.querySelectorAll('img'));
-    await Promise.all(images.map(image => image.complete
+    await Promise.all(images.map(image => (image.complete && image.naturalHeight !== 0)
       ? Promise.resolve()
       : new Promise<void>(resolve => {
-          image.addEventListener('load', () => resolve(), { once: true });
-          image.addEventListener('error', () => resolve(), { once: true });
+          image.onload = () => resolve();
+          image.onerror = () => resolve();
         })));
 
     try {
@@ -572,16 +583,22 @@ function ApprovalsPageComponent() {
   };
 
   // 🟢 LÓGICA DE RENOTIFICACIÓN
-  const handleRenotify = async (item: UnifiedApprovalItem) => {
+const handleRenotify = async (item: UnifiedApprovalItem) => {
     try {
       if (item.type === 'Nota Comercial' || item.type === 'Orden de Publicidad') {
         await ensureProgramsLoaded();
       }
       const hydratedItem = await withOrderBilling(item);
-      flushSync(() => setRenotifyingItem(hydratedItem));
-      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      setRenotifyingItem(hydratedItem);
 
-      const elementToCapture = hiddenDocumentContainerRef.current?.firstElementChild as HTMLElement | null;
+      // 🟢 Polling: Esperamos que los componentes dinámicos existan en el DOM
+      let elementToCapture: HTMLElement | null = null;
+      for (let i = 0; i < 20; i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        elementToCapture = hiddenDocumentContainerRef.current?.firstElementChild as HTMLElement | null;
+        if (elementToCapture) break;
+      }
+
       if (!elementToCapture) throw new Error('No se pudo preparar el documento para reinformar.');
 
       await dispatchApprovalEmail(hydratedItem, elementToCapture, true);
