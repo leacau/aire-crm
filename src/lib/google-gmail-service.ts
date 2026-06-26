@@ -18,7 +18,9 @@ export interface EmailParams {
 }
 
 async function getCrmIdToken(): Promise<string> {
-    const idToken = await auth.currentUser?.getIdToken();
+    // 🟢 Pasamos "true" para forzar la actualización del token 
+    // y evitar el 401 si el token expiró en plena carga del PDF.
+    const idToken = await auth.currentUser?.getIdToken(true);
     if (!idToken) {
         throw new Error('Missing CRM authentication token.');
     }
