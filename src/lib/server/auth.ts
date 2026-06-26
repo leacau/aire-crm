@@ -53,6 +53,31 @@ export function getBearerToken(request: Request): string | null {
   return header.slice('Bearer '.length).trim() || null;
 }
 
+function getAuthErrorDetails(error: unknown): { code?: string; message?: string } {
+  if (!error || typeof error !== 'object') return {};
+  const candidate = error as { code?: unknown; message?: unknown };
+  return {
+    code: typeof candidate.code === 'string' ? candidate.code : undefined,
+    message: typeof candidate.message === 'string' ? candidate.message : undefined,
+  };
+}
+
+function isFirebaseAdminConfigurationError(error: unknown): boolean {
+  const { code, message } = getAuthErrorDetails(error);
+  const normalizedMessage = message?.toLowerCase() || '';
+
+  return (
+    code === 'app/invalid-credential' ||
+    code === 'app/invalid-app-options' ||
+    code === 'auth/invalid-credential' ||
+    normalizedMessage.includes('failed to determine project id') ||
+    normalizedMessage.includes('credential') ||
+    normalizedMessage.includes('private key') ||
+    normalizedMessage.includes('service account') ||
+    normalizedMessage.includes('project id')
+  );
+}
+
 export async function requireServerUser(request: Request): Promise<ServerUser | NextResponse> {
   const token = getBearerToken(request);
   if (!token) {
@@ -65,7 +90,19 @@ export async function requireServerUser(request: Request): Promise<ServerUser | 
   try {
     decoded = await authAdmin.verifyIdToken(token);
   } catch (error) {
-    console.error('🔥 [AUTH] Error verificando el Token de Firebase:', error);
+    const details = getAuthErrorDetails(error);
+    console.error('[AUTH] Error verificando el token de Firebase:', details.code || 'sin_codigo', details.message || error);
+
+    if (isFirebaseAdminConfigurationError(error)) {
+      return NextResponse.json(
+        {
+          error: 'La autenticación del servidor no está configurada correctamente.',
+          code: 'AUTH_SERVER_CONFIGURATION_ERROR',
+        },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json({ error: 'El token de autenticación no es válido o ha expirado.' }, { status: 401 });
   }
 

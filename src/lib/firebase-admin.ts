@@ -8,7 +8,26 @@ type ServiceAccountConfig = {
   privateKey?: string;
 };
 
-const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+function inferProjectIdFromClientEmail(value?: string): string | undefined {
+  const match = value?.match(/@(.+?)\.iam\.gserviceaccount\.com$/);
+  return match?.[1];
+}
+
+function resolveProjectId(clientEmail?: string): string | undefined {
+  return (
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
+    process.env.FIREBASE_PROJECT_ID ||
+    inferProjectIdFromClientEmail(clientEmail)
+  );
+}
+
+function resolveRuntimeProjectId(clientEmail?: string): string | undefined {
+  return (
+    resolveProjectId(clientEmail) ||
+    process.env.GCLOUD_PROJECT ||
+    process.env.GOOGLE_CLOUD_PROJECT
+  );
+}
 
 function stripWrappingQuotes(value: string): string {
   const trimmed = value.trim();
@@ -64,7 +83,7 @@ function parseServiceAccountJson(value?: string): ServiceAccountConfig | null {
 
       if (privateKey && clientEmail) {
         return {
-          projectId: parsedProjectId || projectId,
+          projectId: resolveProjectId(clientEmail) || parsedProjectId,
           clientEmail,
           privateKey,
         };
@@ -87,7 +106,7 @@ function getExplicitServiceAccount(): ServiceAccountConfig | null {
   if (!privateKey || !process.env.FIREBASE_CLIENT_EMAIL) return null;
 
   return {
-    projectId,
+    projectId: resolveProjectId(process.env.FIREBASE_CLIENT_EMAIL),
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
     privateKey,
   };
@@ -101,17 +120,20 @@ function createFirebaseAdminApp() {
   const serviceAccount = getExplicitServiceAccount();
 
   if (serviceAccount?.privateKey && serviceAccount.clientEmail) {
+    const resolvedProjectId = serviceAccount.projectId || resolveRuntimeProjectId(serviceAccount.clientEmail);
+
     return initializeApp({
       credential: cert({
-        projectId: serviceAccount.projectId || projectId,
+        projectId: resolvedProjectId,
         clientEmail: serviceAccount.clientEmail,
         privateKey: serviceAccount.privateKey,
       }),
-      projectId: serviceAccount.projectId || projectId,
+      projectId: resolvedProjectId,
     });
   }
 
-  return initializeApp(projectId ? { projectId } : undefined);
+  const fallbackProjectId = resolveRuntimeProjectId();
+  return initializeApp(fallbackProjectId ? { projectId: fallbackProjectId } : undefined);
 }
 
 const app = createFirebaseAdminApp();
