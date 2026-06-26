@@ -142,6 +142,10 @@ export async function getGrantedServerCapabilities(
     const screen = moduleScreenMap[capability];
     if (!screen) return false;
     const permission = capability.endsWith('.read') ? 'view' : 'edit';
+    if (capability.startsWith('billing.')) {
+      return hasScreenPermission(user, 'Billing', permission, areaPermissions)
+        || hasScreenPermission(user, 'BillingRequests', permission, areaPermissions);
+    }
     return hasScreenPermission(user, screen, permission, areaPermissions);
   });
 }

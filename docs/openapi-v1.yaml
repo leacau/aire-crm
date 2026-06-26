@@ -392,6 +392,65 @@ paths:
                 properties:
                   data: { $ref: '#/components/schemas/TangoBillingSummary' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /billing/request-context:
+    get:
+      operationId: getBillingRequestContext
+      tags: [Facturacion]
+      responses:
+        '200':
+          description: Contexto operativo del usuario para la bandeja de control de facturacion.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [isBillingReceptor]
+                    properties:
+                      isBillingReceptor: { type: boolean }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /billing/requests:
+    get:
+      operationId: listBillingRequests
+      tags: [Facturacion]
+      responses:
+        '200':
+          description: Pedidos de facturacion visibles para el usuario autenticado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/BillingRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /billing/requests/{id}/transition:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: transitionBillingRequest
+      tags: [Facturacion]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BillingRequestTransition' }
+      responses:
+        '200':
+          description: Pedido de facturacion actualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /prospects:
     get:
       operationId: listProspects
@@ -920,6 +979,46 @@ components:
               label: { type: string }
               total: { type: number }
               invoiceCount: { type: integer }
+    BillingRequestStatus:
+      type: string
+      enum: [Sugerido, Solicitado, Elevado, Confeccionado]
+    BillingRequest:
+      type: object
+      required: [id, billingStatus, accountExecutive, advisorId, opportunityTitle, clientDisplayName, cuit]
+      properties:
+        id: { type: string }
+        orderId: { type: string }
+        opportunityId: { type: string }
+        clientId: { type: string }
+        company: { type: string, enum: [SRL, SAS, AVION] }
+        date: { type: string, format: date }
+        grossAmount: { type: number }
+        adjustment: { type: number }
+        ivaSas: { type: number }
+        amount: { type: number }
+        paymentType: { type: string, enum: [Se paga, Canje, Mixto] }
+        canjeDescription: { type: string }
+        billingStatus: { $ref: '#/components/schemas/BillingRequestStatus' }
+        invoiceNumber: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        accountExecutive: { type: string }
+        advisorId: { type: string }
+        opportunityTitle: { type: string }
+        clientDisplayName: { type: string }
+        cuit: { type: string }
+    BillingRequestTransition:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/BillingRequestStatus' }
+        invoiceNumber: { type: string }
+        emailPayload:
+          type: object
+          properties:
+            accessToken: { type: string }
+            loggedUser: { type: string }
     IdResponse:
       type: object
       required: [data]

@@ -23,6 +23,8 @@ Estado actual:
 - Tareas ya tiene lectura, finalización y reprogramación detrás de API v1.
 - Facturación/Tango ya tiene consultas de comprobantes, historial por cliente y
   resumen mensual detrás de API v1, consumidos por web y listos para Android.
+- Control de facturación ya tiene lectura y transiciones de estado de pedidos
+  detrás de API v1, con permisos y notificaciones resueltas en servidor.
 - Se integraron cambios funcionales nacidos en `codex_branch` sin merge directo:
   Tango/facturación, reinformado de aprobaciones, ejecuciones publicitarias
   previas a aprobación para gestión ejecutiva y el nuevo centro de actividad

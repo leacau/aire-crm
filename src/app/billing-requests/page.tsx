@@ -1,233 +1,272 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { format } from 'date-fns';
+import { CheckCircle2, Clock, FileCheck2, Link, Loader2, Send } from 'lucide-react';
 import { Header } from '@/components/layout/header';
-import { useAuth } from '@/hooks/use-auth';
-import { Spinner } from '@/components/ui/spinner';
+import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
+import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { getAllBillingRequestsWithMetadata, updateBillingRequestStatus, getWorkflowAssignments } from '@/lib/firebase-service';
-import { format } from 'date-fns';
-import { Clock, Send, CheckCircle2, Link, FileCheck2, Loader2 } from 'lucide-react'; 
-import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
+import {
+  getBillingRequestContext,
+  getBillingRequests,
+  transitionBillingRequest,
+  type BillingRequestStatus,
+  type BillingRequestWithMetadata,
+} from '@/modules/billing/client';
+
+type BillingRequestTab = 'sugerido' | 'solicitado' | 'confeccionado';
+
+const statusLabels: Partial<Record<BillingRequestStatus, string>> = {
+  Solicitado: 'Recibido por Coordinación',
+  Elevado: 'Elevado a Contaduría',
+};
 
 export default function BillingRequestsPage() {
-    const { userInfo, getGoogleAccessToken } = useAuth();
-    const { toast } = useToast();
+  const { userInfo, getGoogleAccessToken } = useAuth();
+  const { toast } = useToast();
 
-    const [loading, setLoading] = useState(true);
-    const [processingId, setProcessingId] = useState<string | null>(null);
-    const [allRequests, setAllRequests] = useState<any[]>([]);
-    const [isReceptor, setIsReceptor] = useState(false);
-    const [invoiceNumbers, setInvoiceNumbers] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [allRequests, setAllRequests] = useState<BillingRequestWithMetadata[]>([]);
+  const [isReceptor, setIsReceptor] = useState(false);
+  const [invoiceNumbers, setInvoiceNumbers] = useState<Record<string, string>>({});
 
-    useEffect(() => {
-        if (userInfo) {
-            getWorkflowAssignments().then(config => {
-                setIsReceptor(config.billingReceptors.includes(userInfo.id));
-                loadData();
-            });
-        }
-    }, [userInfo]);
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [context, requests] = await Promise.all([
+        getBillingRequestContext(),
+        getBillingRequests(),
+      ]);
+      setIsReceptor(context.isBillingReceptor);
+      setAllRequests(requests);
+    } catch (error) {
+      console.error('Error loading billing requests:', error);
+      toast({ title: 'Error al cargar la facturación', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
 
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            const data = await getAllBillingRequestsWithMetadata();
-            setAllRequests(data);
-        } catch (e) {
-            toast({ title: 'Error al cargar la facturación', variant: 'destructive' });
-        } finally {
-            setLoading(false);
-        }
-    };
+  useEffect(() => {
+    if (userInfo) void loadData();
+  }, [loadData, userInfo]);
 
-    // 1. ASESOR -> RECEPTOR (Pasa a Solicitado y notifica por mail)
-    const handleRequestBilling = async (id: string) => {
-        setProcessingId(id);
-        try {
-            const token = await getGoogleAccessToken();
-            await updateBillingRequestStatus(id, 'Solicitado', {
-                emailPayload: { accessToken: token || '', loggedUser: userInfo!.name }
-            });
-            toast({ title: 'Factura Solicitada', description: 'El pedido fue enviado a coordinación.' });
-            loadData();
-        } catch (e) {
-            toast({ title: 'Error al solicitar facturación', variant: 'destructive' });
-        } finally {
-            setProcessingId(null);
-        }
-    };
+  const transitionRequest = async (
+    id: string,
+    status: BillingRequestStatus,
+    options: { invoiceNumber?: string; successTitle: string; successDescription: string; errorTitle: string },
+  ) => {
+    setProcessingId(id);
+    try {
+      const token = await getGoogleAccessToken();
+      await transitionBillingRequest(id, {
+        status,
+        invoiceNumber: options.invoiceNumber,
+        emailPayload: { accessToken: token || '', loggedUser: userInfo?.name || '' },
+      });
+      toast({ title: options.successTitle, description: options.successDescription });
+      await loadData();
+    } catch (error) {
+      console.error(`Error transitioning billing request to ${status}:`, error);
+      toast({
+        title: options.errorTitle,
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-    // 2. RECEPTOR -> FACTURADOR (Pasa a Elevado y envía correo a contabilidad)
-    const handleElevateBilling = async (id: string) => {
-        setProcessingId(id);
-        try {
-            const token = await getGoogleAccessToken();
-            await updateBillingRequestStatus(id, 'Elevado', {
-                emailPayload: { accessToken: token || '', loggedUser: userInfo!.name }
-            });
-            toast({ title: 'Pedido Elevado', description: 'Se aprobó el pedido y se notificó a administración.' });
-            loadData();
-        } catch (e) {
-            toast({ title: 'Error al elevar el pedido', variant: 'destructive' });
-        } finally {
-            setProcessingId(null);
-        }
-    };
+  const handleRequestBilling = (id: string) => transitionRequest(id, 'Solicitado', {
+    successTitle: 'Factura solicitada',
+    successDescription: 'El pedido fue enviado a coordinación.',
+    errorTitle: 'Error al solicitar facturación',
+  });
 
-    // 3. RECEPTOR -> ASESOR (Pasa a Confeccionado, asigna número de Tango y notifica al vendedor)
-    const handleConfectInvoice = async (id: string) => {
-        const noReal = invoiceNumbers[id]?.trim();
-        if (!noReal) {
-            toast({ title: 'Número requerido', description: 'Por favor, escribe el número de comprobante Tango.', variant: 'destructive' });
-            return;
-        }
-        setProcessingId(id);
-        try {
-            const token = await getGoogleAccessToken();
-            await updateBillingRequestStatus(id, 'Confeccionado', { 
-                invoiceNumber: noReal,
-                emailPayload: { accessToken: token || '', loggedUser: userInfo!.name }
-            });
-            toast({ title: 'Factura asentada', description: 'Se guardó el comprobante y se notificó al asesor.' });
-            loadData();
-        } catch (e) {
-            toast({ title: 'Error al registrar', variant: 'destructive' });
-        } finally {
-            setProcessingId(null);
-        }
-    };
+  const handleElevateBilling = (id: string) => transitionRequest(id, 'Elevado', {
+    successTitle: 'Pedido elevado',
+    successDescription: 'Se aprobó el pedido y se notificó a administración.',
+    errorTitle: 'Error al elevar el pedido',
+  });
 
-    if (!userInfo) return <Spinner />;
+  const handleConfectInvoice = (id: string) => {
+    const invoiceNumber = invoiceNumbers[id]?.trim();
+    if (!invoiceNumber) {
+      toast({
+        title: 'Número requerido',
+        description: 'Por favor, escribí el número de comprobante Tango.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    const myRequests = allRequests.filter(r => isReceptor ? true : r.advisorId === userInfo.id);
+    void transitionRequest(id, 'Confeccionado', {
+      invoiceNumber,
+      successTitle: 'Factura asentada',
+      successDescription: 'Se guardó el comprobante y se notificó al asesor.',
+      errorTitle: 'Error al registrar',
+    });
+  };
 
-    const bandSugeridas = myRequests.filter(r => r.billingStatus === 'Sugerido');
-    const bandSolicitadas = myRequests.filter(r => r.billingStatus === 'Solicitado' || r.billingStatus === 'Elevado');
-    const bandConfeccionadas = myRequests.filter(r => r.billingStatus === 'Confeccionado');
+  if (!userInfo) return <Spinner />;
 
-    const renderTable = (data: any[], tabType: 'sugerido' | 'solicitado' | 'confeccionado') => (
-        <div className="bg-white border rounded-md shadow-sm overflow-hidden">
-            <Table>
-                <TableHeader className="bg-slate-50">
-                    <TableRow>
-                        <TableHead>Fecha Progr.</TableHead>
-                        <TableHead>Empresa</TableHead>
-                        <TableHead>Anunciante / Razón Social</TableHead>
-                        <TableHead>CUIT</TableHead>
-                        <TableHead>Asesor</TableHead>
-                        <TableHead className="text-right">Monto Neto</TableHead>
-                        <TableHead>Condición de Cobro</TableHead>
-                        <TableHead className="text-center">Contrato</TableHead>
-                        <TableHead className="text-right w-[240px]">Acción / Estado</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {data.length === 0 && (
-                        <TableRow><TableCell colSpan={9} className="text-center py-10 text-slate-400 font-medium">No hay documentos en esta bandeja.</TableCell></TableRow>
-                    )}
-                    {data.map((row) => {
-                        const isProcessing = processingId === row.id;
-                        return (
-                            <TableRow key={row.id}>
-                                <TableCell className="font-medium text-xs whitespace-nowrap">{format(new Date(row.date + 'T12:00:00'), 'dd/MM/yyyy')}</TableCell>
-                                <TableCell>
-                                    <Badge className={row.company === 'SRL' ? 'bg-purple-100 text-purple-800 border-purple-200' : row.company === 'SAS' ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-slate-100 text-slate-800 border-slate-200'}>
-                                        {row.company}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="font-bold text-slate-700 text-xs max-w-[200px] truncate" title={row.clientDisplayName}>{row.clientDisplayName}</TableCell>
-                                <TableCell className="text-xs font-mono">{row.cuit}</TableCell>
-                                <TableCell className="text-xs">{row.accountExecutive}</TableCell>
-                                <TableCell className="text-right font-mono font-bold text-xs text-blue-800">${Number(row.amount || 0).toLocaleString('es-AR')}</TableCell>
-                                <TableCell className="text-[11px]">
-                                    <span className="font-semibold block">{row.paymentType || 'Se paga'}</span>
-                                    {row.canjeDescription && <span className="text-slate-500 italic block truncate max-w-[120px]" title={row.canjeDescription}>{row.canjeDescription}</span>}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    <AdvertisingOrderViewer order={{ id: row.orderId } as any} />
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    {tabType === 'sugerido' && (
-                                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 h-8 text-xs font-bold" onClick={() => handleRequestBilling(row.id)} disabled={isProcessing}>
-                                            {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Send className="w-3 h-3 mr-1" />}
-                                            Solicitar Factura
-                                        </Button>
-                                    )}
-                                    
-                                    {tabType === 'solicitado' && isReceptor && row.billingStatus === 'Solicitado' && (
-                                        <Button size="sm" className="bg-amber-600 hover:bg-amber-700 h-8 text-xs font-bold" onClick={() => handleElevateBilling(row.id)} disabled={isProcessing}>
-                                            {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Send className="w-3 h-3 mr-1" />}
-                                            Aprobar y Elevar
-                                        </Button>
-                                    )}
-                                    {tabType === 'solicitado' && isReceptor && row.billingStatus === 'Elevado' && (
-                                        <div className="flex gap-2 items-center justify-end">
-                                            <Input 
-                                                placeholder="N° Factura Tango" 
-                                                className="w-36 h-8 text-xs bg-white font-mono" 
-                                                value={invoiceNumbers[row.id] || ''}
-                                                onChange={e => setInvoiceNumbers({ ...invoiceNumbers, [row.id]: e.target.value })}
-                                            />
-                                            <Button size="sm" className="bg-green-600 hover:bg-green-700 h-8 text-xs font-bold" onClick={() => handleConfectInvoice(row.id)} disabled={isProcessing}>
-                                                {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <FileCheck2 className="w-3 h-3 mr-1" />}
-                                                Asentar
-                                            </Button>
-                                        </div>
-                                    )}
+  const myRequests = allRequests.filter(request => isReceptor || request.advisorId === userInfo.id);
+  const suggestedRequests = myRequests.filter(request => request.billingStatus === 'Sugerido');
+  const requestedRequests = myRequests.filter(request =>
+    request.billingStatus === 'Solicitado' || request.billingStatus === 'Elevado',
+  );
+  const completedRequests = myRequests.filter(request => request.billingStatus === 'Confeccionado');
 
-                                    {tabType === 'solicitado' && !isReceptor && (
-                                        <Badge variant="outline" className={row.billingStatus === 'Solicitado' ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-blue-50 text-blue-700 border-blue-200"}>
-                                            {row.billingStatus === 'Solicitado' ? "Recibido por Coordinación" : "Elevado a Contaduría"}
-                                        </Badge>
-                                    )}
+  const renderTable = (data: BillingRequestWithMetadata[], tabType: BillingRequestTab) => (
+    <div className="overflow-hidden rounded-md border bg-white shadow-sm">
+      <Table>
+        <TableHeader className="bg-slate-50">
+          <TableRow>
+            <TableHead>Fecha progr.</TableHead>
+            <TableHead>Empresa</TableHead>
+            <TableHead>Anunciante / Razón Social</TableHead>
+            <TableHead>CUIT</TableHead>
+            <TableHead>Asesor</TableHead>
+            <TableHead className="text-right">Monto Neto</TableHead>
+            <TableHead>Condición de Cobro</TableHead>
+            <TableHead className="text-center">Contrato</TableHead>
+            <TableHead className="w-[240px] text-right">Acción / Estado</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={9} className="py-10 text-center font-medium text-slate-400">
+                No hay documentos en esta bandeja.
+              </TableCell>
+            </TableRow>
+          )}
+          {data.map(row => {
+            const isProcessing = processingId === row.id;
+            return (
+              <TableRow key={row.id}>
+                <TableCell className="whitespace-nowrap text-xs font-medium">
+                  {row.date ? format(new Date(`${row.date}T12:00:00`), 'dd/MM/yyyy') : '-'}
+                </TableCell>
+                <TableCell>
+                  <Badge className={
+                    row.company === 'SRL' ? 'border-purple-200 bg-purple-100 text-purple-800'
+                      : row.company === 'SAS' ? 'border-blue-200 bg-blue-100 text-blue-800'
+                        : 'border-slate-200 bg-slate-100 text-slate-800'
+                  }>
+                    {row.company || '-'}
+                  </Badge>
+                </TableCell>
+                <TableCell className="max-w-[200px] truncate text-xs font-bold text-slate-700" title={row.clientDisplayName}>
+                  {row.clientDisplayName}
+                </TableCell>
+                <TableCell className="font-mono text-xs">{row.cuit}</TableCell>
+                <TableCell className="text-xs">{row.accountExecutive}</TableCell>
+                <TableCell className="text-right font-mono text-xs font-bold text-blue-800">
+                  ${Number(row.amount || 0).toLocaleString('es-AR')}
+                </TableCell>
+                <TableCell className="text-[11px]">
+                  <span className="block font-semibold">{row.paymentType || 'Se paga'}</span>
+                  {row.canjeDescription && (
+                    <span className="block max-w-[120px] truncate italic text-slate-500" title={row.canjeDescription}>
+                      {row.canjeDescription}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="text-center">
+                  <AdvertisingOrderViewer order={{ id: row.orderId } as any} />
+                </TableCell>
+                <TableCell className="text-right">
+                  {tabType === 'sugerido' && (
+                    <Button size="sm" className="h-8 bg-blue-600 text-xs font-bold hover:bg-blue-700" onClick={() => handleRequestBilling(row.id)} disabled={isProcessing}>
+                      {isProcessing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Send className="mr-1 h-3 w-3" />}
+                      Solicitar Factura
+                    </Button>
+                  )}
 
-                                    {tabType === 'confeccionado' && (
-                                        <div className="text-right font-mono font-bold text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded inline-block">
-                                            Comprobante: {row.invoiceNumber}
-                                        </div>
-                                    )}
-                                </TableCell>
-                            </TableRow>
-                        );
-                    })}
-                </TableBody>
-            </Table>
-        </div>
-    );
+                  {tabType === 'solicitado' && isReceptor && row.billingStatus === 'Solicitado' && (
+                    <Button size="sm" className="h-8 bg-amber-600 text-xs font-bold hover:bg-amber-700" onClick={() => handleElevateBilling(row.id)} disabled={isProcessing}>
+                      {isProcessing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Send className="mr-1 h-3 w-3" />}
+                      Aprobar y Elevar
+                    </Button>
+                  )}
+                  {tabType === 'solicitado' && isReceptor && row.billingStatus === 'Elevado' && (
+                    <div className="flex items-center justify-end gap-2">
+                      <Input
+                        placeholder="N° Factura Tango"
+                        className="h-8 w-36 bg-white font-mono text-xs"
+                        value={invoiceNumbers[row.id] || ''}
+                        onChange={event => setInvoiceNumbers(current => ({ ...current, [row.id]: event.target.value }))}
+                      />
+                      <Button size="sm" className="h-8 bg-green-600 text-xs font-bold hover:bg-green-700" onClick={() => handleConfectInvoice(row.id)} disabled={isProcessing}>
+                        {isProcessing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <FileCheck2 className="mr-1 h-3 w-3" />}
+                        Asentar
+                      </Button>
+                    </div>
+                  )}
 
-    return (
-        <div className="flex flex-col h-full bg-slate-50">
-            <Header title="Bandeja de Control de Facturación" />
-            
-            <main className="flex-1 overflow-auto p-4 md:p-8 max-w-7xl mx-auto w-full">
-                <Tabs defaultValue={isReceptor ? "solicitado" : "sugerido"} className="w-full">
-                    <TabsList className="mb-6 flex w-fit gap-2">
-                        {!isReceptor && (
-                            <TabsTrigger value="sugerido" className="font-bold data-[state=active]:bg-blue-600 data-[state=active]:text-white">
-                                <Clock className="w-4 h-4 mr-2" /> 1. Facturas Sugeridas ({bandSugeridas.length})
-                            </TabsTrigger>
-                        )}
-                        <TabsTrigger value="solicitado" className="font-bold data-[state=active]:bg-amber-500 data-[state=active]:text-white">
-                            <Link className="w-4 h-4 mr-2" /> 2. Pedidos Realizados ({bandSolicitadas.length})
-                        </TabsTrigger>
-                        <TabsTrigger value="confeccionado" className="font-bold data-[state=active]:bg-green-600 data-[state=active]:text-white">
-                            <CheckCircle2 className="w-4 h-4 mr-2" /> 3. Confeccionadas ({bandConfeccionadas.length})
-                        </TabsTrigger>
-                    </TabsList>
+                  {tabType === 'solicitado' && !isReceptor && (
+                    <Badge variant="outline" className={row.billingStatus === 'Solicitado' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-blue-200 bg-blue-50 text-blue-700'}>
+                      {statusLabels[row.billingStatus] || row.billingStatus}
+                    </Badge>
+                  )}
 
-                    {!isReceptor && (
-                        <TabsContent value="sugerido">{renderTable(bandSugeridas, 'sugerido')}</TabsContent>
-                    )}
-                    <TabsContent value="solicitado">{renderTable(bandSolicitadas, 'solicitado')}</TabsContent>
-                    <TabsContent value="confeccionado">{renderTable(bandConfeccionadas, 'confeccionado')}</TabsContent>
-                </Tabs>
-            </main>
-        </div>
-    );
+                  {tabType === 'confeccionado' && (
+                    <div className="inline-block rounded border border-green-200 bg-green-50 px-2 py-1 text-right font-mono text-xs font-bold text-green-700">
+                      Comprobante: {row.invoiceNumber || '-'}
+                    </div>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
+  return (
+    <div className="flex h-full flex-col bg-slate-50">
+      <Header title="Bandeja de Control de Facturación" />
+
+      <main className="mx-auto w-full max-w-7xl flex-1 overflow-auto p-4 md:p-8">
+        {loading ? (
+          <div className="flex min-h-[280px] items-center justify-center">
+            <Spinner size="large" />
+          </div>
+        ) : (
+          <Tabs defaultValue={isReceptor ? 'solicitado' : 'sugerido'} className="w-full">
+            <TabsList className="mb-6 flex w-fit gap-2">
+              {!isReceptor && (
+                <TabsTrigger value="sugerido" className="font-bold data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+                  <Clock className="mr-2 h-4 w-4" /> 1. Facturas Sugeridas ({suggestedRequests.length})
+                </TabsTrigger>
+              )}
+              <TabsTrigger value="solicitado" className="font-bold data-[state=active]:bg-amber-500 data-[state=active]:text-white">
+                <Link className="mr-2 h-4 w-4" /> 2. Pedidos Realizados ({requestedRequests.length})
+              </TabsTrigger>
+              <TabsTrigger value="confeccionado" className="font-bold data-[state=active]:bg-green-600 data-[state=active]:text-white">
+                <CheckCircle2 className="mr-2 h-4 w-4" /> 3. Confeccionadas ({completedRequests.length})
+              </TabsTrigger>
+            </TabsList>
+
+            {!isReceptor && (
+              <TabsContent value="sugerido">{renderTable(suggestedRequests, 'sugerido')}</TabsContent>
+            )}
+            <TabsContent value="solicitado">{renderTable(requestedRequests, 'solicitado')}</TabsContent>
+            <TabsContent value="confeccionado">{renderTable(completedRequests, 'confeccionado')}</TabsContent>
+          </Tabs>
+        )}
+      </main>
+    </div>
+  );
 }
