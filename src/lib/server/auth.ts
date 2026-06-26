@@ -100,9 +100,7 @@ export async function requireServerUser(request: Request): Promise<ServerUser | 
 }
 
 export function isServerResponse(value: ServerUser | NextResponse): value is NextResponse {
-  // 🟢 CORRECCIÓN CRÍTICA: En Node.js runtime de Next.js, `instanceof NextResponse` suele fallar por referencias cruzadas.
-  // Es muchísimo más seguro verificar que el objeto devuelto NO tenga la propiedad 'uid' (propia del ServerUser).
-  return !('uid' in value);
+  return !(value && typeof value === 'object' && 'uid' in value);
 }
 
 export function hasServerManagementPrivileges(user: ServerUser): boolean {

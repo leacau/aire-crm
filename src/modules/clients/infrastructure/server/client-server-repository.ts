@@ -80,7 +80,7 @@ function assertOwnershipChangeAllowed(user: ServerUser, input: UpdateClientReque
 
 export async function listClientsForOrganization(organizationId: string): Promise<Client[]> {
   const snapshot = organizationId === DEFAULT_ORGANIZATION_ID
-    ? await clientsCollection.orderBy('denominacion').get()
+    ? await clientsCollection.get()
     : await clientsCollection.where('organizationId', '==', organizationId).get();
 
   return snapshot.docs

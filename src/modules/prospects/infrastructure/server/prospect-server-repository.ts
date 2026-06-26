@@ -76,7 +76,7 @@ function assertNoPrivilegedOwnershipChange(user: ServerUser, input: UpdateProspe
 
 export async function listProspectsForOrganization(organizationId: string): Promise<Prospect[]> {
   const snapshot = organizationId === DEFAULT_ORGANIZATION_ID
-    ? await prospectsCollection.orderBy('createdAt', 'desc').get()
+    ? await prospectsCollection.get()
     : await prospectsCollection.where('organizationId', '==', organizationId).get();
 
   return snapshot.docs
@@ -86,9 +86,13 @@ export async function listProspectsForOrganization(organizationId: string): Prom
 }
 
 export async function listProspectIdsForOrganization(organizationId: string): Promise<Set<string>> {
+  if (!organizationId) {
+    return new Set();
+  }
+
   const snapshot = organizationId === DEFAULT_ORGANIZATION_ID
-    ? await prospectsCollection.select().get()
-    : await prospectsCollection.where('organizationId', '==', organizationId).select().get();
+    ? await prospectsCollection.select('organizationId').get()
+    : await prospectsCollection.where('organizationId', '==', organizationId).select('organizationId').get();
 
   return new Set(
     snapshot.docs

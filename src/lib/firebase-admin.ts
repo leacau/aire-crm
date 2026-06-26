@@ -2,50 +2,116 @@ import { initializeApp, getApps, cert, getApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
-const serviceAccount = {
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-  privateKey: process.env.FIREBASE_PRIVATE_KEY,
+type ServiceAccountConfig = {
+  projectId?: string;
+  clientEmail?: string;
+  privateKey?: string;
 };
 
+const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+function stripWrappingQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function normalizePrivateKey(value?: string): string | undefined {
+  if (!value) return undefined;
+
+  let privateKey = stripWrappingQuotes(value).replace(/\\n/g, '\n');
+  if (privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+    return privateKey;
+  }
+
+  try {
+    privateKey = Buffer.from(privateKey, 'base64').toString('utf8').replace(/\\n/g, '\n');
+    return privateKey.includes('-----BEGIN PRIVATE KEY-----') ? privateKey : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseServiceAccountJson(value?: string): ServiceAccountConfig | null {
+  if (!value) return null;
+
+  const candidates = [stripWrappingQuotes(value)];
+  try {
+    candidates.push(Buffer.from(candidates[0], 'base64').toString('utf8'));
+  } catch {
+    // Ignoramos: puede no venir en base64.
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as {
+        project_id?: string;
+        projectId?: string;
+        client_email?: string;
+        clientEmail?: string;
+        private_key?: string;
+        privateKey?: string;
+      };
+
+      const privateKey = normalizePrivateKey(parsed.private_key || parsed.privateKey);
+      const clientEmail = parsed.client_email || parsed.clientEmail;
+      const parsedProjectId = parsed.project_id || parsed.projectId;
+
+      if (privateKey && clientEmail) {
+        return {
+          projectId: parsedProjectId || projectId,
+          clientEmail,
+          privateKey,
+        };
+      }
+    } catch {
+      // Probamos el siguiente formato posible.
+    }
+  }
+
+  return null;
+}
+
+function getExplicitServiceAccount(): ServiceAccountConfig | null {
+  const jsonServiceAccount = parseServiceAccountJson(
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_SERVICE_ACCOUNT,
+  );
+  if (jsonServiceAccount) return jsonServiceAccount;
+
+  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+  if (!privateKey || !process.env.FIREBASE_CLIENT_EMAIL) return null;
+
+  return {
+    projectId,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey,
+  };
+}
+
 function createFirebaseAdminApp() {
-  // Si ya existe una app inicializada, úsala (evita hot-reload errors)
   if (getApps().length > 0) {
     return getApp();
   }
 
-  // Verificar si tenemos credenciales para inicializar
-  if (serviceAccount.privateKey && serviceAccount.clientEmail) {
-    try {
-        // --- SANITIZACIÓN DE LA CLAVE PRIVADA ---
-        let privateKey = serviceAccount.privateKey;
+  const serviceAccount = getExplicitServiceAccount();
 
-        // 1. Eliminar comillas dobles al inicio y final si se copiaron por error en Vercel
-        //    Ej: "-----BEGIN..." -> -----BEGIN...
-        if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-            privateKey = privateKey.slice(1, -1);
-        }
-
-        // 2. Reemplazar los caracteres literales '\n' por saltos de línea reales
-        //    Esto es crucial porque Vercel/Env suelen aplanar el string.
-        privateKey = privateKey.replace(/\\n/g, '\n');
-
-        return initializeApp({
-            credential: cert({
-                projectId: serviceAccount.projectId,
-                clientEmail: serviceAccount.clientEmail,
-                privateKey: privateKey,
-            }),
-        });
-    } catch (error) {
-        console.error('FIREBASE ADMIN INIT ERROR: La clave privada es inválida.', error);
-        // En caso de error crítico en credenciales, retornamos la app por defecto 
-        // para no romper el build estático, aunque fallará al intentar leer datos reales.
-    }
+  if (serviceAccount?.privateKey && serviceAccount.clientEmail) {
+    return initializeApp({
+      credential: cert({
+        projectId: serviceAccount.projectId || projectId,
+        clientEmail: serviceAccount.clientEmail,
+        privateKey: serviceAccount.privateKey,
+      }),
+      projectId: serviceAccount.projectId || projectId,
+    });
   }
 
-  // Fallback: Intenta inicializar sin credenciales explícitas (ej: entorno Google Cloud)
-  return initializeApp();
+  return initializeApp(projectId ? { projectId } : undefined);
 }
 
 const app = createFirebaseAdminApp();
