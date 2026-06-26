@@ -118,22 +118,27 @@ function createFirebaseAdminApp() {
   }
 
   const serviceAccount = getExplicitServiceAccount();
+  const fallbackProjectId = resolveRuntimeProjectId(serviceAccount?.clientEmail);
+  const fallbackOptions = fallbackProjectId ? { projectId: fallbackProjectId } : undefined;
 
   if (serviceAccount?.privateKey && serviceAccount.clientEmail) {
-    const resolvedProjectId = serviceAccount.projectId || resolveRuntimeProjectId(serviceAccount.clientEmail);
+    const resolvedProjectId = serviceAccount.projectId || fallbackProjectId;
 
-    return initializeApp({
-      credential: cert({
+    try {
+      return initializeApp({
+        credential: cert({
+          projectId: resolvedProjectId,
+          clientEmail: serviceAccount.clientEmail,
+          privateKey: serviceAccount.privateKey,
+        }),
         projectId: resolvedProjectId,
-        clientEmail: serviceAccount.clientEmail,
-        privateKey: serviceAccount.privateKey,
-      }),
-      projectId: resolvedProjectId,
-    });
+      });
+    } catch (error) {
+      console.error('[FIREBASE_ADMIN] No se pudo inicializar con credenciales explícitas:', error);
+    }
   }
 
-  const fallbackProjectId = resolveRuntimeProjectId();
-  return initializeApp(fallbackProjectId ? { projectId: fallbackProjectId } : undefined);
+  return initializeApp(fallbackOptions);
 }
 
 const app = createFirebaseAdminApp();
