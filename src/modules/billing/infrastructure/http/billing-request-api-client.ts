@@ -8,8 +8,8 @@ import type {
 
 const API_PATH = '/api/v1/billing/requests';
 
-export function getBillingRequestContext(): Promise<{ isBillingReceptor: boolean }> {
-  return apiRequest<{ isBillingReceptor: boolean }>('/api/v1/billing/request-context');
+export function getBillingRequestContext(): Promise<{ isBillingReceptor: boolean; canManageAllBillingRequests: boolean }> {
+  return apiRequest<{ isBillingReceptor: boolean; canManageAllBillingRequests: boolean }>('/api/v1/billing/request-context');
 }
 
 export function getBillingRequests(): Promise<BillingRequestWithMetadata[]> {

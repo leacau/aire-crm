@@ -128,7 +128,8 @@ export async function listBillingRequestsForUser(user: ServerUser): Promise<Bill
 export async function getBillingRequestContextForUser(user: ServerUser) {
   const actor = await getActor(user);
   return {
-    isBillingReceptor: actor.isBillingReceptor || actor.isManager,
+    isBillingReceptor: actor.isBillingReceptor,
+    canManageAllBillingRequests: actor.isManager,
   };
 }
 

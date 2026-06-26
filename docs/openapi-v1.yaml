@@ -407,9 +407,10 @@ paths:
                 properties:
                   data:
                     type: object
-                    required: [isBillingReceptor]
+                    required: [isBillingReceptor, canManageAllBillingRequests]
                     properties:
                       isBillingReceptor: { type: boolean }
+                      canManageAllBillingRequests: { type: boolean }
         '403': { $ref: '#/components/responses/Forbidden' }
   /billing/requests:
     get:

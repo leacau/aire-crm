@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { CheckCircle2, Clock, FileCheck2, Link, Loader2, Send } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer';
+import { MonthYearPicker } from '@/components/ui/month-year-picker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,7 +37,9 @@ export default function BillingRequestsPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [allRequests, setAllRequests] = useState<BillingRequestWithMetadata[]>([]);
   const [isReceptor, setIsReceptor] = useState(false);
+  const [canManageAllBillingRequests, setCanManageAllBillingRequests] = useState(false);
   const [invoiceNumbers, setInvoiceNumbers] = useState<Record<string, string>>({});
+  const [suggestedMonth, setSuggestedMonth] = useState(new Date());
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -46,6 +49,7 @@ export default function BillingRequestsPage() {
         getBillingRequests(),
       ]);
       setIsReceptor(context.isBillingReceptor);
+      setCanManageAllBillingRequests(context.canManageAllBillingRequests);
       setAllRequests(requests);
     } catch (error) {
       console.error('Error loading billing requests:', error);
@@ -119,8 +123,16 @@ export default function BillingRequestsPage() {
 
   if (!userInfo) return <Spinner />;
 
-  const myRequests = allRequests.filter(request => isReceptor || request.advisorId === userInfo.id);
-  const suggestedRequests = myRequests.filter(request => request.billingStatus === 'Sugerido');
+  const canSeeSuggestedRequests = canManageAllBillingRequests || !isReceptor;
+  const canOperateRequestedQueue = canManageAllBillingRequests || isReceptor;
+  const suggestedMonthKey = format(suggestedMonth, 'yyyy-MM');
+  const myRequests = allRequests.filter(request =>
+    canManageAllBillingRequests || isReceptor || request.advisorId === userInfo.id,
+  );
+  const suggestedRequests = myRequests.filter(request =>
+    request.billingStatus === 'Sugerido'
+    && (!request.date || request.date.slice(0, 7) === suggestedMonthKey),
+  );
   const requestedRequests = myRequests.filter(request =>
     request.billingStatus === 'Solicitado' || request.billingStatus === 'Elevado',
   );
@@ -193,13 +205,13 @@ export default function BillingRequestsPage() {
                     </Button>
                   )}
 
-                  {tabType === 'solicitado' && isReceptor && row.billingStatus === 'Solicitado' && (
+                  {tabType === 'solicitado' && canOperateRequestedQueue && row.billingStatus === 'Solicitado' && (
                     <Button size="sm" className="h-8 bg-amber-600 text-xs font-bold hover:bg-amber-700" onClick={() => handleElevateBilling(row.id)} disabled={isProcessing}>
                       {isProcessing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Send className="mr-1 h-3 w-3" />}
                       Aprobar y Elevar
                     </Button>
                   )}
-                  {tabType === 'solicitado' && isReceptor && row.billingStatus === 'Elevado' && (
+                  {tabType === 'solicitado' && canOperateRequestedQueue && row.billingStatus === 'Elevado' && (
                     <div className="flex items-center justify-end gap-2">
                       <Input
                         placeholder="N° Factura Tango"
@@ -214,7 +226,7 @@ export default function BillingRequestsPage() {
                     </div>
                   )}
 
-                  {tabType === 'solicitado' && !isReceptor && (
+                  {tabType === 'solicitado' && !canOperateRequestedQueue && (
                     <Badge variant="outline" className={row.billingStatus === 'Solicitado' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-blue-200 bg-blue-50 text-blue-700'}>
                       {statusLabels[row.billingStatus] || row.billingStatus}
                     </Badge>
@@ -244,22 +256,30 @@ export default function BillingRequestsPage() {
             <Spinner size="large" />
           </div>
         ) : (
-          <Tabs defaultValue={isReceptor ? 'solicitado' : 'sugerido'} className="w-full">
-            <TabsList className="mb-6 flex w-fit gap-2">
-              {!isReceptor && (
+          <Tabs defaultValue={canSeeSuggestedRequests ? 'sugerido' : 'solicitado'} className="w-full">
+            <div className="mb-6 flex flex-wrap items-center gap-3">
+              <TabsList className="flex w-fit gap-2">
+                {canSeeSuggestedRequests && (
                 <TabsTrigger value="sugerido" className="font-bold data-[state=active]:bg-blue-600 data-[state=active]:text-white">
                   <Clock className="mr-2 h-4 w-4" /> 1. Facturas Sugeridas ({suggestedRequests.length})
                 </TabsTrigger>
+                )}
+                <TabsTrigger value="solicitado" className="font-bold data-[state=active]:bg-amber-500 data-[state=active]:text-white">
+                  <Link className="mr-2 h-4 w-4" /> 2. Pedidos Realizados ({requestedRequests.length})
+                </TabsTrigger>
+                <TabsTrigger value="confeccionado" className="font-bold data-[state=active]:bg-green-600 data-[state=active]:text-white">
+                  <CheckCircle2 className="mr-2 h-4 w-4" /> 3. Confeccionadas ({completedRequests.length})
+                </TabsTrigger>
+              </TabsList>
+              {canSeeSuggestedRequests && (
+                <div className="flex items-center gap-2 rounded-md border bg-white px-3 py-2">
+                  <span className="text-xs font-medium text-muted-foreground">Mes punto 1</span>
+                  <MonthYearPicker date={suggestedMonth} onDateChange={setSuggestedMonth} />
+                </div>
               )}
-              <TabsTrigger value="solicitado" className="font-bold data-[state=active]:bg-amber-500 data-[state=active]:text-white">
-                <Link className="mr-2 h-4 w-4" /> 2. Pedidos Realizados ({requestedRequests.length})
-              </TabsTrigger>
-              <TabsTrigger value="confeccionado" className="font-bold data-[state=active]:bg-green-600 data-[state=active]:text-white">
-                <CheckCircle2 className="mr-2 h-4 w-4" /> 3. Confeccionadas ({completedRequests.length})
-              </TabsTrigger>
-            </TabsList>
+            </div>
 
-            {!isReceptor && (
+            {canSeeSuggestedRequests && (
               <TabsContent value="sugerido">{renderTable(suggestedRequests, 'sugerido')}</TabsContent>
             )}
             <TabsContent value="solicitado">{renderTable(requestedRequests, 'solicitado')}</TabsContent>
