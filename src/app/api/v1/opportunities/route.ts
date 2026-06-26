@@ -1,16 +1,15 @@
-import { NextResponse } from 'next/server';
-
 import { apiErrorResponse, ApiError } from '@/lib/server/api-error';
 import { isServerResponse, requireServerCapability } from '@/lib/server/auth';
+import { jsonDataResponse } from '@/lib/server/json-response';
 import { listOpportunitiesForOrganization } from '@/modules/opportunities/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  const user = await requireServerCapability(request, 'opportunities.read');
-  if (isServerResponse(user)) return user;
   try {
+    const user = await requireServerCapability(request, 'opportunities.read');
+    if (isServerResponse(user)) return user;
     const url = new URL(request.url);
     const rawScope = url.searchParams.get('scope') || 'active';
     if (rawScope !== 'active' && rawScope !== 'all') {
@@ -18,7 +17,7 @@ export async function GET(request: Request) {
     }
     const clientId = url.searchParams.get('clientId') || undefined;
     const opportunities = await listOpportunitiesForOrganization(user.organizationId, rawScope, clientId);
-    return NextResponse.json({ data: opportunities });
+    return jsonDataResponse(opportunities);
   } catch (error) {
     return apiErrorResponse(error);
   }
