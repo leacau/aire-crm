@@ -59,8 +59,18 @@ export async function requireServerUser(request: Request): Promise<ServerUser | 
     return NextResponse.json({ error: 'Falta el token de autenticación.' }, { status: 401 });
   }
 
+  let decoded;
+  
+  // 1. Verificamos exclusivamente el Token
   try {
-    const decoded = await authAdmin.verifyIdToken(token);
+    decoded = await authAdmin.verifyIdToken(token);
+  } catch (error) {
+    console.error('🔥 [AUTH] Error real verificando el Token de Firebase:', error);
+    return NextResponse.json({ error: 'El token de autenticación no es válido o ha expirado.' }, { status: 401 });
+  }
+
+  // 2. Buscamos el perfil en base de datos de manera aislada
+  try {
     const userSnap = await dbAdmin.collection('users').doc(decoded.uid).get();
     const profile = userSnap.exists ? userSnap.data() : {};
     const tokenOrganizationId = typeof decoded.organizationId === 'string'
@@ -76,8 +86,16 @@ export async function requireServerUser(request: Request): Promise<ServerUser | 
       area: profile?.area,
       permissions: profile?.permissions,
     };
-  } catch {
-    return NextResponse.json({ error: 'El token de autenticación no es válido.' }, { status: 401 });
+  } catch (error) {
+    console.error('🔥 [AUTH] Error obteniendo el perfil de Firestore (posible timeout/cold start):', error);
+    // Fallback: Si el token es válido pero Firestore tarda en responder, permitimos pasar 
+    // con un usuario básico para que procesos críticos (como enviar un email) no crasheen.
+    return {
+      uid: decoded.uid,
+      organizationId: typeof decoded.organizationId === 'string' ? decoded.organizationId : DEFAULT_ORGANIZATION_ID,
+      email: decoded.email,
+      name: decoded.name || decoded.email || 'Usuario',
+    };
   }
 }
 
