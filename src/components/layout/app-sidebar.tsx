@@ -131,7 +131,7 @@ export function AppSidebar() {
   }, [userInfo?.id]);
 
   const rawSidebarEntries: SidebarEntry[] = [
-    { title: 'Dashboard', href: '/', icon: LayoutDashboard, screenName: 'Dashboard' },
+    { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, screenName: 'Dashboard' },
     { title: 'Necesidades', href: '/canjes', icon: Repeat, screenName: 'Canjes' },
     { title: 'App Móvil Canjes', href: '/app-canjes', icon: Smartphone, screenName: 'AppCanjes' },
     {
