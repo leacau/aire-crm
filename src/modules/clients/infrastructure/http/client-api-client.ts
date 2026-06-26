@@ -39,6 +39,7 @@ export async function createClient(
   input: CreateClientInput,
   ownerId?: string,
   ownerName?: string,
+  options: { skipCoachingUpdate?: boolean } = {},
 ): Promise<string> {
   const result = await apiRequest<{ id: string }>(API_PATH, {
     method: 'POST',
@@ -46,7 +47,7 @@ export async function createClient(
   });
   invalidateClients();
 
-  if (ownerId && ownerName) {
+  if (ownerId && ownerName && !options.skipCoachingUpdate) {
     try {
       const { autoUpdateCoachingSession } = await import('@/lib/firebase-service');
       await autoUpdateCoachingSession(

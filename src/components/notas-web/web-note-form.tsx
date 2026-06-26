@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getClients, saveWebNote, updateWebNote, getWebNote, getAllUsers, getAdvertisingOrder, getAdvertisingOrdersByClientId } from '@/lib/firebase-service'; 
 import { AdvertisingOrder, Client, WebNote, User, WebNoteFormat, WebNoteImageSupport } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
-import { hasManagementPrivileges } from '@/lib/role-utils';
+import { hasExecutiveManagementPrivileges, hasManagementPrivileges } from '@/lib/role-utils';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +22,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Save, ExternalLink, ArrowLeft, Loader2, Link as LinkIcon } from 'lucide-react';
 import { WebNotePdf } from './web-note-pdf';
 import { ClientCombobox } from '@/components/clients/client-combobox';
-import { advertisingOrderSupportsExecution } from '@/lib/advertising-order-utils';
+import { advertisingOrderSupportsExecution, getAdvertisingOrderApprovalStatus } from '@/lib/advertising-order-utils';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 
 import { arrayUnion } from 'firebase/firestore';
@@ -72,7 +72,10 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
     
     const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
     const effectiveOrderId = orderId || selectedOrderId;
-    const compatibleOrders = clientOrders.filter(order => advertisingOrderSupportsExecution(order, 'web-note'));
+    const canUseUnapprovedOrder = hasExecutiveManagementPrivileges(userInfo);
+    const compatibleOrders = clientOrders.filter(order =>
+        advertisingOrderSupportsExecution(order, 'web-note')
+        && (getAdvertisingOrderApprovalStatus(order) === 'Aprobado' || canUseUnapprovedOrder));
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement)) {
@@ -123,6 +126,11 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
                 } else if (orderId) {
                     const parentOrder = await getAdvertisingOrder(orderId);
                     if (parentOrder) {
+                        if (getAdvertisingOrderApprovalStatus(parentOrder) !== 'Aprobado' && !canUseUnapprovedOrder) {
+                            toast({ title: 'Orden pendiente de aprobación', description: 'Solo Jefes o Gerencia pueden cargar ejecuciones antes de la aprobación.', variant: 'destructive' });
+                            router.replace(`/publicidad/${orderId}`);
+                            return;
+                        }
                         setClientId(parentOrder.clientId);
                         setAdvisorId(parentOrder.createdBy || userInfo?.id || '');
                         setAdvisorName(parentOrder.accountExecutive || userInfo?.name || '');
@@ -140,7 +148,7 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
             }
         };
         if (userInfo) init();
-    }, [userInfo, editId, cloneId, orderId, toast, canReassign]);
+    }, [userInfo, editId, cloneId, orderId, toast, canReassign, canUseUnapprovedOrder, router]);
 
     useEffect(() => {
         const loadClientOrders = async () => {

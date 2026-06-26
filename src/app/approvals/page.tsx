@@ -49,6 +49,37 @@ interface UnifiedApprovalItem {
   approvalHistory?: ApprovalHistoryItem[];
 }
 
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
+const waitForDocumentAssets = async (containerElement: HTMLElement) => {
+  if (document.fonts?.ready) {
+    await withTimeout(document.fonts.ready, 5000, 'La carga de tipografías demoró demasiado.');
+  }
+
+  const images = Array.from(containerElement.querySelectorAll('img'));
+  await withTimeout(
+    Promise.all(images.map(image => image.complete
+      ? Promise.resolve()
+      : new Promise<void>(resolve => {
+          image.addEventListener('load', () => resolve(), { once: true });
+          image.addEventListener('error', () => resolve(), { once: true });
+        }))),
+    5000,
+    'La carga de imágenes demoró demasiado.'
+  );
+};
+
 function ApprovalsPageComponent() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
@@ -390,20 +421,46 @@ function ApprovalsPageComponent() {
       if (sellerProfile?.email) sellerEmail = sellerProfile.email;
     }
 
-    const docPdf = await generateAdvancedPdf(containerElement, item.type);
-    const orderBase64 = docPdf.output('datauristring').split(',')[1];
+    const attachments: Array<{ filename: string; content: string; encoding: 'base64' }> = [];
+    const attachmentErrors: string[] = [];
 
-    let clientBase64 = '';
-    if (item.clientId) {
-      const clientObj = await getClient(item.clientId);
-      if (clientObj) clientBase64 = await generateClientSummaryPdfBase64(clientObj);
+    try {
+      await waitForDocumentAssets(containerElement);
+      const docPdf = await withTimeout(
+        generateAdvancedPdf(containerElement, item.type),
+        30000,
+        `La generación del PDF de ${item.type} demoró demasiado.`
+      );
+      const orderBase64 = docPdf.output('datauristring').split(',')[1];
+      attachments.push({
+        filename: `${item.type.replace(/ /g, '_')}_${item.clientName.replace(/ /g, '_')}.pdf`,
+        content: orderBase64,
+        encoding: 'base64',
+      });
+    } catch (error) {
+      console.error(`Error generating ${item.type} approval PDF:`, error);
+      attachmentErrors.push(`el PDF de ${item.type}`);
     }
 
-    const attachments = [
-      { filename: `${item.type.replace(/ /g, '_')}_${item.clientName.replace(/ /g, '_')}.pdf`, content: orderBase64, encoding: 'base64' }
-    ];
-    if (clientBase64) {
-      attachments.push({ filename: `Alta_Cliente_${item.clientName.replace(/ /g, '_')}.pdf`, content: clientBase64, encoding: 'base64' });
+    if (item.clientId) {
+      try {
+        const clientObj = await getClient(item.clientId);
+        if (clientObj) {
+          const clientBase64 = await withTimeout(
+            generateClientSummaryPdfBase64(clientObj),
+            30000,
+            'La generación del alta de cliente demoró demasiado.'
+          );
+          attachments.push({
+            filename: `Alta_Cliente_${item.clientName.replace(/ /g, '_')}.pdf`,
+            content: clientBase64,
+            encoding: 'base64',
+          });
+        }
+      } catch (error) {
+        console.error('Error generating client approval PDF:', error);
+        attachmentErrors.push('el alta de cliente');
+      }
     }
 
     const titleHtml = isRenotification 
@@ -414,17 +471,26 @@ function ApprovalsPageComponent() {
       <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
         ${titleHtml}
         <p>Se informa que el Centro de Revisión ha aprobado de manera definitiva la carga de <strong>${item.type}</strong> para el cliente <strong>${item.clientName}</strong>.</p>
-        <p>Se adjuntan los PDFs finales de carga y alta comercial correspondientes.</p>
+        <p>${attachments.length > 0
+          ? 'Se adjuntan los PDFs finales disponibles de la carga y el alta comercial.'
+          : 'La aprobación quedó registrada correctamente. Los adjuntos no pudieron generarse y pueden descargarse desde el CRM.'}</p>
+        ${attachmentErrors.length > 0
+          ? `<p style="color: #b45309;"><strong>Atención:</strong> no se pudo adjuntar ${attachmentErrors.join(' ni ')}.</p>`
+          : ''}
       </div>
     `;
 
-    await sendEmail({
-      accessToken,
-      to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar', sellerEmail],
-      subject: `INGRESO CORRECTO - ${item.type}: ${item.clientName}`,
-      body: approvalEmailBody,
-      attachments
-    });
+    await withTimeout(
+      sendEmail({
+        accessToken,
+        to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar', sellerEmail],
+        subject: `INGRESO CORRECTO - ${item.type}: ${item.clientName}`,
+        body: approvalEmailBody,
+        attachments
+      }),
+      45000,
+      'El servicio de correo no respondió a tiempo.'
+    );
   };
 
   const submitEvaluation = async () => {
@@ -488,8 +554,9 @@ function ApprovalsPageComponent() {
             body: returnEmailBody
             });
         }
-      } else if (actionType === 'Aprobado' && documentContainerRef.current) {
-        const elementToCapture = documentContainerRef.current.firstChild as HTMLElement;
+      } else if (actionType === 'Aprobado') {
+        const elementToCapture = documentContainerRef.current?.firstElementChild as HTMLElement | null;
+        if (!elementToCapture) throw new Error('No se pudo preparar el documento aprobado para notificar.');
         await dispatchApprovalEmail(selectedItem, elementToCapture, false);
       }
 
@@ -506,29 +573,29 @@ function ApprovalsPageComponent() {
 
   // 🟢 LÓGICA DE RENOTIFICACIÓN
   const handleRenotify = async (item: UnifiedApprovalItem) => {
-    if (item.type === 'Nota Comercial' || item.type === 'Orden de Publicidad') {
-      await ensureProgramsLoaded();
-    }
-    const hydratedItem = await withOrderBilling(item);
-    setRenotifyingItem(hydratedItem);
-    
-    // Dejamos un pequeño delay para que React dibuje el PDF oculto en el DOM
-    setTimeout(async () => {
-      try {
-        if (hiddenDocumentContainerRef.current && hiddenDocumentContainerRef.current.firstChild) {
-          const elementToCapture = hiddenDocumentContainerRef.current.firstChild as HTMLElement;
-          await dispatchApprovalEmail(hydratedItem, elementToCapture, true);
-          toast({ title: 'Notificación reenviada correctamente.' });
-        } else {
-          throw new Error("No se pudo generar el documento.");
-        }
-      } catch (error) {
-        console.error("Error al renotificar:", error);
-        toast({ title: 'Error al reenviar el correo', variant: 'destructive' });
-      } finally {
-        setRenotifyingItem(null);
+    try {
+      if (item.type === 'Nota Comercial' || item.type === 'Orden de Publicidad') {
+        await ensureProgramsLoaded();
       }
-    }, 800);
+      const hydratedItem = await withOrderBilling(item);
+      flushSync(() => setRenotifyingItem(hydratedItem));
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+      const elementToCapture = hiddenDocumentContainerRef.current?.firstElementChild as HTMLElement | null;
+      if (!elementToCapture) throw new Error('No se pudo preparar el documento para reinformar.');
+
+      await dispatchApprovalEmail(hydratedItem, elementToCapture, true);
+      toast({ title: 'Notificación reenviada correctamente.' });
+    } catch (error) {
+      console.error('Error al renotificar:', error);
+      toast({
+        title: 'No se pudo reinformar',
+        description: error instanceof Error ? error.message : 'Ocurrió un error al reenviar el correo.',
+        variant: 'destructive'
+      });
+    } finally {
+      setRenotifyingItem(null);
+    }
   };
 
   const getTypeColorClass = (type: ApprovalItemType) => {

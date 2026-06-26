@@ -2,11 +2,26 @@
 
 import React from 'react';
 import type { SocialMediaRequest } from '@/lib/types';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 
 interface SocialMediaPdfProps {
   request: Partial<SocialMediaRequest>;
 }
+
+const formatPdfDate = (value: unknown): string => {
+    if (!value) return '-';
+
+    const timestampValue = value as { toDate?: () => Date };
+    const date = typeof timestampValue.toDate === 'function'
+        ? timestampValue.toDate()
+        : value instanceof Date
+            ? value
+            : typeof value === 'string'
+                ? parseISO(value)
+                : new Date(String(value));
+
+    return isValid(date) ? format(date, 'dd/MM/yyyy') : '-';
+};
 
 const SectionTitle = ({ title }: { title: string }) => (
     <div className="bg-gray-200 p-2 font-bold uppercase mb-2 text-sm border-b-2 border-red-600 w-full">
@@ -69,7 +84,7 @@ export const SocialMediaPdf = React.forwardRef<HTMLDivElement, SocialMediaPdfPro
                         {request.contentType === 'Reel' && (
                             <>
                                 <Field label="Lugar de Grabación" value={request.recordingLocation} />
-                                <Field label="Fecha Grabación" value={request.recordingDate ? format(parseISO(request.recordingDate), 'dd/MM/yyyy') : '-'} />
+                                <Field label="Fecha Grabación" value={formatPdfDate(request.recordingDate)} />
                                 <Field label="Hora" value={request.recordingTime} />
                             </>
                         )}
@@ -86,7 +101,7 @@ export const SocialMediaPdf = React.forwardRef<HTMLDivElement, SocialMediaPdfPro
                     <Field label="Objetivo" value={request.objective} fullWidth />
                     <Field label="Guion estimativo / Idea" value={request.script} fullWidth />
                     <div className="grid grid-cols-2 gap-4">
-                        <Field label="Fecha Pub. Sugerida" value={request.publishDate ? format(parseISO(request.publishDate), 'dd/MM/yyyy') : '-'} />
+                        <Field label="Fecha Pub. Sugerida" value={formatPdfDate(request.publishDate)} />
                         {request.materialUrl && <Field label="Material de Apoyo" value={request.materialUrl} />}
                     </div>
                 </div>

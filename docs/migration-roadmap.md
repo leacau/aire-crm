@@ -21,6 +21,10 @@ Estado actual:
 - Oportunidades ya tiene consultas de lectura detrás de API v1.
 - Actividades ya tiene lectura, alta y actualización detrás de API v1.
 - Tareas ya tiene lectura, finalización y reprogramación detrás de API v1.
+- Se integraron cambios funcionales nacidos en `codex_branch` sin merge directo:
+  Tango/facturación, reinformado de aprobaciones, ejecuciones publicitarias
+  previas a aprobación para gestión ejecutiva y el nuevo centro de actividad
+  comercial sobre Coaching.
 - Las operaciones destructivas o con cascadas complejas quedan pendientes hasta rediseñar sus efectos laterales.
 
 ## Etapa 2 — API central

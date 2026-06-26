@@ -3,8 +3,9 @@ import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 
 const DEFAULT_TANGO_BASE_URL = 'https://040896-002.connect.axoft.com';
 const COMPANY_QUERIES: Record<string, { process: string; customQuery: string }> = {
-  '5': { process: '17942', customQuery: '0' },
-  '6': { process: '17943', customQuery: '1233' },
+  '4': { process: '17943', customQuery: '1235' }, // Aire (Avión)
+  '5': { process: '17943', customQuery: '1235' }, // SRL
+  '6': { process: '17943', customQuery: '1235' }, // SAS
 };
 const PAGE_SIZE = 2000;
 const MAX_PAGES = 100;
@@ -131,14 +132,27 @@ export async function GET(request: Request) {
         && (!toDate || issueDate <= toDate)
         && (!clientFilter || clientText.includes(clientFilter))
         && (!sellerFilter || sellerText.includes(sellerFilter));
-    }).map(invoice => ({
-      ...invoice,
-      TIPO_COMPROBANTE: invoice.TIPO_COMPROBANTE
-        || invoice.DESC_TIPO_COMPROBANTE
-        || invoice.COD_TIPO_COMPROBANTE
-        || undefined,
-      TOTAL: typeof invoice.TOTAL === 'number' ? invoice.TOTAL : null,
-    }));
+    }).map((invoice: any) => {
+      // 1. Procesar el TOTAL de forma nativa (JavaScript entiende el punto como decimal por defecto)
+      let parsedTotal = null;
+      if (invoice.TOTAL != null) {
+        // Convierte "33333.330000" o 33333.33 directamente a número
+        const numericTotal = Number(invoice.TOTAL);
+        parsedTotal = isNaN(numericTotal) ? null : numericTotal;
+      }
+
+      return {
+        ...invoice,
+        TIPO_COMPROBANTE: invoice.TIPO_COMPROBANTE
+          || invoice.DESC_TIPO_COMPROBANTE
+          || invoice.COD_TIPO_COMPROBANTE
+          || undefined,
+        TOTAL: parsedTotal,
+        COD_CLIENTE: invoice.COD_CLIENTE || invoice.CODIGO_CLIENTE || invoice.CLIENTE || '',
+        COD_VENDEDOR: invoice.COD_VENDEDOR || invoice.COD_VEND || invoice.VENDEDOR || '',
+        NOMBRE_VENDEDOR: invoice.NOMBRE_VENDEDOR || invoice.VENDEDOR_NOMBRE || invoice.NOMBRE_VEND || '',
+      };
+    });
 
     return NextResponse.json({
       list: filtered,

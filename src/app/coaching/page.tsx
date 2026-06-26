@@ -82,7 +82,7 @@ export default function CoachingPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header title="Seguimiento Semanal">
+      <Header title="Centro de Actividad Comercial">
         {(authLoading || loading) && canManageCoaching ? (
           <div className="h-10 w-[280px] animate-pulse rounded bg-muted" />
         ) : canManageCoaching && advisors.length > 0 && (

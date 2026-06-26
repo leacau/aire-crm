@@ -23,6 +23,7 @@ export async function createProspect(
   input: CreateProspectInput,
   userId: string,
   userName: string,
+  options: { skipCoachingUpdate?: boolean } = {},
 ): Promise<string> {
   const result = await apiRequest<{ id: string }>(API_PATH, {
     method: 'POST',
@@ -31,18 +32,20 @@ export async function createProspect(
   invalidateProspectApiCache();
 
   // Transitional side effect until Coaching is migrated behind the API.
-  try {
-    const { autoUpdateCoachingSession } = await import('@/lib/firebase-service');
-    await autoUpdateCoachingSession(
-      userId,
-      userName,
-      'prospect',
-      result.id,
-      input.companyName,
-      'Nuevo prospecto cargado en el sistema.',
-    );
-  } catch (error) {
-    console.error('No se pudo actualizar el seguimiento del prospecto:', error);
+  if (!options.skipCoachingUpdate) {
+    try {
+      const { autoUpdateCoachingSession } = await import('@/lib/firebase-service');
+      await autoUpdateCoachingSession(
+        userId,
+        userName,
+        'prospect',
+        result.id,
+        input.companyName,
+        'Nuevo prospecto cargado en el sistema.',
+      );
+    } catch (error) {
+      console.error('No se pudo actualizar el seguimiento del prospecto:', error);
+    }
   }
 
   return result.id;

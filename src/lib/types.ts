@@ -477,6 +477,13 @@ export type CoachingItem = {
   entityName: string; 
   action: string; 
   status: CoachingItemStatus;
+  commercialWorkType?: 'new_company' | 'existing_client' | 'existing_prospect' | 'general';
+  commercialIntent?: 'new_contact' | 'renegotiation' | 'new_proposal' | 'renewal' | 'recovery' | 'follow_up' | 'general';
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  businessLine?: string;
+  nextActionDate?: string;
   advisorNotes?: string; 
   followUpDone?: string;
   followUpDoneUpdatedAt?: string;

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Header } from '@/components/layout/header';
+import { TangoBillingSummary } from '@/components/dashboard/tango-billing-summary';
 import {
   Card,
   CardContent,
@@ -740,6 +741,7 @@ export default function DashboardPage() {
                     </CardTitle>
                     <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
+                  <TangoBillingSummary />
                   <CardContent>
                     <div className="text-2xl font-bold">
                       {loadingData ? <Skeleton className="h-8 w-32" /> : formatCurrency(totalBillingInPeriod)}
