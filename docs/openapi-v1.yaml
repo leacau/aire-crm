@@ -325,7 +325,11 @@ paths:
         - name: company
           in: query
           required: true
-          schema: { $ref: '#/components/schemas/TangoCompanyId' }
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/TangoCompanyId'
+              - type: string
+                enum: [all]
         - name: fromDate
           in: query
           schema: { type: string, format: date }
@@ -337,6 +341,18 @@ paths:
           schema: { type: string }
         - name: seller
           in: query
+          schema: { type: string }
+        - name: types
+          in: query
+          description: Tipos de comprobante separados por coma.
+          schema: { type: string }
+        - name: clients
+          in: query
+          description: Codigos de cliente separados por coma.
+          schema: { type: string }
+        - name: sellers
+          in: query
+          description: Codigos de vendedor separados por coma.
           schema: { type: string }
       responses:
         '200':

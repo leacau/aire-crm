@@ -11,6 +11,7 @@ export type {
   ClientTangoInvoiceQuery,
   TangoBillingSummary,
   TangoCompany,
+  TangoCompanyFilter,
   TangoCompanyId,
   TangoInvoice,
   TangoInvoiceQuery,

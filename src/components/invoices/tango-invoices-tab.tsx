@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth } from 'date-fns';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -18,20 +21,110 @@ import {
   normalizeTangoCode,
   normalizeTangoText,
   tangoCompanies,
-  type TangoCompanyId,
+  type TangoCompanyFilter,
   type TangoInvoice,
 } from '@/modules/billing/client';
 
 const ROWS_PER_PAGE = 50;
 
+type FilterOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
+
+function uniqueOptions(options: FilterOption[]) {
+  const seen = new Set<string>();
+  return options
+    .filter(option => {
+      if (!option.value || seen.has(option.value)) return false;
+      seen.add(option.value);
+      return true;
+    })
+    .sort((left, right) => left.label.localeCompare(right.label, 'es'));
+}
+
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  options: FilterOption[];
+  selected: string[];
+  onChange: (value: string[]) => void;
+  disabled?: boolean;
+}) {
+  const selectedLabels = options.filter(option => selected.includes(option.value)).map(option => option.label);
+
+  const toggleValue = (value: string) => {
+    onChange(selected.includes(value)
+      ? selected.filter(item => item !== value)
+      : [...selected, value]);
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="w-full justify-between" disabled={disabled || options.length === 0}>
+            <span className="truncate text-left">
+              {selected.length === 0 ? 'Todos' : `${selected.length} seleccionado${selected.length > 1 ? 's' : ''}`}
+            </span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-80 space-y-3 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium">{label}</p>
+            <Button type="button" variant="ghost" size="sm" onClick={() => onChange([])}>
+              Limpiar
+            </Button>
+          </div>
+          <div className="max-h-72 space-y-1 overflow-y-auto">
+            {options.map(option => (
+              <label key={option.value} className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 hover:bg-muted">
+                <Checkbox
+                  checked={selected.includes(option.value)}
+                  onCheckedChange={() => toggleValue(option.value)}
+                />
+                <span className="grid gap-0.5 text-sm leading-tight">
+                  <span>{option.label}</span>
+                  {option.description && <span className="text-xs text-muted-foreground">{option.description}</span>}
+                </span>
+              </label>
+            ))}
+          </div>
+          {selectedLabels.length > 0 && (
+            <div className="flex flex-wrap gap-1 border-t pt-2">
+              {selectedLabels.slice(0, 6).map(item => (
+                <Badge key={item} variant="secondary">{item}</Badge>
+              ))}
+              {selectedLabels.length > 6 && <Badge variant="outline">+{selectedLabels.length - 6}</Badge>}
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+const getTypeKey = (invoice: TangoInvoice) => normalizeTangoText(invoice.TIPO_COMPROBANTE || '-');
+const getClientKey = (invoice: TangoInvoice) => `${invoice._companyId || 'all'}:${normalizeTangoCode(invoice.COD_CLIENTE)}`;
+const getSellerKey = (invoice: TangoInvoice) =>
+  `${invoice._companyId || 'all'}:${normalizeTangoCode(invoice.COD_VENDEDOR) || normalizeTangoText(invoice.NOMBRE_VENDEDOR)}`;
+
 export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
   const { toast } = useToast();
   const today = new Date();
-  const [company, setCompany] = useState<TangoCompanyId>('6');
+  const [company, setCompany] = useState<TangoCompanyFilter>('all');
   const [fromDate, setFromDate] = useState(format(startOfMonth(today), 'yyyy-MM-dd'));
   const [toDate, setToDate] = useState(format(today, 'yyyy-MM-dd'));
-  const [client, setClient] = useState('');
-  const [seller, setSeller] = useState('');
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [selectedSellers, setSelectedSellers] = useState<string[]>([]);
+  const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [invoices, setInvoices] = useState<TangoInvoice[]>([]);
   const [sourceTotalCount, setSourceTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -43,11 +136,52 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
     getAllUsers().then(setUsers).catch(error => console.error('Error loading CRM sellers:', error));
   }, []);
 
-  const totalPages = Math.max(1, Math.ceil(invoices.length / ROWS_PER_PAGE));
-  const visibleInvoices = useMemo(() => invoices.slice(
+  useEffect(() => {
+    setSelectedTypes([]);
+    setSelectedSellers([]);
+    setSelectedClients([]);
+    setPage(1);
+  }, [company, fromDate, toDate]);
+
+  const typeOptions = useMemo(() => uniqueOptions(invoices.map(invoice => ({
+    value: getTypeKey(invoice),
+    label: invoice.TIPO_COMPROBANTE || '-',
+  }))), [invoices]);
+
+  const sellerOptions = useMemo(() => uniqueOptions(invoices.map(invoice => {
+    const companyLabel = tangoCompanies.find(item => item.id === invoice._companyId)?.shortLabel;
+    return {
+      value: getSellerKey(invoice),
+      label: invoice.NOMBRE_VENDEDOR || invoice.COD_VENDEDOR || 'Sin vendedor',
+      description: [companyLabel, invoice.COD_VENDEDOR].filter(Boolean).join(' · '),
+    };
+  })), [invoices]);
+
+  const clientOptions = useMemo(() => uniqueOptions(invoices.map(invoice => {
+    const companyLabel = tangoCompanies.find(item => item.id === invoice._companyId)?.shortLabel;
+    return {
+      value: getClientKey(invoice),
+      label: invoice.RAZON_SOCIAL || invoice.COD_CLIENTE || 'Sin cliente',
+      description: [companyLabel, invoice.COD_CLIENTE].filter(Boolean).join(' · '),
+    };
+  })), [invoices]);
+
+  const filteredInvoices = useMemo(() => invoices.filter(invoice =>
+    (selectedTypes.length === 0 || selectedTypes.includes(getTypeKey(invoice)))
+    && (selectedSellers.length === 0 || selectedSellers.includes(getSellerKey(invoice)))
+    && (selectedClients.length === 0 || selectedClients.includes(getClientKey(invoice))),
+  ), [invoices, selectedClients, selectedSellers, selectedTypes]);
+
+  const filteredTotal = useMemo(
+    () => filteredInvoices.reduce((sum, invoice) => sum + Number(invoice.TOTAL || 0), 0),
+    [filteredInvoices],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / ROWS_PER_PAGE));
+  const visibleInvoices = useMemo(() => filteredInvoices.slice(
     (page - 1) * ROWS_PER_PAGE,
     page * ROWS_PER_PAGE,
-  ), [invoices, page]);
+  ), [filteredInvoices, page]);
 
   const handleSearch = async () => {
     if (fromDate && toDate && fromDate > toDate) {
@@ -62,13 +196,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
     setLoading(true);
     setHasSearched(true);
     try {
-      const result = await getTangoInvoices({
-        company,
-        fromDate,
-        toDate,
-        client: client.trim() || undefined,
-        seller: seller.trim() || undefined,
-      });
+      const result = await getTangoInvoices({ company, fromDate, toDate });
 
       setInvoices(Array.isArray(result.list) ? result.list : []);
       setSourceTotalCount(Number(result.sourceTotalCount) || 0);
@@ -96,12 +224,13 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 rounded-md border bg-white p-4 md:grid-cols-2 xl:grid-cols-[160px_160px_160px_1fr_1fr_auto] xl:items-end">
+      <div className="grid gap-4 rounded-md border bg-white p-4 md:grid-cols-2 xl:grid-cols-[170px_160px_160px_1fr_1fr_1fr_auto] xl:items-end">
         <div className="space-y-2">
           <Label>Compañía</Label>
-          <Select value={company} onValueChange={value => setCompany(value as TangoCompanyId)}>
+          <Select value={company} onValueChange={value => setCompany(value as TangoCompanyFilter)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
               {tangoCompanies.map(item => (
                 <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
               ))}
@@ -116,14 +245,9 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
           <Label>Hasta</Label>
           <Input type="date" value={toDate} onChange={event => setToDate(event.target.value)} />
         </div>
-        <div className="space-y-2">
-          <Label>Cliente</Label>
-          <Input value={client} onChange={event => setClient(event.target.value)} placeholder="Código o razón social" />
-        </div>
-        <div className="space-y-2">
-          <Label>Vendedor</Label>
-          <Input value={seller} onChange={event => setSeller(event.target.value)} placeholder="Código o nombre" />
-        </div>
+        <MultiSelectFilter label="Tipo de comprobante" options={typeOptions} selected={selectedTypes} onChange={setSelectedTypes} disabled={!hasSearched || loading} />
+        <MultiSelectFilter label="Vendedor" options={sellerOptions} selected={selectedSellers} onChange={setSelectedSellers} disabled={!hasSearched || loading} />
+        <MultiSelectFilter label="Cliente" options={clientOptions} selected={selectedClients} onChange={setSelectedClients} disabled={!hasSearched || loading} />
         <Button onClick={handleSearch} disabled={loading}>
           {loading ? <Spinner size="small" className="mr-2" /> : <Search className="mr-2 h-4 w-4" />}
           Consultar
@@ -131,16 +255,18 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
       </div>
 
       {hasSearched && !loading && (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-          <span>{invoices.length} comprobantes coincidentes de {sourceTotalCount} consultados en Tango.</span>
-          {invoices.length > ROWS_PER_PAGE && <span>Página {page} de {totalPages}</span>}
+        <div className="grid gap-2 rounded-md border bg-white px-4 py-3 text-sm text-muted-foreground md:grid-cols-2">
+          <span>{filteredInvoices.length} comprobantes visibles de {invoices.length} filtrados ({sourceTotalCount} consultados en Tango).</span>
+          <span className="font-semibold text-slate-800 md:text-right">Total mostrado: {formatTangoCurrency(filteredTotal)}</span>
+          {filteredInvoices.length > ROWS_PER_PAGE && <span className="md:col-span-2">Página {page} de {totalPages}</span>}
         </div>
       )}
 
       <div className="overflow-x-auto rounded-md border bg-white">
-        <Table className="min-w-[1280px]">
+        <Table className="min-w-[1380px]">
           <TableHeader>
             <TableRow>
+              <TableHead>Empresa</TableHead>
               <TableHead>Fecha</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Comprobante</TableHead>
@@ -152,9 +278,11 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={7} className="h-32 text-center"><Spinner size="large" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="h-32 text-center"><Spinner size="large" /></TableCell></TableRow>
             ) : visibleInvoices.length > 0 ? visibleInvoices.map((invoice, index) => {
-              const companyConfig = tangoCompanies.find(item => item.id === company) || tangoCompanies[2];
+              const companyConfig = tangoCompanies.find(item => item.id === invoice._companyId)
+                || tangoCompanies.find(item => item.id === company)
+                || tangoCompanies[2];
               const crmClient = clients.find(item =>
                 normalizeTangoCode(item[companyConfig.crmClientField]) === normalizeTangoCode(invoice.COD_CLIENTE),
               );
@@ -166,7 +294,8 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
                 || users.find(user => normalizeTangoText(user.name) === normalizeTangoText(invoice.NOMBRE_VENDEDOR));
 
               return (
-                <TableRow key={`${invoice.ID_GVA12 || invoice.NRO_COMPROBANTE || 'invoice'}-${index}`}>
+                <TableRow key={`${invoice._companyId || company}-${invoice.ID_GVA12 || invoice.NRO_COMPROBANTE || 'invoice'}-${index}`}>
+                  <TableCell><Badge variant="outline">{companyConfig.shortLabel}</Badge></TableCell>
                   <TableCell>{invoice.FECHA_DE_EMISION ? format(new Date(invoice.FECHA_DE_EMISION), 'dd/MM/yyyy') : '-'}</TableCell>
                   <TableCell>{invoice.TIPO_COMPROBANTE || '-'}</TableCell>
                   <TableCell className="font-medium">{invoice.NRO_COMPROBANTE || '-'}</TableCell>
@@ -192,7 +321,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
               );
             }) : (
               <TableRow>
-                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-28 text-center text-muted-foreground">
                   {hasSearched ? 'No se encontraron comprobantes con esos filtros.' : 'Completá los filtros y consultá Tango.'}
                 </TableCell>
               </TableRow>
@@ -201,7 +330,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
         </Table>
       </div>
 
-      {invoices.length > ROWS_PER_PAGE && (
+      {filteredInvoices.length > ROWS_PER_PAGE && (
         <div className="flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={page === 1}>
             <ChevronLeft className="mr-1 h-4 w-4" />Anterior

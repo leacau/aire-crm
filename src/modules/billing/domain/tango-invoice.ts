@@ -1,16 +1,18 @@
 export type TangoCompanyId = '4' | '5' | '6';
+export type TangoCompanyFilter = TangoCompanyId | 'all';
 
 export type TangoCompany = {
   id: TangoCompanyId;
   label: string;
+  shortLabel: string;
   crmClientField: 'idAire' | 'idAireSrl' | 'idAireDigital';
   sellerCompanySearch: string;
 };
 
 export const tangoCompanies: readonly TangoCompany[] = [
-  { id: '4', label: 'Aire (Avión)', crmClientField: 'idAire', sellerCompanySearch: 'aire' },
-  { id: '5', label: 'SRL', crmClientField: 'idAireSrl', sellerCompanySearch: 'srl' },
-  { id: '6', label: 'SAS', crmClientField: 'idAireDigital', sellerCompanySearch: 'sas' },
+  { id: '4', label: 'Aire (Avión)', shortLabel: 'Aire', crmClientField: 'idAire', sellerCompanySearch: 'aire' },
+  { id: '5', label: 'SRL', shortLabel: 'SRL', crmClientField: 'idAireSrl', sellerCompanySearch: 'srl' },
+  { id: '6', label: 'SAS', shortLabel: 'SAS', crmClientField: 'idAireDigital', sellerCompanySearch: 'sas' },
 ] as const;
 
 export type TangoInvoice = {
@@ -33,11 +35,14 @@ export type TangoInvoice = {
 };
 
 export type TangoInvoiceQuery = {
-  company: TangoCompanyId;
+  company: TangoCompanyFilter;
   fromDate?: string;
   toDate?: string;
   client?: string;
   seller?: string;
+  types?: string;
+  clients?: string;
+  sellers?: string;
 };
 
 export type TangoInvoiceResult = {

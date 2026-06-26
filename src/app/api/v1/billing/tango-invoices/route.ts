@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const company = searchParams.get('company') || '';
-    if (!isTangoCompanyId(company)) {
+    if (company !== 'all' && !isTangoCompanyId(company)) {
       throw new ApiError(400, 'La compañía solicitada no es válida.', 'INVALID_TANGO_COMPANY');
     }
 
@@ -25,12 +25,15 @@ export async function GET(request: Request) {
     }
 
     const result = await listTangoInvoices({
-      company,
+      company: company as 'all' | '4' | '5' | '6',
       fromDate,
       toDate,
       client: searchParams.get('client') || undefined,
       seller: searchParams.get('seller') || undefined,
-    });
+      types: searchParams.get('types') || undefined,
+      clients: searchParams.get('clients') || undefined,
+      sellers: searchParams.get('sellers') || undefined,
+    }, user);
     return NextResponse.json({ data: result }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     return apiErrorResponse(error);

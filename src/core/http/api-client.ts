@@ -23,19 +23,30 @@ export class ApiClientError extends Error {
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = await auth.currentUser?.getIdToken();
+  const currentUser = auth.currentUser;
+  const token = await currentUser?.getIdToken();
   if (!token) {
     throw new ApiClientError(401, 'Tu sesión no está disponible. Vuelve a iniciar sesión.', 'AUTH_REQUIRED');
   }
 
-  const headers = new Headers(init.headers);
-  headers.set('Authorization', `Bearer ${token}`);
-  headers.set('Accept', 'application/json');
-  if (init.body && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
+  const buildHeaders = (idToken: string) => {
+    const headers = new Headers(init.headers);
+    headers.set('Authorization', `Bearer ${idToken}`);
+    headers.set('Accept', 'application/json');
+    if (init.body && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    return headers;
+  };
+
+  let response = await fetch(path, { ...init, headers: buildHeaders(token) });
+  if (response.status === 401) {
+    const refreshedToken = await currentUser?.getIdToken(true);
+    if (refreshedToken) {
+      response = await fetch(path, { ...init, headers: buildHeaders(refreshedToken) });
+    }
   }
 
-  const response = await fetch(path, { ...init, headers });
   if (response.status === 204) return undefined as T;
 
   const payload = await response.json().catch(() => ({})) as ApiEnvelope<T> & ApiErrorEnvelope;

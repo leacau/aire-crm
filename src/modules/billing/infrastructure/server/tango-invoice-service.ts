@@ -1,5 +1,8 @@
 import { format, endOfMonth, startOfMonth } from 'date-fns';
 
+import { dbAdmin } from '@/lib/firebase-admin';
+import type { ServerUser } from '@/lib/server/auth';
+import { hasServerManagementPrivileges } from '@/lib/server/auth';
 import type {
   ClientTangoInvoiceQuery,
   TangoBillingSummary,
@@ -11,6 +14,7 @@ import type {
 import { tangoCompanies } from '../../domain/tango-invoice';
 import {
   isAdvisorInvoice,
+  normalizeTangoCode,
   normalizeTangoInvoice,
   normalizeTangoText,
 } from '../../application/tango-invoice-utils';
@@ -39,8 +43,40 @@ const getTangoEndpoint = () => {
   }
 };
 
-export async function listTangoInvoices(query: TangoInvoiceQuery): Promise<TangoInvoiceResult> {
-  const companyQuery = COMPANY_QUERIES[query.company];
+function splitFilter(value?: string) {
+  return (value || '')
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+async function filterInvoicesForUser(invoices: TangoInvoice[], user?: ServerUser): Promise<TangoInvoice[]> {
+  if (!user || hasServerManagementPrivileges(user)) return invoices;
+
+  const userSnapshot = await dbAdmin.collection('users').doc(user.uid).get();
+  const sellerConfig = Array.isArray(userSnapshot.data()?.sellerConfig)
+    ? userSnapshot.data()?.sellerConfig as Array<{ companyName?: string; codes?: string[] }>
+    : [];
+  const userName = normalizeTangoText(user.name);
+
+  return invoices.filter(invoice => {
+    const company = tangoCompanies.find(item => item.id === invoice._companyId);
+    const companyConfigs = sellerConfig.filter(config =>
+      !company
+      || normalizeTangoText(config.companyName).includes(company.sellerCompanySearch)
+      || normalizeTangoText(config.companyName).includes(normalizeTangoText(company.label)),
+    );
+    const allowedCodes = companyConfigs.flatMap(config => config.codes || []).map(normalizeTangoCode);
+    const invoiceSellerCode = normalizeTangoCode(invoice.COD_VENDEDOR);
+    if (invoiceSellerCode && allowedCodes.includes(invoiceSellerCode)) return true;
+
+    return userName.length > 0 && normalizeTangoText(invoice.NOMBRE_VENDEDOR) === userName;
+  });
+}
+
+async function fetchCompanyInvoices(companyId: TangoCompanyId) {
+  const companyQuery = COMPANY_QUERIES[companyId];
+  const company = tangoCompanies.find(item => item.id === companyId);
   const apiAuthorization = process.env.TANGO_API_AUTHORIZATION;
   if (!apiAuthorization) {
     throw new Error('Falta configurar TANGO_API_AUTHORIZATION');
@@ -60,7 +96,7 @@ export async function listTangoInvoices(query: TangoInvoiceQuery): Promise<Tango
       method: 'GET',
       headers: {
         ApiAuthorization: apiAuthorization,
-        Company: query.company,
+        Company: companyId,
       },
       cache: 'no-store',
     });
@@ -79,7 +115,13 @@ export async function listTangoInvoices(query: TangoInvoiceQuery): Promise<Tango
   };
 
   const firstPage = await fetchPage(0);
-  const firstPageItems = Array.isArray(firstPage.list) ? firstPage.list.map(normalizeTangoInvoice) : [];
+  const firstPageItems = Array.isArray(firstPage.list)
+    ? firstPage.list.map((invoice: Record<string, unknown>) => ({
+      ...normalizeTangoInvoice(invoice),
+      _company: company?.label,
+      _companyId: companyId,
+    }))
+    : [];
   invoices.push(...firstPageItems);
   const sourceTotalCount = Number(firstPage.totalCount) || firstPageItems.length;
   const reportedTotalPages = Math.max(1, Number(firstPage.totalPages) || Math.ceil(sourceTotalCount / PAGE_SIZE));
@@ -93,25 +135,57 @@ export async function listTangoInvoices(query: TangoInvoiceQuery): Promise<Tango
     );
     const pages = await Promise.all(pageIndexes.map(fetchPage));
     pages.forEach(page => {
-      if (Array.isArray(page.list)) invoices.push(...page.list.map(normalizeTangoInvoice));
+      if (Array.isArray(page.list)) {
+        invoices.push(...page.list.map((invoice: Record<string, unknown>) => ({
+          ...normalizeTangoInvoice(invoice),
+          _company: company?.label,
+          _companyId: companyId,
+        })));
+      }
     });
   }
 
+  return { invoices, sourceTotalCount, truncated };
+}
+
+export async function listTangoInvoices(query: TangoInvoiceQuery, user?: ServerUser): Promise<TangoInvoiceResult> {
+  const companies = query.company === 'all'
+    ? tangoCompanies
+    : tangoCompanies.filter(company => company.id === query.company);
+  const companyResults = await Promise.all(companies.map(company => fetchCompanyInvoices(company.id)));
+  const invoices = companyResults.flatMap(result => result.invoices);
+  const sourceTotalCount = companyResults.reduce((sum, result) => sum + result.sourceTotalCount, 0);
+  const truncated = companyResults.some(result => result.truncated);
+
   const clientFilter = normalizeTangoText(query.client);
   const sellerFilter = normalizeTangoText(query.seller);
-  const filtered = invoices.filter(invoice => {
+  const typeFilters = new Set(splitFilter(query.types).map(normalizeTangoText));
+  const clientFilters = new Set(splitFilter(query.clients).map(normalizeTangoCode));
+  const sellerFilters = new Set(splitFilter(query.sellers).map(normalizeTangoCode));
+  const userVisibleInvoices = await filterInvoicesForUser(invoices, user);
+  const visibleSourceTotalCount = user && !hasServerManagementPrivileges(user)
+    ? userVisibleInvoices.length
+    : sourceTotalCount;
+
+  const filtered = userVisibleInvoices.filter(invoice => {
     const issueDate = String(invoice.FECHA_DE_EMISION || '').slice(0, 10);
     const clientText = normalizeTangoText(`${invoice.COD_CLIENTE || ''} ${invoice.RAZON_SOCIAL || ''}`);
     const sellerText = normalizeTangoText(`${invoice.COD_VENDEDOR || ''} ${invoice.NOMBRE_VENDEDOR || ''}`);
+    const typeText = normalizeTangoText(invoice.TIPO_COMPROBANTE);
+    const clientCode = normalizeTangoCode(invoice.COD_CLIENTE);
+    const sellerCode = normalizeTangoCode(invoice.COD_VENDEDOR);
     return (!query.fromDate || issueDate >= query.fromDate)
       && (!query.toDate || issueDate <= query.toDate)
       && (!clientFilter || clientText.includes(clientFilter))
-      && (!sellerFilter || sellerText.includes(sellerFilter));
+      && (!sellerFilter || sellerText.includes(sellerFilter))
+      && (typeFilters.size === 0 || typeFilters.has(typeText))
+      && (clientFilters.size === 0 || clientFilters.has(clientCode))
+      && (sellerFilters.size === 0 || sellerFilters.has(sellerCode));
   });
 
   return {
     list: filtered,
-    sourceTotalCount,
+    sourceTotalCount: visibleSourceTotalCount,
     filteredCount: filtered.length,
     truncated,
   };

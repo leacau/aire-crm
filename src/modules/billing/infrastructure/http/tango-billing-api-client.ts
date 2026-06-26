@@ -15,6 +15,7 @@ function buildParams(input: Record<string, unknown>) {
   const params = new URLSearchParams();
   Object.entries(input).forEach(([key, value]) => {
     if (typeof value === 'string' && value) params.set(key, value);
+    if (Array.isArray(value) && value.length > 0) params.set(key, value.join(','));
   });
   return params;
 }

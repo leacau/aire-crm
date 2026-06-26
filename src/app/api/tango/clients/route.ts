@@ -13,7 +13,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Falta el ID de Company' }, { status: 400 });
     }
 
-    if (!['5', '6'].includes(company)) {
+    if (!['4', '5', '6'].includes(company)) {
         return NextResponse.json({ error: 'Company no permitida' }, { status: 400 });
     }
 
