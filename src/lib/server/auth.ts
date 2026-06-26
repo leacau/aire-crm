@@ -61,50 +61,51 @@ export async function requireServerUser(request: Request): Promise<ServerUser | 
 
   let decoded;
   
-  // 1. Verificamos exclusivamente el Token
+  // 1. Verificación del Token
   try {
     decoded = await authAdmin.verifyIdToken(token);
   } catch (error) {
-    console.error('🔥 [AUTH] Error real verificando el Token de Firebase:', error);
+    console.error('🔥 [AUTH] Error verificando el Token de Firebase:', error);
     return NextResponse.json({ error: 'El token de autenticación no es válido o ha expirado.' }, { status: 401 });
   }
 
-  // 2. Buscamos el perfil en base de datos de manera aislada
+  // 2. Extracción de Perfil de la Base de Datos
+  let profile: any = {};
   try {
     const userSnap = await dbAdmin.collection('users').doc(decoded.uid).get();
-    const profile = userSnap.exists ? userSnap.data() : {};
-    const tokenOrganizationId = typeof decoded.organizationId === 'string'
-      ? decoded.organizationId
-      : undefined;
-
-    return {
-      uid: decoded.uid,
-      organizationId: profile?.organizationId || tokenOrganizationId || DEFAULT_ORGANIZATION_ID,
-      email: decoded.email,
-      name: profile?.name || decoded.name || decoded.email || 'Usuario',
-      role: profile?.role,
-      area: profile?.area,
-      permissions: profile?.permissions,
-    };
+    if (userSnap.exists) {
+      profile = userSnap.data();
+    }
   } catch (error) {
     console.error('🔥 [AUTH] Error obteniendo el perfil de Firestore (posible timeout/cold start):', error);
-    // Fallback: Si el token es válido pero Firestore tarda en responder, permitimos pasar 
-    // con un usuario básico para que procesos críticos (como enviar un email) no crasheen.
-    return {
-      uid: decoded.uid,
-      organizationId: typeof decoded.organizationId === 'string' ? decoded.organizationId : DEFAULT_ORGANIZATION_ID,
-      email: decoded.email,
-      name: decoded.name || decoded.email || 'Usuario',
-    };
   }
+
+  const tokenOrganizationId = typeof decoded.organizationId === 'string'
+    ? decoded.organizationId
+    : undefined;
+
+  // Garantizamos acceso de superusuario para Leandro incluso si la DB falla temporalmente en el inicio
+  const isSuperAdminFallback = decoded.email === 'lchena@airedesantafe.com.ar' || decoded.email === 'leandrochena@gmail.com';
+
+  return {
+    uid: decoded.uid,
+    organizationId: profile?.organizationId || tokenOrganizationId || DEFAULT_ORGANIZATION_ID,
+    email: decoded.email,
+    name: profile?.name || decoded.name || decoded.email || 'Usuario',
+    role: profile?.role || (isSuperAdminFallback ? 'Gerencia' : undefined),
+    area: profile?.area,
+    permissions: profile?.permissions,
+  };
 }
 
 export function isServerResponse(value: ServerUser | NextResponse): value is NextResponse {
-  return value instanceof NextResponse;
+  // 🟢 CORRECCIÓN CRÍTICA: En Node.js runtime de Next.js, `instanceof NextResponse` suele fallar por referencias cruzadas.
+  // Es muchísimo más seguro verificar que el objeto devuelto NO tenga la propiedad 'uid' (propia del ServerUser).
+  return !('uid' in value);
 }
 
 export function hasServerManagementPrivileges(user: ServerUser): boolean {
-  if (user.email?.toLowerCase() === 'lchena@airedesantafe.com.ar') return true;
+  if (user.email?.toLowerCase() === 'lchena@airedesantafe.com.ar' || user.email?.toLowerCase() === 'leandrochena@gmail.com') return true;
   return user.role === 'Jefe' || user.role === 'Gerencia' || user.role === 'Administracion' || user.role === 'Admin';
 }
 
@@ -174,6 +175,7 @@ export async function requireServerCapability(
 ): Promise<ServerUser | NextResponse> {
   const user = await requireServerUser(request);
   if (isServerResponse(user)) return user;
+  
   if (!(await hasServerCapability(user, capability))) {
     return NextResponse.json(
       { error: 'No tienes permiso para realizar esta acción.', code: 'FORBIDDEN' },
@@ -186,6 +188,7 @@ export async function requireServerCapability(
 export async function requireServerManagement(request: Request): Promise<ServerUser | NextResponse> {
   const user = await requireServerUser(request);
   if (isServerResponse(user)) return user;
+  
   if (!hasServerManagementPrivileges(user)) {
     return NextResponse.json({ error: 'No tienes permisos de gestión.', code: 'FORBIDDEN' }, { status: 403 });
   }
