@@ -23,7 +23,13 @@ export function cleanCuit(value: string | undefined | null): string {
 }
 
 // 🟢 Transforma nombres de clientes de "HOLA MUNDO" o "hola mundo" en "Hola Mundo"
-export function toTitleCase(str?: string): string {
-  if (!str) return '';
-  return str.toLowerCase().replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
+export function toTitleCase(str?: unknown): string {
+  if (str === null || str === undefined) return '';
+  const value = typeof str === 'string'
+    ? str
+    : typeof str === 'number' || typeof str === 'boolean'
+      ? String(str)
+      : '';
+  if (!value) return '';
+  return value.toLowerCase().replace(/(?:^|\s|["'([{])+\S/g, match => match.toUpperCase());
 }

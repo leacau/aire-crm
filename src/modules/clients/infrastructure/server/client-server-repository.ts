@@ -21,9 +21,19 @@ const peopleCollection = dbAdmin.collection('people');
 function timestampToIso(value: unknown): string | undefined {
   if (!value) return undefined;
   if (typeof value === 'string') return value;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
+  }
+  if (typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  }
   if (typeof value === 'object' && value !== null && 'toDate' in value) {
     const toDate = (value as { toDate?: () => Date }).toDate;
-    if (typeof toDate === 'function') return toDate.call(value).toISOString();
+    if (typeof toDate === 'function') {
+      const date = toDate.call(value);
+      return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+    }
   }
   return undefined;
 }
@@ -86,7 +96,7 @@ export async function listClientsForOrganization(organizationId: string): Promis
   return snapshot.docs
     .filter(document => belongsToOrganization(document.data(), organizationId))
     .map(document => serializeClient(document.id, document.data()))
-    .sort((left, right) => left.denominacion.localeCompare(right.denominacion, 'es'));
+    .sort((left, right) => String(left.denominacion || '').localeCompare(String(right.denominacion || ''), 'es'));
 }
 
 export async function getClientForOrganization(id: string, organizationId: string): Promise<Client> {
@@ -185,7 +195,7 @@ export async function listPeopleForClient(clientId: string, user: ServerUser): P
   return snapshot.docs
     .filter(document => belongsToOrganization(document.data(), user.organizationId))
     .map(document => serializePerson(document.id, document.data()))
-    .sort((left, right) => left.name.localeCompare(right.name, 'es'));
+    .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), 'es'));
 }
 
 export async function createPersonForClient(

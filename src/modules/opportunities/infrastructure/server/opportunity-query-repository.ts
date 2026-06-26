@@ -10,9 +10,19 @@ const opportunitiesCollection = dbAdmin.collection('opportunities');
 function timestampToIso(value: unknown): string | undefined {
   if (!value) return undefined;
   if (typeof value === 'string') return value;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
+  }
+  if (typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  }
   if (typeof value === 'object' && value !== null && 'toDate' in value) {
     const toDate = (value as { toDate?: () => Date }).toDate;
-    if (typeof toDate === 'function') return toDate.call(value).toISOString();
+    if (typeof toDate === 'function') {
+      const date = toDate.call(value);
+      return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+    }
   }
   return undefined;
 }
@@ -25,8 +35,21 @@ function serializeOpportunity(id: string, data: FirebaseFirestore.DocumentData):
     updatedAt: timestampToIso(data.updatedAt),
     stageChangedAt: timestampToIso(data.stageChangedAt),
     manualUpdateDate: timestampToIso(data.manualUpdateDate),
+    followUpDoneUpdatedAt: timestampToIso(data.followUpDoneUpdatedAt),
+    followUpCurrentUpdatedAt: timestampToIso(data.followUpCurrentUpdatedAt),
+    followUpNextUpdatedAt: timestampToIso(data.followUpNextUpdatedAt),
+    bonificacionFechaAutorizacion: timestampToIso(data.bonificacionFechaAutorizacion),
+    finalizationDate: timestampToIso(data.finalizationDate) || data.finalizationDate,
+    startDate: timestampToIso(data.startDate) || data.startDate,
+    endDate: timestampToIso(data.endDate) || data.endDate,
     manualUpdateHistory: Array.isArray(data.manualUpdateHistory)
       ? data.manualUpdateHistory.map(timestampToIso).filter(Boolean)
+      : [],
+    periodHistory: Array.isArray(data.periodHistory)
+      ? data.periodHistory.map((period: FirebaseFirestore.DocumentData) => ({
+          ...period,
+          updatedAt: timestampToIso(period?.updatedAt) || period?.updatedAt || '',
+        }))
       : [],
     closeDate: timestampToIso(data.closeDate)?.slice(0, 10) || data.closeDate || '',
   } as Opportunity;

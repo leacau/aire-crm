@@ -92,6 +92,33 @@ function firebaseInfrastructureErrorResponse(error: unknown): NextResponse | nul
   return null;
 }
 
+function dataShapeErrorResponse(error: unknown): NextResponse | null {
+  const { message } = getErrorDetails(error);
+  const normalizedMessage = message?.toLowerCase() || '';
+
+  if (
+    error instanceof TypeError &&
+    (
+      normalizedMessage.includes('tolowercase') ||
+      normalizedMessage.includes('localecompare') ||
+      normalizedMessage.includes('toisostring') ||
+      normalizedMessage.includes('date.parse') ||
+      normalizedMessage.includes('is not a function')
+    )
+  ) {
+    return NextResponse.json(
+      {
+        error: 'Hay un dato histórico con formato inesperado que impide armar el listado.',
+        code: 'DATA_SHAPE_ERROR',
+        details: message,
+      },
+      { status: 500 },
+    );
+  }
+
+  return null;
+}
+
 export function apiErrorResponse(error: unknown): NextResponse {
   if (error instanceof ApiError) {
     return NextResponse.json(
@@ -113,6 +140,9 @@ export function apiErrorResponse(error: unknown): NextResponse {
 
   const firebaseResponse = firebaseInfrastructureErrorResponse(error);
   if (firebaseResponse) return firebaseResponse;
+
+  const dataShapeResponse = dataShapeErrorResponse(error);
+  if (dataShapeResponse) return dataShapeResponse;
 
   console.error('Unhandled API error:', error);
   return NextResponse.json(
