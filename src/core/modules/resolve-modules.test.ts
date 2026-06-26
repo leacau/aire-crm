@@ -50,7 +50,7 @@ describe('CRM module registry', () => {
 
   it('marks only migrated modules as available through an API contract', () => {
     const apiModules = crmModuleCatalog.filter(module => module.apiVersion);
-    expect(apiModules.map(module => module.id)).toEqual(['prospects']);
-    expect(apiModules[0]?.apiVersion).toBe('v1');
+    expect(apiModules.map(module => module.id)).toEqual(['prospects', 'billing']);
+    expect(apiModules.every(module => module.apiVersion === 'v1')).toBe(true);
   });
 });

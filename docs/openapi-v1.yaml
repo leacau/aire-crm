@@ -317,6 +317,81 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /billing/tango-invoices:
+    get:
+      operationId: listTangoInvoices
+      tags: [Facturacion]
+      parameters:
+        - name: company
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/TangoCompanyId' }
+        - name: fromDate
+          in: query
+          schema: { type: string, format: date }
+        - name: toDate
+          in: query
+          schema: { type: string, format: date }
+        - name: client
+          in: query
+          schema: { type: string }
+        - name: seller
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Comprobantes de Tango filtrados para la compania indicada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TangoInvoiceResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /billing/tango-client-invoices:
+    get:
+      operationId: listClientTangoInvoices
+      tags: [Facturacion]
+      parameters:
+        - name: aireClientId
+          in: query
+          schema: { type: string }
+        - name: srlClientId
+          in: query
+          schema: { type: string }
+        - name: sasClientId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Historial de comprobantes de Tango para un cliente CRM mapeado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/TangoInvoice' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /billing/tango-summary/current-month:
+    get:
+      operationId: getCurrentMonthTangoBillingSummary
+      tags: [Facturacion]
+      responses:
+        '200':
+          description: Total facturado en Tango durante el mes corriente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TangoBillingSummary' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /prospects:
     get:
       operationId: listProspects
@@ -797,6 +872,54 @@ components:
         claimantId: { type: [string, 'null'] }
         claimantName: { type: [string, 'null'] }
         claimedAt: { type: [string, 'null'], format: date-time }
+    TangoCompanyId:
+      type: string
+      enum: ['4', '5', '6']
+      description: '4: Aire/Avion, 5: SRL, 6: SAS.'
+    TangoInvoice:
+      type: object
+      properties:
+        FECHA_DE_EMISION: { type: string, format: date-time }
+        TIPO_COMPROBANTE: { type: string }
+        NRO_COMPROBANTE: { type: string }
+        COD_VENDEDOR: { type: string }
+        NOMBRE_VENDEDOR: { type: string }
+        COD_CLIENTE: { type: string }
+        RAZON_SOCIAL: { type: string }
+        ID_GVA14: { type: [number, 'null'] }
+        TOTAL: { type: [number, 'null'] }
+        ID_GVA12: { type: [number, 'null'] }
+        ID_GVA23: { type: [number, 'null'] }
+        ID_GVA38: { type: [number, 'null'] }
+        _company: { type: string }
+        _companyId: { $ref: '#/components/schemas/TangoCompanyId' }
+    TangoInvoiceResult:
+      type: object
+      required: [list, sourceTotalCount, filteredCount, truncated]
+      properties:
+        list:
+          type: array
+          items: { $ref: '#/components/schemas/TangoInvoice' }
+        sourceTotalCount: { type: integer }
+        filteredCount: { type: integer }
+        truncated: { type: boolean }
+    TangoBillingSummary:
+      type: object
+      required: [total, fromDate, toDate, companies]
+      properties:
+        total: { type: number }
+        fromDate: { type: string, format: date }
+        toDate: { type: string, format: date }
+        companies:
+          type: array
+          items:
+            type: object
+            required: [company, label, total, invoiceCount]
+            properties:
+              company: { $ref: '#/components/schemas/TangoCompanyId' }
+              label: { type: string }
+              total: { type: number }
+              invoiceCount: { type: integer }
     IdResponse:
       type: object
       required: [data]

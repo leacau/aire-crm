@@ -38,6 +38,13 @@ const moduleScreenMap: Partial<Record<ModuleCapability, ScreenName>> = {
   'prospects.delete': 'Prospects',
   'prospects.approve': 'Prospects',
   'prospects.export': 'Prospects',
+  'billing.read': 'Billing',
+  'billing.create': 'Billing',
+  'billing.update': 'Billing',
+  'billing.delete': 'Billing',
+  'billing.approve': 'Billing',
+  'billing.import': 'Billing',
+  'billing.export': 'Billing',
 };
 
 export function getBearerToken(request: Request): string | null {

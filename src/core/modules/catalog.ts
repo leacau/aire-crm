@@ -133,6 +133,7 @@ export const crmModuleCatalog = [
     dependencies: ['clients', 'opportunities'],
     platforms: ['web', 'android'],
     capabilities: ['billing.read', 'billing.create', 'billing.update', 'billing.delete', 'billing.approve', 'billing.import', 'billing.export'],
+    apiVersion: 'v1',
   }),
   defineModule({
     id: 'exchanges',
