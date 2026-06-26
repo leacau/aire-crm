@@ -249,11 +249,18 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
         return pdf;
     };
 
-    const handleDownloadPdf = async () => {
-        flushSync(() => setIsPdfMounted(true));
+   const handleDownloadPdf = async () => {
+        setIsPdfMounted(true);
         try {
-            await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+            // 🟢 Polling de espera del renderizado dinámico
+            let attempts = 0;
+            while (!pdfRef.current && attempts < 20) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                attempts++;
+            }
+            
             if (!pdfRef.current) throw new Error("No se pudo preparar la vista del PDF.");
+            
             const pdf = await generateMultiPagePdf(pdfRef.current);
             pdf.save(`PedidoRedes_${clients.find(c => c.id === clientId)?.denominacion || 'Cliente'}.pdf`);
         } catch (error) {
