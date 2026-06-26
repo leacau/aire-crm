@@ -80,7 +80,7 @@ export async function requireServerUser(request: Request): Promise<ServerUser | 
     console.error('🔥 [AUTH] Error obteniendo el perfil de Firestore (posible timeout/cold start):', error);
   }
 
-  const tokenOrganizationId = typeof decoded.organizationId === 'string'
+  const tokenOrganizationId = typeof decoded.organizationId === 'string' && decoded.organizationId.length > 0
     ? decoded.organizationId
     : undefined;
 
@@ -89,6 +89,7 @@ export async function requireServerUser(request: Request): Promise<ServerUser | 
 
   return {
     uid: decoded.uid,
+    // 🟢 FORZAMOS SIEMPRE UN STRING VÁLIDO. SI TODO FALLA, USA EL DEFAULT.
     organizationId: profile?.organizationId || tokenOrganizationId || DEFAULT_ORGANIZATION_ID,
     email: decoded.email,
     name: profile?.name || decoded.name || decoded.email || 'Usuario',
