@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { getAllUsers } from '@/lib/firebase-service';
 import type { Client, User } from '@/lib/types';
@@ -119,6 +120,16 @@ const getSellerKey = (invoice: TangoInvoice) =>
 
 export function TangoInvoicesTab({ clients, mappingWarning }: { clients: Client[]; mappingWarning?: string | null }) {
   const { toast } = useToast();
+  const { userInfo, isBoss } = useAuth();
+  const userEmail = userInfo?.email?.toLowerCase();
+  const canViewTeamInvoices = Boolean(
+    isBoss
+    || userEmail === 'lchena@airedesantafe.com.ar'
+    || userEmail === 'leandrochena@gmail.com'
+    || userInfo?.role === 'Gerencia'
+    || userInfo?.role === 'Administracion'
+    || userInfo?.role === 'Admin',
+  );
   const today = new Date();
   const [company, setCompany] = useState<TangoCompanyFilter>('all');
   const [fromDate, setFromDate] = useState(format(startOfMonth(today), 'yyyy-MM-dd'));
@@ -132,10 +143,21 @@ export function TangoInvoicesTab({ clients, mappingWarning }: { clients: Client[
   const [hasSearched, setHasSearched] = useState(false);
   const [page, setPage] = useState(1);
   const [users, setUsers] = useState<User[]>([]);
+  const [resultScope, setResultScope] = useState<'all' | 'own'>(canViewTeamInvoices ? 'all' : 'own');
 
   useEffect(() => {
+    if (!userInfo) {
+      setUsers([]);
+      return;
+    }
+
+    if (!canViewTeamInvoices) {
+      setUsers([userInfo]);
+      return;
+    }
+
     getAllUsers().then(setUsers).catch(error => console.error('Error loading CRM sellers:', error));
-  }, []);
+  }, [canViewTeamInvoices, userInfo]);
 
   useEffect(() => {
     setSelectedTypes([]);
@@ -201,6 +223,7 @@ export function TangoInvoicesTab({ clients, mappingWarning }: { clients: Client[
 
       setInvoices(Array.isArray(result.list) ? result.list : []);
       setSourceTotalCount(Number(result.sourceTotalCount) || 0);
+      setResultScope(result.scope || (canViewTeamInvoices ? 'all' : 'own'));
       setPage(1);
       if (result.truncated) {
         toast({
@@ -213,6 +236,7 @@ export function TangoInvoicesTab({ clients, mappingWarning }: { clients: Client[
       console.error('Error loading Tango invoices:', error);
       setInvoices([]);
       setSourceTotalCount(0);
+      setResultScope(canViewTeamInvoices ? 'all' : 'own');
       toast({
         title: 'No se pudo consultar Tango',
         description: error instanceof Error ? error.message : 'Error desconocido',
@@ -268,7 +292,11 @@ export function TangoInvoicesTab({ clients, mappingWarning }: { clients: Client[
 
       {hasSearched && !loading && (
         <div className="grid gap-2 rounded-md border bg-white px-4 py-3 text-sm text-muted-foreground md:grid-cols-2">
-          <span>{filteredInvoices.length} comprobantes visibles de {invoices.length} filtrados ({sourceTotalCount} consultados en Tango).</span>
+          <span>
+            {filteredInvoices.length} comprobantes visibles de {invoices.length} filtrados ({sourceTotalCount} consultados en Tango).
+            {' '}
+            {resultScope === 'own' ? 'Vista limitada a tus comprobantes asignados.' : 'Vista completa del equipo.'}
+          </span>
           <span className="font-semibold text-slate-800 md:text-right">Total mostrado: {formatTangoCurrency(filteredTotal)}</span>
           {filteredInvoices.length > ROWS_PER_PAGE && <span className="md:col-span-2">Página {page} de {totalPages}</span>}
         </div>

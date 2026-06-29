@@ -149,6 +149,7 @@ async function fetchCompanyInvoices(companyId: TangoCompanyId) {
 }
 
 export async function listTangoInvoices(query: TangoInvoiceQuery, user?: ServerUser): Promise<TangoInvoiceResult> {
+  const isOwnScope = Boolean(user && !hasServerManagementPrivileges(user));
   const companies = query.company === 'all'
     ? tangoCompanies
     : tangoCompanies.filter(company => company.id === query.company);
@@ -163,9 +164,7 @@ export async function listTangoInvoices(query: TangoInvoiceQuery, user?: ServerU
   const clientFilters = new Set(splitFilter(query.clients).map(normalizeTangoCode));
   const sellerFilters = new Set(splitFilter(query.sellers).map(normalizeTangoCode));
   const userVisibleInvoices = await filterInvoicesForUser(invoices, user);
-  const visibleSourceTotalCount = user && !hasServerManagementPrivileges(user)
-    ? userVisibleInvoices.length
-    : sourceTotalCount;
+  const visibleSourceTotalCount = isOwnScope ? userVisibleInvoices.length : sourceTotalCount;
 
   const filtered = userVisibleInvoices.filter(invoice => {
     const issueDate = String(invoice.FECHA_DE_EMISION || '').slice(0, 10);
@@ -188,6 +187,7 @@ export async function listTangoInvoices(query: TangoInvoiceQuery, user?: ServerU
     sourceTotalCount: visibleSourceTotalCount,
     filteredCount: filtered.length,
     truncated,
+    scope: isOwnScope ? 'own' : 'all',
   };
 }
 

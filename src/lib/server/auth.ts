@@ -199,7 +199,8 @@ export async function getGrantedServerCapabilities(
     const permission = capability.endsWith('.read') ? 'view' : 'edit';
     if (capability.startsWith('billing.')) {
       return hasScreenPermission(user, 'Billing', permission, areaPermissions)
-        || hasScreenPermission(user, 'BillingRequests', permission, areaPermissions);
+        || hasScreenPermission(user, 'BillingRequests', permission, areaPermissions)
+        || (capability === 'billing.read' && hasScreenPermission(user, 'Invoices', 'view', areaPermissions));
     }
     return hasScreenPermission(user, screen, permission, areaPermissions);
   });

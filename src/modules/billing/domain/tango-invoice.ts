@@ -50,6 +50,7 @@ export type TangoInvoiceResult = {
   sourceTotalCount: number;
   filteredCount: number;
   truncated: boolean;
+  scope: 'all' | 'own';
 };
 
 export type ClientTangoInvoiceQuery = {
