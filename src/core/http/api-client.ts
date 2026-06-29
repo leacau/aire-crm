@@ -11,6 +11,9 @@ type ApiErrorEnvelope = {
   code?: string;
 };
 
+const DEFAULT_READ_CIRCUIT_TTL_MS = 2 * 60 * 1000;
+const readCircuitOpenUntil = new Map<string, number>();
+
 export class ApiClientError extends Error {
   constructor(
     public readonly status: number,
@@ -30,6 +33,58 @@ export function isRecoverableReadApiError(error: unknown): boolean {
     error.code === 'FIRESTORE_INDEX_REQUIRED' ||
     error.code === 'INTERNAL_ERROR'
   );
+}
+
+function getReadCircuitKey(path: string): string {
+  try {
+    const url = new URL(path, window.location.origin);
+    return url.pathname;
+  } catch {
+    return path.split('?')[0] || path;
+  }
+}
+
+function isReadCircuitOpen(key: string): boolean {
+  const openUntil = readCircuitOpenUntil.get(key) || 0;
+  if (openUntil <= Date.now()) {
+    readCircuitOpenUntil.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function openReadCircuit(key: string, ttlMs: number): void {
+  readCircuitOpenUntil.set(key, Date.now() + ttlMs);
+}
+
+export function resetApiReadCircuit(path?: string): void {
+  if (!path) {
+    readCircuitOpenUntil.clear();
+    return;
+  }
+  readCircuitOpenUntil.delete(getReadCircuitKey(path));
+}
+
+export async function apiReadWithFallback<T>(
+  path: string,
+  fallback: () => Promise<T>,
+  options: { circuitKey?: string; circuitTtlMs?: number; label?: string } = {},
+): Promise<T> {
+  const circuitKey = options.circuitKey || getReadCircuitKey(path);
+  const label = options.label || circuitKey;
+  if (isReadCircuitOpen(circuitKey)) {
+    console.warn(`Skipping API read for ${label}; using fallback while circuit is open.`);
+    return fallback();
+  }
+
+  try {
+    return await apiRequest<T>(path);
+  } catch (error) {
+    if (!isRecoverableReadApiError(error)) throw error;
+    openReadCircuit(circuitKey, options.circuitTtlMs ?? DEFAULT_READ_CIRCUIT_TTL_MS);
+    console.warn(`Falling back to Firestore client read for ${label}:`, error);
+    return fallback();
+  }
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {

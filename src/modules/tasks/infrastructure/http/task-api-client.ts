@@ -1,6 +1,6 @@
 'use client';
 
-import { apiRequest, isRecoverableReadApiError } from '@/core/http/api-client';
+import { apiReadWithFallback, apiRequest } from '@/core/http/api-client';
 import type { ClientActivity } from '../../domain/task';
 
 type CreateClientActivityInput = Omit<ClientActivity, 'id' | 'timestamp'>;
@@ -14,38 +14,38 @@ export function getMyOpenTasks(): Promise<ClientActivity[]> {
 
 export async function getClientActivities(clientId: string): Promise<ClientActivity[]> {
   const params = new URLSearchParams({ clientId });
-  try {
-    return await apiRequest<ClientActivity[]>(`${ACTIVITIES_PATH}?${params}`);
-  } catch (error) {
-    if (!isRecoverableReadApiError(error)) throw error;
-    console.warn('Falling back to Firestore client read for client activities:', error);
+  return apiReadWithFallback<ClientActivity[]>(
+    `${ACTIVITIES_PATH}?${params}`,
+    async () => {
     const { getClientActivities: getClientActivitiesFromFirestore } = await import('@/lib/firebase-service');
-    return getClientActivitiesFromFirestore(clientId) as Promise<ClientActivity[]>;
-  }
+      return getClientActivitiesFromFirestore(clientId) as Promise<ClientActivity[]>;
+    },
+    { circuitKey: ACTIVITIES_PATH, label: 'client activities' },
+  );
 }
 
 export async function getProspectActivities(prospectId: string): Promise<ClientActivity[]> {
   const params = new URLSearchParams({ prospectId });
-  try {
-    return await apiRequest<ClientActivity[]>(`${ACTIVITIES_PATH}?${params}`);
-  } catch (error) {
-    if (!isRecoverableReadApiError(error)) throw error;
-    console.warn('Falling back to Firestore client read for prospect activities:', error);
+  return apiReadWithFallback<ClientActivity[]>(
+    `${ACTIVITIES_PATH}?${params}`,
+    async () => {
     const { getAllClientActivities } = await import('@/lib/firebase-service');
     const activities = await getAllClientActivities();
-    return activities.filter(activity => activity.prospectId === prospectId) as ClientActivity[];
-  }
+      return activities.filter(activity => activity.prospectId === prospectId) as ClientActivity[];
+    },
+    { circuitKey: ACTIVITIES_PATH, label: 'prospect activities' },
+  );
 }
 
 export async function getAllClientActivities(): Promise<ClientActivity[]> {
-  try {
-    return await apiRequest<ClientActivity[]>(ACTIVITIES_PATH);
-  } catch (error) {
-    if (!isRecoverableReadApiError(error)) throw error;
-    console.warn('Falling back to Firestore client read for all activities:', error);
+  return apiReadWithFallback<ClientActivity[]>(
+    ACTIVITIES_PATH,
+    async () => {
     const { getAllClientActivities: getAllClientActivitiesFromFirestore } = await import('@/lib/firebase-service');
-    return getAllClientActivitiesFromFirestore() as Promise<ClientActivity[]>;
-  }
+      return getAllClientActivitiesFromFirestore() as Promise<ClientActivity[]>;
+    },
+    { label: 'activities' },
+  );
 }
 
 export async function createClientActivity(input: CreateClientActivityInput): Promise<string> {

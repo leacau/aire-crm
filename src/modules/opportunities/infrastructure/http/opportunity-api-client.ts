@@ -1,6 +1,6 @@
 'use client';
 
-import { ApiClientError, apiRequest, isRecoverableReadApiError } from '@/core/http/api-client';
+import { ApiClientError, apiReadWithFallback, apiRequest } from '@/core/http/api-client';
 import { getClients } from '@/modules/clients/client';
 import type { Invoice } from '@/lib/types';
 import type { Opportunity } from '../../domain/opportunity';
@@ -20,23 +20,21 @@ async function list(scope: 'active' | 'all', clientId?: string): Promise<Opportu
   if (cached && cached.expiresAt > Date.now()) return cached.data;
   const params = new URLSearchParams({ scope });
   if (clientId) params.set('clientId', clientId);
-  try {
-    const opportunities = await apiRequest<Opportunity[]>(`${API_PATH}?${params}`);
-    cache.set(key, { data: opportunities, expiresAt: Date.now() + CACHE_DURATION_MS });
-    return opportunities;
-  } catch (error) {
-    if (!isRecoverableReadApiError(error)) throw error;
-    console.warn('Falling back to Firestore client read for opportunities:', error);
+  const opportunities = await apiReadWithFallback<Opportunity[]>(
+    `${API_PATH}?${params}`,
+    async () => {
     const firebaseService = await import('@/lib/firebase-service');
-    const opportunities = clientId
-      ? await firebaseService.getOpportunitiesByClientId(clientId)
-      : await firebaseService.getAllOpportunities();
-    const filtered = scope === 'active'
-      ? opportunities.filter(opportunity => isOpportunityVisibleInActiveScope(opportunity as Opportunity))
-      : opportunities;
-    cache.set(key, { data: filtered as Opportunity[], expiresAt: Date.now() + CACHE_DURATION_MS });
-    return filtered as Opportunity[];
-  }
+      const fallbackOpportunities = clientId
+        ? await firebaseService.getOpportunitiesByClientId(clientId)
+        : await firebaseService.getAllOpportunities();
+      return (scope === 'active'
+        ? fallbackOpportunities.filter(opportunity => isOpportunityVisibleInActiveScope(opportunity as Opportunity))
+        : fallbackOpportunities) as Opportunity[];
+    },
+    { circuitKey: API_PATH, label: 'opportunities' },
+  );
+  cache.set(key, { data: opportunities, expiresAt: Date.now() + CACHE_DURATION_MS });
+  return opportunities;
 }
 
 export function getOpportunities(options: { forceServer?: boolean } = {}): Promise<Opportunity[]> {
