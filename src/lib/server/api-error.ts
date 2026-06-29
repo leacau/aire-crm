@@ -43,6 +43,21 @@ function firebaseInfrastructureErrorResponse(error: unknown): NextResponse | nul
   }
 
   if (
+    normalizedMessage.includes('could not load the default credentials') ||
+    normalizedMessage.includes('application default credentials') ||
+    normalizedMessage.includes('google application credentials')
+  ) {
+    return NextResponse.json(
+      {
+        error: 'No se encontraron credenciales Firebase Admin en el servidor.',
+        code: 'FIREBASE_ADMIN_MISSING_CREDENTIALS',
+        details: code || 'missing-credentials',
+      },
+      { status: 500 },
+    );
+  }
+
+  if (
     normalizedCode.includes('invalid-credential') ||
     normalizedCode.includes('invalid-grant') ||
     normalizedCode.includes('invalid-app-options') ||
