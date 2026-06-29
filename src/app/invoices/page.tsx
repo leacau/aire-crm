@@ -11,6 +11,7 @@ import type { Client } from '@/lib/types';
 export default function InvoicesPage() {
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
+  const [clientsError, setClientsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,10 +21,22 @@ export default function InvoicesPage() {
       setLoading(true);
       try {
         const result = await getClients({ forceServer: true });
-        if (isMounted) setClients(result as Client[]);
+        if (isMounted) {
+          setClients(result as Client[]);
+          setClientsError(null);
+        }
       } catch (error) {
         console.error('Error loading clients for Tango invoices:', error);
-        toast({ title: 'Error al cargar clientes', variant: 'destructive' });
+        const message = error instanceof Error ? error.message : 'No se pudieron cargar los clientes del CRM.';
+        if (isMounted) {
+          setClients([]);
+          setClientsError(message);
+        }
+        toast({
+          title: 'No se pudo cargar el mapeo de clientes',
+          description: 'Podés consultar Tango igual, pero no se mostrará la relación con clientes CRM.',
+          variant: 'destructive',
+        });
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -43,7 +56,7 @@ export default function InvoicesPage() {
             <Spinner size="large" />
           </div>
         ) : (
-          <TangoInvoicesTab clients={clients} />
+          <TangoInvoicesTab clients={clients} mappingWarning={clientsError} />
         )}
       </main>
     </div>

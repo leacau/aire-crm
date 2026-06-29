@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth } from 'date-fns';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -116,7 +117,7 @@ const getClientKey = (invoice: TangoInvoice) => `${invoice._companyId || 'all'}:
 const getSellerKey = (invoice: TangoInvoice) =>
   `${invoice._companyId || 'all'}:${normalizeTangoCode(invoice.COD_VENDEDOR) || normalizeTangoText(invoice.NOMBRE_VENDEDOR)}`;
 
-export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
+export function TangoInvoicesTab({ clients, mappingWarning }: { clients: Client[]; mappingWarning?: string | null }) {
   const { toast } = useToast();
   const today = new Date();
   const [company, setCompany] = useState<TangoCompanyFilter>('all');
@@ -224,6 +225,17 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
 
   return (
     <div className="space-y-4">
+      {mappingWarning && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>No se pudo cargar el mapeo CRM</AlertTitle>
+          <AlertDescription>
+            Tango se puede consultar igual, pero los comprobantes aparecerán como “Sin mapear” hasta corregir la conexión
+            de Firebase Admin. Detalle: {mappingWarning}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid gap-4 rounded-md border bg-white p-4 md:grid-cols-2 xl:grid-cols-[170px_160px_160px_1fr_1fr_1fr_auto] xl:items-end">
         <div className="space-y-2">
           <Label>Compañía</Label>
