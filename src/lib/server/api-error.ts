@@ -21,6 +21,31 @@ function getErrorDetails(error: unknown): { code?: string; message?: string } {
   };
 }
 
+function firebaseAdminEnvironmentSummary() {
+  return {
+    runtime: process.env.NETLIFY ? 'netlify' : process.env.VERCEL ? 'vercel' : process.env.NODE_ENV || 'unknown',
+    hasServiceAccountKey: Boolean(
+      process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
+      process.env.FIREBASE_SERVICE_ACCOUNT ||
+      process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT ||
+      process.env.FIREBASE_ADMIN_CREDENTIALS ||
+      process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON ||
+      process.env.GOOGLE_CREDENTIALS
+    ),
+    hasSeparatedCredentials: Boolean(
+      (process.env.FIREBASE_ADMIN_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL || process.env.GOOGLE_CLIENT_EMAIL) &&
+      (process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY || process.env.GOOGLE_PRIVATE_KEY)
+    ),
+    hasProjectId: Boolean(
+      process.env.FIREBASE_ADMIN_PROJECT_ID ||
+      process.env.FIREBASE_PROJECT_ID ||
+      process.env.GOOGLE_CLOUD_PROJECT ||
+      process.env.GCLOUD_PROJECT ||
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    ),
+  };
+}
+
 function firebaseInfrastructureErrorResponse(error: unknown): NextResponse | null {
   const { code, message } = getErrorDetails(error);
   const normalizedCode = code?.toLowerCase() || '';
@@ -51,7 +76,7 @@ function firebaseInfrastructureErrorResponse(error: unknown): NextResponse | nul
       {
         error: 'No se encontraron credenciales Firebase Admin en el servidor.',
         code: 'FIREBASE_ADMIN_MISSING_CREDENTIALS',
-        details: code || 'missing-credentials',
+        details: firebaseAdminEnvironmentSummary(),
       },
       { status: 500 },
     );
@@ -69,7 +94,10 @@ function firebaseInfrastructureErrorResponse(error: unknown): NextResponse | nul
       {
         error: 'Las credenciales Firebase Admin del servidor no son válidas.',
         code: 'FIREBASE_ADMIN_INVALID_CREDENTIALS',
-        details: code || 'invalid-credentials',
+        details: {
+          firebaseCode: code || 'invalid-credentials',
+          environment: firebaseAdminEnvironmentSummary(),
+        },
       },
       { status: 500 },
     );

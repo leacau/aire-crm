@@ -6,7 +6,7 @@ import { AppSidebar } from '@/components/layout/app-sidebar';
 import { AuthProvider } from '@/hooks/use-auth';
 import { AuthLayout } from '@/components/layout/auth-layout';
 import { Analytics } from '@vercel/analytics/next';
-import { SpeedInsights } from "@vercel/speed-insights/next"
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
 export const metadata: Metadata = {
@@ -17,6 +17,8 @@ export const metadata: Metadata = {
     apple: '/apple-touch-icon.png',
   },
 };
+
+const enableVercelInsights = Boolean(process.env.VERCEL);
 
 export default function RootLayout({
   children,
@@ -37,8 +39,12 @@ export default function RootLayout({
              <FirebaseErrorListener />
         </AuthProvider>
         <Toaster />
-        <Analytics />
-        <SpeedInsights />
+        {enableVercelInsights && (
+          <>
+            <Analytics />
+            <SpeedInsights />
+          </>
+        )}
       </body>
     </html>
   );

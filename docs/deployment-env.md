@@ -25,3 +25,20 @@ Como alternativa, se pueden configurar variables separadas:
 - `FIREBASE_ADMIN_PRIVATE_KEY` o `FIREBASE_PRIVATE_KEY`
 
 La clave privada puede guardarse con saltos reales, con `\n` escapados o en base64.
+
+### Netlify: revisar el contexto correcto
+
+Si la app muestra `FIREBASE_ADMIN_MISSING_CREDENTIALS`, el servidor no está recibiendo credenciales en el runtime del deploy abierto.
+
+En Netlify, una misma variable puede tener valores distintos por contexto. Verificar especialmente:
+
+- Production
+- Deploy previews
+- Branch deploys
+- Local development, si se usa Netlify CLI
+
+Para el sitio público de producción, `FIREBASE_SERVICE_ACCOUNT_KEY` debe tener valor en el contexto `Production` y estar disponible para `Functions` / `Runtime`.
+
+Si se usa el deploy de una rama o preview, cargar la misma variable también en ese contexto o marcarla con el mismo valor para todos los deploy contexts.
+
+Los valores `NEXT_PUBLIC_FIREBASE_*` sólo sirven para el navegador. No reemplazan las credenciales Firebase Admin del servidor.

@@ -37,9 +37,50 @@ const privateKeyEnvKeys = [
   'GOOGLE_PRIVATE_KEY',
 ] as const;
 
+function getEnvValue(key: string): string | undefined {
+  switch (key) {
+    case 'FIREBASE_SERVICE_ACCOUNT_KEY':
+      return process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    case 'FIREBASE_SERVICE_ACCOUNT':
+      return process.env.FIREBASE_SERVICE_ACCOUNT;
+    case 'FIREBASE_ADMIN_SERVICE_ACCOUNT':
+      return process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT;
+    case 'FIREBASE_ADMIN_CREDENTIALS':
+      return process.env.FIREBASE_ADMIN_CREDENTIALS;
+    case 'GOOGLE_APPLICATION_CREDENTIALS_JSON':
+      return process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+    case 'GOOGLE_CREDENTIALS':
+      return process.env.GOOGLE_CREDENTIALS;
+    case 'FIREBASE_ADMIN_PROJECT_ID':
+      return process.env.FIREBASE_ADMIN_PROJECT_ID;
+    case 'FIREBASE_PROJECT_ID':
+      return process.env.FIREBASE_PROJECT_ID;
+    case 'GOOGLE_CLOUD_PROJECT':
+      return process.env.GOOGLE_CLOUD_PROJECT;
+    case 'GCLOUD_PROJECT':
+      return process.env.GCLOUD_PROJECT;
+    case 'NEXT_PUBLIC_FIREBASE_PROJECT_ID':
+      return process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    case 'FIREBASE_ADMIN_CLIENT_EMAIL':
+      return process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+    case 'FIREBASE_CLIENT_EMAIL':
+      return process.env.FIREBASE_CLIENT_EMAIL;
+    case 'GOOGLE_CLIENT_EMAIL':
+      return process.env.GOOGLE_CLIENT_EMAIL;
+    case 'FIREBASE_ADMIN_PRIVATE_KEY':
+      return process.env.FIREBASE_ADMIN_PRIVATE_KEY;
+    case 'FIREBASE_PRIVATE_KEY':
+      return process.env.FIREBASE_PRIVATE_KEY;
+    case 'GOOGLE_PRIVATE_KEY':
+      return process.env.GOOGLE_PRIVATE_KEY;
+    default:
+      return undefined;
+  }
+}
+
 function firstEnvValue(keys: readonly string[]): string | undefined {
   for (const key of keys) {
-    const value = process.env[key]?.trim();
+    const value = getEnvValue(key)?.trim();
     if (value) return value;
   }
   return undefined;
