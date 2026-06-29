@@ -8,6 +8,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const company = searchParams.get('company');
     const apiAuthorization = process.env.TANGO_API_AUTHORIZATION;
+    const tangoBaseUrl = process.env.TANGO_API_BASE_URL?.trim().replace(/^["']|["']$/g, '');
 
     if (!company) {
         return NextResponse.json({ error: 'Falta el ID de Company' }, { status: 400 });
@@ -17,13 +18,19 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Company no permitida' }, { status: 400 });
     }
 
-    if (!apiAuthorization) {
+    if (!apiAuthorization || !tangoBaseUrl) {
         return NextResponse.json({ error: 'Configuracion de Tango incompleta' }, { status: 500 });
     }
 
     try {
         // 🟢 CORRECCIÓN: Tango usa GET y los datos viajan en la URL (por el flag -G)
-        const tangoUrl = 'https://040896-002.connect.axoft.com/Api/GetApiLiveQueryData?process=17961&fromDate=&toDate=&pageSize=2000&pageIndex=0&customQuery=0';
+        const tangoUrl = new URL('/Api/GetApiLiveQueryData', tangoBaseUrl);
+        tangoUrl.searchParams.set('process', '17961');
+        tangoUrl.searchParams.set('fromDate', '');
+        tangoUrl.searchParams.set('toDate', '');
+        tangoUrl.searchParams.set('pageSize', '2000');
+        tangoUrl.searchParams.set('pageIndex', '0');
+        tangoUrl.searchParams.set('customQuery', '0');
 
         console.log(`Conectando a Tango (Company ${company})... URL: ${tangoUrl}`);
 

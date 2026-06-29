@@ -22,6 +22,7 @@ import { advertisingOrderSchema, AdvertisingOrderFormValues } from "@/lib/valida
 
 import { 
     createAdvertisingOrder, 
+    createOpportunity as createOpportunityRecord,
     getClients, 
     getAgencies, 
     getPrograms, 
@@ -173,6 +174,8 @@ export function AdvertisingForm() {
       billingRequestsAvion: [], 
       canjeId: "",
       event: "",
+      opportunityId: "",
+      newOpportunityTitle: "",
       startDate: undefined,
       endDate: undefined,
     },
@@ -776,7 +779,7 @@ export function AdvertisingForm() {
       const selectedClient = clients.find(c => c.id === values.clientId);
       const selectedAgency = agencies.find(a => a.id === values.agencyId);
       const selectedOpp = opportunities.find(o => o.id === values.opportunityId);
-      const oppTitle = selectedOpp?.title;
+      const oppTitle = selectedOpp?.title || values.newOpportunityTitle?.trim();
 
       const safeStartDate = (values.startDate && isValid(values.startDate)) ? values.startDate.toISOString() : new Date().toISOString();
       const safeEndDate = (values.endDate && isValid(values.endDate)) ? values.endDate.toISOString() : new Date().toISOString();
@@ -789,7 +792,7 @@ export function AdvertisingForm() {
           agencyName: values.agencyId === "none" ? undefined : selectedAgency?.name,
           product: "", 
           event: values.event || undefined,
-          opportunityId: values.opportunityId,
+          opportunityId: values.opportunityId || "",
           opportunityTitle: oppTitle || "Campaña",
           accountExecutive: values.accountExecutive || userInfo?.name || "",
           createdAt: new Date().toISOString(),
@@ -936,7 +939,7 @@ export function AdvertisingForm() {
   const onInvalid = (errors: any) => {
       const missing = [];
       if (errors.clientId) missing.push("Cliente");
-      if (errors.opportunityId) missing.push("Oportunidad Cerrado - Ganado");
+      if (errors.opportunityId || errors.newOpportunityTitle) missing.push("Oportunidad Cerrado - Ganado o nombre de nueva oportunidad");
       if (errors.startDate || errors.endDate) missing.push("Fechas de Vigencia");
       if (errors.observations) missing.push("Observaciones (Obligatorio por desajuste)");
       toast({ title: "Faltan datos", description: `Por favor completa: ${missing.join(", ")}`, variant: "destructive" });
@@ -958,9 +961,20 @@ export function AdvertisingForm() {
       const selectedClient = clients.find(c => c.id === data.clientId);
       const selectedAgency = agencies.find(a => a.id === data.agencyId);
       
-      const finalOppId = data.opportunityId;
+      if (!selectedClient) {
+          toast({
+              title: "Cliente no encontrado",
+              description: "Seleccioná nuevamente el cliente para guardar la orden.",
+              variant: "destructive"
+          });
+          setIsSubmitting(false);
+          return;
+      }
+
+      let finalOppId = data.opportunityId || "";
+      let oppTitle = "";
       const existingOpp = opportunities.find(o => o.id === finalOppId);
-      if (!existingOpp || existingOpp.stage !== 'Cerrado - Ganado') {
+      if (finalOppId && (!existingOpp || existingOpp.stage !== 'Cerrado - Ganado')) {
           toast({
               title: "Oportunidad no habilitada",
               description: "La orden solo puede vincularse a una oportunidad Cerrado - Ganado.",
@@ -969,7 +983,60 @@ export function AdvertisingForm() {
           setIsSubmitting(false);
           return;
       }
-      const oppTitle = existingOpp.title;
+      if (existingOpp) {
+          oppTitle = existingOpp.title;
+      } else {
+          const newOpportunityTitle = data.newOpportunityTitle?.trim();
+          if (!newOpportunityTitle) {
+              toast({
+                  title: "Falta oportunidad",
+                  description: "Seleccioná una oportunidad ganada o escribí el nombre de una nueva.",
+                  variant: "destructive"
+              });
+              setIsSubmitting(false);
+              return;
+          }
+
+          const campaignValue = Math.max(0, campaignSrlNet + campaignSasNet);
+          const createdAt = new Date().toISOString();
+          finalOppId = await createOpportunityRecord(
+              {
+                  title: newOpportunityTitle,
+                  clientId: data.clientId,
+                  clientName: selectedClient.razonSocial || selectedClient.denominacion || "Cliente",
+                  value: campaignValue,
+                  stage: "Cerrado - Ganado",
+                  closeDate: format(new Date(), 'yyyy-MM-dd'),
+                  startDate: data.startDate.toISOString(),
+                  endDate: data.endDate.toISOString(),
+                  createdAt,
+                  stageChangedAt: createdAt,
+                  ownerId: selectedClient.ownerId || orderCreatedBy || userInfo.id,
+              },
+              userInfo.id,
+              userInfo.name,
+              selectedClient.ownerName || userInfo.name,
+          );
+          oppTitle = newOpportunityTitle;
+          setValue("opportunityId", finalOppId);
+          setOpportunities(previous => [
+              ...previous,
+              {
+                  id: finalOppId,
+                  title: newOpportunityTitle,
+                  clientId: data.clientId,
+                  clientName: selectedClient.razonSocial || selectedClient.denominacion || "Cliente",
+                  value: campaignValue,
+                  stage: "Cerrado - Ganado",
+                  closeDate: format(new Date(), 'yyyy-MM-dd'),
+                  startDate: data.startDate.toISOString(),
+                  endDate: data.endDate.toISOString(),
+                  createdAt,
+                  stageChangedAt: createdAt,
+                  ownerId: selectedClient.ownerId || orderCreatedBy || userInfo.id,
+              } as Opportunity,
+          ]);
+      }
 
       let targetStatus: ApprovalStatus = notifyOnSave ? 'Pendiente' : 'Borrador';
 
@@ -1143,7 +1210,11 @@ export function AdvertisingForm() {
                   <ClientCombobox
                     clients={clients}
                     value={field.value}
-                    onChange={(val) => { field.onChange(val); setValue("opportunityId", ""); }}
+                    onChange={(val) => {
+                      field.onChange(val);
+                      setValue("opportunityId", "");
+                      setValue("newOpportunityTitle", "");
+                    }}
                     placeholder="Buscar cliente..."
                   />
                 </FormControl>
@@ -1160,13 +1231,38 @@ export function AdvertisingForm() {
           <div className="col-span-1">
              <FormField control={form.control} name="opportunityId" render={({ field }) => (
                   <FormItem><FormLabel>Producto (Oportunidad) <span className="text-red-500">*</span></FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || undefined}>
+                    <Select
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        setValue("newOpportunityTitle", "");
+                      }}
+                      value={field.value || undefined}
+                    >
                       <FormControl><SelectTrigger><SelectValue placeholder={opportunities.length === 0 ? "Sin oportunidades ganadas" : "Seleccionar"} /></SelectTrigger></FormControl>
                       <SelectContent>
                          {opportunities.map(opp => (<SelectItem key={opp.id} value={opp.id}>{opp.title} ({opp.stage})</SelectItem>))}
                       </SelectContent>
                     </Select>
                     <FormDescription>Solo se muestran oportunidades en estado Cerrado - Ganado.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+             <FormField control={form.control} name="newOpportunityTitle" render={({ field }) => (
+                  <FormItem className="mt-3">
+                    <FormLabel>Nueva oportunidad ganada</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="Ej: Campaña institucional 2026"
+                        onChange={(event) => {
+                          field.onChange(event);
+                          if (event.target.value.trim()) setValue("opportunityId", "");
+                        }}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Usalo cuando el cliente no tenga una oportunidad Cerrado - Ganado. Se crea y se vincula al guardar.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />

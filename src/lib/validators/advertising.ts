@@ -59,8 +59,8 @@ export const advertisingOrderSchema = z.object({
   clientId: z.string().min(1, "El cliente es obligatorio"),
   canjeId: z.string().optional(),
   agencyId: z.string().optional(),
-  opportunityId: z.string().min(1, "La oportunidad Cerrado - Ganado es obligatoria"),
-  newOpportunityTitle: z.string().optional(),
+  opportunityId: z.string().optional().default(""),
+  newOpportunityTitle: z.string().optional().default(""),
   product: z.string().optional(), 
   event: z.string().optional(),
   accountExecutive: z.string().optional(),
@@ -83,6 +83,16 @@ export const advertisingOrderSchema = z.object({
   // 🟢 REGISTRO PARA ENTRADAS EN AVIÓN
   billingRequestsAvion: z.array(billingRequestItemSchema).optional().default([]),
 }).superRefine((val, ctx) => {
+  const hasExistingOpportunity = Boolean(val.opportunityId?.trim());
+  const hasNewOpportunityTitle = Boolean(val.newOpportunityTitle?.trim());
+  if (!hasExistingOpportunity && !hasNewOpportunityTitle) {
+      ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Seleccioná una oportunidad Cerrado - Ganado o cargá el nombre de una nueva.",
+          path: ["newOpportunityTitle"]
+      });
+  }
+
   if ((val.adjustmentSrl > 0 || val.adjustmentSas > 0) && (!val.observations || val.observations.trim() === "")) {
       ctx.addIssue({
           code: z.ZodIssueCode.custom,

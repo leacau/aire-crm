@@ -132,6 +132,24 @@ function firebaseInfrastructureErrorResponse(error: unknown): NextResponse | nul
     );
   }
 
+  if (
+    normalizedCode.includes('deadline-exceeded') ||
+    normalizedCode.includes('unavailable') ||
+    normalizedCode.includes('resource-exhausted') ||
+    normalizedMessage.includes('deadline exceeded') ||
+    normalizedMessage.includes('service unavailable') ||
+    normalizedMessage.includes('quota')
+  ) {
+    return NextResponse.json(
+      {
+        error: 'Firestore no pudo completar la consulta en este momento.',
+        code: 'FIRESTORE_UNAVAILABLE',
+        details: code || message || 'unavailable',
+      },
+      { status: 500 },
+    );
+  }
+
   return null;
 }
 

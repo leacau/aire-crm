@@ -19,7 +19,6 @@ import {
   normalizeTangoText,
 } from '../../application/tango-invoice-utils';
 
-const DEFAULT_TANGO_BASE_URL = 'https://040896-002.connect.axoft.com';
 const COMPANY_QUERIES: Record<TangoCompanyId, { process: string; customQuery: string }> = {
   '4': { process: '17943', customQuery: '1235' },
   '5': { process: '17943', customQuery: '1235' },
@@ -30,7 +29,10 @@ const MAX_PAGES = 100;
 
 const getTangoEndpoint = () => {
   const configuredValue = process.env.TANGO_API_BASE_URL?.trim();
-  const cleanValue = configuredValue?.replace(/^["']|["']$/g, '') || DEFAULT_TANGO_BASE_URL;
+  const cleanValue = configuredValue?.replace(/^["']|["']$/g, '');
+  if (!cleanValue) {
+    throw new Error('Falta configurar TANGO_API_BASE_URL');
+  }
 
   try {
     const url = new URL(cleanValue);
@@ -38,8 +40,7 @@ const getTangoEndpoint = () => {
     url.search = '';
     return url;
   } catch {
-    console.warn('TANGO_API_BASE_URL is invalid; using Tango Connect default URL.');
-    return new URL('/Api/GetApiLiveQueryData', DEFAULT_TANGO_BASE_URL);
+    throw new Error('TANGO_API_BASE_URL no es una URL válida');
   }
 };
 
