@@ -12,9 +12,12 @@ export type {
   ProposalItem,
 } from './domain/opportunity';
 export {
+  createOpportunity,
+  deleteOpportunity,
   getAllOpportunities,
   getOpportunities,
   getOpportunitiesByClientId,
   getOpportunitiesForUser,
   getOpportunityById,
+  updateOpportunity,
 } from './infrastructure/http/opportunity-api-client';

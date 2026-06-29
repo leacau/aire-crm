@@ -5,7 +5,7 @@ import { dbAdmin } from '@/lib/firebase-admin';
 type ServerActivityPayload = {
   userId: string;
   userName: string;
-  type: 'create' | 'update' | 'delete';
+  type: 'create' | 'update' | 'delete' | 'stage_change';
   entityType: string;
   entityId: string;
   entityName: string;

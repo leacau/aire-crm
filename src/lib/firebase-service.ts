@@ -3441,65 +3441,21 @@ export const createOpportunity = async (
     userName: string,
     ownerName: string
 ): Promise<string> => {
-    if ((opportunityData.stage as string) === 'Ganado (Recurrente)') {
-        throw new Error('Ganado (Recurrente) es un estado visual del Kanban y no puede guardarse.');
-    }
-    if (opportunityData.stage === 'Cerrado - Ganado') {
-        if (!opportunityData.startDate || !opportunityData.endDate) {
-            throw new Error('La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.');
-        }
-        if (parseISO(opportunityData.endDate) < parseISO(opportunityData.startDate)) {
-            throw new Error('La fecha de fin del contrato no puede ser anterior a la fecha de inicio.');
-        }
-    }
-    const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
-    if (!clientSnap.exists()) throw new Error("Client not found for opportunity creation");
-
-    const dataToSave: any = {
-        ...opportunityData,
-        createdAt: serverTimestamp(),
-        stageChangedAt: serverTimestamp()
-    };
-
-    if (dataToSave.agencyId === undefined) {
-        delete dataToSave.agencyId;
-    }
-    delete dataToSave.pautados;
-
-
-    const docRef = await addDoc(collections.opportunities, dataToSave);
-    
-    // 🟢 MUTADOR CORRECTO PARA OPORTUNIDADES (Con el truco de la fecha local)
+    const { createOpportunity: createOpportunityViaApi } = await import('@/modules/opportunities/client');
+    const newOpportunityId = await createOpportunityViaApi(opportunityData);
+    const savedAt = new Date().toISOString();
     const cacheData = {
-        ...dataToSave,
-        createdAt: new Date().toISOString(),
-        stageChangedAt: new Date().toISOString()
+        ...opportunityData,
+        createdAt: savedAt,
+        stageChangedAt: savedAt
     };
-    mutateCacheArray('opportunities', docRef.id, cacheData, 'add', (a, b) => {
+    mutateCacheArray('opportunities', newOpportunityId, cacheData, 'add', (a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return dateB - dateA;
     });
     invalidateOpportunityCaches([opportunityData.clientId]);
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'opportunity',
-        entityId: docRef.id,
-        entityName: opportunityData.title,
-        details: `creó la oportunidad <strong>${opportunityData.title}</strong> para el cliente <a href="/clients/${opportunityData.clientId}" class="font-bold text-primary hover:underline">${opportunityData.clientName}</a>`,
-        ownerName: ownerName
-    });
-    try {
-        const observationText = opportunityData.observaciones?.trim() ? ` - Observación: ${opportunityData.observaciones.trim()}` : '';
-        await autoUpdateCoachingSession(userId, userName, 'client', opportunityData.clientId, opportunityData.clientName, `Nueva propuesta: ${opportunityData.title} - Valor: $${opportunityData.value}${observationText}`);
-    } catch (e) {
-        console.error('Error auto-updating coaching:', e);
-    }
-
-    return docRef.id;
+    return newOpportunityId;
 };
 
 // Crear Oportunidad Rápida (para cuando el usuario escribe una nueva)
@@ -3594,256 +3550,14 @@ export const updateOpportunity = async (
     pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[],
     options?: { manageContractPeriods?: boolean }
 ): Promise<Partial<Opportunity>> => {
-    const docRef = doc(db, 'opportunities', id);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) throw new Error("Opportunity not found");
-    const originalData = docSnap.data() as Opportunity;
-
-    if ((data.stage as string | undefined) === 'Ganado (Recurrente)') {
-        throw new Error('Ganado (Recurrente) es un estado visual del Kanban y no puede guardarse.');
+    const { updateOpportunity: updateOpportunityViaApi } = await import('@/modules/opportunities/client');
+    const persisted = await updateOpportunityViaApi(id, data, pendingInvoices, options);
+    mutateCacheArray('opportunities', id, persisted, 'update');
+    invalidateOpportunityCaches([data.clientId]);
+    if (pendingInvoices && pendingInvoices.length > 0) {
+        invalidateCache('invoices');
     }
-
-    const resultingStage = data.stage || originalData.stage;
-    const hasStartDateUpdate = Object.prototype.hasOwnProperty.call(data, 'startDate');
-    const hasEndDateUpdate = Object.prototype.hasOwnProperty.call(data, 'endDate');
-    const nextStartDate = hasStartDateUpdate ? data.startDate : originalData.startDate;
-    const nextEndDate = hasEndDateUpdate ? data.endDate : originalData.endDate;
-    const isTransitioningToWon = resultingStage === 'Cerrado - Ganado' && originalData.stage !== 'Cerrado - Ganado';
-    if (isTransitioningToWon && (!nextStartDate || !nextEndDate)) {
-            throw new Error('La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.');
-    }
-    if (!!nextStartDate !== !!nextEndDate) {
-        throw new Error('La fecha de inicio y fin de la vigencia deben cargarse juntas.');
-    }
-    if (nextStartDate && nextEndDate && parseISO(nextEndDate) < parseISO(nextStartDate)) {
-        throw new Error('La fecha de fin del contrato no puede ser anterior a la fecha de inicio.');
-    }
-    if (
-        !options?.manageContractPeriods
-        && originalData.startDate
-        && originalData.endDate
-        && ((typeof data.startDate === 'string' && data.startDate !== originalData.startDate)
-          || (typeof data.endDate === 'string' && data.endDate !== originalData.endDate))
-    ) {
-        throw new Error('La vigencia inicial ya fue confirmada. Para extenderla, usá Renovar período.');
-    }
-
-    const clientSnap = await getDoc(doc(db, 'clients', originalData.clientId));
-    if (!clientSnap.exists()) throw new Error("Client not found for opportunity update");
-
-    const updateData: {[key: string]: any} = {
-        ...data,
-        updatedAt: serverTimestamp()
-    };
-    if (options?.manageContractPeriods && hasStartDateUpdate && !data.startDate) updateData.startDate = deleteField();
-    if (options?.manageContractPeriods && hasEndDateUpdate && !data.endDate) updateData.endDate = deleteField();
-
-    const originalHistory = Array.isArray(originalData.periodHistory) ? originalData.periodHistory : [];
-    const submittedHistory = Array.isArray(data.periodHistory) ? data.periodHistory : originalHistory;
-    if (options?.manageContractPeriods && Array.isArray(data.periodHistory)) {
-        updateData.periodHistory = data.periodHistory;
-    }
-    const periodDateKey = (period: { startDate: string; endDate: string }) =>
-        `${String(period.startDate).slice(0, 10)}|${String(period.endDate).slice(0, 10)}`;
-    const newRenewals = (options?.manageContractPeriods ? [] : submittedHistory.filter(period => !originalHistory.some(existing => (
-        periodDateKey(existing) === periodDateKey(period)
-    ))));
-    const occupiedPeriods = [
-        ...(nextStartDate && nextEndDate ? [{ startDate: nextStartDate, endDate: nextEndDate }] : []),
-        ...(options?.manageContractPeriods ? [] : originalHistory),
-    ];
-    const periodsToValidate = options?.manageContractPeriods && Array.isArray(data.periodHistory)
-        ? data.periodHistory
-        : newRenewals;
-    periodsToValidate.forEach(period => {
-        if (!period.startDate || !period.endDate || parseISO(period.endDate) < parseISO(period.startDate)) {
-            throw new Error('La renovación contiene una vigencia inválida.');
-        }
-        const periodStart = String(period.startDate).slice(0, 10);
-        const periodEnd = String(period.endDate).slice(0, 10);
-        const conflict = occupiedPeriods.find(existing => {
-            const existingStart = String(existing.startDate).slice(0, 10);
-            const existingEnd = String(existing.endDate).slice(0, 10);
-            return periodStart <= existingEnd && periodEnd >= existingStart;
-        });
-        if (conflict) {
-            throw new Error(`La renovación se superpone con la vigencia ${String(conflict.startDate).slice(0, 10)} al ${String(conflict.endDate).slice(0, 10)}.`);
-        }
-        occupiedPeriods.push(period);
-    });
-    const isRenewal = newRenewals.length > 0;
-    if (Array.isArray(data.periodHistory) && !options?.manageContractPeriods) {
-        updateData.periodHistory = [...originalHistory, ...newRenewals];
-    }
-    if (isRenewal) {
-        updateData.lastRenewedAt = serverTimestamp();
-        updateData.lastRenewedById = userId;
-        updateData.lastRenewedByName = userName;
-        updateData.finalizationDate = deleteField();
-    }
-    if (!originalData.startDate && !originalData.endDate && nextStartDate && nextEndDate) {
-        updateData.initialValidityConfirmedAt = serverTimestamp();
-        updateData.initialValidityConfirmedById = userId;
-        updateData.initialValidityConfirmedByName = userName;
-    }
-
-    if ('finalizationDate' in data && !data.finalizationDate) {
-        updateData.finalizationDate = deleteField();
-    }
-
-    Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined) delete updateData[key];
-    });
-
-    if ('manualUpdateHistory' in updateData) {
-        delete updateData.manualUpdateHistory;
-    }
-
-    const stageChanged = data.stage && data.stage !== originalData.stage;
-    if (stageChanged) {
-        updateData.stageChangedAt = serverTimestamp();
-    }
-
-    if (typeof data.manualUpdateDate !== 'undefined') {
-        if (!data.manualUpdateDate) {
-            updateData.manualUpdateDate = deleteField();
-        } else if (data.manualUpdateDate !== originalData.manualUpdateDate) {
-            updateData.manualUpdateDate = data.manualUpdateDate;
-            updateData.manualUpdateHistory = arrayUnion(data.manualUpdateDate);
-        } else {
-            delete updateData.manualUpdateDate;
-        }
-    }
-    
-    const bonusStateChanged = data.bonificacionEstado && data.bonificacionEstado !== originalData.bonificacionEstado && originalData.bonificacionEstado === 'Pendiente';
-    if (bonusStateChanged) {
-        if (originalData.stage === 'Negociación a Aprobar') {
-            updateData.stage = 'Negociación';
-        }
-    }
-
-    if (data.stage === 'Cerrado - Ganado' && originalData.stage !== 'Cerrado - Ganado') {
-        const fullOpportunityData = { ...originalData, ...data, id };
-        await createCommercialItemsFromOpportunity(fullOpportunityData, userId, userName);
-    }
-
-    if (data.bonificacionDetalle !== undefined && !data.bonificacionDetalle.trim()) {
-        updateData.bonificacionEstado = deleteField();
-        updateData.bonificacionAutorizadoPorId = deleteField();
-        updateData.bonificacionAutorizadoPorNombre = deleteField();
-        updateData.bonificacionFechaAutorizacion = deleteField();
-    }
-    
-    if (data.agencyId === '' || data.agencyId === undefined) {
-        updateData.agencyId = deleteField();
-    }
-    
-    updateData.pautados = deleteField();
-
-    if ('createdAt' in updateData && typeof updateData.createdAt === 'string') {
-        updateData.createdAt = Timestamp.fromDate(new Date(updateData.createdAt));
-    }
-
-    await updateDoc(docRef, updateData);
-    
-    // 🟢 MUTADOR CORRECTO PARA EDICIÓN DE OPORTUNIDADES (Con truco de fechas)
-    const savedAt = new Date().toISOString();
-    const cacheData: Partial<Opportunity> = { ...data, updatedAt: savedAt };
-    if (Array.isArray(updateData.periodHistory)) {
-        cacheData.periodHistory = updateData.periodHistory as OpportunityPeriod[];
-    }
-    if (typeof updateData.stage === 'string') {
-        cacheData.stage = updateData.stage as OpportunityStage;
-    }
-    if (stageChanged) {
-        cacheData.stageChangedAt = savedAt;
-    }
-    if (isRenewal || ('finalizationDate' in data && !data.finalizationDate)) {
-        cacheData.finalizationDate = undefined;
-    }
-    if (options?.manageContractPeriods && hasStartDateUpdate && !data.startDate) cacheData.startDate = undefined;
-    if (options?.manageContractPeriods && hasEndDateUpdate && !data.endDate) cacheData.endDate = undefined;
-    if (data.agencyId === '' || data.agencyId === undefined) cacheData.agencyId = undefined;
-    if (typeof data.manualUpdateDate !== 'undefined' && !data.manualUpdateDate) cacheData.manualUpdateDate = undefined;
-    mutateCacheArray('opportunities', id, cacheData, 'update');
-    invalidateOpportunityCaches([originalData.clientId, data.clientId]);
-
-     if (pendingInvoices && pendingInvoices.length > 0) {
-        for (const invoiceData of pendingInvoices) {
-            await createInvoice({
-                ...invoiceData,
-                opportunityId: id,
-            }, userId, userName, ownerName);
-        }
-    }
-
-    const activityDetails = {
-        userId,
-        userName,
-        entityType: 'opportunity' as const,
-        entityId: id,
-        entityName: originalData.title,
-        ownerName: ownerName
-    };
-
-    const isFirstRenewal = isRenewal && originalHistory.length === 0;
-    
-    if (isRenewal || isFirstRenewal) {
-         try {
-             const latestRenewal = newRenewals[newRenewals.length - 1];
-             const newStart = latestRenewal ? format(parseISO(latestRenewal.startDate), 'dd/MM/yyyy', { locale: es }) : '?';
-             const newEnd = latestRenewal ? format(parseISO(latestRenewal.endDate), 'dd/MM/yyyy', { locale: es }) : '?';
-             await autoUpdateCoachingSession(userId, userName, 'client', originalData.clientId, originalData.clientName, `Propuesta renovada: ${data.title || originalData.title} - Valor: $${data.value || originalData.value} - Período: ${newStart} al ${newEnd}`);
-         } catch (e) {
-             console.error('Error auto-updating coaching:', e);
-         }
-    }
-
-    if (stageChanged) {
-        await logActivity({
-            ...activityDetails,
-            type: 'stage_change',
-            details: `cambió la etapa de <strong>${originalData.title}</strong> a <strong>${data.stage}</strong> para el cliente <a href="/clients/${originalData.clientId}" class="font-bold text-primary hover:underline">${originalData.clientName}</a>`,
-        });
-    } else {
-        await logActivity({
-            ...activityDetails,
-            type: 'update',
-            details: `actualizó la oportunidad <strong>${originalData.title}</strong> para el cliente <a href="/clients/${originalData.clientId}" class="font-bold text-primary hover:underline">${originalData.clientName}</a>`,
-        });
-    }
-    const coachingChanges = [
-        stageChanged ? `Etapa: ${data.stage}` : null,
-        data.value !== undefined && data.value !== originalData.value ? `Valor: $${data.value}` : null,
-        data.observaciones !== undefined && data.observaciones !== originalData.observaciones ? `Observación: ${data.observaciones || 'sin observaciones'}` : null,
-        data.followUpDone !== undefined && data.followUpDone !== originalData.followUpDone ? `Qué hice: ${data.followUpDone || 'sin detalle'}` : null,
-        data.followUpCurrent !== undefined && data.followUpCurrent !== originalData.followUpCurrent ? `En qué estamos: ${data.followUpCurrent || 'sin detalle'}` : null,
-        data.followUpNext !== undefined && data.followUpNext !== originalData.followUpNext ? `Qué sigue: ${data.followUpNext || 'sin detalle'}` : null,
-    ].filter(Boolean).join(' - ');
-
-    if (coachingChanges) {
-        try {
-            const isClosingWonProposal = stageChanged && data.stage === 'Cerrado - Ganado';
-            await autoUpdateCoachingSession(
-                userId,
-                userName,
-                'client',
-                originalData.clientId,
-                originalData.clientName,
-                `Actualización de propuesta: ${data.title || originalData.title} - ${coachingChanges}`,
-                isClosingWonProposal
-                    ? {
-                        createIfMissing: false,
-                        completeIfActive: true,
-                        updateExistingIfMissing: true,
-                    }
-                    : undefined
-            );
-        } catch (e) {
-            console.error('Error auto-updating coaching:', e);
-        }
-    }
-    return cacheData;
+    return persisted;
 };
 
 export const deleteOpportunity = async (
@@ -3851,40 +3565,12 @@ export const deleteOpportunity = async (
     userId: string,
     userName: string
 ): Promise<void> => {
-    const docRef = doc(db, 'opportunities', id);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) throw new Error("Opportunity not found");
-    const opportunityData = docSnap.data() as Opportunity;
-
-    const batch = writeBatch(db);
-
-    const invoicesQuery = query(collections.invoices, where('opportunityId', '==', id));
-    const invoicesSnap = await getDocs(invoicesQuery);
-    invoicesSnap.forEach(doc => batch.delete(doc.ref));
-    
-    batch.delete(docRef);
-
-    await batch.commit();
-    
-    // 🟢 MUTADOR CORRECTO PARA BORRADO DE OPORTUNIDADES
+    const { deleteOpportunity: deleteOpportunityViaApi, getOpportunityById } = await import('@/modules/opportunities/client');
+    const opportunityData = await getOpportunityById(id).catch(() => null);
+    await deleteOpportunityViaApi(id);
     mutateCacheArray('opportunities', id, null, 'delete');
-    invalidateOpportunityCaches([opportunityData.clientId]);
-    // Las facturas las seguimos invalidando completas por precaución a desincronizaciones en cascada
+    invalidateOpportunityCaches([opportunityData?.clientId]);
     invalidateCache('invoices');
-
-    const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
-    const clientOwnerName = clientSnap.exists() ? (clientSnap.data() as Client).ownerName : 'N/A';
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'opportunity',
-        entityId: id,
-        entityName: opportunityData.title,
-        details: `eliminó la oportunidad <strong>${opportunityData.title}</strong> del cliente ${opportunityData.clientName}`,
-        ownerName: clientOwnerName
-    });
 };
 
 const convertActivityLogDoc = (doc: any): ActivityLog => {

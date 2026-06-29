@@ -186,6 +186,22 @@ paths:
                     items: { $ref: '#/components/schemas/Opportunity' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createOpportunity
+      tags: [Oportunidades]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OpportunityWrite' }
+      responses:
+        '201':
+          description: Oportunidad creada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /opportunities/{id}:
     parameters:
       - $ref: '#/components/parameters/OpportunityId'
@@ -202,6 +218,57 @@ paths:
                 required: [data]
                 properties:
                   data: { $ref: '#/components/schemas/Opportunity' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: updateOpportunity
+      tags: [Oportunidades]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data: { $ref: '#/components/schemas/OpportunityPatch' }
+                pendingInvoices:
+                  type: array
+                  items: { type: object, additionalProperties: true }
+                options:
+                  type: object
+                  properties:
+                    manageContractPeriods: { type: boolean }
+      responses:
+        '200':
+          description: Oportunidad actualizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/OpportunityPatch' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteOpportunity
+      tags: [Oportunidades]
+      responses:
+        '200':
+          description: Oportunidad eliminada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [ok]
+                    properties:
+                      ok: { type: boolean }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
   /activities:
@@ -821,6 +888,33 @@ components:
         finalizationDate: { type: string, format: date }
         ownerId: { type: string }
         isCanje: { type: boolean }
+    OpportunityWrite:
+      type: object
+      required: [title, clientName, clientId, value, stage]
+      additionalProperties: true
+      properties:
+        organizationId: { type: string }
+        title: { type: string, minLength: 1 }
+        clientName: { type: string, minLength: 1 }
+        clientId: { type: string, minLength: 1 }
+        value: { type: number }
+        stage: { $ref: '#/components/schemas/OpportunityStage' }
+        closeDate: { type: string, format: date }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+    OpportunityPatch:
+      type: object
+      minProperties: 1
+      additionalProperties: true
+      properties:
+        title: { type: string, minLength: 1 }
+        clientName: { type: string, minLength: 1 }
+        clientId: { type: string, minLength: 1 }
+        value: { type: number }
+        stage: { $ref: '#/components/schemas/OpportunityStage' }
+        closeDate: { type: string, format: date }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
     Activity:
       type: object
       required: [id, userId, userName, type, observation, timestamp, isTask]
