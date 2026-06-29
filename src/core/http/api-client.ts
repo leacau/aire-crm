@@ -22,6 +22,16 @@ export class ApiClientError extends Error {
   }
 }
 
+export function isRecoverableReadApiError(error: unknown): boolean {
+  if (!(error instanceof ApiClientError)) return false;
+  return (
+    error.status >= 500 ||
+    error.code === 'FIRESTORE_UNAVAILABLE' ||
+    error.code === 'FIRESTORE_INDEX_REQUIRED' ||
+    error.code === 'INTERNAL_ERROR'
+  );
+}
+
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const currentUser = auth.currentUser;
   const token = await currentUser?.getIdToken();

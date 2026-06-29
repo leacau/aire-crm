@@ -1,6 +1,6 @@
 'use client';
 
-import { ApiClientError, apiRequest } from '@/core/http/api-client';
+import { ApiClientError, apiRequest, isRecoverableReadApiError } from '@/core/http/api-client';
 import type {
   Client,
   CreateClientInput,
@@ -21,9 +21,18 @@ function invalidateClients() {
 
 export async function getClients(options: { forceServer?: boolean } = {}): Promise<Client[]> {
   if (!options.forceServer && clientCache && clientCache.expiresAt > Date.now()) return clientCache.data;
-  const clients = await apiRequest<Client[]>(API_PATH);
-  clientCache = { data: clients, expiresAt: Date.now() + CACHE_DURATION_MS };
-  return clients;
+  try {
+    const clients = await apiRequest<Client[]>(API_PATH);
+    clientCache = { data: clients, expiresAt: Date.now() + CACHE_DURATION_MS };
+    return clients;
+  } catch (error) {
+    if (!isRecoverableReadApiError(error)) throw error;
+    console.warn('Falling back to Firestore client read for clients:', error);
+    const { getClients: getClientsFromFirestore } = await import('@/lib/firebase-service');
+    const clients = await getClientsFromFirestore({ forceServer: options.forceServer });
+    clientCache = { data: clients as Client[], expiresAt: Date.now() + CACHE_DURATION_MS };
+    return clients as Client[];
+  }
 }
 
 export async function getClient(id: string): Promise<Client | null> {

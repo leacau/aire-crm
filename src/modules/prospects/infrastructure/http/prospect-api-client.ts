@@ -1,6 +1,6 @@
 'use client';
 
-import { apiRequest } from '@/core/http/api-client';
+import { apiRequest, isRecoverableReadApiError } from '@/core/http/api-client';
 import type { CreateProspectInput, Prospect, UpdateProspectInput } from '../../domain/prospect';
 
 const API_PATH = '/api/v1/prospects';
@@ -14,9 +14,18 @@ function invalidateProspectApiCache() {
 
 export async function getProspects(): Promise<Prospect[]> {
   if (cache && cache.expiresAt > Date.now()) return cache.data;
-  const prospects = await apiRequest<Prospect[]>(API_PATH);
-  cache = { data: prospects, expiresAt: Date.now() + CACHE_DURATION_MS };
-  return prospects;
+  try {
+    const prospects = await apiRequest<Prospect[]>(API_PATH);
+    cache = { data: prospects, expiresAt: Date.now() + CACHE_DURATION_MS };
+    return prospects;
+  } catch (error) {
+    if (!isRecoverableReadApiError(error)) throw error;
+    console.warn('Falling back to Firestore client read for prospects:', error);
+    const { getProspects: getProspectsFromFirestore } = await import('@/lib/firebase-service');
+    const prospects = await getProspectsFromFirestore();
+    cache = { data: prospects as Prospect[], expiresAt: Date.now() + CACHE_DURATION_MS };
+    return prospects as Prospect[];
+  }
 }
 
 export async function createProspect(

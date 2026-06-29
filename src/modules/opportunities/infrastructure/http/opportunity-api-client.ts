@@ -1,9 +1,10 @@
 'use client';
 
-import { ApiClientError, apiRequest } from '@/core/http/api-client';
+import { ApiClientError, apiRequest, isRecoverableReadApiError } from '@/core/http/api-client';
 import { getClients } from '@/modules/clients/client';
 import type { Invoice } from '@/lib/types';
 import type { Opportunity } from '../../domain/opportunity';
+import { isOpportunityVisibleInActiveScope } from '../../domain/opportunity-visibility';
 
 const API_PATH = '/api/v1/opportunities';
 const CACHE_DURATION_MS = 3 * 60 * 1000;
@@ -19,9 +20,23 @@ async function list(scope: 'active' | 'all', clientId?: string): Promise<Opportu
   if (cached && cached.expiresAt > Date.now()) return cached.data;
   const params = new URLSearchParams({ scope });
   if (clientId) params.set('clientId', clientId);
-  const opportunities = await apiRequest<Opportunity[]>(`${API_PATH}?${params}`);
-  cache.set(key, { data: opportunities, expiresAt: Date.now() + CACHE_DURATION_MS });
-  return opportunities;
+  try {
+    const opportunities = await apiRequest<Opportunity[]>(`${API_PATH}?${params}`);
+    cache.set(key, { data: opportunities, expiresAt: Date.now() + CACHE_DURATION_MS });
+    return opportunities;
+  } catch (error) {
+    if (!isRecoverableReadApiError(error)) throw error;
+    console.warn('Falling back to Firestore client read for opportunities:', error);
+    const firebaseService = await import('@/lib/firebase-service');
+    const opportunities = clientId
+      ? await firebaseService.getOpportunitiesByClientId(clientId)
+      : await firebaseService.getAllOpportunities();
+    const filtered = scope === 'active'
+      ? opportunities.filter(opportunity => isOpportunityVisibleInActiveScope(opportunity as Opportunity))
+      : opportunities;
+    cache.set(key, { data: filtered as Opportunity[], expiresAt: Date.now() + CACHE_DURATION_MS });
+    return filtered as Opportunity[];
+  }
 }
 
 export function getOpportunities(options: { forceServer?: boolean } = {}): Promise<Opportunity[]> {
