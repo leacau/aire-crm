@@ -26,11 +26,6 @@ async function getCrmIdToken(): Promise<string> {
 }
 
 export async function sendEmail(params: EmailParams) {
-    if (!params.accessToken) {
-        console.warn('Skipping email send because accessToken is missing.');
-        return;
-    }
-
     const idToken = await getCrmIdToken();
     const response = await fetch('/api/services/gmail/send', {
         method: 'POST',

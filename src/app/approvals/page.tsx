@@ -47,7 +47,7 @@ interface UnifiedApprovalItem {
 }
 
 function ApprovalsPageComponent() {
-  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
+  const { userInfo, loading: authLoading, isBoss } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -379,9 +379,6 @@ function ApprovalsPageComponent() {
 
   // 🟢 ENCARGADO DE CONSTRUIR EL PDF Y DESPACHAR EL MAIL (REUTILIZABLE)
   const dispatchApprovalEmail = async (item: UnifiedApprovalItem, containerElement: HTMLElement, isRenotification: boolean = false) => {
-    const accessToken = await getGoogleAccessToken();
-    if (!accessToken) throw new Error("No se pudo obtener la autorización de Gmail.");
-
     const sellerId = item.rawData.advisorId || item.rawData.createdBy || item.rawData.creatorId;
     let sellerEmail = userInfo!.email; 
     if (sellerId) {
@@ -418,7 +415,6 @@ function ApprovalsPageComponent() {
     `;
 
     await sendEmail({
-      accessToken,
       to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar', sellerEmail],
       subject: `INGRESO CORRECTO - ${item.type}: ${item.clientName}`,
       body: approvalEmailBody,
@@ -458,9 +454,10 @@ function ApprovalsPageComponent() {
         approvalHistory: arrayUnion(historyItem)
       });
 
+      let notificationError: unknown = null;
+
       if (actionType === 'Devuelto') {
-        const accessToken = await getGoogleAccessToken();
-        if (accessToken) {
+        try {
             const sellerId = selectedItem.rawData.advisorId || selectedItem.rawData.createdBy || selectedItem.rawData.creatorId;
             let sellerEmail = userInfo.email; 
             if (sellerId) {
@@ -481,18 +478,29 @@ function ApprovalsPageComponent() {
             `;
 
             await sendEmail({
-            accessToken,
             to: [sellerEmail, 'lchena@airedesantafe.com.ar'],
             subject: `Corrección Requerida - ${selectedItem.type}: ${selectedItem.clientName}`,
             body: returnEmailBody
             });
+        } catch (emailError) {
+            notificationError = emailError;
+            console.error('Error enviando notificación de devolución:', emailError);
         }
       } else if (actionType === 'Aprobado' && documentContainerRef.current) {
-        const elementToCapture = documentContainerRef.current.firstChild as HTMLElement;
-        await dispatchApprovalEmail(selectedItem, elementToCapture, false);
+        try {
+          const elementToCapture = documentContainerRef.current.firstChild as HTMLElement;
+          await dispatchApprovalEmail(selectedItem, elementToCapture, false);
+        } catch (emailError) {
+          notificationError = emailError;
+          console.error('Error enviando notificación de aprobación:', emailError);
+        }
       }
 
-      toast({ title: `Documento marcado como ${actionType} exitosamente.` });
+      toast({
+        title: `Documento marcado como ${actionType} exitosamente.`,
+        description: notificationError ? 'La aprobación quedó guardada, pero no se pudo enviar el correo de notificación.' : undefined,
+        variant: notificationError ? 'destructive' : 'default',
+      });
       setIsModalOpen(false);
       fetchData();
     } catch (error) {
