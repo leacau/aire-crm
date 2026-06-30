@@ -17,10 +17,10 @@ export async function getProspects(): Promise<Prospect[]> {
   const prospects = await apiReadWithFallback<Prospect[]>(
     API_PATH,
     async () => {
-    const { getProspects: getProspectsFromFirestore } = await import('@/lib/firebase-service');
+      const { getProspects: getProspectsFromFirestore } = await import('@/lib/firebase-service');
       return getProspectsFromFirestore() as Promise<Prospect[]>;
     },
-    { label: 'prospects' },
+    { fallbackOnForbidden: true, label: 'prospects' },
   );
   cache = { data: prospects, expiresAt: Date.now() + CACHE_DURATION_MS };
   return prospects;

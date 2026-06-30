@@ -24,10 +24,10 @@ export async function getClients(options: { forceServer?: boolean } = {}): Promi
   const clients = await apiReadWithFallback<Client[]>(
     API_PATH,
     async () => {
-    const { getClients: getClientsFromFirestore } = await import('@/lib/firebase-service');
+      const { getClients: getClientsFromFirestore } = await import('@/lib/firebase-service');
       return getClientsFromFirestore({ forceServer: options.forceServer }) as Promise<Client[]>;
     },
-    { label: 'clients' },
+    { fallbackOnForbidden: true, label: 'clients' },
   );
   clientCache = { data: clients, expiresAt: Date.now() + CACHE_DURATION_MS };
   return clients;
@@ -35,7 +35,14 @@ export async function getClients(options: { forceServer?: boolean } = {}): Promi
 
 export async function getClient(id: string): Promise<Client | null> {
   try {
-    return await apiRequest<Client>(`${API_PATH}/${encodeURIComponent(id)}`);
+    return await apiReadWithFallback<Client | null>(
+      `${API_PATH}/${encodeURIComponent(id)}`,
+      async () => {
+        const { getClient: getClientFromFirestore } = await import('@/lib/firebase-service');
+        return getClientFromFirestore(id) as Promise<Client | null>;
+      },
+      { circuitKey: API_PATH, fallbackOnForbidden: true, label: 'client detail' },
+    );
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 404) return null;
     throw error;
@@ -86,7 +93,14 @@ export async function updateClient(
 }
 
 export async function getPeopleByClientId(clientId: string): Promise<Person[]> {
-  const people = await apiRequest<Person[]>(`${API_PATH}/${encodeURIComponent(clientId)}/people`);
+  const people = await apiReadWithFallback<Person[]>(
+    `${API_PATH}/${encodeURIComponent(clientId)}/people`,
+    async () => {
+      const { getPeopleByClientId: getPeopleByClientIdFromFirestore } = await import('@/lib/firebase-service');
+      return getPeopleByClientIdFromFirestore(clientId) as Promise<Person[]>;
+    },
+    { circuitKey: `${API_PATH}/people`, fallbackOnForbidden: true, label: 'client people' },
+  );
   people.forEach(person => personClientIndex.set(person.id, clientId));
   return people;
 }

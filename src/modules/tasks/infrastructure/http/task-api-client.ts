@@ -17,10 +17,10 @@ export async function getClientActivities(clientId: string): Promise<ClientActiv
   return apiReadWithFallback<ClientActivity[]>(
     `${ACTIVITIES_PATH}?${params}`,
     async () => {
-    const { getClientActivities: getClientActivitiesFromFirestore } = await import('@/lib/firebase-service');
+      const { getClientActivities: getClientActivitiesFromFirestore } = await import('@/lib/firebase-service');
       return getClientActivitiesFromFirestore(clientId) as Promise<ClientActivity[]>;
     },
-    { circuitKey: ACTIVITIES_PATH, label: 'client activities' },
+    { circuitKey: ACTIVITIES_PATH, fallbackOnForbidden: true, label: 'client activities' },
   );
 }
 
@@ -29,11 +29,11 @@ export async function getProspectActivities(prospectId: string): Promise<ClientA
   return apiReadWithFallback<ClientActivity[]>(
     `${ACTIVITIES_PATH}?${params}`,
     async () => {
-    const { getAllClientActivities } = await import('@/lib/firebase-service');
-    const activities = await getAllClientActivities();
+      const { getAllClientActivities } = await import('@/lib/firebase-service');
+      const activities = await getAllClientActivities();
       return activities.filter(activity => activity.prospectId === prospectId) as ClientActivity[];
     },
-    { circuitKey: ACTIVITIES_PATH, label: 'prospect activities' },
+    { circuitKey: ACTIVITIES_PATH, fallbackOnForbidden: true, label: 'prospect activities' },
   );
 }
 
@@ -41,10 +41,10 @@ export async function getAllClientActivities(): Promise<ClientActivity[]> {
   return apiReadWithFallback<ClientActivity[]>(
     ACTIVITIES_PATH,
     async () => {
-    const { getAllClientActivities: getAllClientActivitiesFromFirestore } = await import('@/lib/firebase-service');
+      const { getAllClientActivities: getAllClientActivitiesFromFirestore } = await import('@/lib/firebase-service');
       return getAllClientActivitiesFromFirestore() as Promise<ClientActivity[]>;
     },
-    { label: 'activities' },
+    { fallbackOnForbidden: true, label: 'activities' },
   );
 }
 

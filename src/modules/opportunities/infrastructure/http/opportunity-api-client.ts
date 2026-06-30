@@ -23,7 +23,7 @@ async function list(scope: 'active' | 'all', clientId?: string): Promise<Opportu
   const opportunities = await apiReadWithFallback<Opportunity[]>(
     `${API_PATH}?${params}`,
     async () => {
-    const firebaseService = await import('@/lib/firebase-service');
+      const firebaseService = await import('@/lib/firebase-service');
       const fallbackOpportunities = clientId
         ? await firebaseService.getOpportunitiesByClientId(clientId)
         : await firebaseService.getAllOpportunities();
@@ -31,7 +31,7 @@ async function list(scope: 'active' | 'all', clientId?: string): Promise<Opportu
         ? fallbackOpportunities.filter(opportunity => isOpportunityVisibleInActiveScope(opportunity as Opportunity))
         : fallbackOpportunities) as Opportunity[];
     },
-    { circuitKey: API_PATH, label: 'opportunities' },
+    { circuitKey: API_PATH, fallbackOnForbidden: true, label: 'opportunities' },
   );
   cache.set(key, { data: opportunities, expiresAt: Date.now() + CACHE_DURATION_MS });
   return opportunities;
@@ -58,7 +58,14 @@ export async function getOpportunitiesForUser(userId: string): Promise<Opportuni
 
 export async function getOpportunityById(id: string): Promise<Opportunity | null> {
   try {
-    return await apiRequest<Opportunity>(`${API_PATH}/${encodeURIComponent(id)}`);
+    return await apiReadWithFallback<Opportunity | null>(
+      `${API_PATH}/${encodeURIComponent(id)}`,
+      async () => {
+        const { getOpportunityById: getOpportunityByIdFromFirestore } = await import('@/lib/firebase-service');
+        return getOpportunityByIdFromFirestore(id) as Promise<Opportunity | null>;
+      },
+      { circuitKey: API_PATH, fallbackOnForbidden: true, label: 'opportunity detail' },
+    );
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 404) return null;
     throw error;

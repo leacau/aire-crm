@@ -25,9 +25,13 @@ export class ApiClientError extends Error {
   }
 }
 
-export function isRecoverableReadApiError(error: unknown): boolean {
+export function isRecoverableReadApiError(
+  error: unknown,
+  options: { fallbackOnForbidden?: boolean } = {},
+): boolean {
   if (!(error instanceof ApiClientError)) return false;
   return (
+    (options.fallbackOnForbidden === true && error.status === 403) ||
     error.status >= 500 ||
     error.code === 'FIRESTORE_UNAVAILABLE' ||
     error.code === 'FIRESTORE_INDEX_REQUIRED' ||
@@ -68,7 +72,7 @@ export function resetApiReadCircuit(path?: string): void {
 export async function apiReadWithFallback<T>(
   path: string,
   fallback: () => Promise<T>,
-  options: { circuitKey?: string; circuitTtlMs?: number; label?: string } = {},
+  options: { circuitKey?: string; circuitTtlMs?: number; fallbackOnForbidden?: boolean; label?: string } = {},
 ): Promise<T> {
   const circuitKey = options.circuitKey || getReadCircuitKey(path);
   const label = options.label || circuitKey;
@@ -80,7 +84,7 @@ export async function apiReadWithFallback<T>(
   try {
     return await apiRequest<T>(path);
   } catch (error) {
-    if (!isRecoverableReadApiError(error)) throw error;
+    if (!isRecoverableReadApiError(error, { fallbackOnForbidden: options.fallbackOnForbidden })) throw error;
     openReadCircuit(circuitKey, options.circuitTtlMs ?? DEFAULT_READ_CIRCUIT_TTL_MS);
     console.warn(`Falling back to Firestore client read for ${label}:`, error);
     return fallback();
