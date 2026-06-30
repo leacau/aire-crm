@@ -118,6 +118,40 @@ service cloud.firestore {
           && request.resource.data.orderId == resource.data.orderId);
     }
 
+    function requestedExecutionOrderIsApprovedOrExecutive() {
+      return !(request.resource.data.get('orderId', null) is string)
+        || isExecutiveManagement()
+        || get(/databases/$(database)/documents/advertising_orders/$(request.resource.data.orderId)).data.get('status', null) == 'Aprobado'
+        || (get(/databases/$(database)/documents/advertising_orders/$(request.resource.data.orderId)).data.get('status', null) == null
+          && get(/databases/$(database)/documents/advertising_orders/$(request.resource.data.orderId)).data.get('approvalHistory', []).size() == 0);
+    }
+
+    function executionOrderLinkUpdateAllowed() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['orderId'])
+        || requestedExecutionOrderIsApprovedOrExecutive();
+    }
+
+    function hasPersistableOpportunityStage() {
+      return request.resource.data.stage != 'Ganado (Recurrente)';
+    }
+
+    function linksWonOpportunityForOrder() {
+      return request.resource.data.opportunityId is string
+        && exists(/databases/$(database)/documents/opportunities/$(request.resource.data.opportunityId))
+        && get(/databases/$(database)/documents/opportunities/$(request.resource.data.opportunityId)).data.stage == 'Cerrado - Ganado'
+        && get(/databases/$(database)/documents/opportunities/$(request.resource.data.opportunityId)).data.clientId == request.resource.data.clientId;
+    }
+
+    function legacyAdvertisingOrderEntersReapproval() {
+      return resource.data.get('status', null) != null
+        || resource.data.get('approvalHistory', []).size() > 0
+        || (request.resource.data.status == 'Pendiente de Modificación'
+          && request.resource.data.approvalHistory is list
+          && request.resource.data.approvalHistory.size() > 0
+          && request.resource.data.revisionHistory is list
+          && request.resource.data.revisionHistory.size() > 0);
+    }
+
     function hasValidWonContractPeriod() {
       return request.resource.data.stage != 'Cerrado - Ganado'
         || (request.resource.data.startDate is string
@@ -171,9 +205,9 @@ service cloud.firestore {
 
     match /opportunities/{oppId} {
       allow read, list: if isSignedIn();
-      allow create: if hasValidWonContractPeriod() && (ownsClientOnRequest() || isManagement()
+      allow create: if hasPersistableOpportunityStage() && hasValidWonContractPeriod() && (ownsClientOnRequest() || isManagement()
         || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId)));
-      allow update: if (isManagement() || canUpdateWonContractPeriod()) && (ownsClientOnResource() || isManagement()
+      allow update: if hasPersistableOpportunityStage() && (isManagement() || canUpdateWonContractPeriod()) && (ownsClientOnResource() || isManagement()
         || (isCanjeOperator() && request.resource.data.isCanje == true && canOperateCanjeClient(request.resource.data.clientId)));
       allow delete: if ownsClientOnResource() || isManagement();
     }
@@ -181,10 +215,12 @@ service cloud.firestore {
     match /commercial_notes/{noteId} {
       allow get: if true;
       allow list: if isSignedIn();
-      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
-      allow update: if isExecutiveManagement()
-        || (preservesAdvertisingOrderLink()
-          && (isManagement() || isActorOnResource() || ownsClientOnResource()));
+      allow create: if requestedExecutionOrderIsApprovedOrExecutive()
+        && (isActorOnRequest() || ownsClientOnRequest() || isManagement());
+      allow update: if executionOrderLinkUpdateAllowed()
+        && (isExecutiveManagement()
+          || (preservesAdvertisingOrderLink()
+            && (isManagement() || isActorOnResource() || ownsClientOnResource())));
       allow delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
     }
 
@@ -214,7 +250,8 @@ service cloud.firestore {
 
     match /invoices/{invoiceId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isManagement();
+      allow create, update: if isSignedIn();
+      allow delete: if isManagement();
     }
 
     match /payment_entries/{paymentId} {
@@ -232,28 +269,33 @@ service cloud.firestore {
 
     match /advertising_orders/{orderId} {
       allow read: if isSignedIn();
-      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement()
-        || (isCanjeOperator() && request.resource.data.canjeId is string && canOperateCanjeClient(request.resource.data.clientId));
-      allow update: if isActorOnResource() || ownsClientOnResource() || isManagement()
-        || (isCanjeOperator() && resource.data.canjeId is string && canOperateCanjeClient(resource.data.clientId));
+      allow create: if linksWonOpportunityForOrder() && (isActorOnRequest() || ownsClientOnRequest() || isManagement()
+        || (isCanjeOperator() && request.resource.data.canjeId is string && canOperateCanjeClient(request.resource.data.clientId)));
+      allow update: if linksWonOpportunityForOrder() && legacyAdvertisingOrderEntersReapproval()
+        && (isActorOnResource() || ownsClientOnResource() || isManagement()
+          || (isCanjeOperator() && resource.data.canjeId is string && canOperateCanjeClient(resource.data.clientId)));
       allow delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
     }
 
     match /social_media_requests/{requestId} {
       allow read: if isSignedIn();
-      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
-      allow update: if isExecutiveManagement()
-        || (preservesAdvertisingOrderLink()
-          && (isManagement() || isActorOnResource() || ownsClientOnResource()));
+      allow create: if requestedExecutionOrderIsApprovedOrExecutive()
+        && (isActorOnRequest() || ownsClientOnRequest() || isManagement());
+      allow update: if executionOrderLinkUpdateAllowed()
+        && (isExecutiveManagement()
+          || (preservesAdvertisingOrderLink()
+            && (isManagement() || isActorOnResource() || ownsClientOnResource())));
       allow delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
     }
 
     match /web_notes/{noteId} {
       allow read: if isSignedIn();
-      allow create: if isActorOnRequest() || ownsClientOnRequest() || isManagement();
-      allow update: if isExecutiveManagement()
-        || (preservesAdvertisingOrderLink()
-          && (isManagement() || isActorOnResource() || ownsClientOnResource()));
+      allow create: if requestedExecutionOrderIsApprovedOrExecutive()
+        && (isActorOnRequest() || ownsClientOnRequest() || isManagement());
+      allow update: if executionOrderLinkUpdateAllowed()
+        && (isExecutiveManagement()
+          || (preservesAdvertisingOrderLink()
+            && (isManagement() || isActorOnResource() || ownsClientOnResource())));
       allow delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
     }
 
