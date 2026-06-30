@@ -25,14 +25,22 @@ function shouldFallbackClientCreate(error: unknown): boolean {
     && error.code === 'VALIDATION_ERROR';
 }
 
-export async function getClients(options: { forceServer?: boolean } = {}): Promise<Client[]> {
+export async function getClients(options: { forceServer?: boolean; preferFirestore?: boolean } = {}): Promise<Client[]> {
   if (!options.forceServer && clientCache && clientCache.expiresAt > Date.now()) return clientCache.data;
+  const loadFromFirestore = async () => {
+    const { getClients: getClientsFromFirestore } = await import('@/lib/firebase-service');
+    return getClientsFromFirestore({ forceServer: options.forceServer }) as Promise<Client[]>;
+  };
+
+  if (options.preferFirestore) {
+    const clients = await loadFromFirestore();
+    clientCache = { data: clients, expiresAt: Date.now() + CACHE_DURATION_MS };
+    return clients;
+  }
+
   const clients = await apiReadWithFallback<Client[]>(
     API_PATH,
-    async () => {
-      const { getClients: getClientsFromFirestore } = await import('@/lib/firebase-service');
-      return getClientsFromFirestore({ forceServer: options.forceServer }) as Promise<Client[]>;
-    },
+    loadFromFirestore,
     { fallbackOnForbidden: true, label: 'clients' },
   );
   clientCache = { data: clients, expiresAt: Date.now() + CACHE_DURATION_MS };

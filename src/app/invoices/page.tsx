@@ -20,7 +20,7 @@ export default function InvoicesPage() {
     const loadClients = async () => {
       setLoading(true);
       try {
-        const result = await getClients({ forceServer: true });
+        const result = await getClients({ forceServer: true, preferFirestore: true });
         if (isMounted) {
           setClients(result as Client[]);
           setClientsError(null);
