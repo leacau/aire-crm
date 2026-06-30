@@ -15,6 +15,19 @@ describe('Client API contracts', () => {
     expect(client.tipoEntidad).toBe('Privada');
   });
 
+  it('accepts legacy empty client fields from existing forms', () => {
+    const client = createClientSchema.parse({
+      denominacion: 'Empresa Demo',
+      tipoEntidad: 'PÃºblica',
+      agencyId: null,
+      razonSocialTango: null,
+      email: null,
+    });
+    expect(client.tipoEntidad).toBe('Pública');
+    expect(client.agencyId).toBeUndefined();
+    expect(client.email).toBe('');
+  });
+
   it('rejects organization and audit fields supplied by a client', () => {
     expect(createClientSchema.safeParse({
       denominacion: 'Demo',

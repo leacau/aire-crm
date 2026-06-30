@@ -19,6 +19,12 @@ function invalidateClients() {
   clientCache = null;
 }
 
+function shouldFallbackClientCreate(error: unknown): boolean {
+  return error instanceof ApiClientError
+    && error.status === 400
+    && error.code === 'VALIDATION_ERROR';
+}
+
 export async function getClients(options: { forceServer?: boolean } = {}): Promise<Client[]> {
   if (!options.forceServer && clientCache && clientCache.expiresAt > Date.now()) return clientCache.data;
   const clients = await apiReadWithFallback<Client[]>(
@@ -55,13 +61,27 @@ export async function createClient(
   ownerName?: string,
   options: { skipCoachingUpdate?: boolean } = {},
 ): Promise<string> {
-  const result = await apiRequest<{ id: string }>(API_PATH, {
-    method: 'POST',
-    body: JSON.stringify({ ...input, ownerId, ownerName }),
-  });
+  let result: { id: string };
+  let usedFirestoreFallback = false;
+  try {
+    result = await apiRequest<{ id: string }>(API_PATH, {
+      method: 'POST',
+      body: JSON.stringify({ ...input, ownerId, ownerName }),
+    });
+  } catch (error) {
+    if (!shouldFallbackClientCreate(error)) throw error;
+    console.warn('Falling back to Firestore client create after API validation rejected payload:', error);
+    const { createClient: createClientInFirestore } = await import('@/lib/firebase-service');
+    usedFirestoreFallback = true;
+    result = {
+      id: await createClientInFirestore(input, ownerId, ownerName, {
+        skipCoachingUpdate: options.skipCoachingUpdate,
+      }),
+    };
+  }
   invalidateClients();
 
-  if (ownerId && ownerName && !options.skipCoachingUpdate) {
+  if (ownerId && ownerName && !options.skipCoachingUpdate && !usedFirestoreFallback) {
     try {
       const { autoUpdateCoachingSession } = await import('@/lib/firebase-service');
       await autoUpdateCoachingSession(

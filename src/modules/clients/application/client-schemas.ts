@@ -8,27 +8,48 @@ const condicionIvaValues = [
 ] as const;
 const tipoEntidadValues = ['Pública', 'Privada', 'Mixta'] as const;
 
-const optionalShortText = z.string().trim().max(500).optional();
-const optionalId = z.string().trim().max(128).optional();
+const nullableToUndefined = (value: unknown) => value === null ? undefined : value;
+const optionalShortText = z.preprocess(nullableToUndefined, z.string().trim().max(500).optional());
+const optionalId = z.preprocess(nullableToUndefined, z.string().trim().max(128).optional());
+const textWithDefault = (max: number, defaultValue = '') => z.preprocess(
+  value => value === null ? undefined : value,
+  z.string().trim().max(max).default(defaultValue),
+);
+const optionalLongText = (max: number) => z.preprocess(
+  nullableToUndefined,
+  z.string().trim().max(max).optional(),
+);
+const emailText = z.preprocess(
+  value => value === null || value === undefined ? '' : value,
+  z.string().trim().email().max(254).or(z.literal('')).default(''),
+);
+const tipoEntidadSchema = z.preprocess(
+  value => {
+    if (value === null || value === undefined || value === '') return undefined;
+    if (value === 'PÃºblica') return 'Pública';
+    return value;
+  },
+  z.enum(tipoEntidadValues).default('Privada'),
+);
 
 export const createClientSchema = z.object({
   denominacion: z.string().trim().min(1).max(200),
-  razonSocial: z.string().trim().max(200).default(''),
-  razonSocialTango: z.string().trim().max(200).optional(),
-  cuit: z.string().trim().max(20).optional(),
+  razonSocial: textWithDefault(200),
+  razonSocialTango: optionalLongText(200),
+  cuit: optionalId,
   idTango: optionalId,
   tangoCompanyId: optionalId,
   idAireSrl: optionalId,
   idAireDigital: optionalId,
   idAire: optionalId,
   condicionIVA: z.enum(condicionIvaValues).default('Consumidor Final'),
-  provincia: z.string().trim().max(100).default(''),
-  localidad: z.string().trim().max(100).default(''),
-  tipoEntidad: z.enum(tipoEntidadValues).default('Privada'),
-  rubro: z.string().trim().max(200).default(''),
-  email: z.string().trim().email().max(254).or(z.literal('')).default(''),
-  phone: z.string().trim().max(80).default(''),
-  observaciones: z.string().trim().max(10_000).optional(),
+  provincia: textWithDefault(100),
+  localidad: textWithDefault(100),
+  tipoEntidad: tipoEntidadSchema,
+  rubro: textWithDefault(200),
+  email: emailText,
+  phone: textWithDefault(80),
+  observaciones: optionalLongText(10_000),
   agencyId: optionalId,
   isNewClient: z.boolean().default(false),
   isDeactivated: z.boolean().optional(),
