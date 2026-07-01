@@ -15,18 +15,18 @@ type CompanyQuery = {
 const COMPANY_QUERIES: Record<string, CompanyQuery> = {
   '4': {
     label: 'Aire',
-    process: process.env.TANGO_AIRE_INVOICES_PROCESS || '17933',
-    customQuery: process.env.TANGO_AIRE_INVOICES_QUERY || '1236',
+    process: '17933',
+    customQuery: '1237',
   },
   '5': {
     label: 'Aire SRL',
-    process: process.env.TANGO_SRL_INVOICES_PROCESS || '17942',
-    customQuery: process.env.TANGO_SRL_INVOICES_QUERY || '0',
+    process: '17933',
+    customQuery: '1237',
   },
   '6': {
     label: 'Aire Digital SAS',
-    process: process.env.TANGO_SAS_INVOICES_PROCESS || '17943',
-    customQuery: process.env.TANGO_SAS_INVOICES_QUERY || '1233',
+    process: '17933',
+    customQuery: '1237',
   },
 };
 
