@@ -15,6 +15,28 @@ function formatMailbox(name: unknown, email: unknown): string {
     return safeName ? `"${safeName}" <${safeEmail}>` : safeEmail;
 }
 
+function normalizeSmtpError(error: any) {
+    const message = String(error?.message || error || '');
+    if (
+        error?.code === 'EAUTH' ||
+        error?.responseCode === 535 ||
+        message.includes('Username and Password not accepted') ||
+        message.includes('BadCredentials')
+    ) {
+        return {
+            code: 'SMTP_AUTH_FAILED',
+            status: 502,
+            message: 'Gmail rechazo las credenciales SMTP. Revisar SMTP_USER y SMTP_PASS en Vercel; para Gmail debe usarse una contraseña de aplicacion, no la contraseña normal de la cuenta.',
+        };
+    }
+
+    return {
+        code: error?.code || 'SMTP_SEND_FAILED',
+        status: 500,
+        message: message || 'No se pudo enviar el correo por SMTP.',
+    };
+}
+
 function getSmtpTransporter() {
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
         return null;
@@ -52,14 +74,22 @@ async function sendViaSmtp(params: {
         encoding: att.encoding || 'base64',
     }));
 
-    await transporter.sendMail({
-        from: formatMailbox(params.fromName || 'Aire CRM', params.fromEmail || process.env.SMTP_FROM || process.env.SMTP_USER),
-        to: toList,
-        replyTo: cleanHeader(params.replyTo || params.fromEmail || ''),
-        subject: cleanHeader(params.subject),
-        html: params.body,
-        attachments: safeAttachments,
-    });
+    try {
+        await transporter.sendMail({
+            from: formatMailbox(params.fromName || 'Aire CRM', params.fromEmail || process.env.SMTP_FROM || process.env.SMTP_USER),
+            to: toList,
+            replyTo: cleanHeader(params.replyTo || params.fromEmail || ''),
+            subject: cleanHeader(params.subject),
+            html: params.body,
+            attachments: safeAttachments,
+        });
+    } catch (error: any) {
+        const normalized = normalizeSmtpError(error);
+        const smtpError = new Error(normalized.message) as Error & { status?: number; code?: string };
+        smtpError.status = normalized.status;
+        smtpError.code = normalized.code;
+        throw smtpError;
+    }
 }
 
 export async function POST(req: Request) {
@@ -153,7 +183,10 @@ export async function POST(req: Request) {
                 await sendViaSmtp({ to, subject, body, attachments, fromName, fromEmail, replyTo });
                 return NextResponse.json({ success: true, provider: 'smtp-fallback', gmailError: errorData });
             } catch (smtpError: any) {
-                return NextResponse.json({ error: smtpError.message || 'SMTP fallback failed', gmailError: errorData }, { status: response.status });
+                return NextResponse.json(
+                    { error: smtpError.message || 'SMTP fallback failed', code: smtpError.code || 'SMTP_FALLBACK_FAILED', gmailError: errorData },
+                    { status: smtpError.status || response.status },
+                );
             }
         }
 
@@ -162,6 +195,9 @@ export async function POST(req: Request) {
 
     } catch (error: any) {
         console.error('Error sending email:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json(
+            { error: error.message || 'No se pudo enviar el correo.', code: error.code || 'EMAIL_SEND_FAILED' },
+            { status: error.status || 500 },
+        );
     }
 }

@@ -422,6 +422,10 @@ function ApprovalsPageComponent() {
     });
   };
 
+  const getNotificationErrorMessage = (error: unknown) => (
+    error instanceof Error ? error.message : 'No se pudo enviar el correo de notificacion.'
+  );
+
   const submitEvaluation = async () => {
     if (!selectedItem || !actionType || !userInfo) return;
     
@@ -498,7 +502,7 @@ function ApprovalsPageComponent() {
 
       toast({
         title: `Documento marcado como ${actionType} exitosamente.`,
-        description: notificationError ? 'La aprobación quedó guardada, pero no se pudo enviar el correo de notificación.' : undefined,
+        description: notificationError ? getNotificationErrorMessage(notificationError) : undefined,
         variant: notificationError ? 'destructive' : 'default',
       });
       setIsModalOpen(false);
@@ -531,7 +535,7 @@ function ApprovalsPageComponent() {
         }
       } catch (error) {
         console.error("Error al renotificar:", error);
-        toast({ title: 'Error al reenviar el correo', variant: 'destructive' });
+        toast({ title: 'Error al reenviar el correo', description: getNotificationErrorMessage(error), variant: 'destructive' });
       } finally {
         setRenotifyingItem(null);
       }

@@ -38,7 +38,17 @@ export async function sendEmail(params: EmailParams) {
 
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Failed to send email: ${errorText}`);
+        try {
+            const payload = JSON.parse(errorText);
+            const error = new Error(payload.error || 'No se pudo enviar el correo.') as Error & { code?: string };
+            error.code = payload.code;
+            throw error;
+        } catch (parseError) {
+            if (parseError instanceof Error && (parseError as Error & { code?: string }).code) {
+                throw parseError;
+            }
+            throw new Error(`No se pudo enviar el correo: ${errorText}`);
+        }
     }
 
     return response.json();
