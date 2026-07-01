@@ -4,8 +4,10 @@ import { authAdmin, dbAdmin } from '@/lib/firebase-admin';
 export type ServerUser = {
   uid: string;
   email?: string;
+  name?: string;
   role?: string;
   area?: string;
+  sellerConfig?: Array<{ companyName: string; codes: string[] }>;
 };
 
 export function getBearerToken(request: Request): string | null {
@@ -28,8 +30,10 @@ export async function requireServerUser(request: Request): Promise<ServerUser | 
     return {
       uid: decoded.uid,
       email: decoded.email,
+      name: profile?.name,
       role: profile?.role,
       area: profile?.area,
+      sellerConfig: profile?.sellerConfig || [],
     };
   } catch {
     return NextResponse.json({ error: 'Invalid authentication token' }, { status: 401 });

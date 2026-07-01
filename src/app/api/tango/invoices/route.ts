@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 
 const DEFAULT_TANGO_BASE_URL = 'https://040896-002.connect.axoft.com';
 const PAGE_SIZE = 2000;
@@ -45,6 +45,8 @@ type TangoInvoice = {
   ID_GVA12?: number | null;
   ID_GVA23?: number | null;
   ID_GVA38?: number | null;
+  _companyId?: string;
+  _companyLabel?: string;
 };
 
 const normalize = (value: unknown) => String(value || '')
@@ -67,8 +69,53 @@ const getTangoEndpoint = () => {
   }
 };
 
+const parseTangoNumber = (value: unknown): number | null => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (value == null) return null;
+
+  const rawValue = String(value)
+    .trim()
+    .replace(/[^\d,.-]/g, '');
+
+  if (!rawValue) return null;
+
+  const hasComma = rawValue.includes(',');
+  const hasDot = rawValue.includes('.');
+  let normalized = rawValue;
+
+  if (hasComma && hasDot) {
+    normalized = rawValue.lastIndexOf('.') > rawValue.lastIndexOf(',')
+      ? rawValue.replace(/,/g, '')
+      : rawValue.replace(/\./g, '').replace(',', '.');
+  } else if (hasComma) {
+    const parts = rawValue.split(',');
+    const lastPart = parts[parts.length - 1] || '';
+    normalized = parts.length > 1 && lastPart.length === 3
+      ? rawValue.replace(/,/g, '')
+      : rawValue.replace(',', '.');
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeCompanyName = (value: unknown) => normalize(value).replace(/\s+/g, ' ');
+const normalizeCode = (value: unknown) => {
+  const normalized = String(value || '').trim().replace(/^0+/, '');
+  return normalized || (String(value || '').trim() ? '0' : '');
+};
+
+const getSellerCodesForCompany = (
+  sellerConfig: Array<{ companyName: string; codes: string[] }> | undefined,
+  companyId: string,
+) => {
+  const expectedName = normalizeCompanyName(COMPANY_QUERIES[companyId]?.label || '');
+  const config = sellerConfig?.find(item => normalizeCompanyName(item.companyName) === expectedName);
+  return new Set((config?.codes || []).map(normalizeCode).filter(Boolean));
+};
+
 const normalizeInvoice = (invoice: Record<string, any>): TangoInvoice => {
-  const numericTotal = invoice.TOTAL == null ? null : Number(invoice.TOTAL);
+  const numericTotal = parseTangoNumber(invoice.TOTAL ?? invoice.IMPORTE ?? invoice.TOTAL_COMPROBANTE ?? invoice.NETO);
 
   return {
     ...invoice,
@@ -78,7 +125,7 @@ const normalizeInvoice = (invoice: Record<string, any>): TangoInvoice => {
       || invoice.COD_TIPO_COMPROBANTE
       || invoice.TIPO
       || undefined,
-    TOTAL: Number.isFinite(numericTotal) ? numericTotal : null,
+    TOTAL: numericTotal,
     COD_CLIENTE: invoice.COD_CLIENTE || invoice.CODIGO_CLIENTE || invoice.CLIENTE || '',
     COD_VENDEDOR: invoice.COD_VENDEDOR || invoice.COD_VEND || invoice.VENDEDOR || '',
     NOMBRE_VENDEDOR: invoice.NOMBRE_VENDEDOR || invoice.VENDEDOR_NOMBRE || invoice.NOMBRE_VEND || '',
@@ -96,30 +143,42 @@ export async function GET(request: Request) {
   const clientFilter = normalize(searchParams.get('client'));
   const sellerFilter = normalize(searchParams.get('seller'));
 
-  const companyQuery = COMPANY_QUERIES[company];
-  if (!companyQuery) {
+  const companyIds = company === 'all' ? Object.keys(COMPANY_QUERIES) : [company];
+  if (companyIds.some(companyId => !COMPANY_QUERIES[companyId])) {
     return NextResponse.json({ error: 'Company no permitida' }, { status: 400 });
   }
   if (fromDate && toDate && fromDate > toDate) {
     return NextResponse.json({ error: 'El rango de fechas no es valido' }, { status: 400 });
   }
-  if (!companyQuery.process || companyQuery.customQuery == null) {
-    return NextResponse.json({
-      list: [],
-      sourceTotalCount: 0,
-      filteredCount: 0,
-      skipped: true,
-      message: `La consulta de comprobantes de ${companyQuery.label} no esta configurada.`,
-    }, { headers: { 'Cache-Control': 'no-store' } });
-  }
-
   const apiAuthorization = process.env.TANGO_API_AUTHORIZATION;
   if (!apiAuthorization) {
     return NextResponse.json({ error: 'Falta configurar TANGO_API_AUTHORIZATION' }, { status: 500 });
   }
 
   try {
-    const fetchPage = async (pageIndex: number) => {
+    const canSeeAllInvoices = hasServerManagementPrivileges(serverUser);
+    const skippedCompanies: Array<{ companyId: string; label: string; reason: string }> = [];
+
+    const fetchCompanyInvoices = async (companyId: string) => {
+      const companyQuery = COMPANY_QUERIES[companyId];
+      if (!companyQuery.process || companyQuery.customQuery == null) {
+        skippedCompanies.push({
+          companyId,
+          label: companyQuery.label,
+          reason: 'Consulta no configurada',
+        });
+        return { invoices: [] as TangoInvoice[], sourceTotalCount: 0, truncated: false };
+      }
+
+      const allowedSellerCodes = canSeeAllInvoices
+        ? null
+        : getSellerCodesForCompany(serverUser.sellerConfig, companyId);
+
+      if (allowedSellerCodes && allowedSellerCodes.size === 0) {
+        return { invoices: [] as TangoInvoice[], sourceTotalCount: 0, truncated: false };
+      }
+
+      const fetchPage = async (pageIndex: number) => {
       const tangoUrl = getTangoEndpoint();
       tangoUrl.searchParams.set('process', companyQuery.process!);
       tangoUrl.searchParams.set('fromDate', '');
@@ -132,7 +191,7 @@ export async function GET(request: Request) {
         method: 'GET',
         headers: {
           ApiAuthorization: apiAuthorization,
-          Company: company,
+          Company: companyId,
         },
         cache: 'no-store',
       });
@@ -171,22 +230,37 @@ export async function GET(request: Request) {
       });
     }
 
-    const filtered = invoices.map(normalizeInvoice).filter(invoice => {
+      const filtered = invoices.map(rawInvoice => ({
+        ...normalizeInvoice(rawInvoice as Record<string, any>),
+        _companyId: companyId,
+        _companyLabel: companyQuery.label,
+      })).filter(invoice => {
       const issueDate = String(invoice.FECHA_DE_EMISION || '').slice(0, 10);
       const clientText = normalize(`${invoice.COD_CLIENTE || ''} ${invoice.RAZON_SOCIAL || ''}`);
       const sellerText = normalize(`${invoice.COD_VENDEDOR || ''} ${invoice.NOMBRE_VENDEDOR || ''}`);
+      const sellerCode = normalizeCode(invoice.COD_VENDEDOR);
 
       return (!fromDate || issueDate >= fromDate)
         && (!toDate || issueDate <= toDate)
         && (!clientFilter || clientText.includes(clientFilter))
-        && (!sellerFilter || sellerText.includes(sellerFilter));
+        && (!sellerFilter || sellerText.includes(sellerFilter))
+        && (!allowedSellerCodes || allowedSellerCodes.has(sellerCode));
     });
+
+      return { invoices: filtered, sourceTotalCount, truncated };
+    };
+
+    const companyResults = await Promise.all(companyIds.map(fetchCompanyInvoices));
+    const filtered = companyResults.flatMap(result => result.invoices);
+    const sourceTotalCount = companyResults.reduce((sum, result) => sum + result.sourceTotalCount, 0);
+    const truncated = companyResults.some(result => result.truncated);
 
     return NextResponse.json({
       list: filtered,
       sourceTotalCount,
       filteredCount: filtered.length,
       truncated,
+      skippedCompanies,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('Error consulting Tango invoices:', error);
