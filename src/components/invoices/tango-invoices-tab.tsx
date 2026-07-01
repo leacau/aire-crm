@@ -26,6 +26,11 @@ type TangoInvoice = {
   NOMBRE_VENDEDOR?: string;
   COD_CLIENTE?: string;
   RAZON_SOCIAL?: string;
+  NOMBRE_COMERCIAL?: string;
+  SUBTOTAL?: number | null;
+  IVA?: number | null;
+  TOTAL_SIN_IMPUESTOS?: number | null;
+  TOTAL_BONIFICADO?: number | null;
   ID_GVA14?: number | null;
   TOTAL?: number | null;
   ID_GVA12?: number | null;
@@ -362,7 +367,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
       )}
 
       <div className="overflow-x-auto rounded-md border bg-white">
-        <Table className="min-w-[1360px]">
+        <Table className="min-w-[1680px]">
           <TableHeader>
             <TableRow>
               <TableHead>Compania</TableHead>
@@ -371,13 +376,17 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
               <TableHead>Comprobante</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Vendedor</TableHead>
+              <TableHead className="text-right">Subtotal</TableHead>
+              <TableHead className="text-right">IVA</TableHead>
+              <TableHead className="text-right">Sin impuestos</TableHead>
+              <TableHead className="text-right">Bonificado</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>IDs Tango</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={8} className="h-32 text-center"><Spinner size="large" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={12} className="h-32 text-center"><Spinner size="large" /></TableCell></TableRow>
             ) : visibleInvoices.length > 0 ? visibleInvoices.map((invoice, index) => {
               const invoiceCompany = invoice._companyId || company;
               const clientCodeField = getClientCodeField(invoiceCompany);
@@ -396,7 +405,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
                 <TableCell>{invoice.TIPO_COMPROBANTE || '-'}</TableCell>
                 <TableCell className="font-medium">{invoice.NRO_COMPROBANTE || '-'}</TableCell>
                 <TableCell>
-                  <div className="font-medium">{invoice.RAZON_SOCIAL || '-'}</div>
+                  <div className="font-medium">{invoice.RAZON_SOCIAL || invoice.NOMBRE_COMERCIAL || '-'}</div>
                   <div className="text-xs text-muted-foreground">{invoice.COD_CLIENTE || '-'}</div>
                   <div className={`text-xs ${crmClient ? 'text-emerald-700' : 'text-amber-700'}`}>
                     CRM: {crmClient?.denominacion || crmClient?.razonSocial || 'Sin mapear'}
@@ -409,6 +418,10 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
                     CRM: {crmSeller?.name || 'Sin mapear'}
                   </div>
                 </TableCell>
+                <TableCell className="text-right">{invoice.SUBTOTAL == null ? 'No informado' : formatCurrency(invoice.SUBTOTAL)}</TableCell>
+                <TableCell className="text-right">{invoice.IVA == null ? 'No informado' : formatCurrency(invoice.IVA)}</TableCell>
+                <TableCell className="text-right">{invoice.TOTAL_SIN_IMPUESTOS == null ? 'No informado' : formatCurrency(invoice.TOTAL_SIN_IMPUESTOS)}</TableCell>
+                <TableCell className="text-right">{invoice.TOTAL_BONIFICADO == null ? 'No informado' : formatCurrency(invoice.TOTAL_BONIFICADO)}</TableCell>
                 <TableCell className="text-right font-semibold">{invoice.TOTAL == null ? 'No informado' : formatCurrency(invoice.TOTAL)}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">
                   GVA14: {invoice.ID_GVA14 ?? '-'} | GVA12: {invoice.ID_GVA12 ?? '-'} | GVA23: {invoice.ID_GVA23 ?? '-'} | GVA38: {invoice.ID_GVA38 ?? '-'}
@@ -416,7 +429,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
               </TableRow>;
             }) : (
               <TableRow>
-                <TableCell colSpan={8} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={12} className="h-28 text-center text-muted-foreground">
                   {hasSearched ? 'No se encontraron comprobantes con esos filtros.' : 'Elegí rango, compania y consulta Tango.'}
                 </TableCell>
               </TableRow>

@@ -15,8 +15,8 @@ type CompanyQuery = {
 const COMPANY_QUERIES: Record<string, CompanyQuery> = {
   '4': {
     label: 'Aire',
-    process: process.env.TANGO_AIRE_INVOICES_PROCESS,
-    customQuery: process.env.TANGO_AIRE_INVOICES_QUERY,
+    process: process.env.TANGO_AIRE_INVOICES_PROCESS || '17933',
+    customQuery: process.env.TANGO_AIRE_INVOICES_QUERY || '1236',
   },
   '5': {
     label: 'Aire SRL',
@@ -40,6 +40,11 @@ type TangoInvoice = {
   NOMBRE_VENDEDOR?: string;
   COD_CLIENTE?: string;
   RAZON_SOCIAL?: string;
+  NOMBRE_COMERCIAL?: string;
+  SUBTOTAL?: number | string | null;
+  IVA?: number | string | null;
+  TOTAL_SIN_IMPUESTOS?: number | string | null;
+  TOTAL_BONIFICADO?: number | string | null;
   TOTAL?: number | string | null;
   ID_GVA14?: number | null;
   ID_GVA12?: number | null;
@@ -115,7 +120,12 @@ const getSellerCodesForCompany = (
 };
 
 const normalizeInvoice = (invoice: Record<string, any>): TangoInvoice => {
+  const numericSubtotal = parseTangoNumber(invoice.SUBTOTAL);
+  const numericIva = parseTangoNumber(invoice.IVA);
+  const numericTotalSinImpuestos = parseTangoNumber(invoice.TOTAL_SIN_IMPUESTOS);
+  const numericTotalBonificado = parseTangoNumber(invoice.TOTAL_BONIFICADO);
   const numericTotal = parseTangoNumber(invoice.TOTAL ?? invoice.IMPORTE ?? invoice.TOTAL_COMPROBANTE ?? invoice.NETO);
+  const clientName = invoice.RAZON_SOCIAL || invoice.NOMBRE_COMERCIAL || invoice.NOMBRE_CLIENTE || '';
 
   return {
     ...invoice,
@@ -125,6 +135,12 @@ const normalizeInvoice = (invoice: Record<string, any>): TangoInvoice => {
       || invoice.COD_TIPO_COMPROBANTE
       || invoice.TIPO
       || undefined,
+    RAZON_SOCIAL: clientName,
+    NOMBRE_COMERCIAL: invoice.NOMBRE_COMERCIAL || clientName,
+    SUBTOTAL: numericSubtotal,
+    IVA: numericIva,
+    TOTAL_SIN_IMPUESTOS: numericTotalSinImpuestos,
+    TOTAL_BONIFICADO: numericTotalBonificado,
     TOTAL: numericTotal,
     COD_CLIENTE: invoice.COD_CLIENTE || invoice.CODIGO_CLIENTE || invoice.CLIENTE || '',
     COD_VENDEDOR: invoice.COD_VENDEDOR || invoice.COD_VEND || invoice.VENDEDOR || '',
