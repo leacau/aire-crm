@@ -3631,6 +3631,13 @@ export const updateOpportunity = async (
     if (options?.manageContractPeriods && hasEndDateUpdate && !data.endDate) updateData.endDate = deleteField();
 
     const originalHistory = Array.isArray(originalData.periodHistory) ? originalData.periodHistory : [];
+    if (
+        (originalData.stage as string) === 'Ganado (Recurrente)'
+        && Array.isArray(data.periodHistory)
+        && data.periodHistory.length >= originalHistory.length
+    ) {
+        updateData.stage = 'Cerrado - Ganado';
+    }
     const submittedHistory = Array.isArray(data.periodHistory) ? data.periodHistory : originalHistory;
     if (options?.manageContractPeriods && Array.isArray(data.periodHistory)) {
         updateData.periodHistory = data.periodHistory;
