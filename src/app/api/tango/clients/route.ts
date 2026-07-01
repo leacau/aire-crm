@@ -1,6 +1,23 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerManagement } from '@/lib/server/auth';
 
+const DEFAULT_TANGO_BASE_URL = 'https://040896-002.connect.axoft.com';
+const ALLOWED_COMPANIES = ['4', '5', '6'];
+
+const getTangoEndpoint = () => {
+    const configuredValue = process.env.TANGO_API_BASE_URL?.trim();
+    const cleanValue = configuredValue?.replace(/^["']|["']$/g, '') || DEFAULT_TANGO_BASE_URL;
+
+    try {
+        const url = new URL(cleanValue);
+        url.pathname = '/Api/GetApiLiveQueryData';
+        url.search = '';
+        return url;
+    } catch {
+        return new URL('/Api/GetApiLiveQueryData', DEFAULT_TANGO_BASE_URL);
+    }
+};
+
 export async function GET(request: Request) {
     const serverUser = await requireServerManagement(request);
     if (isServerResponse(serverUser)) return serverUser;
@@ -13,7 +30,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Falta el ID de Company' }, { status: 400 });
     }
 
-    if (!['5', '6'].includes(company)) {
+    if (!ALLOWED_COMPANIES.includes(company)) {
         return NextResponse.json({ error: 'Company no permitida' }, { status: 400 });
     }
 
@@ -23,9 +40,15 @@ export async function GET(request: Request) {
 
     try {
         // 🟢 CORRECCIÓN: Tango usa GET y los datos viajan en la URL (por el flag -G)
-        const tangoUrl = 'https://040896-002.connect.axoft.com/Api/GetApiLiveQueryData?process=17961&fromDate=&toDate=&pageSize=2000&pageIndex=0&customQuery=0';
+        const tangoUrl = getTangoEndpoint();
+        tangoUrl.searchParams.set('process', '17961');
+        tangoUrl.searchParams.set('fromDate', '');
+        tangoUrl.searchParams.set('toDate', '');
+        tangoUrl.searchParams.set('pageSize', '2000');
+        tangoUrl.searchParams.set('pageIndex', '0');
+        tangoUrl.searchParams.set('customQuery', '0');
 
-        console.log(`Conectando a Tango (Company ${company})... URL: ${tangoUrl}`);
+        console.log(`Conectando a Tango (Company ${company})... URL: ${tangoUrl.toString()}`);
 
         const response = await fetch(tangoUrl, {
             method: 'GET',

@@ -106,6 +106,7 @@ import { ClientPdf } from './client-pdf';
 import { CommentThread } from '@/components/comments/comment-thread';
 import { NotePdf } from '@/components/notas/note-pdf';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
+import { ClientTangoInvoices } from './client-tango-invoices';
 
 const stageColors: Record<OpportunityStage, string> = {
   'Nuevo': 'bg-blue-500',
@@ -836,11 +837,12 @@ export function ClientDetails({
       )}
 
       <Tabs defaultValue="opportunities" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6">
           <TabsTrigger value="opportunities">Oportunidades</TabsTrigger>
           <TabsTrigger value="contacts">Contactos</TabsTrigger>
           <TabsTrigger value="activity">Actividad</TabsTrigger>
           <TabsTrigger value="notes">Notas Com.</TabsTrigger>
+          <TabsTrigger value="tango-invoices">Facturas Tango</TabsTrigger>
           <TabsTrigger value="history">Historial</TabsTrigger>
         </TabsList>
         <TabsContent value="opportunities">
@@ -1182,6 +1184,9 @@ export function ClientDetails({
                     {notes.length === 0 && <p className="text-center py-4 text-muted-foreground">No hay notas registradas.</p>}
                 </CardContent>
             </Card>
+        </TabsContent>
+        <TabsContent value="tango-invoices">
+            <ClientTangoInvoices client={client} />
         </TabsContent>
         <TabsContent value="history">
             <Card>

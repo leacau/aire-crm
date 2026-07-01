@@ -136,6 +136,7 @@ export default function TangoMappingPage() {
     srl: [],
     sas: [],
   });
+  const [tangoErrors, setTangoErrors] = useState<Partial<Record<TangoCompanyKey, string>>>({});
   const [activeCompany, setActiveCompany] = useState<TangoCompanyKey>('aire');
   const [mainTab, setMainTab] = useState<'clients' | 'sellers'>('clients');
 
@@ -218,19 +219,29 @@ export default function TangoMappingPage() {
       const crmData = await getClients();
       setCrmClients(crmData);
 
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await auth.currentUser?.getIdToken(true);
       if (!idToken) throw new Error('No se pudo validar la sesión.');
 
       const requestOptions = { headers: { Authorization: `Bearer ${idToken}` } };
       const responses = await Promise.all(
         TANGO_COMPANIES.map(async company => {
-          const response = await fetch(`/api/tango/clients?company=${company.id}`, requestOptions);
-          const payload = await response.json();
-          return [company.key, processMatches(crmData, payload.resultData?.list || [], company)] as const;
+          try {
+            const response = await fetch(`/api/tango/clients?company=${company.id}`, requestOptions);
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              const message = payload?.details || payload?.error || `Tango respondio ${response.status}`;
+              return [company.key, [], message] as const;
+            }
+            return [company.key, processMatches(crmData, payload.resultData?.list || [], company), ''] as const;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'No se pudo consultar Tango';
+            return [company.key, [], message] as const;
+          }
         }),
       );
 
-      setMatchesByCompany(Object.fromEntries(responses) as Record<TangoCompanyKey, MatchResult[]>);
+      setMatchesByCompany(Object.fromEntries(responses.map(([key, matches]) => [key, matches])) as Record<TangoCompanyKey, MatchResult[]>);
+      setTangoErrors(Object.fromEntries(responses.filter(([, , message]) => message).map(([key, , message]) => [key, message])) as Partial<Record<TangoCompanyKey, string>>);
     } catch (error) {
       console.error('Error al traer datos:', error);
       toast({ title: 'Error de conexión con Tango', variant: 'destructive', description: 'Revisa tu conexión de red local.' });
@@ -345,7 +356,14 @@ export default function TangoMappingPage() {
 
   const renderClientTable = (company: TangoCompany) => {
     const matches = matchesByCompany[company.key] || [];
+    const errorMessage = tangoErrors[company.key];
     return (
+      <div className="space-y-3">
+      {errorMessage && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          No se pudo consultar Tango {company.shortLabel}: {errorMessage}
+        </div>
+      )}
       <div className="overflow-hidden rounded-md border bg-white shadow-sm">
         <Table>
           <TableHeader className="bg-slate-100">
@@ -415,6 +433,7 @@ export default function TangoMappingPage() {
             })}
           </TableBody>
         </Table>
+      </div>
       </div>
     );
   };
