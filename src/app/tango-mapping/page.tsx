@@ -11,10 +11,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import { getAllUsers, getClients, updateClientTangoMapping, updateUserProfile } from '@/lib/firebase-service';
 import type { Client, SellerCompanyConfig, User } from '@/lib/types';
-import { RefreshCcw, CheckCircle2, Save } from 'lucide-react';
+import { RefreshCcw, CheckCircle2, Save, Undo2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { auth, db } from '@/lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 interface TangoClient {
   COD_CLIENTE: string;
@@ -127,6 +128,8 @@ export default function TangoMappingPage() {
   const [loading, setLoading] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [bulkSyncing, setBulkSyncing] = useState(false);
+  const [undoingId, setUndoingId] = useState<string | null>(null);
   const [savingSellerId, setSavingSellerId] = useState<string | null>(null);
   const [crmClients, setCrmClients] = useState<Client[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -138,7 +141,12 @@ export default function TangoMappingPage() {
   });
   const [tangoErrors, setTangoErrors] = useState<Partial<Record<TangoCompanyKey, string>>>({});
   const [activeCompany, setActiveCompany] = useState<TangoCompanyKey>('aire');
-  const [mainTab, setMainTab] = useState<'clients' | 'sellers'>('clients');
+  const [selectedMatches, setSelectedMatches] = useState<Record<TangoCompanyKey, string[]>>({
+    aire: [],
+    srl: [],
+    sas: [],
+  });
+  const [mainTab, setMainTab] = useState<'clients' | 'mapped' | 'sellers'>('clients');
 
   const canAccess = userInfo && (isBoss || userInfo.email === 'lchena@airedesantafe.com.ar' || userInfo.role === 'Administracion');
 
@@ -151,7 +159,7 @@ export default function TangoMappingPage() {
     const results: MatchResult[] = [];
 
     crmData.forEach(crm => {
-      if ((crm as any)[company.syncedField]) return;
+      if ((crm as any)[company.syncedField] || (crm as any)[company.crmIdField]) return;
 
       let matchedTango: TangoClient | null = null;
       let matchType: MatchResult['matchType'] | null = null;
@@ -241,6 +249,7 @@ export default function TangoMappingPage() {
       );
 
       setMatchesByCompany(Object.fromEntries(responses.map(([key, matches]) => [key, matches])) as Record<TangoCompanyKey, MatchResult[]>);
+      setSelectedMatches({ aire: [], srl: [], sas: [] });
       setTangoErrors(Object.fromEntries(responses.filter(([, , message]) => message).map(([key, , message]) => [key, message])) as Partial<Record<TangoCompanyKey, string>>);
     } catch (error) {
       console.error('Error al traer datos:', error);
@@ -278,49 +287,111 @@ export default function TangoMappingPage() {
     fetchUsers();
   }, [canAccess, fetchClientsAndMatches, fetchUsers]);
 
+  const buildClientUpdates = (match: MatchResult, company: TangoCompany) => {
+    const updates: Record<string, any> = {
+      razonSocialTango: match.tangoClient.RAZON_SOCIAL,
+      cuit: match.tangoClient.NUMERO,
+      rubro: match.tangoClient.ACTIVIDAD || '',
+      [company.crmIdField]: match.tangoClient.COD_CLIENTE,
+    };
+
+    if (!match.crmClient.phone && match.tangoClient.TELEFONO) updates.phone = match.tangoClient.TELEFONO;
+    if (!match.crmClient.localidad && match.tangoClient.LOCALIDAD) updates.localidad = match.tangoClient.LOCALIDAD;
+
+    return updates;
+  };
+
+  const markMatchAsSynced = (match: MatchResult, company: TangoCompany, updates: Record<string, any>) => {
+    setMatchesByCompany(previous => ({
+      ...previous,
+      [company.key]: previous[company.key].filter(item => item.crmClient.id !== match.crmClient.id),
+    }));
+
+    setCrmClients(previous => previous.map(client => (
+      client.id === match.crmClient.id
+        ? { ...client, ...updates, [company.syncedField]: true }
+        : client
+    )));
+
+    setSelectedMatches(previous => ({
+      ...previous,
+      [company.key]: previous[company.key].filter(id => id !== match.crmClient.id),
+    }));
+  };
+
   const handleSync = async (match: MatchResult, company: TangoCompany) => {
     setSyncingId(`${company.key}-${match.crmClient.id}`);
     try {
-      const updates: any = {
-        razonSocialTango: match.tangoClient.RAZON_SOCIAL,
-        cuit: match.tangoClient.NUMERO,
-        rubro: match.tangoClient.ACTIVIDAD || '',
-        [company.crmIdField]: match.tangoClient.COD_CLIENTE,
-      };
-
-      if (!match.crmClient.phone && match.tangoClient.TELEFONO) updates.phone = match.tangoClient.TELEFONO;
-      if (!match.crmClient.localidad && match.tangoClient.LOCALIDAD) updates.localidad = match.tangoClient.LOCALIDAD;
+      const updates = buildClientUpdates(match, company);
 
       await updateClientTangoMapping(match.crmClient.id, updates, userInfo!.id, userInfo!.name);
       await updateDoc(doc(db, 'clients', match.crmClient.id), { [company.syncedField]: true });
 
       toast({ title: 'Cliente sincronizado con éxito' });
 
-      setMatchesByCompany(previous => {
-        const list = [...previous[company.key]];
-        const index = list.findIndex(item => item.crmClient.id === match.crmClient.id);
-        if (index > -1) {
-          list[index] = {
-            ...list[index],
-            isSynced: true,
-            matchType: 'ID',
-            similarityScore: 100,
-            crmClient: { ...list[index].crmClient, ...updates },
-          };
-        }
-        return {
-          ...previous,
-          [company.key]: list.sort((a, b) => {
-            if (a.isSynced === b.isSynced) return b.similarityScore - a.similarityScore;
-            return a.isSynced ? 1 : -1;
-          }),
-        };
-      });
+      markMatchAsSynced(match, company, updates);
     } catch (error) {
       console.error(error);
       toast({ title: 'Error al sincronizar', variant: 'destructive' });
     } finally {
       setSyncingId(null);
+    }
+  };
+
+  const handleBulkSync = async (company: TangoCompany) => {
+    const selectedIds = selectedMatches[company.key];
+    const matches = matchesByCompany[company.key].filter(match => selectedIds.includes(match.crmClient.id) && !match.isSynced);
+    if (matches.length === 0 || !userInfo) return;
+    if (!window.confirm(`Mapear ${matches.length} clientes de ${company.shortLabel}? Se procesaran uno por uno.`)) return;
+
+    setBulkSyncing(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const match of matches) {
+      setSyncingId(`${company.key}-${match.crmClient.id}`);
+      try {
+        const updates = buildClientUpdates(match, company);
+        await updateClientTangoMapping(match.crmClient.id, updates, userInfo.id, userInfo.name);
+        await updateDoc(doc(db, 'clients', match.crmClient.id), { [company.syncedField]: true });
+        markMatchAsSynced(match, company, updates);
+        successCount += 1;
+      } catch (error) {
+        console.error('Error bulk syncing client', match.crmClient.id, error);
+        errorCount += 1;
+      }
+    }
+
+    setSyncingId(null);
+    setBulkSyncing(false);
+    toast({
+      title: 'Mapeo masivo terminado',
+      description: `${successCount} vinculados${errorCount ? `, ${errorCount} con error` : ''}.`,
+      variant: errorCount ? 'destructive' : 'default',
+    });
+  };
+
+  const handleUndoMapping = async (client: Client, company: TangoCompany) => {
+    if (!window.confirm(`Quitar el ID Tango ${company.shortLabel} de ${client.denominacion}?`)) return;
+    setUndoingId(`${company.key}-${client.id}`);
+    try {
+      await updateDoc(doc(db, 'clients', client.id), {
+        [company.crmIdField]: deleteField(),
+        [company.syncedField]: deleteField(),
+        updatedAt: serverTimestamp(),
+      });
+      setCrmClients(previous => previous.map(item => (
+        item.id === client.id
+          ? { ...item, [company.crmIdField]: undefined, [company.syncedField]: undefined }
+          : item
+      )));
+      toast({ title: 'Mapeo deshecho', description: `Se quito el ID ${company.shortLabel}.` });
+      fetchClientsAndMatches();
+    } catch (error) {
+      console.error('Error undoing Tango mapping', error);
+      toast({ title: 'No se pudo deshacer el mapeo', variant: 'destructive' });
+    } finally {
+      setUndoingId(null);
     }
   };
 
@@ -357,6 +428,24 @@ export default function TangoMappingPage() {
   const renderClientTable = (company: TangoCompany) => {
     const matches = matchesByCompany[company.key] || [];
     const errorMessage = tangoErrors[company.key];
+    const selectedIds = selectedMatches[company.key];
+    const selectableMatches = matches.filter(match => !match.isSynced);
+    const allSelected = selectableMatches.length > 0 && selectableMatches.every(match => selectedIds.includes(match.crmClient.id));
+    const toggleAll = () => {
+      setSelectedMatches(previous => ({
+        ...previous,
+        [company.key]: allSelected ? [] : selectableMatches.map(match => match.crmClient.id),
+      }));
+    };
+    const toggleOne = (clientId: string) => {
+      setSelectedMatches(previous => {
+        const current = previous[company.key];
+        return {
+          ...previous,
+          [company.key]: current.includes(clientId) ? current.filter(id => id !== clientId) : [...current, clientId],
+        };
+      });
+    };
     return (
       <div className="space-y-3">
       {errorMessage && (
@@ -364,10 +453,26 @@ export default function TangoMappingPage() {
           No se pudo consultar Tango {company.shortLabel}: {errorMessage}
         </div>
       )}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-white px-4 py-3 shadow-sm">
+        <div className="text-sm text-slate-600">
+          {selectedIds.length > 0 ? `${selectedIds.length} seleccionados para ${company.shortLabel}` : 'Selecciona filas sugeridas para mapearlas en bloque.'}
+        </div>
+        <Button
+          size="sm"
+          onClick={() => handleBulkSync(company)}
+          disabled={bulkSyncing || selectedIds.length === 0}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          {bulkSyncing ? <Spinner size="small" /> : 'Mapear seleccionados'}
+        </Button>
+      </div>
       <div className="overflow-hidden rounded-md border bg-white shadow-sm">
         <Table>
           <TableHeader className="bg-slate-100">
             <TableRow>
+              <TableHead className="w-[48px] text-center">
+                <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Seleccionar todos" />
+              </TableHead>
               <TableHead className="w-1/2 border-r border-slate-300">Base CRM</TableHead>
               <TableHead className="w-[100px] bg-blue-50/50 text-center">Similitud</TableHead>
               <TableHead className="w-1/2 border-l border-slate-300">Datos oficiales Tango</TableHead>
@@ -377,7 +482,7 @@ export default function TangoMappingPage() {
           <TableBody>
             {matches.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="py-10 text-center">
+                <TableCell colSpan={5} className="py-10 text-center">
                   No hay clientes pendientes de validación en {company.shortLabel}.
                 </TableCell>
               </TableRow>
@@ -386,6 +491,14 @@ export default function TangoMappingPage() {
               const isSyncing = syncingId === `${company.key}-${match.crmClient.id}`;
               return (
                 <TableRow key={`${company.key}-${match.crmClient.id}-${index}`} className={match.isSynced ? 'bg-green-50/20' : ''}>
+                  <TableCell className="text-center">
+                    <Checkbox
+                      checked={selectedIds.includes(match.crmClient.id)}
+                      disabled={match.isSynced || isSyncing || bulkSyncing}
+                      onCheckedChange={() => toggleOne(match.crmClient.id)}
+                      aria-label={`Seleccionar ${match.crmClient.denominacion}`}
+                    />
+                  </TableCell>
                   <TableCell className="border-r border-slate-200">
                     <div className="font-bold text-slate-800">{match.crmClient.denominacion}</div>
                     {match.crmClient.razonSocial && <div className="text-xs text-slate-500">{match.crmClient.razonSocial}</div>}
@@ -422,7 +535,7 @@ export default function TangoMappingPage() {
                       size="sm"
                       variant={match.isSynced ? 'secondary' : 'default'}
                       className={match.isSynced ? '' : 'bg-blue-600 hover:bg-blue-700'}
-                      disabled={isSyncing || match.isSynced}
+                      disabled={isSyncing || match.isSynced || bulkSyncing}
                       onClick={() => handleSync(match, company)}
                     >
                       {isSyncing ? <Spinner size="small" /> : match.isSynced ? 'Vinculado' : 'Vincular'}
@@ -434,6 +547,72 @@ export default function TangoMappingPage() {
           </TableBody>
         </Table>
       </div>
+      </div>
+    );
+  };
+
+  const renderMappedTable = (company: TangoCompany) => {
+    const mappedClients = crmClients
+      .filter(client => Boolean((client as any)[company.crmIdField]) || Boolean((client as any)[company.syncedField]))
+      .sort((a, b) => String(a.denominacion || '').localeCompare(String(b.denominacion || '')));
+
+    return (
+      <div className="overflow-hidden rounded-md border bg-white shadow-sm">
+        <Table>
+          <TableHeader className="bg-slate-100">
+            <TableRow>
+              <TableHead>Cliente CRM</TableHead>
+              <TableHead className="w-[160px]">ID Tango</TableHead>
+              <TableHead>Razon social Tango</TableHead>
+              <TableHead className="w-[130px] text-center">Marca</TableHead>
+              <TableHead className="w-[140px] text-right">Accion</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {mappedClients.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="py-10 text-center">
+                  No hay mapeos realizados en {company.shortLabel}.
+                </TableCell>
+              </TableRow>
+            )}
+            {mappedClients.map(client => {
+              const isUndoing = undoingId === `${company.key}-${client.id}`;
+              return (
+                <TableRow key={`${company.key}-${client.id}`}>
+                  <TableCell>
+                    <div className="font-medium">{client.denominacion}</div>
+                    <div className="text-xs text-muted-foreground">{client.cuit || 'CUIT sin cargar'}</div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{String((client as any)[company.crmIdField] || 'Sin ID')}</Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-slate-600">
+                    {client.razonSocialTango || client.razonSocial || 'Sin razon social registrada'}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {Boolean((client as any)[company.syncedField]) ? (
+                      <Badge className="bg-green-600">Sincronizado</Badge>
+                    ) : (
+                      <Badge variant="outline">ID cargado</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleUndoMapping(client, company)}
+                      disabled={isUndoing}
+                    >
+                      {isUndoing ? <Spinner size="small" /> : <Undo2 className="mr-2 h-4 w-4" />}
+                      Deshacer
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       </div>
     );
   };
@@ -505,9 +684,10 @@ export default function TangoMappingPage() {
           </p>
         </div>
 
-        <Tabs value={mainTab} onValueChange={value => setMainTab(value as 'clients' | 'sellers')}>
-          <TabsList className="mb-6 grid w-full max-w-md grid-cols-2">
+        <Tabs value={mainTab} onValueChange={value => setMainTab(value as 'clients' | 'mapped' | 'sellers')}>
+          <TabsList className="mb-6 grid w-full max-w-2xl grid-cols-3">
             <TabsTrigger value="clients">Clientes</TabsTrigger>
+            <TabsTrigger value="mapped">Mapeados</TabsTrigger>
             <TabsTrigger value="sellers">Vendedores</TabsTrigger>
           </TabsList>
 
@@ -526,6 +706,27 @@ export default function TangoMappingPage() {
                 {TANGO_COMPANIES.map(company => (
                   <TabsContent key={company.key} value={company.key}>
                     {renderClientTable(company)}
+                  </TabsContent>
+                ))}
+              </Tabs>
+            )}
+          </TabsContent>
+
+          <TabsContent value="mapped">
+            {loading ? (
+              <div className="flex justify-center py-20"><Spinner size="large" /></div>
+            ) : (
+              <Tabs value={activeCompany} onValueChange={value => setActiveCompany(value as TangoCompanyKey)}>
+                <TabsList className="mb-6 grid w-full max-w-2xl grid-cols-3">
+                  {TANGO_COMPANIES.map(company => (
+                    <TabsTrigger key={company.key} value={company.key} className={`font-bold ${company.activeClass}`}>
+                      {company.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                {TANGO_COMPANIES.map(company => (
+                  <TabsContent key={company.key} value={company.key}>
+                    {renderMappedTable(company)}
                   </TabsContent>
                 ))}
               </Tabs>
