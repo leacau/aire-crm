@@ -14,7 +14,6 @@ import { addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO, format
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
-import { getManualInvoiceDate } from '@/lib/invoice-utils';
 import { AdvisorAlertsPanel } from '@/components/objectives/advisor-alerts-panel';
 import { buildAdvisorAlerts, type AdvisorAlert } from '@/lib/advisor-alerts';
 import { sendEmail } from '@/lib/google-gmail-service';
@@ -22,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useNotifications } from '@/hooks/use-notifications';
 import { getObjectiveForDate, resolveObjectiveAnchorDate } from '@/lib/objective-utils';
+import { fetchTangoObjectiveInvoices, summarizeTangoObjectiveBilling, type TangoObjectiveInvoice } from '@/lib/tango-objective-billing';
 
 const Confetti = dynamic(() => import('react-dom-confetti'), { ssr: false });
 
@@ -29,6 +29,7 @@ export default function ObjectivesPage() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [tangoObjectiveInvoices, setTangoObjectiveInvoices] = useState<TangoObjectiveInvoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
@@ -72,6 +73,15 @@ export default function ObjectivesPage() {
           const today = new Date();
           const anchor = resolveObjectiveAnchorDate(today, visibility);
           setObjectiveVisibility(anchor);
+          const tangoFromDate = startOfMonth(addMonths(anchor, -1));
+          const tangoToDate = endOfMonth(anchor);
+          try {
+            const tangoInvoices = await fetchTangoObjectiveInvoices(tangoFromDate, tangoToDate);
+            setTangoObjectiveInvoices(tangoInvoices);
+          } catch (tangoError) {
+            console.error('Error fetching Tango objective invoices', tangoError);
+            setTangoObjectiveInvoices([]);
+          }
 
           try {
             const threads = await getSupervisorCommentThreadsForUser(userInfo.id);
@@ -97,8 +107,7 @@ export default function ObjectivesPage() {
     previousMonthBilling,
     monthlyObjective,
     currentMonthBilling,
-    currentMonthPaidBilling,
-    currentMonthPendingBilling,
+    currentMonthInvoiceCount,
     progressPercentage,
     billingDifference,
     forecastedIncome,
@@ -109,8 +118,7 @@ export default function ObjectivesPage() {
         previousMonthBilling: 0,
         monthlyObjective: 0,
         currentMonthBilling: 0,
-        currentMonthPaidBilling: 0,
-        currentMonthPendingBilling: 0,
+        currentMonthInvoiceCount: 0,
         progressPercentage: 0,
         billingDifference: 0,
         forecastedIncome: 0,
@@ -127,27 +135,10 @@ export default function ObjectivesPage() {
 
     const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
     const userOpportunities = opportunities.filter(opp => userClientIds.has(opp.clientId));
-    const userOppIds = new Set(userOpportunities.map(opp => opp.id));
-
-    const userInvoices = invoices.filter(inv => userOppIds.has(inv.opportunityId) && !inv.isCreditNote);
-
-    const invoicesWithDates = userInvoices
-      .map(invoice => ({ invoice, invoiceDate: getManualInvoiceDate(invoice) }))
-      .filter(({ invoiceDate }) => invoiceDate !== null) as { invoice: Invoice; invoiceDate: Date }[];
-
-    const currentMonthInvoices = invoicesWithDates.filter(({ invoiceDate }) =>
-      isWithinInterval(invoiceDate, { start: currentMonthStart, end: currentMonthEnd })
-    );
-
-    const currentMonthTotal = currentMonthInvoices.reduce((sum, { invoice }) => sum + invoice.amount, 0);
-    const currentMonthPaid = currentMonthInvoices
-      .filter(({ invoice }) => invoice.status === 'Pagada')
-      .reduce((sum, { invoice }) => sum + invoice.amount, 0);
-    const currentMonthPending = currentMonthTotal - currentMonthPaid;
-
-    const prevMonthBilling = invoicesWithDates
-      .filter(({ invoiceDate }) => isWithinInterval(invoiceDate, { start: previousMonthStart, end: previousMonthEnd }))
-      .reduce((sum, { invoice }) => sum + invoice.amount, 0);
+    const currentTangoBilling = summarizeTangoObjectiveBilling(tangoObjectiveInvoices, currentMonthStart, currentMonthEnd);
+    const previousTangoBilling = summarizeTangoObjectiveBilling(tangoObjectiveInvoices, previousMonthStart, previousMonthEnd);
+    const currentMonthTotal = currentTangoBilling.total;
+    const prevMonthBilling = previousTangoBilling.total;
 
     const currentMonthOpportunities = userOpportunities.filter(opp => {
       try {
@@ -173,14 +164,13 @@ export default function ObjectivesPage() {
       previousMonthBilling: prevMonthBilling,
       monthlyObjective,
       currentMonthBilling: currentMonthTotal,
-      currentMonthPaidBilling: currentMonthPaid,
-      currentMonthPendingBilling: currentMonthPending,
+      currentMonthInvoiceCount: currentTangoBilling.count,
       progressPercentage,
       billingDifference,
       forecastedIncome,
       prospectingIncome,
     };
-  }, [userInfo, opportunities, invoices, clients, anchorDate]);
+  }, [userInfo, opportunities, clients, anchorDate, tangoObjectiveInvoices]);
 
   const teamObjectives = useMemo(() => {
     if (!isBoss || advisors.length === 0) return [];
@@ -190,31 +180,8 @@ export default function ObjectivesPage() {
     const currentMonthEnd = endOfMonth(today);
     const previousMonthStart = startOfMonth(addMonths(today, -1));
     const previousMonthEnd = endOfMonth(previousMonthStart);
-
-    const clientOwnerMap = new Map<string, string>();
-    clients.forEach(client => {
-      if (client.ownerId) {
-        clientOwnerMap.set(client.id, client.ownerId);
-      }
-    });
-
-    const opportunityOwnerMap = new Map<string, string>();
-    opportunities.forEach(opp => {
-      const ownerId = clientOwnerMap.get(opp.clientId);
-      if (ownerId) {
-        opportunityOwnerMap.set(opp.id, ownerId);
-      }
-    });
-
-    const invoicesByAdvisor = new Map<string, Invoice[]>();
-    invoices.forEach(inv => {
-      const advisorId = opportunityOwnerMap.get(inv.opportunityId);
-      if (!advisorId) return;
-      if (!invoicesByAdvisor.has(advisorId)) {
-        invoicesByAdvisor.set(advisorId, []);
-      }
-      invoicesByAdvisor.get(advisorId)!.push(inv);
-    });
+    const currentTangoBilling = summarizeTangoObjectiveBilling(tangoObjectiveInvoices, currentMonthStart, currentMonthEnd, advisors);
+    const previousTangoBilling = summarizeTangoObjectiveBilling(tangoObjectiveInvoices, previousMonthStart, previousMonthEnd, advisors);
 
     const parseMonthKey = (month: string) => {
       const [year, monthString] = month.split('-').map(part => Number(part));
@@ -224,21 +191,8 @@ export default function ObjectivesPage() {
 
     return advisors.map(advisor => {
       const { value: monthlyObjective } = getObjectiveForDate(advisor, today);
-      const advisorInvoices = (invoicesByAdvisor.get(advisor.id) ?? []).filter(inv => !inv.isCreditNote);
-
-      const invoicesWithDate = advisorInvoices
-        .map(invoice => ({ invoice, invoiceDate: getManualInvoiceDate(invoice) }))
-        .filter(({ invoiceDate }) => invoiceDate !== null) as { invoice: Invoice; invoiceDate: Date }[];
-
-      const currentMonthInvoices = invoicesWithDate.filter(({ invoiceDate }) =>
-        isWithinInterval(invoiceDate, { start: currentMonthStart, end: currentMonthEnd })
-      );
-
-      const currentMonthBilling = currentMonthInvoices.reduce((sum, { invoice }) => sum + invoice.amount, 0);
-
-      const prevMonthBilling = invoicesWithDate
-        .filter(({ invoiceDate }) => isWithinInterval(invoiceDate, { start: previousMonthStart, end: previousMonthEnd }))
-        .reduce((sum, { invoice }) => sum + invoice.amount, 0);
+      const currentMonthBilling = currentTangoBilling.byAdvisor[advisor.id]?.total ?? 0;
+      const prevMonthBilling = previousTangoBilling.byAdvisor[advisor.id]?.total ?? 0;
       const progressPercentage = monthlyObjective > 0 ? (currentMonthBilling / monthlyObjective) * 100 : 0;
       const billingDifference = currentMonthBilling - prevMonthBilling;
 
@@ -261,9 +215,9 @@ export default function ObjectivesPage() {
           progressPercentage,
           billingDifference,
           recentClosures,
-        };
+      };
     }).sort((a, b) => b.currentMonthBilling - a.currentMonthBilling);
-  }, [isBoss, advisors, clients, opportunities, invoices, anchorDate]);
+  }, [isBoss, advisors, tangoObjectiveInvoices, anchorDate]);
 
   const teamAggregateProgress = useMemo(() => {
     if (!isBoss || teamObjectives.length === 0) {
@@ -508,7 +462,7 @@ export default function ObjectivesPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">${currentMonthBilling.toLocaleString('es-AR')}</div>
-                    <p className="text-xs text-muted-foreground">Facturas (pagadas o a pagar) con fecha en el mes actual.</p>
+                    <p className="text-xs text-muted-foreground">Comprobantes FAC emitidos en Tango este mes.</p>
                   </CardContent>
                 </Card>
                 <Card>
@@ -518,7 +472,7 @@ export default function ObjectivesPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">${previousMonthBilling.toLocaleString('es-AR')}</div>
-                    <p className="text-xs text-muted-foreground">Facturas con fecha en el mes anterior.</p>
+                    <p className="text-xs text-muted-foreground">Comprobantes FAC de Tango del mes anterior.</p>
                   </CardContent>
                 </Card>
                 <Card>
@@ -560,7 +514,7 @@ export default function ObjectivesPage() {
                <CardHeader>
                  <CardTitle>Progreso del Objetivo Mensual</CardTitle>
                  <CardDescription>
-                   Seguimiento de tu facturación pagada y a pagar en comparación con tu objetivo para este mes.
+                   Seguimiento de tu facturación FAC emitida en Tango contra el objetivo del mes.
                  </CardDescription>
                </CardHeader>
                <CardContent className="space-y-4">
@@ -570,8 +524,8 @@ export default function ObjectivesPage() {
                  </div>
                  <Progress value={Math.min(progressPercentage, 100)} className="h-4" />
                  <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary" />Pagadas ${currentMonthPaidBilling.toLocaleString('es-AR')}</span>
-                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" />A pagar ${currentMonthPendingBilling.toLocaleString('es-AR')}</span>
+                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary" />Tango FAC ${currentMonthBilling.toLocaleString('es-AR')}</span>
+                   <span>{currentMonthInvoiceCount} comprobantes FAC de todas las Company</span>
                  </div>
                  <div className="flex justify-between items-center text-sm font-medium">
                      <span>{progressPercentage.toFixed(2)}% Completado</span>

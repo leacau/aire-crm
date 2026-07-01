@@ -1,19 +1,19 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { startOfMonth, endOfMonth } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
-import { getClients, getInvoices, getOpportunities, getObjectiveVisibilityConfig } from '@/lib/firebase-service';
-import { getManualInvoiceDate } from '@/lib/invoice-utils';
+import { getObjectiveVisibilityConfig } from '@/lib/firebase-service';
 import { Trophy } from 'lucide-react';
 import { getObjectiveForDate, resolveObjectiveAnchorDate } from '@/lib/objective-utils';
+import { fetchTangoObjectiveInvoices, summarizeTangoObjectiveBilling } from '@/lib/tango-objective-billing';
 
 const HIDDEN_ROLES = new Set(['Jefe', 'Gerencia', 'Administracion', 'Admin']);
 
 interface ObjectiveMetrics {
   monthlyObjective: number;
-  currentMonthPaidBilling: number;
-  currentMonthPendingBilling: number;
+  currentMonthBilling: number;
+  invoiceCount: number;
 }
 
 export function ObjectiveReminderBanner() {
@@ -35,63 +35,44 @@ export function ObjectiveReminderBanner() {
     let idleId: number | undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    const loadMetrics = () => {
+    const loadMetrics = async () => {
       if (!isMounted) return;
       setLoading(true);
-      Promise.all([getClients(), getOpportunities(), getInvoices(), getObjectiveVisibilityConfig()])
-      .then(([clients, opportunities, invoices, visibility]) => {
+      try {
+        const visibility = await getObjectiveVisibilityConfig();
         if (!isMounted) return;
-
-        const clientIds = new Set(clients.filter(client => client.ownerId === userInfo.id).map(client => client.id));
-        const opportunityIds = new Set(opportunities.filter(opp => clientIds.has(opp.clientId)).map(opp => opp.id));
-        const userInvoices = invoices.filter(inv => opportunityIds.has(inv.opportunityId));
 
         const today = new Date();
         const anchor = resolveObjectiveAnchorDate(today, visibility);
         setAnchorDate(anchor);
         const currentMonthStart = startOfMonth(anchor);
         const currentMonthEnd = endOfMonth(anchor);
-
-        const currentMonthInvoices = userInvoices
-          .map(invoice => ({ invoice, invoiceDate: getManualInvoiceDate(invoice) }))
-          .filter(({ invoice, invoiceDate }) =>
-            invoiceDate &&
-            !invoice.isCreditNote &&
-            isWithinInterval(invoiceDate, { start: currentMonthStart, end: currentMonthEnd })
-          );
-
-        const currentMonthPaidInvoices = currentMonthInvoices
-          .filter(({ invoice }) => invoice.status === 'Pagada')
-          .reduce((sum, { invoice }) => sum + invoice.amount, 0);
-
-        const currentMonthPendingInvoices = currentMonthInvoices
-          .filter(({ invoice }) => invoice.status !== 'Pagada')
-          .reduce((sum, { invoice }) => sum + invoice.amount, 0);
+        const tangoInvoices = await fetchTangoObjectiveInvoices(currentMonthStart, currentMonthEnd);
+        const billing = summarizeTangoObjectiveBilling(tangoInvoices, currentMonthStart, currentMonthEnd);
 
         const { value: monthlyObjective } = getObjectiveForDate(userInfo, anchor);
 
         setMetrics({
           monthlyObjective,
-          currentMonthPaidBilling: currentMonthPaidInvoices,
-          currentMonthPendingBilling: currentMonthPendingInvoices,
+          currentMonthBilling: billing.total,
+          invoiceCount: billing.count,
         });
         setLoading(false);
-      })
-        .catch(error => {
-          console.error('Error cargando el objetivo global', error);
-          if (isMounted) {
-            const fallbackDate = new Date();
-            setAnchorDate(fallbackDate);
-            const { value: monthlyObjective } = getObjectiveForDate(userInfo, fallbackDate);
+      } catch (error) {
+        console.error('Error cargando el objetivo global', error);
+        if (isMounted) {
+          const fallbackDate = new Date();
+          setAnchorDate(fallbackDate);
+          const { value: monthlyObjective } = getObjectiveForDate(userInfo, fallbackDate);
 
-            setMetrics({
-              monthlyObjective,
-              currentMonthPaidBilling: 0,
-              currentMonthPendingBilling: 0,
-            });
-            setLoading(false);
-          }
-        });
+          setMetrics({
+            monthlyObjective,
+            currentMonthBilling: 0,
+            invoiceCount: 0,
+          });
+          setLoading(false);
+        }
+      }
     };
 
     if ('requestIdleCallback' in window) {
@@ -105,21 +86,19 @@ export function ObjectiveReminderBanner() {
       if (idleId !== undefined && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [shouldHide, userInfo?.id, userInfo?.monthlyObjective, userInfo?.monthlyObjectives]);
+  }, [shouldHide, userInfo]);
 
   const progressData = useMemo(() => {
     if (!metrics) {
-      return { progress: 0, paidProgress: 0, pendingProgress: 0, remaining: 0 };
+      return { progress: 0, remaining: 0 };
     }
 
-    const { monthlyObjective, currentMonthPaidBilling, currentMonthPendingBilling } = metrics;
-    const totalBilling = currentMonthPaidBilling + currentMonthPendingBilling;
+    const { monthlyObjective, currentMonthBilling } = metrics;
+    const totalBilling = currentMonthBilling;
     const totalProgress = monthlyObjective > 0 ? Math.min((totalBilling / monthlyObjective) * 100, 999) : 0;
-    const paidProgress = monthlyObjective > 0 ? Math.min((currentMonthPaidBilling / monthlyObjective) * 100, totalProgress) : 0;
-    const pendingProgress = monthlyObjective > 0 ? Math.min((currentMonthPendingBilling / monthlyObjective) * 100, Math.max(totalProgress - paidProgress, 0)) : 0;
     const remaining = monthlyObjective > 0 ? Math.max(monthlyObjective - totalBilling, 0) : 0;
 
-    return { progress: totalProgress, paidProgress, pendingProgress, remaining };
+    return { progress: totalProgress, remaining };
   }, [metrics]);
 
   if (shouldHide) {
@@ -139,9 +118,8 @@ export function ObjectiveReminderBanner() {
   }
 
   const monthlyObjective = metrics?.monthlyObjective ?? 0;
-  const currentMonthPaidBilling = metrics?.currentMonthPaidBilling ?? 0;
-  const currentMonthPendingBilling = metrics?.currentMonthPendingBilling ?? 0;
-  const totalBilling = currentMonthPaidBilling + currentMonthPendingBilling;
+  const totalBilling = metrics?.currentMonthBilling ?? 0;
+  const invoiceCount = metrics?.invoiceCount ?? 0;
   const showObjectiveInfo = monthlyObjective > 0;
 
   return (
@@ -167,21 +145,12 @@ export function ObjectiveReminderBanner() {
             <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full bg-primary"
-                style={{ width: `${Math.min(progressData.paidProgress, 100)}%` }}
-              />
-              <div
-                className="h-full bg-amber-400"
-                style={{
-                  width: `${Math.max(
-                    Math.min(progressData.paidProgress + progressData.pendingProgress, 100) - Math.min(progressData.paidProgress, 100),
-                    0
-                  )}%`,
-                }}
+                style={{ width: `${Math.min(progressData.progress, 100)}%` }}
               />
             </div>
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground sm:text-xs">
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary" />Pagadas ${currentMonthPaidBilling.toLocaleString('es-AR')}</span>
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" />A pagar ${currentMonthPendingBilling.toLocaleString('es-AR')}</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary" />Tango FAC ${totalBilling.toLocaleString('es-AR')}</span>
+              <span>{invoiceCount} comprobantes FAC del mes en curso</span>
             </div>
             <p className="text-xs text-muted-foreground">
               {progressData.progress >= 100
@@ -191,7 +160,7 @@ export function ObjectiveReminderBanner() {
           </>
         ) : (
           <div className="text-xs text-muted-foreground">
-            {loading ? 'Revisando tus facturas pagadas...' : 'Pedile a tu líder que defina un objetivo para vos y mantenete enfocado.'}
+            {loading ? 'Revisando tus facturas FAC de Tango...' : 'Pedile a tu líder que defina un objetivo para vos y mantenete enfocado.'}
           </div>
         )}
       </div>
