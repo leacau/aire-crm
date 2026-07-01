@@ -47,7 +47,7 @@ interface UnifiedApprovalItem {
 }
 
 function ApprovalsPageComponent() {
-  const { userInfo, loading: authLoading, isBoss } = useAuth();
+  const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -378,7 +378,7 @@ function ApprovalsPageComponent() {
   };
 
   // 🟢 ENCARGADO DE CONSTRUIR EL PDF Y DESPACHAR EL MAIL (REUTILIZABLE)
-  const dispatchApprovalEmail = async (item: UnifiedApprovalItem, containerElement: HTMLElement, isRenotification: boolean = false) => {
+  const dispatchApprovalEmail = async (item: UnifiedApprovalItem, containerElement: HTMLElement, accessToken: string, isRenotification: boolean = false) => {
     const sellerId = item.rawData.advisorId || item.rawData.createdBy || item.rawData.creatorId;
     let sellerEmail = userInfo!.email; 
     if (sellerId) {
@@ -415,10 +415,14 @@ function ApprovalsPageComponent() {
     `;
 
     await sendEmail({
+      accessToken,
       to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar', sellerEmail],
       subject: `INGRESO CORRECTO - ${item.type}: ${item.clientName}`,
       body: approvalEmailBody,
-      attachments
+      attachments,
+      fromName: userInfo!.name,
+      fromEmail: userInfo!.email,
+      replyTo: sellerEmail,
     });
   };
 
@@ -462,6 +466,8 @@ function ApprovalsPageComponent() {
 
       if (actionType === 'Devuelto') {
         try {
+            const accessToken = await getGoogleAccessToken();
+            if (!accessToken) throw new Error('No se pudo obtener acceso a Gmail para enviar la notificacion.');
             const sellerId = selectedItem.rawData.advisorId || selectedItem.rawData.createdBy || selectedItem.rawData.creatorId;
             let sellerEmail = userInfo.email; 
             if (sellerId) {
@@ -482,9 +488,13 @@ function ApprovalsPageComponent() {
             `;
 
             await sendEmail({
+            accessToken,
             to: [sellerEmail, 'lchena@airedesantafe.com.ar'],
             subject: `Corrección Requerida - ${selectedItem.type}: ${selectedItem.clientName}`,
-            body: returnEmailBody
+            body: returnEmailBody,
+            fromName: userInfo.name,
+            fromEmail: userInfo.email,
+            replyTo: sellerEmail,
             });
         } catch (emailError) {
             notificationError = emailError;
@@ -492,8 +502,10 @@ function ApprovalsPageComponent() {
         }
       } else if (actionType === 'Aprobado' && documentContainerRef.current) {
         try {
+          const accessToken = await getGoogleAccessToken();
+          if (!accessToken) throw new Error('No se pudo obtener acceso a Gmail para enviar la notificacion.');
           const elementToCapture = documentContainerRef.current.firstChild as HTMLElement;
-          await dispatchApprovalEmail(selectedItem, elementToCapture, false);
+          await dispatchApprovalEmail(selectedItem, elementToCapture, accessToken, false);
         } catch (emailError) {
           notificationError = emailError;
           console.error('Error enviando notificación de aprobación:', emailError);
@@ -520,6 +532,11 @@ function ApprovalsPageComponent() {
     if (item.type === 'Nota Comercial' || item.type === 'Orden de Publicidad') {
       await ensureProgramsLoaded();
     }
+    const accessToken = await getGoogleAccessToken();
+    if (!accessToken) {
+      toast({ title: 'No se pudo acceder a Gmail', description: 'Volve a intentar y acepta el permiso de Gmail para enviar la notificacion.', variant: 'destructive' });
+      return;
+    }
     const hydratedItem = await withOrderBilling(item);
     setRenotifyingItem(hydratedItem);
     
@@ -528,7 +545,7 @@ function ApprovalsPageComponent() {
       try {
         if (hiddenDocumentContainerRef.current && hiddenDocumentContainerRef.current.firstChild) {
           const elementToCapture = hiddenDocumentContainerRef.current.firstChild as HTMLElement;
-          await dispatchApprovalEmail(hydratedItem, elementToCapture, true);
+          await dispatchApprovalEmail(hydratedItem, elementToCapture, accessToken, true);
           toast({ title: 'Notificación reenviada correctamente.' });
         } else {
           throw new Error("No se pudo generar el documento.");
