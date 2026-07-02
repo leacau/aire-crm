@@ -75,6 +75,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { hasManagementPrivileges } from '@/lib/role-utils';
+import { fetchTangoObjectiveInvoices, summarizeTangoObjectiveBilling, type TangoObjectiveInvoice } from '@/lib/tango-objective-billing';
 const TasksModal = dynamic(() => import('@/components/dashboard/tasks-modal').then(mod => mod.TasksModal), { ssr: false });
 const OpportunityDetailsDialog = dynamic(() => import('@/components/opportunities/opportunity-details-dialog').then(mod => mod.OpportunityDetailsDialog), { ssr: false });
 
@@ -203,6 +204,7 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [tasks, setTasks] = useState<ClientActivity[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [tangoBillingInvoices, setTangoBillingInvoices] = useState<TangoObjectiveInvoice[]>([]);
   const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [advisors, setAdvisors] = useState<User[]>([]);
@@ -253,11 +255,17 @@ export default function DashboardPage() {
         Promise.all([
             getOpportunities(),
             getDashboardInvoices(),
-            getPendingPaymentEntries() 
-        ]).then(([o, i, p]) => {
+            getPendingPaymentEntries(),
+            fetchTangoObjectiveInvoices(startOfMonth(subMonths(new Date(), 12)), endOfMonth(subMonths(new Date(), 1)))
+              .catch(error => {
+                console.error('Error fetching Tango billing history:', error);
+                return [] as TangoObjectiveInvoice[];
+              }),
+        ]).then(([o, i, p, tangoInvoices]) => {
             if (!isMounted) return;
             setOpportunities(o);
             setInvoices(i);
+            setTangoBillingInvoices(tangoInvoices);
             setPaymentEntries(p);
             setLoadingData(false); 
         }).catch(error => {
@@ -576,30 +584,30 @@ export default function DashboardPage() {
       end: endOfMonth(subMonths(now, 1))
   });
 
-  const getBillingForMonth = (date: Date, invoiceList: Invoice[]) => {
+  const getTangoBillingForMonth = (date: Date, advisorId?: string) => {
       const monthStart = startOfMonth(date);
       const monthEnd = endOfMonth(date);
-      const range = { from: monthStart, to: monthEnd };
-      
-      return invoiceList
-        .filter(inv => {
-             return inv.date && dateFilter(inv.date, range) && isValidInvoice(inv);
-        })
-        .reduce((acc, inv) => acc + inv.amount, 0);
+      const needsAdvisorBreakdown = Boolean(advisorId || (isBoss && selectedAdvisor !== 'all'));
+      const summary = summarizeTangoObjectiveBilling(tangoBillingInvoices, monthStart, monthEnd, needsAdvisorBreakdown ? advisors : []);
+
+      if (advisorId) {
+        return summary.byAdvisor[advisorId]?.total ?? 0;
+      }
+      if (isBoss && selectedAdvisor !== 'all') {
+        return summary.byAdvisor[selectedAdvisor]?.total ?? 0;
+      }
+
+      return summary.total;
   };
 
   const billingChartData = last12Months.map(monthDate => ({
       month: format(monthDate, 'MMM yy', { locale: es }),
-      amount: getBillingForMonth(monthDate, userInvoices),
+      amount: getTangoBillingForMonth(monthDate),
       fullDate: monthDate
   }));
 
   const billingTableColumns = [...last12Months].reverse().slice(0, 6); 
   const billingTableData = advisors.map(advisor => {
-      const advisorClientIds = new Set(clients.filter(c => c.ownerId === advisor.id).map(c => c.id));
-      const oppIds = new Set(opportunities.filter(o => advisorClientIds.has(o.clientId)).map(o => o.id));
-      const advisorInvoices = invoices.filter(i => oppIds.has(i.opportunityId));
-      
       const rowData: any = {
           advisorName: advisor.name,
           advisorId: advisor.id,
@@ -608,7 +616,7 @@ export default function DashboardPage() {
 
       let total = 0;
       last12Months.forEach(month => {
-          const val = getBillingForMonth(month, advisorInvoices);
+          const val = getTangoBillingForMonth(month, advisor.id);
           total += val;
           if (billingTableColumns.some(c => c.getTime() === month.getTime())) {
               rowData[format(month, 'MMM yy', { locale: es })] = val;
@@ -918,8 +926,8 @@ export default function DashboardPage() {
                             </CardTitle>
                             <CardDescription>
                                 {showManagementView 
-                                    ? "Comparativa de facturación por asesor (excluyendo mes en curso)." 
-                                    : "Tu histórico de facturación (excluyendo mes en curso)."}
+                                    ? "Comparativa de comprobantes FAC de Tango por asesor (excluyendo mes en curso)." 
+                                    : "Tu histórico de comprobantes FAC de Tango (excluyendo mes en curso)."}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className='min-h-[300px]'>
