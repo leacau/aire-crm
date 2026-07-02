@@ -69,6 +69,7 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
     const [observations, setObservations] = useState('');
 
     const [notifyOnSave, setNotifyOnSave] = useState(true);
+    const [requiresResubmission, setRequiresResubmission] = useState(false);
     
     const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
     const effectiveOrderId = orderId || selectedOrderId;
@@ -119,6 +120,10 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
                         setCollaborateReel(req.collaborateReel || false);
                         setMaterialUrl(req.materialUrl || '');
                         setObservations(req.observations || '');
+                        if (editId && req.status === 'Devuelto') {
+                            setRequiresResubmission(true);
+                            setNotifyOnSave(true);
+                        }
                     }
                 } else if (orderId) {
                     const parentOrder = await getAdvertisingOrder(orderId);
@@ -251,7 +256,9 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
 
             if (notifyOnSave) {
                 const token = await getGoogleAccessToken();
-                if (token) {
+                if (!token) {
+                    toast({ title: 'Pedido guardado, pero no notificado', description: 'No se pudo obtener autorización de Gmail. Reintentá desde el pedido.', variant: 'destructive' });
+                } else {
                     try {
                         const clientDisplayName = client?.denominacion || 'Desconocido';
                         const baseUrl = window.location.origin;
@@ -267,7 +274,10 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
                             subject: `Pedido de Revisión Web - ${clientDisplayName}`,
                             body: emailBody
                         });
-                    } catch (e) {}
+                    } catch (e) {
+                        console.error('Error al enviar notificación simple de nota web:', e);
+                        toast({ title: 'Pedido guardado, pero no notificado', description: e instanceof Error ? e.message : 'Falló el envío del correo.', variant: 'destructive' });
+                    }
                 }
             }
 
@@ -292,8 +302,8 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
                 <div className="flex gap-4 items-center">
                     <Button variant="outline" onClick={handleDownloadPdf} disabled={!clientId}><ExternalLink className="mr-2 h-4 w-4"/> Exportar PDF</Button>
                     <div className="flex items-center gap-2 border p-2 rounded bg-gray-50">
-                        <Switch checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
-                        <Label className="text-sm font-semibold">Pasar a aprobación</Label>
+                        <Switch checked={notifyOnSave} onCheckedChange={setNotifyOnSave} disabled={requiresResubmission} />
+                        <Label className="text-sm font-semibold">{requiresResubmission ? 'Reenvío obligatorio' : 'Pasar a aprobación'}</Label>
                     </div>
                     <Button onClick={handleSave} disabled={saving} className="bg-orange-600 hover:bg-orange-700">{saving ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4"/>} Guardar</Button>
                 </div>

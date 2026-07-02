@@ -83,6 +83,7 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
     const [clientOrders, setClientOrders] = useState<AdvertisingOrder[]>([]);
 
     const [notifyOnSave, setNotifyOnSave] = useState(true);
+    const [requiresResubmission, setRequiresResubmission] = useState(false);
     
     const canReassign = userInfo && (hasManagementPrivileges(userInfo) || userInfo.role === 'Administracion' || userInfo.role === 'Admin');
     const effectiveOrderId = orderId || selectedOrderId;
@@ -144,7 +145,11 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
 
                         setAdvisorId(req.advisorId || userInfo?.id || '');
                         setAdvisorName(req.advisorName || userInfo?.name || '');
-                        
+                        if (editId && req.status === 'Devuelto') {
+                            setRequiresResubmission(true);
+                            setNotifyOnSave(true);
+                        }
+                         
                         if (req.orderId) setOrderTitle(req.orderTitle || 'Orden Vinculada');
                     }
                 } else if (orderId) {
@@ -350,7 +355,9 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
 
             if (notifyOnSave) {
                 const token = await getGoogleAccessToken();
-                if (token) {
+                if (!token) {
+                    toast({ title: 'Pedido guardado, pero no notificado', description: 'No se pudo obtener autorización de Gmail. Reintentá desde el pedido.', variant: 'destructive' });
+                } else {
                     try {
                         const clientDisplayName = client?.denominacion || 'Desconocido';
                         const baseUrl = window.location.origin;
@@ -369,6 +376,7 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
                         });
                     } catch (emailErr) {
                         console.error("Error al enviar notificación simple de redes:", emailErr);
+                        toast({ title: 'Pedido guardado, pero no notificado', description: emailErr instanceof Error ? emailErr.message : 'Falló el envío del correo.', variant: 'destructive' });
                     }
                 }
             }
@@ -400,8 +408,8 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
                 <div className="flex gap-4 items-center">
                     <Button variant="outline" onClick={handleDownloadPdf} disabled={!clientId}><ExternalLink className="mr-2 h-4 w-4"/> Exportar PDF</Button>
                     <div className="flex items-center gap-2 border p-2 rounded bg-gray-50">
-                        <Switch checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
-                        <Label className="text-sm font-semibold">Pasar a aprobación</Label>
+                        <Switch checked={notifyOnSave} onCheckedChange={setNotifyOnSave} disabled={requiresResubmission} />
+                        <Label className="text-sm font-semibold">{requiresResubmission ? 'Reenvío obligatorio' : 'Pasar a aprobación'}</Label>
                     </div>
                     <Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="animate-spin" /> : <Save className="mr-2 h-4 w-4"/>} Guardar</Button>
                 </div>

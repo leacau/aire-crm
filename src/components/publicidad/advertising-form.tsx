@@ -149,6 +149,7 @@ export function AdvertisingForm() {
   const [isListeningVoice, setIsListeningVoice] = useState(false);
 
   const [wasApproved, setWasApproved] = useState(false);
+  const [requiresResubmission, setRequiresResubmission] = useState(false);
   const [modificationReason, setModificationReason] = useState('');
 
   const pdfRef = useRef<HTMLDivElement>(null);
@@ -285,6 +286,10 @@ export function AdvertisingForm() {
                       || (order.approvalHistory || []).some(item => item.status === 'Aprobado')
                   )) {
                       setWasApproved(true);
+                      setNotifyOnSave(true);
+                  }
+                  if (editId && order.status === 'Devuelto') {
+                      setRequiresResubmission(true);
                       setNotifyOnSave(true);
                   }
 
@@ -1107,7 +1112,9 @@ export function AdvertisingForm() {
 
       if (notifyOnSave) {
           const accessToken = await getGoogleAccessToken();
-          if (accessToken) {
+          if (!accessToken) {
+              toast({ title: 'Orden guardada, pero no notificada', description: 'No se pudo obtener autorización de Gmail. Reintentá desde la orden.', variant: 'destructive' });
+          } else {
               try {
                   const clientDisplayName = selectedClient?.razonSocial || selectedClient?.denominacion || 'Desconocido';
                   const ownerUser = users.find(u => u.id === (cleanPayload.createdBy || orderCreatedBy));
@@ -1139,8 +1146,11 @@ export function AdvertisingForm() {
                       fromName: advisorDisplayName,
                       fromEmail: userInfo.email,
                       replyTo: advisorEmail,
-                  });
-              } catch (emailErr) {}
+                   });
+              } catch (emailErr) {
+                  console.error('Error al enviar notificación de orden de publicidad:', emailErr);
+                  toast({ title: 'Orden guardada, pero no notificada', description: emailErr instanceof Error ? emailErr.message : 'Falló el envío del correo.', variant: 'destructive' });
+              }
           }
       }
 
@@ -1183,9 +1193,9 @@ export function AdvertisingForm() {
                {isExporting ? "Generando..." : "Exportar PDF"}
             </Button>
             <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white h-10">
-                <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} disabled={wasApproved} />
-                <Label htmlFor="notify" className={cn("text-sm font-semibold", wasApproved ? "cursor-not-allowed" : "cursor-pointer")}>
-                    {wasApproved ? "Reaprobación obligatoria" : "Pasar a aprobación"}
+                <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} disabled={wasApproved || requiresResubmission} />
+                <Label htmlFor="notify" className={cn("text-sm font-semibold", (wasApproved || requiresResubmission) ? "cursor-not-allowed" : "cursor-pointer")}>
+                    {wasApproved ? "Reaprobación obligatoria" : requiresResubmission ? "Reenvío obligatorio" : "Pasar a aprobación"}
                 </Label>
             </div>
             <Button type="submit" disabled={isSubmitting}>

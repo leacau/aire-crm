@@ -41,6 +41,7 @@ export default function NewCommercialNotePage() {
     const [saving, setSaving] = useState(false);
     const pdfRef = useRef<HTMLDivElement>(null);
     const [notifyOnSave, setNotifyOnSave] = useState(true); 
+    const [requiresResubmission, setRequiresResubmission] = useState(false);
     
     const [clients, setClients] = useState<Client[]>([]);
     const [programs, setPrograms] = useState<Program[]>([]);
@@ -208,6 +209,10 @@ export default function NewCommercialNotePage() {
 
                     setAdvisorId(note.advisorId || userInfo?.id || '');
                     setAdvisorName(note.advisorName || userInfo?.name || '');
+                    if (editModeId && note.status === 'Devuelto') {
+                        setRequiresResubmission(true);
+                        setNotifyOnSave(true);
+                    }
 
                     if (note.orderId) setOrderTitle(note.orderTitle || 'Orden Vinculada');
                 }
@@ -670,7 +675,9 @@ export default function NewCommercialNotePage() {
 
             if (notifyOnSave) {
                 const accessToken = await getGoogleAccessToken();
-                if (accessToken) {
+                if (!accessToken) {
+                    toast({ title: 'Nota guardada, pero no notificada', description: 'No se pudo obtener autorización de Gmail. Reintentá desde la nota.', variant: 'destructive' });
+                } else {
                     try {
                         const clientDisplayName = client?.denominacion || 'Desconocido';
                         const baseUrl = window.location.origin;
@@ -690,6 +697,7 @@ export default function NewCommercialNotePage() {
                         });
                     } catch (emailErr) {
                         console.error("Error al enviar notificación simple de nota:", emailErr);
+                        toast({ title: 'Nota guardada, pero no notificada', description: emailErr instanceof Error ? emailErr.message : 'Falló el envío del correo.', variant: 'destructive' });
                     }
                 }
             }
@@ -736,8 +744,10 @@ export default function NewCommercialNotePage() {
                 </Button>
                 
                 <div className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-white h-10">
-                    <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} />
-                    <Label htmlFor="notify" className="cursor-pointer text-sm font-semibold">Pasar a aprobación</Label>
+                    <Switch id="notify" checked={notifyOnSave} onCheckedChange={setNotifyOnSave} disabled={requiresResubmission} />
+                    <Label htmlFor="notify" className={cn("text-sm font-semibold", requiresResubmission ? "cursor-not-allowed" : "cursor-pointer")}>
+                        {requiresResubmission ? 'Reenvío obligatorio' : 'Pasar a aprobación'}
+                    </Label>
                 </div>
 
                 <Button onClick={handleSave} disabled={saving || hasGrafErrors}>
