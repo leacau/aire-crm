@@ -34,29 +34,32 @@ type Props = {
 
 const paymentStatuses: PaymentStatus[] = ['Pendiente', 'Reclamado', 'Pagado', 'Incobrable'];
 
-const formatDate = (value?: string | null) => {
-  if (!value) return '';
-  try {
-    return format(parseISO(value), 'P', { locale: es });
-  } catch (error) {
-    return value;
-  }
-};
-
-const parseDate = (value?: string | null) => {
+const parseDate = (value?: unknown) => {
   if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (typeof value === 'object' && typeof (value as any).toDate === 'function') {
+    const date = (value as any).toDate();
+    if (date instanceof Date && !Number.isNaN(date.getTime())) return date;
+  }
+
   try {
-    const iso = parseISO(value);
+    const iso = parseISO(String(value));
     if (!Number.isNaN(iso.getTime())) return iso;
   } catch (error) {
     try {
-      const parsed = parse(value, 'dd/MM/yyyy', new Date());
+      const parsed = parse(String(value), 'dd/MM/yyyy', new Date());
       if (!Number.isNaN(parsed.getTime())) return parsed;
     } catch (err) {
       return null;
     }
   }
   return null;
+};
+
+const formatDate = (value?: unknown) => {
+  const parsed = parseDate(value);
+  if (parsed) return format(parsed, 'P', { locale: es });
+  return value == null ? '' : String(value);
 };
 
 const getDaysLate = (entry: PaymentEntry) => {

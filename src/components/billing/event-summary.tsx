@@ -9,6 +9,22 @@ import { getAdvertisingOrdersWithEvent } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 
+const formatEventDate = (value: unknown) => {
+  if (!value) return 'Sin fecha';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return format(value, 'dd/MM/yyyy');
+  if (typeof value === 'object' && typeof (value as any).toDate === 'function') {
+    const date = (value as any).toDate();
+    if (date instanceof Date && !Number.isNaN(date.getTime())) return format(date, 'dd/MM/yyyy');
+  }
+
+  try {
+    const date = parseISO(String(value));
+    return Number.isNaN(date.getTime()) ? String(value) : format(date, 'dd/MM/yyyy');
+  } catch {
+    return String(value);
+  }
+};
+
 const actionSummary = (order: AdvertisingOrder) => {
   const totals = new Map<string, number>();
   (order.srlItems || []).forEach(item => {
@@ -55,7 +71,7 @@ export function EventSummary() {
         <div className="divide-y">
           {eventOrders.map(order => <div key={order.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[1.2fr_1fr_2fr_auto] md:items-center">
             <div><p className="font-semibold">{order.clientName}</p><p className="text-xs text-muted-foreground">{order.product || order.opportunityTitle}</p></div>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" />{format(parseISO(order.startDate), 'dd/MM/yyyy')} al {format(parseISO(order.endDate), 'dd/MM/yyyy')}</div>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" />{formatEventDate(order.startDate)} al {formatEventDate(order.endDate)}</div>
             <p className="text-xs text-slate-600">{actionSummary(order)}</p>
             <Link href={`/publicidad/${order.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">Ver OP <ExternalLink className="h-3 w-3" /></Link>
           </div>)}

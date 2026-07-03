@@ -14,6 +14,28 @@ import { Label } from '../ui/label';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { AlertTriangle } from 'lucide-react';
 
+const parseDateValue = (value: unknown) => {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (typeof value === 'object' && typeof (value as any).toDate === 'function') {
+    const date = (value as any).toDate();
+    if (date instanceof Date && !Number.isNaN(date.getTime())) return date;
+  }
+
+  try {
+    const date = parseISO(String(value));
+    return Number.isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
+};
+
+const formatDateValue = (value: unknown, pattern = 'P') => {
+  const parsed = parseDateValue(value);
+  if (parsed) return format(parsed, pattern, { locale: es });
+  return value == null ? '-' : String(value);
+};
+
 export const BillingTable = ({
   items,
   type,
@@ -173,15 +195,7 @@ export const BillingTable = ({
 
             const markerName = (invoice as any).deletionMarkedByName as string | undefined;
             const markedAtRaw = invoice.deletionMarkedAt as string | undefined | null;
-            const formattedDate = markedAtRaw
-              ? (() => {
-                  try {
-                    return format(parseISO(markedAtRaw), 'Pp', { locale: es });
-                  } catch (error) {
-                    return markedAtRaw;
-                  }
-                })()
-              : null;
+            const formattedDate = markedAtRaw ? formatDateValue(markedAtRaw, 'Pp') : null;
 
             return (
               <TooltipProvider>
@@ -213,7 +227,7 @@ export const BillingTable = ({
             header: 'Fecha Factura',
             cell: ({ row }) => {
               const invoice = row.original as Invoice;
-              return invoice.date ? format(parseISO(invoice.date), 'P', { locale: es }) : '-';
+              return invoice.date ? formatDateValue(invoice.date) : '-';
             },
         });
         if (showCreditNoteDate) {
@@ -223,11 +237,7 @@ export const BillingTable = ({
             cell: ({ row }) => {
               const invoice = row.original as Invoice;
               if (!invoice.creditNoteMarkedAt) return '-';
-              try {
-                return format(parseISO(invoice.creditNoteMarkedAt), 'P', { locale: es });
-              } catch (error) {
-                return '-';
-              }
+              return formatDateValue(invoice.creditNoteMarkedAt);
             }
           });
         }
@@ -282,7 +292,7 @@ export const BillingTable = ({
                     <Label htmlFor={`delete-${invoice.id}`}>Eliminar</Label>
                     {invoice.markedForDeletion && (
                       <span className="text-[11px] text-muted-foreground">
-                        {invoice.deletionMarkedByName || 'Solicitada'} {invoice.deletionMarkedAt ? `· ${format(parseISO(invoice.deletionMarkedAt), 'P', { locale: es })}` : ''}
+                        {invoice.deletionMarkedByName || 'Solicitada'} {invoice.deletionMarkedAt ? `· ${formatDateValue(invoice.deletionMarkedAt)}` : ''}
                       </span>
                     )}
                   </div>

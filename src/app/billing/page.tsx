@@ -595,7 +595,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     userWonOpps.forEach(opp => {
         if (!opp.createdAt) return;
 
-        const creationDate = parseISO(opp.createdAt);
+        const creationDate = normalizeDateForComparison(opp.createdAt);
+        if (!creationDate) return;
         const maxPeriodicity = opp.periodicidad?.[0] || 'Ocasional';
         const durationMonths = getPeriodDurationInMonths(maxPeriodicity);
 
@@ -1415,9 +1416,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                         const invoiceDate = (() => {
                         if (!invoice.date) return '—';
                         try {
-                            return format(parseISO(invoice.date), 'P', { locale: es });
+                            const parsedDate = normalizeDateForComparison(invoice.date);
+                            return parsedDate ? format(parsedDate, 'P', { locale: es }) : String(invoice.date);
                         } catch (error) {
-                            return invoice.date;
+                            return String(invoice.date);
                         }
                         })();
 
