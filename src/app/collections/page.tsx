@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { format, startOfMonth } from 'date-fns';
-import { Search } from 'lucide-react';
+import { BarChart3, Search } from 'lucide-react';
 import { auth } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
 type CollectionStatus = 'paid' | 'pending';
+type CollectionsTab = CollectionStatus | 'monthly';
 
 type TangoCollectionRecord = {
   id: string;
@@ -34,7 +35,19 @@ type TangoCollectionRecord = {
   sellerName: string;
   daysLate: number | null;
   amount: number | null;
-  balance: number | null;
+  invoiceTotal: number | null;
+};
+
+type TangoInvoice = {
+  FECHA_DE_EMISION?: string;
+  TIPO_COMPROBANTE?: string;
+  NRO_COMPROBANTE?: string;
+  COD_VENDEDOR?: string;
+  NOMBRE_VENDEDOR?: string;
+  COD_CLIENTE?: string;
+  RAZON_SOCIAL?: string;
+  NOMBRE_COMERCIAL?: string;
+  TOTAL?: number | null;
 };
 
 type FilterOption = {
@@ -69,19 +82,36 @@ const normalizeText = (value: unknown) => String(value || '')
 
 const getLateBucket = (daysLate: number | null) => {
   const value = Number(daysLate);
-  if (!Number.isFinite(value) || value <= 0) return 'sin-mora';
+  if (!Number.isFinite(value) || value <= 0) return '0';
   if (value <= 30) return '1-30';
   if (value <= 60) return '31-60';
   if (value <= 90) return '61-90';
-  return '90-plus';
+  if (value <= 120) return '91-120';
+  return '120-plus';
 };
 
 const lateBucketOptionsBase: FilterOption[] = [
-  { value: 'sin-mora', label: 'Sin mora' },
+  { value: '0', label: '0 dias' },
   { value: '1-30', label: '1 a 30 dias' },
   { value: '31-60', label: '31 a 60 dias' },
   { value: '61-90', label: '61 a 90 dias' },
-  { value: '90-plus', label: 'Mas de 90 dias' },
+  { value: '91-120', label: '91 a 120 dias' },
+  { value: '120-plus', label: 'Mas de 120 dias' },
+];
+
+const MONTHS = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
 ];
 
 const lateBucketLabels = lateBucketOptionsBase.reduce<Record<string, string>>((acc, option) => {
@@ -156,10 +186,13 @@ function MultiSelectFilter({
 export default function CollectionsPage() {
   const { toast } = useToast();
   const today = new Date();
-  const [status, setStatus] = useState<CollectionStatus>('paid');
+  const [activeTab, setActiveTab] = useState<CollectionsTab>('paid');
+  const status: CollectionStatus = activeTab === 'pending' ? 'pending' : 'paid';
   const [fromDate, setFromDate] = useState(format(startOfMonth(today), 'yyyy-MM-dd'));
   const [toDate, setToDate] = useState(format(today, 'yyyy-MM-dd'));
+  const [selectedYear, setSelectedYear] = useState(String(today.getFullYear()));
   const [records, setRecords] = useState<TangoCollectionRecord[]>([]);
+  const [monthlyInvoices, setMonthlyInvoices] = useState<TangoInvoice[]>([]);
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [selectedSellers, setSelectedSellers] = useState<string[]>([]);
   const [selectedLateBuckets, setSelectedLateBuckets] = useState<string[]>([]);
@@ -168,6 +201,7 @@ export default function CollectionsPage() {
   const [sourceTotalCount, setSourceTotalCount] = useState(0);
   const [canSeeAll, setCanSeeAll] = useState(false);
   const [truncated, setTruncated] = useState(false);
+  const [hasMonthlySearched, setHasMonthlySearched] = useState(false);
 
   const resetFilters = () => {
     setSelectedClients([]);
@@ -189,7 +223,11 @@ export default function CollectionsPage() {
       const idToken = await auth.currentUser?.getIdToken(true);
       if (!idToken) throw new Error('No se pudo validar la sesion.');
 
-      const params = new URLSearchParams({ status, fromDate, toDate });
+      const params = new URLSearchParams({ status });
+      if (status === 'paid') {
+        params.set('fromDate', fromDate);
+        params.set('toDate', toDate);
+      }
       const response = await fetch(`/api/tango/collections?${params.toString()}`, {
         headers: { Authorization: `Bearer ${idToken}` },
         cache: 'no-store',
@@ -220,6 +258,46 @@ export default function CollectionsPage() {
     }
   };
 
+  const handleMonthlySearch = async () => {
+    setLoading(true);
+    setHasMonthlySearched(true);
+    setSelectedSellers([]);
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken(true);
+      if (!idToken) throw new Error('No se pudo validar la sesion.');
+
+      const params = new URLSearchParams({
+        company: 'all',
+        fromDate: `${selectedYear}-01-01`,
+        toDate: `${selectedYear}-12-31`,
+      });
+      const response = await fetch(`/api/tango/invoices?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+        cache: 'no-store',
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.details || payload.error || 'Error al consultar Tango');
+
+      setMonthlyInvoices(Array.isArray(payload.list) ? payload.list : []);
+      setSourceTotalCount(Number(payload.sourceTotalCount) || 0);
+      setTruncated(Boolean(payload.truncated));
+      if (payload.truncated) {
+        toast({ title: 'Resultado parcial', description: 'La consulta alcanzo el limite maximo de paginas.', variant: 'destructive' });
+      }
+    } catch (error) {
+      console.error('Error loading monthly Tango invoices:', error);
+      setMonthlyInvoices([]);
+      toast({
+        title: 'No se pudo consultar Tango',
+        description: error instanceof Error ? error.message : 'Error desconocido',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const clientOptions = useMemo(() => {
     const map = new Map<string, FilterOption>();
     records.forEach(record => {
@@ -239,6 +317,18 @@ export default function CollectionsPage() {
     });
     return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [records]);
+
+  const monthlySellerOptions = useMemo(() => {
+    const map = new Map<string, FilterOption>();
+    monthlyInvoices.forEach(invoice => {
+      const code = String(invoice.COD_VENDEDOR || '').trim();
+      const name = String(invoice.NOMBRE_VENDEDOR || '').trim();
+      const value = `${normalizeCode(code)}|${normalizeText(name)}`;
+      if (!value.trim()) return;
+      map.set(value, { value, label: name || code || 'Sin asesor', description: code });
+    });
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [monthlyInvoices]);
 
   const lateBucketOptions = useMemo(() => {
     const buckets = new Set<string>(records.map(record => getLateBucket(record.daysLate)));
@@ -262,11 +352,50 @@ export default function CollectionsPage() {
   }, [records, selectedClients, selectedSellers, selectedLateBuckets]);
 
   const visibleTotal = useMemo(
-    () => filteredRecords.reduce((sum, record) => sum + (record.amount || record.balance || 0), 0),
+    () => filteredRecords.reduce((sum, record) => sum + (record.amount || 0), 0),
     [filteredRecords],
   );
 
   const visibleRecords = filteredRecords.slice(0, ROWS_PER_PAGE);
+
+  const monthlyRows = useMemo(() => {
+    const sellerSet = new Set(selectedSellers);
+    const rows = new Map<string, {
+      clientCode: string;
+      clientName: string;
+      sellerName: string;
+      months: number[];
+      total: number;
+    }>();
+
+    monthlyInvoices
+      .filter(invoice => String(invoice.TIPO_COMPROBANTE || '').trim().toUpperCase() === 'FAC')
+      .filter(invoice => {
+        const sellerValue = `${normalizeCode(invoice.COD_VENDEDOR)}|${normalizeText(invoice.NOMBRE_VENDEDOR)}`;
+        return sellerSet.size === 0 || sellerSet.has(sellerValue);
+      })
+      .forEach(invoice => {
+        const date = String(invoice.FECHA_DE_EMISION || '').slice(0, 10);
+        const monthIndex = Number(date.slice(5, 7)) - 1;
+        if (monthIndex < 0 || monthIndex > 11) return;
+        const clientCode = String(invoice.COD_CLIENTE || '').trim();
+        const clientName = String(invoice.RAZON_SOCIAL || invoice.NOMBRE_COMERCIAL || 'Sin cliente').trim();
+        const key = `${normalizeCode(clientCode)}|${normalizeText(clientName)}`;
+        const current = rows.get(key) || {
+          clientCode,
+          clientName,
+          sellerName: String(invoice.NOMBRE_VENDEDOR || ''),
+          months: Array(12).fill(0),
+          total: 0,
+        };
+        const amount = typeof invoice.TOTAL === 'number' ? invoice.TOTAL : 0;
+        current.months[monthIndex] += amount;
+        current.total += amount;
+        rows.set(key, current);
+      });
+
+    return Array.from(rows.values()).sort((a, b) => b.total - a.total);
+  }, [monthlyInvoices, selectedSellers]);
 
   return (
     <div className="space-y-6">
@@ -275,13 +404,21 @@ export default function CollectionsPage() {
         <p className="text-sm text-muted-foreground">Comprobantes cobrados e imputados, y mora pendiente desde Tango.</p>
       </div>
 
-      <Tabs value={status} onValueChange={(value) => { setStatus(value as CollectionStatus); setRecords([]); setHasSearched(false); resetFilters(); }}>
+      <Tabs value={activeTab} onValueChange={(value) => {
+        setActiveTab(value as CollectionsTab);
+        setRecords([]);
+        setMonthlyInvoices([]);
+        setHasSearched(false);
+        setHasMonthlySearched(false);
+        resetFilters();
+      }}>
         <TabsList>
           <TabsTrigger value="paid">Cobradas / imputadas</TabsTrigger>
           <TabsTrigger value="pending">Mora pendiente</TabsTrigger>
+          <TabsTrigger value="monthly">Clientes por mes</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={status} className="space-y-4">
+        <TabsContent value="paid" className="space-y-4">
           <Card>
             <CardContent className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-[160px_160px_1fr_1fr_1fr_auto] xl:items-end">
               <div className="space-y-2">
@@ -301,7 +438,24 @@ export default function CollectionsPage() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
 
+        <TabsContent value="pending" className="space-y-4">
+          <Card>
+            <CardContent className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto] xl:items-end">
+              <MultiSelectFilter label="Cliente" options={clientOptions} selectedValues={selectedClients} onChange={setSelectedClients} />
+              <MultiSelectFilter label="Asesor" options={sellerOptions} selectedValues={selectedSellers} onChange={setSelectedSellers} />
+              <MultiSelectFilter label="Tiempo de mora" options={lateBucketOptions} selectedValues={selectedLateBuckets} onChange={setSelectedLateBuckets} />
+              <Button onClick={handleSearch} disabled={loading}>
+                {loading ? <Spinner size="small" className="mr-2" /> : <Search className="mr-2 h-4 w-4" />}
+                Consultar
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {(activeTab === 'paid' || activeTab === 'pending') && (
+          <div className="space-y-4">
           {hasSearched && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-3">
@@ -330,16 +484,16 @@ export default function CollectionsPage() {
                           <TableHead>Cliente</TableHead>
                           <TableHead>Asesor</TableHead>
                           <TableHead>Emision</TableHead>
-                          <TableHead>Vencimiento</TableHead>
-                          <TableHead>{status === 'paid' ? 'Pago / imputacion' : 'Dias mora'}</TableHead>
-                          <TableHead className="text-right">Importe</TableHead>
-                          <TableHead className="text-right">Saldo</TableHead>
+                          {status === 'pending' && <TableHead>Vencimiento</TableHead>}
+                          {status === 'pending' && <TableHead>Tiempo de mora</TableHead>}
+                          <TableHead className="text-right">{status === 'paid' ? 'Imputado' : 'Total factura'}</TableHead>
+                          {status === 'paid' && <TableHead className="text-right">Valor factura</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {visibleRecords.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                            <TableCell colSpan={status === 'paid' ? 6 : 7} className="h-24 text-center text-muted-foreground">
                               Sin registros para los filtros seleccionados.
                             </TableCell>
                           </TableRow>
@@ -358,14 +512,10 @@ export default function CollectionsPage() {
                               <div className="text-xs text-muted-foreground">{record.sellerCode || 'Sin codigo'}</div>
                             </TableCell>
                             <TableCell>{record.issueDate || '-'}</TableCell>
-                            <TableCell>{record.dueDate || '-'}</TableCell>
-                            <TableCell>
-                              {status === 'paid'
-                                ? (record.paymentDate || '-')
-                                : lateBucketLabels[getLateBucket(record.daysLate)]}
-                            </TableCell>
+                            {status === 'pending' && <TableCell>{record.dueDate || '-'}</TableCell>}
+                            {status === 'pending' && <TableCell>{lateBucketLabels[getLateBucket(record.daysLate)]}</TableCell>}
                             <TableCell className="text-right font-medium">{formatCurrency(record.amount)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(record.balance)}</TableCell>
+                            {status === 'paid' && <TableCell className="text-right">{formatCurrency(record.invoiceTotal)}</TableCell>}
                           </TableRow>
                         ))}
                       </TableBody>
@@ -374,6 +524,81 @@ export default function CollectionsPage() {
                 )}
                 {filteredRecords.length > ROWS_PER_PAGE && (
                   <p className="mt-3 text-xs text-muted-foreground">Mostrando los primeros {ROWS_PER_PAGE} registros. Ajusta los filtros para acotar el resultado.</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          </div>
+        )}
+
+        <TabsContent value="monthly" className="space-y-4">
+          <Card>
+            <CardContent className="grid gap-4 p-4 md:grid-cols-[180px_1fr_auto] md:items-end">
+              <div className="space-y-2">
+                <Label>Año</Label>
+                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 6 }, (_, index) => String(today.getFullYear() - index)).map(year => (
+                      <SelectItem key={year} value={year}>{year}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <MultiSelectFilter label="Vendedor" options={monthlySellerOptions} selectedValues={selectedSellers} onChange={setSelectedSellers} />
+              <Button onClick={handleMonthlySearch} disabled={loading}>
+                {loading ? <Spinner size="small" className="mr-2" /> : <BarChart3 className="mr-2 h-4 w-4" />}
+                Consultar
+              </Button>
+            </CardContent>
+          </Card>
+
+          {hasMonthlySearched && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Clientes con facturación mensual</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {monthlyRows.length} clientes con comprobantes FAC en {selectedYear}.
+                  {truncated && <span className="ml-2 text-destructive">Resultado parcial.</span>}
+                </p>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex justify-center py-12"><Spinner /></div>
+                ) : (
+                  <div className="overflow-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="min-w-[240px]">Cliente</TableHead>
+                          {MONTHS.map(month => <TableHead key={month} className="min-w-[130px] text-right">{month}</TableHead>)}
+                          <TableHead className="text-right">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {monthlyRows.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={14} className="h-24 text-center text-muted-foreground">
+                              Sin facturación FAC para los filtros seleccionados.
+                            </TableCell>
+                          </TableRow>
+                        ) : monthlyRows.map(row => (
+                          <TableRow key={`${row.clientCode}-${row.clientName}`}>
+                            <TableCell>
+                              <div className="font-medium">{row.clientName}</div>
+                              <div className="text-xs text-muted-foreground">{row.clientCode || 'Sin codigo'}{row.sellerName ? ` · ${row.sellerName}` : ''}</div>
+                            </TableCell>
+                            {row.months.map((amount, index) => (
+                              <TableCell key={MONTHS[index]} className="text-right">
+                                {amount > 0 ? formatCurrency(amount) : '-'}
+                              </TableCell>
+                            ))}
+                            <TableCell className="text-right font-semibold">{formatCurrency(row.total)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>

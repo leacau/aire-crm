@@ -31,7 +31,7 @@ type TangoCollectionRecord = {
   sellerName: string;
   daysLate: number | null;
   amount: number | null;
-  balance: number | null;
+  invoiceTotal: number | null;
   source: Record<string, unknown>;
 };
 
@@ -168,13 +168,24 @@ const fetchTangoList = async (
 const buildRecordKey = (clientCode: string, voucherNumber: string, voucherType: string) =>
   `${normalizeCode(clientCode)}|${String(voucherType || '').trim()}|${String(voucherNumber || '').trim()}`;
 
+const buildVoucherNumberKey = (voucherNumber: string) => `voucher|${String(voucherNumber || '').trim()}`;
+
+const getInvoiceTotal = (
+  invoiceTotals: Map<string, number>,
+  clientCode: string,
+  voucherNumber: string,
+  voucherType: string,
+) => invoiceTotals.get(buildRecordKey(clientCode, voucherNumber, voucherType))
+  ?? invoiceTotals.get(buildVoucherNumberKey(voucherNumber))
+  ?? null;
+
 const normalizeCollectionRecord = (
   raw: Record<string, any>,
   status: CollectionStatus,
   invoiceTotals: Map<string, number>,
 ): TangoCollectionRecord => {
   const issueDate = String(firstValue(raw, ['FECHA_DE_EMISION', 'FECHA_EMISION', 'FECHA']) || '').slice(0, 10);
-  const dueDate = String(firstValue(raw, ['FECHA_VENCIMIENTO', 'FECHA_VTO', 'VENCIMIENTO']) || '').slice(0, 10);
+  const dueDate = String(firstValue(raw, ['FECHA_DE_VENCIMIENTO', 'FECHA_VENCIMIENTO', 'FECHA_VTO', 'VENCIMIENTO']) || '').slice(0, 10);
   const paymentDate = String(firstValue(raw, ['FECHA_IMPUTACION', 'FECHA_PAGO', 'FECHA_COBRO', 'FECHA_CANCELACION']) || '').slice(0, 10);
   const voucherType = String(firstValue(raw, ['TIPO_COMPROBANTE', 'COD_TIPO_COMPROBANTE', 'DESC_TIPO_COMPROBANTE', 'TIPO']) || '').trim();
   const voucherNumber = String(firstValue(raw, ['NRO_COMPROBANTE', 'NUMERO_COMPROBANTE', 'COMPROBANTE', 'N_COMP']) || '').trim();
@@ -183,17 +194,18 @@ const normalizeCollectionRecord = (
   const sellerCode = String(firstValue(raw, ['COD_VENDEDOR', 'COD_VEND', 'VENDEDOR']) || '').trim();
   const sellerName = String(firstValue(raw, ['NOMBRE_VENDEDOR', 'VENDEDOR_NOMBRE', 'NOMBRE_VEND']) || '').trim();
   const daysLate = parseTangoNumber(firstValue(raw, ['DIAS_MORA', 'DIAS_ATRASO', 'DIAS_VENCIDO', 'MORA']));
+  const imputedAmount = parseTangoNumber(firstValue(raw, ['TOTAL_IMPUTADO', 'IMPORTE_IMPUTADO', 'IMPUTADO', 'MONTO_IMPUTADO']));
   const directAmount = parseTangoNumber(firstValue(raw, [
     'TOTAL',
     'IMPORTE',
     'IMPORTE_TOTAL',
     'TOTAL_COMPROBANTE',
-    'IMPORTE_IMPUTADO',
     'MONTO',
   ]));
-  const balance = parseTangoNumber(firstValue(raw, ['SALDO', 'SALDO_PENDIENTE', 'IMPORTE_PENDIENTE']));
-  const totalFromInvoice = invoiceTotals.get(buildRecordKey(clientCode, voucherNumber, voucherType)) ?? null;
-  const amount = directAmount ?? totalFromInvoice;
+  const invoiceTotal = getInvoiceTotal(invoiceTotals, clientCode, voucherNumber, voucherType);
+  const amount = status === 'paid'
+    ? (imputedAmount ?? directAmount)
+    : (invoiceTotal ?? directAmount);
 
   return {
     id: `${status}-${buildRecordKey(clientCode, voucherNumber, voucherType)}-${issueDate || paymentDate || dueDate}`,
@@ -211,7 +223,7 @@ const normalizeCollectionRecord = (
     sellerName,
     daysLate,
     amount,
-    balance,
+    invoiceTotal,
     source: raw,
   };
 };
@@ -226,7 +238,10 @@ const buildInvoiceTotalsIndex = async (apiAuthorization: string) => {
     const voucherNumber = String(firstValue(source, ['NRO_COMPROBANTE', 'NUMERO_COMPROBANTE', 'COMPROBANTE', 'N_COMP']) || '').trim();
     const clientCode = String(firstValue(source, ['COD_CLIENTE', 'CODIGO_CLIENTE', 'CLIENTE']) || '').trim();
     const total = parseTangoNumber(firstValue(source, ['TOTAL', 'IMPORTE', 'TOTAL_COMPROBANTE', 'NETO']));
-    if (total != null) totals.set(buildRecordKey(clientCode, voucherNumber, voucherType), total);
+    if (total != null) {
+      totals.set(buildRecordKey(clientCode, voucherNumber, voucherType), total);
+      if (voucherNumber) totals.set(buildVoucherNumberKey(voucherNumber), total);
+    }
   });
 
   return totals;
@@ -270,7 +285,7 @@ export async function GET(request: Request) {
     const query = STATUS_QUERIES[status];
     const [collectionResult, invoiceTotals] = await Promise.all([
       fetchTangoList(apiAuthorization, query.process, query.customQuery),
-      status === 'pending' ? buildInvoiceTotalsIndex(apiAuthorization) : Promise.resolve(new Map<string, number>()),
+      buildInvoiceTotalsIndex(apiAuthorization),
     ]);
 
     const records = collectionResult.items
@@ -281,8 +296,11 @@ export async function GET(request: Request) {
           : (record.dueDate || record.issueDate);
         const sellerCode = normalizeCode(record.sellerCode);
 
-        return (!fromDate || relevantDate >= fromDate)
-          && (!toDate || relevantDate <= toDate)
+        const matchesDate = status === 'pending'
+          ? true
+          : (!fromDate || relevantDate >= fromDate) && (!toDate || relevantDate <= toDate);
+
+        return matchesDate
           && (!allowedSellerCodes || allowedSellerCodes.has(sellerCode));
       });
 
