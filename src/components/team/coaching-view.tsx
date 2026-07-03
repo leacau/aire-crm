@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import type { User, CoachingSession, CoachingItem, CoachingFollowUpEntry } from '@/lib/types';
-import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, updateCoachingFollowUpEntry, deleteCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem, invalidateCache } from '@/lib/firebase-service';
+import type { User, CoachingSession, CoachingItem, CoachingFollowUpEntry, Client, Prospect } from '@/lib/types';
+import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, updateCoachingFollowUpEntry, deleteCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem, invalidateCache, getClients, getProspects, createProspect } from '@/lib/firebase-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Briefcase, Pencil, X, Check, RefreshCw } from 'lucide-react';
+import { Loader2, Plus, Save, UserCheck, MoreVertical, Trash2, Archive, ArchiveRestore, ChevronDown, ChevronUp, History, Briefcase, Pencil, X, Check, RefreshCw, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -46,6 +46,16 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const [newItemEntity, setNewItemEntity] = useState('');
     const [newItemAction, setNewItemAction] = useState('');
     const [newItemType, setNewItemType] = useState<'client' | 'prospect' | 'general'>('client');
+    const [selectedEntityId, setSelectedEntityId] = useState('');
+    const [entitySearch, setEntitySearch] = useState('');
+    const [ownedClients, setOwnedClients] = useState<Client[]>([]);
+    const [ownedProspects, setOwnedProspects] = useState<Prospect[]>([]);
+    const [loadingEntities, setLoadingEntities] = useState(false);
+    const [creatingProspect, setCreatingProspect] = useState(false);
+    const [prospectContactName, setProspectContactName] = useState('');
+    const [prospectContactPhone, setProspectContactPhone] = useState('');
+    const [prospectContactEmail, setProspectContactEmail] = useState('');
+    const [prospectSector, setProspectSector] = useState('');
     const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
     const [openSessions, setOpenSessions] = useState<Record<string, boolean>>({});
 
@@ -77,6 +87,54 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const [savingEntry, setSavingEntry] = useState(false);
 
     const canManage = isBoss || userInfo?.role === 'Gerencia' || userInfo?.role === 'Jefe' || userInfo?.role === 'Admin';
+
+    useEffect(() => {
+        setSelectedEntityId('');
+        setEntitySearch('');
+        setNewItemEntity('');
+        setCreatingProspect(false);
+    }, [newItemType]);
+
+    useEffect(() => {
+        let active = true;
+        const loadEntities = async () => {
+            if (newItemType === 'general') return;
+            setLoadingEntities(true);
+            try {
+                if (newItemType === 'client') {
+                    const data = await getClients();
+                    if (!active) return;
+                    setOwnedClients(data.filter(client => client.ownerId === advisor.id));
+                } else {
+                    const data = await getProspects();
+                    if (!active) return;
+                    setOwnedProspects(data.filter(prospect => prospect.ownerId === advisor.id && prospect.status !== 'Convertido'));
+                }
+            } catch (error) {
+                console.error('Error loading coaching entities:', error);
+                if (active) toast({ title: "No se pudieron cargar los datos para seleccionar", variant: "destructive" });
+            } finally {
+                if (active) setLoadingEntities(false);
+            }
+        };
+
+        loadEntities();
+        return () => { active = false; };
+    }, [advisor.id, newItemType, toast]);
+
+    const filteredOwnedClients = useMemo(() => {
+        const term = entitySearch.trim().toLowerCase();
+        return ownedClients
+            .filter(client => !term || `${client.denominacion} ${client.razonSocial} ${client.cuit || ''}`.toLowerCase().includes(term))
+            .slice(0, 80);
+    }, [entitySearch, ownedClients]);
+
+    const filteredOwnedProspects = useMemo(() => {
+        const term = entitySearch.trim().toLowerCase();
+        return ownedProspects
+            .filter(prospect => !term || `${prospect.companyName} ${prospect.contactName || ''} ${prospect.contactEmail || ''}`.toLowerCase().includes(term))
+            .slice(0, 80);
+    }, [entitySearch, ownedProspects]);
 
     const getLatestItemUpdate = useCallback((item: CoachingItem) => {
         const entryDates = [
@@ -236,21 +294,103 @@ export function CoachingView({ advisor }: { advisor: User }) {
         }
     };
 
+    const resetNewItemForm = () => {
+        setNewItemEntity('');
+        setNewItemAction('');
+        setSelectedEntityId('');
+        setEntitySearch('');
+        setCreatingProspect(false);
+        setProspectContactName('');
+        setProspectContactPhone('');
+        setProspectContactEmail('');
+        setProspectSector('');
+    };
+
     const handleAddItem = async (sessionId: string) => {
-        if (!newItemEntity.trim() || !newItemAction.trim()) return;
-        
-        // 🟢 VALIDACIÓN DE UNIDAD (Evitar que creen manual un cliente que ya está en la lista activa de la sesión)
+        if (!newItemAction.trim()) return;
+
+        let entityId = '';
+        let entityName = newItemEntity.trim();
+        let entityType: CoachingItem['entityType'] = newItemType;
+
+        if (newItemType === 'client') {
+            const selectedClient = ownedClients.find(client => client.id === selectedEntityId);
+            if (!selectedClient) {
+                toast({ title: "Seleccioná un cliente", description: "El seguimiento debe quedar vinculado a un cliente de tu cartera.", variant: "destructive" });
+                return;
+            }
+            entityId = selectedClient.id;
+            entityName = selectedClient.denominacion || selectedClient.razonSocial;
+        }
+
+        if (newItemType === 'prospect') {
+            if (creatingProspect) {
+                if (!newItemEntity.trim() || !userInfo) {
+                    toast({ title: "Completá el nombre del prospecto", variant: "destructive" });
+                    return;
+                }
+                try {
+                    entityId = await createProspect({
+                        companyName: newItemEntity.trim(),
+                        contactName: prospectContactName.trim(),
+                        contactPhone: prospectContactPhone.trim(),
+                        contactEmail: prospectContactEmail.trim(),
+                        sector: prospectSector.trim(),
+                        notes: newItemAction.trim(),
+                        status: 'Nuevo',
+                    }, advisor.id, advisor.name, { skipCoachingUpdate: true });
+                    entityName = newItemEntity.trim();
+                    setOwnedProspects(prev => [{
+                        id: entityId,
+                        companyName: entityName,
+                        contactName: prospectContactName.trim(),
+                        contactPhone: prospectContactPhone.trim(),
+                        contactEmail: prospectContactEmail.trim(),
+                        sector: prospectSector.trim(),
+                        notes: newItemAction.trim(),
+                        status: 'Nuevo',
+                        ownerId: advisor.id,
+                        ownerName: advisor.name,
+                        createdAt: new Date().toISOString(),
+                    }, ...prev]);
+                } catch (error) {
+                    console.error('Error creating prospect from coaching:', error);
+                    toast({ title: "No se pudo crear el prospecto", variant: "destructive" });
+                    return;
+                }
+            } else {
+                const selectedProspect = ownedProspects.find(prospect => prospect.id === selectedEntityId);
+                if (!selectedProspect) {
+                    toast({ title: "Seleccioná un prospecto", description: "O creá uno nuevo desde este mismo formulario.", variant: "destructive" });
+                    return;
+                }
+                entityId = selectedProspect.id;
+                entityName = selectedProspect.companyName;
+            }
+        }
+
+        if (newItemType === 'general') {
+            if (!newItemEntity.trim()) return;
+            entityId = `general_${newItemEntity.trim().toLowerCase()}_${Date.now()}`;
+            entityType = 'general';
+        }
+
+        // Validación de unidad: evita crear dos seguimientos abiertos para la misma entidad.
         const session = sessions.find(s => s.id === sessionId);
         if (session) {
             const existsOpen = session.items.some(i => 
-                i.entityName.toLowerCase() === newItemEntity.trim().toLowerCase() && 
+                (
+                    entityType === 'general'
+                        ? i.entityName.toLowerCase() === entityName.toLowerCase()
+                        : i.entityType === entityType && i.entityId === entityId
+                ) &&
                 (i.status === 'Pendiente' || i.status === 'En Proceso')
             );
 
             if (existsOpen) {
                 toast({ 
                     title: "Ya existe un seguimiento", 
-                    description: `Ya hay un ítem abierto para "${newItemEntity}". Por favor, agrega tus notas o pedidos a ese mismo ítem.`, 
+                    description: `Ya hay un ítem abierto para "${entityName}". Por favor, agrega tus notas o pedidos a ese mismo ítem.`, 
                     variant: "destructive" 
                 });
                 return;
@@ -263,10 +403,9 @@ export function CoachingView({ advisor }: { advisor: User }) {
             id: '', 
             taskId: '', 
             originalCreatedAt: new Date().toISOString(),
-            entityType: newItemType,
-            // 🟢 SOLUCIÓN AL BUG: Agregamos un entityId único basado en el nombre para evitar que Firebase fusione las tareas manuales
-            entityId: `manual_${newItemEntity.trim().toLowerCase()}_${Date.now()}`,
-            entityName: newItemEntity,
+            entityType,
+            entityId,
+            entityName,
             action: newItemAction,
             status: 'Pendiente',
             advisorNotes: '',
@@ -275,8 +414,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
 
         try {
             await addItemsToSession(sessionId, [item]);
-            setNewItemEntity('');
-            setNewItemAction('');
+            resetNewItemForm();
             loadData();
             toast({ title: canManage ? "Tarea asignada" : "Agregado a cartera" });
         } catch (error) {
@@ -645,7 +783,9 @@ export function CoachingView({ advisor }: { advisor: User }) {
             
             <div className="space-y-3 border-r md:pr-4 border-dashed md:border-solid border-border/50 relative">
                 <div className="flex flex-wrap items-center gap-2 pr-6">
-                    <Badge variant="outline" className="capitalize bg-background text-[10px]">{item.entityType === 'general' ? 'General' : 'Cliente/Prospecto'}</Badge>
+                    <Badge variant="outline" className="capitalize bg-background text-[10px]">
+                        {item.entityType === 'client' ? 'Cliente' : item.entityType === 'prospect' ? 'Prospecto' : item.entityType === 'general' ? 'General' : 'Oportunidad'}
+                    </Badge>
                     <span className="font-semibold text-sm truncate block max-w-full" title={item.entityName}>{item.entityName}</span>
                 </div>
                 
@@ -961,7 +1101,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                 )}
 
                                 {session.status === 'Open' && (
-                                    <div className={`p-3 rounded-lg border border-dashed flex flex-col md:flex-row gap-3 items-end mt-4 ${canManage ? 'bg-muted/40' : 'bg-blue-50/50 border-blue-200'}`}>
+                                    <div className={`p-3 rounded-lg border border-dashed grid grid-cols-1 md:grid-cols-[140px_minmax(260px,1fr)_minmax(260px,1fr)_auto] gap-3 items-end mt-4 ${canManage ? 'bg-muted/40' : 'bg-blue-50/50 border-blue-200'}`}>
                                         <div className="w-full md:w-[120px] space-y-1">
                                             <Label className="text-xs">Tipo</Label>
                                             <Select value={newItemType} onValueChange={(v: any) => setNewItemType(v)}>
@@ -973,16 +1113,84 @@ export function CoachingView({ advisor }: { advisor: User }) {
                                                 </SelectContent>
                                             </Select>
                                         </div>
-                                        <div className="w-full md:w-[200px] space-y-1">
-                                            <Label className="text-xs">Nombre</Label>
-                                            <Input 
-                                                className="h-8 text-xs bg-background"
-                                                placeholder="Ej: Coca Cola" 
-                                                value={newItemEntity}
-                                                onChange={e => setNewItemEntity(e.target.value)}
-                                            />
+
+                                        <div className="w-full space-y-1">
+                                            <Label className="text-xs">
+                                                {newItemType === 'client' ? 'Cliente' : newItemType === 'prospect' ? 'Prospecto' : 'Nombre'}
+                                            </Label>
+
+                                            {newItemType === 'general' && (
+                                                <Input
+                                                    className="h-8 text-xs bg-background"
+                                                    placeholder="Ej: Gestión general"
+                                                    value={newItemEntity}
+                                                    onChange={e => setNewItemEntity(e.target.value)}
+                                                />
+                                            )}
+
+                                            {newItemType !== 'general' && (
+                                                <div className="space-y-2">
+                                                    <div className="relative">
+                                                        <Search className="pointer-events-none absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+                                                        <Input
+                                                            className="h-8 bg-background pl-8 text-xs"
+                                                            placeholder={newItemType === 'client' ? 'Buscar cliente propio...' : 'Buscar prospecto propio...'}
+                                                            value={entitySearch}
+                                                            onChange={e => setEntitySearch(e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <Select
+                                                        value={creatingProspect ? '__new__' : selectedEntityId}
+                                                        onValueChange={(value) => {
+                                                            if (value === '__new__') {
+                                                                setCreatingProspect(true);
+                                                                setSelectedEntityId('');
+                                                                setNewItemEntity(entitySearch);
+                                                                return;
+                                                            }
+                                                            setCreatingProspect(false);
+                                                            setSelectedEntityId(value);
+                                                            const selected = newItemType === 'client'
+                                                                ? ownedClients.find(client => client.id === value)
+                                                                : ownedProspects.find(prospect => prospect.id === value);
+                                                            setNewItemEntity(newItemType === 'client'
+                                                                ? ((selected as Client | undefined)?.denominacion || '')
+                                                                : ((selected as Prospect | undefined)?.companyName || '')
+                                                            );
+                                                        }}
+                                                        disabled={loadingEntities}
+                                                    >
+                                                        <SelectTrigger className="h-8 bg-background text-xs">
+                                                            <SelectValue placeholder={loadingEntities ? 'Cargando...' : 'Seleccionar'} />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {newItemType === 'prospect' && (
+                                                                <SelectItem value="__new__">Crear nuevo prospecto</SelectItem>
+                                                            )}
+                                                            {(newItemType === 'client' ? filteredOwnedClients : filteredOwnedProspects).map(entity => (
+                                                                <SelectItem key={entity.id} value={entity.id}>
+                                                                    {newItemType === 'client'
+                                                                        ? (entity as Client).denominacion
+                                                                        : (entity as Prospect).companyName}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            )}
+
+                                            {creatingProspect && newItemType === 'prospect' && (
+                                                <div className="grid grid-cols-1 gap-2 rounded-md border bg-background p-2 md:grid-cols-2">
+                                                    <Input className="h-8 text-xs" placeholder="Nombre empresa" value={newItemEntity} onChange={e => setNewItemEntity(e.target.value)} />
+                                                    <Input className="h-8 text-xs" placeholder="Contacto" value={prospectContactName} onChange={e => setProspectContactName(e.target.value)} />
+                                                    <Input className="h-8 text-xs" placeholder="Teléfono" value={prospectContactPhone} onChange={e => setProspectContactPhone(e.target.value)} />
+                                                    <Input className="h-8 text-xs" placeholder="Correo" value={prospectContactEmail} onChange={e => setProspectContactEmail(e.target.value)} />
+                                                    <Input className="h-8 text-xs md:col-span-2" placeholder="Rubro / sector" value={prospectSector} onChange={e => setProspectSector(e.target.value)} />
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="flex-1 w-full space-y-1">
+
+                                        <div className="w-full space-y-1">
                                             <Label className="text-xs">{canManage ? 'Solicitud / Pedido' : 'Propuesta / Tarea'}</Label>
                                             <Input 
                                                 className="h-8 text-xs bg-background"

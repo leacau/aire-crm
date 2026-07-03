@@ -1210,7 +1210,12 @@ export const getProspects = async (): Promise<Prospect[]> => {
     return prospects;
 };
 
-export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'>, userId: string, userName: string): Promise<string> => {
+export const createProspect = async (
+    prospectData: Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'>,
+    userId: string,
+    userName: string,
+    options?: { skipCoachingUpdate?: boolean },
+): Promise<string> => {
     const dataToSave = {
         ...prospectData,
         ownerId: userId,
@@ -1243,10 +1248,12 @@ export const createProspect = async (prospectData: Omit<Prospect, 'id' | 'create
         details: `creó el prospecto <strong>${prospectData.companyName}</strong>`,
         ownerName: userName,
     });
-    try {
-        await autoUpdateCoachingSession(userId, userName, 'prospect', docRef.id, prospectData.companyName, 'Nuevo prospecto cargado en el sistema.');
-    } catch (e) {
-        console.error('Error auto-updating coaching:', e);
+    if (!options?.skipCoachingUpdate) {
+        try {
+            await autoUpdateCoachingSession(userId, userName, 'prospect', docRef.id, prospectData.companyName, 'Nuevo prospecto cargado en el sistema.');
+        } catch (e) {
+            console.error('Error auto-updating coaching:', e);
+        }
     }
     return docRef.id;
 };
