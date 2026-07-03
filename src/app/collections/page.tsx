@@ -38,6 +38,8 @@ type TangoCollectionRecord = {
   daysLate: number | null;
   amount: number | null;
   invoiceTotal: number | null;
+  imputedAmount: number | null;
+  pendingAmount: number | null;
 };
 
 type TangoInvoice = {
@@ -519,13 +521,15 @@ export default function CollectionsPage() {
                           {status === 'pending' && <TableHead>Vencimiento</TableHead>}
                           {status === 'pending' && <TableHead>Tiempo de mora</TableHead>}
                           <TableHead className="text-right">{status === 'paid' ? 'Imputado' : 'Total factura'}</TableHead>
+                          {status === 'pending' && <TableHead className="text-right">Total imputado</TableHead>}
+                          {status === 'pending' && <TableHead className="text-right">Saldo pendiente</TableHead>}
                           {status === 'paid' && <TableHead className="text-right">Valor factura</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {visibleRecords.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={status === 'paid' ? 6 : 7} className="h-24 text-center text-muted-foreground">
+                            <TableCell colSpan={status === 'paid' ? 6 : 9} className="h-24 text-center text-muted-foreground">
                               Sin registros para los filtros seleccionados.
                             </TableCell>
                           </TableRow>
@@ -546,7 +550,11 @@ export default function CollectionsPage() {
                             <TableCell>{record.issueDate || '-'}</TableCell>
                             {status === 'pending' && <TableCell>{record.dueDate || '-'}</TableCell>}
                             {status === 'pending' && <TableCell>{lateBucketLabels[getLateBucket(record.daysLate)]}</TableCell>}
-                            <TableCell className="text-right font-medium">{formatCurrency(record.amount)}</TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(status === 'pending' ? record.invoiceTotal : record.amount)}
+                            </TableCell>
+                            {status === 'pending' && <TableCell className="text-right">{formatCurrency(record.imputedAmount || 0)}</TableCell>}
+                            {status === 'pending' && <TableCell className="text-right font-semibold">{formatCurrency(record.pendingAmount ?? record.amount)}</TableCell>}
                             {status === 'paid' && <TableCell className="text-right">{formatCurrency(record.invoiceTotal)}</TableCell>}
                           </TableRow>
                         ))}

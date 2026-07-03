@@ -10,7 +10,7 @@ const MAX_PAGES = 80;
 
 const STATUS_QUERIES = {
   paid: { process: '12919', customQuery: '1239' },
-  pending: { process: '17952', customQuery: '1240' },
+  pending: { process: '12919', customQuery: '1241' },
 } as const;
 
 type CollectionStatus = keyof typeof STATUS_QUERIES;
@@ -32,6 +32,8 @@ type TangoCollectionRecord = {
   daysLate: number | null;
   amount: number | null;
   invoiceTotal: number | null;
+  imputedAmount: number | null;
+  pendingAmount: number | null;
   source: Record<string, unknown>;
 };
 
@@ -214,6 +216,9 @@ const getInvoiceTotal = (
   ?? invoiceTotals.get(buildVoucherNumberKey(voucherNumber))
   ?? null;
 
+const getCollectionGroupKey = (record: Pick<TangoCollectionRecord, 'clientCode' | 'voucherNumber' | 'voucherType'>) =>
+  buildRecordKey(record.clientCode, record.voucherNumber, record.voucherType) || buildVoucherNumberKey(record.voucherNumber);
+
 const normalizeCollectionRecord = (
   raw: Record<string, any>,
   status: CollectionStatus,
@@ -237,10 +242,13 @@ const normalizeCollectionRecord = (
     'TOTAL_COMPROBANTE',
     'MONTO',
   ]));
-  const invoiceTotal = getInvoiceTotal(invoiceTotals, clientCode, voucherNumber, voucherType);
+  const invoiceTotal = getInvoiceTotal(invoiceTotals, clientCode, voucherNumber, voucherType) ?? directAmount;
+  const pendingAmount = status === 'pending' && invoiceTotal != null
+    ? Math.max(invoiceTotal - (imputedAmount || 0), 0)
+    : null;
   const amount = status === 'paid'
     ? (imputedAmount ?? directAmount)
-    : (invoiceTotal ?? directAmount);
+    : (pendingAmount ?? invoiceTotal ?? directAmount);
 
   return {
     id: `${status}-${buildRecordKey(clientCode, voucherNumber, voucherType)}-${issueDate || paymentDate || dueDate}`,
@@ -259,8 +267,52 @@ const normalizeCollectionRecord = (
     daysLate,
     amount,
     invoiceTotal,
+    imputedAmount,
+    pendingAmount,
     source: raw,
   };
+};
+
+const aggregatePendingRecords = (records: TangoCollectionRecord[]) => {
+  const grouped = new Map<string, TangoCollectionRecord>();
+
+  records.forEach(record => {
+    const key = getCollectionGroupKey(record);
+    const current = grouped.get(key);
+    if (!current) {
+      grouped.set(key, {
+        ...record,
+        imputedAmount: record.imputedAmount || 0,
+        pendingAmount: null,
+        amount: null,
+      });
+      return;
+    }
+
+    current.imputedAmount = (current.imputedAmount || 0) + (record.imputedAmount || 0);
+    if (!current.issueDate && record.issueDate) current.issueDate = record.issueDate;
+    if (!current.dueDate && record.dueDate) current.dueDate = record.dueDate;
+    if (!current.paymentDate && record.paymentDate) current.paymentDate = record.paymentDate;
+    if (!current.sellerCode && record.sellerCode) current.sellerCode = record.sellerCode;
+    if (!current.sellerName && record.sellerName) current.sellerName = record.sellerName;
+    if (current.invoiceTotal == null && record.invoiceTotal != null) current.invoiceTotal = record.invoiceTotal;
+  });
+
+  return Array.from(grouped.values()).map(record => {
+    const imputedAmount = record.imputedAmount || 0;
+    const pendingAmount = record.invoiceTotal != null
+      ? Math.max(record.invoiceTotal - imputedAmount, 0)
+      : null;
+
+    return {
+      ...record,
+      id: `pending-${getCollectionGroupKey(record)}`,
+      imputedAmount,
+      pendingAmount,
+      amount: pendingAmount ?? record.amount,
+      daysLate: calculateDaysLate(record.dueDate),
+    };
+  });
 };
 
 const buildInvoiceTotalsIndex = async (apiAuthorization: string) => {
@@ -323,8 +375,9 @@ export async function GET(request: Request) {
       buildInvoiceTotalsIndex(apiAuthorization),
     ]);
 
-    const records = collectionResult.items
-      .map(raw => normalizeCollectionRecord(raw as Record<string, any>, status, invoiceTotals))
+    const normalizedRecords = collectionResult.items
+      .map(raw => normalizeCollectionRecord(raw as Record<string, any>, status, invoiceTotals));
+    const records = (status === 'pending' ? aggregatePendingRecords(normalizedRecords) : normalizedRecords)
       .filter(record => {
         const relevantDate = status === 'paid'
           ? (record.paymentDate || record.issueDate)
