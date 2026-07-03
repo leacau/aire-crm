@@ -78,8 +78,39 @@ const parseFlexibleDate = (raw?: string | null) => {
 const normalizeDate = (raw?: string) => {
   const parsed = parseFlexibleDate(raw);
   if (parsed) return parsed.toISOString();
-  return raw ? raw.trim() : undefined;
+  return raw ? String(raw).trim() : undefined;
 };
+
+const normalizeDateKey = (raw: unknown) => {
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw.toISOString().split('T')[0];
+  if (raw && typeof raw === 'object' && typeof (raw as any).toDate === 'function') {
+    const parsedTimestamp = (raw as any).toDate();
+    if (parsedTimestamp instanceof Date && !Number.isNaN(parsedTimestamp.getTime())) {
+      return parsedTimestamp.toISOString().split('T')[0];
+    }
+  }
+  const parsed = parseFlexibleDate(raw == null ? null : String(raw));
+  if (parsed) return parsed.toISOString().split('T')[0];
+  const value = raw == null ? '' : String(raw).trim();
+  return value ? value.split('T')[0] : '';
+};
+
+const normalizeDateForComparison = (raw: unknown) => {
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw;
+  if (raw && typeof raw === 'object' && typeof (raw as any).toDate === 'function') {
+    const parsedTimestamp = (raw as any).toDate();
+    if (parsedTimestamp instanceof Date && !Number.isNaN(parsedTimestamp.getTime())) return parsedTimestamp;
+  }
+  return parseFlexibleDate(raw == null ? null : String(raw));
+};
+
+const isOfficialSellerName = (value?: string | null) => (
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .includes('oficial')
+);
 
 const computeDaysLate = (dueDate?: string) => {
   const parsedDate = parseFlexibleDate(dueDate);
@@ -387,7 +418,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         const getIdentity = (inv: Invoice) => {
              const opp = opportunitiesMap[inv.opportunityId];
              const clientId = opp?.clientId || 'unknown';
-             const date = inv.date ? inv.date.split('T')[0] : 'nodate';
+             const date = normalizeDateKey(inv.date) || 'nodate';
              const amount = Math.abs(inv.amount).toFixed(2);
              return `${clientId}|${date}|${amount}`;
         };
@@ -549,6 +580,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
         const client = clients.find(c => c.id === opp.clientId);
         isOwner = client?.ownerId === userInfo.id;
       }
+      const client = clients.find(c => c.id === opp.clientId);
+      if (isOfficialSellerName(client?.ownerName)) return false;
       return isOwner;
     });
 
@@ -571,9 +604,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 const monthDate = addMonths(creationDate, i);
 
                 if (isDateInRange(monthDate)) {
-                    const hasInvoiceForMonth = (invoicesByOppId[opp.id] || []).some(inv =>
-                        inv.date && !inv.isCreditNote && isSameMonth(parseISO(inv.date), monthDate)
-                    );
+        const hasInvoiceForMonth = (invoicesByOppId[opp.id] || []).some(inv => {
+                        const invoiceDate = normalizeDateForComparison(inv.date);
+                        return invoiceDate && !inv.isCreditNote && isSameMonth(invoiceDate, monthDate);
+                    });
 
                     if (!hasInvoiceForMonth) {
                         const virtualOpp = {
@@ -587,9 +621,10 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             }
         } else { 
             if (isDateInRange(creationDate)) {
-                const hasInvoiceInMonth = (invoicesByOppId[opp.id] || []).some(inv =>
-                    inv.date && !inv.isCreditNote && isSameMonth(parseISO(inv.date), creationDate)
-                );
+                const hasInvoiceInMonth = (invoicesByOppId[opp.id] || []).some(inv => {
+                    const invoiceDate = normalizeDateForComparison(inv.date);
+                    return invoiceDate && !inv.isCreditNote && isSameMonth(invoiceDate, creationDate);
+                });
 
                 if (!hasInvoiceInMonth) {
                     toInvoiceOpps.push({ ...opp, closeDate: creationDate.toISOString() });
@@ -610,20 +645,28 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       userFilteredInvoices = invoices.filter(inv => userOppIds.has(inv.opportunityId));
     }
     
-    const visibleInvoices = markedOnly ? userFilteredInvoices.filter(isDeletionMarked) : userFilteredInvoices;
+    const visibleInvoicesBase = userFilteredInvoices.filter(inv => {
+        const opp = opportunities.find(o => o.id === inv.opportunityId);
+        const client = opp ? clients.find(c => c.id === opp.clientId) : undefined;
+        return !isOfficialSellerName(client?.ownerName);
+    });
+    const visibleInvoices = markedOnly ? visibleInvoicesBase.filter(isDeletionMarked) : visibleInvoicesBase;
 
-    const toCollectInvoices = visibleInvoices.filter(inv =>
-        inv.date && isDateInRange(parseISO(inv.date)) && inv.status !== 'Pagada' && !inv.isCreditNote
-    );
-    const paidInvoices = visibleInvoices.filter(inv =>
-        inv.datePaid && isDateInRange(parseISO(inv.datePaid)) && inv.status === 'Pagada'
-    );
+    const toCollectInvoices = visibleInvoices.filter(inv => {
+        const invoiceDate = normalizeDateForComparison(inv.date);
+        return invoiceDate && isDateInRange(invoiceDate) && inv.status !== 'Pagada' && !inv.isCreditNote;
+    });
+    const paidInvoices = visibleInvoices.filter(inv => {
+        const paidDate = normalizeDateForComparison(inv.datePaid);
+        return paidDate && isDateInRange(paidDate) && inv.status === 'Pagada';
+    });
 
     const creditNoteInvoices = visibleInvoices.filter(inv => {
         if (!inv.isCreditNote) return false;
         if (!inv.creditNoteMarkedAt) return false;
         try {
-            return isDateInRange(parseISO(inv.creditNoteMarkedAt));
+            const markedAt = normalizeDateForComparison(inv.creditNoteMarkedAt);
+            return !!markedAt && isDateInRange(markedAt);
         } catch (error) {
             return false;
         }
@@ -660,6 +703,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     const parseDueDate = (value?: string | null) => parseFlexibleDate(value);
 
     return [...baseList]
+      .filter(entry => !isOfficialSellerName(entry.advisorName))
       .map((entry) => ({
         ...entry,
         daysLate: computeDaysLate(entry.dueDate || undefined) ?? entry.daysLate,
