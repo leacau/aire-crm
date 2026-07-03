@@ -109,6 +109,7 @@ const normalizeCode = (value: unknown) => {
   const normalized = String(value || '').trim().replace(/^0+/, '');
   return normalized || (String(value || '').trim() ? '0' : '');
 };
+const isOfficialSeller = (value: unknown) => normalize(value).includes('oficial');
 
 const getSellerCodesForCompany = (
   sellerConfig: Array<{ companyName: string; codes: string[] }> | undefined,
@@ -260,6 +261,7 @@ export async function GET(request: Request) {
         && (!toDate || issueDate <= toDate)
         && (!clientFilter || clientText.includes(clientFilter))
         && (!sellerFilter || sellerText.includes(sellerFilter))
+        && !isOfficialSeller(invoice.NOMBRE_VENDEDOR)
         && (!allowedSellerCodes || allowedSellerCodes.has(sellerCode));
     });
 

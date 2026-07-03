@@ -47,6 +47,7 @@ const normalizeCode = (value: unknown) => {
 };
 
 const normalizeCompanyName = (value: unknown) => normalize(value).replace(/\s+/g, ' ');
+const isOfficialSeller = (value: unknown) => normalize(value).includes('oficial');
 
 const getTangoEndpoint = () => {
   const configuredValue = process.env.TANGO_API_BASE_URL?.trim();
@@ -301,6 +302,7 @@ export async function GET(request: Request) {
           : (!fromDate || relevantDate >= fromDate) && (!toDate || relevantDate <= toDate);
 
         return matchesDate
+          && !isOfficialSeller(record.sellerName)
           && (!allowedSellerCodes || allowedSellerCodes.has(sellerCode));
       });
 

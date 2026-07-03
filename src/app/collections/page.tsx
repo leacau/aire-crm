@@ -389,15 +389,15 @@ export default function CollectionsPage() {
       total: number;
     }>();
 
-    const findCrmClientName = (invoice: TangoInvoice, clientCode: string) => {
+    const findCrmClient = (invoice: TangoInvoice, clientCode: string) => {
       const codeField = getClientCodeField(invoice._companyId);
       const normalizedClientCode = normalizeCode(clientCode);
-      const crmClient = crmClients.find(client => normalizeCode((client as any)[codeField]) === normalizedClientCode);
-      return crmClient?.denominacion || crmClient?.razonSocial || '';
+      return crmClients.find(client => normalizeCode((client as any)[codeField]) === normalizedClientCode);
     };
 
     monthlyInvoices
       .filter(invoice => String(invoice.TIPO_COMPROBANTE || '').trim().toUpperCase() === 'FAC')
+      .filter(invoice => !normalizeText(invoice.NOMBRE_VENDEDOR).includes('oficial'))
       .filter(invoice => {
         const sellerValue = `${normalizeCode(invoice.COD_VENDEDOR)}|${normalizeText(invoice.NOMBRE_VENDEDOR)}`;
         return sellerSet.size === 0 || sellerSet.has(sellerValue);
@@ -408,8 +408,9 @@ export default function CollectionsPage() {
         if (monthIndex < 0 || monthIndex > 11) return;
         const clientCode = String(invoice.COD_CLIENTE || '').trim();
         const clientName = String(invoice.RAZON_SOCIAL || invoice.NOMBRE_COMERCIAL || 'Sin cliente').trim();
-        const crmClientName = findCrmClientName(invoice, clientCode);
-        const key = `${normalizeCode(clientCode)}|${normalizeText(clientName)}`;
+        const crmClient = findCrmClient(invoice, clientCode);
+        const crmClientName = crmClient?.denominacion || crmClient?.razonSocial || '';
+        const key = crmClient?.id || `${normalizeCode(clientCode)}|${normalizeText(clientName)}`;
         const current = rows.get(key) || {
           clientCode,
           clientName,

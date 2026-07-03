@@ -41,6 +41,10 @@ const isFacInvoice = (invoice: TangoObjectiveInvoice) => (
   String(invoice.TIPO_COMPROBANTE || '').trim().toUpperCase() === 'FAC'
 );
 
+const isOfficialSeller = (invoice: TangoObjectiveInvoice) => (
+  normalizeCompanyName(invoice.NOMBRE_VENDEDOR).includes('oficial')
+);
+
 const getInvoiceDate = (invoice: TangoObjectiveInvoice) => (
   String(invoice.FECHA_DE_EMISION || '').slice(0, 10)
 );
@@ -102,7 +106,7 @@ export function summarizeTangoObjectiveBilling(
   invoices.forEach(invoice => {
     const issueDate = getInvoiceDate(invoice);
     const invoiceTotal = Number(invoice.TOTAL || 0);
-    if (!isFacInvoice(invoice) || !issueDate || issueDate < from || issueDate > to || !Number.isFinite(invoiceTotal)) {
+    if (!isFacInvoice(invoice) || isOfficialSeller(invoice) || !issueDate || issueDate < from || issueDate > to || !Number.isFinite(invoiceTotal)) {
       return;
     }
 
