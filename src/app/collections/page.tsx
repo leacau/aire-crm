@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth } from 'date-fns';
 import { BarChart3, Search } from 'lucide-react';
 import { auth } from '@/lib/firebase';
@@ -16,6 +16,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { getClients } from '@/lib/firebase-service';
+import type { Client } from '@/lib/types';
 
 type CollectionStatus = 'paid' | 'pending';
 type CollectionsTab = CollectionStatus | 'monthly';
@@ -48,6 +50,7 @@ type TangoInvoice = {
   RAZON_SOCIAL?: string;
   NOMBRE_COMERCIAL?: string;
   TOTAL?: number | null;
+  _companyId?: string;
 };
 
 type FilterOption = {
@@ -113,6 +116,12 @@ const MONTHS = [
   'Noviembre',
   'Diciembre',
 ];
+
+const getClientCodeField = (companyId?: string) => {
+  if (companyId === '4') return 'idAire';
+  if (companyId === '5') return 'idAireSrl';
+  return 'idAireDigital';
+};
 
 const lateBucketLabels = lateBucketOptionsBase.reduce<Record<string, string>>((acc, option) => {
   acc[option.value] = option.label;
@@ -193,6 +202,7 @@ export default function CollectionsPage() {
   const [selectedYear, setSelectedYear] = useState(String(today.getFullYear()));
   const [records, setRecords] = useState<TangoCollectionRecord[]>([]);
   const [monthlyInvoices, setMonthlyInvoices] = useState<TangoInvoice[]>([]);
+  const [crmClients, setCrmClients] = useState<Client[]>([]);
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [selectedSellers, setSelectedSellers] = useState<string[]>([]);
   const [selectedLateBuckets, setSelectedLateBuckets] = useState<string[]>([]);
@@ -208,6 +218,16 @@ export default function CollectionsPage() {
     setSelectedSellers([]);
     setSelectedLateBuckets([]);
   };
+
+  useEffect(() => {
+    let active = true;
+    getClients()
+      .then(clients => {
+        if (active) setCrmClients(clients);
+      })
+      .catch(error => console.error('Error loading CRM clients for Tango collections:', error));
+    return () => { active = false; };
+  }, []);
 
   const handleSearch = async () => {
     if (fromDate && toDate && fromDate > toDate) {
@@ -364,9 +384,17 @@ export default function CollectionsPage() {
       clientCode: string;
       clientName: string;
       sellerName: string;
+      crmClientName?: string;
       months: number[];
       total: number;
     }>();
+
+    const findCrmClientName = (invoice: TangoInvoice, clientCode: string) => {
+      const codeField = getClientCodeField(invoice._companyId);
+      const normalizedClientCode = normalizeCode(clientCode);
+      const crmClient = crmClients.find(client => normalizeCode((client as any)[codeField]) === normalizedClientCode);
+      return crmClient?.denominacion || crmClient?.razonSocial || '';
+    };
 
     monthlyInvoices
       .filter(invoice => String(invoice.TIPO_COMPROBANTE || '').trim().toUpperCase() === 'FAC')
@@ -380,14 +408,17 @@ export default function CollectionsPage() {
         if (monthIndex < 0 || monthIndex > 11) return;
         const clientCode = String(invoice.COD_CLIENTE || '').trim();
         const clientName = String(invoice.RAZON_SOCIAL || invoice.NOMBRE_COMERCIAL || 'Sin cliente').trim();
+        const crmClientName = findCrmClientName(invoice, clientCode);
         const key = `${normalizeCode(clientCode)}|${normalizeText(clientName)}`;
         const current = rows.get(key) || {
           clientCode,
           clientName,
           sellerName: String(invoice.NOMBRE_VENDEDOR || ''),
+          crmClientName,
           months: Array(12).fill(0),
           total: 0,
         };
+        if (!current.crmClientName && crmClientName) current.crmClientName = crmClientName;
         const amount = typeof invoice.TOTAL === 'number' ? invoice.TOTAL : 0;
         current.months[monthIndex] += amount;
         current.total += amount;
@@ -395,7 +426,7 @@ export default function CollectionsPage() {
       });
 
     return Array.from(rows.values()).sort((a, b) => b.total - a.total);
-  }, [monthlyInvoices, selectedSellers]);
+  }, [crmClients, monthlyInvoices, selectedSellers]);
 
   return (
     <div className="space-y-6">
@@ -587,6 +618,9 @@ export default function CollectionsPage() {
                             <TableCell>
                               <div className="font-medium">{row.clientName}</div>
                               <div className="text-xs text-muted-foreground">{row.clientCode || 'Sin codigo'}{row.sellerName ? ` · ${row.sellerName}` : ''}</div>
+                              <div className={row.crmClientName ? 'text-xs text-emerald-700' : 'text-xs text-amber-700'}>
+                                CRM: {row.crmClientName || 'Sin mapear'}
+                              </div>
                             </TableCell>
                             {row.months.map((amount, index) => (
                               <TableCell key={MONTHS[index]} className="text-right">
