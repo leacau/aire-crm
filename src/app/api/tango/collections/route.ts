@@ -98,6 +98,40 @@ const firstValue = (source: Record<string, any>, keys: string[]) => {
   return '';
 };
 
+const parseTangoDate = (value: unknown) => {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const isoDate = raw.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+    const parsed = new Date(`${isoDate}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (slashMatch) {
+    const year = Number(slashMatch[3].length === 2 ? `20${slashMatch[3]}` : slashMatch[3]);
+    const month = Number(slashMatch[2]) - 1;
+    const day = Number(slashMatch[1]);
+    const parsed = new Date(year, month, day);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const calculateDaysLate = (dueDate: string) => {
+  const due = parseTangoDate(dueDate);
+  if (!due) return null;
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const dueStart = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const diff = Math.floor((todayStart.getTime() - dueStart.getTime()) / 86400000);
+  return diff > 0 ? diff : 0;
+};
+
 const getSellerCodesForCompany = (
   sellerConfig: Array<{ companyName: string; codes: string[] }> | undefined,
 ) => {
@@ -194,7 +228,7 @@ const normalizeCollectionRecord = (
   const clientName = String(firstValue(raw, ['RAZON_SOCIAL', 'NOMBRE_COMERCIAL', 'NOMBRE_CLIENTE', 'CLIENTE']) || '').trim();
   const sellerCode = String(firstValue(raw, ['COD_VENDEDOR', 'COD_VEND', 'VENDEDOR']) || '').trim();
   const sellerName = String(firstValue(raw, ['NOMBRE_VENDEDOR', 'VENDEDOR_NOMBRE', 'NOMBRE_VEND']) || '').trim();
-  const daysLate = parseTangoNumber(firstValue(raw, ['DIAS_MORA', 'DIAS_ATRASO', 'DIAS_VENCIDO', 'MORA']));
+  const daysLate = status === 'pending' ? calculateDaysLate(dueDate) : null;
   const imputedAmount = parseTangoNumber(firstValue(raw, ['TOTAL_IMPUTADO', 'IMPORTE_IMPUTADO', 'IMPUTADO', 'MONTO_IMPUTADO']));
   const directAmount = parseTangoNumber(firstValue(raw, [
     'TOTAL',
