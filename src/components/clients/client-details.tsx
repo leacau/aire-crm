@@ -764,9 +764,13 @@ export function ClientDetails({
                 <span>{client.cuit}</span>
               </div>
              )}
-             <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <span>{client.condicionIVA}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
+              <span>Forma de pago: {client.formaDePago || 'No definida'}</span>
             </div>
             {(client.idAire || client.idAireSrl || client.idAireDigital || client.idTango || client.tangoCompanyId) && (
               <div className="space-y-1">

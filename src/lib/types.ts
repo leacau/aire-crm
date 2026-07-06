@@ -236,6 +236,7 @@ export type Client = {
   deactivationHistory?: string[];
   needsAttention?: boolean;
   allowCanjes?: boolean;
+  formaDePago?: FormaDePago;
   createdAt?: string;
 };
 

@@ -2,7 +2,8 @@
 
 import { auth, db } from './firebase';
 import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
-import type { Client, Person, Opportunity, OpportunityPeriod, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CoachingFollowUpEntry, CoachingActiveIndex, CoachingActiveIndexEntry, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction, ApprovalHistoryItem } from './types';
+import type { Client, Person, Opportunity, OpportunityPeriod, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CoachingFollowUpEntry, CoachingActiveIndex, CoachingActiveIndexEntry, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction, ApprovalHistoryItem, FormaDePago } from './types';
+import { formaDePagoOptions } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
 import { defaultPermissions } from './data';
@@ -2873,6 +2874,9 @@ export const createClient = async (
     if (newClientData.agencyId === undefined) {
         delete newClientData.agencyId;
     }
+    if (newClientData.formaDePago === undefined) {
+        delete newClientData.formaDePago;
+    }
 
     const docRef = await addDoc(collections.clients, newClientData);
     
@@ -2920,6 +2924,10 @@ export const updateClient = async (
 
     const updateData: {[key: string]: any} = { ...data };
 
+    if (Object.prototype.hasOwnProperty.call(data, 'formaDePago') && data.formaDePago === undefined) {
+        updateData.formaDePago = deleteField();
+    }
+
     if (updateData.denominacion) updateData.denominacion = toTitleCase(updateData.denominacion);
     if (updateData.razonSocial) updateData.razonSocial = toTitleCase(updateData.razonSocial);
     
@@ -2937,7 +2945,11 @@ export const updateClient = async (
         ...updateData,
         updatedAt: serverTimestamp()
     });
-    mutateCacheArray('clients', id, updateData, 'update');
+    if (Object.prototype.hasOwnProperty.call(data, 'formaDePago') && data.formaDePago === undefined) {
+        invalidateCache('clients');
+    } else {
+        mutateCacheArray('clients', id, updateData, 'update');
+    }
     
     const newOwnerName = (data.ownerName !== undefined) ? data.ownerName : originalData.ownerName;
     const clientName = data.denominacion || originalData.denominacion;
@@ -3220,6 +3232,92 @@ export const bulkUpdateClients = async (
             ownerName: newOwnerName!
         });
     }
+};
+
+export const migrateClientPaymentTermsFromOpportunities = async (
+    userId: string,
+    userName: string
+): Promise<{ updated: number; candidates: number }> => {
+    const validPaymentTerms = new Set<string>(formaDePagoOptions);
+    const clients = await getClients({ forceServer: true });
+    const opportunitiesSnapshot = await getDocs(collections.opportunities);
+    const paymentTermsByClient: Record<string, Record<string, { count: number; latest: number }>> = {};
+
+    const toMillis = (value: any) => {
+        if (value instanceof Timestamp) return value.toMillis();
+        if (typeof value === 'string') {
+            const parsed = new Date(value).getTime();
+            return Number.isNaN(parsed) ? 0 : parsed;
+        }
+        return 0;
+    };
+
+    opportunitiesSnapshot.docs.forEach((opportunityDoc) => {
+        const data = opportunityDoc.data() as Partial<Opportunity>;
+        if (!data.clientId) return;
+
+        const rawTerms = Array.isArray(data.formaDePago)
+            ? data.formaDePago
+            : data.formaDePago
+                ? [data.formaDePago]
+                : [];
+        const terms = rawTerms.filter((term): term is FormaDePago => validPaymentTerms.has(term));
+        if (terms.length === 0) return;
+
+        const latest = Math.max(toMillis((data as any).updatedAt), toMillis(data.createdAt));
+        if (!paymentTermsByClient[data.clientId]) paymentTermsByClient[data.clientId] = {};
+
+        terms.forEach((term) => {
+            const current = paymentTermsByClient[data.clientId][term] || { count: 0, latest: 0 };
+            paymentTermsByClient[data.clientId][term] = {
+                count: current.count + 1,
+                latest: Math.max(current.latest, latest),
+            };
+        });
+    });
+
+    const clientsToUpdate = clients
+        .filter(client => !client.formaDePago && paymentTermsByClient[client.id])
+        .map(client => {
+            const [term] = Object.entries(paymentTermsByClient[client.id])
+                .sort((a, b) => b[1].count - a[1].count || b[1].latest - a[1].latest)[0];
+            return { id: client.id, term: term as FormaDePago };
+        });
+
+    let batch = writeBatch(db);
+    let operations = 0;
+    for (const client of clientsToUpdate) {
+        batch.update(doc(collections.clients, client.id), {
+            formaDePago: client.term,
+            updatedAt: serverTimestamp(),
+        });
+        operations += 1;
+        if (operations === 450) {
+            await batch.commit();
+            batch = writeBatch(db);
+            operations = 0;
+        }
+    }
+    if (operations > 0) await batch.commit();
+
+    if (clientsToUpdate.length > 0) {
+        invalidateCache('clients');
+        await logActivity({
+            userId,
+            userName,
+            type: 'update',
+            entityType: 'client',
+            entityId: 'multiple',
+            entityName: 'multiple',
+            details: `migrÃ³ la forma de pago desde oportunidades a <strong>${clientsToUpdate.length}</strong> cliente(s).`,
+            ownerName: userName,
+        });
+    }
+
+    return {
+        updated: clientsToUpdate.length,
+        candidates: Object.keys(paymentTermsByClient).length,
+    };
 };
 
 export const getPeopleByClientId = async (clientId: string): Promise<Person[]> => {

@@ -3,13 +3,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog, CopyCheck, Activity, TriangleAlert, Mail, MessageSquare } from 'lucide-react';
+import { FileDown, MoreHorizontal, PlusCircle, Search, Trash2, UserCog, CopyCheck, Activity, TriangleAlert, Mail, MessageSquare, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import type { Client, Opportunity, User } from '@/lib/types';
-import { getClients, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients, getAllOpportunities, getOpportunitiesForUser } from '@/lib/firebase-service';
+import { getClients, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients, getAllOpportunities, getOpportunitiesForUser, migrateClientPaymentTermsFromOpportunities } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -166,6 +166,7 @@ export default function ClientsPage() {
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isMigratingPaymentTerms, setIsMigratingPaymentTerms] = useState(false);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [selectedAdvisor, setSelectedAdvisor] = useState('all');
   const [selectedOpportunityStage, setSelectedOpportunityStage] = useState('all');
@@ -392,6 +393,26 @@ export default function ClientsPage() {
     link.click();
     URL.revokeObjectURL(url);
   };
+
+  const handleMigratePaymentTerms = async () => {
+    if (!userInfo || !canManage) return;
+    setIsMigratingPaymentTerms(true);
+    try {
+      const result = await migrateClientPaymentTermsFromOpportunities(userInfo.id, userInfo.name);
+      toast({
+        title: 'MigraciÃ³n completada',
+        description: result.updated > 0
+          ? `Se completÃ³ la forma de pago en ${result.updated} cliente(s).`
+          : 'No habÃ­a clientes pendientes para completar.',
+      });
+      await fetchData();
+    } catch (error) {
+      console.error('Error migrating payment terms:', error);
+      toast({ title: 'Error al migrar formas de pago', description: (error as Error).message, variant: 'destructive' });
+    } finally {
+      setIsMigratingPaymentTerms(false);
+    }
+  };
   
   const handleBulkDelete = async () => {
     const idsToDelete = Object.keys(rowSelection);
@@ -566,6 +587,17 @@ export default function ClientsPage() {
         cell: ({ row }) => <div className="truncate" title={row.original.razonSocial}>{row.original.razonSocial}</div>,
       },
       {
+        accessorKey: 'formaDePago',
+        header: 'Forma de pago',
+        enableSorting: true,
+        size: 150,
+        cell: ({ row }) => (
+          row.original.formaDePago
+            ? <Badge variant="outline">{row.original.formaDePago}</Badge>
+            : <span className="text-muted-foreground">No definida</span>
+        ),
+      },
+      {
         accessorKey: 'rubro',
         header: 'Rubro',
         enableSorting: true,
@@ -709,6 +741,12 @@ export default function ClientsPage() {
           <Button variant="outline" onClick={() => setShowDuplicates(s => !s)}>
             <CopyCheck className="mr-2 h-4 w-4" />
             {showDuplicates ? 'Ver Todos' : 'Buscar Duplicados'}
+          </Button>
+        )}
+        {canManage && (
+          <Button variant="outline" onClick={handleMigratePaymentTerms} disabled={isMigratingPaymentTerms}>
+            {isMigratingPaymentTerms ? <Spinner size="small" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Migrar forma de pago
           </Button>
         )}
         <Button variant="outline" onClick={handleExport}>

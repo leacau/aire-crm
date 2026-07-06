@@ -15,7 +15,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/lib/data';
-import type { Client, TipoEntidad, CondicionIVA, Agency } from '@/lib/types';
+import type { Client, TipoEntidad, CondicionIVA, Agency, FormaDePago } from '@/lib/types';
+import { formaDePagoOptions } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
 import { getAgencies, createClient } from '@/lib/firebase-service';
@@ -50,6 +51,7 @@ const initialFormData: ClientFormData = {
   isNewClient: false,
   isDeactivated: false,
   allowCanjes: false,
+  formaDePago: undefined,
   idAire: '',
   idAireSrl: '',
   idAireDigital: '',
@@ -129,6 +131,7 @@ export function ClientFormDialog({
       isNewClient: formData.isNewClient || false,
       isDeactivated: formData.isDeactivated || false,
       allowCanjes: formData.allowCanjes || false,
+      formaDePago: formData.formaDePago,
       idAire: canEditIds ? (formData.idAire || '').trim() : client?.idAire || '',
       idAireSrl: canEditIds ? (formData.idAireSrl || '').trim() : client?.idAireSrl || '',
       idAireDigital: canEditIds ? (formData.idAireDigital || '').trim() : client?.idAireDigital || '',
@@ -286,6 +289,20 @@ export function ClientFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                     {condicionIVAOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="formaDePago" className="text-right">
+              Forma de Pago
+            </Label>
+            <Select name="formaDePago" value={formData.formaDePago || 'none'} onValueChange={(value: FormaDePago | 'none') => handleSelectChange('formaDePago', value)}>
+                <SelectTrigger id="formaDePago" className="col-span-3">
+                    <SelectValue placeholder="No definida" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="none">No definida</SelectItem>
+                    {formaDePagoOptions.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
                 </SelectContent>
             </Select>
           </div>

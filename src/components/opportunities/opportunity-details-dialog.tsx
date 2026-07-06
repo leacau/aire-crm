@@ -22,8 +22,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, SupervisorComment, AdvertisingOrder, Program, OpportunityPeriod } from '@/lib/types';
-import { periodicidadOptions, formaDePagoOptions, invoiceStatusOptions } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, SupervisorComment, AdvertisingOrder, Program, OpportunityPeriod } from '@/lib/types';
+import { periodicidadOptions, invoiceStatusOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
@@ -87,7 +87,6 @@ const getInitialOpportunityData = (client: any): Omit<Opportunity, 'id'> => ({
     bonificacionDetalle: '',
     periodicidad: [],
     facturaPorAgencia: false,
-    formaDePago: [],
     fechaFacturacion: '',
     proposalFiles: [],
     ordenesPautado: [],
@@ -503,9 +502,9 @@ export function OpportunityDetailsDialog({
     });
 }
 
-  const handleMultiCheckboxChange = (field: 'periodicidad' | 'formaDePago', value: string, isChecked: boolean) => {
+  const handleMultiCheckboxChange = (field: 'periodicidad', value: Periodicidad, isChecked: boolean) => {
     setEditedOpportunity(prev => {
-        const currentValues = (prev[field] as string[] | undefined) || [];
+        const currentValues = (prev[field] as Periodicidad[] | undefined) || [];
         const newValues = isChecked
             ? [...currentValues, value]
             : currentValues.filter(item => item !== value);
@@ -1074,22 +1073,6 @@ export function OpportunityDetailsDialog({
                   )}
               </div>
 
-              <div className="space-y-2">
-                <Label>Forma de Pago</Label>
-                <div className="flex flex-wrap gap-x-4 gap-y-2">
-                    {formaDePagoOptions.map(option => (
-                        <div key={option} className="flex items-center space-x-2">
-                            <Checkbox
-                                id={`payment-${option}`}
-                                name='formaDePago'
-                                checked={editedOpportunity.formaDePago?.includes(option)}
-                                onCheckedChange={(checked) => handleMultiCheckboxChange('formaDePago', option, !!checked)}
-                            />
-                            <Label htmlFor={`payment-${option}`} className="font-normal">{option}</Label>
-                        </div>
-                    ))}
-                </div>
-              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label htmlFor="fechaFacturacion">Día de Facturación (Día/Mes)</Label>
