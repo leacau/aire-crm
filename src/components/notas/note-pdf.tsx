@@ -1,287 +1,366 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import type { CommercialNote, Program } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Copy, Check } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 
 interface NotePdfProps {
   note: Partial<CommercialNote>;
   programs: Program[];
 }
 
+const sectionTitleStyle: React.CSSProperties = {
+  backgroundColor: '#e5e7eb',
+  borderBottom: '2px solid #dc2626',
+  fontSize: '11px',
+  fontWeight: 700,
+  letterSpacing: '0.02em',
+  marginBottom: '5px',
+  padding: '5px 7px',
+  textTransform: 'uppercase',
+  width: '100%',
+};
+
 const SectionTitle = ({ title }: { title: string }) => (
-    <div className="bg-gray-200 p-2 font-bold uppercase mb-2 text-sm border-b-2 border-red-600 w-full" data-pdf-keep-together="true">
-        {title}
-    </div>
+  <div style={sectionTitleStyle} data-pdf-keep-together="true">
+    {title}
+  </div>
 );
 
-const Field = ({ label, value, fullWidth = false }: { label: string, value?: string | number | null, fullWidth?: boolean }) => {
-    const isUrl = typeof value === 'string' && (value.startsWith('http') || value.startsWith('www.')) && label !== 'Web' ;
-    const displayValue = isUrl ? (value.startsWith('http') ? value : `https://${value}`) : value;
+const Field = ({
+  label,
+  value,
+  fullWidth = false,
+}: {
+  label: string;
+  value?: string | number | null;
+  fullWidth?: boolean;
+}) => {
+  const isUrl = typeof value === 'string' && (value.startsWith('http') || value.startsWith('www.')) && label !== 'Web';
+  const displayValue = isUrl ? (value.startsWith('http') ? value : `https://${value}`) : value;
 
-    return (
-        <div className={`mb-2 ${fullWidth ? 'w-full' : ''}`} data-pdf-keep-together="true">
-            <span className="font-bold text-sm">{label}: </span>
-            {isUrl ? (
-                <a 
-                    href={displayValue as string} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-700 underline font-bold"
-                    style={{ display: 'inline-block', padding: '2px 8px', backgroundColor: '#eff6ff', borderRadius: '4px', border: '1px solid #bfdbfe' }}
-                >
-                    👉 ABRIR ENLACE 👈
-                </a>
-            ) : (
-                <span className="text-sm break-words whitespace-pre-wrap">{value || '-'}</span>
-            )}
-        </div>
-    );
+  return (
+    <div style={{ marginBottom: 4, width: fullWidth ? '100%' : undefined }} data-pdf-keep-together="true">
+      <span style={{ fontSize: 11, fontWeight: 700 }}>{label}: </span>
+      {isUrl ? (
+        <a
+          href={displayValue as string}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            backgroundColor: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: 4,
+            color: '#1d4ed8',
+            display: 'inline-block',
+            fontSize: 11,
+            fontWeight: 700,
+            padding: '2px 6px',
+            textDecoration: 'underline',
+          }}
+        >
+          ABRIR ENLACE
+        </a>
+      ) : (
+        <span style={{ fontSize: 11, overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{value || '-'}</span>
+      )}
+    </div>
+  );
 };
 
 export const NotePdf = React.forwardRef<HTMLDivElement, NotePdfProps>(({ note, programs }, ref) => {
-    
-    const pageStyle: React.CSSProperties = {
-        width: '210mm',
-        minHeight: '297mm',
-        padding: '20mm',
-        backgroundColor: 'white',
-        fontFamily: 'Arial, sans-serif',
-        position: 'relative',
-        boxSizing: 'border-box'
-    };
-  
-    const pGrafs = note.primaryGrafs && note.primaryGrafs.length > 0 ? note.primaryGrafs : (note.primaryGraf ? [note.primaryGraf] : []);
-    const sGrafs = note.secondaryGrafs && note.secondaryGrafs.length > 0 ? note.secondaryGrafs : (note.secondaryGraf ? [note.secondaryGraf] : []);
-  
-    // 🟢 Normalización de entrevistados para el PDF
-    const safeInterviewees = note.interviewees?.length 
-        ? note.interviewees 
-        : (note.intervieweeName ? [{ name: note.intervieweeName, role: note.intervieweeRole || '', location: 'Piso' }] : []);
+  const pageStyle: React.CSSProperties = {
+    backgroundColor: 'white',
+    boxSizing: 'border-box',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 11,
+    lineHeight: 1.22,
+    minHeight: '297mm',
+    padding: '12mm 14mm 14mm',
+    position: 'relative',
+    width: '210mm',
+  };
 
-    return (
-      <div ref={ref}>
-        
-        <div id="note-pdf-page-1" style={pageStyle}>
-            <header className="flex justify-between items-center mb-6 border-b pb-4">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.webp" alt="AIRE Logo" style={{ width: '120px', height: 'auto' }} />
-                <div className="text-right">
-                    <h1 className="text-2xl font-bold text-red-600">NOTA COMERCIAL</h1>
-                    <p className="text-sm text-gray-500">{format(new Date(), "d 'de' MMMM, yyyy", { locale: es })}</p>
-                    <p className="text-sm font-semibold">Asesor: {note.advisorName}</p>
-                </div>
-            </header>
+  const pageContentStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+  };
 
-            <div className="flex flex-col gap-6">
-                
-                <div className="w-full" data-pdf-keep-together="true">
-                    <SectionTitle title="1. Detalles de la Nota" />
-                    <Field label="Título" value={note.title} fullWidth />
-                    <div className="grid grid-cols-2 gap-4 mt-2">
-                        <Field label="Ubicación" value={note.location} />
-                        {note.location === 'Llamada' && <Field label="Teléfono Llamada" value={note.callPhone} />}
-                        {note.location === 'Móvil' && <Field label="Dirección Móvil" value={note.mobileAddress} />}
+  const grid2Style: React.CSSProperties = {
+    display: 'grid',
+    gap: '4px 14px',
+    gridTemplateColumns: '1fr 1fr',
+  };
+
+  const pGrafs = note.primaryGrafs && note.primaryGrafs.length > 0 ? note.primaryGrafs : (note.primaryGraf ? [note.primaryGraf] : []);
+  const sGrafs = note.secondaryGrafs && note.secondaryGrafs.length > 0 ? note.secondaryGrafs : (note.secondaryGraf ? [note.secondaryGraf] : []);
+  const safeInterviewees = note.interviewees?.length
+    ? note.interviewees
+    : (note.intervieweeName ? [{ name: note.intervieweeName, role: note.intervieweeRole || '', location: 'Piso' }] : []);
+
+  const normalizedLocation = String(note.location || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const isMobileLocation = normalizedLocation === 'movil';
+
+  const renderGrafBox = (label: string, value: string, key: string) => (
+    <div
+      key={key}
+      style={{
+        backgroundColor: '#f9fafb',
+        border: '1px solid #d1d5db',
+        borderRadius: 4,
+        padding: 7,
+      }}
+      data-pdf-keep-together="true"
+    >
+      <p style={{ color: '#6b7280', fontSize: 9, fontWeight: 700, margin: '0 0 2px', textTransform: 'uppercase' }}>
+        {label}
+      </p>
+      <p style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.15, margin: 0, textTransform: 'uppercase' }}>
+        {value}
+      </p>
+    </div>
+  );
+
+  return (
+    <div ref={ref}>
+      <div id="note-pdf-page-1" style={pageStyle}>
+        <header
+          style={{
+            alignItems: 'center',
+            borderBottom: '1px solid #e5e7eb',
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginBottom: 12,
+            paddingBottom: 8,
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.webp" alt="AIRE Logo" style={{ height: 'auto', width: 76 }} />
+          <div style={{ textAlign: 'right' }}>
+            <h1 style={{ color: '#dc2626', fontSize: 18, fontWeight: 700, lineHeight: 1, margin: 0 }}>NOTA COMERCIAL</h1>
+            <p style={{ color: '#6b7280', fontSize: 10, margin: '4px 0 0' }}>{format(new Date(), "d 'de' MMMM, yyyy", { locale: es })}</p>
+            <p style={{ fontSize: 11, fontWeight: 600, margin: '2px 0 0' }}>Asesor: {note.advisorName || '-'}</p>
+          </div>
+        </header>
+
+        <div style={pageContentStyle}>
+          <section data-pdf-keep-together="true">
+            <SectionTitle title="1. Detalles de la Nota" />
+            <Field label="Titulo" value={note.title} fullWidth />
+            <div style={grid2Style}>
+              <Field label="Ubicacion" value={note.location} />
+              {note.location === 'Llamada' && <Field label="Telefono llamada" value={note.callPhone} />}
+              {isMobileLocation && <Field label="Direccion movil" value={note.mobileAddress} />}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 7 }}>
+              {pGrafs.map((graf, index) => renderGrafBox('TITULAR.Text (Max 84)', graf, `p-${index}`))}
+              {sGrafs.map((graf, index) => renderGrafBox('NOMBRE/FUNCION.Text (Max 55)', graf, `s-${index}`))}
+            </div>
+
+            {note.graphicSupport && (
+              <div
+                style={{
+                  backgroundColor: '#fefce8',
+                  border: '1px solid #fde047',
+                  borderRadius: 4,
+                  marginTop: 8,
+                  padding: 7,
+                }}
+                data-pdf-keep-together="true"
+              >
+                <p style={{ color: '#713f12', fontSize: 11, fontWeight: 700, margin: '0 0 5px', textAlign: 'center' }}>
+                  REQUIERE SOPORTE GRAFICO
+                </p>
+                {(() => {
+                  const links = note.graphicSupportLinks?.length ? note.graphicSupportLinks : (note.graphicSupportLink ? [note.graphicSupportLink] : []);
+                  if (links.length === 0) return null;
+                  return (
+                    <div style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 4, padding: 7, textAlign: 'center' }}>
+                      <span style={{ color: '#6b7280', fontSize: 9, fontWeight: 700 }}>ENLACES AL MATERIAL:</span>
+                      {links.map((link, index) => (
+                        <a
+                          key={index}
+                          href={link.startsWith('http') ? link : `https://${link}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            backgroundColor: '#eff6ff',
+                            border: '1px solid #bfdbfe',
+                            borderRadius: 4,
+                            color: '#1d4ed8',
+                            display: 'inline-block',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: '3px 8px',
+                            textDecoration: 'underline',
+                          }}
+                        >
+                          ENLACE {index + 1}
+                        </a>
+                      ))}
                     </div>
-                    
-                    <div className="mt-3 space-y-3">
-                        {pGrafs.map((g, i) => (
-                            <div key={`p-${i}`} className="p-3 border border-gray-300 rounded bg-gray-50" data-pdf-keep-together="true">
-                                <p className="text-xs font-bold text-gray-500 uppercase mb-1">TITULAR.Text (Max 84)</p>
-                                <p className="text-base font-medium uppercase">{g}</p>
-                            </div>
-                        ))}
-                        {sGrafs.map((g, i) => (
-                            <div key={`s-${i}`} className="p-3 border border-gray-300 rounded bg-gray-50" data-pdf-keep-together="true">
-                                <p className="text-xs font-bold text-gray-500 uppercase mb-1">NOMBRE/FUNCION.Text (Max 55)</p>
-                                <p className="text-base font-medium uppercase">{g}</p>
-                            </div>
-                        ))}
-                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </section>
 
-                   {note.graphicSupport && (
-                      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded" data-pdf-keep-together="true">
-                          <p className="text-yellow-900 font-bold text-center mb-2">⚠️ REQUIERE SOPORTE GRÁFICO</p>
-                          
-                          {(() => {
-                              const links = note.graphicSupportLinks?.length ? note.graphicSupportLinks : (note.graphicSupportLink ? [note.graphicSupportLink] : []);
-                              if (links.length === 0) return null;
-                              return (
-                                  <div className="bg-white p-4 border border-yellow-200 rounded text-center flex flex-col gap-2">
-                                      <span className="text-xs text-gray-500 font-bold block mb-1">ENLACES AL MATERIAL:</span>
-                                      {links.map((link, idx) => (
-                                          <a 
-                                              key={idx} 
-                                              href={link.startsWith('http') ? link : `https://${link}`} 
-                                              target="_blank" 
-                                              rel="noopener noreferrer"
-                                              className="text-blue-700 underline font-bold text-base"
-                                              style={{ display: 'inline-block', padding: '8px 16px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px' }}
-                                          >
-                                              👉 ENLACE {idx + 1} 👈
-                                          </a>
-                                      ))}
-                                  </div>
-                              );
-                          })()}
+          <section data-pdf-keep-together="true">
+            <SectionTitle title="2. Datos del Cliente" />
+            <div style={grid2Style}>
+              <Field label="Cliente" value={note.clientName} />
+              <Field label="Razon Social" value={note.razonSocial} />
+              <Field label="CUIT" value={note.cuit} />
+              <Field label="Rubro" value={note.rubro} />
+            </div>
+          </section>
+
+          <section data-pdf-keep-together="true">
+            <SectionTitle title="3. Produccion y Pautado" />
+            <div style={{ ...grid2Style, marginBottom: 6 }}>
+              <Field label="Coordinacion (Cliente)" value={note.contactName} />
+              <Field label="Telefono coord." value={note.contactPhone} />
+            </div>
+
+            <div style={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 4, marginBottom: 7, padding: 7 }} data-pdf-keep-together="true">
+              <span style={{ display: 'block', fontSize: 11, fontWeight: 700, marginBottom: 4, textDecoration: 'underline' }}>
+                Cronograma / Salidas:
+              </span>
+              <ul style={{ fontSize: 11, listStyle: 'none', margin: 0, padding: 0 }}>
+                {Object.entries(note.schedule || {}).map(([programId, items]) => {
+                  const programName = programs.find(program => program.id === programId)?.name || 'Programa';
+                  const formattedItems = Array.isArray(items) ? items : [];
+                  if (formattedItems.length === 0) return null;
+                  return (
+                    <li key={programId} style={{ borderLeft: '2px solid #ef4444', marginBottom: 4, paddingLeft: 7 }}>
+                      <strong style={{ color: '#b91c1c' }}>{programName}</strong>
+                      <div style={{ color: '#374151', marginTop: 1 }}>
+                        {formattedItems.map(item => `${format(new Date(item.date), 'dd/MM/yyyy')} a las ${item.time ? item.time : '??:??'}hs`).join(' | ')}
                       </div>
-                    )}
-                </div>
-
-                <div className="w-full" data-pdf-keep-together="true">
-                    <SectionTitle title="2. Datos del Cliente" />
-                    <div className="grid grid-cols-2 gap-4">
-                        <Field label="Cliente" value={note.clientName} />
-                        <Field label="Razón Social" value={note.razonSocial} />
-                        <Field label="CUIT" value={note.cuit} />
-                        <Field label="Rubro" value={note.rubro} />
-                    </div>
-                </div>
-
-                <div className="w-full" data-pdf-keep-together="true">
-                    <SectionTitle title="3. Producción y Pautado" />
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                        <Field label="Coordinación (Cliente)" value={note.contactName} />
-                        <Field label="Teléfono Coord." value={note.contactPhone} />
-                    </div>
-                    
-                    <div className="mb-4 bg-gray-50 p-3 rounded border border-gray-200" data-pdf-keep-together="true">
-                        <span className="font-bold text-sm block mb-2 underline">Cronograma / Salidas:</span>
-                        <ul className="text-sm space-y-2">
-                            {Object.entries(note.schedule || {}).map(([progId, items]) => {
-                                const progName = programs.find(p => p.id === progId)?.name || 'Programa';
-                                // @ts-ignore
-                                const formattedItems = Array.isArray(items) ? items : [];
-                                if (formattedItems.length === 0) return null;
-                                return (
-                                    <li key={progId} className="border-l-4 border-red-500 pl-3">
-                                        <strong className="text-red-700">{progName}</strong>
-                                        <div className="text-gray-700 mt-1">
-                                            {/* @ts-ignore */}
-                                            {formattedItems.map(i => `${format(new Date(i.date), 'dd/MM/yyyy')} a las ${i.time ? i.time : '??:??'}hs`).join(' | ')}
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </div>
-
-                    <div className="flex flex-col gap-2 text-sm border-t pt-2" data-pdf-keep-together="true">
-                        <div className="flex gap-8">
-                            <div><span className="font-bold">Replica Web:</span> {note.replicateWeb ? 'SÍ' : 'NO'}</div>
-                            <div><span className="font-bold">Replica Redes:</span> {note.replicateSocials && note.replicateSocials.length > 0 ? note.replicateSocials.join(', ') : 'Ninguna'}</div>
-                        </div>
-                        {note.replicateSocials && note.replicateSocials.length > 0 && (
-                            <div className="bg-blue-50 p-2 rounded border border-blue-100 mt-1">
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div><span className="font-bold">Colaboración:</span> {note.collaboration ? `SÍ (${note.collaborationHandle})` : 'NO'}</div>
-                                    <div><span className="font-bold">CTA:</span> {note.ctaText || '-'} &rarr; {note.ctaDestination || '-'}</div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
-            
-            <div className="absolute bottom-8 right-8 text-xs text-gray-400">Página 1 de 2</div>
+
+            <div style={{ borderTop: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', fontSize: 11, gap: 4, paddingTop: 6 }} data-pdf-keep-together="true">
+              <div style={{ display: 'flex', gap: 24 }}>
+                <div><strong>Replica Web:</strong> {note.replicateWeb ? 'SI' : 'NO'}</div>
+                <div><strong>Replica Redes:</strong> {note.replicateSocials && note.replicateSocials.length > 0 ? note.replicateSocials.join(', ') : 'Ninguna'}</div>
+              </div>
+              {note.replicateSocials && note.replicateSocials.length > 0 && (
+                <div style={{ backgroundColor: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 4, marginTop: 2, padding: 6 }}>
+                  <div style={grid2Style}>
+                    <div><strong>Colaboracion:</strong> {note.collaboration ? `SI (${note.collaborationHandle})` : 'NO'}</div>
+                    <div><strong>CTA:</strong> {note.ctaText || '-'} - {note.ctaDestination || '-'}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
         </div>
 
-        {/* --- PÁGINA 2 --- */}
-        <div id="note-pdf-page-2" style={pageStyle}>
-            <header className="flex justify-between items-center mb-6 border-b pb-4">
-                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                 <img src="/logo.webp" alt="AIRE Logo" style={{ width: '80px', height: 'auto', opacity: 0.7 }} />
-                 <div className="text-right">
-                    <h2 className="text-lg font-bold text-gray-600">NOTA COMERCIAL - Continuación</h2>
-                    <p className="text-xs text-gray-400">Título: {note.title}</p>
-                </div>
-            </header>
-
-            <div className="flex flex-col gap-6">
-                
-                <div className="w-full" data-pdf-keep-together="true">
-                    {/* 🟢 SECCIÓN DE ENTREVISTADOS ACTUALIZADA AL ARRAY */}
-                    <SectionTitle title="4. Entrevistado(s)" />
-                    
-                    {safeInterviewees.map((person, idx) => (
-                        <div key={idx} className="grid grid-cols-3 gap-4 mb-2 pb-2 border-b border-gray-100 last:border-0 last:pb-0" data-pdf-keep-together="true">
-                            <Field label="Nombre" value={person.name} />
-                            <Field label="Cargo" value={person.role} />
-                            <Field label="Locación" value={person.location} />
-                        </div>
-                    ))}
-
-                    {note.intervieweeBio && (
-                        <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-100" data-pdf-keep-together="true">
-                            <span className="font-bold text-sm block">Bio / Info Adicional:</span>
-                            <p className="text-sm italic mt-1 text-gray-700">{note.intervieweeBio}</p>
-                        </div>
-                    )}
-                </div>
-
-                <div className="w-full" data-pdf-keep-together="true">
-                    <SectionTitle title="5. Canales de Contacto (A mostrar)" />
-                    <div className="grid grid-cols-2 gap-y-2 gap-x-8 mb-3">
-                        {!note.noWeb && <Field label="Web" value={note.website} />}
-                        {!note.noWhatsapp && <Field label="WhatsApp" value={note.whatsapp} />}
-                        {!note.noCommercialPhone && <Field label="Tel. Comercial" value={note.phone} />}
-                        {note.instagram && <Field label="Instagram" value={note.instagram} />}
-                    </div>
-                    
-                    {!note.noCommercialAddress && note.commercialAddresses && note.commercialAddresses.length > 0 && (
-                        <div className="mt-2 border-t pt-2" data-pdf-keep-together="true">
-                            <span className="font-bold text-sm block mb-1">Domicilio(s) Comercial(es):</span>
-                            <ul className="list-disc list-inside text-sm pl-2">
-                                {note.commercialAddresses.map((addr, i) => (
-                                <li key={i} data-pdf-keep-together="true">{addr}</li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
-
-                    {(note.noWeb && note.noWhatsapp && note.noCommercialPhone && !note.instagram && note.noCommercialAddress) && (
-                        <p className="text-sm text-gray-500 italic">No se mostrarán canales de contacto.</p>
-                    )}
-                </div>
-
-                <div className="w-full" data-pdf-keep-together="true">
-                    <SectionTitle title="6. Contenido" />
-                    
-                    <div className="mb-4" data-pdf-keep-together="true">
-                        <span className="font-bold text-sm block mb-2 underline">Preguntas Sugeridas:</span>
-                        <ul className="list-decimal list-inside text-sm space-y-2">
-                            {note.questions?.map((q, i) => (
-                                <li key={i} className="pl-2 py-1 border-b border-gray-100 last:border-0" data-pdf-keep-together="true">{q}</li>
-                            ))}
-                        </ul>
-                    </div>
-
-                    {note.topicsToAvoid && note.topicsToAvoid.length > 0 && (
-                        <div className="p-3 bg-red-50 border border-red-200 rounded" data-pdf-keep-together="true">
-                            <span className="font-bold text-sm block mb-2 text-red-700 underline">⚠️ TEMAS A EVITAR:</span>
-                            <ul className="list-disc list-inside text-red-900 space-y-1">
-                                {note.topicsToAvoid.map((t, i) => (
-                                    <li key={i} data-pdf-keep-together="true">{t}</li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
-                </div>
-
-                <div className="w-full" data-pdf-keep-together="true">
-                    <SectionTitle title="7. Observaciones Generales" />
-                    <div className="p-4 border border-gray-200 rounded min-h-[100px] bg-yellow-50/30" data-pdf-keep-together="true">
-                        <p className="text-sm whitespace-pre-wrap">{note.noteObservations || 'Sin observaciones adicionales.'}</p>
-                    </div>
-                </div>
-            </div>
-            <div className="absolute bottom-8 right-8 text-xs text-gray-400">Página 2 de 2</div>
-        </div>
+        <div style={{ bottom: 18, color: '#9ca3af', fontSize: 10, position: 'absolute', right: 26 }}>Pagina 1 de 2</div>
       </div>
-    );
+
+      <div id="note-pdf-page-2" style={pageStyle}>
+        <div style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontSize: 10, marginBottom: 8, paddingBottom: 5 }}>
+          <strong style={{ color: '#374151', textTransform: 'uppercase' }}>Para conductores / entrevistadores</strong>
+          <span style={{ marginLeft: 8 }}>Nota Comercial: {note.title || '-'}</span>
+        </div>
+
+        <div style={pageContentStyle}>
+          <section data-pdf-keep-together="true">
+            <SectionTitle title="4. Entrevistado(s)" />
+            {safeInterviewees.map((person, index) => (
+              <div
+                key={index}
+                style={{ borderBottom: index === safeInterviewees.length - 1 ? 'none' : '1px solid #f3f4f6', display: 'grid', gap: '4px 14px', gridTemplateColumns: '1fr 1fr 1fr', marginBottom: 4, paddingBottom: 4 }}
+                data-pdf-keep-together="true"
+              >
+                <Field label="Nombre" value={person.name} />
+                <Field label="Cargo" value={person.role} />
+                <Field label="Locacion" value={person.location} />
+              </div>
+            ))}
+
+            {note.intervieweeBio && (
+              <div style={{ backgroundColor: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 4, marginTop: 7, padding: 7 }} data-pdf-keep-together="true">
+                <span style={{ display: 'block', fontSize: 11, fontWeight: 700 }}>Bio / Info adicional:</span>
+                <p style={{ color: '#374151', fontSize: 11, fontStyle: 'italic', margin: '3px 0 0' }}>{note.intervieweeBio}</p>
+              </div>
+            )}
+          </section>
+
+          <section data-pdf-keep-together="true">
+            <SectionTitle title="5. Canales de Contacto (A mostrar)" />
+            <div style={{ ...grid2Style, marginBottom: 6 }}>
+              {!note.noWeb && <Field label="Web" value={note.website} />}
+              {!note.noWhatsapp && <Field label="WhatsApp" value={note.whatsapp} />}
+              {!note.noCommercialPhone && <Field label="Tel. Comercial" value={note.phone} />}
+              {note.instagram && <Field label="Instagram" value={note.instagram} />}
+            </div>
+
+            {!note.noCommercialAddress && note.commercialAddresses && note.commercialAddresses.length > 0 && (
+              <div style={{ borderTop: '1px solid #e5e7eb', marginTop: 5, paddingTop: 5 }} data-pdf-keep-together="true">
+                <span style={{ display: 'block', fontSize: 11, fontWeight: 700, marginBottom: 3 }}>Domicilio(s) comercial(es):</span>
+                <ul style={{ fontSize: 11, listStyle: 'disc inside', margin: 0, paddingLeft: 6 }}>
+                  {note.commercialAddresses.map((address, index) => (
+                    <li key={index} data-pdf-keep-together="true">{address}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {(note.noWeb && note.noWhatsapp && note.noCommercialPhone && !note.instagram && note.noCommercialAddress) && (
+              <p style={{ color: '#6b7280', fontSize: 11, fontStyle: 'italic', margin: 0 }}>No se mostraran canales de contacto.</p>
+            )}
+          </section>
+
+          <section data-pdf-keep-together="true">
+            <SectionTitle title="6. Contenido" />
+            <div style={{ marginBottom: 8 }} data-pdf-keep-together="true">
+              <span style={{ display: 'block', fontSize: 11, fontWeight: 700, marginBottom: 4, textDecoration: 'underline' }}>
+                Preguntas sugeridas:
+              </span>
+              <ol style={{ fontSize: 11, listStyle: 'decimal inside', margin: 0, padding: 0 }}>
+                {note.questions?.map((question, index) => (
+                  <li key={index} style={{ borderBottom: '1px solid #f3f4f6', padding: '2px 0 2px 6px' }} data-pdf-keep-together="true">
+                    {question}
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            {note.topicsToAvoid && note.topicsToAvoid.length > 0 && (
+              <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: 7 }} data-pdf-keep-together="true">
+                <span style={{ color: '#b91c1c', display: 'block', fontSize: 11, fontWeight: 700, marginBottom: 4, textDecoration: 'underline' }}>
+                  Temas a evitar:
+                </span>
+                <ul style={{ color: '#7f1d1d', fontSize: 11, listStyle: 'disc inside', margin: 0, padding: 0 }}>
+                  {note.topicsToAvoid.map((topic, index) => (
+                    <li key={index} data-pdf-keep-together="true">{topic}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+
+          <section data-pdf-keep-together="true">
+            <SectionTitle title="7. Observaciones Generales" />
+            <div style={{ backgroundColor: '#fefce8', border: '1px solid #e5e7eb', borderRadius: 4, minHeight: 56, padding: 8 }} data-pdf-keep-together="true">
+              <p style={{ fontSize: 11, margin: 0, whiteSpace: 'pre-wrap' }}>{note.noteObservations || 'Sin observaciones adicionales.'}</p>
+            </div>
+          </section>
+        </div>
+
+        <div style={{ bottom: 18, color: '#9ca3af', fontSize: 10, position: 'absolute', right: 26 }}>Pagina 2 de 2</div>
+      </div>
+    </div>
+  );
 });
 
 NotePdf.displayName = 'NotePdf';
