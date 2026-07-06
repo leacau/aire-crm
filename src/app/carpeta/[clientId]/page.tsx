@@ -6,12 +6,10 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { CarpetaTable } from '@/components/carpeta/carpeta-table';
 import { useEffect, useState } from 'react';
-import { getClient } from '@/lib/firebase-service';
+import { getAdvertisingOrdersByClientId, getClient } from '@/lib/firebase-service';
 import type { Client, AdvertisingOrder } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { format, parseISO } from 'date-fns';
 import Link from 'next/link';
 
@@ -31,12 +29,7 @@ export default function ClientCarpetaPage() {
                 const clientData = await getClient(clientId);
                 setClient(clientData);
 
-                // Fetch Publicidad Orders (Pestaña B)
-                const q = query(collection(db, 'advertising_orders'), where('clientId', '==', clientId));
-                const querySnapshot = await getDocs(q);
-                const fetchedOrders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AdvertisingOrder));
-                // Ordenar de la más reciente a la más antigua
-                fetchedOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                const fetchedOrders = await getAdvertisingOrdersByClientId(clientId);
                 setOrders(fetchedOrders);
 
             } catch (error) {

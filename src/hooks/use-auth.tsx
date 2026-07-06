@@ -8,6 +8,8 @@ import { Spinner } from '@/components/ui/spinner';
 import type { User } from '@/lib/types';
 import { validateGoogleServicesAccess } from '@/lib/google-service-check';
 import { useToast } from '@/hooks/use-toast';
+import { getAuthSession } from '@/lib/api/auth';
+import { hydratePermissionsCache } from '@/lib/permissions';
 
 const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service', '/'];
 
@@ -38,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isBoss, setIsBoss] = useState(false);
-  const { toast } = useToast(); 
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!loading) {
@@ -54,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const saveTokenToStorage = (token: string, expiresInSeconds: number = 3600) => {
     googleAccessTokenMemory = {
       token,
-      expiresAt: Date.now() + (expiresInSeconds * 1000) - (5 * 60 * 1000),
+      expiresAt: Date.now() + expiresInSeconds * 1000 - 5 * 60 * 1000,
     };
   };
 
@@ -69,8 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const getStoredToken = (): string | null => {
     if (!googleAccessTokenMemory) return null;
     if (Date.now() > googleAccessTokenMemory.expiresAt) {
-        clearStoredToken();
-        return null;
+      clearStoredToken();
+      return null;
     }
     return googleAccessTokenMemory.token;
   };
@@ -78,82 +80,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        const [
-          { getUserProfile, getEmailWhitelist, createUserProfile },
-          { initializePermissions },
-        ] = await Promise.all([
-          import('@/lib/firebase-service'),
-          import('@/lib/permissions'),
-        ]);
-        const email = firebaseUser.email?.toLowerCase() || '';
-        const isAuthorizedDomain = email.endsWith('@airedesantafe.com.ar') || email.endsWith('@airedigital.com');
-        const isHardcodedException = email === 'leandrochena@gmail.com';
-        const profile = await getUserProfile(firebaseUser.uid);
-        const isManagedExternalUser = profile?.externalUser === true && profile?.role === 'Asesor Canjes';
-
-        let isWhitelisted = false;
-        if (!isAuthorizedDomain && !isHardcodedException && !isManagedExternalUser) {
-            const whitelist = await getEmailWhitelist();
-            isWhitelisted = whitelist.some(w => w.toLowerCase().trim() === email);
-        }
-
-        if (!isAuthorizedDomain && !isHardcodedException && !isWhitelisted && !isManagedExternalUser) {
-            await auth.signOut();
-            clearStoredToken();
-            setUser(null);
-            setUserInfo(null);
-            setIsBoss(false);
-            setLoading(false);
-            toast({ 
-                title: 'Acceso Denegado', 
-                description: 'Tu correo no pertenece a la organización ni está en la lista de autorizados.', 
-                variant: 'destructive' 
-            });
-            return;
-        }
-
         setUser(firebaseUser);
-        
-        try {
-            await initializePermissions();
-            
-            if (profile) {
-              const initials = profile.name?.substring(0, 2).toUpperCase() || 'U';
-              const finalProfile = { 
-                id: firebaseUser.uid, 
-                ...profile,
-                photoURL: firebaseUser.photoURL || profile.photoURL,
-                initials
-              };
-              setUserInfo(finalProfile);
-              setIsBoss(finalProfile.role === 'Jefe' || finalProfile.role === 'Gerencia');
-            } else {
-                const name = firebaseUser.displayName || 'Usuario';
-                await createUserProfile(firebaseUser.uid, name, firebaseUser.email || '', firebaseUser.photoURL || undefined);
-                
-                setUserInfo({
-                    id: firebaseUser.uid,
-                    name: name,
-                    email: firebaseUser.email || '',
-                    role: 'Asesor Canjes',
-                    photoURL: firebaseUser.photoURL,
-                    initials: name.substring(0, 2).toUpperCase()
-                });
-                setIsBoss(false);
-            }
-        } catch (error) {
-            console.error("Error al inicializar el usuario:", error);
-            setUserInfo({
-                id: firebaseUser.uid,
-                name: firebaseUser.displayName || 'Usuario',
-                email: firebaseUser.email || '',
-                role: 'Asesor',
-                photoURL: firebaseUser.photoURL,
-                initials: (firebaseUser.displayName || 'U').substring(0, 2).toUpperCase()
-            });
-            setIsBoss(false);
-        }
 
+        try {
+          const session = await getAuthSession(firebaseUser);
+          hydratePermissionsCache(session.permissions);
+          setUserInfo(session.user);
+          setIsBoss(session.user.role === 'Jefe' || session.user.role === 'Gerencia');
+        } catch (error) {
+          console.error('Error al inicializar el usuario:', error);
+          await auth.signOut();
+          clearStoredToken();
+          setUser(null);
+          setUserInfo(null);
+          setIsBoss(false);
+          setLoading(false);
+          toast({
+            title: 'Acceso Denegado',
+            description: error instanceof Error ? error.message : 'No se pudo validar tu acceso.',
+            variant: 'destructive',
+          });
+          return;
+        }
       } else {
         setUser(null);
         setUserInfo(null);
@@ -182,8 +130,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error: any) {
           console.warn('Silent validation failed:', error);
           if (error.message && (error.message.includes('403') || error.message.includes('401'))) {
-             console.log('Token inválido o sin scopes. Eliminando para forzar re-login.');
-             clearStoredToken();
+            console.log('Token invalido o sin scopes. Eliminando para forzar re-login.');
+            clearStoredToken();
           }
         }
       }
@@ -192,53 +140,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     runCheck();
   }, [loading, user]);
 
-    const getGoogleAccessToken = async (options?: { silent?: boolean }): Promise<string | null> => {
-        if (typeof window === 'undefined') return null;
+  const getGoogleAccessToken = async (options?: { silent?: boolean }): Promise<string | null> => {
+    if (typeof window === 'undefined') return null;
 
-        const storedToken = getStoredToken();
-        if (storedToken) return storedToken;
+    const storedToken = getStoredToken();
+    if (storedToken) return storedToken;
 
-        if (options?.silent) return null;
+    if (options?.silent) return null;
 
-        if (auth.currentUser) {
-            const provider = new GoogleAuthProvider();
-            
-            // 🟢 CORRECCIÓN: Quitamos el "prompt" obligatorio y arreglamos el tipo de include_granted_scopes
-            // para evitar el auth/internal-error. Ahora renovará el token de forma casi transparente.
-            provider.setCustomParameters({
-                  include_granted_scopes: 'true'
-            });
-            
-            provider.addScope('https://www.googleapis.com/auth/calendar.events');
-            provider.addScope('https://www.googleapis.com/auth/gmail.send');
-            
-            // 🟢 Eliminados los scopes de Google Chat y Drive
-            
-            try {
-                const result = await signInWithPopup(auth, provider);
-                const credential = GoogleAuthProvider.credentialFromResult(result);
-                const token = credential?.accessToken;
-                // @ts-ignore
-                const expiresIn = result._tokenResponse?.oauthExpiresIn ? parseInt(result._tokenResponse.oauthExpiresIn) : 3600;
+    if (auth.currentUser) {
+      const provider = new GoogleAuthProvider();
 
-                if (token) {
-                    saveTokenToStorage(token, expiresIn);
-                    sessionStorage.setItem('google-access-validated', 'true');
-                    return token;
-                }
-            } catch (error) {
-                console.error("Error getting Google access token:", error);
-                return null;
-            }
+      provider.setCustomParameters({
+        include_granted_scopes: 'true',
+      });
+
+      provider.addScope('https://www.googleapis.com/auth/calendar.events');
+      provider.addScope('https://www.googleapis.com/auth/gmail.send');
+
+      try {
+        const result = await signInWithPopup(auth, provider);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        const token = credential?.accessToken;
+        // @ts-ignore
+        const expiresIn = result._tokenResponse?.oauthExpiresIn ? parseInt(result._tokenResponse.oauthExpiresIn) : 3600;
+
+        if (token) {
+          saveTokenToStorage(token, expiresIn);
+          sessionStorage.setItem('google-access-validated', 'true');
+          return token;
         }
+      } catch (error) {
+        console.error('Error getting Google access token:', error);
         return null;
-    };
+      }
+    }
+    return null;
+  };
 
-    const ensureGoogleAccessToken = async (): Promise<string | null> => {
-        const token = await getGoogleAccessToken({ silent: true });
-        if (token) return token;
-        return await getGoogleAccessToken({ silent: false });
-    };
+  const ensureGoogleAccessToken = async (): Promise<string | null> => {
+    const token = await getGoogleAccessToken({ silent: true });
+    if (token) return token;
+    return getGoogleAccessToken({ silent: false });
+  };
 
   if (loading && !publicRoutes.includes(pathname) && !pathname.startsWith('/public/')) {
     return (
@@ -258,7 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen items-center justify-center">
-        <Spinner size="large" />
+      <Spinner size="large" />
     </div>
   );
 }

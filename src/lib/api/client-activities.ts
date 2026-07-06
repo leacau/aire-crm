@@ -1,0 +1,28 @@
+'use client';
+
+import { apiRequest } from '@/lib/api-client';
+import type { ClientActivity } from '@/lib/types';
+
+export async function updateClientActivity(
+  id: string,
+  data: Partial<Omit<ClientActivity, 'id'>>,
+): Promise<void> {
+  await apiRequest<{ ok: true }>(`/api/client-activities/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: { data },
+  });
+}
+
+export async function completeActivityTask(activityId: string): Promise<void> {
+  await apiRequest<{ ok: true }>(`/api/client-activities/${encodeURIComponent(activityId)}/complete`, {
+    method: 'POST',
+  });
+}
+
+export async function rescheduleActivityTask(activityId: string, newDate: Date): Promise<void> {
+  await apiRequest<{ ok: true }>(`/api/client-activities/${encodeURIComponent(activityId)}/reschedule`, {
+    method: 'POST',
+    body: { dueDate: newDate.toISOString() },
+  });
+}
+

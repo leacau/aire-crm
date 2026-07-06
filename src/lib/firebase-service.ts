@@ -555,32 +555,16 @@ export const updateObjectiveVisibilityConfig = async (
 export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
     const cachedData = getFromCache('permissions');
     if (cachedData) return cachedData;
-    
-    const permissionsDocRef = doc(db, 'system_config', PERMISSIONS_DOC_ID);
-    const docSnap = await getDoc(permissionsDocRef);
 
-    if (docSnap.exists()) {
-        const perms = docSnap.data().permissions;
-        setInCache('permissions', perms);
-        return perms;
-    } else {
-        await setDoc(permissionsDocRef, { permissions: defaultPermissions });
-        setInCache('permissions', defaultPermissions);
-        return defaultPermissions;
-    }
+    const { getAreaPermissions } = await import('@/lib/api/system');
+    const permissions = await getAreaPermissions();
+    setInCache('permissions', permissions);
+    return permissions;
 };
 
 export const updateAreaPermissions = async (permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>): Promise<void> => {
-    const permissionsDocRef = doc(db, 'system_config', PERMISSIONS_DOC_ID);
-    
-    setDoc(permissionsDocRef, { permissions }, { merge: true }).catch(async (serverError) => {
-      const permissionError = new FirestorePermissionError({
-        path: permissionsDocRef.path,
-        operation: 'update',
-        requestResourceData: { permissions },
-      } satisfies SecurityRuleContext);
-      errorEmitter.emit('permission-error', permissionError);
-    });
+    const { updateAreaPermissions } = await import('@/lib/api/system');
+    await updateAreaPermissions(permissions);
     invalidateCache('permissions');
 };
 
@@ -1359,170 +1343,53 @@ export const recordProspectNotifications = async (
 // --- Task Functions ---
 
 export const completeActivityTask = async (activityId: string, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'client-activities', activityId);
-    
-    await updateDoc(docRef, {
-        completed: true,
-        completedAt: serverTimestamp(),
-        completedByUserId: userId,
-        completedByUserName: userName,
-        updatedAt: serverTimestamp()
-    });
-
-invalidateCache('client_activities');
-    // Opcional: Loguear que se completó la tarea
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'client_activity' as any, 
-        entityId: activityId,
-        entityName: 'Tarea completada',
-        details: 'marcó la tarea como finalizada',
-        ownerName: userName
-    }); 
-};
-
-export const rescheduleActivityTask = async (activityId: string, newDate: Date, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'client-activities', activityId);
-    
-    await updateDoc(docRef, {
-        dueDate: Timestamp.fromDate(newDate),
-        updatedAt: serverTimestamp()
-    });
-    
+    const { completeActivityTask } = await import('@/lib/api/client-activities');
+    await completeActivityTask(activityId);
     invalidateCache('client_activities');
 };
 
+export const rescheduleActivityTask = async (activityId: string, newDate: Date, userId: string, userName: string): Promise<void> => {
+    const { rescheduleActivityTask } = await import('@/lib/api/client-activities');
+    await rescheduleActivityTask(activityId, newDate);
+    invalidateCache('client_activities');
+};
 
 // --- Grilla Comercial Functions ---
 
 export const getPrograms = async (): Promise<Program[]> => {
     const cachedData = getFromCache('programs');
     if (cachedData) return cachedData;
-    
-    const snapshot = await getDocs(query(collections.programs, orderBy("name")));
-    const programs = snapshot.docs.map(doc => {
-      const data = doc.data();
-      if (!data.schedules) {
-        return {
-          id: doc.id,
-          ...data,
-          schedules: [{
-            id: 'default',
-            daysOfWeek: data.daysOfWeek || [],
-            startTime: data.startTime || '',
-            endTime: data.endTime || '',
-          }]
-        } as Program;
-      }
-      return { id: doc.id, ...data } as Program
-    });
+
+    const { getPrograms } = await import('@/lib/api/programs');
+    const programs = await getPrograms();
     setInCache('programs', programs);
     return programs;
 };
 
 export const getProgram = async (id: string): Promise<Program | null> => {
-    const docRef = doc(db, 'programs', id);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (!data.schedules) {
-            return {
-              id: docSnap.id,
-              ...data,
-              schedules: [{
-                id: 'default',
-                daysOfWeek: data.daysOfWeek || [],
-                startTime: data.startTime || '',
-                endTime: data.endTime || '',
-              }]
-            } as Program;
-        }
-        return { id: docSnap.id, ...data } as Program;
-    }
-    return null;
+    const { getProgram } = await import('@/lib/api/programs');
+    return getProgram(id);
 }
 
 export const saveProgram = async (programData: Omit<Program, 'id'>, userId: string): Promise<string> => {
-    const dataToSave = { ...programData };
-    // @ts-ignore - Remove deprecated fields before saving
-    delete dataToSave.startTime;
-    delete dataToSave.endTime;
-    delete dataToSave.daysOfWeek;
-    const docRef = await addDoc(collections.programs, { ...dataToSave, createdBy: userId, createdAt: serverTimestamp() });
+    const { saveProgram } = await import('@/lib/api/programs');
+    const programId = await saveProgram(programData);
     invalidateCache('programs');
-    
-    const userSnap = await getDoc(doc(db, 'users', userId));
-    const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'program',
-        entityId: docRef.id,
-        entityName: programData.name,
-        details: `creó el programa <strong>${programData.name}</strong>`,
-        ownerName: userName,
-    });
-
-    return docRef.id;
+    return programId;
 };
 
 export const updateProgram = async (programId: string, programData: Partial<Omit<Program, 'id'>>, userId: string): Promise<void> => {
-    const docRef = doc(db, 'programs', programId);
-    const originalSnap = await getDoc(docRef);
-    if (!originalSnap.exists()) throw new Error("Program not found");
-
-    const dataToUpdate = { ...programData };
-    // @ts-ignore
-    delete dataToUpdate.startTime;
-    delete dataToUpdate.endTime;
-    delete dataToUpdate.daysOfWeek;
-    await updateDoc(docRef, { ...dataToUpdate, updatedBy: userId, updatedAt: serverTimestamp() });
+    const { updateProgram } = await import('@/lib/api/programs');
+    await updateProgram(programId, programData);
     invalidateCache('programs');
-
-    const userSnap = await getDoc(doc(db, 'users', userId));
-    const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'program',
-        entityId: programId,
-        entityName: programData.name || originalSnap.data().name,
-        details: `actualizó el programa <strong>${programData.name || originalSnap.data().name}</strong>`,
-        ownerName: userName,
-    });
 };
 
 export const deleteProgram = async (programId: string, userId: string): Promise<void> => {
-    const docRef = doc(db, 'programs', programId);
-    const originalSnap = await getDoc(docRef);
-    if (!originalSnap.exists()) throw new Error("Program not found");
-    const programName = originalSnap.data().name;
-
-    await deleteDoc(docRef);
+    const { deleteProgram } = await import('@/lib/api/programs');
+    await deleteProgram(programId);
     invalidateCache('programs');
-    invalidateCache(); // Invalidate all for commercial items
-    
-    const userSnap = await getDoc(doc(db, 'users', userId));
-    const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'program',
-        entityId: programId,
-        entityName: programName,
-        details: `eliminó el programa <strong>${programName}</strong>`,
-        ownerName: userName,
-    });
+    invalidateCache();
 };
-
 export const getCommercialItems = async (date: string): Promise<CommercialItem[]> => {
     const cacheKey = `commercial_items_${date}`;
     const cachedData = getFromCache(cacheKey);
@@ -2096,47 +1963,8 @@ export const getInvoicesForOpportunity = async (opportunityId: string): Promise<
 export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]> => {
     const cacheKey = `invoices_client_${clientId}`;
     return getCachedOrLoad(cacheKey, async () => {
-    const opportunityIds = (await getOpportunitiesByClientId(clientId)).map(opp => opp.id);
-    if (opportunityIds.length === 0) return [];
-    
-    const chunks: string[][] = [];
-    for (let i = 0; i < opportunityIds.length; i += 30) {
-        chunks.push(opportunityIds.slice(i, i + 30));
-    }
-
-    const snapshots = await Promise.all(
-        chunks.map(ids => getDocsPreferCache(query(collections.invoices, where("opportunityId", "in", ids))))
-    );
-
-    const invoices = snapshots.flatMap(snapshot => snapshot.docs.map(doc => {
-        const data = doc.data() as any;
-        const rawCreditNoteDate = data.creditNoteMarkedAt;
-        const normalizedCreditNoteDate = rawCreditNoteDate instanceof Timestamp
-            ? rawCreditNoteDate.toDate().toISOString()
-            : typeof rawCreditNoteDate === 'string'
-                ? rawCreditNoteDate
-                : null;
-        const rawDeletionMarkAt = (data as any).deletionMarkedAt;
-        const normalizedDeletionMarkAt = rawDeletionMarkAt instanceof Timestamp
-            ? rawDeletionMarkAt.toDate().toISOString()
-            : typeof rawDeletionMarkAt === 'string'
-                ? rawDeletionMarkAt
-                : null;
-
-        return {
-            id: doc.id,
-            ...data,
-            amount: normalizeInvoiceAmount(data.amount),
-            isCreditNote: Boolean(data.isCreditNote),
-            creditNoteMarkedAt: normalizedCreditNoteDate,
-            deletionMarkedAt: normalizedDeletionMarkAt,
-            periodStart: data.periodStart,
-            periodEnd: data.periodEnd,
-            orderDate: data.orderDate,
-            orderNumber: data.orderNumber,
-        } as Invoice;
-    }));
-    return invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
+        const { getInvoicesForClient } = await import('@/lib/api/clients');
+        return getInvoicesForClient(clientId);
     });
 };
 
@@ -2601,9 +2429,9 @@ export const deletePaymentEntries = async (paymentIds: string[]) => {
 export const getAgencies = async (): Promise<Agency[]> => {
     const cachedData = getFromCache('agencies');
     if (cachedData) return cachedData;
-    
-    const snapshot = await getDocs(query(collections.agencies, orderBy("name")));
-    const agencies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Agency));
+
+    const { getAgencies } = await import('@/lib/api/agencies');
+    const agencies = await getAgencies();
     setInCache('agencies', agencies);
     return agencies;
 };
@@ -2613,28 +2441,11 @@ export const createAgency = async (
     userId: string,
     userName: string
 ): Promise<string> => {
-    const newAgencyData = {
-        ...agencyData,
-        createdAt: serverTimestamp(),
-        createdBy: userId,
-    };
-    const docRef = await addDoc(collections.agencies, newAgencyData);
+    const { createAgency } = await import('@/lib/api/agencies');
+    const agencyId = await createAgency(agencyData);
     invalidateCache('agencies');
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'agency',
-        entityId: docRef.id,
-        entityName: agencyData.name,
-        details: `creó la agencia <strong>${agencyData.name}</strong>`,
-        ownerName: userName
-    });
-
-    return docRef.id;
+    return agencyId;
 };
-
 
 // --- User Profile Functions ---
 
@@ -2651,18 +2462,15 @@ export const createUserProfile = async (uid: string, name: string, email: string
 };
 
 export async function getUserProfile(uid: string): Promise<User | null> {
-  const docRef = doc(db, 'users', uid);
-  const docSnap = await getDoc(docRef);
-  if (docSnap.exists()) {
-    return { id: docSnap.id, ...docSnap.data() } as User;
-  }
-  return null;
+  const { getUserProfile } = await import('@/lib/api/users');
+  const user = await getUserProfile(uid);
+  if (user) setInCache(`user_${uid}`, user);
+  return user;
 }
 
 export async function updateUserProfile(uid: string, data: Partial<User>) {
-  const userRef = doc(db, 'users', uid);
-  // Usamos set con merge: true para crear el documento si no existe, o actualizar si existe
-  await setDoc(userRef, data, { merge: true });
+  const { updateUserProfile } = await import('@/lib/api/users');
+  await updateUserProfile(uid, data);
   invalidateCache('users');
 };
 
@@ -2712,13 +2520,8 @@ export const getAllUsers = async (role?: UserRole): Promise<User[]> => {
   if (pendingReads[cacheKey]) return pendingReads[cacheKey] as Promise<User[]>;
 
   pendingReads[cacheKey] = (async () => {
-    const snapshot = await getDocs(collections.users);
-    let users = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as User));
-    if (role) {
-        users = users.filter(u => u.role === role);
-    }
-    
-    const sorted = users.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const { getAllUsers } = await import('@/lib/api/users');
+    const sorted = await getAllUsers(role);
     if (sorted.length > 0) setInCache(cacheKey, sorted);
     return sorted;
   })().finally(() => {
@@ -2733,11 +2536,9 @@ export const getUserById = async (userId: string): Promise<User | null> => {
     const cached = getFromCache(cacheKey);
     if (cached) return cached as User;
 
-    const userRef = doc(collections.users, userId);
-    const snap = await getDoc(userRef);
-    if (!snap.exists()) return null;
-    const user = { id: snap.id, ...snap.data() } as User;
-    setInCache(cacheKey, user);
+    const { getUserById } = await import('@/lib/api/users');
+    const user = await getUserById(userId);
+    if (user) setInCache(cacheKey, user);
     return user;
 };
 
@@ -2797,19 +2598,8 @@ export const deleteUserAndReassignEntities = async (
 
 export const getClients = async (options: LoadOptions = {}): Promise<Client[]> => {
     const loader = async () => {
-      const source = query(collections.clients, orderBy("denominacion"));
-      const snapshot = options.forceServer ? await getDocs(source) : await getDocsPreferCache(source);
-      return snapshot.docs.map(doc => {
-        const data = doc.data() as any;
-        return { 
-          id: doc.id, 
-          ...data,
-          denominacion: data.denominacion ? toTitleCase(data.denominacion) : data.denominacion,
-          razonSocial: data.razonSocial ? toTitleCase(data.razonSocial) : data.razonSocial,
-          razonSocialTango: data.razonSocialTango ? toTitleCase(data.razonSocialTango) : data.razonSocialTango,
-          newClientDate: data.newClientDate instanceof Timestamp ? data.newClientDate.toDate().toISOString() : data.newClientDate,
-        } as Client
-      });
+      const { getClients } = await import('@/lib/api/clients');
+      return getClients();
     };
 
     if (options.forceServer) {
@@ -2823,22 +2613,8 @@ export const getClients = async (options: LoadOptions = {}): Promise<Client[]> =
 };
 
 export const getClient = async (id: string): Promise<Client | null> => {
-    const docRef = doc(db, 'clients', id);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-        const data = docSnap.data();
-        const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
-        
-        data.createdAt = convertTimestamp(data.createdAt);
-        data.updatedAt = convertTimestamp(data.updatedAt);
-        data.newClientDate = convertTimestamp(data.newClientDate);
-        if (data.deactivationHistory) {
-            data.deactivationHistory = data.deactivationHistory.map(convertTimestamp);
-        }
-
-        return { id: docSnap.id, ...data } as Client;
-    }
-    return null;
+    const { getClient } = await import('@/lib/api/clients');
+    return getClient(id);
 };
 
 export const createClient = async (
@@ -2846,386 +2622,61 @@ export const createClient = async (
     userId?: string,
     userName?: string
 ): Promise<string> => {
-    // 🟢 NORMALIZAMOS LOS TEXTOS AQUÍ (Lo que hicimos antes)
-    const denominacionLimpia = toTitleCase(clientData.denominacion);
-    const razonSocialLimpia = clientData.razonSocial ? toTitleCase(clientData.razonSocial) : '';
-
-    const newClientData: any = {
-        ...clientData,
-        denominacion: denominacionLimpia,
-        razonSocial: razonSocialLimpia,
-        personIds: [],
-        createdAt: serverTimestamp(),
-        isDeactivated: false,
-        deactivationHistory: [],
-    };
-    if (userId && userName) {
-        newClientData.ownerId = userId;
-        newClientData.ownerName = userName;
-    }
-
-    if (clientData.isNewClient) {
-        newClientData.newClientDate = serverTimestamp();
-    } else {
-        newClientData.isNewClient = false;
-    }
-    
-    if (newClientData.agencyId === undefined) {
-        delete newClientData.agencyId;
-    }
-
-    const docRef = await addDoc(collections.clients, newClientData);
-    
-    // 🟢 EL TRUCO EN APLICACIÓN PARA EL CLIENTE:
-    const cacheData = {
-        ...newClientData,
-        createdAt: new Date().toISOString(),
-        newClientDate: newClientData.isNewClient ? new Date().toISOString() : undefined
-    };
-    mutateCacheArray('clients', docRef.id, cacheData, 'add', (a, b) => a.denominacion.localeCompare(b.denominacion));
-    
-    if (userId && userName) {
-        await logActivity({
-            userId,
-            userName,
-            type: 'create',
-            entityType: 'client',
-            entityId: docRef.id,
-            entityName: clientData.denominacion,
-            details: `creó el cliente <a href="/clients/${docRef.id}" class="font-bold text-primary hover:underline">${clientData.denominacion}</a>`,
-            ownerName: userName
-        });
-    }
-    if (userId && userName) {
-        try {
-            await autoUpdateCoachingSession(userId, userName, 'client', docRef.id, clientData.denominacion, 'Nuevo cliente cargado en el sistema.');
-        } catch (e) {
-            console.error('Error auto-updating coaching:', e);
-        }
-    }
-
-    return docRef.id;
+    const { createClient } = await import('@/lib/api/clients');
+    const id = await createClient(clientData, userId, userName);
+    invalidateCache('clients');
+    return id;
 };
 
 export const updateClient = async (
-    id: string, 
+    id: string,
     data: Partial<Omit<Client, 'id'>>,
     userId: string,
     userName: string
 ): Promise<void> => {
-    const docRef = doc(db, 'clients', id);
-    const originalDoc = await getDoc(docRef);
-    if (!originalDoc.exists()) throw new Error('Client not found');
-    const originalData = originalDoc.data() as Client;
-
-    const updateData: {[key: string]: any} = { ...data };
-
-    if (updateData.denominacion) updateData.denominacion = toTitleCase(updateData.denominacion);
-    if (updateData.razonSocial) updateData.razonSocial = toTitleCase(updateData.razonSocial);
-    
-    Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined) {
-            delete updateData[key];
-        }
-    });
-
-    if (data.isDeactivated === true && originalData.isDeactivated === false) {
-        updateData.deactivationHistory = arrayUnion(serverTimestamp());
-    }
-    
-    await updateDoc(docRef, {
-        ...updateData,
-        updatedAt: serverTimestamp()
-    });
-    mutateCacheArray('clients', id, updateData, 'update');
-    
-    const newOwnerName = (data.ownerName !== undefined) ? data.ownerName : originalData.ownerName;
-    const clientName = data.denominacion || originalData.denominacion;
-
-    let details = `actualizó el cliente <a href="/clients/${id}" class="font-bold text-primary hover:underline">${clientName}</a>`;
-    if (data.ownerId && data.ownerId !== originalData.ownerId) {
-        details = `reasignó el cliente <strong>${clientName}</strong> a <strong>${newOwnerName}</strong>`;
-    }
-    if (data.isDeactivated === true && !originalData.isDeactivated) {
-        details = `dio de baja al cliente <strong>${clientName}</strong>`;
-    }
-    if (data.isDeactivated === false && originalData.isDeactivated) {
-        details = `reactivó al cliente <strong>${clientName}</strong>`;
-    }
-
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'client',
-        entityId: id,
-        entityName: clientName,
-        details: details,
-        ownerName: newOwnerName
-    });
+    const { updateClient } = await import('@/lib/api/clients');
+    await updateClient(id, data);
+    mutateCacheArray('clients', id, data, 'update');
 };
-
 export const updateClientTangoMapping = async (
     id: string,
     data: ClientTangoUpdate,
     userId: string,
     userName: string
 ): Promise<void> => {
-    const docRef = doc(db, 'clients', id);
-    const originalDoc = await getDoc(docRef);
-    if (!originalDoc.exists()) throw new Error('Client not found');
-    const originalData = originalDoc.data() as Client;
-
-    const updatePayload: Record<string, any> = {
-        updatedAt: serverTimestamp(),
-    };
-
-    if (data.cuit && data.cuit.trim().length > 0) {
-        updatePayload.cuit = data.cuit.trim();
-    }
-    if (data.razonSocialTango && data.razonSocialTango.trim().length > 0) {
-        updatePayload.razonSocialTango = toTitleCase(data.razonSocialTango.trim());
-    }
-    if (data.tangoCompanyId && data.tangoCompanyId.toString().trim().length > 0) {
-        updatePayload.tangoCompanyId = data.tangoCompanyId.toString().trim();
-        updatePayload.idTango = updatePayload.tangoCompanyId;
-    } else if (data.idTango && data.idTango.toString().trim().length > 0) {
-        updatePayload.idTango = data.idTango.toString().trim();
-        updatePayload.tangoCompanyId = updatePayload.idTango;
-    }
-    if (data.email && data.email.trim().length > 0) {
-        updatePayload.email = data.email.trim();
-    }
-    if (data.phone && data.phone.trim().length > 0) {
-        updatePayload.phone = data.phone.trim();
-    }
-    if (data.rubro && data.rubro.trim().length > 0) {
-        updatePayload.rubro = data.rubro.trim();
-    }
-    if (data.razonSocial && data.razonSocial.trim().length > 0) {
-        updatePayload.razonSocial = toTitleCase(data.razonSocial.trim());
-    }
-    if (data.denominacion && data.denominacion.trim().length > 0) {
-        updatePayload.denominacion = toTitleCase(data.denominacion.trim());
-    }
-    if (data.idAireSrl && data.idAireSrl.toString().trim().length > 0) {
-        updatePayload.idAireSrl = data.idAireSrl.toString().trim();
-    }
-    if (data.idAireDigital && data.idAireDigital.toString().trim().length > 0) {
-        updatePayload.idAireDigital = data.idAireDigital.toString().trim();
-    }
-    if (data.idAire && data.idAire.toString().trim().length > 0) {
-        updatePayload.idAire = data.idAire.toString().trim();
-    }
-    if (data.condicionIVA && data.condicionIVA.trim().length > 0) {
-        updatePayload.condicionIVA = data.condicionIVA.trim() as any;
-    }
-    if (data.provincia && data.provincia.trim().length > 0) {
-        updatePayload.provincia = data.provincia.trim();
-    }
-    if (data.localidad && data.localidad.trim().length > 0) {
-        updatePayload.localidad = data.localidad.trim();
-    }
-    if (data.tipoEntidad && data.tipoEntidad.trim().length > 0) {
-        updatePayload.tipoEntidad = data.tipoEntidad.trim() as any;
-    }
-    if (data.observaciones && data.observaciones.trim().length > 0) {
-        updatePayload.observaciones = data.observaciones.trim();
-    }
-
-    await updateDoc(docRef, updatePayload);
+    const { updateClientTangoMapping } = await import('@/lib/api/clients');
+    await updateClientTangoMapping(id, data);
     invalidateCache('clients');
-
-    const detailsParts = [];
-    if (updatePayload.cuit && updatePayload.cuit !== originalData.cuit) {
-        detailsParts.push(`CUIT <strong>${updatePayload.cuit}</strong>`);
-    }
-    if (updatePayload.tangoCompanyId && updatePayload.tangoCompanyId !== originalData.tangoCompanyId) {
-        detailsParts.push(`ID de Tango <strong>${updatePayload.tangoCompanyId}</strong>`);
-    }
-    if (updatePayload.email && updatePayload.email !== originalData.email) {
-        detailsParts.push(`Email <strong>${updatePayload.email}</strong>`);
-    }
-    if (updatePayload.phone && updatePayload.phone !== originalData.phone) {
-        detailsParts.push(`Teléfono <strong>${updatePayload.phone}</strong>`);
-    }
-    if (updatePayload.rubro && updatePayload.rubro !== originalData.rubro) {
-        detailsParts.push(`Rubro <strong>${updatePayload.rubro}</strong>`);
-    }
-    if (updatePayload.razonSocial && updatePayload.razonSocial !== originalData.razonSocial) {
-        detailsParts.push(`Razón Social <strong>${updatePayload.razonSocial}</strong>`);
-    }
-    if (updatePayload.denominacion && updatePayload.denominacion !== originalData.denominacion) {
-        detailsParts.push(`Denominación <strong>${updatePayload.denominacion}</strong>`);
-    }
-    if (updatePayload.idAireSrl && updatePayload.idAireSrl !== (originalData as any).idAireSrl) {
-        detailsParts.push(`ID Aire SRL <strong>${updatePayload.idAireSrl}</strong>`);
-    }
-    if (updatePayload.idAireDigital && updatePayload.idAireDigital !== (originalData as any).idAireDigital) {
-        detailsParts.push(`ID Aire Digital <strong>${updatePayload.idAireDigital}</strong>`);
-    }
-    if (updatePayload.idAire && updatePayload.idAire !== (originalData as any).idAire) {
-        detailsParts.push(`ID Aire <strong>${updatePayload.idAire}</strong>`);
-    }
-    if (updatePayload.condicionIVA && updatePayload.condicionIVA !== originalData.condicionIVA) {
-        detailsParts.push(`Condición IVA <strong>${updatePayload.condicionIVA}</strong>`);
-    }
-    if (updatePayload.provincia && updatePayload.provincia !== originalData.provincia) {
-        detailsParts.push(`Provincia <strong>${updatePayload.provincia}</strong>`);
-    }
-    if (updatePayload.localidad && updatePayload.localidad !== originalData.localidad) {
-        detailsParts.push(`Localidad <strong>${updatePayload.localidad}</strong>`);
-    }
-    if (updatePayload.tipoEntidad && updatePayload.tipoEntidad !== originalData.tipoEntidad) {
-        detailsParts.push(`Tipo de Entidad <strong>${updatePayload.tipoEntidad}</strong>`);
-    }
-    if (updatePayload.observaciones && updatePayload.observaciones !== originalData.observaciones) {
-        detailsParts.push(`Observaciones`);
-    }
-    const detailText = detailsParts.length > 0 ? detailsParts.join(' y ') : 'datos de Tango';
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'client',
-        entityId: id,
-        entityName: originalData.denominacion,
-        details: `actualizó ${detailText} para <a href="/clients/${id}" class="font-bold text-primary hover:underline">${originalData.denominacion}</a>`,
-        ownerName: originalData.ownerName,
-    });
 };
-
 export const deleteClient = async (
     id: string,
     userId: string,
     userName: string
 ): Promise<void> => {
-    const clientRef = doc(db, 'clients', id);
-    const clientSnap = await getDoc(clientRef);
-    if (!clientSnap.exists()) throw new Error("Client not found");
-
-    const clientData = clientSnap.data() as Client;
-    const batch = writeBatch(db);
-
-    const oppsQuery = query(collections.opportunities, where('clientId', '==', id));
-    const oppsSnap = await getDocs(oppsQuery);
-    oppsSnap.forEach(doc => batch.delete(doc.ref));
-
-    const peopleQuery = query(collections.people, where('clientIds', 'array-contains', id));
-    const peopleSnap = await getDocs(peopleQuery);
-    peopleSnap.forEach(doc => batch.delete(doc.ref));
-    
-    const clientActivitiesQuery = query(collections.clientActivities, where('clientId', '==', id));
-    const clientActivitiesSnap = await getDocs(clientActivitiesQuery);
-    clientActivitiesSnap.forEach(doc => batch.delete(doc.ref));
-
-    const clientOpps = oppsSnap.docs.map(d => d.id);
-    if (clientOpps.length > 0) {
-        const invoicesQuery = query(collections.invoices, where('opportunityId', 'in', clientOpps));
-        const invoicesSnap = await getDocs(invoicesQuery);
-        invoicesSnap.forEach(doc => batch.delete(doc.ref));
-    }
-
-    batch.delete(clientRef);
-
-    await batch.commit();
+    const { deleteClient } = await import('@/lib/api/clients');
+    await deleteClient(id);
     mutateCacheArray('clients', id, null, 'delete');
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'client',
-        entityId: id,
-        entityName: clientData.denominacion,
-        details: `eliminó el cliente <strong>${clientData.denominacion}</strong> y toda su información asociada`,
-        ownerName: clientData.ownerName
-    });
 };
 
 export const bulkDeleteClients = async (clientIds: string[], userId: string, userName: string): Promise<void> => {
     if (!clientIds || clientIds.length === 0) return;
-  
-    const batch = writeBatch(db);
-  
-    for (const clientId of clientIds) {
-      const clientRef = doc(db, 'clients', clientId);
-      batch.delete(clientRef);
-  
-      const oppsQuery = query(collections.opportunities, where('clientId', '==', clientId));
-      const oppsSnap = await getDocs(oppsQuery);
-      oppsSnap.forEach(doc => batch.delete(doc.ref));
-  
-      const activitiesQuery = query(collections.clientActivities, where('clientId', '==', clientId));
-      const activitiesSnap = await getDocs(activitiesQuery);
-      activitiesSnap.forEach(doc => batch.delete(doc.ref));
-  
-      const peopleQuery = query(collections.people, where('clientIds', 'array-contains', clientId));
-      const peopleSnap = await getDocs(peopleQuery);
-      peopleSnap.forEach(doc => batch.delete(doc.ref));
-
-      const clientOpps = oppsSnap.docs.map(d => d.id);
-      if (clientOpps.length > 0) {
-        const invoicesQuery = query(collections.invoices, where('opportunityId', 'in', clientOpps));
-        const invoicesSnap = await getDocs(invoicesQuery);
-        invoicesSnap.forEach(doc => batch.delete(doc.ref));
-      }
-    }
-  
-    await batch.commit();
+    const { bulkDeleteClients } = await import('@/lib/api/clients');
+    await bulkDeleteClients(clientIds);
     clientIds.forEach(clientId => mutateCacheArray('clients', clientId, null, 'delete'));
-    
-    await logActivity({
-      userId,
-      userName,
-      type: 'delete',
-      entityType: 'client',
-      entityId: 'multiple',
-      entityName: 'multiple',
-      details: `eliminó <strong>${clientIds.length}</strong> clientes de forma masiva`,
-      ownerName: userName,
-    });
 };
-
 
 export const bulkUpdateClients = async (
     updates: { id: string; denominacion: string; data: Partial<Omit<Client, 'id'>> }[],
     userId: string,
     userName: string
 ): Promise<void> => {
-    const batch = writeBatch(db);
-
-    for (const { id, data } of updates) {
-        const docRef = doc(db, 'clients', id);
-        batch.update(docRef, { ...data, updatedAt: serverTimestamp() });
-    }
-
-    await batch.commit();
+    const { bulkUpdateClients } = await import('@/lib/api/clients');
+    await bulkUpdateClients(updates);
     invalidateCache('clients');
-    
-    const isReassign = updates.length > 0 && updates[0].data.ownerName;
-
-    if (isReassign) {
-        const newOwnerName = updates[0].data.ownerName;
-        await logActivity({
-            userId,
-            userName,
-            type: 'update',
-            entityType: 'client',
-            entityId: 'multiple',
-            entityName: 'multiple',
-            details: `reasignó <strong>${updates.length}</strong> clientes a <strong>${newOwnerName}</strong>`,
-            ownerName: newOwnerName!
-        });
-    }
 };
-
 export const getPeopleByClientId = async (clientId: string): Promise<Person[]> => {
-    const q = query(collections.people, where("clientIds", "array-contains", clientId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
+    const { getPeopleByClientId } = await import('@/lib/api/clients');
+    return getPeopleByClientId(clientId);
 }
 
 export const createPerson = async (
@@ -3233,72 +2684,22 @@ export const createPerson = async (
     userId: string,
     userName: string
 ): Promise<string> => {
-    const docRef = await addDoc(collections.people, {
-        ...personData,
-        createdAt: serverTimestamp()
-    });
+    const { createPerson } = await import('@/lib/api/people');
+    const personId = await createPerson(personData);
     invalidateCache('people');
-    
-    if (personData.clientIds) {
-        for (const clientId of personData.clientIds) {
-            const clientRef = doc(db, 'clients', clientId);
-            const clientSnap = await getDoc(clientRef);
-            if (clientSnap.exists()) {
-                const clientData = clientSnap.data() as Client;
-                await updateDoc(clientRef, {
-                    personIds: arrayUnion(docRef.id)
-                });
-                invalidateCache('clients');
-
-                 await logActivity({
-                    userId,
-                    userName,
-                    type: 'create',
-                    entityType: 'person',
-                    entityId: docRef.id,
-                    entityName: personData.name,
-                    details: `creó el contacto <strong>${personData.name}</strong> para el cliente <a href="/clients/${clientId}" class="font-bold text-primary hover:underline">${clientData.denominacion}</a>`,
-                    ownerName: clientData.ownerName
-                });
-            }
-        }
-    }
-    
-    return docRef.id;
+    invalidateCache('clients');
+    return personId;
 };
 
 export const updatePerson = async (
-    id: string, 
+    id: string,
     data: Partial<Omit<Person, 'id'>>,
     userId: string,
     userName: string
 ): Promise<void> => {
-    const docRef = doc(db, 'people', id);
-    const originalDoc = await getDoc(docRef);
-    const originalData = originalDoc.data() as Person;
-
-    await updateDoc(docRef, {
-        ...data,
-        updatedAt: serverTimestamp()
-    });
+    const { updatePerson } = await import('@/lib/api/people');
+    await updatePerson(id, data);
     invalidateCache('people');
-
-    if (originalData.clientIds && originalData.clientIds.length > 0) {
-        const clientSnap = await getDoc(doc(db, 'clients', originalData.clientIds[0]));
-        if (clientSnap.exists()) {
-            const clientData = clientSnap.data() as Client;
-            await logActivity({
-                userId,
-                userName,
-                type: 'update',
-                entityType: 'person',
-                entityId: id,
-                entityName: data.name || originalData.name,
-                details: `actualizó el contacto <strong>${data.name || originalData.name}</strong>`,
-                ownerName: clientData.ownerName
-            });
-        }
-    }
 };
 
 export const deletePerson = async (
@@ -3306,33 +2707,10 @@ export const deletePerson = async (
     userId: string,
     userName: string
 ): Promise<void> => {
-    const personRef = doc(db, 'people', id);
-    const personSnap = await getDoc(personRef);
-    if (!personSnap.exists()) throw new Error("Person not found");
-
-    const personData = personSnap.data() as Person;
-    
-    await deleteDoc(personRef);
+    const { deletePerson } = await import('@/lib/api/people');
+    await deletePerson(id);
     invalidateCache('people');
-
-    if (personData.clientIds && personData.clientIds.length > 0) {
-        const clientSnap = await getDoc(doc(db, 'clients', personData.clientIds[0]));
-        const clientOwnerName = clientSnap.exists() ? (clientSnap.data() as Client).ownerName : 'N/A';
-        const clientName = clientSnap.exists() ? (clientSnap.data() as Client).denominacion : 'N/A';
-
-         await logActivity({
-            userId,
-            userName,
-            type: 'delete',
-            entityType: 'person',
-            entityId: id,
-            entityName: personData.name,
-            details: `eliminó el contacto <strong>${personData.name}</strong> del cliente <a href="/clients/${personData.clientIds[0]}" class="font-bold text-primary hover:underline">${clientName}</a>`,
-            ownerName: clientOwnerName
-        });
-    }
 };
-
 const mapOpportunityDoc = (doc: any): Opportunity => {
     const data = doc.data();
     const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
@@ -3375,72 +2753,32 @@ export const getOpportunities = async (options: LoadOptions = {}): Promise<Oppor
     const cachedData = options.forceServer ? null : getFromCache('opportunities');
     if (cachedData) return cachedData;
 
-    // 🟢 ESTRATEGIA LIGERA: Traemos etapas activas y solo las "Perdidas" recientes
-    const activeStages = ['Nuevo', 'Propuesta', 'Negociación', 'Negociación a Aprobar', 'Cerrado - No Definido', 'Cerrado - Ganado'];
-    
-    const readDocs = options.forceServer ? getDocs : getDocsPreferCache;
-
-    // Ejecutamos las consultas de las activas en paralelo
-    const activeQueries = activeStages.map(stage => readDocs(query(collections.opportunities, where('stage', '==', stage))));
-    
-    // Traemos solo las Perdidas de los últimos 3 meses
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    const lostQuery = readDocs(query(collections.opportunities, where('stage', '==', 'Cerrado - Perdido'), where('createdAt', '>=', threeMonthsAgo.toISOString())));
-
-    const snapshots = await Promise.all([...activeQueries, lostQuery]) as any[];
-    
-    const opportunities: Opportunity[] = [];
-    snapshots.forEach(snap => {
-        snap.docs.forEach(doc => {
-            opportunities.push(mapOpportunityDoc(doc));
-        });
-    });
-
+    const { getOpportunities } = await import('@/lib/api/opportunities');
+    const opportunities = await getOpportunities();
     setInCache('opportunities', opportunities);
     return opportunities;
 };
 
 export const getAllOpportunities = async (): Promise<Opportunity[]> => {
     return getCachedOrLoad('all_opportunities', async () => {
-        const snapshot = await getDocsPreferCache(collections.opportunities);
-        return snapshot.docs.map(mapOpportunityDoc);
+        const { getAllOpportunities } = await import('@/lib/api/opportunities');
+        return getAllOpportunities();
     });
 };
 
-
 export const getOpportunitiesByClientId = async (clientId: string): Promise<Opportunity[]> => {
     return getCachedOrLoad(`opportunities_client_${clientId}`, async () => {
-        const q = query(collections.opportunities, where('clientId', '==', clientId));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(mapOpportunityDoc);
+        const { getOpportunitiesByClientId } = await import('@/lib/api/clients');
+        return getOpportunitiesByClientId(clientId);
     });
 };
 
 export const getOpportunitiesForUser = async (userId: string): Promise<Opportunity[]> => {
     return getCachedOrLoad(`opportunities_user_${userId}`, async () => {
-        const allClients = await getClients();
-        const userClientIds = new Set(allClients.filter(c => c.ownerId === userId).map(c => c.id));
-
-        if (userClientIds.size === 0) return [];
-
-        // Firestore limits the `in` operator to 30 values, so chunk the client ids
-        // and merge the results to avoid query failures for advisors with many clients.
-        const clientIds = Array.from(userClientIds);
-        const chunks: string[][] = [];
-
-        for (let i = 0; i < clientIds.length; i += 30) {
-            chunks.push(clientIds.slice(i, i + 30));
-        }
-
-        const results = await Promise.all(
-            chunks.map(ids => getDocs(query(collections.opportunities, where('clientId', 'in', ids))))
-        );
-
-        return results.flatMap(snapshot => snapshot.docs.map(mapOpportunityDoc));
+        const { getOpportunitiesForUser } = await import('@/lib/api/opportunities');
+        return getOpportunitiesForUser(userId);
     });
 };
-
 export const createOpportunity = async (
     opportunityData: Omit<Opportunity, 'id'>,
     userId: string,
@@ -3990,9 +3328,8 @@ const convertActivityDoc = (doc: any): ClientActivity => {
 
 
 export const getClientActivities = async (clientId: string): Promise<ClientActivity[]> => {
-    const q = query(collections.clientActivities, where('clientId', '==', clientId), orderBy('timestamp', 'desc'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(convertActivityDoc);
+    const { getClientActivities } = await import('@/lib/api/clients');
+    return getClientActivities(clientId);
 };
 
 export const getAllClientActivities = async (): Promise<ClientActivity[]> => {
@@ -4063,31 +3400,10 @@ export const updateClientActivity = async (
     id: string,
     data: Partial<Omit<ClientActivity, 'id'>>
 ): Promise<void> => {
-    const docRef = doc(db, 'client-activities', id);
-    const updateData: {[key: string]: any} = { ...data, updatedAt: serverTimestamp() };
-
-    if (data.completed) {
-        updateData.completedAt = serverTimestamp();
-        updateData.completedByUserId = data.completedByUserId;
-        updateData.completedByUserName = data.completedByUserName;
-    } else if (data.completed === false) {
-        updateData.completedAt = deleteField();
-        updateData.completedByUserId = deleteField();
-        updateData.completedByUserName = deleteField();
-    }
-
-    if (data.dueDate) {
-        updateData.dueDate = Timestamp.fromDate(new Date(data.dueDate));
-    }
-
-    if (data.googleCalendarEventId === null) {
-        updateData.googleCalendarEventId = deleteField();
-    }
-
-    await updateDoc(docRef, updateData);
+    const { updateClientActivity } = await import('@/lib/api/client-activities');
+    await updateClientActivity(id, data);
     invalidateCache('client_activities');
 };
-
 export const getCoachingSessions = async (advisorId: string): Promise<CoachingSession[]> => {
     const q = query(
         collections.coachingSessions, 
@@ -4849,17 +4165,13 @@ export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, '
 
 export const getBillingRequestsByClient = async (clientId: string): Promise<BillingRequest[]> => {
     try {
-        const q = query(collections.billingRequests, where('clientId', '==', clientId));
-        const snap = await getDocs(q);
-        const results = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as BillingRequest));
-        // 🟢 Ordenar por fecha cronológicamente ascendente (desde la más antigua)
-        return results.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const { getBillingRequestsByClient } = await import('@/lib/api/clients');
+        return getBillingRequestsByClient(clientId);
     } catch (e) {
         console.error(e);
         return [];
     }
 };
-
 export const getBillingRequestsByOrder = async (orderId: string) => {
     try {
         const q = query(collections.billingRequests, where('orderId', '==', orderId));
@@ -4904,11 +4216,8 @@ export const getAdvertisingOrdersByOpportunity = async (opportunityId: string): 
 export const getAdvertisingOrdersByClientId = async (clientId: string): Promise<AdvertisingOrder[]> => {
     try {
         if (!clientId) return [];
-        const q = query(collection(db, 'advertising_orders'), where('clientId', '==', clientId));
-        const snapshot = await getDocsPreferCache(q);
-        return snapshot.docs
-            .map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() } as AdvertisingOrder))
-            .sort((a, b) => (b.startDate || b.createdAt || '').localeCompare(a.startDate || a.createdAt || ''));
+        const { getAdvertisingOrdersByClientId } = await import('@/lib/api/clients');
+        return getAdvertisingOrdersByClientId(clientId);
     } catch (error) {
         console.error("Error fetching ad orders by client:", error);
         return [];
@@ -5441,30 +4750,14 @@ export const saveConvenioCanje = async (
 
 // --- Gestión de Lista Blanca de Correos ---
 export const getEmailWhitelist = async (): Promise<string[]> => {
-    const docRef = doc(collections.systemConfig, 'email_whitelist');
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-        return snap.data().emails || [];
-    }
-    return [];
+    const { getEmailWhitelist } = await import('@/lib/api/system');
+    return getEmailWhitelist();
 };
 
 export const updateEmailWhitelist = async (emails: string[], userId: string, userName: string): Promise<void> => {
-    const docRef = doc(collections.systemConfig, 'email_whitelist');
-    await setDoc(docRef, { emails }, { merge: true });
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'system_config' as any,
-        entityId: 'email_whitelist',
-        entityName: 'Lista Blanca de Accesos',
-        details: 'actualizó los correos autorizados para ingresar al sistema.',
-        ownerName: 'Sistema',
-    });
+    const { updateEmailWhitelist } = await import('@/lib/api/system');
+    await updateEmailWhitelist(emails);
 };
-
 // --- Obtener Convenios de Canje (Nueva Modalidad) ---
 export const getConveniosCanje = async (): Promise<ConvenioCanje[]> => {
     const cachedData = getFromCache('convenios_canje');
@@ -6224,88 +5517,10 @@ export const mergeClients = async (
     userId: string,
     userName: string
 ): Promise<void> => {
-    if (targetClientId === sourceClientId) throw new Error("No puedes fusionar un cliente consigo mismo.");
-
-    const targetRef = doc(db, 'clients', targetClientId);
-    const sourceRef = doc(db, 'clients', sourceClientId);
-
-    const [targetSnap, sourceSnap] = await Promise.all([getDoc(targetRef), getDoc(sourceRef)]);
-    if (!targetSnap.exists() || !sourceSnap.exists()) throw new Error("Uno de los clientes no existe.");
-
-    const targetData = targetSnap.data() as Client;
-    const sourceData = sourceSnap.data() as Client;
-    const targetName = targetData.denominacion;
-
-    // 🟢 PREVENCIÓN DE CRASHEO: Usamos Lotes (Batches) en lugar de promesas paralelas
-    let batch = writeBatch(db);
-    let operationCount = 0;
-
-    const commitBatchIfNeeded = async () => {
-        if (operationCount >= 450) { // Firebase permite max 500 operaciones por lote
-            await batch.commit();
-            batch = writeBatch(db);
-            operationCount = 0;
-        }
-    };
-
-    const updateDocsBatch = async (querySnapshot: any, dataToUpdate: any) => {
-        for (const d of querySnapshot.docs) {
-            batch.update(d.ref, dataToUpdate);
-            operationCount++;
-            await commitBatchIfNeeded();
-        }
-    };
-
-    // 1. Mover Oportunidades
-    await updateDocsBatch(await getDocs(query(collections.opportunities, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
-    // 2. Mover Ordenes
-    await updateDocsBatch(await getDocs(query(collection(db, 'advertising_orders'), where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
-    // 3. Billing
-    await updateDocsBatch(await getDocs(query(collections.billingRequests, where('clientId', '==', sourceClientId))), { clientId: targetClientId });
-    // 4. Actividades
-    await updateDocsBatch(await getDocs(query(collections.clientActivities, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
-    
-    // 5. Contactos
-    const peopleSnap = await getDocs(query(collections.people, where('clientIds', 'array-contains', sourceClientId)));
-    for (const d of peopleSnap.docs) {
-        const data = d.data();
-        const newIds = data.clientIds.filter((id: string) => id !== sourceClientId);
-        if (!newIds.includes(targetClientId)) newIds.push(targetClientId);
-        batch.update(d.ref, { clientIds: newIds });
-        operationCount++;
-        await commitBatchIfNeeded();
-    }
-
-    // 6. Notas
-    await updateDocsBatch(await getDocs(query(collections.commercialNotes, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
-    // 7. Redes
-    await updateDocsBatch(await getDocs(query(collections.socialMediaRequests, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
-    // 8. Notas Web
-    await updateDocsBatch(await getDocs(query(collections.webNotes, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
-    // 9. Canjes
-    await updateDocsBatch(await getDocs(query(collections.canjes, where('clienteId', '==', sourceClientId))), { clienteId: targetClientId, clienteName: targetName });
-    // 10. Convenios
-    await updateDocsBatch(await getDocs(query(collections.convenios, where('clientId', '==', sourceClientId))), { clientId: targetClientId, clientName: targetName });
-
-    // 11. Eliminar el origen (duplicado)
-    batch.delete(sourceRef);
-    await batch.commit();
-
+    const { mergeClients } = await import('@/lib/api/clients');
+    await mergeClients(targetClientId, sourceClientId);
     invalidateCache();
-
-    // 12. Registrar la acción
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'client',
-        entityId: targetClientId,
-        entityName: targetName,
-        details: `fusionó el cliente duplicado <strong>${sourceData.denominacion}</strong> hacia este cliente, migrando todo su historial.`,
-        ownerName: targetData.ownerName || 'Sistema'
-    });
 };
-
 // ============================================================================
 // --- GESTIÓN DINÁMICA DE TRABAJO (ROLES Y RESPONSABILIDADES) ---
 // ============================================================================
@@ -6322,39 +5537,15 @@ export interface WorkflowAssignments {
 }
 
 export const getWorkflowAssignments = async (): Promise<WorkflowAssignments> => {
-    const docRef = doc(db, 'system_config', 'workflow_assignments');
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-        const d = snap.data();
-        return {
-            approvers: d.approvers || [],
-            billingReceptors: d.billingReceptors || [],
-            tangoInvoicers: d.tangoInvoicers || [],
-            needLoaders: d.needLoaders || [],
-            needRequestReceivers: d.needRequestReceivers || [],
-            canjeRequestReceivers: d.canjeRequestReceivers || [],
-            canjeManagementApprovers: d.canjeManagementApprovers || [],
-            canjeCommercialReferents: d.canjeCommercialReferents || []
-        };
-    }
-    return {
-        approvers: [],
-        billingReceptors: [],
-        tangoInvoicers: [],
-        needLoaders: [],
-        needRequestReceivers: [],
-        canjeRequestReceivers: [],
-        canjeManagementApprovers: [],
-        canjeCommercialReferents: []
-    };
+    const { getWorkflowAssignments } = await import('@/lib/api/system');
+    return getWorkflowAssignments();
 };
 
 export const saveWorkflowAssignments = async (assignments: WorkflowAssignments): Promise<void> => {
-    const docRef = doc(db, 'system_config', 'workflow_assignments');
-    await setDoc(docRef, assignments, { merge: true });
+    const { saveWorkflowAssignments } = await import('@/lib/api/system');
+    await saveWorkflowAssignments(assignments);
     invalidateCache();
 };
-
 // ============================================================================
 // --- PROCESADOR DE BANDEJA DE FACTURACIÓN ---
 // ============================================================================

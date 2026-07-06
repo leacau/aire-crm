@@ -1,5 +1,4 @@
 import type { User, AreaType, ScreenName, ScreenPermission } from './types';
-import { getAreaPermissions } from './firebase-service';
 import { defaultPermissions } from './data';
 import { hasManagementPrivileges } from './role-utils';
 
@@ -20,6 +19,7 @@ export async function initializePermissions() {
     }
     
     try {
+        const { getAreaPermissions } = await import('./firebase-service');
         permissionsCache = await getAreaPermissions();
         cacheTimestamp = now;
         return permissionsCache;
@@ -29,6 +29,11 @@ export async function initializePermissions() {
         cacheTimestamp = now;
         return permissionsCache;
     }
+}
+
+export function hydratePermissionsCache(permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>) {
+    permissionsCache = permissions;
+    cacheTimestamp = Date.now();
 }
 
 
