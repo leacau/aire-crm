@@ -179,6 +179,17 @@ service cloud.firestore {
           .hasAny(['role', 'area', 'managerId', 'permissions', 'sellerConfig', 'deletedAt', 'vacationDays', 'monthlyClosures', 'monthlyObjectives']);
     }
 
+    function selfDecreasesOwnVacationDays(userId) {
+      return isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['vacationDays'])
+        && resource.data.get('vacationDays', 0) is number
+        && request.resource.data.get('vacationDays', -1) is number
+        && request.resource.data.get('vacationDays', -1) >= 0
+        && request.resource.data.get('vacationDays', -1) < resource.data.get('vacationDays', 0);
+    }
+
     match /system_config/{docId} {
       allow read: if isSignedIn();
       allow write: if isManagement() || isSuperAdmin();
@@ -187,7 +198,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow get, list: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if updatesSelfProfile(userId) || isManagement();
+      allow update: if updatesSelfProfile(userId) || selfDecreasesOwnVacationDays(userId) || isManagement();
       allow delete: if isManagement();
     }
 
