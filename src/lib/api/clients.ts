@@ -23,6 +23,13 @@ export type ClientTangoUpdate = {
   observaciones?: string;
 };
 
+export type ClientTangoIdField = 'idAire' | 'idAireSrl' | 'idAireDigital';
+export type ClientTangoSyncedField = 'isTangoSyncedAire' | 'isTangoSyncedSrl' | 'isTangoSyncedSas';
+
+export type ClientTangoMappingOptions = {
+  markSyncedField?: ClientTangoSyncedField;
+};
+
 export async function getClients(): Promise<Client[]> {
   const result = await apiRequest<{ clients: Client[] }>('/api/clients', { method: 'GET' });
   return result.clients;
@@ -76,10 +83,25 @@ export async function bulkUpdateClients(
   });
 }
 
-export async function updateClientTangoMapping(id: string, data: ClientTangoUpdate): Promise<void> {
+export async function updateClientTangoMapping(
+  id: string,
+  data: ClientTangoUpdate,
+  options: ClientTangoMappingOptions = {},
+): Promise<void> {
   await apiRequest<{ ok: true }>(`/api/clients/${encodeURIComponent(id)}/tango-mapping`, {
     method: 'PATCH',
-    body: { data },
+    body: { data, ...options },
+  });
+}
+
+export async function undoClientTangoMapping(
+  id: string,
+  crmIdField: ClientTangoIdField,
+  syncedField: ClientTangoSyncedField,
+): Promise<void> {
+  await apiRequest<{ ok: true }>(`/api/clients/${encodeURIComponent(id)}/tango-mapping`, {
+    method: 'DELETE',
+    body: { crmIdField, syncedField },
   });
 }
 

@@ -192,6 +192,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las pantallas de notas web y publicidad conservan sus llamadas actuales mediante el puente temporal.
 - `firestore.rules` sigue intacto.
 
+## Vigesimo primer corte aplicado
+
+- Se extendio `/api/clients/[clientId]/tango-mapping` para marcar y deshacer sincronizaciones Tango desde servidor.
+- La pantalla `/tango-mapping` deja de actualizar campos de `clients` directo desde Firestore para marcar sincronizado o quitar IDs Tango.
+- Los campos permitidos para sincronizacion se validan en API con lista blanca.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

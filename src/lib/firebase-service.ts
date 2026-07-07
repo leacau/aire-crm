@@ -204,6 +204,12 @@ export type ClientTangoUpdate = {
     cuit?: string; tangoCompanyId?: string; idTango?: string; email?: string; phone?: string; rubro?: string; razonSocial?: string; razonSocialTango?: string; denominacion?: string; idAireSrl?: string; idAireDigital?: string; idAire?: string; condicionIVA?: string; provincia?: string; localidad?: string; tipoEntidad?: string; observaciones?: string;
 };
 
+export type ClientTangoIdField = 'idAire' | 'idAireSrl' | 'idAireDigital';
+export type ClientTangoSyncedField = 'isTangoSyncedAire' | 'isTangoSyncedSrl' | 'isTangoSyncedSas';
+export type ClientTangoMappingOptions = {
+    markSyncedField?: ClientTangoSyncedField;
+};
+
 // --- Commercial Notes Functions ---
 
 export const saveCommercialNote = async (
@@ -2194,12 +2200,26 @@ export const updateClientTangoMapping = async (
     id: string,
     data: ClientTangoUpdate,
     userId: string,
-    userName: string
+    userName: string,
+    options: ClientTangoMappingOptions = {}
 ): Promise<void> => {
     const { updateClientTangoMapping } = await import('@/lib/api/clients');
-    await updateClientTangoMapping(id, data);
+    await updateClientTangoMapping(id, data, options);
     invalidateCache('clients');
 };
+
+export const undoClientTangoMapping = async (
+    id: string,
+    crmIdField: ClientTangoIdField,
+    syncedField: ClientTangoSyncedField,
+    userId: string,
+    userName: string
+): Promise<void> => {
+    const { undoClientTangoMapping } = await import('@/lib/api/clients');
+    await undoClientTangoMapping(id, crmIdField, syncedField);
+    invalidateCache('clients');
+};
+
 export const deleteClient = async (
     id: string,
     userId: string,

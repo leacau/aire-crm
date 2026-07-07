@@ -5,11 +5,26 @@ import { logServerActivity } from '@/lib/server/activity';
 import { toTitleCase } from '@/lib/utils';
 import { cleanObject, FieldValue, getRequesterName, mapClient } from '@/app/api/clients/utils';
 import type { Client } from '@/lib/types';
-import type { ClientTangoUpdate } from '@/lib/api/clients';
+import type { ClientTangoIdField, ClientTangoSyncedField, ClientTangoUpdate } from '@/lib/api/clients';
 
 type RouteContext = {
   params: Promise<{ clientId: string }>;
 };
+
+const TANGO_ID_FIELDS = new Set<ClientTangoIdField>(['idAire', 'idAireSrl', 'idAireDigital']);
+const TANGO_SYNCED_FIELDS = new Set<ClientTangoSyncedField>([
+  'isTangoSyncedAire',
+  'isTangoSyncedSrl',
+  'isTangoSyncedSas',
+]);
+
+function isTangoSyncedField(value: unknown): value is ClientTangoSyncedField {
+  return typeof value === 'string' && TANGO_SYNCED_FIELDS.has(value as ClientTangoSyncedField);
+}
+
+function isTangoIdField(value: unknown): value is ClientTangoIdField {
+  return typeof value === 'string' && TANGO_ID_FIELDS.has(value as ClientTangoIdField);
+}
 
 function buildTangoUpdatePayload(data: ClientTangoUpdate) {
   const updatePayload: Record<string, unknown> = {
@@ -71,6 +86,15 @@ export async function PATCH(request: Request, context: RouteContext) {
   const { clientId } = await context.params;
   const body = await request.json();
   const updatePayload = buildTangoUpdatePayload(body?.data || {});
+  const markSyncedField = body?.markSyncedField;
+
+  if (markSyncedField !== undefined) {
+    if (!isTangoSyncedField(markSyncedField)) {
+      return NextResponse.json({ error: 'Campo de sincronizacion invalido.' }, { status: 400 });
+    }
+    updatePayload[markSyncedField] = true;
+  }
+
   const docRef = dbAdmin.collection('clients').doc(clientId);
   const originalDoc = await docRef.get();
 
@@ -91,6 +115,48 @@ export async function PATCH(request: Request, context: RouteContext) {
     entityId: clientId,
     entityName: originalData.denominacion,
     details: `actualizo ${detailText} para <a href="/clients/${clientId}" class="font-bold text-primary hover:underline">${originalData.denominacion}</a>`,
+    ownerName: originalData.ownerName,
+  });
+
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(request: Request, context: RouteContext) {
+  const requester = await requireServerUser(request);
+  if (isServerResponse(requester)) return requester;
+
+  const { clientId } = await context.params;
+  const body = await request.json().catch(() => null);
+  const crmIdField = body?.crmIdField;
+  const syncedField = body?.syncedField;
+
+  if (!isTangoIdField(crmIdField) || !isTangoSyncedField(syncedField)) {
+    return NextResponse.json({ error: 'Campos de Tango invalidos.' }, { status: 400 });
+  }
+
+  const docRef = dbAdmin.collection('clients').doc(clientId);
+  const originalDoc = await docRef.get();
+
+  if (!originalDoc.exists) {
+    return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+  }
+
+  const originalData = mapClient(originalDoc.id, originalDoc.data());
+  await docRef.update({
+    [crmIdField]: FieldValue.delete(),
+    [syncedField]: FieldValue.delete(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  const requesterName = getRequesterName(requester);
+  await logServerActivity({
+    userId: requester.uid,
+    userName: requesterName,
+    type: 'update',
+    entityType: 'client',
+    entityId: clientId,
+    entityName: originalData.denominacion,
+    details: `quito el mapeo de Tango de <a href="/clients/${clientId}" class="font-bold text-primary hover:underline">${originalData.denominacion}</a>`,
     ownerName: originalData.ownerName,
   });
 

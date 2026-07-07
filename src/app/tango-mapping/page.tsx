@@ -9,13 +9,12 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { getAllUsers, getClients, updateClientTangoMapping, updateUserProfile } from '@/lib/firebase-service';
+import { getAllUsers, getClients, undoClientTangoMapping, updateClientTangoMapping, updateUserProfile } from '@/lib/firebase-service';
 import type { Client, SellerCompanyConfig, User } from '@/lib/types';
 import { RefreshCcw, CheckCircle2, Save, Undo2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { auth, db } from '@/lib/firebase';
-import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { auth } from '@/lib/firebase';
 
 interface TangoClient {
   COD_CLIENTE: string;
@@ -324,8 +323,9 @@ export default function TangoMappingPage() {
     try {
       const updates = buildClientUpdates(match, company);
 
-      await updateClientTangoMapping(match.crmClient.id, updates, userInfo!.id, userInfo!.name);
-      await updateDoc(doc(db, 'clients', match.crmClient.id), { [company.syncedField]: true });
+      await updateClientTangoMapping(match.crmClient.id, updates, userInfo!.id, userInfo!.name, {
+        markSyncedField: company.syncedField,
+      });
 
       toast({ title: 'Cliente sincronizado con éxito' });
 
@@ -352,8 +352,9 @@ export default function TangoMappingPage() {
       setSyncingId(`${company.key}-${match.crmClient.id}`);
       try {
         const updates = buildClientUpdates(match, company);
-        await updateClientTangoMapping(match.crmClient.id, updates, userInfo.id, userInfo.name);
-        await updateDoc(doc(db, 'clients', match.crmClient.id), { [company.syncedField]: true });
+        await updateClientTangoMapping(match.crmClient.id, updates, userInfo.id, userInfo.name, {
+          markSyncedField: company.syncedField,
+        });
         markMatchAsSynced(match, company, updates);
         successCount += 1;
       } catch (error) {
@@ -375,11 +376,7 @@ export default function TangoMappingPage() {
     if (!window.confirm(`Quitar el ID Tango ${company.shortLabel} de ${client.denominacion}?`)) return;
     setUndoingId(`${company.key}-${client.id}`);
     try {
-      await updateDoc(doc(db, 'clients', client.id), {
-        [company.crmIdField]: deleteField(),
-        [company.syncedField]: deleteField(),
-        updatedAt: serverTimestamp(),
-      });
+      await undoClientTangoMapping(client.id, company.crmIdField, company.syncedField, userInfo.id, userInfo.name);
       setCrmClients(previous => previous.map(item => (
         item.id === client.id
           ? { ...item, [company.crmIdField]: undefined, [company.syncedField]: undefined }
