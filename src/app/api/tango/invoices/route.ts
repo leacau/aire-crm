@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 
-const DEFAULT_TANGO_BASE_URL = 'https://040896-002.connect.axoft.com';
 const PAGE_SIZE = 2000;
 const PAGE_BATCH_SIZE = 5;
 const MAX_PAGES = 100;
@@ -62,7 +61,11 @@ const normalize = (value: unknown) => String(value || '')
 
 const getTangoEndpoint = () => {
   const configuredValue = process.env.TANGO_API_BASE_URL?.trim();
-  const cleanValue = configuredValue?.replace(/^["']|["']$/g, '') || DEFAULT_TANGO_BASE_URL;
+  const cleanValue = configuredValue?.replace(/^["']|["']$/g, '');
+
+  if (!cleanValue) {
+    throw new Error('Falta configurar TANGO_API_BASE_URL');
+  }
 
   try {
     const url = new URL(cleanValue);
@@ -70,7 +73,7 @@ const getTangoEndpoint = () => {
     url.search = '';
     return url;
   } catch {
-    return new URL('/Api/GetApiLiveQueryData', DEFAULT_TANGO_BASE_URL);
+    throw new Error('TANGO_API_BASE_URL no es una URL valida');
   }
 };
 
