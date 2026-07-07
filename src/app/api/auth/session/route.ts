@@ -86,6 +86,10 @@ export async function POST(request: Request) {
       permissions: await getPermissions(),
     });
   } catch (error: any) {
+    console.error('AUTH SESSION ERROR:', {
+      code: error?.code,
+      message: error?.message,
+    });
     const status = error?.code === 'auth/id-token-expired' ? 401 : 500;
     return NextResponse.json(
       { error: status === 401 ? 'Sesion vencida.' : 'No se pudo validar la sesion.' },
