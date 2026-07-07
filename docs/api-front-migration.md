@@ -134,6 +134,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las mutaciones de ordenes de publicidad quedan pendientes para un corte propio porque actualizan billing, canjes, historial, auditoria y relaciones.
 - `firestore.rules` sigue intacto.
 
+## Decimoquinto corte aplicado
+
+- Se agrego `/api/approvals` para centralizar la bandeja unificada de aprobaciones.
+- La pantalla `/approvals` ya no consulta Firestore directo para listar notas comerciales, pedidos de redes, ordenes de publicidad y notas web.
+- Aprobar o devolver documentos tambien pasa por `/api/approvals`, con actualizacion de estado, comentarios e historial en servidor.
+- La generacion de PDFs y envio de emails sigue en el front porque depende del DOM renderizado y del token Google del usuario.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

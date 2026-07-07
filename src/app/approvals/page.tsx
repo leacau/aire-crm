@@ -7,8 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, updateDoc, doc, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -22,6 +20,7 @@ import { getPrograms, getUserById, getClient, getBillingRequestsByOrder } from '
 import { sendEmail } from '@/lib/google-gmail-service';
 import dynamic from 'next/dynamic';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
+import { getApprovals, updateApprovalStatus } from '@/lib/api/approvals';
 
 const AdvertisingOrderPdf = dynamic(() => import('@/components/publicidad/advertising-pdf').then(mod => mod.AdvertisingOrderPdf), { ssr: false });
 const AdvertisingRevisionHistory = dynamic(() => import('@/components/publicidad/advertising-revision-history').then(mod => mod.AdvertisingRevisionHistory), { ssr: false });
@@ -81,104 +80,11 @@ function ApprovalsPageComponent() {
     if (!userInfo) return;
     setLoading(true);
     try {
-      const statusesToFetch: ApprovalStatus[] = ['Pendiente', 'Aprobado', 'Devuelto', 'Borrador', 'Pendiente de Modificación'];
-      const isReviewer = isBoss || userInfo.role === 'Administracion' || userInfo.area === 'Pautado' || userInfo.role === 'Gerencia' || userInfo.role === 'Jefe';
-      
-      const [notesSnap, socialSnap, ordersSnap, webNotesSnap] = await Promise.all([
-        getDocs(query(collection(db, 'commercial_notes'), where('status', 'in', statusesToFetch))),
-        getDocs(query(collection(db, 'social_media_requests'), where('status', 'in', statusesToFetch))),
-        getDocs(query(collection(db, 'advertising_orders'), where('status', 'in', statusesToFetch))),
-        getDocs(query(collection(db, 'web_notes'), where('status', 'in', statusesToFetch))),
-      ]);
-
-      const unifiedList: UnifiedApprovalItem[] = [];
-
-      notesSnap.forEach(d => {
-        const data = d.data();
-        const isOwner = data.advisorId === userInfo.id;
-        if (!isReviewer && !isOwner) return;
-
-        unifiedList.push({
-          id: d.id,
-          type: 'Nota Comercial',
-          clientId: data.clientId,
-          clientName: data.clientName,
-          advisorName: data.advisorName,
-          title: data.title || 'Nota Sin Título',
-          createdAt: parseDate(data.createdAt),
-          status: data.status,
-          adminComments: data.adminComments,
-          collectionName: 'commercial_notes',
-          rawData: data,
-          approvalHistory: data.approvalHistory || []
-        });
-      });
-
-      socialSnap.forEach(d => {
-        const data = d.data();
-        const isOwner = data.advisorId === userInfo.id;
-        if (!isReviewer && !isOwner) return;
-
-        unifiedList.push({
-          id: d.id,
-          type: 'Pedido de Redes',
-          clientId: data.clientId,
-          clientName: data.clientName,
-          advisorName: data.advisorName,
-          title: `${data.contentType} - ${data.objective || 'Sin objetivo'}`,
-          createdAt: parseDate(data.createdAt),
-          status: data.status,
-          adminComments: data.adminComments,
-          collectionName: 'social_media_requests',
-          rawData: data,
-          approvalHistory: data.approvalHistory || []
-        });
-      });
-
-      ordersSnap.forEach(d => {
-        const data = d.data();
-        const isOwner = data.createdBy === userInfo.id || data.advisorId === userInfo.id;
-        if (!isReviewer && !isOwner) return;
-
-        unifiedList.push({
-          id: d.id,
-          type: 'Orden de Publicidad',
-          clientId: data.clientId,
-          clientName: data.clientName || 'Cliente',
-          advisorName: data.accountExecutive,
-          title: data.product || 'Publicidad Sin Título',
-          createdAt: parseDate(data.createdAt),
-          status: data.status || 'Pendiente',
-          adminComments: data.adminComments,
-          collectionName: 'advertising_orders',
-          rawData: data,
-          approvalHistory: data.approvalHistory || []
-        });
-      });
-
-      webNotesSnap.forEach(d => {
-          const data = d.data();
-          const isOwner = data.advisorId === userInfo.id;
-          if (!isReviewer && !isOwner) return;
-
-          unifiedList.push({
-            id: d.id,
-            type: 'Nota Web / Gacetilla',
-            clientId: data.clientId,
-            clientName: data.clientName,
-            advisorName: data.advisorName,
-            title: data.format || 'Nota Web',
-            createdAt: parseDate(data.createdAt),
-            status: data.status,
-            adminComments: data.adminComments,
-            collectionName: 'web_notes',
-            rawData: data,
-            approvalHistory: data.approvalHistory || []
-          });
-      });
-
-      unifiedList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      setItems(unifiedList);
+      const approvals = await getApprovals();
+      setItems(approvals.map(item => ({
+        ...item,
+        createdAt: parseDate(item.createdAt),
+      })));
     } catch (error) {
       console.error("Error fetching approvals:", error);
       toast({ title: 'Error al cargar las solicitudes', variant: 'destructive' });
@@ -452,14 +358,12 @@ function ApprovalsPageComponent() {
         historyItem.comments = adminComments.trim();
       }
 
-      const docRef = doc(db, selectedItem.collectionName, selectedItem.id);
-      await updateDoc(docRef, {
+      await updateApprovalStatus({
+        collectionName: selectedItem.collectionName,
+        itemId: selectedItem.id,
         status: actionType,
         adminComments: adminComments.trim(),
-        approvedAt: serverTimestamp(),
-        approvedBy: userInfo.id,
-        approvedByName: userInfo.name,
-        approvalHistory: arrayUnion(historyItem)
+        historyItem,
       });
 
       let notificationError: unknown = null;
