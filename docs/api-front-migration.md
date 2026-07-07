@@ -149,6 +149,16 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Esto reduce lecturas directas en aprobaciones, visor de publicidad y formulario de publicidad al hidratar datos de facturacion de una orden.
 - `firestore.rules` sigue intacto.
 
+## Decimoseptimo corte aplicado
+
+- Se agregaron borrados por API para listados operativos:
+  - `/api/commercial-notes/[noteId]`
+  - `/api/social-media-requests/[requestId]`
+  - `DELETE /api/advertising-orders/[orderId]`
+- Las pantallas `/notas`, `/redes` y `/publicidad` ya no importan Firestore directo para eliminar registros.
+- `deleteCommercialNote`, `deleteSocialMediaRequest` y `deleteAdvertisingOrder` pasan por API con registro de actividad en servidor.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

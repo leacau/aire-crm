@@ -402,24 +402,8 @@ export const getCommercialNote = async (noteId: string): Promise<CommercialNote 
 };
 
 export const deleteCommercialNote = async (noteId: string, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'commercial_notes', noteId);
-    const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists()) throw new Error("Nota no encontrada");
-    const noteData = docSnap.data();
-
-    await deleteDoc(docRef);
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'commercial_note' as any,
-        entityId: noteId,
-        entityName: noteData.title || 'Nota Comercial',
-        details: `eliminó la nota comercial <strong>${noteData.title}</strong>`,
-        ownerName: noteData.advisorName || 'Desconocido'
-    });
+    const { deleteCommercialNote } = await import('@/lib/api/commercial-notes');
+    await deleteCommercialNote(noteId);
 };
 
 export const updateCommercialNote = async (
@@ -3962,19 +3946,8 @@ export const getAdvertisingOrder = async (id: string): Promise<AdvertisingOrder 
 
 export const deleteAdvertisingOrder = async (id: string, userId: string, userName: string, clientName: string): Promise<void> => {
     try {
-        const docRef = doc(db, 'advertising_orders', id);
-        await deleteDoc(docRef);
-
-        await logActivity({
-            userId,
-            userName,
-            type: 'delete',
-            entityType: 'opportunity' as any,
-            entityId: id,
-            entityName: 'Orden de Publicidad',
-            details: `eliminó una orden de publicidad del cliente <strong>${clientName}</strong>`,
-            ownerName: 'Sistema'
-        });
+        const { deleteAdvertisingOrder } = await import('@/lib/api/advertising-orders');
+        await deleteAdvertisingOrder(id);
     } catch (error) {
         console.error("Error deleting ad order:", error);
         throw error;
@@ -4396,25 +4369,9 @@ export const updateSocialMediaRequest = async (
 };
 
 export const deleteSocialMediaRequest = async (id: string, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'social_media_requests', id);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) return;
-    
-    const data = docSnap.data() as SocialMediaRequest;
-    
-    await deleteDoc(docRef);
+    const { deleteSocialMediaRequest } = await import('@/lib/api/social-media-requests');
+    await deleteSocialMediaRequest(id);
     invalidateCache('socialMediaRequests');
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'social_media_request' as any,
-        entityId: id,
-        entityName: data.clientName,
-        details: `eliminó un pedido de redes de <strong>${data.clientName}</strong>`,
-        ownerName: data.advisorName,
-    });
 };
 
 // --- Convenios de Canje (App Móvil) ---

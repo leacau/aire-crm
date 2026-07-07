@@ -4,9 +4,7 @@ import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { getClients, getSocialMediaRequests } from '@/lib/firebase-service';
-import { db } from '@/lib/firebase';
-import { doc, deleteDoc } from 'firebase/firestore';
+import { deleteSocialMediaRequest, getClients, getSocialMediaRequests } from '@/lib/firebase-service';
 import type { SocialMediaRequest } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
@@ -47,9 +45,10 @@ export default function RedesPage() {
 
     // 🟢 ACCIÓN BORRADO CON REFRESH DE DATATABLE
     const handleDeleteRequest = async (id: string) => {
+        if (!userInfo) return;
         if (!window.confirm("¿Estás seguro de eliminar permanentemente este Pedido de Redes comercial?")) return;
         try {
-            await deleteDoc(doc(db, 'social_media_requests', id));
+            await deleteSocialMediaRequest(id, userInfo.id, userInfo.name);
             setRequests(prev => prev.filter(r => r.id !== id));
             toast({ title: "Pedido de redes eliminado con éxito." });
         } catch (error) {

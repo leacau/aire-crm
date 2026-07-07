@@ -7,9 +7,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllCommercialNotes, getClients } from '@/lib/firebase-service';
-import { db } from '@/lib/firebase';
-import { doc, deleteDoc } from 'firebase/firestore';
+import { deleteCommercialNote, getAllCommercialNotes, getClients } from '@/lib/firebase-service';
 import type { CommercialNote } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -65,9 +63,10 @@ export default function CommercialNotesListPage() {
 
     // 🟢 ELIMINACIÓN DE NOTAS DESDE LA COMPAÑÍA PRINCIPAL
     const handleDeleteNote = async (id: string) => {
+        if (!userInfo) return;
         if (!window.confirm("¿Seguro que deseas eliminar permanentemente esta Nota Comercial? No quedará registro en el CRM.")) return;
         try {
-            await deleteDoc(doc(db, 'commercial_notes', id));
+            await deleteCommercialNote(id, userInfo.id, userInfo.name);
             setNotes(prev => prev.filter(n => n.id !== id));
             toast({ title: "Nota comercial eliminada del histórico." });
         } catch (error) {

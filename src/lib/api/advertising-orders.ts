@@ -46,3 +46,9 @@ export async function getAdvertisingOrdersForDateRange(
   });
   return result.orders;
 }
+
+export async function deleteAdvertisingOrder(id: string): Promise<void> {
+  await apiRequest<{ ok: true }>(`/api/advertising-orders/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
