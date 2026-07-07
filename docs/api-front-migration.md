@@ -96,6 +96,44 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las mutaciones de grilla/commercial items quedan pendientes para un corte propio.
 - `firestore.rules` sigue intacto.
 
+## Undecimo corte aplicado
+
+- Se agregaron endpoints para grilla/comerciales:
+  - `/api/commercial-items`
+  - `/api/commercial-items/[itemId]`
+  - `/api/commercial-items/series`
+  - `/api/commercial-items/series/[seriesId]`
+  - `/api/commercial-items/bulk-delete`
+- `getCommercialItems`, `getCommercialItemsBySeries`, `saveCommercialItemSeries`, `createCommercialItem`, `updateCommercialItem` y `deleteCommercialItem` pasan por API.
+- Las pantallas `/grilla` y `/pnts` conservan sus llamadas actuales mediante el puente temporal de `firebase-service.ts`.
+- La creacion/edicion/borrado de elementos comerciales y series queda centralizada en servidor con Firebase Admin y registro de actividad.
+- `firestore.rules` sigue intacto.
+
+## Duodecimo corte aplicado
+
+- Se agrego `/api/canjes` y `/api/canjes/[canjeId]` para listar, crear, actualizar y eliminar necesidades/canjes desde servidor.
+- Se agregaron lecturas relacionadas:
+  - `/api/canjes/[canjeId]/advertising-orders`
+  - `/api/canjes/[canjeId]/invoices`
+- `getCanjes`, `createCanje`, `updateCanje`, `deleteCanje`, `getAdvertisingOrdersByCanjeId` y `getInvoicesByCanjeId` pasan por API.
+- La pantalla `/canjes`, el modal de canje y la integracion legacy conservan sus llamadas actuales mediante el puente temporal de `firebase-service.ts`.
+- `firestore.rules` sigue intacto.
+
+## Decimotercer corte aplicado
+
+- Se agrego `/api/pnts/scheduled` para exponer a Programacion los PNTs cargados en ordenes de publicidad vigentes.
+- La pantalla `/pnts` ahora muestra, por dia y programa, los PNTs comprometidos en ordenes aunque todavia no exista el texto cargado en la grilla.
+- Estos PNTs se muestran como pendientes de orden de publicidad y no se pueden marcar como leidos ni eliminar hasta que se cargue el texto real.
+- `firestore.rules` sigue intacto.
+
+## Decimocuarto corte aplicado
+
+- Se agrego `/api/advertising-orders` y `/api/advertising-orders/[orderId]` para lecturas de ordenes de publicidad.
+- `getAdvertisingOrdersByOpportunity`, `getAdvertisingOrdersWithEvent`, `getAdvertisingOrder`, `getRecentAdvertisingOrders` y `getAdvertisingOrdersForDateRange` pasan por API.
+- Esto cubre lecturas usadas por oportunidad, publicidad, notas, redes, eventos de billing y acciones vigentes.
+- Las mutaciones de ordenes de publicidad quedan pendientes para un corte propio porque actualizan billing, canjes, historial, auditoria y relaciones.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

@@ -9,9 +9,11 @@ import { cn } from '@/lib/utils';
 import { CheckCircle, Mic, Star, FileText, PlusCircle, Group } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
+import type { ScheduledPnt } from '@/lib/api/pnts';
+import { ScheduledPntRow } from '@/components/pnts/scheduled-pnt-row';
 
 interface PntViewByProgramProps {
-    programs: (Program & { pnts: CommercialItem[], notas: CommercialItem[], auspicios: Record<string, CommercialItem[]> })[];
+    programs: (Program & { pnts: CommercialItem[], scheduledPnts: ScheduledPnt[], notas: CommercialItem[], auspicios: Record<string, CommercialItem[]> })[];
     onItemClick: (item: CommercialItem) => void;
     onAddItemClick: (programId: string) => void;
 }
@@ -81,7 +83,7 @@ export function PntViewByProgram({ programs, onItemClick, onAddItemClick }: PntV
                         <CardTitle>{selectedProgram.name}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                         {Object.keys(selectedProgram.auspicios).length === 0 && selectedProgram.notas.length === 0 && selectedProgram.pnts.length === 0 ? (
+                         {Object.keys(selectedProgram.auspicios).length === 0 && selectedProgram.notas.length === 0 && selectedProgram.pnts.length === 0 && selectedProgram.scheduledPnts.length === 0 ? (
                              <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
                         ) : (
                             <>
@@ -101,6 +103,12 @@ export function PntViewByProgram({ programs, onItemClick, onAddItemClick }: PntV
                                 <div className="space-y-2 pt-2">
                                      <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Mic className="h-4 w-4"/> PNTs</h4>
                                     {selectedProgram.pnts.map(item => <PntItemRow key={item.id} item={item} onClick={onItemClick} />)}
+                                </div>
+                            )}
+                            {selectedProgram.scheduledPnts.length > 0 && (
+                                <div className="space-y-2 pt-2">
+                                     <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Mic className="h-4 w-4"/> PNTs en ordenes de publicidad</h4>
+                                    {selectedProgram.scheduledPnts.map(item => <ScheduledPntRow key={item.id} item={item} />)}
                                 </div>
                             )}
                             </>

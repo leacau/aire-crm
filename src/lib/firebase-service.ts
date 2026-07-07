@@ -1395,191 +1395,44 @@ export const getCommercialItems = async (date: string): Promise<CommercialItem[]
     const cachedData = getFromCache(cacheKey);
     if (cachedData) return cachedData;
 
-    const q = query(collections.commercialItems, where("date", "==", date));
-    const snapshot = await getDocs(q);
-    const items = snapshot.docs.map(doc => {
-        const data = doc.data();
-        const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
-        const validDate = parseDateWithTimezone(data.date);
-        return { 
-            id: doc.id, 
-            ...data,
-            date: validDate ? format(validDate, 'yyyy-MM-dd') : 'invalid-date',
-            pntReadAt: convertTimestamp(data.pntReadAt),
-        } as CommercialItem
-    });
+    const { getCommercialItems } = await import('@/lib/api/commercial-items');
+    const items = await getCommercialItems(date);
     setInCache(cacheKey, items);
     return items;
 };
 
 export const getCommercialItemsBySeries = async (seriesId: string): Promise<CommercialItem[]> => {
-    const q = query(collections.commercialItems, where("seriesId", "==", seriesId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => {
-      const data = doc.data();
-      const validDate = parseDateWithTimezone(data.date);
-      return { 
-        id: doc.id, 
-        ...data,
-        date: validDate ? format(validDate, 'yyyy-MM-dd') : 'invalid-date'
-      } as CommercialItem
-    });
+    const { getCommercialItemsBySeries } = await import('@/lib/api/commercial-items');
+    return getCommercialItemsBySeries(seriesId);
 };
 
 export const saveCommercialItemSeries = async (item: Omit<CommercialItem, 'id' | 'date'>, dates: Date[], userId: string, isEditingSeries?: boolean): Promise<string | void> => {
-    const batch = writeBatch(db);
-    const newSeriesId = item.seriesId || doc(collection(db, 'dummy')).id;
-
-    const formattedDates = new Set(dates.map(d => d.toISOString().split('T')[0]));
-    
-    const itemToSave: {[key: string]: any} = {...item};
-    
-    if (itemToSave.clientId === undefined || itemToSave.clientId === null || itemToSave.clientId === '') {
-      delete itemToSave.clientId;
-      delete itemToSave.clientName;
-    }
-    if (itemToSave.opportunityId === undefined || itemToSave.opportunityId === null || itemToSave.opportunityId === '') {
-      delete itemToSave.opportunityId;
-      delete itemToSave.opportunityTitle;
-    }
-
-
-    if (isEditingSeries && item.seriesId) {
-        const existingItems = await getCommercialItemsBySeries(item.seriesId);
-
-        for (const existingItem of existingItems) {
-            if (!formattedDates.has(existingItem.date)) {
-                const docRef = doc(db, 'commercial_items', existingItem.id);
-                batch.delete(docRef);
-            }
-        }
-
-        for (const dateStr of formattedDates) {
-            const existingItem = existingItems.find(i => i.date === dateStr);
-            const dataToSave = { ...itemToSave, seriesId: newSeriesId, date: dateStr, updatedBy: userId, updatedAt: serverTimestamp() };
-            
-            const docRef = existingItem ? doc(db, 'commercial_items', existingItem.id) : doc(collection(db, 'commercial_items'));
-            batch.set(docRef, dataToSave, { merge: true });
-        }
-
-    } else {
-        for (const date of dates) {
-            const docRef = doc(collection(db, 'commercial_items'));
-            const formattedDate = date.toISOString().split('T')[0];
-
-            const itemData: Omit<CommercialItem, 'id'> = {
-                ...item,
-                date: formattedDate,
-                seriesId: dates.length > 1 ? newSeriesId : undefined,
-            };
-
-            const dataToSave: { [key: string]: any } = { ...itemData, createdBy: userId, createdAt: serverTimestamp() };
-            
-            if (dataToSave.clientId === undefined) delete dataToSave.clientId;
-            if (dataToSave.clientName === undefined) delete dataToSave.clientName;
-            if (dataToSave.opportunityId === undefined) delete dataToSave.opportunityId;
-            if (dataToSave.opportunityTitle === undefined) delete dataToSave.opportunityTitle;
-
-            batch.set(docRef, dataToSave);
-        }
-    }
-    
-    await batch.commit();
+    const { saveCommercialItemSeries } = await import('@/lib/api/commercial-items');
+    const seriesId = await saveCommercialItemSeries(item, dates, isEditingSeries);
     invalidateCache(); // Invalidate all caches for simplicity
-
-    const userSnap = await getDoc(doc(db, 'users', userId));
-    const userName = userSnap.exists() ? (userSnap.data() as User).name : 'Sistema';
-    
-    await logActivity({
-        userId,
-        userName,
-        type: isEditingSeries ? 'update' : 'create',
-        entityType: 'commercial_item_series',
-        entityId: newSeriesId,
-        entityName: item.title || item.description,
-        details: `${isEditingSeries ? 'actualizó' : 'creó'} ${dates.length} elemento(s) comerciales para <strong>${item.title || item.description}</strong>`,
-        ownerName: item.clientName || userName,
-    });
-
-    return newSeriesId;
+    return seriesId;
 };
 
 export const createCommercialItem = async (itemData: Omit<CommercialItem, 'id'>, userId: string, userName: string): Promise<string> => {
-    const dataToSave = { ...itemData, createdBy: userId, createdAt: serverTimestamp() };
-    const docRef = await addDoc(collections.commercialItems, dataToSave);
+    const { createCommercialItem } = await import('@/lib/api/commercial-items');
+    const id = await createCommercialItem(itemData);
     invalidateCache(); // Invalidate all for simplicity
-    return docRef.id;
+    return id;
 };
 
 
 export const updateCommercialItem = async (itemId: string, itemData: Partial<Omit<CommercialItem, 'id'>>, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'commercial_items', itemId);
-    const originalSnap = await getDoc(docRef);
-    if (!originalSnap.exists()) throw new Error("Commercial item not found");
-    const originalData = originalSnap.data() as CommercialItem;
-
-    const dataToUpdate: {[key:string]: any} = {...itemData};
-    
-    if (!dataToUpdate.clientId) {
-        dataToUpdate.clientId = deleteField();
-        dataToUpdate.clientName = deleteField();
-    }
-    if (!dataToUpdate.opportunityId) {
-        dataToUpdate.opportunityId = deleteField();
-        dataToUpdate.opportunityTitle = deleteField();
-    }
-    if (dataToUpdate.pntReadAt === undefined) {
-        dataToUpdate.pntReadAt = deleteField();
-    }
-     if (dataToUpdate.seriesId) {
-        dataToUpdate.seriesId = dataToUpdate.seriesId;
-    }
-
-
-    await updateDoc(docRef, {...dataToUpdate, updatedBy: userId, updatedAt: serverTimestamp()});
-    invalidateCache(`commercial_items_${originalData.date}`);
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'commercial_item',
-        entityId: itemId,
-        entityName: originalData.title || originalData.description,
-        details: `actualizó el elemento comercial <strong>${originalData.title || originalData.description}</strong>`,
-        ownerName: originalData.clientName || userName,
-    });
-}
+    const { updateCommercialItem } = await import('@/lib/api/commercial-items');
+    await updateCommercialItem(itemId, itemData);
+    invalidateCache();
+};
 
 export const deleteCommercialItem = async (itemIds: string[], userId?: string, userName?: string): Promise<void> => {
     if (!itemIds || itemIds.length === 0) return;
 
-    const batch = writeBatch(db);
-    
-    const firstItemRef = doc(db, 'commercial_items', itemIds[0]);
-    const firstItemSnap = await getDoc(firstItemRef);
-    const firstItemData = firstItemSnap.exists() ? firstItemSnap.data() as CommercialItem : null;
-    
-    for (const id of itemIds) {
-        const docRef = doc(db, 'commercial_items', id);
-        batch.delete(docRef);
-    }
-    
-    await batch.commit();
+    const { deleteCommercialItem } = await import('@/lib/api/commercial-items');
+    await deleteCommercialItem(itemIds, Boolean(userId && userName));
     invalidateCache(); // Invalidate all caches
-
-    if (userId && userName && firstItemData) {
-        await logActivity({
-            userId,
-            userName,
-            type: 'delete',
-            entityType: 'commercial_item',
-            entityId: 'multiple',
-            entityName: firstItemData.title || firstItemData.description,
-            details: `eliminó ${itemIds.length} elemento(s) comercial(es) de la serie <strong>${firstItemData.title || firstItemData.description}</strong>`,
-            ownerName: firstItemData.clientName || userName,
-        });
-    }
 };
 
 
@@ -1588,88 +1441,29 @@ export const getCanjes = async (): Promise<Canje[]> => {
     const cachedData = getFromCache('canjes');
     if (cachedData) return cachedData;
 
-    const snapshot = await getDocs(query(collections.canjes, orderBy("fechaCreacion", "desc")));
-    const canjes = snapshot.docs.map(doc => {
-      const data = doc.data();
-      const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
-      
-      const canje: Canje = { 
-          id: doc.id,
-          ...data,
-          fechaCreacion: convertTimestamp(data.fechaCreacion),
-          fechaResolucion: data.fechaResolucion ? format(parseISO(data.fechaResolucion), 'yyyy-MM-dd') : undefined,
-          fechaCulminacion: data.fechaCulminacion ? format(parseISO(data.fechaCulminacion), 'yyyy-MM-dd') : undefined,
-      } as Canje;
-      
-      if (canje.historialMensual) {
-        canje.historialMensual = canje.historialMensual.map(h => ({
-          ...h,
-          fechaEstado: convertTimestamp(h.fechaEstado),
-          fechaCulminacion: h.fechaCulminacion ? format(parseISO(h.fechaCulminacion), 'yyyy-MM-dd') : undefined,
-        })).sort((a,b) => b.mes.localeCompare(a.mes));
-      }
-
-      return canje;
-    });
+    const { getCanjes } = await import('@/lib/api/canjes');
+    const canjes = await getCanjes();
     setInCache('canjes', canjes);
     return canjes;
 };
 
 export const getAdvertisingOrdersByCanjeId = async (canjeId: string, legacyOrderIds: string[] = []): Promise<AdvertisingOrder[]> => {
     if (!canjeId) return [];
-    const snapshot = await getDocs(query(collection(db, 'advertising_orders'), where('canjeId', '==', canjeId)));
-    const orders = snapshot.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() } as AdvertisingOrder));
-    const foundIds = new Set(orders.map(order => order.id));
-    const missingLegacyIds = legacyOrderIds.filter(orderId => !foundIds.has(orderId));
-    const legacySnapshots = await Promise.all(
-        missingLegacyIds.map(orderId => getDoc(doc(db, 'advertising_orders', orderId)))
-    );
-    legacySnapshots.forEach(orderSnapshot => {
-        if (orderSnapshot.exists()) {
-            orders.push({ id: orderSnapshot.id, ...orderSnapshot.data() } as AdvertisingOrder);
-        }
-    });
-    return orders
-        .sort((a, b) => new Date(b.startDate || b.createdAt).getTime() - new Date(a.startDate || a.createdAt).getTime());
+    const { getAdvertisingOrdersByCanjeId } = await import('@/lib/api/canjes');
+    return getAdvertisingOrdersByCanjeId(canjeId, legacyOrderIds);
 };
 
 export const getInvoicesByCanjeId = async (canjeId: string): Promise<Invoice[]> => {
     if (!canjeId) return [];
-    const snapshot = await getDocs(query(collections.invoices, where('canjeId', '==', canjeId)));
-    return snapshot.docs
-        .map(invoiceDoc => ({ id: invoiceDoc.id, ...invoiceDoc.data() } as Invoice))
-        .sort((a, b) => new Date(b.date || b.dateGenerated).getTime() - new Date(a.date || a.dateGenerated).getTime());
+    const { getInvoicesByCanjeId } = await import('@/lib/api/canjes');
+    return getInvoicesByCanjeId(canjeId);
 };
 
 export const createCanje = async (canjeData: Omit<Canje, 'id' | 'fechaCreacion'>, userId: string, userName: string): Promise<string> => {
-    const dataToSave: { [key: string]: any } = {
-        ...canjeData,
-        fechaCreacion: serverTimestamp(),
-        creadoPorId: userId,
-        creadoPorName: userName,
-    };
-
-    Object.keys(dataToSave).forEach(key => {
-        if (dataToSave[key] === undefined) {
-            delete dataToSave[key];
-        }
-    });
-    
-    const docRef = await addDoc(collections.canjes, dataToSave);
+    const { createCanje } = await import('@/lib/api/canjes');
+    const id = await createCanje(canjeData);
     invalidateCache('canjes');
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'canje',
-        entityId: docRef.id,
-        entityName: canjeData.titulo,
-        details: `creó un pedido de canje: <strong>${canjeData.titulo}</strong>`,
-        ownerName: canjeData.asesorName || userName,
-    });
-
-    return docRef.id;
+    return id;
 };
 
 export const updateCanje = async (
@@ -1678,84 +1472,15 @@ export const updateCanje = async (
     userId: string, 
     userName: string
 ): Promise<void> => {
-    const docRef = doc(db, 'canjes', id);
-    const originalDoc = await getDoc(docRef);
-    if (!originalDoc.exists()) throw new Error('Canje not found');
-
-    const originalData = originalDoc.data() as Canje;
-    
-    const updateData: { [key: string]: any } = { ...data };
-    
-    Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined) {
-            updateData[key] = deleteField();
-        }
-    });
-
-    if (data.tipo === 'Una vez' && data.estado === 'Aprobado' && originalData.estado !== 'Aprobado') {
-        updateData.culminadoPorId = userId;
-        updateData.culminadoPorName = userName;
-    }
-    
-    if (data.historialMensual) {
-        updateData.historialMensual = data.historialMensual.map(h => {
-            const historyItem: Partial<HistorialMensualItem> = { ...h };
-            if (historyItem.fechaEstado) {
-                historyItem.fechaEstado = new Date(historyItem.fechaEstado).toISOString();
-            }
-            if (historyItem.fechaCulminacion) {
-                historyItem.fechaCulminacion = new Date(historyItem.fechaCulminacion).toISOString();
-            }
-            return historyItem;
-        });
-    }
-
-    await updateDoc(docRef, updateData);
+    const { updateCanje } = await import('@/lib/api/canjes');
+    await updateCanje(id, data);
     invalidateCache('canjes');
-
-    let details = `actualizó el canje <strong>${originalData.titulo}</strong>`;
-    if (data.estado && data.estado !== originalData.estado) {
-        details = `cambió el estado del canje <strong>${originalData.titulo}</strong> a <strong>${data.estado}</strong>`;
-    }
-    if (data.clienteId && data.clienteId !== originalData.clienteId) {
-        details = `asignó el canje <strong>${originalData.titulo}</strong> al cliente <strong>${data.clienteName}</strong>`
-    }
-    if(data.historialMensual) {
-        details = `actualizó el historial mensual del canje <strong>${originalData.titulo}</strong>`;
-    }
-
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'canje',
-        entityId: id,
-        entityName: originalData.titulo,
-        details: details,
-        ownerName: data.asesorName || originalData.asesorName,
-    });
 };
 
 export const deleteCanje = async (id: string, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'canjes', id);
-    const canjeSnap = await getDoc(docRef);
-    if (!canjeSnap.exists()) throw new Error("Canje not found");
-    const canjeData = canjeSnap.data() as Canje;
-
-    await deleteDoc(docRef);
+    const { deleteCanje } = await import('@/lib/api/canjes');
+    await deleteCanje(id);
     invalidateCache('canjes');
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'canje',
-        entityId: id,
-        entityName: canjeData.titulo,
-        details: `eliminó el canje <strong>${canjeData.titulo}</strong>`,
-        ownerName: canjeData.asesorName || userName,
-    });
 };
 
 
@@ -4204,9 +3929,8 @@ export const updateMonthlyBillingStat = async (
 
 export const getAdvertisingOrdersByOpportunity = async (opportunityId: string): Promise<AdvertisingOrder[]> => {
     try {
-        const q = query(collection(db, 'advertising_orders'), where('opportunityId', '==', opportunityId));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AdvertisingOrder));
+        const { getAdvertisingOrdersByOpportunity } = await import('@/lib/api/advertising-orders');
+        return getAdvertisingOrdersByOpportunity(opportunityId);
     } catch (error) {
         console.error("Error fetching ad orders:", error);
         return [];
@@ -4225,17 +3949,14 @@ export const getAdvertisingOrdersByClientId = async (clientId: string): Promise<
 };
 
 export const getAdvertisingOrdersWithEvent = async (): Promise<AdvertisingOrder[]> => {
-    const snapshot = await getDocs(query(collection(db, 'advertising_orders'), where('event', '!=', '')));
-    return snapshot.docs
-        .map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() } as AdvertisingOrder))
-        .filter(order => Boolean(order.event?.trim()));
+    const { getAdvertisingOrdersWithEvent } = await import('@/lib/api/advertising-orders');
+    return getAdvertisingOrdersWithEvent();
 };
 
 export const getAdvertisingOrder = async (id: string): Promise<AdvertisingOrder | null> => {
     try {
-        const docRef = doc(db, 'advertising_orders', id);
-        const snap = await getDoc(docRef);
-        return snap.exists() ? { id: snap.id, ...snap.data() } as AdvertisingOrder : null;
+        const { getAdvertisingOrder } = await import('@/lib/api/advertising-orders');
+        return getAdvertisingOrder(id);
     } catch (error) {
         console.error("Error fetching ad order:", error);
         return null;
@@ -4265,16 +3986,8 @@ export const deleteAdvertisingOrder = async (id: string, userId: string, userNam
 
 export const getRecentAdvertisingOrders = async (): Promise<AdvertisingOrder[]> => {
     try {
-        const twoMonthsAgo = new Date();
-        twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-
-        const q = query(
-            collection(db, 'advertising_orders'), 
-            where('createdAt', '>=', twoMonthsAgo.toISOString()),
-            orderBy('createdAt', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AdvertisingOrder));
+        const { getRecentAdvertisingOrders } = await import('@/lib/api/advertising-orders');
+        return getRecentAdvertisingOrders();
     } catch (error) {
         console.error("Error fetching recent ad orders:", error);
         return [];
@@ -4283,22 +3996,8 @@ export const getRecentAdvertisingOrders = async (): Promise<AdvertisingOrder[]> 
 
 export const getAdvertisingOrdersForDateRange = async (rangeStart: Date, rangeEnd: Date): Promise<AdvertisingOrder[]> => {
     try {
-        const startIso = rangeStart.toISOString();
-        const endIso = rangeEnd.toISOString();
-        const q = query(
-            collection(db, 'advertising_orders'),
-            where('startDate', '<=', endIso),
-            orderBy('startDate', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs
-            .map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() } as AdvertisingOrder))
-            .filter(order => {
-                const orderEnd = order.endDate || order.startDate;
-                const status = order.status || 'Aprobado';
-                return orderEnd >= startIso
-                    && ['Aprobado', 'Pendiente de ModificaciÃ³n'].includes(status);
-            });
+        const { getAdvertisingOrdersForDateRange } = await import('@/lib/api/advertising-orders');
+        return getAdvertisingOrdersForDateRange(rangeStart, rangeEnd);
     } catch (error) {
         console.error('Error fetching advertising orders by date range:', error);
         return [];

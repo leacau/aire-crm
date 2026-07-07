@@ -21,6 +21,8 @@ import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PntViewByProgram } from '@/components/pnts/pnt-view-by-program';
 import { hasPermission } from '@/lib/permissions';
+import { getScheduledPnts, type ScheduledPnt } from '@/lib/api/pnts';
+import { ScheduledPntRow } from '@/components/pnts/scheduled-pnt-row';
 
 
 interface PntItemRowProps {
@@ -71,6 +73,7 @@ export default function PntsPage() {
   const [currentDate, setCurrentDate] = useState(startOfToday());
   const [programs, setPrograms] = useState<Program[]>([]);
   const [pnts, setPnts] = useState<CommercialItem[]>([]);
+  const [scheduledPnts, setScheduledPnts] = useState<ScheduledPnt[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -88,14 +91,16 @@ export default function PntsPage() {
     setLoading(true);
     const formattedDate = format(currentDate, 'yyyy-MM-dd');
     try {
-      const [fetchedPrograms, fetchedItems, fetchedClients] = await Promise.all([
+      const [fetchedPrograms, fetchedItems, fetchedScheduledPnts, fetchedClients] = await Promise.all([
         getPrograms(),
         getCommercialItems(formattedDate),
+        getScheduledPnts(formattedDate),
         getClients(),
       ]);
       
       setPrograms(fetchedPrograms);
       setPnts(fetchedItems.filter(item => ['PNT', 'Auspicio', 'Nota'].includes(item.type)));
+      setScheduledPnts(fetchedScheduledPnts);
       setClients(fetchedClients);
 
     } catch (error) {
@@ -216,6 +221,7 @@ export default function PntsPage() {
         const auspicios = programPnts.filter(item => item.type === 'Auspicio');
         const notas = programPnts.filter(item => item.type === 'Nota');
         const otrosPnts = programPnts.filter(item => item.type === 'PNT');
+        const orderPnts = scheduledPnts.filter(item => item.programId === program.id);
 
         const auspiciosPorBloque = auspicios.reduce((acc, item) => {
             const bloque = item.bloque || 'General';
@@ -229,13 +235,14 @@ export default function PntsPage() {
           ...program,
           schedule: scheduleForDay,
           pnts: otrosPnts,
+          scheduledPnts: orderPnts,
           notas: notas,
           auspicios: auspiciosPorBloque,
         };
       })
-      .filter((p): p is Program & { schedule: NonNullable<Program['schedules'][0]>, pnts: CommercialItem[], notas: CommercialItem[], auspicios: Record<string, CommercialItem[]> } => p !== null)
+      .filter((p): p is Program & { schedule: NonNullable<Program['schedules'][0]>, pnts: CommercialItem[], scheduledPnts: ScheduledPnt[], notas: CommercialItem[], auspicios: Record<string, CommercialItem[]> } => p !== null)
       .sort((a, b) => a!.schedule.startTime.localeCompare(b!.schedule.startTime));
-  }, [programs, pnts, dayOfWeek]);
+  }, [programs, pnts, scheduledPnts, dayOfWeek]);
 
 
   const navigateDay = (direction: 'next' | 'prev') => {
@@ -317,7 +324,7 @@ export default function PntsPage() {
                                 <CollapsibleContent>
                                     <div className="border-t">
                                         <div className="p-4 space-y-3">
-                                        {Object.keys(program.auspicios).length === 0 && program.notas.length === 0 && program.pnts.length === 0 ? (
+                                        {Object.keys(program.auspicios).length === 0 && program.notas.length === 0 && program.pnts.length === 0 && program.scheduledPnts.length === 0 ? (
                                              <p className="text-center text-sm text-muted-foreground py-4">No hay pautas para este programa.</p>
                                         ) : (
                                             <>
@@ -337,6 +344,12 @@ export default function PntsPage() {
                                                 <div className="space-y-2 pt-2">
                                                     <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Mic className="h-4 w-4"/> PNTs</h4>
                                                     {program.pnts.map(item => <PntItemRow key={item.id} item={item} onClick={openDetailsModal} />)}
+                                                </div>
+                                            )}
+                                            {program.scheduledPnts.length > 0 && (
+                                                <div className="space-y-2 pt-2">
+                                                    <h4 className="font-semibold text-sm flex items-center gap-2 text-muted-foreground"><Mic className="h-4 w-4"/> PNTs en ordenes de publicidad</h4>
+                                                    {program.scheduledPnts.map(item => <ScheduledPntRow key={item.id} item={item} />)}
                                                 </div>
                                             )}
                                             </>
