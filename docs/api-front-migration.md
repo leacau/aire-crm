@@ -142,6 +142,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La generacion de PDFs y envio de emails sigue en el front porque depende del DOM renderizado y del token Google del usuario.
 - `firestore.rules` sigue intacto.
 
+## Decimosexto corte aplicado
+
+- Se agrego `/api/billing-requests/order/[orderId]` para leer solicitudes de facturacion asociadas a una orden desde servidor.
+- `getBillingRequestsByOrder` pasa por API.
+- Esto reduce lecturas directas en aprobaciones, visor de publicidad y formulario de publicidad al hidratar datos de facturacion de una orden.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

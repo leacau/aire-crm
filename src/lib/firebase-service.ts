@@ -3899,11 +3899,8 @@ export const getBillingRequestsByClient = async (clientId: string): Promise<Bill
 };
 export const getBillingRequestsByOrder = async (orderId: string) => {
     try {
-        const q = query(collections.billingRequests, where('orderId', '==', orderId));
-        const snap = await getDocs(q);
-        const results = snap.docs.map(doc => doc.data() as BillingRequest);
-        // 🟢 Ordenar por fecha cronológicamente ascendente (desde la más antigua)
-        return results.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const { getBillingRequestsByOrder } = await import('@/lib/api/billing-requests');
+        return getBillingRequestsByOrder(orderId);
     } catch (e) {
         console.error(e);
         return [];
