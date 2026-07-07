@@ -13,9 +13,7 @@ import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
-import { getBillingRequestsByOrder, getClient } from "@/lib/firebase-service";
-import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { deleteWebNote, getBillingRequestsByOrder, getClient, getWebNotesByOrderId } from "@/lib/firebase-service";
 import { Badge } from "@/components/ui/badge";
 
 export function AdvertisingOrderViewer({ order, programs = [] }: { order: AdvertisingOrder, programs?: Program[] }) {
@@ -80,9 +78,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
             }
 
             // 🟢 Buscar Notas Web Vinculadas
-            const qWebNotes = query(collection(db, 'web_notes'), where('orderId', '==', order.id));
-            getDocs(qWebNotes).then(snap => {
-                const notes = snap.docs.map(d => ({ id: d.id, ...d.data() } as WebNote));
+            getWebNotesByOrderId(order.id).then(notes => {
                 setLinkedWebNotes(notes);
             }).catch(err => console.error("Error fetching web notes:", err));
         }
@@ -289,7 +285,8 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
   const handleDeleteWebNote = async (noteId: string) => {
       if (!window.confirm("¿Seguro que deseas eliminar permanentemente esta Nota Web / Gacetilla?")) return;
       try {
-          await deleteDoc(doc(db, 'web_notes', noteId));
+          if (!userInfo) return;
+          await deleteWebNote(noteId, userInfo.id, userInfo.name);
           setLinkedWebNotes(prev => prev.filter(n => n.id !== noteId));
           toast({ title: "Nota Web eliminada correctamente." });
       } catch (e) {

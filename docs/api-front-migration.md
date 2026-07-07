@@ -181,6 +181,17 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las pantallas `/redes` y `/publicidad/[id]` conservan sus llamadas actuales mediante el puente temporal.
 - `firestore.rules` sigue intacto.
 
+## Vigesimo corte aplicado
+
+- Se completo el flujo de Notas Web / Gacetillas por API:
+  - `/api/web-notes`
+  - `/api/web-notes/[noteId]`
+  - `/api/web-notes/[noteId]/order-link`
+- Crear, listar, leer, editar, eliminar, vincular y desvincular notas web ahora pasa por servidor con Firebase Admin.
+- El visor de ordenes de publicidad deja de consultar y borrar `web_notes` directo desde el front.
+- Las pantallas de notas web y publicidad conservan sus llamadas actuales mediante el puente temporal.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

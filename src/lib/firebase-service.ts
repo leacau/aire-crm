@@ -4510,71 +4510,27 @@ export const saveWebNote = async (
     userId: string,
     userName: string
 ): Promise<string> => {
-    const dataToSave = {
-        ...noteData,
-        createdAt: serverTimestamp(),
-    };
-
-    const docRef = await addDoc(collections.webNotes, dataToSave);
+    const webNotesApi = await import('@/lib/api/web-notes');
+    const id = await webNotesApi.saveWebNote(noteData);
     invalidateCache('webNotes');
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'commercial_note' as any, // Mismo rubro conceptual
-        entityId: docRef.id,
-        entityName: noteData.clientName,
-        details: `cargó un pedido de Nota Web / Gacetilla para <strong>${noteData.clientName}</strong>`,
-        ownerName: noteData.advisorName,
-    });
-
-    return docRef.id;
+    return id;
 };
 
 export const getWebNotes = async (): Promise<WebNote[]> => {
-    const cachedData = getFromCache('webNotes');
-    if (cachedData) return cachedData;
-
-    const snapshot = await getDocs(collections.webNotes);
-    const notes = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : (data.createdAt || ''),
-            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-        } as WebNote;
-    }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-    
+    const webNotesApi = await import('@/lib/api/web-notes');
+    const notes = await webNotesApi.getWebNotes();
     setInCache('webNotes', notes);
     return notes;
 };
 
 export const getWebNotesByOrderId = async (orderId: string): Promise<WebNote[]> => {
-    const snapshot = await getDocs(query(collections.webNotes, where('orderId', '==', orderId)));
-    return snapshot.docs.map(noteDoc => {
-        const data = noteDoc.data();
-        return {
-            id: noteDoc.id,
-            ...data,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
-            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-        } as WebNote;
-    });
+    const webNotesApi = await import('@/lib/api/web-notes');
+    return webNotesApi.getWebNotesByOrderId(orderId);
 };
 
 export const getWebNotesByClientId = async (clientId: string): Promise<WebNote[]> => {
-    const snapshot = await getDocs(query(collections.webNotes, where('clientId', '==', clientId)));
-    return snapshot.docs.map(noteDoc => {
-        const data = noteDoc.data();
-        return {
-            id: noteDoc.id,
-            ...data,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : (data.createdAt || ''),
-            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-        } as WebNote;
-    }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const webNotesApi = await import('@/lib/api/web-notes');
+    return webNotesApi.getWebNotesByClientId(clientId);
 };
 
 export const linkWebNoteToOrder = async (
@@ -4584,23 +4540,9 @@ export const linkWebNoteToOrder = async (
     userId: string,
     userName: string
 ): Promise<void> => {
-    const docRef = doc(collections.webNotes, noteId);
-    await updateDoc(docRef, {
-        orderId,
-        orderTitle,
-        updatedAt: serverTimestamp(),
-    });
+    const webNotesApi = await import('@/lib/api/web-notes');
+    await webNotesApi.linkWebNoteToOrder(noteId, orderId, orderTitle);
     invalidateCache('webNotes');
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'commercial_note' as any,
-        entityId: noteId,
-        entityName: 'Nota Web',
-        details: `vinculÃ³ una nota web a la orden <strong>${orderTitle}</strong>`,
-        ownerName: userName,
-    });
 };
 
 export const unlinkWebNoteFromOrder = async (
@@ -4609,96 +4551,32 @@ export const unlinkWebNoteFromOrder = async (
     userName: string,
     reason: string
 ): Promise<void> => {
-    const normalizedReason = reason.trim();
-    if (!normalizedReason) throw new Error('Debe indicar el motivo de la desvinculacion.');
-    const docRef = doc(collections.webNotes, noteId);
-    await updateDoc(docRef, {
-        orderId: deleteField(),
-        orderTitle: deleteField(),
-        orderUnlinkedAt: serverTimestamp(),
-        orderUnlinkedById: userId,
-        orderUnlinkedByName: userName,
-        orderUnlinkReason: normalizedReason,
-        updatedAt: serverTimestamp(),
-    });
+    const webNotesApi = await import('@/lib/api/web-notes');
+    await webNotesApi.unlinkWebNoteFromOrder(noteId, reason);
     invalidateCache('webNotes');
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'commercial_note' as any,
-        entityId: noteId,
-        entityName: 'Nota Web',
-        details: 'quitÃ³ la vinculaciÃ³n de una nota web con una orden de publicidad',
-        ownerName: userName,
-    });
 };
 
 export const getWebNote = async (id: string): Promise<WebNote | null> => {
-    const docRef = doc(db, 'web_notes', id);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-        const data = docSnap.data();
-        return {
-            id: docSnap.id,
-            ...data,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
-            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-        } as WebNote;
-    }
-    return null;
+    const webNotesApi = await import('@/lib/api/web-notes');
+    return webNotesApi.getWebNote(id);
 };
 
 export const updateWebNote = async (
-    id: string, 
+    id: string,
     data: Partial<Omit<WebNote, 'id' | 'createdAt'>>,
     userId: string,
     userName: string
 ): Promise<void> => {
-    const docRef = doc(db, 'web_notes', id);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) throw new Error('Nota Web no encontrada');
-    
-    const originalData = docSnap.data() as WebNote;
-    const updateData: any = { ...data, updatedAt: serverTimestamp() }; 
-    
-    await updateDoc(docRef, updateData);
+    const webNotesApi = await import('@/lib/api/web-notes');
+    await webNotesApi.updateWebNote(id, data);
     invalidateCache('webNotes');
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'commercial_note' as any,
-        entityId: id,
-        entityName: data.clientName || originalData.clientName,
-        details: `actualizó un pedido de Nota Web / Gacetilla de <strong>${data.clientName || originalData.clientName}</strong>`,
-        ownerName: data.advisorName || originalData.advisorName, 
-    });
 };
 
 export const deleteWebNote = async (id: string, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'web_notes', id);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) return;
-    
-    const data = docSnap.data() as WebNote;
-    
-    await deleteDoc(docRef);
+    const webNotesApi = await import('@/lib/api/web-notes');
+    await webNotesApi.deleteWebNote(id);
     invalidateCache('webNotes');
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'commercial_note' as any,
-        entityId: id,
-        entityName: data.clientName,
-        details: `eliminó el pedido de Nota Web / Gacetilla de <strong>${data.clientName}</strong>`,
-        ownerName: data.advisorName,
-    });
 };
-
 export const getReportDataForAdvisors = async (advisorIds: string[]): Promise<any[]> => {
     const allOpps = await getOpportunities();
     const allPayments = await getPendingPaymentEntries();
