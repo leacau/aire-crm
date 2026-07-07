@@ -170,6 +170,17 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La lectura puntual de una nota se mantiene disponible para la vista publica existente por ID.
 - `firestore.rules` sigue intacto.
 
+## Decimonoveno corte aplicado
+
+- Se completo el flujo de Pedidos de Redes por API:
+  - `/api/social-media-requests`
+  - `/api/social-media-requests/[requestId]`
+  - `/api/social-media-requests/[requestId]/order-link`
+- Crear, listar, leer, editar, vincular y desvincular pedidos de redes ahora pasa por servidor con Firebase Admin.
+- La limpieza de campos segun tipo de contenido (Reel, Story o Carrusel) queda centralizada en API.
+- Las pantallas `/redes` y `/publicidad/[id]` conservan sus llamadas actuales mediante el puente temporal.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

@@ -1,26 +1,13 @@
 import { NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
-import { buildSocialMediaUpdatePayload, mapSocialMediaRequest } from '@/app/api/social-media-requests/utils';
-import type { SocialMediaRequest } from '@/lib/types';
 
 type RouteContext = {
   params: Promise<{ requestId: string }>;
 };
-
-export async function GET(request: Request, context: RouteContext) {
-  const requester = await requireServerUser(request);
-  if (isServerResponse(requester)) return requester;
-
-  const { requestId } = await context.params;
-  const snap = await dbAdmin.collection('social_media_requests').doc(requestId).get();
-
-  return NextResponse.json({
-    request: snap.exists ? mapSocialMediaRequest(snap.id, snap.data()) : null,
-  });
-}
 
 export async function PATCH(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
@@ -28,16 +15,24 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const { requestId } = await context.params;
   const body = await request.json();
-  const data = (body?.data || {}) as Partial<Omit<SocialMediaRequest, 'id' | 'createdAt'>>;
+  const orderId = typeof body?.orderId === 'string' ? body.orderId.trim() : '';
+  const orderTitle = typeof body?.orderTitle === 'string' ? body.orderTitle.trim() : '';
+
+  if (!orderId || !orderTitle) {
+    return NextResponse.json({ error: 'Orden obligatoria para vincular el pedido.' }, { status: 400 });
+  }
+
   const docRef = dbAdmin.collection('social_media_requests').doc(requestId);
   const snap = await docRef.get();
-
   if (!snap.exists) {
     return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
   }
 
-  const originalData = mapSocialMediaRequest(snap.id, snap.data());
-  await docRef.update(buildSocialMediaUpdatePayload(data as Record<string, unknown>));
+  await docRef.update({
+    orderId,
+    orderTitle,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
   const requesterName = getRequesterName(requester);
   await logServerActivity({
@@ -46,9 +41,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     type: 'update',
     entityType: 'social_media_request' as any,
     entityId: requestId,
-    entityName: data.clientName || originalData.clientName,
-    details: `actualizo un pedido de redes de <strong>${data.clientName || originalData.clientName}</strong>`,
-    ownerName: data.advisorName || originalData.advisorName,
+    entityName: 'Pedido de Redes',
+    details: `vinculo un pedido de redes a la orden <strong>${orderTitle}</strong>`,
+    ownerName: requesterName,
   });
 
   return NextResponse.json({ ok: true });
@@ -59,26 +54,39 @@ export async function DELETE(request: Request, context: RouteContext) {
   if (isServerResponse(requester)) return requester;
 
   const { requestId } = await context.params;
-  const docRef = dbAdmin.collection('social_media_requests').doc(requestId);
-  const snap = await docRef.get();
+  const body = await request.json().catch(() => null);
+  const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
 
-  if (!snap.exists) {
-    return NextResponse.json({ ok: true });
+  if (!reason) {
+    return NextResponse.json({ error: 'Debe indicar el motivo de la desvinculacion.' }, { status: 400 });
   }
 
-  const data = snap.data() || {};
-  await docRef.delete();
+  const docRef = dbAdmin.collection('social_media_requests').doc(requestId);
+  const snap = await docRef.get();
+  if (!snap.exists) {
+    return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
+  }
 
   const requesterName = getRequesterName(requester);
+  await docRef.update({
+    orderId: FieldValue.delete(),
+    orderTitle: FieldValue.delete(),
+    orderUnlinkedAt: FieldValue.serverTimestamp(),
+    orderUnlinkedById: requester.uid,
+    orderUnlinkedByName: requesterName,
+    orderUnlinkReason: reason,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
   await logServerActivity({
     userId: requester.uid,
     userName: requesterName,
-    type: 'delete',
+    type: 'update',
     entityType: 'social_media_request' as any,
     entityId: requestId,
-    entityName: data.clientName || 'Pedido de redes',
-    details: `elimino un pedido de redes de <strong>${data.clientName || 'Cliente'}</strong>`,
-    ownerName: data.advisorName || requesterName,
+    entityName: 'Pedido de Redes',
+    details: 'quito la vinculacion de un pedido de redes con una orden de publicidad',
+    ownerName: requesterName,
   });
 
   return NextResponse.json({ ok: true });

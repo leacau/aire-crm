@@ -4019,71 +4019,27 @@ export const saveSocialMediaRequest = async (
     userId: string,
     userName: string
 ): Promise<string> => {
-    const dataToSave = {
-        ...requestData,
-        createdAt: serverTimestamp(),
-    };
-
-    const docRef = await addDoc(collections.socialMediaRequests, dataToSave);
+    const socialMediaApi = await import('@/lib/api/social-media-requests');
+    const id = await socialMediaApi.saveSocialMediaRequest(requestData);
     invalidateCache('socialMediaRequests');
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'social_media_request' as any,
-        entityId: docRef.id,
-        entityName: requestData.clientName,
-        details: `creó un pedido de redes para <strong>${requestData.clientName}</strong> (${requestData.contentType})`,
-        ownerName: requestData.advisorName,
-    });
-
-    return docRef.id;
+    return id;
 };
 
 export const getSocialMediaRequests = async (): Promise<SocialMediaRequest[]> => {
-    const cachedData = getFromCache('socialMediaRequests');
-    if (cachedData) return cachedData;
-
-    const snapshot = await getDocs(collections.socialMediaRequests);
-    const requests = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : (data.createdAt || ''),
-            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-        } as SocialMediaRequest;
-    }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-    
+    const socialMediaApi = await import('@/lib/api/social-media-requests');
+    const requests = await socialMediaApi.getSocialMediaRequests();
     setInCache('socialMediaRequests', requests);
     return requests;
 };
 
 export const getSocialMediaRequestsByOrderId = async (orderId: string): Promise<SocialMediaRequest[]> => {
-    const snapshot = await getDocs(query(collections.socialMediaRequests, where('orderId', '==', orderId)));
-    return snapshot.docs.map(requestDoc => {
-        const data = requestDoc.data();
-        return {
-            id: requestDoc.id,
-            ...data,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
-            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-        } as SocialMediaRequest;
-    });
+    const socialMediaApi = await import('@/lib/api/social-media-requests');
+    return socialMediaApi.getSocialMediaRequestsByOrderId(orderId);
 };
 
 export const getSocialMediaRequestsByClientId = async (clientId: string): Promise<SocialMediaRequest[]> => {
-    const snapshot = await getDocs(query(collections.socialMediaRequests, where('clientId', '==', clientId)));
-    return snapshot.docs.map(requestDoc => {
-        const data = requestDoc.data();
-        return {
-            id: requestDoc.id,
-            ...data,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : (data.createdAt || ''),
-            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-        } as SocialMediaRequest;
-    }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const socialMediaApi = await import('@/lib/api/social-media-requests');
+    return socialMediaApi.getSocialMediaRequestsByClientId(clientId);
 };
 
 export const linkSocialMediaRequestToOrder = async (
@@ -4093,23 +4049,9 @@ export const linkSocialMediaRequestToOrder = async (
     userId: string,
     userName: string
 ): Promise<void> => {
-    const docRef = doc(collections.socialMediaRequests, requestId);
-    await updateDoc(docRef, {
-        orderId,
-        orderTitle,
-        updatedAt: serverTimestamp(),
-    });
+    const socialMediaApi = await import('@/lib/api/social-media-requests');
+    await socialMediaApi.linkSocialMediaRequestToOrder(requestId, orderId, orderTitle);
     invalidateCache('socialMediaRequests');
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'social_media_request' as any,
-        entityId: requestId,
-        entityName: 'Pedido de Redes',
-        details: `vinculÃ³ un pedido de redes a la orden <strong>${orderTitle}</strong>`,
-        ownerName: userName,
-    });
 };
 
 export const unlinkSocialMediaRequestFromOrder = async (
@@ -4118,105 +4060,32 @@ export const unlinkSocialMediaRequestFromOrder = async (
     userName: string,
     reason: string
 ): Promise<void> => {
-    const normalizedReason = reason.trim();
-    if (!normalizedReason) throw new Error('Debe indicar el motivo de la desvinculacion.');
-    const docRef = doc(collections.socialMediaRequests, requestId);
-    await updateDoc(docRef, {
-        orderId: deleteField(),
-        orderTitle: deleteField(),
-        orderUnlinkedAt: serverTimestamp(),
-        orderUnlinkedById: userId,
-        orderUnlinkedByName: userName,
-        orderUnlinkReason: normalizedReason,
-        updatedAt: serverTimestamp(),
-    });
+    const socialMediaApi = await import('@/lib/api/social-media-requests');
+    await socialMediaApi.unlinkSocialMediaRequestFromOrder(requestId, reason);
     invalidateCache('socialMediaRequests');
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'social_media_request' as any,
-        entityId: requestId,
-        entityName: 'Pedido de Redes',
-        details: 'quitÃ³ la vinculaciÃ³n de un pedido de redes con una orden de publicidad',
-        ownerName: userName,
-    });
 };
 
 export const getSocialMediaRequest = async (id: string): Promise<SocialMediaRequest | null> => {
-    const docRef = doc(db, 'social_media_requests', id);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-        const data = docSnap.data();
-        return {
-            id: docSnap.id,
-            ...data,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
-            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-        } as SocialMediaRequest;
-    }
-    return null;
+    const socialMediaApi = await import('@/lib/api/social-media-requests');
+    return socialMediaApi.getSocialMediaRequest(id);
 };
 
 export const updateSocialMediaRequest = async (
-    id: string, 
+    id: string,
     data: Partial<Omit<SocialMediaRequest, 'id' | 'createdAt'>>,
     userId: string,
     userName: string
 ): Promise<void> => {
-    const docRef = doc(db, 'social_media_requests', id);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) throw new Error('Pedido no encontrado');
-    
-    const originalData = docSnap.data() as SocialMediaRequest;
-
-    const updateData: any = { ...data, updatedAt: serverTimestamp() }; 
-    
-    // Limpiar campos según el tipo de contenido para evitar datos cruzados
-    if (data.contentType === 'Reel') {
-        updateData.isWebReplication = deleteField();
-        updateData.storyUrl = deleteField();
-        updateData.storyCta = deleteField();
-        updateData.storyTagClient = deleteField();
-        updateData.storyTagHandle = deleteField();
-        // 🟢 Limpiar basura de carrusel
-        updateData.carouselSlides = deleteField();
-    } else if (data.contentType === 'Story') {
-        updateData.reelCopy = deleteField();
-        updateData.reelCollaboration = deleteField();
-        updateData.reelCollabHandle = deleteField();
-        updateData.carouselSlides = deleteField();
-    } else if (data.contentType === 'Carrusel') {
-        updateData.isWebReplication = deleteField();
-        updateData.storyUrl = deleteField();
-        updateData.storyCta = deleteField();
-        updateData.storyTagClient = deleteField();
-        updateData.storyTagHandle = deleteField();
-        updateData.reelCopy = deleteField();
-        // En Carrusel Sí hay colaboración, por lo que preservamos reelCollaboration y reelCollabHandle
-    }
-
-    await updateDoc(docRef, updateData);
+    const socialMediaApi = await import('@/lib/api/social-media-requests');
+    await socialMediaApi.updateSocialMediaRequest(id, data);
     invalidateCache('socialMediaRequests');
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'social_media_request' as any,
-        entityId: id,
-        entityName: data.clientName || originalData.clientName,
-        details: `actualizó un pedido de redes de <strong>${data.clientName || originalData.clientName}</strong>`,
-        ownerName: data.advisorName || originalData.advisorName, 
-    });
 };
 
 export const deleteSocialMediaRequest = async (id: string, userId: string, userName: string): Promise<void> => {
-    const { deleteSocialMediaRequest } = await import('@/lib/api/social-media-requests');
-    await deleteSocialMediaRequest(id);
+    const socialMediaApi = await import('@/lib/api/social-media-requests');
+    await socialMediaApi.deleteSocialMediaRequest(id);
     invalidateCache('socialMediaRequests');
 };
-
 // --- Convenios de Canje (App Móvil) ---
 export const saveConvenioCanje = async (
     convenioData: Omit<ConvenioCanje, 'id' | 'createdAt'>,
