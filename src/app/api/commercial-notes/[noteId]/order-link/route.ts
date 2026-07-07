@@ -4,21 +4,10 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
-import { cleanCommercialNotePayload, mapCommercialNote } from '@/app/api/commercial-notes/utils';
-import type { CommercialNote } from '@/lib/types';
 
 type RouteContext = {
   params: Promise<{ noteId: string }>;
 };
-
-export async function GET(_request: Request, context: RouteContext) {
-  const { noteId } = await context.params;
-  const snap = await dbAdmin.collection('commercial_notes').doc(noteId).get();
-
-  return NextResponse.json({
-    note: snap.exists ? mapCommercialNote(snap.id, snap.data()) : null,
-  });
-}
 
 export async function PATCH(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
@@ -26,20 +15,24 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const { noteId } = await context.params;
   const body = await request.json();
-  const noteData = (body?.noteData || {}) as Partial<Omit<CommercialNote, 'id' | 'createdAt'>>;
+  const orderId = typeof body?.orderId === 'string' ? body.orderId.trim() : '';
+  const orderTitle = typeof body?.orderTitle === 'string' ? body.orderTitle.trim() : '';
+
+  if (!orderId || !orderTitle) {
+    return NextResponse.json({ error: 'Orden obligatoria para vincular la nota.' }, { status: 400 });
+  }
+
   const docRef = dbAdmin.collection('commercial_notes').doc(noteId);
   const snap = await docRef.get();
-
   if (!snap.exists) {
     return NextResponse.json({ error: 'Nota no encontrada' }, { status: 404 });
   }
 
-  const updateData = {
-    ...cleanCommercialNotePayload(noteData as Record<string, unknown>),
+  await docRef.update({
+    orderId,
+    orderTitle,
     updatedAt: FieldValue.serverTimestamp(),
-  };
-
-  await docRef.update(updateData);
+  });
 
   const requesterName = getRequesterName(requester);
   await logServerActivity({
@@ -48,9 +41,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     type: 'update',
     entityType: 'commercial_note' as any,
     entityId: noteId,
-    entityName: noteData.title || 'Nota Comercial',
-    details: `edito la nota comercial <strong>${noteData.title || 'Nota Comercial'}</strong>`,
-    ownerName: noteData.advisorName || requesterName,
+    entityName: 'Nota Comercial',
+    details: `vinculo una nota comercial a la orden <strong>${orderTitle}</strong>`,
+    ownerName: requesterName,
   });
 
   return NextResponse.json({ ok: true });
@@ -61,26 +54,39 @@ export async function DELETE(request: Request, context: RouteContext) {
   if (isServerResponse(requester)) return requester;
 
   const { noteId } = await context.params;
+  const body = await request.json().catch(() => null);
+  const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+
+  if (!reason) {
+    return NextResponse.json({ error: 'Debe indicar el motivo de la desvinculacion.' }, { status: 400 });
+  }
+
   const docRef = dbAdmin.collection('commercial_notes').doc(noteId);
   const snap = await docRef.get();
-
   if (!snap.exists) {
     return NextResponse.json({ error: 'Nota no encontrada' }, { status: 404 });
   }
 
-  const noteData = snap.data() || {};
-  await docRef.delete();
-
   const requesterName = getRequesterName(requester);
+  await docRef.update({
+    orderId: FieldValue.delete(),
+    orderTitle: FieldValue.delete(),
+    orderUnlinkedAt: FieldValue.serverTimestamp(),
+    orderUnlinkedById: requester.uid,
+    orderUnlinkedByName: requesterName,
+    orderUnlinkReason: reason,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
   await logServerActivity({
     userId: requester.uid,
     userName: requesterName,
-    type: 'delete',
+    type: 'update',
     entityType: 'commercial_note' as any,
     entityId: noteId,
-    entityName: noteData.title || 'Nota Comercial',
-    details: `elimino la nota comercial <strong>${noteData.title || 'Nota Comercial'}</strong>`,
-    ownerName: noteData.advisorName || 'Desconocido',
+    entityName: 'Nota Comercial',
+    details: 'quito la vinculacion de una nota comercial con una orden de publicidad',
+    ownerName: requesterName,
   });
 
   return NextResponse.json({ ok: true });

@@ -159,6 +159,17 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `deleteCommercialNote`, `deleteSocialMediaRequest` y `deleteAdvertisingOrder` pasan por API con registro de actividad en servidor.
 - `firestore.rules` sigue intacto.
 
+## Decimoctavo corte aplicado
+
+- Se completo el flujo de Notas Comerciales por API:
+  - `/api/commercial-notes`
+  - `/api/commercial-notes/[noteId]`
+  - `/api/commercial-notes/[noteId]/order-link`
+- Crear, listar, leer, editar, vincular y desvincular notas comerciales ahora pasa por servidor con Firebase Admin.
+- El registro de actividad de creacion, edicion y vinculacion queda centralizado en API.
+- La lectura puntual de una nota se mantiene disponible para la vista publica existente por ID.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

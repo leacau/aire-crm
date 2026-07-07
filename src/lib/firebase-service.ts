@@ -211,115 +211,29 @@ export const saveCommercialNote = async (
     userId: string,
     userName: string
 ): Promise<string> => {
-    const batch = writeBatch(db);
-    
-    const noteRef = doc(collections.commercialNotes);
-    batch.set(noteRef, {
-        ...noteData,
-        createdAt: serverTimestamp(),
-    });
-
-    const activityRef = doc(collections.clientActivities);
-    batch.set(activityRef, {
-        clientId: noteData.clientId,
-        clientName: noteData.clientName,
-        userId: userId,
-        userName: userName,
-        type: 'Otra',
-        observation: `Generó una Nota Comercial: "${noteData.title}" (Valor: $${noteData.totalValue.toLocaleString()})`,
-        timestamp: serverTimestamp(),
-        isTask: false,
-        createdAt: serverTimestamp(),
-    });
-
-    const systemLogRef = doc(collections.activities);
-    batch.set(systemLogRef, {
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'commercial_note' as any,
-        entityId: noteRef.id,
-        entityName: 'Nota Comercial',
-        details: `creó una nota comercial para <strong>${noteData.clientName}</strong>`,
-        ownerName: noteData.advisorName,
-        timestamp: serverTimestamp(),
-    });
-
-    await batch.commit();
-    return noteRef.id;
+    const commercialNotesApi = await import('@/lib/api/commercial-notes');
+    return commercialNotesApi.saveCommercialNote(noteData);
 };
 
 export async function getCommercialNotesByClientId(clientId: string): Promise<CommercialNote[]> {
-  try {
-    const q = query(collections.commercialNotes, where('clientId', '==', clientId));
-
-    const querySnapshot = await getDocs(q);
-    const notes: CommercialNote[] = querySnapshot.docs.map(doc => {
-      const data = doc.data();
-      const createdAt = data.createdAt instanceof Timestamp 
-          ? data.createdAt.toDate().toISOString() 
-          : (data.createdAt || '');
-
-      return { id: doc.id, ...data, createdAt } as CommercialNote;
-    });
-
-    return notes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-  } catch (error) {
-    console.error("Error al obtener las notas comerciales del cliente:", error);
-    throw error;
-  }
+    const commercialNotesApi = await import('@/lib/api/commercial-notes');
+    return commercialNotesApi.getCommercialNotesByClientId(clientId);
 }
 
-// Obtener notas de un asesor específico
+// Obtener notas de un asesor especifico
 export const getCommercialNotesForAdvisor = async (advisorId: string): Promise<CommercialNote[]> => {
-    try {
-        const q = query(
-            collections.commercialNotes, 
-            where('advisorId', '==', advisorId),
-            orderBy('createdAt', 'desc')
-        );
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                ...data,
-                createdAt: timestampToISO(data.createdAt) || new Date().toISOString()
-            } as CommercialNote;
-        });
-    } catch (error) {
-        console.error("Error getting advisor notes:", error);
-        return [];
-    }
+    const commercialNotesApi = await import('@/lib/api/commercial-notes');
+    return commercialNotesApi.getCommercialNotesForAdvisor(advisorId);
 };
 
 export const getAllCommercialNotes = async (): Promise<CommercialNote[]> => {
-    try {
-        const querySnapshot = await getDocs(collections.commercialNotes);
-        return querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                ...data,
-                createdAt: timestampToISO(data.createdAt) || data.createdAt || ''
-            } as CommercialNote;
-        }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-    } catch (error) {
-        console.error("Error getting all notes:", error);
-        return [];
-    }
+    const commercialNotesApi = await import('@/lib/api/commercial-notes');
+    return commercialNotesApi.getAllCommercialNotes();
 };
 
 export const getCommercialNotesByOrderId = async (orderId: string): Promise<CommercialNote[]> => {
-    const snapshot = await getDocs(query(collections.commercialNotes, where('orderId', '==', orderId)));
-    return snapshot.docs.map(noteDoc => {
-        const data = noteDoc.data();
-        return {
-            id: noteDoc.id,
-            ...data,
-            createdAt: timestampToISO(data.createdAt) || new Date().toISOString()
-        } as CommercialNote;
-    });
+    const commercialNotesApi = await import('@/lib/api/commercial-notes');
+    return commercialNotesApi.getCommercialNotesByOrderId(orderId);
 };
 
 export const linkCommercialNoteToOrder = async (
@@ -329,22 +243,8 @@ export const linkCommercialNoteToOrder = async (
     userId: string,
     userName: string
 ): Promise<void> => {
-    const docRef = doc(collections.commercialNotes, noteId);
-    await updateDoc(docRef, {
-        orderId,
-        orderTitle,
-        updatedAt: serverTimestamp(),
-    });
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'commercial_note' as any,
-        entityId: noteId,
-        entityName: 'Nota Comercial',
-        details: `vinculÃ³ una nota comercial a la orden <strong>${orderTitle}</strong>`,
-        ownerName: userName,
-    });
+    const commercialNotesApi = await import('@/lib/api/commercial-notes');
+    await commercialNotesApi.linkCommercialNoteToOrder(noteId, orderId, orderTitle);
 };
 
 export const unlinkCommercialNoteFromOrder = async (
@@ -353,57 +253,18 @@ export const unlinkCommercialNoteFromOrder = async (
     userName: string,
     reason: string
 ): Promise<void> => {
-    const normalizedReason = reason.trim();
-    if (!normalizedReason) throw new Error('Debe indicar el motivo de la desvinculacion.');
-    const docRef = doc(collections.commercialNotes, noteId);
-    await updateDoc(docRef, {
-        orderId: deleteField(),
-        orderTitle: deleteField(),
-        orderUnlinkedAt: serverTimestamp(),
-        orderUnlinkedById: userId,
-        orderUnlinkedByName: userName,
-        orderUnlinkReason: normalizedReason,
-        updatedAt: serverTimestamp(),
-    });
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'commercial_note' as any,
-        entityId: noteId,
-        entityName: 'Nota Comercial',
-        details: 'quitÃ³ la vinculaciÃ³n de una nota comercial con una orden de publicidad',
-        ownerName: userName,
-    });
+    const commercialNotesApi = await import('@/lib/api/commercial-notes');
+    await commercialNotesApi.unlinkCommercialNoteFromOrder(noteId, reason);
 };
 
 export const getCommercialNote = async (noteId: string): Promise<CommercialNote | null> => {
-    try {
-        const docRef = doc(db, 'commercial_notes', noteId);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            const createdAt = data.createdAt instanceof Timestamp 
-                ? data.createdAt.toDate().toISOString() 
-                : data.createdAt;
-                
-            return {
-                id: docSnap.id,
-                ...data,
-                createdAt
-            } as CommercialNote;
-        }
-        return null;
-    } catch (error) {
-        console.error("Error fetching commercial note:", error);
-        return null;
-    }
+    const commercialNotesApi = await import('@/lib/api/commercial-notes');
+    return commercialNotesApi.getCommercialNote(noteId);
 };
 
 export const deleteCommercialNote = async (noteId: string, userId: string, userName: string): Promise<void> => {
-    const { deleteCommercialNote } = await import('@/lib/api/commercial-notes');
-    await deleteCommercialNote(noteId);
+    const commercialNotesApi = await import('@/lib/api/commercial-notes');
+    await commercialNotesApi.deleteCommercialNote(noteId);
 };
 
 export const updateCommercialNote = async (
@@ -412,27 +273,9 @@ export const updateCommercialNote = async (
     userId: string,
     userName: string
 ): Promise<void> => {
-    const docRef = doc(collections.commercialNotes, noteId);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) throw new Error("Nota no encontrada");
-
-    await updateDoc(docRef, {
-        ...noteData, // Aquí viajan "advisorId" y "advisorName"
-        updatedAt: serverTimestamp() 
-    });
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'commercial_note' as any,
-        entityId: noteId,
-        entityName: noteData.title || 'Nota Comercial',
-        details: `editó la nota comercial <strong>${noteData.title}</strong>`,
-        ownerName: noteData.advisorName || userName // Se loguea al dueño real de la orden
-    });
+    const commercialNotesApi = await import('@/lib/api/commercial-notes');
+    await commercialNotesApi.updateCommercialNote(noteId, noteData);
 };
-
 export const bulkReleaseProspects = async (
     prospectIds: string[],
     userId: string,
