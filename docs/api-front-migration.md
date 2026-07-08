@@ -342,6 +342,19 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El puente temporal elimina fetches manuales y escrituras directas de usuarios.
 - `firestore.rules` sigue intacto.
 
+## Trigesimo octavo corte aplicado
+
+- Se agrego `/api/vacation-requests` para listar y crear solicitudes de licencia desde servidor.
+- Se agregaron endpoints para editar, eliminar, aprobar, rechazar y anular licencias:
+  - `/api/vacation-requests/[requestId]`
+  - `/api/vacation-requests/[requestId]/status`
+  - `/api/vacation-requests/[requestId]/annul`
+- Se agrego `/api/users/[userId]/vacation-days` para ajustar saldos de licencia desde servidor.
+- `getVacationRequests`, `createVacationRequest`, `updateVacationRequest`, `approveVacationRequest`, `annulVacationRequest`, `deleteVacationRequest`, `adjustVacationDays` y `addVacationDays` pasan por API.
+- El calculo de dias habiles, la retencion/reintegro de saldos y las validaciones de gestion quedan centralizadas en servidor.
+- Al eliminar una licencia pendiente o aprobada, la API reintegra los dias retenidos para evitar saldos inconsistentes.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados
