@@ -3,6 +3,23 @@
 import { apiRequest } from '@/lib/api-client';
 import type { ClientActivity } from '@/lib/types';
 
+export async function getAllClientActivities(): Promise<ClientActivity[]> {
+  const result = await apiRequest<{ activities: ClientActivity[] }>('/api/client-activities', {
+    method: 'GET',
+  });
+  return result.activities;
+}
+
+export async function createClientActivity(
+  activityData: Omit<ClientActivity, 'id' | 'timestamp'>,
+): Promise<string> {
+  const result = await apiRequest<{ id: string }>('/api/client-activities', {
+    method: 'POST',
+    body: { activityData },
+  });
+  return result.id;
+}
+
 export async function updateClientActivity(
   id: string,
   data: Partial<Omit<ClientActivity, 'id'>>,
@@ -25,4 +42,3 @@ export async function rescheduleActivityTask(activityId: string, newDate: Date):
     body: { dueDate: newDate.toISOString() },
   });
 }
-

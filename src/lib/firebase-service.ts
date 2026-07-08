@@ -2908,18 +2908,8 @@ export const getAllClientActivities = async (): Promise<ClientActivity[]> => {
     const cachedData = getFromCache('client_activities');
     if (cachedData) return cachedData;
 
-    const q = query(collections.clientActivities, orderBy('timestamp', 'desc'));
-    const snapshot = await getDocs(q);
-    const activities = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
-            dueDate: data.dueDate instanceof Timestamp ? data.dueDate.toDate().toISOString() : data.dueDate,
-            completedAt: data.completedAt instanceof Timestamp ? data.completedAt.toDate().toISOString() : data.completedAt,
-        } as ClientActivity;
-    });
+    const { getAllClientActivities } = await import('@/lib/api/client-activities');
+    const activities = await getAllClientActivities();
     setInCache('client_activities', activities);
     return activities;
 };
@@ -2928,30 +2918,8 @@ export const getAllClientActivities = async (): Promise<ClientActivity[]> => {
 export const createClientActivity = async (
     activityData: Omit<ClientActivity, 'id' | 'timestamp'>
 ): Promise<string> => {
-    
-    const dataToSave: any = {
-      ...activityData,
-      timestamp: serverTimestamp(),
-    };
-
-    if (activityData.isTask && activityData.dueDate) {
-        dataToSave.dueDate = Timestamp.fromDate(new Date(activityData.dueDate));
-    } else {
-       delete dataToSave.dueDate;
-    }
-
-    if (!activityData.opportunityId || activityData.opportunityId === 'none') {
-        delete dataToSave.opportunityId;
-        delete dataToSave.opportunityTitle;
-    }
-
-    if (!activityData.clientId) delete dataToSave.clientId;
-    if (!activityData.clientName) delete dataToSave.clientName;
-    if (!activityData.prospectId) delete dataToSave.prospectId;
-    if (!activityData.prospectName) delete dataToSave.prospectName;
-
-
-    const docRef = await addDoc(collections.clientActivities, dataToSave);
+    const { createClientActivity } = await import('@/lib/api/client-activities');
+    const id = await createClientActivity(activityData);
     invalidateCache('client_activities');
     if (activityData.userId && activityData.userName) {
         try {
@@ -2965,7 +2933,7 @@ export const createClientActivity = async (
             console.error('Error auto-updating coaching:', e);
         }
     }
-    return docRef.id;
+    return id;
 };
 
 export const updateClientActivity = async (

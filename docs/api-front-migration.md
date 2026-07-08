@@ -199,6 +199,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los campos permitidos para sincronizacion se validan en API con lista blanca.
 - `firestore.rules` sigue intacto.
 
+## Vigesimo segundo corte aplicado
+
+- Se agrego `/api/client-activities` para listar actividades globales y crear nuevas actividades desde servidor.
+- `getAllClientActivities` y `createClientActivity` pasan por API mediante el puente temporal.
+- La autoria de nuevas actividades se toma del usuario autenticado en servidor, no de campos enviados por el navegador.
+- La actualizacion automatica de coaching se conserva en el puente actual y queda pendiente para un corte especifico.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados
