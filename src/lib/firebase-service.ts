@@ -1389,14 +1389,8 @@ export const createAgency = async (
 // --- User Profile Functions ---
 
 export const createUserProfile = async (uid: string, name: string, email: string, photoURL?: string): Promise<void> => {
-    const userRef = doc(db, 'users', uid);
-    await setDoc(userRef, {
-        name,
-        email,
-        role: 'Asesor',
-        photoURL: photoURL || null,
-        createdAt: serverTimestamp(),
-    });
+    const { createUserProfile } = await import('@/lib/api/users');
+    await createUserProfile(uid, name, email, photoURL);
     invalidateCache('users');
 };
 
@@ -1414,44 +1408,18 @@ export async function updateUserProfile(uid: string, data: Partial<User>) {
 };
 
 export const syncRegisteredUsersFromAuth = async (): Promise<{ total: number; created: number; updated: number }> => {
-  const token = await auth.currentUser?.getIdToken();
-  if (!token) throw new Error('No hay sesion activa para sincronizar usuarios.');
-
-  const response = await fetch('/api/admin/users/sync', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.error || 'No se pudo sincronizar usuarios registrados.');
-  }
-
-  const result = await response.json();
+  const { syncRegisteredUsersFromAuth } = await import('@/lib/api/users');
+  const result = await syncRegisteredUsersFromAuth();
   invalidateCache('users');
   return result;
 };
 
 export const createExternalCanjeUser = async (data: { name: string; email: string; password: string }) => {
-  const currentUser = auth.currentUser;
-  if (!currentUser) throw new Error('Debes iniciar sesión.');
-  const token = await currentUser.getIdToken();
-  const response = await fetch('/api/admin/users/external', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(data),
-  });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || 'No se pudo crear la cuenta externa.');
+  const { createExternalCanjeUser } = await import('@/lib/api/users');
+  const result = await createExternalCanjeUser(data);
   invalidateCache('users');
   return result;
 };
-
 export const getAllUsers = async (role?: UserRole): Promise<User[]> => {
   const cacheKey = `all_users_${role || 'all'}`;
   const cached = getFromCache(cacheKey);
@@ -1490,48 +1458,10 @@ export const deleteUserAndReassignEntities = async (
     adminUserId: string,
     adminUserName: string
 ): Promise<void> => {
-    const userRef = doc(db, 'users', userIdToDelete);
-    const userSnap = await getDoc(userRef);
-    if (!userSnap.exists()) throw new Error("Usuario no encontrado.");
-    const userData = userSnap.data() as User;
-
-    const batch = writeBatch(db);
-
-    const clientsQuery = query(collections.clients, where('ownerId', '==', userIdToDelete));
-    const clientsSnapshot = await getDocs(clientsQuery);
-    clientsSnapshot.forEach(doc => {
-        batch.update(doc.ref, {
-            ownerId: deleteField(),
-            ownerName: deleteField()
-        });
-    });
-
-    const prospectsQuery = query(collections.prospects, where('ownerId', '==', userIdToDelete));
-    const prospectsSnapshot = await getDocs(prospectsQuery);
-    prospectsSnapshot.forEach(doc => {
-        batch.update(doc.ref, {
-            ownerId: deleteField(),
-            ownerName: deleteField()
-        });
-    });
-    
-    batch.delete(userRef);
-
-    await batch.commit();
+    const { deleteUserAndReassignEntities } = await import('@/lib/api/users');
+    await deleteUserAndReassignEntities(userIdToDelete);
     invalidateCache();
-
-    await logActivity({
-        userId: adminUserId,
-        userName: adminUserName,
-        type: 'delete',
-        entityType: 'user',
-        entityId: userIdToDelete,
-        entityName: userData.name,
-        details: `eliminó al usuario <strong>${userData.name}</strong> y desasignó ${clientsSnapshot.size} cliente(s) y ${prospectsSnapshot.size} prospecto(s).`,
-        ownerName: adminUserName,
-    });
 };
-
 
 // --- Client Functions ---
 

@@ -327,6 +327,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La autoria de comentarios y respuestas se toma del usuario autenticado en servidor.
 - `firestore.rules` sigue intacto.
 
+## Trigesimo septimo corte aplicado
+
+- Se extendio `/api/users` para crear perfiles de usuario desde servidor.
+- Se extendio `/api/users/[userId]` con borrado y desasignacion de clientes/prospectos desde servidor.
+- `createUserProfile`, `syncRegisteredUsersFromAuth`, `createExternalCanjeUser` y `deleteUserAndReassignEntities` pasan por API.
+- El puente temporal elimina fetches manuales y escrituras directas de usuarios.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados
