@@ -80,3 +80,16 @@ export async function saveSasProducts(products: SasProductConfig[]): Promise<Sas
   });
   return result.products;
 }
+
+export async function getSystemHolidays(): Promise<string[]> {
+  const result = await apiRequest<{ dates: string[] }>('/api/system/holidays', { method: 'GET' });
+  return result.dates;
+}
+
+export async function saveSystemHolidays(dates: string[]): Promise<string[]> {
+  const result = await apiRequest<{ dates: string[] }>('/api/system/holidays', {
+    method: 'PUT',
+    body: { dates },
+  });
+  return result.dates;
+}

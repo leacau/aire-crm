@@ -273,6 +273,15 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los cambios de formatos SRL y productos SAS registran actividad desde API.
 - `firestore.rules` sigue intacto.
 
+## Trigesimo primer corte aplicado
+
+- Se agrego `/api/system/holidays` para leer y guardar feriados del sistema desde servidor.
+- Se agrego `/api/users/[userId]/monthly-closure` para registrar cierres mensuales desde servidor.
+- `getSystemHolidays`, `saveSystemHolidays` y `saveMonthlyClosure` pasan por API mediante el puente temporal.
+- El guardado de feriados y cierres mensuales queda restringido en servidor a perfiles de gestion.
+- Los cambios registran actividad desde API.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

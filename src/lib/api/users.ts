@@ -27,3 +27,9 @@ export async function updateUserProfile(uid: string, data: Partial<User>): Promi
   });
 }
 
+export async function saveMonthlyClosure(userId: string, month: string, value: number): Promise<void> {
+  await apiRequest<{ ok: true }>(`/api/users/${encodeURIComponent(userId)}/monthly-closure`, {
+    method: 'PUT',
+    body: { month, value },
+  });
+}

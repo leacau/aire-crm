@@ -402,31 +402,10 @@ export const updateAreaPermissions = async (permissions: Record<AreaType, Partia
 };
 
 export const saveMonthlyClosure = async (advisorId: string, month: string, value: number, managerId: string) => {
-    const userRef = doc(db, 'users', advisorId);
-    const fieldPath = `monthlyClosures.${month}`;
-
-    await updateDoc(userRef, {
-        [fieldPath]: value,
-    });
+    const { saveMonthlyClosure } = await import('@/lib/api/users');
+    await saveMonthlyClosure(advisorId, month, value);
     invalidateCache('users');
-    
-    const managerSnap = await getDoc(doc(db, 'users', managerId));
-    const advisorSnap = await getDoc(userRef);
-    const managerName = managerSnap.exists() ? managerSnap.data().name : 'Manager';
-    const advisorName = advisorSnap.exists() ? advisorSnap.data().name : 'Asesor';
-
-    await logActivity({
-        userId: managerId,
-        userName: managerName,
-        type: 'update',
-        entityType: 'monthly_closure' as any,
-        entityId: advisorId,
-        entityName: advisorName,
-        details: `registró el cierre de <strong>${month}</strong> para <strong>${advisorName}</strong> con un valor de <strong>$${value.toLocaleString('es-AR')}</strong>`,
-        ownerName: advisorName,
-    });
 };
-
 // --- Supervisor Comments ---
 const mapCommentDoc = (snapshot: any): SupervisorComment => {
     const data = snapshot.data();
@@ -981,31 +960,20 @@ export const calculateBusinessDays = (startDateStr: string, returnDateStr: strin
 // --- Gestión de Feriados ---
 
 export const getSystemHolidays = async (): Promise<string[]> => {
-    const docRef = doc(collections.systemConfig, 'holidays');
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-        return (snap.data() as SystemHolidays).dates || [];
-    }
-    return [];
+    const cached = getFromCache('system_holidays');
+    if (cached) return cached as string[];
+
+    const { getSystemHolidays } = await import('@/lib/api/system');
+    const dates = await getSystemHolidays();
+    setInCache('system_holidays', dates);
+    return dates;
 };
 
 export const saveSystemHolidays = async (dates: string[], userId: string, userName: string) => {
-    const docRef = doc(collections.systemConfig, 'holidays');
-    await setDoc(docRef, { dates }, { merge: true });
-    invalidateCache('system_holidays'); // Si usas caché para esto
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'system_config',
-        entityId: 'holidays',
-        entityName: 'Feriados',
-        details: `actualizó la lista de feriados del sistema.`,
-        ownerName: 'Sistema',
-    });
+    const { saveSystemHolidays } = await import('@/lib/api/system');
+    await saveSystemHolidays(dates);
+    invalidateCache('system_holidays');
 };
-
 // --- Prospect Functions ---
 export const getProspects = async (): Promise<Prospect[]> => {
     const cachedData = getFromCache('prospects');
