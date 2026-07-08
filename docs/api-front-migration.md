@@ -265,6 +265,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La API refuerza el acceso de gerencia/jefatura en servidor y registra la importacion masiva en actividades.
 - `firestore.rules` sigue intacto.
 
+## Trigesimo corte aplicado
+
+- Se agregaron `/api/system/srl-ad-types` y `/api/system/sas-products` para configuracion comercial dinamica.
+- `getSrlAdTypes`, `saveSrlAdTypes`, `getSasProducts` y `saveSasProducts` pasan por API mediante el puente temporal.
+- La lectura queda disponible para usuarios autenticados y el guardado se restringe en servidor a perfiles de gestion.
+- Los cambios de formatos SRL y productos SAS registran actividad desde API.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

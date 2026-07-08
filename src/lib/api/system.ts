@@ -1,7 +1,7 @@
 'use client';
 
 import { apiRequest } from '@/lib/api-client';
-import type { AreaType, ScreenName, ScreenPermission } from '@/lib/types';
+import type { AreaType, SasProductConfig, ScreenName, ScreenPermission } from '@/lib/types';
 
 type PermissionsMap = Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>;
 
@@ -55,3 +55,28 @@ export async function saveWorkflowAssignments(assignments: WorkflowAssignments):
   });
 }
 
+export async function getSrlAdTypes(): Promise<string[]> {
+  const result = await apiRequest<{ types: string[] }>('/api/system/srl-ad-types', { method: 'GET' });
+  return result.types;
+}
+
+export async function saveSrlAdTypes(types: string[]): Promise<string[]> {
+  const result = await apiRequest<{ types: string[] }>('/api/system/srl-ad-types', {
+    method: 'PUT',
+    body: { types },
+  });
+  return result.types;
+}
+
+export async function getSasProducts(): Promise<SasProductConfig[]> {
+  const result = await apiRequest<{ products: SasProductConfig[] }>('/api/system/sas-products', { method: 'GET' });
+  return result.products;
+}
+
+export async function saveSasProducts(products: SasProductConfig[]): Promise<SasProductConfig[]> {
+  const result = await apiRequest<{ products: SasProductConfig[] }>('/api/system/sas-products', {
+    method: 'PUT',
+    body: { products },
+  });
+  return result.products;
+}
