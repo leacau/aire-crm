@@ -231,6 +231,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La actualizacion automatica de coaching posterior a la creacion se conserva en el puente temporal y queda pendiente para un corte especifico.
 - `firestore.rules` sigue intacto.
 
+## Vigesimo sexto corte aplicado
+
+- Se agrego `DELETE /api/opportunities/[opportunityId]` para eliminar oportunidades desde servidor.
+- `deleteOpportunity` pasa por API mediante el puente temporal.
+- El borrado elimina tambien las facturas asociadas a la oportunidad y registra actividad en servidor.
+- La edicion completa de oportunidades queda pendiente para un corte propio por su logica de renovaciones, pautas, facturas pendientes y coaching.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

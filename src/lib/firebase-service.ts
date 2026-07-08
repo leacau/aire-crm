@@ -2341,42 +2341,12 @@ export const deleteOpportunity = async (
     userId: string,
     userName: string
 ): Promise<void> => {
-    const docRef = doc(db, 'opportunities', id);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) throw new Error("Opportunity not found");
-    const opportunityData = docSnap.data() as Opportunity;
-
-    const batch = writeBatch(db);
-
-    const invoicesQuery = query(collections.invoices, where('opportunityId', '==', id));
-    const invoicesSnap = await getDocs(invoicesQuery);
-    invoicesSnap.forEach(doc => batch.delete(doc.ref));
-    
-    batch.delete(docRef);
-
-    await batch.commit();
-    
-    // 🟢 MUTADOR CORRECTO PARA BORRADO DE OPORTUNIDADES
+    const { deleteOpportunity } = await import('@/lib/api/opportunities');
+    await deleteOpportunity(id);
     mutateCacheArray('opportunities', id, null, 'delete');
-    invalidateOpportunityCaches([opportunityData.clientId]);
-    // Las facturas las seguimos invalidando completas por precaución a desincronizaciones en cascada
+    invalidateOpportunityCaches();
     invalidateCache('invoices');
-
-    const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
-    const clientOwnerName = clientSnap.exists() ? (clientSnap.data() as Client).ownerName : 'N/A';
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'opportunity',
-        entityId: id,
-        entityName: opportunityData.title,
-        details: `eliminó la oportunidad <strong>${opportunityData.title}</strong> del cliente ${opportunityData.clientName}`,
-        ownerName: clientOwnerName
-    });
 };
-
 const convertActivityLogDoc = (doc: any): ActivityLog => {
     const data = doc.data();
     if (data.timestamp instanceof Timestamp) {

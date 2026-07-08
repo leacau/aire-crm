@@ -32,3 +32,9 @@ export async function createOpportunity(opportunityData: Omit<Opportunity, 'id'>
   });
   return result.id;
 }
+
+export async function deleteOpportunity(opportunityId: string): Promise<void> {
+  await apiRequest<{ ok: true }>(`/api/opportunities/${encodeURIComponent(opportunityId)}`, {
+    method: 'DELETE',
+  });
+}
