@@ -1,7 +1,17 @@
 'use client';
 
 import { apiRequest } from '@/lib/api-client';
-import type { Opportunity } from '@/lib/types';
+import type { Invoice, Opportunity, OpportunityPeriod } from '@/lib/types';
+
+type UpdateOpportunityResponse = {
+  ok: true;
+  originalData: Opportunity;
+  stageChanged: boolean;
+  isRenewal: boolean;
+  newRenewals: OpportunityPeriod[];
+  createdCommercialItems: number;
+  createdInvoices: number;
+};
 
 export async function getOpportunities(): Promise<Opportunity[]> {
   const result = await apiRequest<{ opportunities: Opportunity[] }>('/api/opportunities?scope=active', {
@@ -31,6 +41,18 @@ export async function createOpportunity(opportunityData: Omit<Opportunity, 'id'>
     body: { opportunityData },
   });
   return result.id;
+}
+
+export async function updateOpportunity(
+  opportunityId: string,
+  data: Partial<Omit<Opportunity, 'id'>>,
+  pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[],
+  options?: { manageContractPeriods?: boolean },
+): Promise<UpdateOpportunityResponse> {
+  return apiRequest<UpdateOpportunityResponse>(`/api/opportunities/${encodeURIComponent(opportunityId)}`, {
+    method: 'PATCH',
+    body: { data, pendingInvoices, options },
+  });
 }
 
 export async function deleteOpportunity(opportunityId: string): Promise<void> {

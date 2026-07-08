@@ -239,6 +239,16 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La edicion completa de oportunidades queda pendiente para un corte propio por su logica de renovaciones, pautas, facturas pendientes y coaching.
 - `firestore.rules` sigue intacto.
 
+## Vigesimo septimo corte aplicado
+
+- Se agrego `PATCH /api/opportunities/[opportunityId]` para editar oportunidades desde servidor.
+- `updateOpportunity` pasa por API mediante el puente temporal.
+- La API valida vigencias, renovaciones y cambios de etapa, elimina campos obsoletos y registra actividad en servidor.
+- Cuando una oportunidad pasa a `Cerrado - Ganado`, la generacion de pautas comerciales asociadas tambien se ejecuta en servidor.
+- La creacion de facturas pendientes vinculadas a la edicion de oportunidades queda centralizada en API.
+- La actualizacion automatica de coaching queda temporalmente en el puente hasta migrar coaching completo.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

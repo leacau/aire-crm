@@ -2020,75 +2020,8 @@ export const createQuickOpportunity = async (title: string, clientId: string, cl
     return docRef.id;
 }
 
-const createCommercialItemsFromOpportunity = async (opportunity: Opportunity, userId: string, userName: string) => {
-    if (!opportunity.ordenesPautado || opportunity.ordenesPautado.length === 0) {
-        return;
-    }
-
-    const batch = writeBatch(db);
-    const newItems: Omit<CommercialItem, 'id'>[] = [];
-
-    for (const orden of opportunity.ordenesPautado) {
-        if (!orden.fechaInicio || !orden.fechaFin || !orden.programas || orden.programas.length === 0) continue;
-
-        const startDate = parseDateWithTimezone(orden.fechaInicio);
-        const endDate = parseDateWithTimezone(orden.fechaFin);
-        if (!startDate || !endDate) continue;
-
-        let currentDate = startDate;
-
-        while (currentDate <= endDate) {
-            const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
-            if (orden.dias?.includes(dayOfWeek)) {
-                for (const programName of orden.programas) {
-                    const program = (await getPrograms()).find(p => p.name === programName);
-                    if (program) {
-                        for (let i = 0; i < (orden.repeticiones || 1); i++) {
-                             const item: Omit<CommercialItem, 'id'> = {
-                                programId: program.id,
-                                date: format(currentDate, 'yyyy-MM-dd'),
-                                type: orden.tipoPauta === 'Spot' ? 'Pauta' : orden.tipoPauta,
-                                title: orden.tipoPauta === 'PNT' ? orden.textoPNT || opportunity.title : opportunity.title,
-                                description: orden.textoPNT || opportunity.title,
-                                status: 'Vendido',
-                                clientId: opportunity.clientId,
-                                clientName: opportunity.clientName,
-                                opportunityId: opportunity.id,
-                                opportunityTitle: opportunity.title,
-                                createdBy: userId,
-                            };
-                            newItems.push(item);
-                        }
-                    }
-                }
-            }
-            currentDate.setDate(currentDate.getDate() + 1);
-        }
-    }
-    
-    if (newItems.length > 0) {
-        for (const itemData of newItems) {
-            const docRef = doc(collection(db, 'commercial_items'));
-            batch.set(docRef, { ...itemData, createdAt: serverTimestamp() });
-        }
-        await batch.commit();
-        invalidateCache();
-
-        await logActivity({
-            userId,
-            userName,
-            type: 'create',
-            entityType: 'commercial_item_series',
-            entityId: opportunity.id,
-            entityName: opportunity.title,
-            details: `generó <strong>${newItems.length}</strong> pautas comerciales desde la oportunidad <strong>${opportunity.title}</strong>`,
-            ownerName: userName,
-        });
-    }
-};
-
 export const updateOpportunity = async (
-    id: string, 
+    id: string,
     data: Partial<Omit<Opportunity, 'id'>>,
     userId: string,
     userName: string,
@@ -2096,232 +2029,60 @@ export const updateOpportunity = async (
     pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[],
     options?: { manageContractPeriods?: boolean }
 ): Promise<void> => {
-    const docRef = doc(db, 'opportunities', id);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) throw new Error("Opportunity not found");
-    const originalData = docSnap.data() as Opportunity;
+    const { updateOpportunity } = await import('@/lib/api/opportunities');
+    const result = await updateOpportunity(id, data, pendingInvoices, options);
+    const originalData = result.originalData;
 
-    const resultingStage = data.stage || originalData.stage;
-    const hasStartDateUpdate = Object.prototype.hasOwnProperty.call(data, 'startDate');
-    const hasEndDateUpdate = Object.prototype.hasOwnProperty.call(data, 'endDate');
-    const nextStartDate = hasStartDateUpdate ? data.startDate : originalData.startDate;
-    const nextEndDate = hasEndDateUpdate ? data.endDate : originalData.endDate;
-    const isTransitioningToWon = resultingStage === 'Cerrado - Ganado' && originalData.stage !== 'Cerrado - Ganado';
-    if (isTransitioningToWon && (!nextStartDate || !nextEndDate)) {
-            throw new Error('La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.');
-    }
-    if (!!nextStartDate !== !!nextEndDate) {
-        throw new Error('La fecha de inicio y fin de la vigencia deben cargarse juntas.');
-    }
-    if (nextStartDate && nextEndDate && parseISO(nextEndDate) < parseISO(nextStartDate)) {
-        throw new Error('La fecha de fin del contrato no puede ser anterior a la fecha de inicio.');
-    }
-    if (
-        !options?.manageContractPeriods
-        && originalData.startDate
-        && originalData.endDate
-        && ((typeof data.startDate === 'string' && data.startDate !== originalData.startDate)
-          || (typeof data.endDate === 'string' && data.endDate !== originalData.endDate))
-    ) {
-        throw new Error('La vigencia inicial ya fue confirmada. Para extenderla, usá Renovar período.');
-    }
-
-    const clientSnap = await getDoc(doc(db, 'clients', originalData.clientId));
-    if (!clientSnap.exists()) throw new Error("Client not found for opportunity update");
-
-    const updateData: {[key: string]: any} = {
-        ...data,
-        updatedAt: serverTimestamp()
-    };
-    if (options?.manageContractPeriods && hasStartDateUpdate && !data.startDate) updateData.startDate = deleteField();
-    if (options?.manageContractPeriods && hasEndDateUpdate && !data.endDate) updateData.endDate = deleteField();
-
-    const originalHistory = Array.isArray(originalData.periodHistory) ? originalData.periodHistory : [];
-    if (
-        (originalData.stage as string) === 'Ganado (Recurrente)'
-        && Array.isArray(data.periodHistory)
-        && data.periodHistory.length >= originalHistory.length
-    ) {
-        updateData.stage = 'Cerrado - Ganado';
-    }
-    const submittedHistory = Array.isArray(data.periodHistory) ? data.periodHistory : originalHistory;
-    if (options?.manageContractPeriods && Array.isArray(data.periodHistory)) {
-        updateData.periodHistory = data.periodHistory;
-    }
-    const newRenewals = (options?.manageContractPeriods ? [] : submittedHistory.filter(period => !originalHistory.some(existing => (
-        existing.startDate === period.startDate
-        && existing.endDate === period.endDate
-        && Number(existing.value || 0) === Number(period.value || 0)
-    ))));
-    const occupiedPeriods = [
-        ...(nextStartDate && nextEndDate ? [{ startDate: nextStartDate, endDate: nextEndDate }] : []),
-        ...(options?.manageContractPeriods ? [] : originalHistory),
-    ];
-    const periodsToValidate = options?.manageContractPeriods && Array.isArray(data.periodHistory)
-        ? data.periodHistory
-        : newRenewals;
-    periodsToValidate.forEach(period => {
-        if (!period.startDate || !period.endDate || parseISO(period.endDate) < parseISO(period.startDate)) {
-            throw new Error('La renovación contiene una vigencia inválida.');
-        }
-        const overlaps = occupiedPeriods.some(existing => (
-            period.startDate <= existing.endDate && period.endDate >= existing.startDate
-        ));
-        if (overlaps) throw new Error('La renovación se superpone con una vigencia ya registrada.');
-        occupiedPeriods.push(period);
-    });
-    const isRenewal = newRenewals.length > 0;
-    if (Array.isArray(data.periodHistory) && !options?.manageContractPeriods) {
-        updateData.periodHistory = [...originalHistory, ...newRenewals];
-    }
-    if (isRenewal) {
-        updateData.lastRenewedAt = serverTimestamp();
-        updateData.lastRenewedById = userId;
-        updateData.lastRenewedByName = userName;
-        updateData.finalizationDate = deleteField();
-    }
-    if (!originalData.startDate && !originalData.endDate && nextStartDate && nextEndDate) {
-        updateData.initialValidityConfirmedAt = serverTimestamp();
-        updateData.initialValidityConfirmedById = userId;
-        updateData.initialValidityConfirmedByName = userName;
-    }
-
-    if ('finalizationDate' in data && !data.finalizationDate) {
-        updateData.finalizationDate = deleteField();
-    }
-
-    Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined) delete updateData[key];
-    });
-
-    if ('manualUpdateHistory' in updateData) {
-        delete updateData.manualUpdateHistory;
-    }
-
-    const stageChanged = data.stage && data.stage !== originalData.stage;
-    if (stageChanged) {
-        updateData.stageChangedAt = serverTimestamp();
-    }
-
-    if (typeof data.manualUpdateDate !== 'undefined') {
-        if (!data.manualUpdateDate) {
-            updateData.manualUpdateDate = deleteField();
-        } else if (data.manualUpdateDate !== originalData.manualUpdateDate) {
-            updateData.manualUpdateDate = data.manualUpdateDate;
-            updateData.manualUpdateHistory = arrayUnion(data.manualUpdateDate);
-        } else {
-            delete updateData.manualUpdateDate;
-        }
-    }
-    
-    const bonusStateChanged = data.bonificacionEstado && data.bonificacionEstado !== originalData.bonificacionEstado && originalData.bonificacionEstado === 'Pendiente';
-    if (bonusStateChanged) {
-        if (originalData.stage === 'Negociación a Aprobar') {
-            updateData.stage = 'Negociación';
-        }
-    }
-
-    if (data.stage === 'Cerrado - Ganado' && originalData.stage !== 'Cerrado - Ganado') {
-        const fullOpportunityData = { ...originalData, ...data, id };
-        await createCommercialItemsFromOpportunity(fullOpportunityData, userId, userName);
-    }
-
-    if (data.bonificacionDetalle !== undefined && !data.bonificacionDetalle.trim()) {
-        updateData.bonificacionEstado = deleteField();
-        updateData.bonificacionAutorizadoPorId = deleteField();
-        updateData.bonificacionAutorizadoPorNombre = deleteField();
-        updateData.bonificacionFechaAutorizacion = deleteField();
-    }
-    
-    if (data.agencyId === '' || data.agencyId === undefined) {
-        updateData.agencyId = deleteField();
-    }
-    
-    updateData.pautados = deleteField();
-
-    if ('createdAt' in updateData && typeof updateData.createdAt === 'string') {
-        updateData.createdAt = Timestamp.fromDate(new Date(updateData.createdAt));
-    }
-
-    await updateDoc(docRef, updateData);
-    
-    // 🟢 MUTADOR CORRECTO PARA EDICIÓN DE OPORTUNIDADES (Con truco de fechas)
     const cacheData: Partial<Opportunity> & { updatedAt: string; stageChangedAt?: string } = {
-        ...updateData,
+        ...data,
         updatedAt: new Date().toISOString(),
     };
-    if (stageChanged) {
+    if (result.stageChanged) {
         cacheData.stageChangedAt = new Date().toISOString();
     }
-    if (isRenewal || ('finalizationDate' in data && !data.finalizationDate)) {
+    if (result.isRenewal || ('finalizationDate' in data && !data.finalizationDate)) {
         cacheData.finalizationDate = undefined;
     }
+
     mutateCacheArray('opportunities', id, cacheData, 'update');
     invalidateOpportunityCaches([originalData.clientId, data.clientId]);
+    if ((pendingInvoices && pendingInvoices.length > 0) || result.createdInvoices > 0) {
+        invalidateCache('invoices');
+    }
+    if (result.createdCommercialItems > 0) {
+        invalidateCache();
+    }
 
-     if (pendingInvoices && pendingInvoices.length > 0) {
-        for (const invoiceData of pendingInvoices) {
-            await createInvoice({
-                ...invoiceData,
-                opportunityId: id,
-            }, userId, userName, ownerName);
+    if (result.isRenewal) {
+        try {
+            const latestRenewal = result.newRenewals[result.newRenewals.length - 1];
+            const newStart = latestRenewal ? format(parseISO(latestRenewal.startDate), 'dd/MM/yyyy', { locale: es }) : '?';
+            const newEnd = latestRenewal ? format(parseISO(latestRenewal.endDate), 'dd/MM/yyyy', { locale: es }) : '?';
+            await autoUpdateCoachingSession(userId, userName, 'client', originalData.clientId, originalData.clientName, `Propuesta renovada: ${data.title || originalData.title} - Valor: $${data.value || originalData.value} - Periodo: ${newStart} al ${newEnd}`);
+        } catch (e) {
+            console.error('Error auto-updating coaching:', e);
         }
     }
 
-    const activityDetails = {
-        userId,
-        userName,
-        entityType: 'opportunity' as const,
-        entityId: id,
-        entityName: originalData.title,
-        ownerName: ownerName
-    };
-
-    const isFirstRenewal = isRenewal && originalHistory.length === 0;
-    
-    if (isRenewal || isFirstRenewal) {
-         try {
-             const latestRenewal = newRenewals[newRenewals.length - 1];
-             const newStart = latestRenewal ? format(parseISO(latestRenewal.startDate), 'dd/MM/yyyy', { locale: es }) : '?';
-             const newEnd = latestRenewal ? format(parseISO(latestRenewal.endDate), 'dd/MM/yyyy', { locale: es }) : '?';
-             await autoUpdateCoachingSession(userId, userName, 'client', originalData.clientId, originalData.clientName, `Propuesta renovada: ${data.title || originalData.title} - Valor: $${data.value || originalData.value} - Período: ${newStart} al ${newEnd}`);
-         } catch (e) {
-             console.error('Error auto-updating coaching:', e);
-         }
-    }
-
-    if (stageChanged) {
-        await logActivity({
-            ...activityDetails,
-            type: 'stage_change',
-            details: `cambió la etapa de <strong>${originalData.title}</strong> a <strong>${data.stage}</strong> para el cliente <a href="/clients/${originalData.clientId}" class="font-bold text-primary hover:underline">${originalData.clientName}</a>`,
-        });
-    } else {
-        await logActivity({
-            ...activityDetails,
-            type: 'update',
-            details: `actualizó la oportunidad <strong>${originalData.title}</strong> para el cliente <a href="/clients/${originalData.clientId}" class="font-bold text-primary hover:underline">${originalData.clientName}</a>`,
-        });
-    }
     const coachingChanges = [
-        stageChanged ? `Etapa: ${data.stage}` : null,
+        result.stageChanged ? `Etapa: ${data.stage}` : null,
         data.value !== undefined && data.value !== originalData.value ? `Valor: $${data.value}` : null,
-        data.observaciones !== undefined && data.observaciones !== originalData.observaciones ? `Observación: ${data.observaciones || 'sin observaciones'}` : null,
-        data.followUpDone !== undefined && data.followUpDone !== originalData.followUpDone ? `Qué hice: ${data.followUpDone || 'sin detalle'}` : null,
-        data.followUpCurrent !== undefined && data.followUpCurrent !== originalData.followUpCurrent ? `En qué estamos: ${data.followUpCurrent || 'sin detalle'}` : null,
-        data.followUpNext !== undefined && data.followUpNext !== originalData.followUpNext ? `Qué sigue: ${data.followUpNext || 'sin detalle'}` : null,
+        data.observaciones !== undefined && data.observaciones !== originalData.observaciones ? `Observacion: ${data.observaciones || 'sin observaciones'}` : null,
+        data.followUpDone !== undefined && data.followUpDone !== originalData.followUpDone ? `Que hice: ${data.followUpDone || 'sin detalle'}` : null,
+        data.followUpCurrent !== undefined && data.followUpCurrent !== originalData.followUpCurrent ? `En que estamos: ${data.followUpCurrent || 'sin detalle'}` : null,
+        data.followUpNext !== undefined && data.followUpNext !== originalData.followUpNext ? `Que sigue: ${data.followUpNext || 'sin detalle'}` : null,
     ].filter(Boolean).join(' - ');
 
     if (coachingChanges) {
         try {
-            const isClosingWonProposal = stageChanged && data.stage === 'Cerrado - Ganado';
+            const isClosingWonProposal = result.stageChanged && data.stage === 'Cerrado - Ganado';
             await autoUpdateCoachingSession(
                 userId,
                 userName,
                 'client',
                 originalData.clientId,
                 originalData.clientName,
-                `Actualización de propuesta: ${data.title || originalData.title} - ${coachingChanges}`,
+                `Actualizacion de propuesta: ${data.title || originalData.title} - ${coachingChanges}`,
                 isClosingWonProposal
                     ? {
                         createIfMissing: false,
