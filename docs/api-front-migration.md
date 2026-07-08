@@ -207,6 +207,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La actualizacion automatica de coaching se conserva en el puente actual y queda pendiente para un corte especifico.
 - `firestore.rules` sigue intacto.
 
+## Vigesimo tercer corte aplicado
+
+- Se agrego `/api/invoices` y `/api/invoices/[invoiceId]` para el CRUD basico de facturas.
+- `getInvoices`, `getInvoicesForOpportunity`, `createInvoice`, `updateInvoice` y `deleteInvoice` pasan por API mediante el puente temporal.
+- La creacion de facturas actualiza la estadistica mensual desde servidor cuando corresponde.
+- Quedan pendientes para otro corte: dashboard/paginacion optimizada, borrado masivo y operaciones de cobranzas.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

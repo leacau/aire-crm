@@ -1336,48 +1336,10 @@ const normalizeInvoiceAmount = (rawAmount: unknown): number => {
 
 export const getInvoices = async (): Promise<Invoice[]> => {
     return getCachedOrLoad('invoices', async () => {
-
-    const snapshot = await getDocsPreferCache(query(collections.invoices, orderBy("dateGenerated", "desc")));
-    const invoices = snapshot.docs.map(doc => {
-        const data = doc.data() as any;
-        
-        const validDate = data.date && typeof data.date === 'string' ? parseDateWithTimezone(data.date) : null;
-        const validDatePaid = data.datePaid && typeof data.datePaid === 'string' ? parseDateWithTimezone(data.datePaid) : null;
-
-        const rawCreditNoteDate = data.creditNoteMarkedAt;
-        const normalizedCreditNoteDate = rawCreditNoteDate instanceof Timestamp
-            ? rawCreditNoteDate.toDate().toISOString()
-            : typeof rawCreditNoteDate === 'string'
-                ? rawCreditNoteDate
-                : null;
-        const rawDeletionMarkAt = (data as any).deletionMarkedAt;
-        const normalizedDeletionMarkAt = rawDeletionMarkAt instanceof Timestamp
-            ? rawDeletionMarkAt.toDate().toISOString()
-            : typeof rawDeletionMarkAt === 'string'
-                ? rawDeletionMarkAt
-                : null;
-
-        return {
-            id: doc.id,
-            ...data,
-            amount: normalizeInvoiceAmount(data.amount),
-            date: validDate ? format(validDate, 'yyyy-MM-dd') : undefined,
-            dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
-            datePaid: validDatePaid ? format(validDatePaid, 'yyyy-MM-dd') : undefined,
-            isCreditNote: Boolean(data.isCreditNote),
-            creditNoteMarkedAt: normalizedCreditNoteDate,
-            deletionMarkedAt: normalizedDeletionMarkAt,
-            // 🟢 Mapeo explícito de los nuevos campos
-            periodStart: data.periodStart,
-            periodEnd: data.periodEnd,
-            orderDate: data.orderDate,
-            orderNumber: data.orderNumber,
-        } as Invoice;
-    });
-    return invoices;
+        const { getInvoices } = await import('@/lib/api/invoices');
+        return getInvoices();
     });
 };
-
 export const getDashboardInvoices = async (): Promise<Invoice[]> => {
     const cachedData = getFromCache('dashboard_invoices');
     if (cachedData) return cachedData;
@@ -1483,38 +1445,8 @@ export const getInvoicesPaginated = async (
 export const getInvoicesForOpportunity = async (opportunityId: string): Promise<Invoice[]> => {
     const cacheKey = `invoices_opportunity_${opportunityId}`;
     return getCachedOrLoad(cacheKey, async () => {
-    const q = query(collections.invoices, where("opportunityId", "==", opportunityId));
-    const snapshot = await getDocsPreferCache(q);
-    const invoices = snapshot.docs.map(doc => {
-        const data = doc.data() as any;
-        const rawCreditNoteDate = data.creditNoteMarkedAt;
-        const normalizedCreditNoteDate = rawCreditNoteDate instanceof Timestamp
-            ? rawCreditNoteDate.toDate().toISOString()
-            : typeof rawCreditNoteDate === 'string'
-                ? rawCreditNoteDate
-                : null;
-        const rawDeletionMarkAt = (data as any).deletionMarkedAt;
-        const normalizedDeletionMarkAt = rawDeletionMarkAt instanceof Timestamp
-            ? rawDeletionMarkAt.toDate().toISOString()
-            : typeof rawDeletionMarkAt === 'string'
-                ? rawDeletionMarkAt
-                : null;
-
-        return {
-            id: doc.id,
-            ...data,
-            amount: normalizeInvoiceAmount(data.amount),
-            isCreditNote: Boolean(data.isCreditNote),
-            creditNoteMarkedAt: normalizedCreditNoteDate,
-            deletionMarkedAt: normalizedDeletionMarkAt,
-            periodStart: data.periodStart,
-            periodEnd: data.periodEnd,
-            orderDate: data.orderDate,
-            orderNumber: data.orderNumber,
-        } as Invoice;
-    });
-    invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
-    return invoices;
+        const { getInvoicesForOpportunity } = await import('@/lib/api/invoices');
+        return getInvoicesForOpportunity(opportunityId);
     });
 };
 
@@ -1527,80 +1459,26 @@ export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]>
 };
 
 export const createInvoice = async (invoiceData: Omit<Invoice, 'id'>, userId: string, userName: string, ownerName: string): Promise<string> => {
-    const dataToSave = {
-      ...invoiceData,
-      dateGenerated: new Date().toISOString(),
-      isCreditNote: invoiceData.isCreditNote ?? false,
-      creditNoteMarkedAt: invoiceData.creditNoteMarkedAt ?? null,
-      markedForDeletion: invoiceData.markedForDeletion ?? false,
-      deletionMarkedAt: invoiceData.deletionMarkedAt ?? null,
-      deletionMarkedById: invoiceData.deletionMarkedById ?? null,
-      deletionMarkedByName: invoiceData.deletionMarkedByName ?? null,
-      periodStart: invoiceData.periodStart ?? null,
-      periodEnd: invoiceData.periodEnd ?? null,
-      orderDate: invoiceData.orderDate ?? null,
-      orderNumber: invoiceData.orderNumber ?? null,
-    };
-    Object.keys(dataToSave).forEach(key => {
-      if ((dataToSave as Record<string, unknown>)[key] === undefined) {
-        delete (dataToSave as Record<string, unknown>)[key];
-      }
-    });
-    const docRef = await addDoc(collections.invoices, dataToSave);
-    
-    // 🟢 MUTADOR CORRECTO PARA FACTURAS (Usamos dataToSave)
-    mutateCacheArray('invoices', docRef.id, dataToSave, 'add', (a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
+    const { createInvoice } = await import('@/lib/api/invoices');
+    const id = await createInvoice(invoiceData);
+    invalidateCache('invoices');
     invalidateInvoiceDetailCaches();
-
-   if (invoiceData.date && !invoiceData.isCreditNote) {
-        const monthKey = invoiceData.date.substring(0, 7);
-        const amountToLog = Math.abs(invoiceData.amount);
-        
-        await updateMonthlyBillingStat(monthKey, amountToLog, userId);
-    }
-    return docRef.id;
+    return id;
 };
 
 export const updateInvoice = async (id: string, data: Partial<Omit<Invoice, 'id'>>, userId: string, userName: string, ownerName: string): Promise<void> => {
-    const docRef = doc(db, 'invoices', id);
-    const updateData: Partial<Invoice> & { [key: string]: any } = {...data};
-
-    delete updateData.id;
-
-    if (updateData.status === 'Pagada' && !updateData.datePaid) {
-        updateData.datePaid = new Date().toISOString().split('T')[0];
-    }
-    
-    await updateDoc(docRef, updateData);
-    
-    // 🟢 MUTADOR CORRECTO PARA EDICIÓN DE FACTURAS
-    mutateCacheArray('invoices', id, updateData, 'update');
+    const { updateInvoice } = await import('@/lib/api/invoices');
+    await updateInvoice(id, data);
+    mutateCacheArray('invoices', id, data, 'update');
     invalidateInvoiceDetailCaches();
 };
 
 export const deleteInvoice = async (id: string, userId: string, userName: string, ownerName: string): Promise<void> => {
-    const docRef = doc(db, 'invoices', id);
-    const invoiceSnap = await getDoc(docRef);
-    const invoiceData = invoiceSnap.data();
-
-    await deleteDoc(docRef);
-    
-    // 🟢 MUTADOR CORRECTO PARA BORRADO DE FACTURAS
+    const { deleteInvoice } = await import('@/lib/api/invoices');
+    await deleteInvoice(id, ownerName);
     mutateCacheArray('invoices', id, null, 'delete');
     invalidateInvoiceDetailCaches();
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'invoice',
-        entityId: id,
-        entityName: `Factura #${invoiceData?.invoiceNumber || id}`,
-        details: `eliminó la factura #${invoiceData?.invoiceNumber || id}`,
-        ownerName: ownerName
-    });
 };
-
 export type InvoiceBatchDeleteResult = {
     deleted: string[];
     failed: { id: string; error: string }[];
