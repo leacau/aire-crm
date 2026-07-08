@@ -979,18 +979,8 @@ export const getProspects = async (): Promise<Prospect[]> => {
     const cachedData = getFromCache('prospects');
     if (cachedData) return cachedData;
 
-    const snapshot = await getDocs(query(collections.prospects, orderBy("createdAt", "desc")));
-    const prospects = snapshot.docs.map(doc => {
-      const data = doc.data();
-      const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
-      return {
-          id: doc.id,
-          ...data,
-          createdAt: convertTimestamp(data.createdAt),
-          statusChangedAt: convertTimestamp(data.statusChangedAt),
-          lastProspectNotificationAt: convertTimestamp((data as any).lastProspectNotificationAt),
-      } as Prospect
-    });
+    const { getProspects } = await import('@/lib/api/prospects');
+    const prospects = await getProspects();
     setInCache('prospects', prospects);
     return prospects;
 };
@@ -1001,80 +991,41 @@ export const createProspect = async (
     userName: string,
     options?: { skipCoachingUpdate?: boolean },
 ): Promise<string> => {
-    const dataToSave = {
+    const { createProspect } = await import('@/lib/api/prospects');
+    const id = await createProspect(prospectData);
+
+    const cacheData = {
         ...prospectData,
+        id,
         ownerId: userId,
         ownerName: userName,
         creatorId: userId,
         creatorName: userName,
-        createdAt: serverTimestamp(), // Va a Firebase
-    };
-    const docRef = await addDoc(collections.prospects, dataToSave);
-    
-    // 🟢 EL TRUCO: Para el caché visual, inyectamos un texto ISO real
-    const cacheData = {
-        ...dataToSave,
-        createdAt: new Date().toISOString()
-    };
-    
-    mutateCacheArray('prospects', docRef.id, cacheData, 'add', (a, b) => {
+        createdAt: new Date().toISOString(),
+    } as Prospect;
+
+    mutateCacheArray('prospects', id, cacheData, 'add', (a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return dateB - dateA;
     });
 
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'prospect',
-        entityId: docRef.id,
-        entityName: prospectData.companyName,
-        details: `creó el prospecto <strong>${prospectData.companyName}</strong>`,
-        ownerName: userName,
-    });
     if (!options?.skipCoachingUpdate) {
         try {
-            await autoUpdateCoachingSession(userId, userName, 'prospect', docRef.id, prospectData.companyName, 'Nuevo prospecto cargado en el sistema.');
+            await autoUpdateCoachingSession(userId, userName, 'prospect', id, prospectData.companyName, 'Nuevo prospecto cargado en el sistema.');
         } catch (e) {
             console.error('Error auto-updating coaching:', e);
         }
     }
-    return docRef.id;
+    return id;
 };
 
 export const updateProspect = async (id: string, data: Partial<Omit<Prospect, 'id'>>, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'prospects', id);
-    const prospectSnap = await getDoc(docRef);
-    if (!prospectSnap.exists()) throw new Error('Prospect not found');
-    const prospectData = prospectSnap.data() as Prospect;
+    const { updateProspect } = await import('@/lib/api/prospects');
+    const result = await updateProspect(id, data);
+    const prospectData = result.originalData;
 
-    const updateData = { ...data, updatedAt: serverTimestamp() };
-    await updateDoc(docRef, updateData);
-    
-    // 🟢 Aplicamos la misma limpieza para la fecha de actualización
-    const cacheData = {
-        ...updateData,
-        updatedAt: new Date().toISOString()
-    };
-    
-    mutateCacheArray('prospects', id, cacheData, 'update');
-
-    let details = `actualizó el prospecto <strong>${prospectData.companyName}</strong>`;
-    if (data.status && data.status !== prospectData.status) {
-        details = `cambió el estado del prospecto <strong>${prospectData.companyName}</strong> a <strong>${data.status}</strong>`;
-    }
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'prospect',
-        entityId: id,
-        entityName: prospectData.companyName,
-        details,
-        ownerName: prospectData.ownerName,
-    });
+    mutateCacheArray('prospects', id, { ...data, updatedAt: new Date().toISOString() }, 'update');
 
     const coachingNotes = [
         data.status && data.status !== prospectData.status ? `Estado: ${data.status}` : null,
@@ -1083,7 +1034,7 @@ export const updateProspect = async (id: string, data: Partial<Omit<Prospect, 'i
 
     if (coachingNotes) {
         try {
-            await autoUpdateCoachingSession(userId, userName, 'prospect', id, prospectData.companyName, `Actualización de prospecto - ${coachingNotes}`);
+            await autoUpdateCoachingSession(userId, userName, 'prospect', id, prospectData.companyName, `Actualizacion de prospecto - ${coachingNotes}`);
         } catch (e) {
             console.error('Error auto-updating coaching:', e);
         }
@@ -1091,28 +1042,10 @@ export const updateProspect = async (id: string, data: Partial<Omit<Prospect, 'i
 };
 
 export const deleteProspect = async (id: string, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'prospects', id);
-    const prospectSnap = await getDoc(docRef);
-    if (!prospectSnap.exists()) throw new Error("Prospect not found");
-    const prospectData = prospectSnap.data() as Prospect;
-
-    await deleteDoc(docRef);
-    
-    // 🟢 MUTADOR CORRECTO PARA BORRADO DE PROSPECTOS
+    const { deleteProspect } = await import('@/lib/api/prospects');
+    await deleteProspect(id);
     mutateCacheArray('prospects', id, null, 'delete');
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'prospect',
-        entityId: id,
-        entityName: prospectData.companyName,
-        details: `eliminó el prospecto <strong>${prospectData.companyName}</strong>`,
-        ownerName: prospectData.ownerName,
-    });
 };
-
 export const recordProspectNotifications = async (
     prospectIds: string[],
     userId: string,

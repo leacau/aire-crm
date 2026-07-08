@@ -282,6 +282,16 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los cambios registran actividad desde API.
 - `firestore.rules` sigue intacto.
 
+## Trigesimo segundo corte aplicado
+
+- Se agrego `/api/prospects` para listar y crear prospectos desde servidor.
+- Se agrego `/api/prospects/[prospectId]` para editar y eliminar prospectos desde servidor.
+- `getProspects`, `createProspect`, `updateProspect` y `deleteProspect` pasan por API mediante el puente temporal.
+- La autoria, auditoria de creacion/edicion/borrado y timestamps quedan centralizados en API.
+- La actualizacion automatica de coaching queda temporalmente en el puente hasta migrar coaching completo.
+- Reclamos, aprobaciones y liberacion masiva de prospectos quedan pendientes para un corte especifico.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados
