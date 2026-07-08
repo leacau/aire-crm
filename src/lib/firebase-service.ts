@@ -351,60 +351,6 @@ export const saveMonthlyClosure = async (advisorId: string, month: string, value
     invalidateCache('users');
 };
 // --- Supervisor Comments ---
-const mapCommentDoc = (snapshot: any): SupervisorComment => {
-    const data = snapshot.data();
-    const replies = Array.isArray(data.replies) ? data.replies.map((reply: SupervisorCommentReply) => ({
-        ...reply,
-        createdAt: timestampToISO((reply as any).createdAt) || new Date().toISOString(),
-    })) : [];
-
-    const lastSeenAtBy: Record<string, string> | undefined = data.lastSeenAtBy
-        ? Object.entries(data.lastSeenAtBy).reduce((acc, [userId, value]) => {
-            const parsed = timestampToISO(value) || (typeof value === 'string' ? value : undefined);
-            if (parsed) acc[userId] = parsed;
-            return acc;
-        }, {} as Record<string, string>)
-        : undefined;
-
-    return {
-        id: snapshot.id,
-        ...data,
-        createdAt: timestampToISO(data.createdAt) || new Date().toISOString(),
-        replies,
-        lastMessageAt: timestampToISO(data.lastMessageAt),
-        lastSeenAtBy,
-    } as SupervisorComment;
-};
-
-export const getSupervisorCommentsForEntity = async (entityType: 'client' | 'opportunity', entityId: string): Promise<SupervisorComment[]> => {
-    const q = query(
-        collections.supervisorComments,
-        where('entityType', '==', entityType),
-        where('entityId', '==', entityId)
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs
-        .map(mapCommentDoc)
-        .sort((a, b) => {
-            if (!a.createdAt || !b.createdAt) return 0;
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        });
-};
-
-export const getSupervisorCommentThreadsForUser = async (userId: string): Promise<SupervisorComment[]> => {
-    const q = query(
-        collections.supervisorComments,
-        where('lastMessageRecipientId', '==', userId)
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs
-        .map(mapCommentDoc)
-        .sort((a, b) => {
-            if (!a.lastMessageAt || !b.lastMessageAt) return 0;
-            return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
-        });
-};
-
 interface CreateSupervisorCommentInput {
     entityType: 'client' | 'opportunity';
     entityId: string;
@@ -418,26 +364,6 @@ interface CreateSupervisorCommentInput {
     recipientName?: string;
 }
 
-export const createSupervisorComment = async (input: CreateSupervisorCommentInput): Promise<string> => {
-    const docRef = await addDoc(collections.supervisorComments, {
-        ...input,
-        createdAt: serverTimestamp(),
-        replies: [],
-        lastMessageAuthorId: input.authorId,
-        lastMessageAuthorName: input.authorName,
-        lastMessageRecipientId: input.recipientId || input.ownerId,
-        lastMessageRecipientName: input.recipientName || input.ownerName,
-        lastMessageText: input.message,
-        lastMessageAt: serverTimestamp(),
-        lastSeenAtBy: {
-            [input.authorId]: serverTimestamp(),
-        },
-    });
-    invalidateCache(`comments_${input.entityType}_${input.entityId}`);
-    invalidateCache(`commentThreads_${input.recipientId || input.ownerId}`);
-    return docRef.id;
-};
-
 interface ReplySupervisorCommentInput {
     commentId: string;
     authorId: string;
@@ -447,36 +373,32 @@ interface ReplySupervisorCommentInput {
     recipientName?: string;
 }
 
-export const replyToSupervisorComment = async ({ commentId, authorId, authorName, message, recipientId, recipientName }: ReplySupervisorCommentInput): Promise<void> => {
-    const commentRef = doc(collections.supervisorComments, commentId);
-    const replyId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-    const reply: SupervisorCommentReply = {
-        id: replyId,
-        authorId,
-        authorName,
-        message,
-        recipientId,
-        recipientName,
-        createdAt: new Date().toISOString(),
-    };
+export const getSupervisorCommentsForEntity = async (entityType: 'client' | 'opportunity', entityId: string): Promise<SupervisorComment[]> => {
+    const { getSupervisorCommentsForEntity } = await import('@/lib/api/supervisor-comments');
+    return getSupervisorCommentsForEntity(entityType, entityId);
+};
 
-    await updateDoc(commentRef, {
-        replies: arrayUnion(reply),
-        lastMessageAuthorId: authorId,
-        lastMessageAuthorName: authorName,
-        lastMessageRecipientId: recipientId,
-        lastMessageRecipientName: recipientName,
-        lastMessageText: message,
-        lastMessageAt: serverTimestamp(),
-        [`lastSeenAtBy.${authorId}`]: serverTimestamp(),
-    });
+export const getSupervisorCommentThreadsForUser = async (userId: string): Promise<SupervisorComment[]> => {
+    const { getSupervisorCommentThreadsForUser } = await import('@/lib/api/supervisor-comments');
+    return getSupervisorCommentThreadsForUser(userId);
+};
+
+export const createSupervisorComment = async (input: CreateSupervisorCommentInput): Promise<string> => {
+    const { createSupervisorComment } = await import('@/lib/api/supervisor-comments');
+    const id = await createSupervisorComment(input);
+    invalidateCache(`comments_${input.entityType}_${input.entityId}`);
+    invalidateCache(`commentThreads_${input.recipientId || input.ownerId}`);
+    return id;
+};
+
+export const replyToSupervisorComment = async (input: ReplySupervisorCommentInput): Promise<void> => {
+    const { replyToSupervisorComment } = await import('@/lib/api/supervisor-comments');
+    await replyToSupervisorComment(input);
 };
 
 export const markSupervisorCommentThreadSeen = async (commentId: string, userId: string): Promise<void> => {
-    const commentRef = doc(collections.supervisorComments, commentId);
-    await updateDoc(commentRef, {
-        [`lastSeenAtBy.${userId}`]: serverTimestamp(),
-    });
+    const { markSupervisorCommentThreadSeen } = await import('@/lib/api/supervisor-comments');
+    await markSupervisorCommentThreadSeen(commentId);
 };
 
 export const deleteSupervisorCommentThread = async (
@@ -486,12 +408,11 @@ export const deleteSupervisorCommentThread = async (
     ownerId: string,
     recipientId?: string
 ): Promise<void> => {
-    const commentRef = doc(collections.supervisorComments, commentId);
-    await deleteDoc(commentRef);
+    const { deleteSupervisorCommentThread } = await import('@/lib/api/supervisor-comments');
+    await deleteSupervisorCommentThread(commentId);
     invalidateCache(`comments_${entityType}_${entityId}`);
     invalidateCache(`commentThreads_${recipientId || ownerId}`);
 };
-
 
 // --- Vacation Request (License) Functions ---
 

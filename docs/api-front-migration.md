@@ -319,6 +319,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El historial de cliente se arma en servidor incluyendo actividad directa, oportunidades y personas relacionadas.
 - `firestore.rules` sigue intacto.
 
+## Trigesimo sexto corte aplicado
+
+- Se agrego `/api/supervisor-comments` para listar y crear comentarios de supervision.
+- Se agregaron endpoints para borrar hilos, responder y marcar vistos.
+- `getSupervisorCommentsForEntity`, `getSupervisorCommentThreadsForUser`, `createSupervisorComment`, `replyToSupervisorComment`, `markSupervisorCommentThreadSeen` y `deleteSupervisorCommentThread` pasan por API.
+- La autoria de comentarios y respuestas se toma del usuario autenticado en servidor.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados
