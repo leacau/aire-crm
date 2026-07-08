@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { ActivityLog } from '@/lib/types';
 
@@ -99,4 +101,27 @@ export async function GET(request: Request) {
     .get();
 
   return NextResponse.json({ activities: snapshot.docs.map(doc => mapActivity(doc.id, doc.data())) });
+}
+
+export async function POST(request: Request) {
+  const requester = await requireServerUser(request);
+  if (isServerResponse(requester)) return requester;
+
+  const body = await request.json();
+  if (!body?.type || !body?.entityType || !body?.entityId || !body?.entityName || !body?.details) {
+    return NextResponse.json({ error: 'Faltan datos para registrar la actividad.' }, { status: 400 });
+  }
+
+  await logServerActivity({
+    userId: requester.uid,
+    userName: getRequesterName(requester),
+    type: body.type,
+    entityType: body.entityType,
+    entityId: String(body.entityId),
+    entityName: String(body.entityName),
+    details: String(body.details),
+    ownerName: body.ownerName ? String(body.ownerName) : undefined,
+  });
+
+  return NextResponse.json({ ok: true });
 }

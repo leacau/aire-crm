@@ -1,9 +1,6 @@
 
-import { db } from './firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import type { ActivityLog } from './types';
-
-const activitiesCollection = collection(db, 'activities');
+import { apiRequest } from '@/lib/api-client';
 
 type LogActivityPayload = Omit<ActivityLog, 'id' | 'timestamp' | 'ownerName'> & {
     ownerName?: string;
@@ -12,13 +9,11 @@ type LogActivityPayload = Omit<ActivityLog, 'id' | 'timestamp' | 'ownerName'> & 
 
 export const logActivity = async (payload: LogActivityPayload): Promise<void> => {
     try {
-        await addDoc(activitiesCollection, {
-            ...payload,
-            timestamp: serverTimestamp(),
+        await apiRequest<{ ok: true }>('/api/activities', {
+            method: 'POST',
+            body: payload,
         });
     } catch (error) {
         console.error("Error logging activity:", error);
-        // Depending on the requirements, you might want to handle this error more gracefully
-        // For now, we just log it to the console.
     }
 };
