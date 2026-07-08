@@ -288,30 +288,10 @@ export const bulkReleaseProspects = async (
     userName: string
 ): Promise<void> => {
     if (!prospectIds || prospectIds.length === 0) return;
-    const batch = writeBatch(db);
-    prospectIds.forEach((id) => {
-        const docRef = doc(db, 'prospects', id);
-        batch.update(docRef, {
-            ownerId: '',            
-            ownerName: 'Sin Asignar',
-            updatedAt: serverTimestamp(),
-        });
-    });
-    await batch.commit();
-    invalidateCache('prospects'); 
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'prospect',
-        entityId: 'multiple_release',
-        entityName: `${prospectIds.length} prospectos`,
-        details: `liberó automáticamente <strong>${prospectIds.length}</strong> prospectos por inactividad.`,
-        ownerName: 'Sistema',
-    });
+    const { bulkReleaseProspects } = await import('@/lib/api/prospects');
+    await bulkReleaseProspects(prospectIds);
+    invalidateCache('prospects');
 };
-
 // --- Config Functions ---
 
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
@@ -1052,28 +1032,10 @@ export const recordProspectNotifications = async (
     userName: string,
 ): Promise<void> => {
     if (prospectIds.length === 0) return;
-
-    const batch = writeBatch(db);
-    prospectIds.forEach(prospectId => {
-        const prospectRef = doc(db, 'prospects', prospectId);
-        batch.update(prospectRef, { lastProspectNotificationAt: serverTimestamp() });
-    });
-
-    await batch.commit();
+    const { recordProspectNotifications } = await import('@/lib/api/prospects');
+    await recordProspectNotifications(prospectIds);
     invalidateCache('prospects');
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'prospect',
-        entityId: 'prospect_notifications',
-        entityName: 'Notificaciones de prospectos',
-        details: `envió recordatorios de seguimiento para ${prospectIds.length} prospecto(s).`,
-        ownerName: userName,
-    });
 };
-
 // --- Task Functions ---
 
 export const completeActivityTask = async (activityId: string, userId: string, userName: string): Promise<void> => {
@@ -2700,118 +2662,22 @@ export const addItemsToSession = async (sessionId: string, newItems: CoachingIte
 };
 
 export const claimProspect = async (prospect: Prospect, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'prospects', prospect.id);
-    await runTransaction(db, async transaction => {
-        const snapshot = await transaction.get(docRef);
-        if (!snapshot.exists()) throw new Error("El prospecto ya no existe.");
-
-        const currentProspect = { id: snapshot.id, ...snapshot.data() } as Prospect;
-        if (currentProspect.ownerId) {
-            throw new Error("El prospecto ya fue asignado a otro asesor.");
-        }
-        if (currentProspect.claimStatus === 'Pendiente') {
-            throw new Error(
-                currentProspect.claimantId === userId
-                    ? "Tu reclamo ya está pendiente de aprobación."
-                    : "Otro asesor ya reclamó este prospecto."
-            );
-        }
-
-        if (currentProspect.previousOwnerId === userId && currentProspect.unassignedAt) {
-            const rawUnassignedAt = currentProspect.unassignedAt as any;
-            const unassignedDate = typeof rawUnassignedAt === 'string'
-                ? parseISO(rawUnassignedAt)
-                : rawUnassignedAt?.toDate?.();
-            if (unassignedDate) {
-                const daysPassed = differenceInCalendarDays(new Date(), unassignedDate);
-                if (daysPassed < 3) {
-                    throw new Error(`Debes esperar ${3 - daysPassed} días más para volver a reclamar este prospecto.`);
-                }
-            }
-        }
-
-        transaction.update(docRef, {
-            claimStatus: 'Pendiente',
-            claimantId: userId,
-            claimantName: userName,
-            claimedAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-        });
-    });
-    
+    const { claimProspect } = await import('@/lib/api/prospects');
+    await claimProspect(prospect.id);
     invalidateCache('prospects');
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'prospect',
-        entityId: prospect.id,
-        entityName: prospect.companyName,
-        details: `solicitó reclamar el prospecto <strong>${prospect.companyName}</strong>`,
-        ownerName: 'Sin Asignar'
-    });
 };
 
 export const approveProspectClaim = async (prospect: Prospect, managerId: string, managerName: string): Promise<void> => {
-    if (!prospect.claimantId || !prospect.claimantName) throw new Error("No hay reclamante válido.");
-
-    const docRef = doc(db, 'prospects', prospect.id);
-    
-    await updateDoc(docRef, {
-        ownerId: prospect.claimantId,
-        ownerName: prospect.claimantName,
-        status: 'Nuevo', 
-        statusChangedAt: serverTimestamp(),
-        
-        // Limpiar campos de reclamo
-        claimStatus: deleteField(),
-        claimantId: deleteField(),
-        claimantName: deleteField(),
-        claimedAt: deleteField(),
-        
-        updatedAt: serverTimestamp()
-    });
-    
+    const { approveProspectClaim } = await import('@/lib/api/prospects');
+    await approveProspectClaim(prospect.id);
     invalidateCache('prospects');
-
-    await logActivity({
-        userId: managerId,
-        userName: managerName,
-        type: 'update',
-        entityType: 'prospect',
-        entityId: prospect.id,
-        entityName: prospect.companyName,
-        details: `aprobó el reclamo y asignó el prospecto a <strong>${prospect.claimantName}</strong>`,
-        ownerName: prospect.claimantName
-    });
 };
 
 export const rejectProspectClaim = async (prospect: Prospect, managerId: string, managerName: string): Promise<void> => {
-    const docRef = doc(db, 'prospects', prospect.id);
-    
-    await updateDoc(docRef, {
-        claimStatus: deleteField(),
-        claimantId: deleteField(),
-        claimantName: deleteField(),
-        claimedAt: deleteField(),
-        updatedAt: serverTimestamp()
-    });
-    
+    const { rejectProspectClaim } = await import('@/lib/api/prospects');
+    await rejectProspectClaim(prospect.id);
     invalidateCache('prospects');
-
-    await logActivity({
-        userId: managerId,
-        userName: managerName,
-        type: 'update',
-        entityType: 'prospect',
-        entityId: prospect.id,
-        entityName: prospect.companyName,
-        details: `rechazó la solicitud de reclamo de <strong>${prospect.claimantName}</strong>`,
-        ownerName: 'Sin Asignar'
-    });
 };
-
 export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, 'id' | 'createdAt'>) => {
   try {
     const { billingRequestsSrl, billingRequestsSas, billingRequestsAvion, ...restOrderData } = orderData as typeof orderData & { billingRequestsAvion?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[] };

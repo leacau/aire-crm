@@ -38,3 +38,35 @@ export async function deleteProspect(prospectId: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+export async function recordProspectNotifications(prospectIds: string[]): Promise<void> {
+  await apiRequest<{ ok: true }>('/api/prospects/notifications', {
+    method: 'POST',
+    body: { prospectIds },
+  });
+}
+
+export async function bulkReleaseProspects(prospectIds: string[]): Promise<void> {
+  await apiRequest<{ ok: true }>('/api/prospects/bulk-release', {
+    method: 'POST',
+    body: { prospectIds },
+  });
+}
+
+export async function claimProspect(prospectId: string): Promise<void> {
+  await apiRequest<{ ok: true }>(`/api/prospects/${encodeURIComponent(prospectId)}/claim`, {
+    method: 'POST',
+  });
+}
+
+export async function approveProspectClaim(prospectId: string): Promise<void> {
+  await apiRequest<{ ok: true }>(`/api/prospects/${encodeURIComponent(prospectId)}/claim/approve`, {
+    method: 'POST',
+  });
+}
+
+export async function rejectProspectClaim(prospectId: string): Promise<void> {
+  await apiRequest<{ ok: true }>(`/api/prospects/${encodeURIComponent(prospectId)}/claim/reject`, {
+    method: 'POST',
+  });
+}

@@ -292,6 +292,18 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Reclamos, aprobaciones y liberacion masiva de prospectos quedan pendientes para un corte especifico.
 - `firestore.rules` sigue intacto.
 
+## Trigesimo tercer corte aplicado
+
+- Se agregaron endpoints de acciones de prospectos:
+  - `/api/prospects/notifications`
+  - `/api/prospects/bulk-release`
+  - `/api/prospects/[prospectId]/claim`
+  - `/api/prospects/[prospectId]/claim/approve`
+  - `/api/prospects/[prospectId]/claim/reject`
+- `recordProspectNotifications`, `bulkReleaseProspects`, `claimProspect`, `approveProspectClaim` y `rejectProspectClaim` pasan por API.
+- Las reglas de reclamo, aprobacion, rechazo y liberacion quedan centralizadas en servidor con auditoria en actividades.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados
