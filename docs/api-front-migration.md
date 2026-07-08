@@ -312,6 +312,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los cambios se auditan desde servidor.
 - `firestore.rules` sigue intacto.
 
+## Trigesimo quinto corte aplicado
+
+- Se agrego `/api/activities` para listar actividad general, actividad de pagos e historial relacionado a clientes desde servidor.
+- `getActivities`, `getPaymentActivities` y `getActivitiesForEntity` pasan por API mediante el puente temporal.
+- El historial de cliente se arma en servidor incluyendo actividad directa, oportunidades y personas relacionadas.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

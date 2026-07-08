@@ -1935,87 +1935,25 @@ const convertActivityLogDoc = (doc: any): ActivityLog => {
 };
 
 export const getActivities = async (activityLimit: number = 20): Promise<ActivityLog[]> => {
-    const cachedData = getFromCache('activities_limit_100');
-    if(cachedData) return cachedData;
-    
-    const q = query(collections.activities, orderBy('timestamp', 'desc'), limit(activityLimit));
-    const snapshot = await getDocs(q);
-    const activities = snapshot.docs.map(convertActivityLogDoc);
-    setInCache('activities_limit_100', activities);
+    const cacheKey = `activities_limit_${activityLimit}`;
+    const cachedData = getFromCache(cacheKey);
+    if (cachedData) return cachedData;
+
+    const { getActivities } = await import('@/lib/api/activities');
+    const activities = await getActivities(activityLimit);
+    setInCache(cacheKey, activities);
     return activities;
 };
-
 
 export const getPaymentActivities = async (paymentId: string, activityLimit: number = 50): Promise<ActivityLog[]> => {
-    if (!paymentId) return [];
-
-    const q = query(
-        collections.activities,
-        where('entityType', '==', 'payment'),
-        where('entityId', '==', paymentId),
-        orderBy('timestamp', 'desc'),
-        limit(activityLimit),
-    );
-
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(convertActivityLogDoc);
+    const { getPaymentActivities } = await import('@/lib/api/activities');
+    return getPaymentActivities(paymentId, activityLimit);
 };
 
-
 export const getActivitiesForEntity = async (entityId: string): Promise<ActivityLog[]> => {
-    const clientRef = doc(db, 'clients', entityId);
-    const clientSnap = await getDoc(clientRef);
-    if (!clientSnap.exists()) return [];
-    
-    const clientOwnerId = clientSnap.data().ownerId;
-
-    const directClientActivitiesQuery = query(
-        collections.activities, 
-        where('entityId', '==', entityId),
-        where('entityType', '==', 'client')
-    );
-
-    const oppsOfClientSnap = await getDocs(query(collections.opportunities, where('clientId', '==', entityId)));
-    const oppIds = oppsOfClientSnap.docs.map(doc => doc.id);
-
-    const activities: ActivityLog[] = [];
-
-    const directClientActivitiesSnap = await getDocs(directClientActivitiesQuery);
-    directClientActivitiesSnap.forEach(doc => {
-        activities.push(convertActivityLogDoc(doc));
-    });
-    
-    if (oppIds.length > 0) {
-        const oppActivitiesQuery = query(
-            collections.activities, 
-            where('entityType', '==', 'opportunity'), 
-            where('entityId', 'in', oppIds)
-        );
-        const oppActivitiesSnap = await getDocs(oppActivitiesQuery);
-        oppActivitiesSnap.forEach(doc => {
-            activities.push(convertActivityLogDoc(doc));
-        });
-    }
-    
-    const peopleSnap = await getDocs(query(collections.people, where('clientIds', 'array-contains', entityId)));
-    const personIds = peopleSnap.docs.map(p => p.id);
-    if (personIds.length > 0) {
-        const personActivitiesQuery = query(
-            collections.activities, 
-            where('entityType', '==', 'person'), 
-            where('entityId', 'in', personIds)
-        );
-         const personActivitiesSnap = await getDocs(personActivitiesQuery);
-         personActivitiesSnap.forEach(doc => {
-            activities.push(convertActivityLogDoc(doc));
-        });
-    }
-
-    activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-    return activities;
-  };
-
+    const { getActivitiesForEntity } = await import('@/lib/api/activities');
+    return getActivitiesForEntity(entityId);
+};
 const convertActivityDoc = (doc: any): ClientActivity => {
     const data = doc.data();
     
