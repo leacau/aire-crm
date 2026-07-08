@@ -1990,64 +1990,20 @@ export const createOpportunity = async (
     userName: string,
     ownerName: string
 ): Promise<string> => {
-    if (opportunityData.stage === 'Cerrado - Ganado') {
-        if (!opportunityData.startDate || !opportunityData.endDate) {
-            throw new Error('La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.');
-        }
-        if (parseISO(opportunityData.endDate) < parseISO(opportunityData.startDate)) {
-            throw new Error('La fecha de fin del contrato no puede ser anterior a la fecha de inicio.');
-        }
-    }
-    const clientSnap = await getDoc(doc(db, 'clients', opportunityData.clientId));
-    if (!clientSnap.exists()) throw new Error("Client not found for opportunity creation");
+    const { createOpportunity } = await import('@/lib/api/opportunities');
+    const id = await createOpportunity(opportunityData);
 
-    const dataToSave: any = {
-        ...opportunityData,
-        createdAt: serverTimestamp(),
-        stageChangedAt: serverTimestamp()
-    };
-
-    if (dataToSave.agencyId === undefined) {
-        delete dataToSave.agencyId;
-    }
-    delete dataToSave.pautados;
-
-
-    const docRef = await addDoc(collections.opportunities, dataToSave);
-    
-    // 🟢 MUTADOR CORRECTO PARA OPORTUNIDADES (Con el truco de la fecha local)
-    const cacheData = {
-        ...dataToSave,
-        createdAt: new Date().toISOString(),
-        stageChangedAt: new Date().toISOString()
-    };
-    mutateCacheArray('opportunities', docRef.id, cacheData, 'add', (a, b) => {
-        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return dateB - dateA;
-    });
     invalidateOpportunityCaches([opportunityData.clientId]);
 
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'opportunity',
-        entityId: docRef.id,
-        entityName: opportunityData.title,
-        details: `creó la oportunidad <strong>${opportunityData.title}</strong> para el cliente <a href="/clients/${opportunityData.clientId}" class="font-bold text-primary hover:underline">${opportunityData.clientName}</a>`,
-        ownerName: ownerName
-    });
     try {
-        const observationText = opportunityData.observaciones?.trim() ? ` - Observación: ${opportunityData.observaciones.trim()}` : '';
+        const observationText = opportunityData.observaciones?.trim() ? ` - Observacion: ${opportunityData.observaciones.trim()}` : '';
         await autoUpdateCoachingSession(userId, userName, 'client', opportunityData.clientId, opportunityData.clientName, `Nueva propuesta: ${opportunityData.title} - Valor: $${opportunityData.value}${observationText}`);
     } catch (e) {
         console.error('Error auto-updating coaching:', e);
     }
 
-    return docRef.id;
+    return id;
 };
-
 // Crear Oportunidad Rápida (para cuando el usuario escribe una nueva)
 export const createQuickOpportunity = async (title: string, clientId: string, clientName: string, userId: string) => {
     // Implementación básica para crear la oportunidad contenedora

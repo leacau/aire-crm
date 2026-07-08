@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
+import { parseISO } from 'date-fns';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { cleanObject, getRequesterName, mapClient } from '@/app/api/clients/utils';
 import {
   hasServerManagementPrivileges,
   isServerResponse,
   requireServerUser,
 } from '@/lib/server/auth';
+import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { Opportunity } from '@/lib/types';
 
@@ -83,3 +87,58 @@ export async function GET(request: Request) {
   return NextResponse.json({ opportunities: await getActiveOpportunities() });
 }
 
+export async function POST(request: Request) {
+  const requester = await requireServerUser(request);
+  if (isServerResponse(requester)) return requester;
+
+  const body = await request.json();
+  const opportunityData = body?.opportunityData as Omit<Opportunity, 'id'> | undefined;
+
+  if (!opportunityData?.clientId || !opportunityData.title) {
+    return NextResponse.json({ error: 'Cliente y titulo son obligatorios.' }, { status: 400 });
+  }
+
+  if (opportunityData.stage === 'Cerrado - Ganado') {
+    if (!opportunityData.startDate || !opportunityData.endDate) {
+      return NextResponse.json(
+        { error: 'La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.' },
+        { status: 400 },
+      );
+    }
+    if (parseISO(opportunityData.endDate) < parseISO(opportunityData.startDate)) {
+      return NextResponse.json(
+        { error: 'La fecha de fin del contrato no puede ser anterior a la fecha de inicio.' },
+        { status: 400 },
+      );
+    }
+  }
+
+  const clientSnap = await dbAdmin.collection('clients').doc(opportunityData.clientId).get();
+  if (!clientSnap.exists) {
+    return NextResponse.json({ error: 'Cliente no encontrado para crear la oportunidad.' }, { status: 404 });
+  }
+
+  const client = mapClient(clientSnap.id, clientSnap.data());
+  const dataToSave = cleanObject({
+    ...(opportunityData as unknown as Record<string, unknown>),
+    pautados: undefined,
+    createdAt: FieldValue.serverTimestamp(),
+    stageChangedAt: FieldValue.serverTimestamp(),
+  });
+
+  const docRef = await dbAdmin.collection('opportunities').add(dataToSave);
+  const requesterName = getRequesterName(requester);
+
+  await logServerActivity({
+    userId: requester.uid,
+    userName: requesterName,
+    type: 'create',
+    entityType: 'opportunity',
+    entityId: docRef.id,
+    entityName: opportunityData.title,
+    details: `creo la oportunidad <strong>${opportunityData.title}</strong> para el cliente <a href="/clients/${opportunityData.clientId}" class="font-bold text-primary hover:underline">${opportunityData.clientName}</a>`,
+    ownerName: client.ownerName,
+  });
+
+  return NextResponse.json({ id: docRef.id });
+}

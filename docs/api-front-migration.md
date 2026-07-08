@@ -223,6 +223,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La pantalla `/billing` conserva sus llamadas actuales mediante el puente temporal.
 - `firestore.rules` sigue intacto.
 
+## Vigesimo quinto corte aplicado
+
+- Se extendio `/api/opportunities` con creacion de oportunidades.
+- `createOpportunity` pasa por API mediante el puente temporal.
+- La validacion de vigencia para oportunidades ganadas, la verificacion del cliente y el registro de actividad quedan centralizados en servidor.
+- La actualizacion automatica de coaching posterior a la creacion se conserva en el puente temporal y queda pendiente para un corte especifico.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

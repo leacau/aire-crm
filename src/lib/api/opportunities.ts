@@ -25,3 +25,10 @@ export async function getOpportunitiesForUser(userId: string): Promise<Opportuni
   return result.opportunities;
 }
 
+export async function createOpportunity(opportunityData: Omit<Opportunity, 'id'>): Promise<string> {
+  const result = await apiRequest<{ id: string }>('/api/opportunities', {
+    method: 'POST',
+    body: { opportunityData },
+  });
+  return result.id;
+}
