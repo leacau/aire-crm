@@ -304,6 +304,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las reglas de reclamo, aprobacion, rechazo y liberacion quedan centralizadas en servidor con auditoria en actividades.
 - `firestore.rules` sigue intacto.
 
+## Trigesimo cuarto corte aplicado
+
+- Se agregaron `/api/system/opportunity-alerts` y `/api/system/objective-visibility`.
+- `getOpportunityAlertsConfig`, `updateOpportunityAlertsConfig`, `getObjectiveVisibilityConfig` y `updateObjectiveVisibilityConfig` pasan por API.
+- La lectura queda disponible para usuarios autenticados y el guardado queda restringido a perfiles de gestion.
+- Los cambios se auditan desde servidor.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

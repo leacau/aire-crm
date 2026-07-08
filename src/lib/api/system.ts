@@ -1,7 +1,14 @@
 'use client';
 
 import { apiRequest } from '@/lib/api-client';
-import type { AreaType, SasProductConfig, ScreenName, ScreenPermission } from '@/lib/types';
+import type {
+  AreaType,
+  ObjectiveVisibilityConfig,
+  OpportunityAlertsConfig,
+  SasProductConfig,
+  ScreenName,
+  ScreenPermission,
+} from '@/lib/types';
 
 type PermissionsMap = Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>;
 
@@ -92,4 +99,32 @@ export async function saveSystemHolidays(dates: string[]): Promise<string[]> {
     body: { dates },
   });
   return result.dates;
+}
+
+export async function getOpportunityAlertsConfig(): Promise<OpportunityAlertsConfig> {
+  const result = await apiRequest<{ config: OpportunityAlertsConfig }>('/api/system/opportunity-alerts', {
+    method: 'GET',
+  });
+  return result.config;
+}
+
+export async function updateOpportunityAlertsConfig(config: OpportunityAlertsConfig): Promise<void> {
+  await apiRequest<{ config: OpportunityAlertsConfig }>('/api/system/opportunity-alerts', {
+    method: 'PUT',
+    body: { config },
+  });
+}
+
+export async function getObjectiveVisibilityConfig(): Promise<ObjectiveVisibilityConfig> {
+  const result = await apiRequest<{ config: ObjectiveVisibilityConfig }>('/api/system/objective-visibility', {
+    method: 'GET',
+  });
+  return result.config;
+}
+
+export async function updateObjectiveVisibilityConfig(config: ObjectiveVisibilityConfig): Promise<void> {
+  await apiRequest<{ config: ObjectiveVisibilityConfig }>('/api/system/objective-visibility', {
+    method: 'PUT',
+    body: { config },
+  });
 }

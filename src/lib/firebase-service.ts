@@ -295,76 +295,40 @@ export const bulkReleaseProspects = async (
 // --- Config Functions ---
 
 export const getOpportunityAlertsConfig = async (): Promise<OpportunityAlertsConfig> => {
-    const docRef = doc(collections.systemConfig, 'opportunity_alerts');
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-        return docSnap.data();
-    }
-    return {};
+    const cached = getFromCache('opportunity_alerts');
+    if (cached) return cached as OpportunityAlertsConfig;
+
+    const { getOpportunityAlertsConfig } = await import('@/lib/api/system');
+    const config = await getOpportunityAlertsConfig();
+    setInCache('opportunity_alerts', config);
+    return config;
 };
 
 export const getObjectiveVisibilityConfig = async (): Promise<ObjectiveVisibilityConfig> => {
     const cached = getFromCache(OBJECTIVE_VISIBILITY_DOC_ID);
     if (cached) return cached;
 
-    const docRef = doc(collections.systemConfig, OBJECTIVE_VISIBILITY_DOC_ID);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-        const data = snap.data() as ObjectiveVisibilityConfig;
-        const parsed: ObjectiveVisibilityConfig = {
-            activeMonthKey: data.activeMonthKey,
-            visibleUntil: typeof data.visibleUntil === 'string' ? data.visibleUntil : undefined,
-            updatedByName: data.updatedByName,
-            updatedAt: timestampToISO((data as any).updatedAt) || data.updatedAt,
-        };
-        setInCache(OBJECTIVE_VISIBILITY_DOC_ID, parsed);
-        return parsed;
-    }
-
-    return {};
+    const { getObjectiveVisibilityConfig } = await import('@/lib/api/system');
+    const config = await getObjectiveVisibilityConfig();
+    setInCache(OBJECTIVE_VISIBILITY_DOC_ID, config);
+    return config;
 };
 
 export const updateOpportunityAlertsConfig = async (config: OpportunityAlertsConfig, userId: string, userName: string) => {
-    const docRef = doc(collections.systemConfig, 'opportunity_alerts');
-    await setDoc(docRef, config, { merge: true });
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'opportunity_alerts_config' as any,
-        entityId: 'opportunity_alerts',
-        entityName: 'Configuración de Alertas de Oportunidades',
-        details: 'actualizó la configuración de alertas de oportunidades.',
-        ownerName: userName,
-    });
+    const { updateOpportunityAlertsConfig } = await import('@/lib/api/system');
+    await updateOpportunityAlertsConfig(config);
+    invalidateCache('opportunity_alerts');
 };
-
 
 export const updateObjectiveVisibilityConfig = async (
     config: ObjectiveVisibilityConfig,
     userId: string,
     userName: string
 ) => {
-    const docRef = doc(collections.systemConfig, OBJECTIVE_VISIBILITY_DOC_ID);
-    await setDoc(
-        docRef,
-        { ...config, updatedAt: serverTimestamp(), updatedByName: userName },
-        { merge: true }
-    );
+    const { updateObjectiveVisibilityConfig } = await import('@/lib/api/system');
+    await updateObjectiveVisibilityConfig(config);
     invalidateCache(OBJECTIVE_VISIBILITY_DOC_ID);
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'objective_visibility' as any,
-        entityId: OBJECTIVE_VISIBILITY_DOC_ID,
-        entityName: 'Visibilidad de objetivos',
-        details: 'actualizó la fecha de visibilidad de objetivos.',
-        ownerName: userName,
-    });
 };
-
 export const getAreaPermissions = async (): Promise<Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>> => {
     const cachedData = getFromCache('permissions');
     if (cachedData) return cachedData;
