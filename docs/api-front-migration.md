@@ -386,6 +386,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La auditoria de modificaciones de ordenes aprobadas, historial de revision y recalculo comparativo queda centralizada en servidor.
 - `firestore.rules` sigue intacto.
 
+## Cuadragesimo segundo corte aplicado
+
+- Se agrego `/api/billing-requests` para listar pedidos de facturacion con metadata de orden, asesor y cliente desde servidor.
+- Se agrego `/api/billing-requests/[requestId]` para cambiar estado y numero de factura desde servidor.
+- `getAllBillingRequestsWithMetadata` y el impacto de `updateBillingRequestStatus` pasan por API.
+- El puente mantiene el envio de correos contables con Gmail, pero ya no lee ni actualiza `billing_requests` directo desde el navegador.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

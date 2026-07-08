@@ -2390,54 +2390,19 @@ export const getAllBillingRequestsWithMetadata = async (): Promise<any[]> => {
     const cached = getFromCache('billing_requests_metadata');
     if (cached) return cached;
 
-    // 1. Traer todas las peticiones de facturación crudas
-    const snapRequests = await getDocsPreferCache(collection(db, 'billing_requests'));
-    const requests = snapRequests.docs.map(d => ({ id: d.id, ...d.data() }));
-
-    // 2. Traer las órdenes asociadas para cruzar ejecutivos y títulos
-    const snapOrders = await getDocsPreferCache(collection(db, 'advertising_orders'));
-    const ordersMap = new Map<string, any>(snapOrders.docs.map(d => [d.id, { id: d.id, ...d.data() } as any]));
-
-    // 3. Traer los clientes para resolver Razones Sociales y CUITs en vivo
-    const snapClients = await getDocsPreferCache(collection(db, 'clients'));
-    const clientsMap = new Map<string, any>(snapClients.docs.map(d => [d.id, d.data() as any]));
-
-    const mapped = requests.map((br: any) => {
-        const order = ordersMap.get(br.orderId);
-        const client = clientsMap.get(br.clientId);
-
-        return {
-            ...br,
-            accountExecutive: order?.accountExecutive || 'Sistema',
-            advisorId: order?.createdBy || '',
-            opportunityTitle: order?.opportunityTitle || order?.product || 'Campaña',
-            clientDisplayName: client?.razonSocialTango || client?.razonSocial || client?.denominacion || 'Desconocido',
-            cuit: client?.cuit || '-',
-            billingStatus: br.billingStatus || 'Sugerido', // Default fallback
-            invoiceNumber: br.invoiceNumber || ''
-        };
-    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    setInCache('billing_requests_metadata', mapped);
-    return mapped;
+    const { getAllBillingRequestsWithMetadata } = await import('@/lib/api/billing-requests');
+    const requests = await getAllBillingRequestsWithMetadata();
+    setInCache('billing_requests_metadata', requests);
+    return requests;
 };
-
 export const updateBillingRequestStatus = async (
     requestId: string,
     newStatus: 'Sugerido' | 'Solicitado' | 'Elevado' | 'Confeccionado',
     metadata?: { invoiceNumber?: string; emailPayload?: { accessToken: string; loggedUser: string } }
 ): Promise<void> => {
-    const docRef = doc(db, 'billing_requests', requestId);
-    const updates: Record<string, any> = { billingStatus: newStatus, updatedAt: serverTimestamp() };
-    
-    if (metadata?.invoiceNumber) {
-        updates.invoiceNumber = metadata.invoiceNumber;
-    }
-
-    // 1. Impactamos el cambio de estado en la Base de Datos
-    await updateDoc(docRef, updates);
+    const { updateBillingRequestStatus } = await import('@/lib/api/billing-requests');
+    await updateBillingRequestStatus(requestId, newStatus, metadata?.invoiceNumber);
     invalidateCache('billing_requests_metadata');
-
     // 2. Ejecución de notificaciones protegidas por correo
     if (metadata?.emailPayload?.accessToken) {
         try {
