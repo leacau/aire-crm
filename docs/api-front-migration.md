@@ -257,6 +257,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Con este corte, las altas, ediciones y bajas de oportunidades quedan centralizadas en API.
 - `firestore.rules` sigue intacto.
 
+## Vigesimo noveno corte aplicado
+
+- Se agrego `/api/pipeline-interactions` para listar, crear e importar interacciones de pipeline desde servidor.
+- Se agrego `/api/pipeline-interactions/[interactionId]` para editar y eliminar interacciones desde servidor.
+- `getPipelineInteractions`, `createPipelineInteraction`, `updatePipelineInteraction`, `deletePipelineInteraction` y `bulkCreatePipelineInteractions` pasan por API mediante el puente temporal.
+- La API refuerza el acceso de gerencia/jefatura en servidor y registra la importacion masiva en actividades.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

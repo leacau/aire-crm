@@ -3960,42 +3960,34 @@ export const saveSasProducts = async (products: SasProductConfig[], userId: stri
 export const getPipelineInteractions = async (): Promise<PipelineInteraction[]> => {
     const cached = getFromCache('pipeline_interactions');
     if (cached) return cached as PipelineInteraction[];
-    
-    const q = query(collections.pipelineInteractions, orderBy('fecha', 'desc'));
-    const snap = await getDocs(q);
-    const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PipelineInteraction));
-    
+
+    const { getPipelineInteractions } = await import('@/lib/api/pipeline-interactions');
+    const data = await getPipelineInteractions();
+
     setInCache('pipeline_interactions', data);
     return data;
 };
 
 export const createPipelineInteraction = async (data: Omit<PipelineInteraction, 'id' | 'createdAt'>, userId: string, userName: string): Promise<string> => {
-    const dataToSave = { 
-        ...data, 
-        createdAt: serverTimestamp(), 
-        advisorId: userId, 
-        advisorName: userName 
-    };
-    const docRef = await addDoc(collections.pipelineInteractions, dataToSave);
-    
-    // Mutador de caché para velocidad instantánea
-    const cacheData = { ...dataToSave, createdAt: new Date().toISOString() };
-    mutateCacheArray('pipeline_interactions', docRef.id, cacheData, 'add', (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-    
-    return docRef.id;
+    const { createPipelineInteraction } = await import('@/lib/api/pipeline-interactions');
+    const id = await createPipelineInteraction(data);
+
+    const cacheData = { ...data, id, advisorId: userId, advisorName: userName, createdAt: new Date().toISOString() };
+    mutateCacheArray('pipeline_interactions', id, cacheData, 'add', (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+    return id;
 };
 
 export const updatePipelineInteraction = async (id: string, data: Partial<PipelineInteraction>): Promise<void> => {
-    const docRef = doc(db, 'pipeline_interactions', id);
-    const updateData = { ...data, updatedAt: serverTimestamp() };
-    await updateDoc(docRef, updateData);
-    
-    mutateCacheArray('pipeline_interactions', id, { ...updateData, updatedAt: new Date().toISOString() }, 'update');
+    const { updatePipelineInteraction } = await import('@/lib/api/pipeline-interactions');
+    await updatePipelineInteraction(id, data);
+
+    mutateCacheArray('pipeline_interactions', id, { ...data, updatedAt: new Date().toISOString() }, 'update');
 };
 
 export const deletePipelineInteraction = async (id: string): Promise<void> => {
-    const docRef = doc(db, 'pipeline_interactions', id);
-    await deleteDoc(docRef);
+    const { deletePipelineInteraction } = await import('@/lib/api/pipeline-interactions');
+    await deletePipelineInteraction(id);
     mutateCacheArray('pipeline_interactions', id, null, 'delete');
 };
 
@@ -4005,30 +3997,10 @@ export const bulkCreatePipelineInteractions = async (
     userName: string
 ): Promise<void> => {
     if (!interactions || interactions.length === 0) return;
-    
-    const batch = writeBatch(db);
-    const createdItems: PipelineInteraction[] = [];
 
-    interactions.forEach(interaction => {
-        const docRef = doc(collection(db, 'pipeline_interactions'));
-        const dataToSave = {
-            ...interaction,
-            advisorId: userId,
-            advisorName: userName,
-            createdAt: serverTimestamp()
-        };
-        batch.set(docRef, dataToSave);
-        
-        createdItems.push({
-            id: docRef.id,
-            ...dataToSave,
-            createdAt: new Date().toISOString()
-        } as PipelineInteraction);
-    });
+    const { bulkCreatePipelineInteractions } = await import('@/lib/api/pipeline-interactions');
+    const createdItems = await bulkCreatePipelineInteractions(interactions);
 
-    await batch.commit();
-    
-    // 🟢 Reflejamos todo en el caché masivamente al instante
     createdItems.forEach(item => {
         mutateCacheArray('pipeline_interactions', item.id!, item, 'add', (a, b) => {
             const dateA = new Date(a.fecha).getTime();
@@ -4036,19 +4008,7 @@ export const bulkCreatePipelineInteractions = async (
             return dateB - dateA;
         });
     });
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'pipeline_interaction' as any,
-        entityId: 'bulk_import',
-        entityName: `${interactions.length} interacciones`,
-        details: `importó <strong>${interactions.length}</strong> interacciones al pipeline desde un archivo`,
-        ownerName: userName
-    });
 };
-
 // ============================================================================
 // --- MANTENIMIENTO: FUSIÓN DE CLIENTES DUPLICADOS (CON LOTES ANTI-CRASH) ---
 // ============================================================================
