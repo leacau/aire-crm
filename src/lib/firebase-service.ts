@@ -1548,130 +1548,17 @@ export const deleteInvoicesInBatches = async (
 const PAYMENT_CACHE_KEY = 'paymentEntries';
 const PENDING_PAYMENT_CACHE_KEY = 'pendingPaymentEntries';
 
-const PAYMENT_DATE_FORMATS = [
-    'yyyy-MM-dd',
-    'dd/MM/yyyy',
-    'd/M/yyyy',
-    'dd-MM-yyyy',
-    'd-M-yyyy',
-    'dd/MM/yy',
-    'd/M/yy',
-    'dd-MM-yy',
-    'd-M-yy',
-];
-
-const parsePaymentDate = (raw?: string | null) => {
-    if (!raw) return null;
-    const value = raw.toString().trim();
-
-    const tryParse = (parser: () => Date) => {
-        try {
-            const parsed = parser();
-            if (!Number.isNaN(parsed.getTime())) return parsed;
-        } catch (error) {
-            return null;
-        }
-        return null;
-    };
-
-    return (
-        tryParse(() => parseISO(value)) ??
-        PAYMENT_DATE_FORMATS.reduce<Date | null>((acc, formatString) => acc ?? tryParse(() => parse(value, formatString, new Date())), null)
-    );
-};
-
-const normalizePaymentDate = (raw?: string | null) => {
-    const parsed = parsePaymentDate(raw);
-    if (parsed) return parsed.toISOString();
-    return raw ? raw.toString().trim() : null;
-};
-
-const computeDaysLate = (dueDate?: string | null) => {
-    const parsed = parsePaymentDate(dueDate);
-    if (!parsed || Number.isNaN(parsed.getTime())) return null;
-
-    const diff = differenceInCalendarDays(new Date(), parsed);
-    return diff > 0 ? diff : 0;
-};
-
 export const getPaymentEntries = async (): Promise<PaymentEntry[]> => {
     return getCachedOrLoad(PAYMENT_CACHE_KEY, async () => {
-
-    const snapshot = await getDocs(query(collections.paymentEntries, orderBy('createdAt', 'desc')));
-    const payments = snapshot.docs.map(docSnap => {
-        const data = docSnap.data();
-        const parsed: PaymentEntry = {
-            id: docSnap.id,
-            advisorId: data.advisorId,
-            advisorName: data.advisorName,
-            company: data.company,
-            tipo: data.tipo,
-            comprobanteNumber: data.comprobanteNumber,
-            razonSocial: data.razonSocial,
-            amount: typeof data.amount === 'number' ? data.amount : Number(data.amount) || undefined,
-            pendingAmount: typeof data.pendingAmount === 'number' ? data.pendingAmount : Number(data.pendingAmount) || undefined,
-            issueDate: timestampToISO((data as any).issueDate) || data.issueDate,
-            dueDate: timestampToISO((data as any).dueDate) || data.dueDate,
-            daysLate: computeDaysLate(timestampToISO((data as any).dueDate) || data.dueDate),
-            status: (data.status as PaymentStatus) || 'Pendiente',
-            notes: data.notes,
-            nextContactAt: timestampToISO((data as any).nextContactAt) || data.nextContactAt || null,
-            lastExplanationRequestAt:
-                timestampToISO((data as any).lastExplanationRequestAt) || (data as any).lastExplanationRequestAt,
-            lastExplanationRequestById: (data as any).lastExplanationRequestById,
-            lastExplanationRequestByName: (data as any).lastExplanationRequestByName,
-            explanationRequestNote: (data as any).explanationRequestNote,
-            createdAt: timestampToISO((data as any).createdAt) || new Date().toISOString(),
-            updatedAt: timestampToISO((data as any).updatedAt),
-        };
-        return parsed;
-    });
-
-    return payments;
+        const { getPaymentEntries } = await import('@/lib/api/payments');
+        return getPaymentEntries();
     });
 };
 
 export const getPendingPaymentEntries = async (): Promise<PaymentEntry[]> => {
     return getCachedOrLoad(PENDING_PAYMENT_CACHE_KEY, async () => {
-
-    // 🟢 ESTRATEGIA LIGERA: Traemos exclusivamente la mora
-    const q = query(
-        collections.paymentEntries,
-        where('status', 'in', ['Pendiente', 'Reclamado', 'Incobrable']),
-        orderBy('createdAt', 'desc')
-    );
-    
-    const snapshot = await getDocs(q);
-    const payments = snapshot.docs.map(docSnap => {
-        const data = docSnap.data();
-        const parsed: PaymentEntry = {
-            id: docSnap.id,
-            advisorId: data.advisorId,
-            advisorName: data.advisorName,
-            company: data.company,
-            tipo: data.tipo,
-            comprobanteNumber: data.comprobanteNumber,
-            razonSocial: data.razonSocial,
-            amount: typeof data.amount === 'number' ? data.amount : Number(data.amount) || undefined,
-            pendingAmount: typeof data.pendingAmount === 'number' ? data.pendingAmount : Number(data.pendingAmount) || undefined,
-            issueDate: timestampToISO((data as any).issueDate) || data.issueDate,
-            dueDate: timestampToISO((data as any).dueDate) || data.dueDate,
-            daysLate: computeDaysLate(timestampToISO((data as any).dueDate) || data.dueDate),
-            status: (data.status as PaymentStatus) || 'Pendiente',
-            notes: data.notes,
-            nextContactAt: timestampToISO((data as any).nextContactAt) || data.nextContactAt || null,
-            lastExplanationRequestAt:
-                timestampToISO((data as any).lastExplanationRequestAt) || (data as any).lastExplanationRequestAt,
-            lastExplanationRequestById: (data as any).lastExplanationRequestById,
-            lastExplanationRequestByName: (data as any).lastExplanationRequestByName,
-            explanationRequestNote: (data as any).explanationRequestNote,
-            createdAt: timestampToISO((data as any).createdAt) || new Date().toISOString(),
-            updatedAt: timestampToISO((data as any).updatedAt),
-        };
-        return parsed;
-    });
-
-    return payments;
+        const { getPendingPaymentEntries } = await import('@/lib/api/payments');
+        return getPendingPaymentEntries();
     });
 };
 
@@ -1682,104 +1569,9 @@ export const replacePaymentEntriesForAdvisor = async (
     userId: string,
     userName: string,
 ) => {
-    const existingQuery = query(collections.paymentEntries, where('advisorId', '==', advisorId));
-    const existingSnap = await getDocs(existingQuery);
-
-    const batch = writeBatch(db);
-    const existingEntries = existingSnap.docs.map((docSnap) => {
-        const data = docSnap.data();
-        const comprobanteNumber = typeof data.comprobanteNumber === 'string'
-            ? data.comprobanteNumber.trim()
-            : '';
-
-        return {
-            ref: docSnap.ref,
-            comprobanteNumber: comprobanteNumber || null,
-        };
-    });
-
-    const existingMap = existingEntries.reduce((acc, entry) => {
-        if (entry.comprobanteNumber) acc.set(entry.comprobanteNumber, entry.ref);
-        return acc;
-    }, new Map<string, any>());
-
-    const existingNumbers = new Set(
-        existingEntries
-            .map((entry) => entry.comprobanteNumber)
-            .filter((value): value is string => Boolean(value)),
-    );
-
-    const incomingNumbers = new Set(
-        rows
-            .map((row) => (row.comprobanteNumber || '').trim())
-            .filter(Boolean),
-    );
-
-    const entriesToDelete = existingEntries.filter(
-        (entry) => entry.comprobanteNumber && !incomingNumbers.has(entry.comprobanteNumber),
-    );
-
-    entriesToDelete.forEach((entry) => batch.delete(entry.ref));
-
-    const rowsToInsert = rows.filter((row) => {
-        const comprobante = (row.comprobanteNumber || '').trim();
-        if (!comprobante) return true;
-        return !existingNumbers.has(comprobante);
-    });
-
-    const upsertPayload = (row: typeof rows[number]) => ({
-        advisorId,
-        advisorName,
-        company: row.company,
-        tipo: row.tipo || null,
-        comprobanteNumber: row.comprobanteNumber,
-        razonSocial: row.razonSocial,
-        amount: row.amount ?? null,
-        pendingAmount: row.pendingAmount ?? null,
-        issueDate: row.issueDate || null,
-        dueDate: row.dueDate || null,
-        daysLate: computeDaysLate(row.dueDate),
-        updatedAt: serverTimestamp(),
-    });
-
-    rows.forEach((row) => {
-        const comprobante = (row.comprobanteNumber || '').trim();
-        const normalizedIssueDate = normalizePaymentDate(row.issueDate);
-        const normalizedDueDate = normalizePaymentDate(row.dueDate);
-        const payload = {
-            ...upsertPayload(row),
-            issueDate: normalizedIssueDate,
-            dueDate: normalizedDueDate,
-            daysLate: computeDaysLate(normalizedDueDate),
-        };
-        if (comprobante && existingMap.has(comprobante)) {
-            batch.update(existingMap.get(comprobante), payload);
-        } else {
-            const docRef = doc(collections.paymentEntries);
-            batch.set(docRef, {
-                ...payload,
-                status: 'Pendiente' as PaymentStatus,
-                notes: row.notes || '',
-                nextContactAt: row.nextContactAt || null,
-                createdAt: serverTimestamp(),
-            });
-        }
-    });
-
-    await batch.commit();
+    const { replacePaymentEntriesForAdvisor } = await import('@/lib/api/payments');
+    await replacePaymentEntriesForAdvisor(advisorId, advisorName, rows);
     invalidateCache(PAYMENT_CACHE_KEY);
-
-    await logActivity({
-        userId,
-        userName,
-        ownerName: advisorName,
-        type: 'update',
-        entityType: 'invoice',
-        entityId: advisorId,
-        entityName: 'Pagos',
-        details: `actualizó la lista de pagos del asesor ${advisorName}`,
-        timestamp: new Date().toISOString(),
-    });
 };
 
 export const updatePaymentEntry = async (
@@ -1787,26 +1579,12 @@ export const updatePaymentEntry = async (
     updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt' | 'pendingAmount'>>,
     audit?: { userId?: string; userName?: string; ownerName?: string; details?: string },
 ) => {
-    const docRef = doc(collections.paymentEntries, paymentId);
-    await updateDoc(docRef, {
-        ...updates,
-        updatedAt: serverTimestamp(),
+    const { updatePaymentEntry } = await import('@/lib/api/payments');
+    await updatePaymentEntry(paymentId, updates, {
+        ownerName: audit?.ownerName,
+        details: audit?.details,
     });
     invalidateCache(PAYMENT_CACHE_KEY);
-
-    if (audit?.userId && audit?.userName) {
-        await logActivity({
-            userId: audit.userId,
-            userName: audit.userName,
-            ownerName: audit.ownerName,
-            type: 'update',
-            entityType: 'payment',
-            entityId: paymentId,
-            entityName: 'Mora',
-            details: audit.details || 'Actualizó un registro de mora',
-            timestamp: new Date().toISOString(),
-        });
-    }
 };
 
 export const requestPaymentExplanation = async (
@@ -1820,45 +1598,22 @@ export const requestPaymentExplanation = async (
         comprobanteNumber?: string | null;
     },
 ) => {
-    const docRef = doc(collections.paymentEntries, paymentId);
-    await updateDoc(docRef, {
-        lastExplanationRequestAt: serverTimestamp(),
-        lastExplanationRequestById: params.requestedById,
-        lastExplanationRequestByName: params.requestedByName,
-        explanationRequestNote: params.note || null,
-        updatedAt: serverTimestamp(),
+    const { requestPaymentExplanation } = await import('@/lib/api/payments');
+    await requestPaymentExplanation(paymentId, {
+        advisorName: params.advisorName,
+        note: params.note,
+        comprobanteNumber: params.comprobanteNumber,
     });
     invalidateCache(PAYMENT_CACHE_KEY);
-
-    await logActivity({
-        userId: params.requestedById,
-        userName: params.requestedByName,
-        ownerName: params.advisorName,
-        type: 'comment',
-        entityType: 'payment',
-        entityId: paymentId,
-        entityName: params.comprobanteNumber ? `Comprobante ${params.comprobanteNumber}` : 'Mora',
-        details:
-            params.note
-                ? `Solicitó aclaración (${params.note})`
-                : 'Solicitó aclaración al asesor sobre el registro de mora.',
-        timestamp: new Date().toISOString(),
-    });
 };
 
 export const deletePaymentEntries = async (paymentIds: string[]) => {
     if (paymentIds.length === 0) return;
 
-    const batch = writeBatch(db);
-    paymentIds.forEach((id) => {
-        const docRef = doc(collections.paymentEntries, id);
-        batch.delete(docRef);
-    });
-
-    await batch.commit();
+    const { deletePaymentEntries } = await import('@/lib/api/payments');
+    await deletePaymentEntries(paymentIds);
     invalidateCache(PAYMENT_CACHE_KEY);
 };
-
 
 // --- Agency Functions ---
 

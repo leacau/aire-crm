@@ -215,6 +215,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Quedan pendientes para otro corte: dashboard/paginacion optimizada, borrado masivo y operaciones de cobranzas.
 - `firestore.rules` sigue intacto.
 
+## Vigesimo cuarto corte aplicado
+
+- Se agrego `/api/payments` y `/api/payments/[paymentId]` para cobranzas/mora.
+- `getPaymentEntries`, `getPendingPaymentEntries`, `replacePaymentEntriesForAdvisor`, `updatePaymentEntry`, `requestPaymentExplanation` y `deletePaymentEntries` pasan por API.
+- La importacion por asesor, actualizacion de estado/notas, solicitud de aclaracion y borrado de pagos quedan centralizados en servidor.
+- La pantalla `/billing` conserva sus llamadas actuales mediante el puente temporal.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados
