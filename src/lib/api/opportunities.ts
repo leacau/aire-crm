@@ -43,6 +43,18 @@ export async function createOpportunity(opportunityData: Omit<Opportunity, 'id'>
   return result.id;
 }
 
+export async function createQuickOpportunity(title: string, clientId: string, clientName: string): Promise<string> {
+  return createOpportunity({
+    title,
+    clientId,
+    clientName,
+    stage: 'Propuesta',
+    value: 0,
+    closeDate: '',
+    createdAt: new Date().toISOString(),
+  });
+}
+
 export async function updateOpportunity(
   opportunityId: string,
   data: Partial<Omit<Opportunity, 'id'>>,

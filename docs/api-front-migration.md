@@ -249,6 +249,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La actualizacion automatica de coaching queda temporalmente en el puente hasta migrar coaching completo.
 - `firestore.rules` sigue intacto.
 
+## Vigesimo octavo corte aplicado
+
+- `createQuickOpportunity` deja de crear documentos directo desde el navegador.
+- La creacion rapida reutiliza `/api/opportunities`, validando cliente y registrando actividad desde servidor.
+- El puente temporal conserva la invalidacion de caches para no cambiar las pantallas actuales.
+- Con este corte, las altas, ediciones y bajas de oportunidades quedan centralizadas en API.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados
