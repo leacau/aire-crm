@@ -355,6 +355,20 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Al eliminar una licencia pendiente o aprobada, la API reintegra los dias retenidos para evitar saldos inconsistentes.
 - `firestore.rules` sigue intacto.
 
+## Trigesimo noveno corte aplicado
+
+- Se agrego `/api/coaching-sessions` para listar y crear sesiones de seguimiento desde servidor.
+- Se agregaron endpoints para editar/cerrar/eliminar sesiones, administrar items y administrar bitacoras por item:
+  - `/api/coaching-sessions/[sessionId]`
+  - `/api/coaching-sessions/[sessionId]/items`
+  - `/api/coaching-sessions/[sessionId]/items/[itemId]`
+  - `/api/coaching-sessions/[sessionId]/items/[itemId]/entries`
+  - `/api/coaching-sessions/[sessionId]/items/[itemId]/entries/[entryId]`
+- `getCoachingSessions`, `createCoachingSession`, `updateCoachingSession`, `deleteCoachingSession`, `updateCoachingItem`, `deleteCoachingItem`, `addItemsToSession`, `appendCoachingFollowUpEntry`, `updateCoachingFollowUpEntry` y `deleteCoachingFollowUpEntry` pasan por API.
+- La vista de Seguimiento conserva el puente temporal, pero las operaciones manuales principales quedan autenticadas y transaccionadas en servidor.
+- La actualizacion automatica de coaching desde oportunidades, prospectos y actividades queda como proximo corte para no mezclar dos flujos grandes.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

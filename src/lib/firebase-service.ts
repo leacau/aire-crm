@@ -1567,50 +1567,33 @@ export const updateClientActivity = async (
     await updateClientActivity(id, data);
     invalidateCache('client_activities');
 };
-export const getCoachingSessions = async (advisorId: string): Promise<CoachingSession[]> => {
-    const q = query(
-        collections.coachingSessions, 
-        where('advisorId', '==', advisorId),
-        orderBy('date', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => {
-        const data = doc.data();
-        return { 
-            id: doc.id, 
-            ...data,
-            createdAt: timestampToISO(data.createdAt) || new Date().toISOString(),
-        } as CoachingSession;
-    });
-};
 
 export const getOpenCoachingSession = async (advisorId: string): Promise<CoachingSession | null> => {
     const cacheKey = `open_session_${advisorId}`;
     const cached = getFromCache(cacheKey);
     if (cached) return cached as CoachingSession;
 
-    // Si no está en caché, buscamos solo las últimas 5 para no consumir lecturas masivas
     const q = query(
-        collections.coachingSessions, 
+        collections.coachingSessions,
         where('advisorId', '==', advisorId),
         orderBy('date', 'desc'),
         limit(5)
     );
     const snapshot = await getDocs(q);
-    
+
     let openSession = null;
     for (const docSnap of snapshot.docs) {
         const data = docSnap.data();
         if (data.status === 'Open') {
-            openSession = { 
-                id: docSnap.id, 
+            openSession = {
+                id: docSnap.id,
                 ...data,
                 createdAt: timestampToISO(data.createdAt) || new Date().toISOString(),
             } as CoachingSession;
             break;
         }
     }
-    
+
     if (openSession) setInCache(cacheKey, openSession);
     return openSession;
 };
@@ -1680,90 +1663,33 @@ const syncCoachingActiveIndexFromSession = async (session: CoachingSession) => {
     await saveCoachingActiveIndex(buildCoachingActiveIndex(session));
 };
 
+export const getCoachingSessions = async (advisorId: string): Promise<CoachingSession[]> => {
+    const { getCoachingSessions } = await import('@/lib/api/coaching');
+    return getCoachingSessions(advisorId);
+};
+
 export const createCoachingSession = async (
     sessionData: Omit<CoachingSession, 'id' | 'createdAt' | 'status'>,
     userId: string, 
     userName: string
 ): Promise<string> => {
-    const preparedItems = sessionData.items.map(item => ({
-        ...item,
-        id: item.id || (typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
-        taskId: item.taskId || (typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
-        originalCreatedAt: item.originalCreatedAt || new Date().toISOString()
-    }));
-
-    const docRef = await addDoc(collections.coachingSessions, {
-        ...sessionData,
-        status: 'Open',
-        createdAt: serverTimestamp(),
-        items: preparedItems
-    });
-    
-    // 🟢 LIMPIAMOS EL CACHÉ AL CREAR UNA NUEVA
+    const { createCoachingSession } = await import('@/lib/api/coaching');
+    const id = await createCoachingSession(sessionData, userId, userName);
     invalidateCache(`open_session_${sessionData.advisorId}`);
-    await syncCoachingActiveIndexFromSession({
-        ...sessionData,
-        id: docRef.id,
-        status: 'Open',
-        createdAt: new Date().toISOString(),
-        items: preparedItems,
-    });
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'user', 
-        entityId: sessionData.advisorId,
-        entityName: 'Sesión de Seguimiento',
-        details: `inició una nueva sesión de seguimiento para <strong>${sessionData.advisorName}</strong>`,
-        ownerName: sessionData.advisorName
-    });
-
-    return docRef.id;
+    invalidateCache(`coaching_active_index_${sessionData.advisorId}`);
+    return id;
 };
 
 export const deleteCoachingSession = async (sessionId: string, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'coaching_sessions', sessionId);
-    const sessionSnap = await getDoc(docRef);
-    await deleteDoc(docRef);
-    
-    invalidateCache(); // Limpieza global por seguridad
-    if (sessionSnap.exists()) {
-        await syncCoachingActiveIndexFromSession({
-            id: sessionSnap.id,
-            ...(sessionSnap.data() as CoachingSession),
-            status: 'Closed',
-            items: [],
-        });
-    }
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'user', 
-        entityId: sessionId,
-        entityName: 'Sesión de Seguimiento',
-        details: `eliminó una sesión de seguimiento`,
-        ownerName: 'Sistema' 
-    });
+    const { deleteCoachingSession } = await import('@/lib/api/coaching');
+    await deleteCoachingSession(sessionId, userId, userName);
+    invalidateCache();
 };
 
 export const updateCoachingSession = async (sessionId: string, data: Partial<CoachingSession>, userId: string, userName: string): Promise<void> => {
-    const docRef = doc(db, 'coaching_sessions', sessionId);
-    const sessionSnap = await getDoc(docRef);
-    await updateDoc(docRef, data);
-    
-    // 🟢 Limpiamos caché de sesión abierta si se cierra
-    if (sessionSnap.exists()) {
-        const previousSession = { id: sessionSnap.id, ...sessionSnap.data() } as CoachingSession;
-        const updatedSession = { ...previousSession, ...data };
-        invalidateCache(`open_session_${updatedSession.advisorId}`);
-        await syncCoachingActiveIndexFromSession(updatedSession);
-    } else {
-        invalidateCache();
-    }
+    const { updateCoachingSession } = await import('@/lib/api/coaching');
+    await updateCoachingSession(sessionId, data, userId, userName);
+    invalidateCache();
 };
 
 export const updateCoachingItem = async (
@@ -1772,53 +1698,16 @@ export const updateCoachingItem = async (
     updates: Partial<Pick<CoachingItem, 'status' | 'advisorNotes' | 'followUpDone' | 'followUpDoneUpdatedAt' | 'followUpCurrent' | 'followUpCurrentUpdatedAt' | 'followUpNext' | 'followUpNextUpdatedAt'>>,
     userId: string,
     userName: string,
-    taskId?: string, // Para sincronización
-    advisorId?: string // Para búsqueda en historial
+    taskId?: string,
+    advisorId?: string
 ): Promise<void> => {
-    // 1. Actualizar la sesión actual
-    const sessionRef = doc(db, 'coaching_sessions', sessionId);
-    const sessionSnap = await getDoc(sessionRef);
-    
-    if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
-    
-    const sessionData = sessionSnap.data() as CoachingSession;
-    const updatedItems = sessionData.items.map(item => {
-        if (item.id === itemId) {
-            return { 
-                ...item, 
-                ...updates,
-                lastUpdate: new Date().toISOString() 
-            };
-        }
-        return item;
-    });
-
-    await updateDoc(sessionRef, { items: updatedItems });
-    if (sessionData.status === 'Open') {
-        setInCache(`open_session_${sessionData.advisorId}`, {
-            ...sessionData,
-            id: sessionId,
-            items: updatedItems,
-        });
-    }
-    await syncCoachingActiveIndexFromSession({
-        ...sessionData,
-        id: sessionId,
-        items: updatedItems,
-    });
-
-    // Loguear solo si se completa
-    if (updates.status === 'Completado') {
-         await logActivity({
-            userId,
-            userName,
-            type: 'update',
-            entityType: 'user',
-            entityId: sessionId,
-            entityName: 'Tarea de Seguimiento',
-            details: `completó una tarea de la sesión de seguimiento.`,
-            ownerName: sessionData.advisorName
-        });
+    const { updateCoachingItem } = await import('@/lib/api/coaching');
+    await updateCoachingItem(sessionId, itemId, updates as Partial<CoachingItem>, userId, userName);
+    if (advisorId) {
+        invalidateCache(`open_session_${advisorId}`);
+        invalidateCache(`coaching_active_index_${advisorId}`);
+    } else {
+        invalidateCache();
     }
 };
 
@@ -1830,57 +1719,10 @@ export const appendCoachingFollowUpEntry = async (
     userId: string,
     userName: string,
 ): Promise<CoachingFollowUpEntry | null> => {
-    const trimmedText = text.trim();
-    if (!trimmedText) return null;
-
-    const sessionRef = doc(db, 'coaching_sessions', sessionId);
-    let sessionForIndex: CoachingSession | null = null;
-    let createdEntry: CoachingFollowUpEntry | null = null;
-
-    await runTransaction(db, async (transaction) => {
-        const sessionSnap = await transaction.get(sessionRef);
-        if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
-
-        const sessionData = sessionSnap.data() as CoachingSession;
-        const now = new Date().toISOString();
-        const entriesField = `${field}Entries` as 'followUpDoneEntries' | 'followUpCurrentEntries' | 'followUpNextEntries';
-        const updatedAtField = `${field}UpdatedAt` as 'followUpDoneUpdatedAt' | 'followUpCurrentUpdatedAt' | 'followUpNextUpdatedAt';
-        let itemFound = false;
-
-        const updatedItems = sessionData.items.map(item => {
-            if (item.id !== itemId) return item;
-            itemFound = true;
-
-            const entry = {
-                id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
-                text: trimmedText,
-                createdAt: now,
-                createdById: userId,
-                createdByName: userName,
-            };
-            createdEntry = entry;
-            const previousEntries = item[entriesField] || [];
-
-            return {
-                ...item,
-                [entriesField]: [...previousEntries, entry],
-                [updatedAtField]: now,
-                lastUpdate: now,
-            };
-        });
-
-        if (!itemFound) throw new Error("Ítem de seguimiento no encontrado");
-        transaction.update(sessionRef, { items: updatedItems });
-        sessionForIndex = { ...sessionData, id: sessionId, items: updatedItems };
-    });
-
-    if (sessionForIndex) {
-        if (sessionForIndex.status === 'Open') {
-            setInCache(`open_session_${sessionForIndex.advisorId}`, sessionForIndex);
-        }
-        await syncCoachingActiveIndexFromSession(sessionForIndex);
-    }
-    return createdEntry;
+    const { appendCoachingFollowUpEntry } = await import('@/lib/api/coaching');
+    const entry = await appendCoachingFollowUpEntry(sessionId, itemId, field, text, userId, userName);
+    invalidateCache();
+    return entry;
 };
 
 export const updateCoachingFollowUpEntry = async (
@@ -1892,66 +1734,9 @@ export const updateCoachingFollowUpEntry = async (
     userId: string,
     userName: string,
 ): Promise<void> => {
-    const trimmedText = text.trim();
-    if (!trimmedText) throw new Error("El asiento no puede quedar vacío");
-
-    const sessionRef = doc(db, 'coaching_sessions', sessionId);
-    let sessionForIndex: CoachingSession | null = null;
-    let advisorName = '';
-
-    await runTransaction(db, async (transaction) => {
-        const sessionSnap = await transaction.get(sessionRef);
-        if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
-
-        const sessionData = sessionSnap.data() as CoachingSession;
-        const now = new Date().toISOString();
-        const entriesField = `${field}Entries` as 'followUpDoneEntries' | 'followUpCurrentEntries' | 'followUpNextEntries';
-        const updatedAtField = `${field}UpdatedAt` as 'followUpDoneUpdatedAt' | 'followUpCurrentUpdatedAt' | 'followUpNextUpdatedAt';
-        let entryFound = false;
-
-        const updatedItems = sessionData.items.map(item => {
-            if (item.id !== itemId) return item;
-            const entries = (item[entriesField] || []).map(entry => {
-                if (entry.id !== entryId) return entry;
-                entryFound = true;
-                return {
-                    ...entry,
-                    text: trimmedText,
-                    updatedAt: now,
-                    updatedById: userId,
-                    updatedByName: userName,
-                };
-            });
-            return {
-                ...item,
-                [entriesField]: entries,
-                [updatedAtField]: now,
-                lastUpdate: now,
-            };
-        });
-
-        if (!entryFound) throw new Error("Asiento de seguimiento no encontrado");
-        transaction.update(sessionRef, { items: updatedItems });
-        advisorName = sessionData.advisorName;
-        sessionForIndex = { ...sessionData, id: sessionId, items: updatedItems };
-    });
-
-    if (sessionForIndex) {
-        if (sessionForIndex.status === 'Open') {
-            setInCache(`open_session_${sessionForIndex.advisorId}`, sessionForIndex);
-        }
-        await syncCoachingActiveIndexFromSession(sessionForIndex);
-    }
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'user',
-        entityId: sessionId,
-        entityName: 'Bitácora de seguimiento',
-        details: `editó un asiento de seguimiento.`,
-        ownerName: advisorName,
-    });
+    const { updateCoachingFollowUpEntry } = await import('@/lib/api/coaching');
+    await updateCoachingFollowUpEntry(sessionId, itemId, field, entryId, text, userId, userName);
+    invalidateCache();
 };
 
 export const deleteCoachingFollowUpEntry = async (
@@ -1962,154 +1747,22 @@ export const deleteCoachingFollowUpEntry = async (
     userId: string,
     userName: string,
 ): Promise<void> => {
-    const sessionRef = doc(db, 'coaching_sessions', sessionId);
-    let sessionForIndex: CoachingSession | null = null;
-    let advisorName = '';
-
-    await runTransaction(db, async (transaction) => {
-        const sessionSnap = await transaction.get(sessionRef);
-        if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
-
-        const sessionData = sessionSnap.data() as CoachingSession;
-        const now = new Date().toISOString();
-        const entriesField = `${field}Entries` as 'followUpDoneEntries' | 'followUpCurrentEntries' | 'followUpNextEntries';
-        const updatedAtField = `${field}UpdatedAt` as 'followUpDoneUpdatedAt' | 'followUpCurrentUpdatedAt' | 'followUpNextUpdatedAt';
-        let entryFound = false;
-
-        const updatedItems = sessionData.items.map(item => {
-            if (item.id !== itemId) return item;
-            const previousEntries = item[entriesField] || [];
-            const entries = previousEntries.filter(entry => entry.id !== entryId);
-            entryFound = entries.length !== previousEntries.length;
-            return {
-                ...item,
-                [entriesField]: entries,
-                [updatedAtField]: now,
-                lastUpdate: now,
-            };
-        });
-
-        if (!entryFound) throw new Error("Asiento de seguimiento no encontrado");
-        transaction.update(sessionRef, { items: updatedItems });
-        advisorName = sessionData.advisorName;
-        sessionForIndex = { ...sessionData, id: sessionId, items: updatedItems };
-    });
-
-    if (sessionForIndex) {
-        if (sessionForIndex.status === 'Open') {
-            setInCache(`open_session_${sessionForIndex.advisorId}`, sessionForIndex);
-        }
-        await syncCoachingActiveIndexFromSession(sessionForIndex);
-    }
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'user',
-        entityId: sessionId,
-        entityName: 'Bitácora de seguimiento',
-        details: `eliminó un asiento de seguimiento.`,
-        ownerName: advisorName,
-    });
+    const { deleteCoachingFollowUpEntry } = await import('@/lib/api/coaching');
+    await deleteCoachingFollowUpEntry(sessionId, itemId, field, entryId, userId, userName);
+    invalidateCache();
 };
 
 export const deleteCoachingItem = async (sessionId: string, itemId: string) => {
-    const sessionRef = doc(db, 'coaching_sessions', sessionId);
-    const sessionSnap = await getDoc(sessionRef);
-    
-    if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
-    
-    const sessionData = sessionSnap.data() as CoachingSession;
-    const updatedItems = sessionData.items.filter(item => item.id !== itemId);
-
-    await updateDoc(sessionRef, { items: updatedItems });
-    if (sessionData.status === 'Open') {
-        setInCache(`open_session_${sessionData.advisorId}`, {
-            ...sessionData,
-            id: sessionId,
-            items: updatedItems,
-        });
-    }
-    await syncCoachingActiveIndexFromSession({
-        ...sessionData,
-        id: sessionId,
-        items: updatedItems,
-    });
+    const { deleteCoachingItem } = await import('@/lib/api/coaching');
+    await deleteCoachingItem(sessionId, itemId);
+    invalidateCache();
 };
 
 export const addItemsToSession = async (sessionId: string, newItems: CoachingItem[]) => {
-    const sessionRef = doc(db, 'coaching_sessions', sessionId);
-    let sessionForIndex: CoachingSession | null = null;
-    
-    await runTransaction(db, async (transaction) => {
-        const sessionSnap = await transaction.get(sessionRef);
-        if (!sessionSnap.exists()) throw new Error("Sesión no encontrada");
-        
-        const sessionData = sessionSnap.data() as CoachingSession;
-        let currentItems = [...sessionData.items];
-        let hasChanges = false;
-
-        newItems.forEach(newItem => {
-            // Buscamos si ya existe un item para esta misma entidad que esté abierto ('Pendiente' o 'En Proceso')
-            const existingItemIndex = currentItems.findIndex(i => 
-                i.entityId === newItem.entityId && 
-                i.status !== 'Cancelado'
-            );
-
-            if (existingItemIndex >= 0) {
-                // El ítem ya existe y está activo: agregamos una indicación o un asiento independiente.
-                const existingItem = currentItems[existingItemIndex];
-                const now = new Date().toISOString();
-                const newEntry = {
-                    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
-                    text: newItem.action,
-                    createdAt: now,
-                    createdById: sessionData.advisorId,
-                    createdByName: sessionData.advisorName,
-                };
-                
-                currentItems[existingItemIndex] = {
-                    ...existingItem,
-                    action: newItem.origin === 'manager' 
-                        ? (existingItem.action ? `${existingItem.action}\n\n${newItem.action}` : newItem.action)
-                        : existingItem.action,
-                    followUpDoneEntries: newItem.origin === 'advisor'
-                        ? [...(existingItem.followUpDoneEntries || []), newEntry]
-                        : existingItem.followUpDoneEntries,
-                    followUpDoneUpdatedAt: newItem.origin === 'advisor' ? now : existingItem.followUpDoneUpdatedAt,
-                    lastUpdate: now,
-                };
-                hasChanges = true;
-            } else {
-                // No existe un ítem abierto para esta entidad, lo creamos como nuevo.
-                currentItems.push({
-                    ...newItem, 
-                    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
-                    taskId: newItem.taskId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
-                    originalCreatedAt: newItem.originalCreatedAt || new Date().toISOString()
-                });
-                hasChanges = true;
-            }
-        });
-
-        if (hasChanges) {
-            transaction.update(sessionRef, { items: currentItems });
-            sessionForIndex = {
-                ...sessionData,
-                id: sessionId,
-                items: currentItems,
-            };
-        }
-    });
-
-    if (sessionForIndex) {
-        if (sessionForIndex.status === 'Open') {
-            setInCache(`open_session_${sessionForIndex.advisorId}`, sessionForIndex);
-        }
-        await syncCoachingActiveIndexFromSession(sessionForIndex);
-    }
+    const { addItemsToSession } = await import('@/lib/api/coaching');
+    await addItemsToSession(sessionId, newItems);
+    invalidateCache();
 };
-
 export const claimProspect = async (prospect: Prospect, userId: string, userName: string): Promise<void> => {
     const { claimProspect } = await import('@/lib/api/prospects');
     await claimProspect(prospect.id);
