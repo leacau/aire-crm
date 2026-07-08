@@ -377,6 +377,15 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se quitaron helpers directos de indice activo que ya no se usan en el puente temporal.
 - `firestore.rules` sigue intacto.
 
+## Cuadragesimo primer corte aplicado
+
+- Se extendio `/api/advertising-orders` con creacion de ordenes de publicidad desde servidor.
+- Se extendio `/api/advertising-orders/[orderId]` con edicion de ordenes desde servidor.
+- `createAdvertisingOrder` y `updateAdvertisingOrder` pasan por API mediante el puente temporal.
+- La creacion/renovacion de pedidos de facturacion SRL, SAS y AVION queda centralizada en servidor junto con la orden.
+- La auditoria de modificaciones de ordenes aprobadas, historial de revision y recalculo comparativo queda centralizada en servidor.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

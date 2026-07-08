@@ -11,8 +11,6 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 import { differenceInCalendarDays, isSaturday, isSunday, parseISO, format, parse } from 'date-fns';
 import { sendEmail } from './google-gmail-service';
 import { toTitleCase } from './utils';
-import { buildAdvertisingOrderChanges } from './advertising-order-history';
-import { getAdvertisingOrderFinancialSummary } from './advertising-order-utils';
 
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
@@ -1684,108 +1682,13 @@ export const rejectProspectClaim = async (prospect: Prospect, managerId: string,
     invalidateCache('prospects');
 };
 export const createAdvertisingOrder = async (orderData: Omit<AdvertisingOrder, 'id' | 'createdAt'>) => {
-  try {
-    const { billingRequestsSrl, billingRequestsSas, billingRequestsAvion, ...restOrderData } = orderData as typeof orderData & { billingRequestsAvion?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[] };
-    const docRef = await addDoc(collection(db, 'advertising_orders'), {
-      ...restOrderData,
-      createdAt: new Date().toISOString(),
-    });
-    
-    const batch = writeBatch(db);
-    let hasBilling = false;
-
-    // 🟢 Guardar Fechas de Facturación SRL
-    if (billingRequestsSrl && billingRequestsSrl.length > 0) {
-        hasBilling = true;
-        billingRequestsSrl.forEach(br => {
-            const brRef = doc(collections.billingRequests);
-            batch.set(brRef, {
-                orderId: docRef.id,
-                opportunityId: restOrderData.opportunityId || '',
-                clientId: restOrderData.clientId,
-                company: 'SRL',
-                date: br.date,
-                grossAmount: br.grossAmount,
-                adjustment: br.adjustment,
-                amount: br.amount,
-                paymentType: br.paymentType || 'Se paga',
-                canjeDescription: br.canjeDescription || '',
-                createdAt: serverTimestamp()
-            });
-        });
-    }
-
-    // 🟢 Guardar Fechas de Facturación SAS
-    if (billingRequestsSas && billingRequestsSas.length > 0) {
-        hasBilling = true;
-        billingRequestsSas.forEach(br => {
-            const brRef = doc(collections.billingRequests);
-            batch.set(brRef, {
-                orderId: docRef.id,
-                opportunityId: restOrderData.opportunityId || '',
-                clientId: restOrderData.clientId,
-                company: 'SAS',
-                date: br.date,
-                grossAmount: br.grossAmount,
-                adjustment: br.adjustment,
-                ivaSas: br.ivaSas,
-                amount: br.amount,
-                paymentType: br.paymentType || 'Se paga',
-                canjeDescription: br.canjeDescription || '',
-                createdAt: serverTimestamp()
-            });
-        });
-    }
-
-    if (billingRequestsAvion && billingRequestsAvion.length > 0) {
-        hasBilling = true;
-        billingRequestsAvion.forEach(br => {
-            const brRef = doc(collections.billingRequests);
-            batch.set(brRef, {
-                orderId: docRef.id,
-                opportunityId: restOrderData.opportunityId || '',
-                clientId: restOrderData.clientId,
-                company: 'AVION',
-                date: br.date,
-                grossAmount: br.grossAmount,
-                adjustment: br.adjustment,
-                amount: br.amount,
-                paymentType: br.paymentType || 'Canje',
-                canjeDescription: br.canjeDescription || '',
-                createdAt: serverTimestamp()
-            });
-        });
-    }
-
-    if (hasBilling) {
-        await batch.commit();
-    }
-
-    if (restOrderData.canjeId) {
-        await updateDoc(doc(db, 'canjes', restOrderData.canjeId), {
-            advertisingOrderIds: arrayUnion(docRef.id),
-        });
-        invalidateCache('canjes');
-    }
-
-    await logActivity({
-      userId: restOrderData.createdBy, 
-      userName: restOrderData.accountExecutive,
-      entityType: 'client',
-      entityId: restOrderData.clientId,
-      entityName: restOrderData.clientName || 'Cliente',
-      type: 'create', 
-      details: `Creó un nuevo pedido de publicidad para el producto: ${restOrderData.product}`,
-      timestamp: new Date().toISOString(),
-    });
-
-    return docRef.id;
-  } catch (error) {
-    console.error("Error creating advertising order:", error);
-    throw error;
-  }
+    const { createAdvertisingOrder } = await import('@/lib/api/advertising-orders');
+    const id = await createAdvertisingOrder(orderData as Omit<AdvertisingOrder, 'id' | 'createdAt'> & { billingRequestsAvion?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[] });
+    invalidateCache('advertising_orders');
+    invalidateCache('billing_requests_metadata');
+    invalidateCache('canjes');
+    return id;
 };
-
 export const getBillingRequestsByClient = async (clientId: string): Promise<BillingRequest[]> => {
     try {
         const { getBillingRequestsByClient } = await import('@/lib/api/clients');
@@ -1899,190 +1802,11 @@ export const updateAdvertisingOrder = async (
         historyItem?: ApprovalHistoryItem;
     }
 ): Promise<void> => {
-    const shouldReplaceBilling = ['billingRequestsSrl', 'billingRequestsSas', 'billingRequestsAvion']
-        .some(field => Object.prototype.hasOwnProperty.call(orderData, field));
-    const {
-        billingRequestsSrl,
-        billingRequestsSas,
-        billingRequestsAvion,
-        approvalHistory: _ignoredApprovalHistory,
-        revisionHistory: _ignoredRevisionHistory,
-        ...restOrderData
-    } = orderData as typeof orderData & { billingRequestsAvion?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[] };
-    const docRef = doc(db, 'advertising_orders', orderId);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) throw new Error("Orden no encontrada");
-    const previousOrder = { id: docSnap.id, ...docSnap.data() } as AdvertisingOrder;
-    const existingBrQuery = query(collections.billingRequests, where('orderId', '==', orderId));
-    const existingBrSnap = await getDocs(existingBrQuery);
-    const previousBillingSrl: AdvertisingOrder['billingRequestsSrl'] = [];
-    const previousBillingSas: AdvertisingOrder['billingRequestsSas'] = [];
-    const previousBillingAvion: AdvertisingOrder['billingRequestsAvion'] = [];
-
-    existingBrSnap.forEach(billingDoc => {
-        const billing = billingDoc.data() as BillingRequest;
-        const comparable = {
-            date: billing.date,
-            grossAmount: billing.grossAmount || 0,
-            adjustment: billing.adjustment || 0,
-            ivaSas: billing.ivaSas || 0,
-            amount: billing.amount || 0,
-            paymentType: billing.paymentType || (billing.company === 'AVION' ? 'Canje' : 'Se paga'),
-            canjeDescription: billing.canjeDescription || '',
-        };
-        if (billing.company === 'SRL') previousBillingSrl.push(comparable);
-        else if (billing.company === 'SAS') previousBillingSas.push(comparable);
-        else if (billing.company === 'AVION') previousBillingAvion.push(comparable);
-    });
-
-    const wasEverApproved = previousOrder.status === 'Aprobado'
-        || (previousOrder.approvalHistory || []).some(item => item.status === 'Aprobado');
-    const updatePayload: Record<string, unknown> = {
-        ...restOrderData,
-        updatedAt: serverTimestamp(),
-    };
-
-    if (options?.historyItem) {
-        updatePayload.approvalHistory = arrayUnion(options.historyItem);
-    }
-
-    if (wasEverApproved) {
-        const reason = options?.modificationReason?.trim();
-        if (!reason) {
-            throw new Error('Debe indicar el motivo de la modificación de una orden aprobada.');
-        }
-
-        const previousComparableOrder = {
-            ...previousOrder,
-            billingRequestsSrl: previousBillingSrl,
-            billingRequestsSas: previousBillingSas,
-            billingRequestsAvion: previousBillingAvion,
-        };
-        const nextComparableOrder = {
-            ...previousOrder,
-            ...restOrderData,
-            billingRequestsSrl: shouldReplaceBilling ? (billingRequestsSrl || []) : previousBillingSrl,
-            billingRequestsSas: shouldReplaceBilling ? (billingRequestsSas || []) : previousBillingSas,
-            billingRequestsAvion: shouldReplaceBilling ? (billingRequestsAvion || []) : previousBillingAvion,
-        };
-        const changes = buildAdvertisingOrderChanges(previousComparableOrder, nextComparableOrder);
-
-        if (changes.length === 0) {
-            throw new Error('No se detectaron cambios para registrar en la orden.');
-        }
-
-        updatePayload.status = 'Pendiente de Modificación';
-        updatePayload.adminComments = deleteField();
-        updatePayload.approvedAt = deleteField();
-        updatePayload.approvedBy = deleteField();
-        updatePayload.approvedByName = deleteField();
-        updatePayload.revisionHistory = arrayUnion({
-            timestamp: new Date().toISOString(),
-            userId,
-            userName,
-            userRole: options?.userRole || '',
-            reason,
-            previousStatus: previousOrder.status || 'Aprobado',
-            changes,
-            financials: {
-                before: getAdvertisingOrderFinancialSummary(previousComparableOrder),
-                after: getAdvertisingOrderFinancialSummary(nextComparableOrder),
-            },
-            schedule: {
-                before: {
-                    startDate: previousComparableOrder.startDate,
-                    endDate: previousComparableOrder.endDate,
-                    srlItems: previousComparableOrder.srlItems || [],
-                    sasItems: previousComparableOrder.sasItems || [],
-                },
-                after: {
-                    startDate: nextComparableOrder.startDate,
-                    endDate: nextComparableOrder.endDate,
-                    srlItems: nextComparableOrder.srlItems || [],
-                    sasItems: nextComparableOrder.sasItems || [],
-                },
-            },
-        });
-    }
-
-    const batch = writeBatch(db);
-    batch.update(docRef, updatePayload);
-    if (shouldReplaceBilling) {
-        existingBrSnap.forEach(doc => batch.delete(doc.ref));
-    }
-
-    if (shouldReplaceBilling && billingRequestsSrl && billingRequestsSrl.length > 0) {
-        billingRequestsSrl.forEach(br => {
-            const brRef = doc(collections.billingRequests);
-            batch.set(brRef, {
-                orderId: orderId,
-                opportunityId: restOrderData.opportunityId || '',
-                clientId: restOrderData.clientId,
-                company: 'SRL',
-                date: br.date,
-                grossAmount: br.grossAmount,
-                adjustment: br.adjustment,
-                amount: br.amount,
-                paymentType: br.paymentType || 'Se paga',
-                canjeDescription: br.canjeDescription || '',
-                createdAt: serverTimestamp()
-            });
-        });
-    }
-
-    if (shouldReplaceBilling && billingRequestsSas && billingRequestsSas.length > 0) {
-        billingRequestsSas.forEach(br => {
-            const brRef = doc(collections.billingRequests);
-            batch.set(brRef, {
-                orderId: orderId,
-                opportunityId: restOrderData.opportunityId || '',
-                clientId: restOrderData.clientId,
-                company: 'SAS',
-                date: br.date,
-                grossAmount: br.grossAmount,
-                adjustment: br.adjustment,
-                ivaSas: br.ivaSas,
-                amount: br.amount,
-                paymentType: br.paymentType || 'Se paga',
-                canjeDescription: br.canjeDescription || '',
-                createdAt: serverTimestamp()
-            });
-        });
-    }
-
-    if (shouldReplaceBilling && billingRequestsAvion && billingRequestsAvion.length > 0) {
-        billingRequestsAvion.forEach(br => {
-            const brRef = doc(collections.billingRequests);
-            batch.set(brRef, {
-                orderId: orderId,
-                opportunityId: restOrderData.opportunityId || '',
-                clientId: restOrderData.clientId,
-                company: 'AVION',
-                date: br.date,
-                grossAmount: br.grossAmount,
-                adjustment: br.adjustment,
-                amount: br.amount,
-                paymentType: br.paymentType || 'Canje',
-                canjeDescription: br.canjeDescription || '',
-                createdAt: serverTimestamp()
-            });
-        });
-    }
-
-    await batch.commit();
-
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'opportunity' as any,
-        entityId: orderId,
-        entityName: 'Orden de Publicidad',
-        details: `editó la orden de publicidad del cliente <strong>${restOrderData.clientName}</strong>`,
-        ownerName: restOrderData.accountExecutive || userName // Se loguea al dueño real de la orden
-    });
+    const { updateAdvertisingOrder } = await import('@/lib/api/advertising-orders');
+    await updateAdvertisingOrder(orderId, orderData as Partial<Omit<AdvertisingOrder, 'id' | 'createdAt'>> & { billingRequestsAvion?: Omit<BillingRequest, 'orderId' | 'opportunityId' | 'clientId'>[] }, userId, userName, options);
+    invalidateCache('advertising_orders');
+    invalidateCache('billing_requests_metadata');
 };
-
 // --- Social Media Requests Functions ---
 
 export const saveSocialMediaRequest = async (
