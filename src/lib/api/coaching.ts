@@ -134,3 +134,31 @@ export async function deleteCoachingFollowUpEntry(
     },
   );
 }
+
+export async function autoUpdateCoachingSession(
+  advisorId: string,
+  advisorName: string,
+  entityType: 'client' | 'prospect',
+  entityId: string,
+  entityName: string,
+  actionText: string,
+  options?: {
+    createIfMissing?: boolean;
+    cancelIfActive?: boolean;
+    completeIfActive?: boolean;
+    updateExistingIfMissing?: boolean;
+  },
+): Promise<void> {
+  await apiRequest<{ ok: true }>('/api/coaching-sessions/auto-update', {
+    method: 'POST',
+    body: {
+      advisorId,
+      advisorName,
+      entityType,
+      entityId,
+      entityName,
+      actionText,
+      options,
+    },
+  });
+}

@@ -12,6 +12,7 @@ import type {
 } from '@/lib/types';
 
 type FollowUpField = 'followUpDone' | 'followUpCurrent' | 'followUpNext';
+type AutoCoachingEntityType = 'client' | 'prospect';
 
 export class CoachingApiError extends Error {
   constructor(
@@ -93,6 +94,34 @@ async function syncActiveIndex(session: CoachingSession) {
 
 function normalizeSession(id: string, data: FirebaseFirestore.DocumentData | undefined): CoachingSession {
   return serializeDocument<CoachingSession>(id, data);
+}
+
+async function getActiveIndex(advisorId: string): Promise<CoachingActiveIndex | null> {
+  const indexSnap = await dbAdmin.collection('coaching_active_index').doc(advisorId).get();
+  return indexSnap.exists ? (indexSnap.data() as CoachingActiveIndex) : null;
+}
+
+async function getOpenSessionById(sessionId: string): Promise<CoachingSession | null> {
+  const sessionSnap = await dbAdmin.collection('coaching_sessions').doc(sessionId).get();
+  if (!sessionSnap.exists) return null;
+  const session = normalizeSession(sessionSnap.id, sessionSnap.data());
+  return session.status === 'Open' ? session : null;
+}
+
+async function getLatestOpenSession(advisorId: string): Promise<CoachingSession | null> {
+  const snapshot = await dbAdmin
+    .collection('coaching_sessions')
+    .where('advisorId', '==', advisorId)
+    .orderBy('date', 'desc')
+    .limit(5)
+    .get();
+
+  for (const doc of snapshot.docs) {
+    const session = normalizeSession(doc.id, doc.data());
+    if (session.status === 'Open') return session;
+  }
+
+  return null;
 }
 
 export async function listCoachingSessions(
@@ -543,4 +572,168 @@ export async function deleteCoachingFollowUpEntryServer(
     details: 'elimino un asiento de seguimiento.',
     ownerName: advisorName,
   });
+}
+
+export async function autoUpdateCoachingSessionServer(
+  advisorId: string,
+  advisorName: string,
+  entityType: AutoCoachingEntityType,
+  entityId: string,
+  entityName: string,
+  actionText: string,
+  options: {
+    createIfMissing?: boolean;
+    cancelIfActive?: boolean;
+    completeIfActive?: boolean;
+    updateExistingIfMissing?: boolean;
+  } | undefined,
+  requester: ServerUser,
+): Promise<void> {
+  if (!advisorId || !entityId) return;
+  if (advisorId !== requester.uid && !hasServerManagementPrivileges(requester)) {
+    throw new CoachingApiError('Forbidden', 403);
+  }
+
+  const isClosingLostOrUndefinedProposal =
+    /Actualizaci.n de propuesta/i.test(actionText) &&
+    /Etapa:\s*Cerrado - (Perdido|No Definido)/i.test(actionText);
+  const createIfMissing = options?.createIfMissing ?? !isClosingLostOrUndefinedProposal;
+  const cancelIfActive = options?.cancelIfActive ?? isClosingLostOrUndefinedProposal;
+  const completeIfActive = options?.completeIfActive ?? false;
+  const updateExistingIfMissing = options?.updateExistingIfMissing ?? false;
+
+  let activeIndex = await getActiveIndex(advisorId);
+  let openSession: CoachingSession | null = null;
+
+  if (activeIndex?.openSessionId) {
+    openSession = await getOpenSessionById(activeIndex.openSessionId);
+  }
+
+  if (!openSession && createIfMissing) {
+    openSession = await getLatestOpenSession(advisorId);
+    if (openSession) {
+      await syncActiveIndex(openSession);
+      activeIndex = buildActiveIndex(openSession);
+    }
+  }
+
+  if (!openSession && createIfMissing) {
+    const now = new Date().toISOString();
+    const docRef = await dbAdmin.collection('coaching_sessions').add({
+      advisorId,
+      advisorName,
+      managerId: advisorId,
+      managerName: 'Sistema Automatico',
+      date: now,
+      items: [],
+      generalNotes: '',
+      status: 'Open',
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    openSession = {
+      id: docRef.id,
+      advisorId,
+      advisorName,
+      managerId: advisorId,
+      managerName: 'Sistema Automatico',
+      date: now,
+      items: [],
+      generalNotes: '',
+      createdAt: now,
+      status: 'Open',
+    };
+    activeIndex = buildActiveIndex(openSession);
+    await syncActiveIndex(openSession);
+  }
+
+  const now = new Date().toISOString();
+  const newEntry: CoachingFollowUpEntry = {
+    id: newId(),
+    text: actionText,
+    createdAt: now,
+    createdById: advisorId,
+    createdByName: advisorName,
+  };
+  const entityKey = coachingEntityKey(entityType, entityId);
+  const indexedItemId = activeIndex?.entities?.[entityKey]?.itemId;
+
+  if (!openSession && updateExistingIfMissing) {
+    const recentSessionsSnap = await dbAdmin
+      .collection('coaching_sessions')
+      .where('advisorId', '==', advisorId)
+      .orderBy('date', 'desc')
+      .limit(20)
+      .get();
+
+    for (const sessionDoc of recentSessionsSnap.docs) {
+      const sessionData = normalizeSession(sessionDoc.id, sessionDoc.data());
+      const itemIndex = (sessionData.items || []).findIndex(
+        item => item.entityType === entityType && item.entityId === entityId,
+      );
+      if (itemIndex < 0) continue;
+
+      const updatedItems = [...(sessionData.items || [])];
+      const existingItem = updatedItems[itemIndex];
+      updatedItems[itemIndex] = {
+        ...existingItem,
+        entityName,
+        followUpDoneEntries: [...(existingItem.followUpDoneEntries || []), newEntry],
+        followUpDoneUpdatedAt: now,
+        lastUpdate: now,
+      };
+
+      const updatedSession = { ...sessionData, items: updatedItems };
+      await dbAdmin.collection('coaching_sessions').doc(sessionDoc.id).update({ items: updatedItems });
+      if (updatedSession.status === 'Open') await syncActiveIndex(updatedSession);
+      return;
+    }
+  }
+
+  if (!openSession) return;
+
+  const updatedItems = [...(openSession.items || [])];
+  const canUpdateClosedItem = updateExistingIfMissing && !createIfMissing;
+  const existingItemIndex = updatedItems.findIndex(
+    item =>
+      (indexedItemId ? item.id === indexedItemId : item.entityId === entityId) &&
+      (canUpdateClosedItem || item.status !== 'Cancelado'),
+  );
+
+  if (existingItemIndex >= 0) {
+    const existingItem = updatedItems[existingItemIndex];
+    const shouldComplete =
+      completeIfActive && existingItem.status !== 'Cancelado' && existingItem.status !== 'Completado';
+
+    updatedItems[existingItemIndex] = {
+      ...existingItem,
+      entityName,
+      status: cancelIfActive ? 'Cancelado' : shouldComplete ? 'Completado' : existingItem.status,
+      followUpDoneEntries: [...(existingItem.followUpDoneEntries || []), newEntry],
+      followUpDoneUpdatedAt: now,
+      lastUpdate: now,
+    };
+  } else if (createIfMissing) {
+    updatedItems.push({
+      id: newId(),
+      taskId: newId(),
+      originalCreatedAt: now,
+      entityType,
+      entityId,
+      entityName,
+      action: 'Seguimiento automatico',
+      status: 'Pendiente',
+      advisorNotes: '',
+      followUpDoneEntries: [newEntry],
+      followUpDoneUpdatedAt: now,
+      lastUpdate: now,
+      origin: 'advisor',
+    });
+  } else {
+    return;
+  }
+
+  const updatedSession = { ...openSession, items: updatedItems };
+  await dbAdmin.collection('coaching_sessions').doc(openSession.id).update({ items: updatedItems });
+  await syncActiveIndex(updatedSession);
 }

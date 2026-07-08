@@ -369,10 +369,18 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La actualizacion automatica de coaching desde oportunidades, prospectos y actividades queda como proximo corte para no mezclar dos flujos grandes.
 - `firestore.rules` sigue intacto.
 
+## Cuadragesimo corte aplicado
+
+- Se agrego `/api/coaching-sessions/auto-update` para centralizar la actualizacion automatica de seguimiento.
+- `autoUpdateCoachingSession` pasa por API y deja de escribir desde el navegador en `coaching_sessions` y `coaching_active_index`.
+- Los disparadores desde prospectos, oportunidades y actividades mantienen la misma interfaz, pero ahora actualizan/crean sesiones, items y entradas desde servidor.
+- Se quitaron helpers directos de indice activo que ya no se usan en el puente temporal.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados
-   - Mover `createClientActivity` junto con la logica de coaching automatico.
+   - Revisar si conviene mover tareas de mantenimiento como limpieza de actividades completadas antiguas a una ruta programada.
    - Actualizar `/clients` y componentes relacionados para importar desde `src/lib/api/*` directamente cuando el puente este estable.
 
 2. Oportunidades
