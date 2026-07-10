@@ -10,6 +10,13 @@ export async function getAllClientActivities(): Promise<ClientActivity[]> {
   return result.activities;
 }
 
+export async function getDashboardTasks(): Promise<ClientActivity[]> {
+  const result = await apiRequest<{ activities: ClientActivity[] }>('/api/client-activities?tasks=true', {
+    method: 'GET',
+  });
+  return result.activities;
+}
+
 export async function createClientActivity(
   activityData: Omit<ClientActivity, 'id' | 'timestamp'>,
 ): Promise<string> {

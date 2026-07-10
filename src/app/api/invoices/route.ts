@@ -16,11 +16,23 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const opportunityId = searchParams.get('opportunityId');
+  const dashboard = searchParams.get('dashboard') === 'true';
 
   const collectionRef = dbAdmin.collection('invoices');
-  const snapshot = opportunityId
-    ? await collectionRef.where('opportunityId', '==', opportunityId).get()
-    : await collectionRef.orderBy('dateGenerated', 'desc').get();
+  let snapshot: FirebaseFirestore.QuerySnapshot;
+
+  if (opportunityId) {
+    snapshot = await collectionRef.where('opportunityId', '==', opportunityId).get();
+  } else if (dashboard) {
+    const thirteenMonthsAgo = new Date();
+    thirteenMonthsAgo.setMonth(thirteenMonthsAgo.getMonth() - 13);
+    snapshot = await collectionRef
+      .where('dateGenerated', '>=', thirteenMonthsAgo.toISOString())
+      .orderBy('dateGenerated', 'desc')
+      .get();
+  } else {
+    snapshot = await collectionRef.orderBy('dateGenerated', 'desc').get();
+  }
 
   const invoices = snapshot.docs
     .map(doc => mapInvoice(doc.id, doc.data()))

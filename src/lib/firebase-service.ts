@@ -1,7 +1,6 @@
 'use client';
 
-import { auth, db } from './firebase';
-import { collection, getDocs, getDocsFromCache, doc, getDoc, addDoc, updateDoc, serverTimestamp, arrayUnion, query, where, Timestamp, orderBy, limit, deleteField, setDoc, deleteDoc, writeBatch, runTransaction, startAfter, QueryDocumentSnapshot, increment } from 'firebase/firestore';
+import { auth } from './firebase';
 import type { Client, Person, Opportunity, OpportunityPeriod, ActivityLog, OpportunityStage, ClientActivity, User, Agency, UserRole, Invoice, Canje, CanjeEstado, ProposalFile, OrdenPautado, InvoiceStatus, ProposalItem, HistorialMensualItem, Program, CommercialItem, ProgramSchedule, Prospect, ProspectStatus, VacationRequest, VacationRequestStatus, MonthlyClosure, AreaType, ScreenName, ScreenPermission, OpportunityAlertsConfig, SupervisorComment, SupervisorCommentReply, ObjectiveVisibilityConfig, PaymentEntry, PaymentStatus, ChatSpaceMapping, CoachingSession, CoachingItem, CoachingFollowUpEntry, CoachingActiveIndex, CoachingActiveIndexEntry, CommercialNote, SystemHolidays, AdvertisingOrder, WebNote, BillingRequest, SocialMediaRequest, ConvenioCanje, SasProductConfig, PipelineInteraction, ApprovalHistoryItem } from './types';
 import { logActivity } from './activity-logger';
 import { es } from 'date-fns/locale';
@@ -15,30 +14,6 @@ import { toTitleCase } from './utils';
 const SUPER_ADMIN_EMAIL = 'lchena@airedesantafe.com.ar';
 const PERMISSIONS_DOC_ID = 'area_permissions';
 const OBJECTIVE_VISIBILITY_DOC_ID = 'objective_visibility';
-
-const collections = {
-    clients: collection(db, 'clients'),
-    people: collection(db, 'people'),
-    opportunities: collection(db, 'opportunities'),
-    activities: collection(db, 'activities'),
-    clientActivities: collection(db, 'client-activities'),
-    users: collection(db, 'users'),
-    agencies: collection(db, 'agencies'),
-    invoices: collection(db, 'invoices'),
-    canjes: collection(db, 'canjes'),
-    programs: collection(db, 'programs'),
-    commercialItems: collection(db, 'commercial_items'),
-    prospects: collection(db, 'prospects'),
-    licenses: collection(db, 'licencias'),
-    systemConfig: collection(db, 'system_config'),
-    supervisorComments: collection(db, 'supervisor_comments'),
-    paymentEntries: collection(db, 'payment_entries'),
-    commercialNotes: collection(db, 'commercial_notes'),
-    billingRequests: collection(db, 'billing_requests'),
-    socialMediaRequests: collection(db, 'social_media_requests'),
-    webNotes: collection(db, 'web_notes'),
-    pipelineInteractions: collection(db, 'pipeline_interactions'),
-};
 
 const cache: { [key: string]: { data: any; timestamp: number } } = {};
 const pendingReads: { [key: string]: Promise<any> | undefined } = {};
@@ -61,18 +36,6 @@ const setInCache = (key: string, data: any) => {
     }
 };
 
-const getDocsPreferCache = async (source: any): Promise<any> => {
-    try {
-        const cachedSnapshot = await getDocsFromCache(source);
-        if (cachedSnapshot.empty && cachedSnapshot.metadata?.fromCache) {
-            return await getDocs(source);
-        }
-        return cachedSnapshot;
-    } catch {
-        return getDocs(source);
-    }
-};
-
 const getCachedOrLoad = async <T>(key: string, loader: () => Promise<T>): Promise<T> => {
     const cached = getFromCache(key);
     if (cached) return cached as T;
@@ -90,10 +53,14 @@ const getCachedOrLoad = async <T>(key: string, loader: () => Promise<T>): Promis
     return pendingReads[key] as Promise<T>;
 };
 
+const isTimestampLike = (value: unknown): value is { toDate: () => Date } => {
+    return !!value && typeof (value as { toDate?: unknown }).toDate === 'function';
+};
+
 const timestampToISO = (value: any): string | undefined => {
     if (!value) return undefined;
     if (typeof value === 'string') return value;
-    if (value instanceof Timestamp) return value.toDate().toISOString();
+    if (isTimestampLike(value)) return value.toDate().toISOString();
     return undefined;
 };
 
@@ -783,38 +750,8 @@ export const getDashboardInvoices = async (): Promise<Invoice[]> => {
     const cachedData = getFromCache('dashboard_invoices');
     if (cachedData) return cachedData;
 
-    // 🟢 Solo traemos facturas de los últimos 13 meses para el gráfico, ahorrando miles de lecturas.
-    const thirteenMonthsAgo = new Date();
-    thirteenMonthsAgo.setMonth(thirteenMonthsAgo.getMonth() - 13);
-    const dateStr = thirteenMonthsAgo.toISOString();
-
-    const q = query(
-        collections.invoices, 
-        where("dateGenerated", ">=", dateStr), 
-        orderBy("dateGenerated", "desc")
-    );
-    const snapshot = await getDocsPreferCache(q);
-    
-    const invoices = snapshot.docs.map(doc => {
-        const data = doc.data() as any;
-        const validDate = data.date && typeof data.date === 'string' ? parseDateWithTimezone(data.date) : null;
-        const validDatePaid = data.datePaid && typeof data.datePaid === 'string' ? parseDateWithTimezone(data.datePaid) : null;
-
-        return {
-            id: doc.id,
-            ...data,
-            amount: normalizeInvoiceAmount(data.amount),
-            date: validDate ? format(validDate, 'yyyy-MM-dd') : undefined,
-            dateGenerated: data.dateGenerated instanceof Timestamp ? data.dateGenerated.toDate().toISOString() : data.dateGenerated,
-            datePaid: validDatePaid ? format(validDatePaid, 'yyyy-MM-dd') : undefined,
-            isCreditNote: Boolean(data.isCreditNote),
-            periodStart: data.periodStart,
-            periodEnd: data.periodEnd,
-            orderDate: data.orderDate,
-            orderNumber: data.orderNumber,
-        } as Invoice;
-    });
-
+    const { getDashboardInvoices } = await import('@/lib/api/invoices');
+    const invoices = await getDashboardInvoices();
     setInCache('dashboard_invoices', invoices);
     return invoices;
 };
@@ -823,64 +760,26 @@ export const getDashboardTasks = async (): Promise<ClientActivity[]> => {
     const cachedData = getFromCache('dashboard_tasks');
     if (cachedData) return cachedData;
 
-    // 🟢 ESTRATEGIA LIGERA: Traemos exclusivamente las que son tareas.
-    const q = query(
-        collections.clientActivities, 
-        where('isTask', '==', true), 
-        orderBy('timestamp', 'desc')
-    );
-    
-    const snapshot = await getDocsPreferCache(q);
-    const tasks = snapshot.docs.map(doc => {
-        const data = doc.data() as any;
-        return {
-            id: doc.id,
-            ...data,
-            timestamp: data.timestamp instanceof Timestamp ? data.timestamp.toDate().toISOString() : data.timestamp,
-            dueDate: data.dueDate instanceof Timestamp ? data.dueDate.toDate().toISOString() : data.dueDate,
-            completedAt: data.completedAt instanceof Timestamp ? data.completedAt.toDate().toISOString() : data.completedAt,
-        } as ClientActivity;
-    });
+    const { getDashboardTasks } = await import('@/lib/api/client-activities');
+    const tasks = await getDashboardTasks();
     setInCache('dashboard_tasks', tasks);
     return tasks;
 };
-
 export const getInvoicesPaginated = async (
-    lastVisibleDoc: QueryDocumentSnapshot | null = null, 
+    lastVisibleDoc: { id: string } | null = null,
     pageSize: number = 50
 ) => {
-    let q;
-    
-    if (lastVisibleDoc) {
-        q = query(
-            collections.invoices, 
-            orderBy("dateGenerated", "desc"), 
-            startAfter(lastVisibleDoc), 
-            limit(pageSize)
-        );
-    } else {
-        q = query(
-            collections.invoices, 
-            orderBy("dateGenerated", "desc"), 
-            limit(pageSize)
-        );
-    }
-
-    const snapshot = await getDocs(q);
-    
-    const invoices = snapshot.docs.map(doc => {
-        const data = doc.data() as Partial<Invoice>;
-        const validDate = data.date && typeof data.date === 'string' ? parseDateWithTimezone(data.date) : null;
-        const validDatePaid = data.datePaid && typeof data.datePaid === 'string' ? parseDateWithTimezone(data.datePaid) : null;
-        return { id: doc.id, ...data } as Invoice;
-    });
+    const invoices = await getInvoices();
+    const startIndex = lastVisibleDoc?.id
+        ? Math.max(0, invoices.findIndex(invoice => invoice.id === lastVisibleDoc.id) + 1)
+        : 0;
+    const page = invoices.slice(startIndex, startIndex + pageSize);
 
     return {
-        invoices,
-        lastVisible: snapshot.docs[snapshot.docs.length - 1] || null // Guardamos el último documento para la siguiente página
+        invoices: page,
+        lastVisible: null
     };
 };
-
 export const getInvoicesForOpportunity = async (opportunityId: string): Promise<Invoice[]> => {
     const cacheKey = `invoices_opportunity_${opportunityId}`;
     return getCachedOrLoad(cacheKey, async () => {
@@ -1289,7 +1188,7 @@ const mapOpportunityDoc = (doc: any): Opportunity => {
     const data = doc.data();
     const opp: Opportunity = { id: doc.id, ...data } as Opportunity;
 
-    const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
+    const convertTimestamp = (field: any) => isTimestampLike(field) ? field.toDate().toISOString() : field;
 
     opp.createdAt = convertTimestamp(data.createdAt);
 
@@ -1313,10 +1212,10 @@ const mapOpportunityDoc = (doc: any): Opportunity => {
         opp.manualUpdateHistory = data.manualUpdateHistory.map((entry: any) => convertTimestamp(entry));
     }
 
-    if (data.closeDate && !(data.closeDate instanceof Timestamp)) {
+    if (data.closeDate && !isTimestampLike(data.closeDate)) {
         const validDate = parseDateWithTimezone(data.closeDate);
         opp.closeDate = validDate ? validDate.toISOString().split('T')[0] : '';
-    } else if (data.closeDate instanceof Timestamp) {
+    } else if (isTimestampLike(data.closeDate)) {
         opp.closeDate = data.closeDate.toDate().toISOString().split('T')[0];
     }
     
@@ -1470,7 +1369,7 @@ export const deleteOpportunity = async (
 };
 const convertActivityLogDoc = (doc: any): ActivityLog => {
     const data = doc.data();
-    if (data.timestamp instanceof Timestamp) {
+    if (isTimestampLike(data.timestamp)) {
         data.timestamp = data.timestamp.toDate().toISOString();
     }
     return { id: doc.id, ...data } as ActivityLog;
@@ -1502,14 +1401,14 @@ const convertActivityDoc = (doc: any): ClientActivity => {
     const activity: ClientActivity = {
         id: doc.id,
         ...data,
-        timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
+        timestamp: isTimestampLike(data.timestamp) ? data.timestamp.toDate().toISOString() : data.timestamp,
     };
 
-    if (data.dueDate && data.dueDate instanceof Timestamp) {
+    if (isTimestampLike(data.dueDate)) {
         activity.dueDate = data.dueDate.toDate().toISOString();
     }
     
-    if (data.completedAt && data.completedAt instanceof Timestamp) {
+    if (isTimestampLike(data.completedAt)) {
         activity.completedAt = data.completedAt.toDate().toISOString();
     }
 
@@ -1903,14 +1802,9 @@ export const getConveniosCanje = async (): Promise<ConvenioCanje[]> => {
     return convenios;
 };
 export const getOpportunityById = async (id: string): Promise<Opportunity | null> => {
-    const docRef = doc(db, 'opportunities', id);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-        return mapOpportunityDoc(snap); // Usamos la misma función de mapeo interno
-    }
-    return null;
+    const { getOpportunityById } = await import('@/lib/api/opportunities');
+    return getOpportunityById(id);
 };
-
 export const updateConvenioCanje = async (
     id: string, 
     data: Partial<Omit<ConvenioCanje, 'id' | 'createdAt'>>, 

@@ -30,7 +30,6 @@ import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 import { ClientCombobox } from '@/components/clients/client-combobox';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { arrayUnion } from 'firebase/firestore';
 import { advertisingOrderSupportsExecution } from '@/lib/advertising-order-utils';
 
 export default function NewCommercialNotePage() {
@@ -655,11 +654,7 @@ export default function NewCommercialNotePage() {
                 noteDataRaw.orderTitle = orderTitle;
             }
 
-            if (editModeId) {
-                noteDataRaw.approvalHistory = arrayUnion(historyItem) as any;
-            } else {
-                noteDataRaw.approvalHistory = [historyItem];
-            }
+            noteDataRaw.approvalHistory = [historyItem];
 
             const noteData = Object.keys(noteDataRaw).reduce((acc, key) => {
                 const value = noteDataRaw[key];

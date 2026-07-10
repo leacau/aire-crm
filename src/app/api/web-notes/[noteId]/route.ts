@@ -38,9 +38,20 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const originalData = mapWebNote(snap.id, snap.data());
-  await docRef.update({
+  const updateData = {
     ...cleanWebNotePayload(data as Record<string, unknown>),
     updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  if (Array.isArray(data.approvalHistory)) {
+    delete (updateData as Record<string, unknown>).approvalHistory;
+    if (data.approvalHistory.length > 0) {
+      (updateData as Record<string, unknown>).approvalHistory = FieldValue.arrayUnion(...data.approvalHistory);
+    }
+  }
+
+  await docRef.update({
+    ...updateData,
   });
 
   const requesterName = getRequesterName(requester);

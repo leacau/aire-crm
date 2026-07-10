@@ -411,21 +411,31 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `firebase-service.ts` queda sin escrituras directas detectables por `addDoc`, `updateDoc`, `deleteDoc`, `setDoc`, `writeBatch` o `runTransaction`.
 - `firestore.rules` sigue intacto.
 
+## Cuadragesimo quinto corte aplicado
+
+- Se agregaron filtros API para datos de dashboard en `/api/invoices?dashboard=true` y `/api/client-activities?tasks=true`.
+- Se agrego `GET /api/opportunities/[opportunityId]` para cargar una oportunidad individual desde servidor.
+- `getDashboardInvoices`, `getDashboardTasks`, `getOpportunityById` y el helper legacy `getInvoicesPaginated` pasan por API mediante el puente temporal.
+- Se quitaron colecciones locales, helpers de lectura directa e imports del SDK de Firestore desde `firebase-service.ts`.
+- Las pantallas de Nota Comercial, Nota Web y Redes dejan de usar `arrayUnion` del SDK cliente; el historial de aprobacion se agrega desde las APIs de actualizacion.
+- En `src`, la unica importacion restante de `firebase/firestore` es la inicializacion de Firestore en `src/lib/firebase.ts`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
-1. Clientes avanzados
-   - Revisar si conviene mover tareas de mantenimiento como limpieza de actividades completadas antiguas a una ruta programada.
-   - Actualizar `/clients` y componentes relacionados para importar desde `src/lib/api/*` directamente cuando el puente este estable.
+1. Imports del front
+   - Ir reemplazando importaciones desde `@/lib/firebase-service` por modulos `@/lib/api/*` en paginas y componentes.
+   - Mantener el puente solo como compatibilidad temporal mientras se estabiliza la nueva version.
 
-2. Oportunidades
-   - Migrar mutaciones: `createOpportunity`, `updateOpportunity`, `deleteOpportunity`.
-   - Centralizar reglas de permisos por rol/area en servidor.
+2. Permisos y validaciones
+   - Endurecer validaciones por rol/area dentro de rutas API criticas.
+   - Agregar pruebas de permisos para operaciones financieras, comerciales y de aprobacion.
 
-3. Facturacion y cobranzas
-   - Mover operaciones masivas y cambios de estado a endpoints transaccionales.
-   - Evitar que el front tenga acceso directo a colecciones financieras.
+3. Operaciones programadas
+   - Evaluar si limpieza de actividades y tareas de mantenimiento deben quedar como rutas protegidas o jobs programados.
+   - Documentar variables de entorno necesarias para Netlify/Vercel sin valores reales.
 
 4. Limpieza final
-   - Reducir `firebase-service.ts` hasta que quede solo compatibilidad temporal o eliminarlo.
+   - Reducir o eliminar `firebase-service.ts` cuando el front consuma directamente las APIs.
    - Revisar reglas de Firestore al final de la migracion, cuando la nueva version este lista para reemplazar a la actual.
    - Convertir paginas que ya no necesitan estado local complejo en server components cuando tenga sentido.

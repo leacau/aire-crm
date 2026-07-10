@@ -39,6 +39,13 @@ export async function PATCH(request: Request, context: RouteContext) {
     updatedAt: FieldValue.serverTimestamp(),
   };
 
+  if (Array.isArray(noteData.approvalHistory)) {
+    delete (updateData as Record<string, unknown>).approvalHistory;
+    if (noteData.approvalHistory.length > 0) {
+      (updateData as Record<string, unknown>).approvalHistory = FieldValue.arrayUnion(...noteData.approvalHistory);
+    }
+  }
+
   await docRef.update(updateData);
 
   const requesterName = getRequesterName(requester);

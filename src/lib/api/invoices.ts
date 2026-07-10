@@ -8,6 +8,13 @@ export async function getInvoices(): Promise<Invoice[]> {
   return result.invoices;
 }
 
+export async function getDashboardInvoices(): Promise<Invoice[]> {
+  const result = await apiRequest<{ invoices: Invoice[] }>('/api/invoices?dashboard=true', {
+    method: 'GET',
+  });
+  return result.invoices;
+}
+
 export async function getInvoicesForOpportunity(opportunityId: string): Promise<Invoice[]> {
   const params = new URLSearchParams({ opportunityId });
   const result = await apiRequest<{ invoices: Invoice[] }>(`/api/invoices?${params}`, { method: 'GET' });

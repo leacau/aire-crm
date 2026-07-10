@@ -31,7 +31,6 @@ const SocialMediaPdf = dynamic(
     { ssr: false }
 );
 
-import { arrayUnion } from 'firebase/firestore';
 import { format } from 'date-fns';
 
 // 🟢 AGREGAMOS orderId A LAS PROPS
@@ -333,11 +332,7 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
                 dataToSaveRaw.carouselSlides = carouselSlides.filter(s => s.text.trim() || s.link.trim());
             }
 
-            if (editId) {
-                dataToSaveRaw.approvalHistory = arrayUnion(historyItem) as any;
-            } else {
-                dataToSaveRaw.approvalHistory = [historyItem];
-            }
+            dataToSaveRaw.approvalHistory = [historyItem];
 
             const dataToSave = Object.keys(dataToSaveRaw).reduce((acc, key) => {
                 const val = (dataToSaveRaw as any)[key];

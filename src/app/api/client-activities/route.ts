@@ -47,10 +47,15 @@ export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const snapshot = await dbAdmin
-    .collection('client-activities')
-    .orderBy('timestamp', 'desc')
-    .get();
+  const { searchParams } = new URL(request.url);
+  const tasksOnly = searchParams.get('tasks') === 'true';
+  let query: FirebaseFirestore.Query = dbAdmin.collection('client-activities');
+
+  if (tasksOnly) {
+    query = query.where('isTask', '==', true);
+  }
+
+  const snapshot = await query.orderBy('timestamp', 'desc').get();
 
   const activities = snapshot.docs.map(doc => mapClientActivity(doc.id, doc.data()));
   return NextResponse.json({ activities });

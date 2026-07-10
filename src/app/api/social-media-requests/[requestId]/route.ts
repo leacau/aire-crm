@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
@@ -37,7 +38,16 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const originalData = mapSocialMediaRequest(snap.id, snap.data());
-  await docRef.update(buildSocialMediaUpdatePayload(data as Record<string, unknown>));
+  const updateData = buildSocialMediaUpdatePayload(data as Record<string, unknown>);
+
+  if (Array.isArray(data.approvalHistory)) {
+    delete updateData.approvalHistory;
+    if (data.approvalHistory.length > 0) {
+      updateData.approvalHistory = FieldValue.arrayUnion(...data.approvalHistory);
+    }
+  }
+
+  await docRef.update(updateData);
 
   const requesterName = getRequesterName(requester);
   await logServerActivity({

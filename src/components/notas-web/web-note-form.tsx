@@ -25,7 +25,6 @@ import { ClientCombobox } from '@/components/clients/client-combobox';
 import { advertisingOrderSupportsExecution } from '@/lib/advertising-order-utils';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 
-import { arrayUnion } from 'firebase/firestore';
 import { format as formatDate } from 'date-fns';
 
 export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, cloneId?: string, orderId?: string }) {
@@ -236,11 +235,7 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
                 dataToSaveRaw.orderTitle = orderTitle;
             }
 
-            if (editId) {
-                dataToSaveRaw.approvalHistory = arrayUnion(historyItem) as any;
-            } else {
-                dataToSaveRaw.approvalHistory = [historyItem];
-            }
+            dataToSaveRaw.approvalHistory = [historyItem];
 
             const dataToSave = Object.keys(dataToSaveRaw).reduce((acc, key) => {
                 const val = (dataToSaveRaw as any)[key];

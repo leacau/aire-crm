@@ -59,6 +59,18 @@ function validateOpportunityDates(
   return { nextStartDate, nextEndDate };
 }
 
+export async function GET(request: Request, context: RouteContext) {
+  const requester = await requireServerUser(request);
+  if (isServerResponse(requester)) return requester;
+
+  const { opportunityId } = await context.params;
+  const snap = await dbAdmin.collection('opportunities').doc(opportunityId).get();
+
+  return NextResponse.json({
+    opportunity: snap.exists ? serializeDocument<Opportunity>(snap.id, snap.data()) : null,
+  });
+}
+
 function buildOpportunityUpdatePayload(
   data: Partial<Omit<Opportunity, 'id'>>,
   originalData: Opportunity,
