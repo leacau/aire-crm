@@ -2130,7 +2130,7 @@ export const updateBillingRequestStatus = async (
     metadata?: { invoiceNumber?: string; emailPayload?: { accessToken: string; loggedUser: string } }
 ): Promise<void> => {
     const { updateBillingRequestStatus } = await import('@/lib/api/billing-requests');
-    await updateBillingRequestStatus(requestId, newStatus, metadata?.invoiceNumber);
+    await updateBillingRequestStatus(requestId, newStatus, { invoiceNumber: metadata?.invoiceNumber });
     invalidateCache('billing_requests_metadata');
     // 2. Ejecución de notificaciones protegidas por correo
     if (metadata?.emailPayload?.accessToken) {

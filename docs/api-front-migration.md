@@ -528,6 +528,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 4 a 2 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Quincuagesimo noveno corte aplicado
+
+- Billing Requests deja de importar `updateBillingRequestStatus` desde `firebase-service.ts`.
+- El modulo `src/lib/api/billing-requests.ts` conserva el cambio de estado por API y absorbe el despacho de correos contables con token Google.
+- El puente temporal mantiene compatibilidad sin duplicar correos si algun flujo legacy lo llama.
+- Los imports a `firebase-service.ts` bajan de 2 a 1 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
