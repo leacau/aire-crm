@@ -403,6 +403,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El borrado de convenios elimina desde servidor la oportunidad asociada, ordenes de publicidad e invoices colgantes.
 - `firestore.rules` sigue intacto.
 
+## Cuadragesimo cuarto corte aplicado
+
+- Se agrego `/api/monthly-billing-stats` para actualizar estadisticas mensuales desde servidor.
+- Se agrego `/api/client-activities/cleanup-old` para limpiar actividades completadas antiguas desde servidor.
+- `updateMonthlyBillingStat` y `cleanupOldActivities` pasan por API mediante el puente temporal.
+- `firebase-service.ts` queda sin escrituras directas detectables por `addDoc`, `updateDoc`, `deleteDoc`, `setDoc`, `writeBatch` o `runTransaction`.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados

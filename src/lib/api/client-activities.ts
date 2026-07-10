@@ -42,3 +42,9 @@ export async function rescheduleActivityTask(activityId: string, newDate: Date):
     body: { dueDate: newDate.toISOString() },
   });
 }
+
+export async function cleanupOldActivities(): Promise<{ deleted: number }> {
+  return apiRequest<{ deleted: number }>('/api/client-activities/cleanup-old', {
+    method: 'POST',
+  });
+}

@@ -1712,18 +1712,9 @@ export const updateMonthlyBillingStat = async (
     amountToAdd: number, 
     advisorId: string
 ) => {
-    // Creamos una referencia al documento de estadísticas de ese mes específico
-    const statsRef = doc(db, 'estadisticas_mensuales', monthKey);
-    
-    // Usamos merge: true e increment() para sumar el valor al total existente
-    // Si el documento no existe, Firebase lo crea automáticamente.
-    await setDoc(statsRef, {
-        totalGeneral: increment(amountToAdd),
-        [`total_asesor_${advisorId}`]: increment(amountToAdd),
-        updatedAt: serverTimestamp()
-    }, { merge: true });
+    const { updateMonthlyBillingStat } = await import('@/lib/api/monthly-billing-stats');
+    await updateMonthlyBillingStat(monthKey, amountToAdd, advisorId);
 };
-
 export const getAdvertisingOrdersByOpportunity = async (opportunityId: string): Promise<AdvertisingOrder[]> => {
     try {
         const { getAdvertisingOrdersByOpportunity } = await import('@/lib/api/advertising-orders');
@@ -1975,41 +1966,21 @@ export const autoUpdateCoachingSession = async (
     invalidateCache(`coaching_active_index_${advisorId}`);
 };
 export const cleanupOldActivities = async (): Promise<void> => {
-    // Ejecutar solo 1 vez por día por navegador para no saturar
     const lastCleanup = typeof window !== 'undefined' ? localStorage.getItem('last_activity_cleanup') : null;
     const today = new Date().toISOString().split('T')[0];
     if (lastCleanup === today) return;
 
     try {
-        const sixtyDaysAgo = new Date();
-        sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-
-        const q = query(
-            collections.clientActivities,
-            where('completed', '==', true),
-            where('completedAt', '<', sixtyDaysAgo.toISOString()),
-            limit(100) // Borramos de a tandas pequeñas para no agotar escrituras
-        );
-
-        const snapshot = await getDocs(q);
-        if (snapshot.empty) {
-            if (typeof window !== 'undefined') localStorage.setItem('last_activity_cleanup', today);
-            return;
-        }
-
-        const batch = writeBatch(db);
-        snapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-        await batch.commit();
-        
+        const { cleanupOldActivities } = await import('@/lib/api/client-activities');
+        const result = await cleanupOldActivities();
         if (typeof window !== 'undefined') localStorage.setItem('last_activity_cleanup', today);
-        console.log(`[Mantenimiento] Se limpiaron ${snapshot.docs.length} actividades antiguas.`);
+        if (result.deleted > 0) {
+            console.log(`[Mantenimiento] Se limpiaron ${result.deleted} actividades antiguas.`);
+        }
     } catch (e) {
         console.error("Error during cleanup of old activities:", e);
     }
 };
-
 // ============================================================================
 // --- WEB NOTES / GACETILLAS FUNCTIONS ---
 // ============================================================================
