@@ -558,6 +558,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se elimina el wrapper legacy `src/lib/activity-logger.ts`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Sexagesimo tercer corte aplicado
+
+- Se elimina el listener global `FirebaseErrorListener`, que ya no tenia emisores activos tras retirar `firebase-service.ts`.
+- Se eliminan `src/firebase/error-emitter.ts` y `src/firebase/errors.ts`.
+- El layout queda sin componentes de diagnostico legacy asociados a reglas cliente de Firestore.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
