@@ -30,7 +30,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { es } from 'date-fns/locale';
-import { logActivity } from '@/lib/activity-logger';
+import { logActivity } from '@/lib/api/activities';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { AlertCircle, CheckCircle2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';

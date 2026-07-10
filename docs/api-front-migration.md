@@ -551,6 +551,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La separacion API/front queda sin dependencias directas del servicio cliente legacy.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Sexagesimo segundo corte aplicado
+
+- El registro de actividad del modulo Contable deja de importar `src/lib/activity-logger.ts`.
+- `logActivity` queda consolidado en `src/lib/api/activities.ts`.
+- Se elimina el wrapper legacy `src/lib/activity-logger.ts`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
