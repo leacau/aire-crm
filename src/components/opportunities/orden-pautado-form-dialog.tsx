@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { Calendar } from '../ui/calendar';
 import type { DateRange } from 'react-day-picker';
-import { getPrograms } from '@/lib/firebase-service';
+import { getPrograms } from '@/lib/api/programs';
 
 interface OrdenPautadoFormDialogProps {
   isOpen: boolean;

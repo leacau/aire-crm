@@ -14,9 +14,9 @@ import {
   deleteSupervisorCommentThread,
   getSupervisorCommentsForEntity,
   replyToSupervisorComment,
-  getUserById,
   markSupervisorCommentThreadSeen,
-} from '@/lib/firebase-service';
+} from '@/lib/api/supervisor-comments';
+import { getUserById } from '@/lib/api/users';
 import { sendEmail } from '@/lib/google-gmail-service';
 import type { SupervisorComment, User } from '@/lib/types';
 
@@ -72,7 +72,7 @@ export function CommentThread({
       setComments(results);
       if (currentUser?.id) {
         await Promise.all(
-          results.map(comment => markSupervisorCommentThreadSeen(comment.id, currentUser.id))
+          results.map(comment => markSupervisorCommentThreadSeen(comment.id))
         );
         onMarkedSeen?.();
       }
@@ -174,7 +174,7 @@ export function CommentThread({
     if (!confirmed) return;
     setDeletingId(comment.id);
     try {
-      await deleteSupervisorCommentThread(comment.id, entityType, entityId, ownerId, comment.recipientId);
+      await deleteSupervisorCommentThread(comment.id);
       setComments(prev => prev.filter(c => c.id !== comment.id));
     } catch (error) {
       console.error('Error deleting comment thread', error);

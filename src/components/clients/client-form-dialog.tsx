@@ -18,7 +18,8 @@ import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/
 import type { Client, TipoEntidad, CondicionIVA, Agency } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
-import { getAgencies, createClient } from '@/lib/firebase-service';
+import { getAgencies } from '@/lib/api/agencies';
+import { createClient } from '@/lib/api/clients';
 import { Checkbox } from '../ui/checkbox';
 import { useAuth } from '@/hooks/use-auth';
 import { hasManagementPrivileges } from '@/lib/role-utils';

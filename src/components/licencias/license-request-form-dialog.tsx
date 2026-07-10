@@ -13,13 +13,32 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format, addDays, parseISO } from 'date-fns';
+import { format, addDays, isSaturday, isSunday, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, Loader2, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { User, VacationRequest } from '@/lib/types';
-import { getSystemHolidays, calculateBusinessDays } from '@/lib/firebase-service';
+import { getSystemHolidays } from '@/lib/api/system';
+
+const calculateBusinessDays = (startDateStr: string, returnDateStr: string, holidays: string[]): number => {
+  const start = parseISO(startDateStr);
+  const end = parseISO(returnDateStr);
+  const holidaySet = new Set(holidays);
+  let count = 0;
+  let current = start;
+
+  while (current < end) {
+    const dateStr = format(current, 'yyyy-MM-dd');
+    if (!isSaturday(current) && !isSunday(current) && !holidaySet.has(dateStr)) {
+      count++;
+    }
+    current = new Date(current);
+    current.setDate(current.getDate() + 1);
+  }
+
+  return count;
+};
 
 interface LicenseRequestFormDialogProps {
   isOpen: boolean;

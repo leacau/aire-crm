@@ -13,7 +13,9 @@ import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
-import { deleteWebNote, getBillingRequestsByOrder, getClient, getWebNotesByOrderId } from "@/lib/firebase-service";
+import { getBillingRequestsByOrder } from "@/lib/api/billing-requests";
+import { getClient } from "@/lib/api/clients";
+import { deleteWebNote, getWebNotesByOrderId } from "@/lib/api/web-notes";
 import { Badge } from "@/components/ui/badge";
 
 export function AdvertisingOrderViewer({ order, programs = [] }: { order: AdvertisingOrder, programs?: Program[] }) {
@@ -286,7 +288,7 @@ export function AdvertisingOrderViewer({ order, programs = [] }: { order: Advert
       if (!window.confirm("¿Seguro que deseas eliminar permanentemente esta Nota Web / Gacetilla?")) return;
       try {
           if (!userInfo) return;
-          await deleteWebNote(noteId, userInfo.id, userInfo.name);
+          await deleteWebNote(noteId);
           setLinkedWebNotes(prev => prev.filter(n => n.id !== noteId));
           toast({ title: "Nota Web eliminada correctamente." });
       } catch (e) {

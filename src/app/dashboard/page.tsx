@@ -25,17 +25,15 @@ import {
 } from 'lucide-react';
 import type { Opportunity, Client, ClientActivity, User, Invoice, PaymentEntry } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
+import { getAgencies } from '@/lib/api/agencies';
+import { cleanupOldActivities, getDashboardTasks, updateClientActivity } from '@/lib/api/client-activities';
+import { getClients } from '@/lib/api/clients';
+import { getDashboardInvoices } from '@/lib/api/invoices';
+import { getOpportunities } from '@/lib/api/opportunities';
+import { getPendingPaymentEntries } from '@/lib/api/payments';
+import { getAllUsers } from '@/lib/api/users';
 import {
-  getOpportunities,
-  getDashboardTasks,
-  getClients,
-  updateClientActivity,
-  getAllUsers,
-  getDashboardInvoices,
-  getPendingPaymentEntries,
   updateOpportunity,
-  getAgencies, 
-  cleanupOldActivities,
   getReportDataForAdvisors // 🟢 IMPORTACIÓN NUEVA
 } from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';

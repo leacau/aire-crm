@@ -439,6 +439,15 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 70 a 34 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Cuadragesimo octavo corte aplicado
+
+- Se migraron Pipeline, Data Cleanup, Canjes, Tango Mapping, Approvals, Objectives, Publicidad listado/viewer, Clientes listado/formulario e Importacion a clientes API directos cuando no habia efectos secundarios pendientes.
+- Se migraron Licencias a `api/vacation-requests` y `api/users`; el calculo de dias habiles queda local al formulario y los feriados salen de `api/system`.
+- Se migraron lecturas/acciones seguras de Prospects a `api/prospects`, `api/client-activities`, `api/system` y `api/users`; create/update/delete siguen en puente por actualizacion automatica de coaching.
+- Dashboard importa directo desde APIs para usuarios, clientes, agencias, tareas, facturas y pagos; conserva el puente para el agregador de reportes y update de oportunidad.
+- Los imports a `firebase-service.ts` bajan de 34 a 16 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

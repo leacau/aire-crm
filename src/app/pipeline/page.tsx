@@ -10,7 +10,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { getPipelineInteractions, createPipelineInteraction, deletePipelineInteraction, bulkCreatePipelineInteractions } from '@/lib/firebase-service';
+import {
+    bulkCreatePipelineInteractions,
+    createPipelineInteraction,
+    deletePipelineInteraction,
+    getPipelineInteractions,
+} from '@/lib/api/pipeline-interactions';
 import { PipelineInteraction } from '@/lib/types';
 import { format, parseISO } from 'date-fns';
 import { Plus, Trash2, Calculator, Upload } from 'lucide-react';
@@ -109,7 +114,7 @@ export default function PipelinePage() {
                 observaciones: String(row['Observaciones'] || row['observaciones'] || '')
             }));
 
-            await bulkCreatePipelineInteractions(mappedData, userInfo!.id, userInfo!.name);
+            await bulkCreatePipelineInteractions(mappedData);
             toast({ title: `Se importaron ${mappedData.length} registros con éxito.` });
             
             loadData(); // Recargamos para ver los cambios
@@ -322,7 +327,7 @@ function QuickAddForm({ onSuccess }: { onSuccess: (item: PipelineInteraction) =>
         if (!userInfo || !formData.empresa) return;
         setSaving(true);
         try {
-            const id = await createPipelineInteraction(formData as any, userInfo.id, userInfo.name);
+            const id = await createPipelineInteraction(formData as any);
             toast({ title: 'Interacción guardada' });
             onSuccess({ id, ...formData, advisorId: userInfo.id, advisorName: userInfo.name } as PipelineInteraction);
             setFormData({

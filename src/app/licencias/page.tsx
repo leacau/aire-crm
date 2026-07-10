@@ -6,16 +6,16 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { User, VacationRequest } from '@/lib/types';
-import { 
-    getAllUsers, 
-    getVacationRequests, 
-    createVacationRequest, 
-    deleteVacationRequest, 
-    approveVacationRequest, 
-    adjustVacationDays, // CAMBIADO de addVacationDays a adjustVacationDays
+import { getAllUsers } from '@/lib/api/users';
+import {
+    adjustVacationDays,
+    annulVacationRequest,
+    approveVacationRequest,
+    createVacationRequest,
+    deleteVacationRequest,
+    getVacationRequests,
     updateVacationRequest,
-    annulVacationRequest // Importado para anulación
-} from '@/lib/firebase-service';
+} from '@/lib/api/vacation-requests';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle } from 'lucide-react';
 import { LicensesTable } from '@/components/licencias/licenses-table';

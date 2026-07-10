@@ -9,7 +9,9 @@ import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { ClientFormDialog } from '@/components/clients/client-form-dialog';
 import type { Client, Opportunity, User } from '@/lib/types';
-import { getClients, deleteClient, getAllUsers, updateClient, bulkDeleteClients, bulkUpdateClients, getAllOpportunities, getOpportunitiesForUser } from '@/lib/firebase-service';
+import { bulkDeleteClients, bulkUpdateClients, deleteClient, getClients, updateClient } from '@/lib/api/clients';
+import { getAllOpportunities, getOpportunitiesForUser } from '@/lib/api/opportunities';
+import { getAllUsers } from '@/lib/api/users';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -399,7 +401,7 @@ export default function ClientsPage() {
 
     setIsBulkDeleting(true);
     try {
-        await bulkDeleteClients(idsToDelete, userInfo.id, userInfo.name);
+        await bulkDeleteClients(idsToDelete);
         toast({ title: `${idsToDelete.length} cliente(s) eliminado(s)` });
         await fetchData();
         setRowSelection({}); 
@@ -439,7 +441,7 @@ export default function ClientsPage() {
     }));
 
     try {
-      await bulkUpdateClients(updates, userInfo.id, userInfo.name);
+      await bulkUpdateClients(updates);
       toast({ title: "Clientes Reasignados", description: `${clientsToUpdate.length} cliente(s) han sido asignado(s) a ${newOwnerName}.`});
       fetchData();
       setRowSelection({});
@@ -477,7 +479,7 @@ export default function ClientsPage() {
     if (!userInfo) return;
     const needsAttention = !client.needsAttention;
     try {
-      await updateClient(client.id, { needsAttention }, userInfo.id, userInfo.name);
+      await updateClient(client.id, { needsAttention });
       toast({
         title: needsAttention ? "Alerta Activada" : "Alerta Desactivada",
         description: `El cliente ${client.denominacion} ha sido ${needsAttention ? 'marcado para' : 'desmarcado de'} atención.`

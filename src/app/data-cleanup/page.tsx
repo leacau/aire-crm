@@ -7,7 +7,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { getClients, mergeClients } from '@/lib/firebase-service';
+import { getClients, mergeClients } from '@/lib/api/clients';
 import { Client } from '@/lib/types';
 import { ArrowRight, AlertTriangle, ShieldAlert, ArrowLeftRight, Wand2, Search } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -179,7 +179,7 @@ export default function DataCleanupPage() {
 
         setMerging(true);
         try {
-            await mergeClients(targetClient.id, sourceClient.id, userInfo!.id, userInfo!.name);
+            await mergeClients(targetClient.id, sourceClient.id);
             toast({ title: '¡Fusión Exitosa!', description: 'Todos los datos fueron migrados y el duplicado fue eliminado.' });
             
             setTargetClient(null);

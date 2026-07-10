@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { deleteAdvertisingOrder, getRecentAdvertisingOrders, getClients } from '@/lib/firebase-service';
+import { deleteAdvertisingOrder, getRecentAdvertisingOrders } from '@/lib/api/advertising-orders';
+import { getClients } from '@/lib/api/clients';
 import type { AdvertisingOrder } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -66,8 +67,7 @@ export default function AdvertisingOrdersListPage() {
         if (!userInfo) return;
         if (!window.confirm("¿Estás completamente seguro de eliminar esta Orden de Publicidad de manera permanente? Esta acción no se puede deshacer.")) return;
         try {
-            const order = orders.find(item => item.id === id);
-            await deleteAdvertisingOrder(id, userInfo.id, userInfo.name, order?.clientName || 'Cliente');
+            await deleteAdvertisingOrder(id);
             setOrders(prev => prev.filter(o => o.id !== id));
             toast({ title: "Orden de publicidad eliminada correctamente." });
         } catch (error) {

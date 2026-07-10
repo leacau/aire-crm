@@ -8,7 +8,11 @@ import { MoreHorizontal, PlusCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Canje, Client, User } from '@/lib/types';
-import { createCanje, deleteCanje, getAllUsers, getCanjes, getClients, getWorkflowAssignments, migrateLegacyConveniosToCanjes, updateCanje } from '@/lib/firebase-service';
+import { createCanje, deleteCanje, getCanjes, updateCanje } from '@/lib/api/canjes';
+import { getClients } from '@/lib/api/clients';
+import { migrateLegacyConveniosToCanjes } from '@/lib/api/convenios';
+import { getWorkflowAssignments } from '@/lib/api/system';
+import { getAllUsers } from '@/lib/api/users';
 import { useToast } from '@/hooks/use-toast';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
@@ -142,12 +146,12 @@ function CanjesPageComponent() {
     if (!userInfo) return;
     try {
       if (selectedNeed) {
-        await updateCanje(selectedNeed.id, needData, userInfo.id, userInfo.name);
+        await updateCanje(selectedNeed.id, needData);
         toast({ title: 'Necesidad actualizada' });
       } else {
         const accessToken = await ensureGoogleAccessToken();
         if (!accessToken) throw new Error('No se autorizó el envío de correo con Google.');
-        const needId = await createCanje(needData, userInfo.id, userInfo.name);
+        const needId = await createCanje(needData);
         try {
           await notifyNeedReceivers(needId, needData, accessToken);
           toast({ title: 'Necesidad creada', description: 'La notificación fue enviada a los receptores asignados.' });
@@ -169,7 +173,7 @@ function CanjesPageComponent() {
   const handleDeleteNeed = async () => {
     if (!needToDelete || !userInfo) return;
     try {
-      await deleteCanje(needToDelete.id, userInfo.id, userInfo.name);
+      await deleteCanje(needToDelete.id);
       toast({ title: 'Necesidad eliminada' });
       fetchData();
     } catch (error) {
@@ -184,7 +188,7 @@ function CanjesPageComponent() {
     if (!userInfo || !canManageAll) return;
     setMigrating(true);
     try {
-      const result = await migrateLegacyConveniosToCanjes(userInfo.id, userInfo.name);
+      const result = await migrateLegacyConveniosToCanjes();
       toast({ title: 'Integración finalizada', description: `${result.created} canjes incorporados; ${result.skipped} ya estaban integrados.` });
       await fetchData();
     } catch (error) {

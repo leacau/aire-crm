@@ -9,7 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { PlusCircle, Trash2, Save } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import type { Client, Opportunity, Invoice } from '@/lib/types';
-import { getClients, getAllOpportunities, createInvoice, createOpportunity, getInvoices } from '@/lib/firebase-service';
+import { getClients } from '@/lib/api/clients';
+import { createInvoice, getInvoices } from '@/lib/api/invoices';
+import { getAllOpportunities } from '@/lib/api/opportunities';
+import { createOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { useRouter } from 'next/navigation';
@@ -321,21 +324,16 @@ export default function InvoiceUploadPage() {
 
             batchNumbers.add(inputRaw);
 
-            await createInvoice(
-                {
-                    opportunityId: row.opportunityId,
-                    ...(canjeRelation.canjeId ? { canjeId: canjeRelation.canjeId } : {}),
-                    ...(canjeRelation.orderId ? { orderId: canjeRelation.orderId } : {}),
-                    invoiceNumber: inputRaw,
-                    amount: amountNum,
-                    date: row.date,
-                    status: 'Generada',
-                    dateGenerated: new Date().toISOString(),
-                },
-                userInfo.id,
-                userInfo.name,
-                client.ownerName
-            );
+            await createInvoice({
+                opportunityId: row.opportunityId,
+                ...(canjeRelation.canjeId ? { canjeId: canjeRelation.canjeId } : {}),
+                ...(canjeRelation.orderId ? { orderId: canjeRelation.orderId } : {}),
+                invoiceNumber: inputRaw,
+                amount: amountNum,
+                date: row.date,
+                status: 'Generada',
+                dateGenerated: new Date().toISOString(),
+            });
             
             setExistingInvoices(prev => [
               ...prev,

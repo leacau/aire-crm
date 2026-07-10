@@ -30,7 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ClientCombobox } from '@/components/clients/client-combobox';
-import { getAdvertisingOrdersByCanjeId, getInvoicesByCanjeId } from '@/lib/firebase-service';
+import { getAdvertisingOrdersByCanjeId, getInvoicesByCanjeId } from '@/lib/api/canjes';
 import { getAdvertisingOrderFinancialSummary } from '@/lib/advertising-order-utils';
 import type { AdvertisingOrder, Canje, CanjeEstado, CanjeModalidad, CanjeTipo, Client, Invoice, NecesidadResolucion, User } from '@/lib/types';
 import { canjeEstados, canjeModalidades, canjeTipos, necesidadResoluciones } from '@/lib/types';

@@ -7,19 +7,21 @@ import { PlusCircle, UserPlus, MoreHorizontal, Trash2, FolderX, Search, Activity
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Prospect, User, Client, ClientActivity } from '@/lib/types';
-import { 
-    getProspects, 
-    createProspect, 
-    updateProspect, 
-    deleteProspect, 
-    getAllUsers, 
-    getAllClientActivities, 
-    getOpportunityAlertsConfig, 
+import { getAllClientActivities } from '@/lib/api/client-activities';
+import {
+    approveProspectClaim,
+    claimProspect,
+    getProspects,
     recordProspectNotifications,
+    rejectProspectClaim,
+} from '@/lib/api/prospects';
+import { getOpportunityAlertsConfig } from '@/lib/api/system';
+import { getAllUsers } from '@/lib/api/users';
+import {
     autoUpdateCoachingSession,
-    claimProspect, 
-    approveProspectClaim, 
-    rejectProspectClaim
+    createProspect,
+    deleteProspect,
+    updateProspect,
 } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
@@ -233,7 +235,7 @@ export default function ProspectsPage() {
   const handleClaim = useCallback(async (prospect: Prospect) => {
       if (!userInfo) return;
       try {
-          await claimProspect(prospect, userInfo.id, userInfo.name);
+          await claimProspect(prospect.id);
           toast({ title: "Reclamo enviado", description: "Un gerente deberá aprobar tu solicitud." });
           fetchData();
       } catch (error) {
@@ -244,7 +246,7 @@ export default function ProspectsPage() {
   const handleApproveClaim = useCallback(async (prospect: Prospect) => {
       if (!userInfo) return;
       try {
-          await approveProspectClaim(prospect, userInfo.id, userInfo.name);
+          await approveProspectClaim(prospect.id);
           toast({ title: "Reclamo Aprobado", description: `Prospecto asignado a ${prospect.claimantName}` });
           fetchData();
       } catch (error) {
@@ -256,7 +258,7 @@ export default function ProspectsPage() {
   const handleRejectClaim = useCallback(async (prospect: Prospect) => {
       if (!userInfo) return;
       try {
-          await rejectProspectClaim(prospect, userInfo.id, userInfo.name);
+          await rejectProspectClaim(prospect.id);
           toast({ title: "Reclamo Rechazado" });
           fetchData();
       } catch (error) {

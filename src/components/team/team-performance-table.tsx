@@ -2,7 +2,11 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Spinner } from '@/components/ui/spinner';
-import { deleteUserAndReassignEntities, getAllOpportunities, getAllUsers, getClients, updateUserProfile, getProspects, getObjectiveVisibilityConfig, updateObjectiveVisibilityConfig, syncRegisteredUsersFromAuth } from '@/lib/firebase-service';
+import { getClients } from '@/lib/api/clients';
+import { getAllOpportunities } from '@/lib/api/opportunities';
+import { getProspects } from '@/lib/api/prospects';
+import { getObjectiveVisibilityConfig, updateObjectiveVisibilityConfig } from '@/lib/api/system';
+import { deleteUserAndReassignEntities, getAllUsers, syncRegisteredUsersFromAuth, updateUserProfile } from '@/lib/api/users';
 import type { Opportunity, User, Client, UserRole, Prospect, AreaType, ObjectiveVisibilityConfig, SellerCompanyConfig } from '@/lib/types';
 import { userRoles } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -159,7 +163,7 @@ export function TeamPerformanceTable() {
         activeMonthKey: visibilityMonth || undefined,
         visibleUntil: visibilityDeadline || undefined,
       };
-      await updateObjectiveVisibilityConfig(payload, userInfo.id, userInfo.name);
+      await updateObjectiveVisibilityConfig(payload);
       setObjectiveVisibility(payload);
       toast({ title: 'Visibilidad de objetivos actualizada' });
     } catch (error) {
@@ -176,7 +180,7 @@ export function TeamPerformanceTable() {
 
     setIsDeleting(true);
     try {
-        await deleteUserAndReassignEntities(userToDelete.id, userInfo.id, userInfo.name);
+        await deleteUserAndReassignEntities(userToDelete.id);
         toast({ title: "Usuario Eliminado", description: `${userToDelete.name} ha sido eliminado y sus clientes han sido desasignados.` });
         fetchData(); 
     } catch (error) {

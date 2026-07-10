@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { getAllUsers, getClients, undoClientTangoMapping, updateClientTangoMapping, updateUserProfile } from '@/lib/firebase-service';
+import { getClients, undoClientTangoMapping, updateClientTangoMapping } from '@/lib/api/clients';
+import { getAllUsers, updateUserProfile } from '@/lib/api/users';
 import type { Client, SellerCompanyConfig, User } from '@/lib/types';
 import { RefreshCcw, CheckCircle2, Save, Undo2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -323,7 +324,7 @@ export default function TangoMappingPage() {
     try {
       const updates = buildClientUpdates(match, company);
 
-      await updateClientTangoMapping(match.crmClient.id, updates, userInfo!.id, userInfo!.name, {
+      await updateClientTangoMapping(match.crmClient.id, updates, {
         markSyncedField: company.syncedField,
       });
 
@@ -352,7 +353,7 @@ export default function TangoMappingPage() {
       setSyncingId(`${company.key}-${match.crmClient.id}`);
       try {
         const updates = buildClientUpdates(match, company);
-        await updateClientTangoMapping(match.crmClient.id, updates, userInfo.id, userInfo.name, {
+        await updateClientTangoMapping(match.crmClient.id, updates, {
           markSyncedField: company.syncedField,
         });
         markMatchAsSynced(match, company, updates);
@@ -376,7 +377,7 @@ export default function TangoMappingPage() {
     if (!window.confirm(`Quitar el ID Tango ${company.shortLabel} de ${client.denominacion}?`)) return;
     setUndoingId(`${company.key}-${client.id}`);
     try {
-      await undoClientTangoMapping(client.id, company.crmIdField, company.syncedField, userInfo.id, userInfo.name);
+      await undoClientTangoMapping(client.id, company.crmIdField, company.syncedField);
       setCrmClients(previous => previous.map(item => (
         item.id === client.id
           ? { ...item, [company.crmIdField]: undefined, [company.syncedField]: undefined }
