@@ -479,6 +479,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 10 a 9 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Quincuagesimo tercer corte aplicado
+
+- App Canjes deja de importar desde `firebase-service.ts`.
+- El flujo movil de canjes consume APIs directas para clientes, programas, prospectos, oportunidades, convenios, canjes y ordenes de publicidad.
+- La edicion de ordenes conserva la firma con datos de usuario que aun exige `src/lib/api/advertising-orders`.
+- Los imports a `firebase-service.ts` bajan de 9 a 8 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

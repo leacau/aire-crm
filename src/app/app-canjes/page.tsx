@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { 
-    getClients, createClient, createOpportunity, saveConvenioCanje, createAdvertisingOrder, createCanje, updateCanje,
-    getPrograms, getProspects, getConveniosCanje, getOpportunityById, getAdvertisingOrdersByOpportunity, 
-    updateOpportunity, updateConvenioCanje, updateAdvertisingOrder, deleteConvenioCanje 
-} from '@/lib/firebase-service';
+import { createAdvertisingOrder, getAdvertisingOrdersByOpportunity, updateAdvertisingOrder } from '@/lib/api/advertising-orders';
+import { createCanje, updateCanje } from '@/lib/api/canjes';
+import { createClient, getClients } from '@/lib/api/clients';
+import { deleteConvenioCanje, getConveniosCanje, saveConvenioCanje, updateConvenioCanje } from '@/lib/api/convenios';
+import { createOpportunity, getOpportunityById, updateOpportunity } from '@/lib/api/opportunities';
+import { getPrograms } from '@/lib/api/programs';
+import { getProspects } from '@/lib/api/prospects';
 import type { Client, Program, Prospect, ConvenioCanje, CondicionIVA, TipoEntidad, AdvertisingOrder } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 
@@ -256,7 +258,7 @@ export default function AppCanjesMobile() {
         if (window.confirm("¿Estás seguro de que deseas eliminar este canje? También se eliminará la oportunidad y el pautado asociado de forma irreversible.")) {
             setLoading(true);
             try {
-                await deleteConvenioCanje(selectedCanjeDetail.id!, selectedCanjeDetail.opportunityId, userInfo.id, userInfo.name);
+                await deleteConvenioCanje(selectedCanjeDetail.id!, selectedCanjeDetail.opportunityId);
                 toast({ title: 'Canje y registros eliminados' });
                 setSelectedCanjeDetail(null);
                 setView('list');
@@ -333,7 +335,6 @@ export default function AppCanjesMobile() {
                 finalClientName = newClientData.denominacion;
             }
 
-            const clientOwnerName = selectedClient?.ownerName || userInfo!.name;
             const formValues = form.getValues();
             const validSrlItems = formValues.srlItems?.filter(item => item.month) || [];
             const validSasItems = formValues.sasItems?.filter(item => item.month) || [];
@@ -346,7 +347,7 @@ export default function AppCanjesMobile() {
                     clientId: finalClientId,
                     clientName: finalClientName,
                     isCanje: true,
-                }, userInfo!.id, userInfo!.name, clientOwnerName);
+                });
 
                 await updateConvenioCanje(editId, {
                     clientId: finalClientId,
@@ -356,7 +357,7 @@ export default function AppCanjesMobile() {
                     fechaInicio: new Date(fechaInicio).toISOString(),
                     fechaFin: new Date(fechaFin).toISOString(),
                     observaciones: `Facturación: ${billingType}` 
-                }, userInfo!.id, userInfo!.name);
+                });
 
                 if (editAdOrderId) {
                     await updateAdvertisingOrder(editAdOrderId, {
@@ -399,7 +400,7 @@ export default function AppCanjesMobile() {
                         modalidad: billingType === 'AVION' ? 'AVION' : 'Factura contra factura',
                         fechaInicio: new Date(fechaInicio).toISOString(),
                         fechaFin: new Date(fechaFin).toISOString(),
-                    }, userInfo!.id, userInfo!.name);
+                    });
                 }
 
             } else {
@@ -415,7 +416,7 @@ export default function AppCanjesMobile() {
                     formaDePago: [],
                     periodicidad: [],
                     isCanje: true,
-                }, userInfo!.id, userInfo!.name, clientOwnerName);
+                });
 
                 const canjeId = await saveConvenioCanje({
                     clientId: finalClientId,
@@ -428,7 +429,7 @@ export default function AppCanjesMobile() {
                     fechaInicio: new Date(fechaInicio).toISOString(),
                     fechaFin: new Date(fechaFin).toISOString(),
                     observaciones: `Facturación: ${billingType}` 
-                }, userInfo!.id, userInfo!.name);
+                });
 
                 const adOrderPayload = {
                     clientId: finalClientId,
@@ -496,8 +497,8 @@ export default function AppCanjesMobile() {
                         facturasCliente: [],
                         facturasAire: [],
                     }],
-                }, userInfo!.id, userInfo!.name);
-                await updateConvenioCanje(canjeId, { masterCanjeId }, userInfo!.id, userInfo!.name);
+                });
+                await updateConvenioCanje(canjeId, { masterCanjeId });
             }
 
             // 🟢 Generar PDFs y Enviar Email
