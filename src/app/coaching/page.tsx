@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { getAllUsers, syncRegisteredUsersFromAuth } from '@/lib/firebase-service';
+import { getAllUsers, syncRegisteredUsersFromAuth } from '@/lib/api/users';
 import type { User } from '@/lib/types';
 import { Header } from '@/components/layout/header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

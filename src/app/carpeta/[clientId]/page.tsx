@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { CarpetaTable } from '@/components/carpeta/carpeta-table';
 import { useEffect, useState } from 'react';
-import { getAdvertisingOrdersByClientId, getClient } from '@/lib/firebase-service';
+import { getAdvertisingOrdersByClientId, getClient } from '@/lib/api/clients';
 import type { Client, AdvertisingOrder } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';

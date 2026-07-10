@@ -79,7 +79,7 @@ import {
 
 import type { ScreenName } from '@/lib/types';
 import { hasManagementPrivileges } from '@/lib/role-utils';
-import { getWorkflowAssignments } from '@/lib/firebase-service';
+import { getWorkflowAssignments } from '@/lib/api/system';
 
 interface SidebarItem {
   title: string;

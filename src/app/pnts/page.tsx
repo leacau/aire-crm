@@ -7,7 +7,15 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import type { Program, CommercialItem, Client } from '@/lib/types';
-import { getPrograms, getCommercialItems, updateCommercialItem, createCommercialItem, getClients, deleteCommercialItem, getCommercialItemsBySeries } from '@/lib/firebase-service';
+import { getClients } from '@/lib/api/clients';
+import {
+  createCommercialItem,
+  deleteCommercialItem,
+  getCommercialItems,
+  getCommercialItemsBySeries,
+  updateCommercialItem,
+} from '@/lib/api/commercial-items';
+import { getPrograms } from '@/lib/api/programs';
 import { useToast } from '@/hooks/use-toast';
 import { format, startOfToday, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -128,7 +136,7 @@ export default function PntsPage() {
             status: 'Vendido',
             createdBy: userInfo.id,
         };
-        await createCommercialItem(newItem, userInfo.id, userInfo.name);
+        await createCommercialItem(newItem);
         fetchData();
         toast({ title: `${itemData.type} añadido correctamente` });
     } catch(error) {
@@ -155,7 +163,7 @@ export default function PntsPage() {
         pntReadAt: isRead ? new Date().toISOString() : undefined,
         updatedBy: userInfo.id,
         updatedAt: new Date().toISOString(),
-      }, userInfo.id, userInfo.name);
+      });
     } catch (error) {
       console.error("Error updating PNT status:", error);
       toast({ title: "Error al actualizar estado", variant: "destructive", description: (error as Error).message });
@@ -182,7 +190,7 @@ export default function PntsPage() {
             }
         }
         
-        await deleteCommercialItem(idsToDelete, userInfo.id, userInfo.name);
+        await deleteCommercialItem(idsToDelete);
         
         toast({ title: `Se eliminaron ${idsToDelete.length} elemento(s)` });
         

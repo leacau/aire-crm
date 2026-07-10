@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { MoreHorizontal, Edit, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
-import { getCommercialItems } from '@/lib/firebase-service';
+import { getCommercialItems } from '@/lib/api/commercial-items';
 
 interface GrillaSemanalProps {
   programs: Program[];

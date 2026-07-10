@@ -12,7 +12,13 @@ import { GrillaSemanal } from '@/components/grilla/grilla-semanal';
 import { GrillaDiaria } from '@/components/grilla/grilla-diaria';
 import { ProgramFormDialog } from '@/components/grilla/program-form-dialog';
 import type { Program, CommercialItem } from '@/lib/types';
-import { getPrograms, saveProgram, updateProgram, deleteProgram, saveCommercialItemSeries, updateCommercialItem, deleteCommercialItem, getCommercialItemsBySeries } from '@/lib/firebase-service';
+import {
+  deleteCommercialItem,
+  getCommercialItemsBySeries,
+  saveCommercialItemSeries,
+  updateCommercialItem,
+} from '@/lib/api/commercial-items';
+import { deleteProgram, getPrograms, saveProgram, updateProgram } from '@/lib/api/programs';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { CommercialItemFormDialog } from '@/components/grilla/commercial-item-form-dialog';
@@ -127,10 +133,10 @@ export default function GrillaPage() {
     if (!userInfo) return;
     try {
         if (selectedProgram) { // Editing
-            await updateProgram(selectedProgram.id, programData, userInfo.id);
+            await updateProgram(selectedProgram.id, programData);
             toast({ title: "Programa Actualizado" });
         } else { // Creating
-            await saveProgram(programData, userInfo.id);
+            await saveProgram(programData);
             toast({ title: "Programa Creado" });
         }
         fetchPrograms();
@@ -143,7 +149,7 @@ export default function GrillaPage() {
   const handleDeleteProgram = async () => {
     if (!programToDelete || !userInfo) return;
     try {
-        await deleteProgram(programToDelete.id, userInfo.id);
+        await deleteProgram(programToDelete.id);
         toast({ title: "Programa Eliminado" });
         fetchPrograms();
     } catch (error) {
@@ -160,21 +166,21 @@ export default function GrillaPage() {
         if (selectedItem) { // Editing existing item
              if (selectedItem.seriesId) {
                 // If it's part of a series, update the whole series
-                await saveCommercialItemSeries({ ...item, seriesId: selectedItem.seriesId }, dates, userInfo.id, true);
+                await saveCommercialItemSeries({ ...item, seriesId: selectedItem.seriesId }, dates, true);
             } else if (dates.length > 1) {
                 // If it wasn't a series but now is, create a new series
-                const newSeriesId = await saveCommercialItemSeries(item, dates, userInfo.id);
+                const newSeriesId = await saveCommercialItemSeries(item, dates);
                 // Assign the new seriesId to the original item being edited
                 if (newSeriesId) {
-                    await updateCommercialItem(selectedItem.id, { seriesId: newSeriesId }, userInfo.id, userInfo.name);
+                    await updateCommercialItem(selectedItem.id, { seriesId: newSeriesId });
                 }
             } else {
                 // Single item update
-                await updateCommercialItem(selectedItem.id, item, userInfo.id, userInfo.name);
+                await updateCommercialItem(selectedItem.id, item);
             }
             toast({ title: 'Elemento comercial actualizado' });
         } else { // Creating new items
-            await saveCommercialItemSeries(item, dates, userInfo.id);
+            await saveCommercialItemSeries(item, dates);
             toast({ title: 'Elemento(s) comercial(es) guardado(s)', description: `${dates.length} elemento(s) han sido creados.` });
         }
         // Instead of fetching all programs, we can just invalidate the specific days' data if we had a cache.

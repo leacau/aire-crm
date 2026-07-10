@@ -9,7 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { getWorkflowAssignments, saveWorkflowAssignments, getAllUsers, syncRegisteredUsersFromAuth } from '@/lib/firebase-service';
+import { getWorkflowAssignments, saveWorkflowAssignments } from '@/lib/api/system';
+import { getAllUsers, syncRegisteredUsersFromAuth } from '@/lib/api/users';
 import { User } from '@/lib/types';
 import { AlertCircle, Save, ShieldAlert, Award, FileText, Landmark, Loader2, RefreshCw, Inbox, ShieldCheck, Handshake, ClipboardEdit, ClipboardCheck } from 'lucide-react';
 

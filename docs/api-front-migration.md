@@ -429,6 +429,16 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La vista publica de nota comercial usa `getPublicPrograms`; las vistas autenticadas siguen usando `/api/programs`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Cuadragesimo septimo corte aplicado
+
+- Se migraron lecturas simples de usuarios, clientes, programas, configuraciones, reportes, calendario, settings y sidebar para importar directo desde `src/lib/api/*`.
+- Se migraron Tareas y Feed de Actividad a `activities`, `client-activities` y `users`, quitando parametros de usuario que ahora resuelve el servidor.
+- Se migraron Carpeta y componentes relacionados a APIs directas de clientes, oportunidades, facturas y billing requests.
+- Se migraron Programacion/Grilla/PNTs a APIs directas de programas, commercial items y clientes.
+- La bandeja de Billing Requests conserva `updateBillingRequestStatus` via puente temporal porque aun contiene el despacho de correos contables con Gmail.
+- Los imports a `firebase-service.ts` bajan de 70 a 34 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

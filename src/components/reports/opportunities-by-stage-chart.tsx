@@ -3,7 +3,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getAllUsers, getClients } from '@/lib/firebase-service';
+import { getClients } from '@/lib/api/clients';
+import { getAllOpportunities } from '@/lib/api/opportunities';
+import { getAllUsers } from '@/lib/api/users';
 import type { Opportunity, User, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';

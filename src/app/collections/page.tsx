@@ -16,7 +16,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { getClients } from '@/lib/firebase-service';
+import { getClients } from '@/lib/api/clients';
 import type { Client } from '@/lib/types';
 
 type CollectionStatus = 'paid' | 'pending';

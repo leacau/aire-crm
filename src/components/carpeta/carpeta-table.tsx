@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { getInvoicesForClient, getOpportunitiesByClientId, createInvoice, updateInvoice, getClient, getBillingRequestsByClient } from '@/lib/firebase-service';
+import { getBillingRequestsByClient, getInvoicesForClient, getOpportunitiesByClientId } from '@/lib/api/clients';
+import { createInvoice, updateInvoice } from '@/lib/api/invoices';
 import type { Invoice, Opportunity, CarpetaBillingStatus } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -165,8 +166,6 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
 
         setSavingId(index.toString());
         try {
-            const clientOwner = (await getClient(clientId))?.ownerName || 'Desconocido';
-            
             // Reconstruimos periodStart y End para mantener retrocompatibilidad en BD
             const periodStartStr = row.month ? `${row.month}-01` : '';
             const periodEndStr = row.month ? format(endOfMonth(parseISO(`${row.month}-01`)), 'yyyy-MM-dd') : '';
@@ -187,10 +186,10 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
             };
 
             if (row.id && !row.isDraft) {
-                await updateInvoice(row.id, payload, userInfo.id, userInfo.name, clientOwner);
+                await updateInvoice(row.id, payload);
                 toast({ title: "Guardado", description: "Registro actualizado." });
             } else {
-                const newId = await createInvoice(payload as Omit<Invoice, 'id'>, userInfo.id, userInfo.name, clientOwner);
+                const newId = await createInvoice(payload as Omit<Invoice, 'id'>);
                 const updatedRows = [...rows];
                 updatedRows[index].id = newId;
                 updatedRows[index].isDraft = false;

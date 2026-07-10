@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllClientActivities, completeActivityTask, rescheduleActivityTask } from '@/lib/firebase-service';
+import { completeActivityTask, getAllClientActivities, rescheduleActivityTask } from '@/lib/api/client-activities';
 import type { ClientActivity } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, isBefore, isSameDay, startOfDay } from 'date-fns';
@@ -66,7 +66,7 @@ export default function TasksPage() {
       setTasks(prev => prev.filter(t => t.id !== task.id));
       
       try {
-          await completeActivityTask(task.id, userInfo.id, userInfo.name);
+          await completeActivityTask(task.id);
           toast({ title: "Tarea completada", description: "La tarea ha sido marcada como finalizada." });
       } catch (error) {
           console.error(error);
@@ -84,7 +84,7 @@ export default function TasksPage() {
       if (!userInfo || !rescheduleTask || !newDate) return;
       setIsProcessing(true);
       try {
-          await rescheduleActivityTask(rescheduleTask.id, newDate, userInfo.id, userInfo.name);
+          await rescheduleActivityTask(rescheduleTask.id, newDate);
           toast({ title: "Tarea pospuesta", description: `Nueva fecha: ${format(newDate, 'P', { locale: es })}` });
           setRescheduleTask(null);
           fetchTasks(); // Recargar para reordenar

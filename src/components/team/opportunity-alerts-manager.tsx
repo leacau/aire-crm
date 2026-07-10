@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { getOpportunityAlertsConfig, updateOpportunityAlertsConfig } from '@/lib/firebase-service';
+import { getOpportunityAlertsConfig, updateOpportunityAlertsConfig } from '@/lib/api/system';
 import type { OpportunityStage, OpportunityAlertsConfig } from '@/lib/types';
 import { Spinner } from '../ui/spinner';
 import { useAuth } from '@/hooks/use-auth';
@@ -62,7 +62,7 @@ export function OpportunityAlertsManager() {
         }
         setIsSaving(true);
         try {
-            await updateOpportunityAlertsConfig(config, userInfo.id, userInfo.name);
+            await updateOpportunityAlertsConfig(config);
             toast({ title: "Configuración de alertas guardada" });
         } catch (error) {
             const isPermissionError = error instanceof Error && (error.message === 'permission-denied' || error.name === 'FirebasePermissionError');

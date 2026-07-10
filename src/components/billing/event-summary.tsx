@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { CalendarDays, ExternalLink } from 'lucide-react';
 import type { AdvertisingOrder } from '@/lib/types';
-import { getAdvertisingOrdersWithEvent } from '@/lib/firebase-service';
+import { getAdvertisingOrdersWithEvent } from '@/lib/api/advertising-orders';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 

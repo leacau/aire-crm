@@ -19,7 +19,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getAdvertisingOrdersForDateRange, getPrograms } from '@/lib/firebase-service';
+import { getAdvertisingOrdersForDateRange } from '@/lib/api/advertising-orders';
+import { getPrograms } from '@/lib/api/programs';
 import type { AdvertisingOrder, AdvertisingOrderItemSrl, Program } from '@/lib/types';
 import { cn } from '@/lib/utils';
 

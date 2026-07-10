@@ -13,7 +13,7 @@ import { FormControl, FormField } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { AdvertisingOrderFormValues } from "@/lib/validators/advertising";
-import { getSasProducts } from "@/lib/firebase-service";
+import { getSasProducts } from "@/lib/api/system";
 import { SasProductConfig } from "@/lib/types";
 
 interface SasSectionProps {

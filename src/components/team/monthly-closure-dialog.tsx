@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '../ui/spinner';
 import type { User } from '@/lib/types';
-import { saveMonthlyClosure } from '@/lib/firebase-service';
+import { saveMonthlyClosure } from '@/lib/api/users';
 import { useAuth } from '@/hooks/use-auth';
 import { format, getYear, getMonth, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -76,7 +76,7 @@ export function MonthlyClosureDialog({
 
     setIsSaving(true);
     try {
-        await saveMonthlyClosure(selectedAdvisorId, selectedMonth, Number(closureValue), userInfo.id);
+        await saveMonthlyClosure(selectedAdvisorId, selectedMonth, Number(closureValue));
         toast({ title: 'Cierre Mensual Guardado', description: `Se ha registrado el cierre para el mes ${selectedMonth}.`});
         onSaveSuccess();
         onOpenChange(false);

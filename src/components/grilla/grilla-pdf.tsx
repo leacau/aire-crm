@@ -6,7 +6,7 @@ import type { Program, CommercialItem } from '@/lib/types';
 import { addDays, startOfWeek, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { getCommercialItems } from '@/lib/firebase-service';
+import { getCommercialItems } from '@/lib/api/commercial-items';
 
 interface GrillaPdfProps {
   programs: Program[];

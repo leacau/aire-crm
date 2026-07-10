@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Clock, CalendarDays, Tv, User } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
-import { getProgram } from '@/lib/firebase-service';
+import { getProgram } from '@/lib/api/programs';
 import type { Program } from '@/lib/types';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';

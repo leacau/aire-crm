@@ -12,7 +12,7 @@ import type { DateRange } from 'react-day-picker';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import dynamic from 'next/dynamic';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getAllUsers } from '@/lib/firebase-service';
+import { getAllUsers } from '@/lib/api/users';
 import type { User } from '@/lib/types';
 import { ActiveClientsReport } from '@/components/reports/active-clients-report';
 import { ProspectsPerformanceReport } from '@/components/reports/prospects-performance-report';

@@ -14,7 +14,7 @@ import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { getPaymentActivities } from '@/lib/firebase-service';
+import { getPaymentActivities } from '@/lib/api/activities';
 
 type Props = {
   entries: PaymentEntry[];

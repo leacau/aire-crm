@@ -24,7 +24,7 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { CalendarToolbar } from './calendar-toolbar';
-import { getUserProfile } from '@/lib/firebase-service';
+import { getUserProfile } from '@/lib/api/users';
 
 
 const locales = {

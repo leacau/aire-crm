@@ -5,7 +5,7 @@ import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/hooks/use-toast';
-import { getPrograms } from '@/lib/firebase-service';
+import { getPrograms } from '@/lib/api/programs';
 import type { Program, ProgramRates } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';

@@ -16,7 +16,8 @@ import { ArrowLeft, Shield, UploadCloud, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useDropzone } from 'react-dropzone';
 import { uploadAvatarToDrive } from '@/lib/google-avatar-service';
-import { updateUserProfile, getEmailWhitelist, updateEmailWhitelist, createExternalCanjeUser } from '@/lib/firebase-service';
+import { getEmailWhitelist, updateEmailWhitelist } from '@/lib/api/system';
+import { createExternalCanjeUser, updateUserProfile } from '@/lib/api/users';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -77,7 +78,7 @@ export default function SettingsPage() {
       setWhitelistLoading(true);
       const updatedList = [...whitelist, lowerEmail];
       try {
-          await updateEmailWhitelist(updatedList, userInfo!.id, userInfo!.name);
+          await updateEmailWhitelist(updatedList);
           setWhitelist(updatedList);
           setNewEmail('');
           toast({ title: 'Correo autorizado agregado' });
@@ -92,7 +93,7 @@ export default function SettingsPage() {
       setWhitelistLoading(true);
       const updatedList = whitelist.filter(e => e !== emailToRemove);
       try {
-          await updateEmailWhitelist(updatedList, userInfo!.id, userInfo!.name);
+          await updateEmailWhitelist(updatedList);
           setWhitelist(updatedList);
           toast({ title: 'Correo removido' });
       } catch (error) {

@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { getAllUsers } from '@/lib/firebase-service';
+import { getAllUsers } from '@/lib/api/users';
 import type { Client, User } from '@/lib/types';
 
 type TangoInvoice = {

@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FormControl, FormField } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AdvertisingOrderFormValues } from "@/lib/validators/advertising";
-import { getSrlAdTypes } from "@/lib/firebase-service";
+import { getSrlAdTypes } from "@/lib/api/system";
 
 interface Program {
     id: string;

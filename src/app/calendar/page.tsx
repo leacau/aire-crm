@@ -6,7 +6,7 @@ import { Header } from '@/components/layout/header';
 import { GoogleCalendar } from '@/components/calendar/google-calendar';
 import { useAuth } from '@/hooks/use-auth';
 import type { User } from '@/lib/types';
-import { getAllUsers } from '@/lib/firebase-service';
+import { getAllUsers } from '@/lib/api/users';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function CalendarPage() {

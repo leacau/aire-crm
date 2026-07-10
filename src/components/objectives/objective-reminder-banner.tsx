@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { startOfMonth, endOfMonth } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
-import { getObjectiveVisibilityConfig } from '@/lib/firebase-service';
+import { getObjectiveVisibilityConfig } from '@/lib/api/system';
 import { Trophy } from 'lucide-react';
 import { getObjectiveForDate, resolveObjectiveAnchorDate } from '@/lib/objective-utils';
 import { fetchTangoObjectiveInvoices, summarizeTangoObjectiveBilling } from '@/lib/tango-objective-billing';

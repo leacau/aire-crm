@@ -9,7 +9,9 @@ import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button'; // Importar Button
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth'; // Importar useAuth
-import { getActivities, getAllClientActivities, getAllUsers, completeActivityTask } from '@/lib/firebase-service'; // Importar completeActivityTask
+import { getActivities } from '@/lib/api/activities';
+import { completeActivityTask, getAllClientActivities } from '@/lib/api/client-activities';
+import { getAllUsers } from '@/lib/api/users';
 import type { ActivityLog, ClientActivity, User } from '@/lib/types';
 import { isWithinInterval, startOfMonth, endOfMonth, format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -128,7 +130,7 @@ export function ActivityFeed() {
 
     setLocalCompletedIds(prev => new Set(prev).add(activityId));
     try {
-        await completeActivityTask(activityId, userInfo.id, userInfo.name);
+        await completeActivityTask(activityId);
         toast({ title: "Tarea completada", description: "Se ha marcado como finalizada." });
         
         // Actualizar estado local para reflejar cambio permanente

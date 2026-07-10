@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
-import { getClients, getAllOpportunities, getBillingRequestsByClient } from '@/lib/firebase-service';
+import { getBillingRequestsByClient, getClients } from '@/lib/api/clients';
+import { getAllOpportunities } from '@/lib/api/opportunities';
 import type { Client, Opportunity, BillingRequest } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { startOfMonth, endOfMonth, parseISO, isWithinInterval, isSameMonth, addMonths } from 'date-fns';

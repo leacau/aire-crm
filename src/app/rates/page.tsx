@@ -6,7 +6,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { getPrograms, updateProgram, getSrlAdTypes, saveSrlAdTypes, getSasProducts, saveSasProducts } from '@/lib/firebase-service';
+import { getPrograms, updateProgram } from '@/lib/api/programs';
+import { getSasProducts, getSrlAdTypes, saveSasProducts, saveSrlAdTypes } from '@/lib/api/system';
 import type { Program, SasProductConfig } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -101,13 +102,13 @@ export default function RatesPage() {
           const originalProgram = programs.find(p => p.id === programId);
           if (!originalProgram) return Promise.resolve();
           const newRates = { ...(originalProgram.rates || {}), ...ratesToUpdate };
-          return updateProgram(programId, { rates: newRates }, userInfo.id);
+          return updateProgram(programId, { rates: newRates });
         });
 
         await Promise.all([
             ...promises,
-            saveSrlAdTypes(srlTypes, userInfo.id, userInfo.name),
-            saveSasProducts(sasProducts, userInfo.id, userInfo.name)
+            saveSrlAdTypes(srlTypes),
+            saveSasProducts(sasProducts)
         ]);
 
         toast({ title: 'Configuración Comercial guardada correctamente.' });
