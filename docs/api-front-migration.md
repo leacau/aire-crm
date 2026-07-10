@@ -536,11 +536,19 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 2 a 1 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Sexagesimo corte aplicado
+
+- Commander deja de depender de `firebase-service.ts`.
+- Se agrega `src/lib/server/commander-crm.ts` para que el asistente cree clientes, prospectos y tareas desde servidor con Firebase Admin.
+- Se conserva el registro de actividad y la actualizacion automatica de coaching para prospectos y tareas.
+- Los imports a `firebase-service.ts` bajan de 1 a 0 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
-   - Ir reemplazando importaciones desde `@/lib/firebase-service` por modulos `@/lib/api/*` en paginas y componentes.
-   - Mantener el puente solo como compatibilidad temporal mientras se estabiliza la nueva version.
+   - Revisar flujos productivos en QA para confirmar que no quedan consumos indirectos del puente temporal.
+   - Mantener `firebase-service.ts` solo como compatibilidad temporal mientras se estabiliza la nueva version.
 
 2. Permisos y validaciones
    - Endurecer validaciones por rol/area dentro de rutas API criticas.

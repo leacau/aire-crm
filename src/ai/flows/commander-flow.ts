@@ -4,10 +4,21 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { createProspect, createClientActivity, getProspects, createClient } from '@/lib/firebase-service';
+import {
+  createCommanderClient,
+  createCommanderClientActivity,
+  createCommanderProspect,
+  getCommanderProspects,
+} from '@/lib/server/commander-crm';
 import type { Prospect, ClientActivity, User, Client } from '@/lib/types';
 import { z } from 'zod';
 import { findBestMatch } from 'string-similarity';
+
+type CommanderContext = {
+  currentUser: User;
+  userId: string;
+  userName: string;
+};
 
 // Define tools for the AI to use
 const createClientTool = ai.defineTool(
@@ -27,8 +38,8 @@ const createClientTool = ai.defineTool(
     }),
   },
   async (input, context) => {
-    const { userId, userName } = context as unknown as { userId: string; userName: string };
-    const clientId = await createClient({
+    const { currentUser } = context as unknown as CommanderContext;
+    const clientId = await createCommanderClient({
       denominacion: input.denominacion,
       razonSocial: input.razonSocial || input.denominacion,
       cuit: input.cuit || '',
@@ -39,7 +50,7 @@ const createClientTool = ai.defineTool(
       localidad: '',
       tipoEntidad: 'Privada',
       rubro: '',
-    }, userId, userName);
+    }, currentUser);
     return { id: clientId, denominacion: input.denominacion };
   }
 );
@@ -61,8 +72,8 @@ const createProspectTool = ai.defineTool(
     }),
   },
   async (input, context) => {
-    const { userId, userName } = context as unknown as { userId: string, userName: string };
-    const prospectId = await createProspect({ ...input, companyName: input.companyName || '', status: 'Nuevo' }, userId, userName);
+    const { currentUser } = context as unknown as CommanderContext;
+    const prospectId = await createCommanderProspect({ ...input, companyName: input.companyName || '', status: 'Nuevo' }, currentUser);
     return { id: prospectId, companyName: input.companyName };
   }
 );
@@ -81,14 +92,14 @@ const scheduleTaskTool = ai.defineTool(
     outputSchema: z.string(),
   },
   async (input, context) => {
-    const { userId, userName } = context as unknown as { userId: string, userName: string };
+    const { currentUser, userId, userName } = context as unknown as CommanderContext;
     
     let entityId = '';
     let entityName = '';
 
     // Find the entity ID based on its name and type
     if (input.entityType === 'prospect') {
-      const prospects = await getProspects(); // This should be optimized if it gets slow
+      const prospects = await getCommanderProspects(); // This should be optimized if it gets slow
       const prospectNames = prospects.map(p => p.companyName);
       const bestMatch = findBestMatch(input.entityName, prospectNames);
       if (bestMatch.bestMatch.rating > 0.6) {
@@ -121,7 +132,7 @@ const scheduleTaskTool = ai.defineTool(
         activityPayload.clientName = entityName;
     }
 
-    await createClientActivity(activityPayload as any);
+    await createCommanderClientActivity(activityPayload as any, currentUser);
     return `Task scheduled successfully for ${entityName}.`;
   }
 );
@@ -159,6 +170,7 @@ const commanderFlow = ai.defineFlow(
             {
                 // Provide the user context to the tools
                 context: {
+                    currentUser,
                     userId: currentUser.id,
                     userName: currentUser.name,
                 },
