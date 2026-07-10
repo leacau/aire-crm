@@ -495,6 +495,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 8 a 7 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Quincuagesimo quinto corte aplicado
+
+- Seguimiento/Coaching deja de importar desde `firebase-service.ts`.
+- La vista usa APIs directas para sesiones, items, bitacoras, clientes y prospectos.
+- El boton de refresco vuelve a consultar la API y deja de depender de invalidacion de cache local.
+- Los imports a `firebase-service.ts` bajan de 7 a 6 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

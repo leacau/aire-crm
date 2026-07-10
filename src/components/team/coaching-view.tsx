@@ -3,7 +3,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import type { User, CoachingSession, CoachingItem, CoachingFollowUpEntry, Client, Prospect } from '@/lib/types';
-import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, updateCoachingFollowUpEntry, deleteCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem, invalidateCache, getClients, getProspects, createProspect } from '@/lib/firebase-service';
+import { getClients } from '@/lib/api/clients';
+import { getCoachingSessions, createCoachingSession, updateCoachingItem, appendCoachingFollowUpEntry, updateCoachingFollowUpEntry, deleteCoachingFollowUpEntry, addItemsToSession, deleteCoachingSession, updateCoachingSession, deleteCoachingItem } from '@/lib/api/coaching';
+import { createProspect, getProspects } from '@/lib/api/prospects';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -184,7 +186,6 @@ export function CoachingView({ advisor }: { advisor: User }) {
         setLoading(true);
         if (forceRefresh) {
             setRefreshing(true);
-            invalidateCache();
         }
         try {
             const data = normalizeLoadedSessions(await getCoachingSessions(advisor.id));
@@ -215,7 +216,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const handleForceRefresh = async () => {
         const success = await loadData(true);
         if (success) {
-            toast({ title: "Datos actualizados", description: "Se descartó el caché local y se volvió a leer el seguimiento." });
+            toast({ title: "Datos actualizados", description: "Se volvio a leer el seguimiento desde la API." });
         }
     };
 
@@ -338,7 +339,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                         sector: prospectSector.trim(),
                         notes: newItemAction.trim(),
                         status: 'Nuevo',
-                    }, advisor.id, advisor.name, { skipCoachingUpdate: true });
+                    });
                     entityName = newItemEntity.trim();
                     setOwnedProspects(prev => [{
                         id: entityId,
@@ -425,7 +426,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
     const handleUpdateItem = async (session: CoachingSession, item: CoachingItem, updates: Partial<CoachingItem>) => {
         if (!userInfo) return;
         try {
-            await updateCoachingItem(session.id, item.id, updates as any, userInfo.id, userInfo.name, item.taskId, session.advisorId);
+            await updateCoachingItem(session.id, item.id, updates as any, userInfo.id, userInfo.name);
             
             setSessions(prev => prev.map(s => {
                 let newItems = s.items;
@@ -606,7 +607,7 @@ export function CoachingView({ advisor }: { advisor: User }) {
                 if (entryToDelete.field === 'action' && session && item) {
                     const now = new Date().toISOString();
                     const nextAction = updateLegacyTextAtIndex(item, 'action', entryToDelete.legacyIndex, null);
-                    await updateCoachingItem(session.id, item.id, { action: nextAction, lastUpdate: now } as any, userInfo.id, userInfo.name, item.taskId, session.advisorId);
+                    await updateCoachingItem(session.id, item.id, { action: nextAction, lastUpdate: now } as any, userInfo.id, userInfo.name);
                     updateLocalItem(session.id, item.id, current => ({ ...current, action: nextAction, lastUpdate: now }));
                     setEntryToDelete(null);
                     toast({ title: "Asiento eliminado" });
@@ -626,8 +627,6 @@ export function CoachingView({ advisor }: { advisor: User }) {
                     },
                     userInfo.id,
                     userInfo.name,
-                    item.taskId,
-                    session.advisorId,
                 );
                 updateLocalItem(session.id, item.id, current => ({
                     ...current,
