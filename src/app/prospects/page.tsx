@@ -11,18 +11,16 @@ import { getAllClientActivities } from '@/lib/api/client-activities';
 import {
     approveProspectClaim,
     claimProspect,
+    createProspect,
+    deleteProspect,
     getProspects,
     recordProspectNotifications,
     rejectProspectClaim,
+    updateProspect,
 } from '@/lib/api/prospects';
 import { getOpportunityAlertsConfig } from '@/lib/api/system';
 import { getAllUsers } from '@/lib/api/users';
-import {
-    autoUpdateCoachingSession,
-    createProspect,
-    deleteProspect,
-    updateProspect,
-} from '@/lib/firebase-service';
+import { autoUpdateCoachingSession } from '@/lib/api/coaching';
 import { useToast } from '@/hooks/use-toast';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
@@ -152,10 +150,10 @@ export default function ProspectsPage() {
       let prospectName = prospectData.companyName;
 
       if (selectedProspect) {
-        await updateProspect(selectedProspect.id, prospectData, userInfo.id, userInfo.name);
+        await updateProspect(selectedProspect.id, prospectData);
         toast({ title: "Prospecto Actualizado" });
       } else {
-        prospectId = await createProspect(prospectData, userInfo.id, userInfo.name);
+        prospectId = await createProspect(prospectData);
         toast({ title: "Prospecto Creado" });
       }
 
@@ -186,7 +184,7 @@ export default function ProspectsPage() {
   const handleDeleteProspect = async () => {
     if (!prospectToDelete || !userInfo) return;
     try {
-      await deleteProspect(prospectToDelete.id, userInfo.id, userInfo.name);
+      await deleteProspect(prospectToDelete.id);
       toast({ title: "Prospecto Eliminado" });
       fetchData();
     } catch (error) {
@@ -205,7 +203,7 @@ export default function ProspectsPage() {
   const handleClientCreatedFromProspect = async () => {
     if (prospectToConvert && userInfo) {
       try {
-        await updateProspect(prospectToConvert.id, { status: 'Convertido', statusChangedAt: new Date().toISOString() }, userInfo.id, userInfo.name);
+        await updateProspect(prospectToConvert.id, { status: 'Convertido', statusChangedAt: new Date().toISOString() });
         toast({ title: "Prospecto Convertido", description: `${prospectToConvert.companyName} ahora es un cliente.`});
         fetchData();
       } catch (error) {
@@ -221,7 +219,7 @@ export default function ProspectsPage() {
   const handleArchiveProspect = async () => {
     if (!prospectToArchive || !userInfo) return;
     try {
-      await updateProspect(prospectToArchive.id, { status: 'No Próspero', statusChangedAt: new Date().toISOString() }, userInfo.id, userInfo.name);
+      await updateProspect(prospectToArchive.id, { status: 'No Próspero', statusChangedAt: new Date().toISOString() });
       toast({ title: "Prospecto Archivado" });
       fetchData();
     } catch (error) {
@@ -285,7 +283,7 @@ export default function ProspectsPage() {
             claimantName: null,
             claimedAt: null,
             unassignedAt: null
-        }, userInfo.id, userInfo.name);
+        });
         
         toast({ title: "Prospecto Asignado", description: `Asignado a ${assignee.name}` });
         fetchData();

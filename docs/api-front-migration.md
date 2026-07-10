@@ -471,6 +471,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 13 a 10 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Quincuagesimo segundo corte aplicado
+
+- Prospectos deja de importar `createProspect`, `updateProspect`, `deleteProspect` y `autoUpdateCoachingSession` desde el puente temporal.
+- Las altas, ediciones, archivado, conversion y asignacion manual de prospectos consumen APIs directas.
+- El agregado automatico a seguimiento usa `src/lib/api/coaching`.
+- Los imports a `firebase-service.ts` bajan de 10 a 9 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
