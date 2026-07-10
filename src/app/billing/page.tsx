@@ -6,10 +6,13 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getAllOpportunities, getClients, getAllUsers, getInvoices, updateInvoice, createInvoice, getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries, deleteInvoicesInBatches } from '@/lib/firebase-service';
+import { getClients } from '@/lib/api/clients';
+import { getInvoices, updateInvoice, createInvoice, deleteInvoicesInBatches } from '@/lib/api/invoices';
+import { getAllOpportunities, updateOpportunity } from '@/lib/api/opportunities';
+import { getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries } from '@/lib/api/payments';
+import { getAllUsers } from '@/lib/api/users';
 import type { Opportunity, Client, User, Invoice, PaymentEntry } from '@/lib/types';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
-import { updateOpportunity } from '@/lib/firebase-service';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { MonthYearPicker } from '@/components/ui/month-year-picker';
@@ -856,7 +859,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       const client = clients.find(c => c.id === selectedOpportunity.clientId);
       if (!client) throw new Error("Client not found for the opportunity");
 
-      await updateOpportunity(selectedOpportunity.id, updatedData, userInfo.id, userInfo.name, client.ownerName);
+      await updateOpportunity(selectedOpportunity.id, updatedData);
       fetchData();
       toast({ title: "Oportunidad Actualizada" });
     } catch (error) {
@@ -918,7 +921,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             dateGenerated: new Date().toISOString(),
         };
 
-        await createInvoice(newInvoice, userInfo.id, userInfo.name, client.ownerName);
+        await createInvoice(newInvoice);
         toast({ title: 'Factura Creada' });
         
         // Optimistically update UI before refetch
@@ -953,7 +956,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
     setIsImportingPayments(true);
     try {
-      await replacePaymentEntriesForAdvisor(advisor.id, advisor.name || advisor.email || 'Asesor', rows, userInfo.id, userInfo.name);
+      await replacePaymentEntriesForAdvisor(advisor.id, advisor.name || advisor.email || 'Asesor', rows);
       toast({ title: 'Pagos actualizados' });
       setPastedPayments('');
       fetchData();
@@ -981,8 +984,6 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       };
 
       await updatePaymentEntry(entry.id, updates, {
-        userId: userInfo?.id,
-        userName: userInfo?.name,
         ownerName: entry.advisorName,
         details: options?.reason ? `Actualizó ${detailMap[options.reason] || 'el registro de mora'}` : undefined,
       });
@@ -1139,7 +1140,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       });
 
       try {
-        const result = await deleteInvoicesInBatches(invoiceIds, userInfo.id, userInfo.name, {
+        const result = await deleteInvoicesInBatches(invoiceIds, {
           batchSize: 25,
           resolveOwnerName: resolveOwnerNameForInvoice,
           onProgress: (progress) => {
@@ -1293,7 +1294,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     try {
       setInvoices(prev => prev.map(inv => inv.id === invoiceId ? {...inv, status: 'Pagada'} : inv));
       
-      await updateInvoice(invoiceId, { status: 'Pagada' }, userInfo.id, userInfo.name, client.ownerName);
+      await updateInvoice(invoiceId, { status: 'Pagada' });
 
       toast({ title: `Factura #${invoiceToUpdate.invoiceNumber} marcada como pagada.`});
       setTimeout(fetchData, 300);
@@ -1336,7 +1337,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, ...updatePayload } : inv));
 
     try {
-      await updateInvoice(invoiceId, updatePayload, userInfo.id, userInfo.name, client.ownerName);
+      await updateInvoice(invoiceId, updatePayload);
       toast({ title: `Factura #${invoiceToUpdate.invoiceNumber} ${nextValue ? 'marcada como NC' : 'sin NC'}` });
       setTimeout(fetchData, 300);
     } catch (error) {

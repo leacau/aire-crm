@@ -11,8 +11,7 @@ import { useAuth } from '@/hooks/use-auth';
 import type { Client, Opportunity, Invoice } from '@/lib/types';
 import { getClients } from '@/lib/api/clients';
 import { createInvoice, getInvoices } from '@/lib/api/invoices';
-import { getAllOpportunities } from '@/lib/api/opportunities';
-import { createOpportunity } from '@/lib/firebase-service';
+import { createOpportunity, getAllOpportunities } from '@/lib/api/opportunities';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { useRouter } from 'next/navigation';
@@ -168,7 +167,7 @@ export default function InvoiceUploadPage() {
   const handleOpportunityCreated = async (newOpp: Omit<Opportunity, 'id'>) => {
     if (!userInfo || !clientForNewOpp || activeRowId === null) return;
     try {
-        const newOppId = await createOpportunity(newOpp, userInfo.id, userInfo.name, clientForNewOpp.ownerName);
+        const newOppId = await createOpportunity(newOpp);
         
         // Add new opp to state to make it available immediately
         const fullNewOpp: Opportunity = { ...newOpp, id: newOppId };

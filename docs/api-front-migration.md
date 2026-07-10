@@ -455,6 +455,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Esto estabiliza pantallas ya migradas a API directa, como Contable/Facturas, Administracion/Mapeo Tango, clientes, agencias, tareas y usuarios.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Quincuagesimo corte aplicado
+
+- Contable deja de importar lecturas y acciones principales desde `firebase-service.ts` y consume `clients`, `invoices`, `opportunities`, `payments` y `users` desde `src/lib/api/*`.
+- Se movio `deleteInvoicesInBatches` a `src/lib/api/invoices.ts`, reutilizando el borrado API individual y conservando progreso por lote.
+- La carga manual de facturas crea oportunidades rapidas por API directa en lugar de pasar por el puente temporal.
+- Los imports a `firebase-service.ts` bajan de 16 a 13 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
