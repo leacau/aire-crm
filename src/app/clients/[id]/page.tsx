@@ -12,7 +12,9 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import type { Client, Opportunity, Invoice } from '@/lib/types';
-import { getClient, updateClient, getClients, createOpportunity, createInvoice } from '@/lib/firebase-service';
+import { getClient, updateClient, getClients } from '@/lib/api/clients';
+import { createInvoice } from '@/lib/api/invoices';
+import { createOpportunity } from '@/lib/api/opportunities';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ClientPage() {
@@ -80,7 +82,7 @@ export default function ClientPage() {
   const handleUpdateClient = async (updatedData: Partial<Omit<Client, 'id'>>) => {
     if (!client || !userInfo) return;
     try {
-        await updateClient(client.id, updatedData, userInfo.id, userInfo.name);
+        await updateClient(client.id, updatedData);
         // No toast here, it's handled in the form dialog
         // Refetch data to show updated values on the page
         await fetchClientData();
@@ -98,14 +100,14 @@ export default function ClientPage() {
             clientId: client.id,
             clientName: client.denominacion,
         }
-        const newOppId = await createOpportunity(fullNewOpp, userInfo.id, userInfo.name, client.ownerName);
+        const newOppId = await createOpportunity(fullNewOpp);
         
         if (newOppId && pendingInvoices.length > 0) {
             for (const invoiceData of pendingInvoices) {
                 await createInvoice({
                     ...invoiceData,
                     opportunityId: newOppId,
-                }, userInfo.id, userInfo.name, client.ownerName);
+                });
             }
         }
 

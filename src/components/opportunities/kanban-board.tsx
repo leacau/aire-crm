@@ -18,8 +18,9 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { OpportunityDetailsDialog } from './opportunity-details-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getOpportunities, updateOpportunity, getClients, getUserProfile } from '@/lib/firebase-service'; // 🟢 Usamos la rápida
-import { invalidateCache } from '@/lib/firebase-service';
+import { getClients } from '@/lib/api/clients';
+import { getOpportunities, updateOpportunity } from '@/lib/api/opportunities';
+import { getUserProfile } from '@/lib/api/users';
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { startOfMonth, parseISO, isSameMonth, format } from 'date-fns';
@@ -231,9 +232,9 @@ const KanbanCard = ({
   }, [opportunity.clientId, opportunity.clientName]);
 
   const handleUpdate = async (updatedOpp: Partial<Opportunity>) => {
-     if (!userInfo || !owner) return;
+     if (!userInfo) return;
      try {
-       await updateOpportunity(opportunity.id, updatedOpp, userInfo.id, userInfo.name, owner.name);
+       await updateOpportunity(opportunity.id, updatedOpp);
        window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: {id: opportunity.id, ...updatedOpp} }));
        if (isDetailsOpen) setIsDetailsOpen(false);
        if (isFinalizeOpen) setIsFinalizeOpen(false);
@@ -248,13 +249,7 @@ const KanbanCard = ({
   const handleRenew = async (updatedOpp: Partial<Opportunity>) => {
     if (!userInfo) throw new Error('Usuario no autenticado');
     try {
-      await updateOpportunity(
-        opportunity.id,
-        updatedOpp,
-        userInfo.id,
-        userInfo.name,
-        owner?.name || clientInfo?.ownerName || opportunity.clientName,
-      );
+      await updateOpportunity(opportunity.id, updatedOpp);
       window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...updatedOpp } }));
     } catch (error) {
       console.error('Error renewing opportunity', error);
@@ -264,15 +259,7 @@ const KanbanCard = ({
 
   const handleManagePeriods = async (updatedOpp: Partial<Opportunity>) => {
     if (!userInfo) throw new Error('Usuario no autenticado');
-    await updateOpportunity(
-      opportunity.id,
-      updatedOpp,
-      userInfo.id,
-      userInfo.name,
-      owner?.name || clientInfo?.ownerName || opportunity.clientName,
-      undefined,
-      { manageContractPeriods: true },
-    );
+    await updateOpportunity(opportunity.id, updatedOpp, undefined, { manageContractPeriods: true });
     window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...updatedOpp } }));
   };
   
@@ -448,17 +435,16 @@ export function KanbanBoard({
     setLoading(true);
     if (forceServer) {
       setRefreshing(true);
-      invalidateCache();
     }
     try {
       const [allOpps, allClients] = await Promise.all([
-        getOpportunities({ forceServer }),
-        getClients({ forceServer }),
+        getOpportunities(),
+        getClients(),
       ]);
       setOpportunities(allOpps);
       setClients(allClients);
       if (forceServer) {
-        toast({ title: 'Datos actualizados', description: 'Se descartó el caché local y se volvieron a leer las oportunidades.' });
+        toast({ title: 'Datos actualizados', description: 'Se volvieron a leer las oportunidades desde la API.' });
       }
 
     } catch (error) {
@@ -630,7 +616,7 @@ export function KanbanBoard({
         const client = clients.find(c => c.id === oppToMove.clientId);
         if (!client) throw new Error("Client not found for opportunity");
 
-        await updateOpportunity(opportunityId, { stage: newStage, highCloseProbability: nextHighCloseProbability }, userInfo.id, userInfo.name, client.ownerName);
+        await updateOpportunity(opportunityId, { stage: newStage, highCloseProbability: nextHighCloseProbability });
         toast({ title: "Etapa actualizada", description: `"${oppToMove.title}" se movió a ${newStage}.` });
       } catch (error) {
         console.error("Error updating opportunity stage:", error);
@@ -644,16 +630,9 @@ export function KanbanBoard({
 
   const handlePendingWonUpdate = async (changes: Partial<Opportunity>) => {
     if (!pendingWonOpportunity || !userInfo) return;
-    const client = clients.find(item => item.id === pendingWonOpportunity.clientId);
     try {
       const update = { ...changes, stage: 'Cerrado - Ganado' as OpportunityStage, highCloseProbability: false };
-      await updateOpportunity(
-        pendingWonOpportunity.id,
-        update,
-        userInfo.id,
-        userInfo.name,
-        client?.ownerName || pendingWonOpportunity.clientName,
-      );
+      await updateOpportunity(pendingWonOpportunity.id, update);
       setOpportunities(previous => previous.map(item => item.id === pendingWonOpportunity.id ? { ...item, ...update } : item));
       window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: pendingWonOpportunity.id, ...update } }));
       setPendingWonOpportunity(null);

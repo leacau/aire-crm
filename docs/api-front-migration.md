@@ -463,6 +463,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 16 a 13 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Quincuagesimo primer corte aplicado
+
+- La pagina de detalle de cliente consume `clients`, `opportunities` e `invoices` desde APIs directas.
+- El kanban de oportunidades consume `clients`, `opportunities` y `users` desde APIs directas.
+- Se elimino la dependencia del cache local del puente en el boton de recarga del kanban; ahora vuelve a leer desde la API.
+- Los imports a `firebase-service.ts` bajan de 13 a 10 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
