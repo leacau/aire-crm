@@ -503,6 +503,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 7 a 6 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Quincuagesimo sexto corte aplicado
+
+- El detalle de cliente deja de importar desde `firebase-service.ts`.
+- Personas, actividades, historial, oportunidades, facturas, notas comerciales, programas y usuarios se cargan desde APIs directas.
+- Las actualizaciones y borrados desde la ficha del cliente ya no pasan userId/userName desde el front cuando la API lo resuelve en servidor.
+- Los imports a `firebase-service.ts` bajan de 6 a 5 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

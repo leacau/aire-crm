@@ -74,7 +74,14 @@ import {
 import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
-import { createPerson, getPeopleByClientId, updatePerson, getOpportunitiesByClientId, createOpportunity, updateOpportunity, createClientActivity, getClientActivities, updateClientActivity, getActivitiesForEntity, deleteOpportunity, deletePerson, getAllUsers, getInvoicesForClient, createInvoice, getCommercialNotesByClientId, getPrograms, deleteCommercialNote } from '@/lib/firebase-service';
+import { createClientActivity, updateClientActivity } from '@/lib/api/client-activities';
+import { getActivitiesForEntity } from '@/lib/api/activities';
+import { getCommercialNotesByClientId, deleteCommercialNote } from '@/lib/api/commercial-notes';
+import { getClientActivities, getInvoicesForClient, getOpportunitiesByClientId, getPeopleByClientId } from '@/lib/api/clients';
+import { deleteOpportunity, updateOpportunity } from '@/lib/api/opportunities';
+import { createPerson, deletePerson, updatePerson } from '@/lib/api/people';
+import { getPrograms } from '@/lib/api/programs';
+import { getAllUsers } from '@/lib/api/users';
 import { sendEmail, createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
@@ -245,7 +252,7 @@ export function ClientDetails({
   const handleOpportunityUpdate = async (updatedOpp: Partial<Opportunity>) => {
     if(!selectedOpportunity || !userInfo) return;
     try {
-        await updateOpportunity(selectedOpportunity.id, updatedOpp, userInfo.id, userInfo.name, client.ownerName);
+        await updateOpportunity(selectedOpportunity.id, updatedOpp);
         fetchClientData();
         toast({ title: 'Oportunidad Actualizada' });
     } catch (error) {
@@ -261,7 +268,7 @@ export function ClientDetails({
     const updatedOpportunities = opportunities.map(opp => opp.id === opportunityId ? { ...opp, stage: newStage } : opp);
     setOpportunities(updatedOpportunities);
     try {
-        await updateOpportunity(opportunityId, { stage: newStage }, userInfo.id, userInfo.name, client.ownerName);
+        await updateOpportunity(opportunityId, { stage: newStage });
         fetchClientData(); // Refetch to get new system log
     } catch (error) {
         console.error('Error updating stage', error);
@@ -295,12 +302,12 @@ export function ClientDetails({
      if(!userInfo) return;
      try {
         if (selectedPerson) { // Editing existing person
-            await updatePerson(selectedPerson.id, personData, userInfo.id, userInfo.name);
+            await updatePerson(selectedPerson.id, personData);
             fetchClientData();
             toast({ title: "Contacto Actualizado" });
         } else { // Creating new person
             const newPersonData = { ...personData, clientIds: [client.id] };
-            await createPerson(newPersonData, userInfo.id, userInfo.name);
+            await createPerson(newPersonData);
             fetchClientData();
             toast({ title: "Contacto Creado" });
         }
@@ -549,7 +556,7 @@ export function ClientDetails({
   const confirmDeleteOpportunity = async (opp: Opportunity) => {
     if (!userInfo) return;
     try {
-      await deleteOpportunity(opp.id, userInfo.id, userInfo.name);
+      await deleteOpportunity(opp.id);
       toast({ title: "Oportunidad Eliminada" });
       fetchClientData(); // Refresh the list
     } catch (error) {
@@ -564,7 +571,7 @@ export function ClientDetails({
   const confirmDeletePerson = async (person: Person) => {
     if (!userInfo) return;
     try {
-      await deletePerson(person.id, userInfo.id, userInfo.name);
+      await deletePerson(person.id);
       fetchClientData();
     } catch (error) {
       console.error("Error deleting person:", error);
@@ -579,7 +586,7 @@ export function ClientDetails({
   const confirmDeleteNote = async (note: CommercialNote) => {
     if (!userInfo) return;
     try {
-        await deleteCommercialNote(note.id, userInfo.id, userInfo.name);
+        await deleteCommercialNote(note.id);
         toast({ title: "Nota Comercial Eliminada" });
         fetchClientData();
     } catch (error) {
