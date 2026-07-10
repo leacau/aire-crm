@@ -30,7 +30,13 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { addDays, format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getAgencies, createAgency, getInvoicesForOpportunity, createInvoice, updateInvoice, deleteInvoice, createOpportunity, getSupervisorCommentsForEntity, getInvoices, getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder, getPrograms, autoUpdateCoachingSession, updateOpportunity as persistOpportunity } from '@/lib/firebase-service';
+import { getAgencies, createAgency } from '@/lib/api/agencies';
+import { getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder } from '@/lib/api/advertising-orders';
+import { autoUpdateCoachingSession } from '@/lib/api/coaching';
+import { createInvoice, deleteInvoice, getInvoices, getInvoicesForOpportunity, updateInvoice } from '@/lib/api/invoices';
+import { updateOpportunity as persistOpportunity } from '@/lib/api/opportunities';
+import { getPrograms } from '@/lib/api/programs';
+import { getSupervisorCommentsForEntity } from '@/lib/api/supervisor-comments';
 import { PlusCircle, Clock, Trash2, Save, CalendarIcon, Mail, Briefcase, ExternalLink, RefreshCw, Pencil } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
@@ -106,7 +112,7 @@ const NewAgencyDialog = ({ onAgencyCreated }: { onAgencyCreated: (newAgency: Age
         if (!agencyName.trim() || !userInfo) return;
         setIsSaving(true);
         try {
-            const newAgencyId = await createAgency({ name: agencyName.trim() }, userInfo.id, userInfo.name);
+            const newAgencyId = await createAgency({ name: agencyName.trim() });
             const newAgency = { id: newAgencyId, name: agencyName.trim() };
             toast({ title: "Agencia Creada" });
             onAgencyCreated(newAgency);
@@ -450,7 +456,7 @@ export function OpportunityDetailsDialog({
       if (!window.confirm("¿Estás seguro de eliminar esta Orden de Publicidad? Esta acción no se puede deshacer.")) return;
       
       try {
-          await deleteAdvertisingOrder(orderId, userInfo.id, userInfo.name, opportunity?.clientName || client?.name || 'Cliente');
+          await deleteAdvertisingOrder(orderId);
           toast({ title: "Orden Eliminada" });
           fetchAdOrders(); 
       } catch (error) {
@@ -536,9 +542,6 @@ export function OpportunityDetailsDialog({
     await persistOpportunity(
       opportunity.id,
       update,
-      userInfo.id,
-      userInfo.name,
-      client?.ownerName || opportunity.clientName,
       undefined,
       management ? { manageContractPeriods: true } : undefined,
     );
@@ -709,7 +712,7 @@ export function OpportunityDetailsDialog({
             dateGenerated: new Date().toISOString(),
         };
 
-        await createInvoice(newInvoice, userInfo.id, userInfo.name, opportunity.clientName);
+        await createInvoice(newInvoice);
 
         toast({ title: "Factura Guardada" });
         fetchInvoices();
@@ -726,7 +729,7 @@ export function OpportunityDetailsDialog({
   const handleDeleteInvoice = async (invoiceId: string) => {
     if (!opportunity || !userInfo) return;
     try {
-      await deleteInvoice(invoiceId, userInfo.id, userInfo.name, opportunity.clientName);
+      await deleteInvoice(invoiceId, opportunity.clientName);
       toast({ title: 'Factura eliminada'});
       fetchInvoices();
     } catch (error) {
