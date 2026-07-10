@@ -544,11 +544,18 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 1 a 0 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Sexagesimo primer corte aplicado
+
+- `src/lib/permissions.ts` deja de cargar permisos desde el puente legacy y usa `src/lib/api/system.ts`.
+- Se elimina `src/lib/firebase-service.ts` porque ya no tiene consumidores en `src`.
+- La separacion API/front queda sin dependencias directas del servicio cliente legacy.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
-   - Revisar flujos productivos en QA para confirmar que no quedan consumos indirectos del puente temporal.
-   - Mantener `firebase-service.ts` solo como compatibilidad temporal mientras se estabiliza la nueva version.
+   - Revisar flujos productivos en QA para confirmar que todas las pantallas consumen las APIs esperadas.
+   - Mantener el seguimiento de regresiones sobre Contable, Publicidad, Programacion, Canjes y Commander.
 
 2. Permisos y validaciones
    - Endurecer validaciones por rol/area dentro de rutas API criticas.
@@ -559,6 +566,6 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
    - Documentar variables de entorno necesarias para Netlify/Vercel sin valores reales.
 
 4. Limpieza final
-   - Reducir o eliminar `firebase-service.ts` cuando el front consuma directamente las APIs.
+   - Revisar si quedan utilidades legacy sin uso luego de remover `firebase-service.ts`.
    - Revisar reglas de Firestore al final de la migracion, cuando la nueva version este lista para reemplazar a la actual.
    - Convertir paginas que ya no necesitan estado local complejo en server components cuando tenga sentido.

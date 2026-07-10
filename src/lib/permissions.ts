@@ -19,7 +19,7 @@ export async function initializePermissions() {
     }
     
     try {
-        const { getAreaPermissions } = await import('./firebase-service');
+        const { getAreaPermissions } = await import('@/lib/api/system');
         permissionsCache = await getAreaPermissions();
         cacheTimestamp = now;
         return permissionsCache;
