@@ -6,7 +6,10 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 // 🟢 AGREGAMOS getAdvertisingOrder
-import { getClients, saveSocialMediaRequest, updateSocialMediaRequest, getSocialMediaRequest, getAllUsers, getAdvertisingOrder, getAdvertisingOrdersByClientId } from '@/lib/firebase-service'; 
+import { getAdvertisingOrder } from '@/lib/api/advertising-orders';
+import { getAdvertisingOrdersByClientId, getClients } from '@/lib/api/clients';
+import { getAllUsers } from '@/lib/api/users';
+import { getSocialMediaRequest, saveSocialMediaRequest, updateSocialMediaRequest } from '@/lib/api/social-media-requests';
 import { AdvertisingOrder, Client, SocialMediaRequest, User, CarouselSlide } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
@@ -343,9 +346,9 @@ export function SocialMediaForm({ editId, cloneId, orderId }: { editId?: string,
             }, {} as Record<string, any>) as Omit<SocialMediaRequest, 'id' | 'createdAt'>;
 
             if (editId) {
-                await updateSocialMediaRequest(editId, dataToSave, userInfo!.id, userInfo!.name);
+                await updateSocialMediaRequest(editId, dataToSave);
             } else {
-                await saveSocialMediaRequest(dataToSave, userInfo!.id, userInfo!.name);
+                await saveSocialMediaRequest(dataToSave);
             }        
 
             if (notifyOnSave) {

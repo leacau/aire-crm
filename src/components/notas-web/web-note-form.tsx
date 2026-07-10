@@ -4,7 +4,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { getClients, saveWebNote, updateWebNote, getWebNote, getAllUsers, getAdvertisingOrder, getAdvertisingOrdersByClientId } from '@/lib/firebase-service'; 
+import { getAdvertisingOrder } from '@/lib/api/advertising-orders';
+import { getAdvertisingOrdersByClientId, getClients } from '@/lib/api/clients';
+import { getAllUsers } from '@/lib/api/users';
+import { getWebNote, saveWebNote, updateWebNote } from '@/lib/api/web-notes';
 import { AdvertisingOrder, Client, WebNote, User, WebNoteFormat, WebNoteImageSupport } from '@/lib/types';
 import { sendEmail } from '@/lib/google-gmail-service';
 import { hasManagementPrivileges } from '@/lib/role-utils';
@@ -244,9 +247,9 @@ export function WebNoteForm({ editId, cloneId, orderId }: { editId?: string, clo
             }, {} as Record<string, any>) as Omit<WebNote, 'id' | 'createdAt'>;
 
             if (editId) {
-                await updateWebNote(editId, dataToSave, userInfo!.id, userInfo!.name);
+                await updateWebNote(editId, dataToSave);
             } else {
-                await saveWebNote(dataToSave, userInfo!.id, userInfo!.name);
+                await saveWebNote(dataToSave);
             }        
 
             if (notifyOnSave) {

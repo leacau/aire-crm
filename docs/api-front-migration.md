@@ -421,6 +421,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - En `src`, la unica importacion restante de `firebase/firestore` es la inicializacion de Firestore en `src/lib/firebase.ts`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Cuadragesimo sexto corte aplicado
+
+- Las pantallas y formularios de Nota Comercial, Nota Web y Redes empiezan a importar directo desde `src/lib/api/*` en lugar de `firebase-service.ts`.
+- Se ajustaron llamadas de guardado, edicion y borrado para depender del usuario autenticado en servidor, sin pasar `userId`/`userName` desde el front.
+- Se agrego `/api/public/programs` para que la vista publica de notas pueda resolver nombres de programas sin sesion y sin exponer datos de edicion.
+- La vista publica de nota comercial usa `getPublicPrograms`; las vistas autenticadas siguen usando `/api/programs`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

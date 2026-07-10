@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { getSocialMediaRequest } from '@/lib/firebase-service';
+import { getSocialMediaRequest } from '@/lib/api/social-media-requests';
 import type { SocialMediaRequest } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';

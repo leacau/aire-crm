@@ -8,6 +8,19 @@ export async function getPrograms(): Promise<Program[]> {
   return result.programs;
 }
 
+export async function getPublicPrograms(): Promise<Program[]> {
+  const response = await fetch('/api/public/programs', {
+    method: 'GET',
+  });
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || 'No se pudieron cargar los programas.');
+  }
+
+  return payload?.programs || [];
+}
+
 export async function getProgram(id: string): Promise<Program | null> {
   const result = await apiRequest<{ program: Program | null }>(`/api/programs/${encodeURIComponent(id)}`, {
     method: 'GET',

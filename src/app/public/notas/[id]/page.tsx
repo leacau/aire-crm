@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { getCommercialNote, getPrograms } from '@/lib/firebase-service';
+import { getCommercialNote } from '@/lib/api/commercial-notes';
+import { getPublicPrograms } from '@/lib/api/programs';
 import type { CommercialNote, Program } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
@@ -29,7 +30,7 @@ export default function PublicNoteView() {
         if (typeof id === 'string') {
             Promise.all([
                 getCommercialNote(id),
-                getPrograms()
+                getPublicPrograms()
             ]).then(([noteData, programsData]) => {
                 setNote(noteData);
                 setPrograms(programsData);

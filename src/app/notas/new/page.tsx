@@ -13,7 +13,11 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 // 🟢 AGREGAMOS getAdvertisingOrder
-import { getClients, getPrograms, updateClientTangoMapping, saveCommercialNote, getCommercialNote, updateCommercialNote, getAllUsers, getAdvertisingOrder, getAdvertisingOrdersByClientId } from '@/lib/firebase-service'; 
+import { getAdvertisingOrder } from '@/lib/api/advertising-orders';
+import { getAdvertisingOrdersByClientId, getClients, updateClientTangoMapping } from '@/lib/api/clients';
+import { getCommercialNote, saveCommercialNote, updateCommercialNote } from '@/lib/api/commercial-notes';
+import { getPrograms } from '@/lib/api/programs';
+import { getAllUsers } from '@/lib/api/users';
 import type { AdvertisingOrder, Client, Program, CommercialNote, ScheduleItem, User, Interviewee } from '@/lib/types';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -582,7 +586,7 @@ export default function NewCommercialNotePage() {
                 if (client.rubro !== rubro) updates.rubro = rubro;
                 if (client.razonSocial !== razonSocial) updates.razonSocial = razonSocial;
                 if (Object.keys(updates).length > 0) {
-                    await updateClientTangoMapping(client.id, updates, userInfo!.id, userInfo!.name);
+                    await updateClientTangoMapping(client.id, updates);
                 }
             }
 
@@ -663,9 +667,9 @@ export default function NewCommercialNotePage() {
             }, {} as Omit<CommercialNote, 'id' | 'createdAt'>);
 
             if (editModeId) {
-                await updateCommercialNote(editModeId, noteData, userInfo!.id, userInfo!.name);
+                await updateCommercialNote(editModeId, noteData);
             } else {
-                await saveCommercialNote(noteData, userInfo!.id, userInfo!.name);
+                await saveCommercialNote(noteData);
             }
 
             if (notifyOnSave) {

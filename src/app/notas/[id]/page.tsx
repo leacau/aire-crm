@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getCommercialNote, getPrograms } from '@/lib/firebase-service';
+import { getCommercialNote } from '@/lib/api/commercial-notes';
+import { getPrograms } from '@/lib/api/programs';
 import type { CommercialNote, Program } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
