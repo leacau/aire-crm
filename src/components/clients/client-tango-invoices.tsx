@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { endOfMonth, format } from 'date-fns';
 import { Receipt, Search } from 'lucide-react';
-import { auth } from '@/lib/firebase';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -14,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { apiFetch } from '@/lib/api-client';
 import type { Client } from '@/lib/types';
 
 type TangoInvoice = {
@@ -206,18 +206,10 @@ export function ClientTangoInvoices({ client }: { client: Client }) {
     setHasSearched(true);
 
     try {
-      const idToken = await auth.currentUser?.getIdToken(true);
-      if (!idToken) throw new Error('Sesion no valida');
-
       const { fromDate, toDate } = getMonthRange(selectedMonth);
       const companiesToFetch = selectedCompany === 'all'
         ? COMPANIES
         : COMPANIES.filter(company => company.id === selectedCompany);
-
-      const requestOptions = {
-        headers: { Authorization: `Bearer ${idToken}` },
-        cache: 'no-store' as RequestCache,
-      };
 
       const companyInvoices = await Promise.all(companiesToFetch.map(async company => {
         const tangoClientId = getClientTangoId(client, company);
@@ -231,7 +223,9 @@ export function ClientTangoInvoices({ client }: { client: Client }) {
         });
 
         try {
-          const response = await fetch(`/api/tango/invoices?${params.toString()}`, requestOptions);
+          const response = await apiFetch(`/api/tango/invoices?${params.toString()}`, {
+            cache: 'no-store',
+          });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) {
             throw new Error(payload?.details || payload?.error || `Tango respondio ${response.status}`);

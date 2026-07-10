@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { auth } from '@/lib/firebase';
+import { apiFetch } from '@/lib/api-client';
 import type { SellerCompanyConfig, User } from '@/lib/types';
 
 export type TangoObjectiveInvoice = {
@@ -68,17 +68,13 @@ const getAdvisorCodeIndex = (advisors: User[]) => {
 };
 
 export async function fetchTangoObjectiveInvoices(fromDate: Date, toDate: Date) {
-  const idToken = await auth.currentUser?.getIdToken();
-  if (!idToken) throw new Error('No se pudo validar la sesion para consultar Tango.');
-
   const params = new URLSearchParams({
     company: 'all',
     fromDate: format(fromDate, 'yyyy-MM-dd'),
     toDate: format(toDate, 'yyyy-MM-dd'),
   });
 
-  const response = await fetch(`/api/tango/invoices?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${idToken}` },
+  const response = await apiFetch(`/api/tango/invoices?${params.toString()}`, {
     cache: 'no-store',
   });
   const payload = await response.json().catch(() => ({}));

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth } from 'date-fns';
 import { BarChart3, Search } from 'lucide-react';
-import { auth } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +15,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { apiFetch } from '@/lib/api-client';
 import { getClients } from '@/lib/api/clients';
 import type { Client } from '@/lib/types';
 
@@ -242,16 +242,12 @@ export default function CollectionsPage() {
     resetFilters();
 
     try {
-      const idToken = await auth.currentUser?.getIdToken(true);
-      if (!idToken) throw new Error('No se pudo validar la sesion.');
-
       const params = new URLSearchParams({ status });
       if (status === 'paid') {
         params.set('fromDate', fromDate);
         params.set('toDate', toDate);
       }
-      const response = await fetch(`/api/tango/collections?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
+      const response = await apiFetch(`/api/tango/collections?${params.toString()}`, {
         cache: 'no-store',
       });
       const payload = await response.json();
@@ -286,16 +282,12 @@ export default function CollectionsPage() {
     setSelectedSellers([]);
 
     try {
-      const idToken = await auth.currentUser?.getIdToken(true);
-      if (!idToken) throw new Error('No se pudo validar la sesion.');
-
       const params = new URLSearchParams({
         company: 'all',
         fromDate: `${selectedYear}-01-01`,
         toDate: `${selectedYear}-12-31`,
       });
-      const response = await fetch(`/api/tango/invoices?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
+      const response = await apiFetch(`/api/tango/invoices?${params.toString()}`, {
         cache: 'no-store',
       });
       const payload = await response.json();

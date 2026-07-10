@@ -9,13 +9,13 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { apiFetch } from '@/lib/api-client';
 import { getClients, undoClientTangoMapping, updateClientTangoMapping } from '@/lib/api/clients';
 import { getAllUsers, updateUserProfile } from '@/lib/api/users';
 import type { Client, SellerCompanyConfig, User } from '@/lib/types';
 import { RefreshCcw, CheckCircle2, Save, Undo2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { auth } from '@/lib/firebase';
 
 interface TangoClient {
   COD_CLIENTE: string;
@@ -227,14 +227,10 @@ export default function TangoMappingPage() {
       const crmData = await getClients();
       setCrmClients(crmData);
 
-      const idToken = await auth.currentUser?.getIdToken(true);
-      if (!idToken) throw new Error('No se pudo validar la sesión.');
-
-      const requestOptions = { headers: { Authorization: `Bearer ${idToken}` } };
       const responses = await Promise.all(
         TANGO_COMPANIES.map(async company => {
           try {
-            const response = await fetch(`/api/tango/clients?company=${company.id}`, requestOptions);
+            const response = await apiFetch(`/api/tango/clients?company=${company.id}`);
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) {
               const message = payload?.details || payload?.error || `Tango respondio ${response.status}`;

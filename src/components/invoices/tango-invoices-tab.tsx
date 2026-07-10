@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth } from 'date-fns';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
-import { auth } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { apiFetch } from '@/lib/api-client';
 import { getAllUsers } from '@/lib/api/users';
 import type { Client, User } from '@/lib/types';
 
@@ -273,12 +273,8 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
     setSelectedSellers([]);
     setSelectedClients([]);
     try {
-      const idToken = await auth.currentUser?.getIdToken(true);
-      if (!idToken) throw new Error('No se pudo validar la sesion.');
-
       const params = new URLSearchParams({ company, fromDate, toDate });
-      const response = await fetch(`/api/tango/invoices?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
+      const response = await apiFetch(`/api/tango/invoices?${params.toString()}`, {
         cache: 'no-store',
       });
       const payload = await response.json();

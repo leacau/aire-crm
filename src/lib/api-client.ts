@@ -8,6 +8,10 @@ type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   user?: FirebaseUser | null;
 };
 
+type ApiFetchOptions = RequestInit & {
+  user?: FirebaseUser | null;
+};
+
 const AUTH_READY_TIMEOUT_MS = 5000;
 
 let authReadyPromise: Promise<FirebaseUser | null> | null = null;
@@ -94,4 +98,29 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   }
 
   return payload as T;
+}
+
+export async function apiFetch(path: string, options: ApiFetchOptions = {}): Promise<Response> {
+  const { user, headers, ...init } = options;
+
+  const send = async (forceRefresh: boolean) => {
+    const token = await getToken(user, forceRefresh);
+
+    if (!token) {
+      throw new Error('No hay sesion activa.');
+    }
+
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set('Authorization', `Bearer ${token}`);
+
+    return fetch(path, {
+      ...init,
+      headers: requestHeaders,
+    });
+  };
+
+  const response = await send(false);
+  if (response.status !== 401) return response;
+
+  return send(true);
 }

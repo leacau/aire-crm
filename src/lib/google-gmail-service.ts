@@ -1,4 +1,4 @@
-import { auth } from './firebase';
+import { apiFetch } from '@/lib/api-client';
 
 export interface EmailAttachment {
     filename: string;
@@ -17,21 +17,11 @@ export interface EmailParams {
     replyTo?: string;
 }
 
-async function getCrmIdToken(): Promise<string> {
-    const idToken = await auth.currentUser?.getIdToken();
-    if (!idToken) {
-        throw new Error('Missing CRM authentication token.');
-    }
-    return idToken;
-}
-
 export async function sendEmail(params: EmailParams) {
-    const idToken = await getCrmIdToken();
-    const response = await fetch('/api/services/gmail/send', {
+    const response = await apiFetch('/api/services/gmail/send', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
         },
         body: JSON.stringify(params),
     });
@@ -55,12 +45,10 @@ export async function sendEmail(params: EmailParams) {
 }
 
 export async function createCalendarEvent(accessToken: string, event: object, calendarId: string = 'primary') {
-    const idToken = await getCrmIdToken();
-    const response = await fetch('/api/services/calendar/events', {
+    const response = await apiFetch('/api/services/calendar/events', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
         },
         body: JSON.stringify({ accessToken, event, calendarId }),
     });
@@ -74,12 +62,10 @@ export async function createCalendarEvent(accessToken: string, event: object, ca
 }
 
 export async function updateCalendarEvent(accessToken: string, eventId: string, event: object, calendarId: string = 'primary') {
-    const idToken = await getCrmIdToken();
-    const response = await fetch(`/api/services/calendar/events/${eventId}`, {
+    const response = await apiFetch(`/api/services/calendar/events/${eventId}`, {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
         },
         body: JSON.stringify({ accessToken, event, calendarId }),
     });
@@ -93,12 +79,10 @@ export async function updateCalendarEvent(accessToken: string, eventId: string, 
 }
 
 export async function deleteCalendarEvent(accessToken: string, eventId: string, calendarId: string = 'primary') {
-    const idToken = await getCrmIdToken();
-    const response = await fetch(`/api/services/calendar/events/${eventId}`, {
+    const response = await apiFetch(`/api/services/calendar/events/${eventId}`, {
         method: 'DELETE',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
         },
         body: JSON.stringify({ accessToken, calendarId }),
     });

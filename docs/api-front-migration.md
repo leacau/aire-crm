@@ -565,6 +565,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El layout queda sin componentes de diagnostico legacy asociados a reglas cliente de Firestore.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Sexagesimo cuarto corte aplicado
+
+- Se agrega `apiFetch` en `src/lib/api-client.ts` para llamadas autenticadas con respuesta cruda.
+- Mapeo Tango, Collections y las vistas de facturas Tango dejan de construir headers `Bearer` manualmente.
+- Los servicios cliente de Gmail/Calendar y facturacion de objetivos Tango reutilizan la misma autenticacion API con reintento ante 401.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
