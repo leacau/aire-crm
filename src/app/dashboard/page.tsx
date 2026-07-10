@@ -29,13 +29,10 @@ import { getAgencies } from '@/lib/api/agencies';
 import { cleanupOldActivities, getDashboardTasks, updateClientActivity } from '@/lib/api/client-activities';
 import { getClients } from '@/lib/api/clients';
 import { getDashboardInvoices } from '@/lib/api/invoices';
-import { getOpportunities } from '@/lib/api/opportunities';
+import { getOpportunities, updateOpportunity } from '@/lib/api/opportunities';
 import { getPendingPaymentEntries } from '@/lib/api/payments';
+import { getReportDataForAdvisors } from '@/lib/api/reports';
 import { getAllUsers } from '@/lib/api/users';
-import {
-  updateOpportunity,
-  getReportDataForAdvisors // 🟢 IMPORTACIÓN NUEVA
-} from '@/lib/firebase-service';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, eachMonthOfInterval, differenceInDays, startOfDay, addDays, isAfter, isBefore, addMonths } from 'date-fns';
@@ -446,7 +443,7 @@ export default function DashboardPage() {
   const handleUpdateOpportunity = async (updates: Partial<Opportunity>) => {
       if (!editingOpportunity || !userInfo) return;
       try {
-          await updateOpportunity(editingOpportunity.id, updates, userInfo.id, userInfo.name, editingOpportunity.clientName);
+          await updateOpportunity(editingOpportunity.id, updates);
           setOpportunities(prev => prev.map(o => o.id === editingOpportunity.id ? { ...o, ...updates } : o));
           toast({ title: 'Oportunidad actualizada' });
           setIsOpportunityModalOpen(false);

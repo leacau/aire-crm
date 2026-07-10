@@ -487,6 +487,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 9 a 8 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Quincuagesimo cuarto corte aplicado
+
+- Se agrego `/api/reports/advisors` para generar los datos del reporte de asesores desde servidor.
+- `Dashboard` deja de importar `updateOpportunity` y `getReportDataForAdvisors` desde `firebase-service.ts`.
+- El reporte cruza asesores, clientes, oportunidades activas, mora pendiente y seguimiento abierto en la API.
+- Los imports a `firebase-service.ts` bajan de 8 a 7 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
