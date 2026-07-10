@@ -448,6 +448,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 34 a 16 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Cuadragesimo noveno corte aplicado
+
+- Se endurecio `apiRequest` para esperar la hidratacion de Firebase Auth antes de llamar APIs protegidas.
+- Ante una respuesta 401, el cliente fuerza un refresco del ID token y reintenta la solicitud una vez antes de mostrar error.
+- Esto estabiliza pantallas ya migradas a API directa, como Contable/Facturas, Administracion/Mapeo Tango, clientes, agencias, tareas y usuarios.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
