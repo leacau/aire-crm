@@ -36,7 +36,6 @@ const collections = {
     commercialNotes: collection(db, 'commercial_notes'),
     billingRequests: collection(db, 'billing_requests'),
     socialMediaRequests: collection(db, 'social_media_requests'),
-    convenios: collection(db, 'convenios'),
     webNotes: collection(db, 'web_notes'),
     pipelineInteractions: collection(db, 'pipeline_interactions'),
 };
@@ -1887,27 +1886,11 @@ export const saveConvenioCanje = async (
     userId: string,
     userName: string
 ): Promise<string> => {
-    const dataToSave = {
-        ...convenioData,
-        createdAt: serverTimestamp(),
-    };
-
-    const docRef = await addDoc(collections.convenios, dataToSave);
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'create',
-        entityType: 'canje' as any, // Lo asociamos genéricamente a canjes
-        entityId: docRef.id,
-        entityName: `Convenio: ${convenioData.clientName}`,
-        details: `creó un nuevo Convenio de Canje para <strong>${convenioData.clientName}</strong>`,
-        ownerName: userName,
-    });
-
-    return docRef.id;
+    const { saveConvenioCanje } = await import('@/lib/api/convenios');
+    const id = await saveConvenioCanje(convenioData);
+    invalidateCache('convenios_canje');
+    return id;
 };
-
 // --- Gestión de Lista Blanca de Correos ---
 export const getEmailWhitelist = async (): Promise<string[]> => {
     const { getEmailWhitelist } = await import('@/lib/api/system');
@@ -1923,23 +1906,11 @@ export const getConveniosCanje = async (): Promise<ConvenioCanje[]> => {
     const cachedData = getFromCache('convenios_canje');
     if (cachedData) return cachedData;
 
-    const snapshot = await getDocs(query(collections.convenios, orderBy("createdAt", "desc")));
-    const convenios = snapshot.docs.map(doc => {
-        const data = doc.data();
-        const convertTimestamp = (field: any) => field instanceof Timestamp ? field.toDate().toISOString() : field;
-        
-        return { 
-            id: doc.id,
-            ...data,
-            createdAt: convertTimestamp(data.createdAt),
-            updatedAt: convertTimestamp(data.updatedAt),
-        } as ConvenioCanje;
-    });
-    
+    const { getConveniosCanje } = await import('@/lib/api/convenios');
+    const convenios = await getConveniosCanje();
     setInCache('convenios_canje', convenios);
     return convenios;
 };
-
 export const getOpportunityById = async (id: string): Promise<Opportunity | null> => {
     const docRef = doc(db, 'opportunities', id);
     const snap = await getDoc(docRef);
@@ -1955,20 +1926,9 @@ export const updateConvenioCanje = async (
     userId: string, 
     userName: string
 ): Promise<void> => {
-    const docRef = doc(db, 'convenios', id);
-    await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
+    const { updateConvenioCanje } = await import('@/lib/api/convenios');
+    await updateConvenioCanje(id, data);
     invalidateCache('convenios_canje');
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'update',
-        entityType: 'canje' as any,
-        entityId: id,
-        entityName: data.clientName || 'Convenio de Canje',
-        details: `actualizó un Convenio de Canje para <strong>${data.clientName || 'Cliente'}</strong>`,
-        ownerName: userName,
-    });
 };
 
 export const deleteConvenioCanje = async (
@@ -1977,119 +1937,23 @@ export const deleteConvenioCanje = async (
     userId: string, 
     userName: string
 ): Promise<void> => {
-    const batch = writeBatch(db);
-    
-    // 1. Borrar Convenio
-    batch.delete(doc(db, 'convenios', canjeId));
-    
-    // 2. Borrar Oportunidad y todo lo que cuelga de ella
-    if (oppId) {
-        batch.delete(doc(db, 'opportunities', oppId));
-        
-        const adQ = query(collection(db, 'advertising_orders'), where('opportunityId', '==', oppId));
-        const adSnap = await getDocs(adQ);
-        adSnap.forEach(d => batch.delete(d.ref));
-        
-        const invQ = query(collections.invoices, where('opportunityId', '==', oppId));
-        const invSnap = await getDocs(invQ);
-        invSnap.forEach(d => batch.delete(d.ref));
-    }
-    
-    await batch.commit();
+    const { deleteConvenioCanje } = await import('@/lib/api/convenios');
+    await deleteConvenioCanje(canjeId, oppId);
     invalidateCache('convenios_canje');
     invalidateCache('opportunities');
     invalidateCache('invoices');
-    
-    await logActivity({
-        userId,
-        userName,
-        type: 'delete',
-        entityType: 'canje' as any,
-        entityId: canjeId,
-        entityName: 'Convenio de Canje',
-        details: `eliminó un Convenio de Canje y su Orden de Publicidad asociada`,
-        ownerName: userName,
-    });
 };
 
 export const migrateLegacyConveniosToCanjes = async (
     userId: string,
     userName: string,
 ): Promise<{ created: number; skipped: number }> => {
-    const [convenios, existingCanjes] = await Promise.all([getConveniosCanje(), getCanjes()]);
-    const existingConvenioIds = new Set(existingCanjes.map(canje => canje.convenioId).filter(Boolean));
-    let created = 0;
-    let skipped = 0;
-
-    for (const convenio of convenios) {
-        if (!convenio.id || existingConvenioIds.has(convenio.id) || convenio.masterCanjeId) {
-            skipped += 1;
-            continue;
-        }
-
-        const [opportunity, orders] = await Promise.all([
-            getOpportunityById(convenio.opportunityId),
-            getAdvertisingOrdersByOpportunity(convenio.opportunityId),
-        ]);
-        const value = Number(opportunity?.value || 0);
-        const month = (convenio.fechaInicio || convenio.createdAt).slice(0, 7);
-        const billingText = convenio.observaciones || '';
-        const modalidad = billingText.includes('AVION') || billingText.includes('AVIÓN')
-            ? 'AVION'
-            : 'Factura contra factura';
-
-        const masterCanjeId = await createCanje({
-            titulo: opportunity?.title || `Canje ${convenio.clientName}`,
-            clienteId: convenio.clientId,
-            clienteName: convenio.clientName,
-            asesorId: convenio.advisorId,
-            asesorName: convenio.advisorName,
-            pedido: convenio.clienteEntrega,
-            necesidadOrganizacion: convenio.clienteEntrega,
-            observaciones: convenio.radioEntrega,
-            valorAsociado: value,
-            valorCanje: value,
-            valorAcordado: value,
-            estado: 'En gestión',
-            tipo: convenio.fechaInicio.slice(0, 7) === convenio.fechaFin.slice(0, 7) ? 'Una vez' : 'Mensual',
-            modalidad,
-            fechaInicio: convenio.fechaInicio,
-            fechaFin: convenio.fechaFin,
-            opportunityId: convenio.opportunityId,
-            convenioId: convenio.id,
-            advertisingOrderIds: orders.map(order => order.id).filter((id): id is string => Boolean(id)),
-            migratedFromConvenio: true,
-            historialMensual: [{
-                mes: month,
-                estado: 'En ejecución',
-                fechaEstado: new Date().toISOString(),
-                valorCanje: value,
-                recepciones: [{
-                    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
-                    descripcion: convenio.clienteEntrega,
-                    valorTotal: value,
-                    estado: 'Pendiente',
-                }],
-                ordenesPublicidad: orders.map(order => ({
-                    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
-                    orderId: order.id,
-                    descripcion: order.product || opportunity?.title || 'Orden de publicidad',
-                    valorTotal: Number(order.totalOrder || value),
-                })),
-                facturasCliente: [],
-                facturasAire: [],
-            }],
-        }, userId, userName);
-
-        await updateConvenioCanje(convenio.id, { masterCanjeId }, userId, userName);
-        created += 1;
-    }
-
+    const { migrateLegacyConveniosToCanjes } = await import('@/lib/api/convenios');
+    const result = await migrateLegacyConveniosToCanjes();
     invalidateCache('canjes');
     invalidateCache('convenios_canje');
-    return { created, skipped };
+    return result;
 };
-
 // --- Mantenimiento Automático ---
 export const autoUpdateCoachingSession = async (
     advisorId: string,

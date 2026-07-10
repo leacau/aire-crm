@@ -394,6 +394,15 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El puente mantiene el envio de correos contables con Gmail, pero ya no lee ni actualiza `billing_requests` directo desde el navegador.
 - `firestore.rules` sigue intacto.
 
+## Cuadragesimo tercer corte aplicado
+
+- Se agrego `/api/convenios` para listar y crear convenios de canje desde servidor.
+- Se agrego `/api/convenios/[convenioId]` para editar y eliminar convenios desde servidor.
+- Se agrego `/api/convenios/migrate-to-canjes` para migrar convenios legacy a canjes nuevos desde servidor.
+- `saveConvenioCanje`, `getConveniosCanje`, `updateConvenioCanje`, `deleteConvenioCanje` y `migrateLegacyConveniosToCanjes` pasan por API.
+- El borrado de convenios elimina desde servidor la oportunidad asociada, ordenes de publicidad e invoices colgantes.
+- `firestore.rules` sigue intacto.
+
 ## Proximos cortes recomendados
 
 1. Clientes avanzados
