@@ -20,19 +20,14 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { advertisingOrderSchema, AdvertisingOrderFormValues } from "@/lib/validators/advertising";
 
-import { 
-    createAdvertisingOrder, 
-    createOpportunity as createOpportunityRecord,
-    getClients, 
-    getAgencies, 
-    getPrograms, 
-    getOpportunitiesByClientId, 
-    getAdvertisingOrder,
-    updateAdvertisingOrder,
-    getBillingRequestsByOrder,
-    getAllUsers,
-    getWorkflowAssignments
-} from "@/lib/firebase-service";
+import { getAgencies } from "@/lib/api/agencies";
+import { createAdvertisingOrder, getAdvertisingOrder, updateAdvertisingOrder } from "@/lib/api/advertising-orders";
+import { getBillingRequestsByOrder } from "@/lib/api/billing-requests";
+import { getClients, getOpportunitiesByClientId } from "@/lib/api/clients";
+import { createOpportunity as createOpportunityRecord } from "@/lib/api/opportunities";
+import { getPrograms } from "@/lib/api/programs";
+import { getWorkflowAssignments } from "@/lib/api/system";
+import { getAllUsers } from "@/lib/api/users";
 import { Client, Agency, AdvertisingOrder, User, ApprovalStatus, Opportunity } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
 import { sendEmail } from "@/lib/google-gmail-service";
@@ -1009,24 +1004,19 @@ export function AdvertisingForm() {
 
           const campaignValue = Math.max(0, campaignSrlNet + campaignSasNet);
           const createdAt = new Date().toISOString();
-          finalOppId = await createOpportunityRecord(
-              {
-                  title: newOpportunityTitle,
-                  clientId: data.clientId,
-                  clientName: selectedClient.razonSocial || selectedClient.denominacion || "Cliente",
-                  value: campaignValue,
-                  stage: "Cerrado - Ganado",
-                  closeDate: format(new Date(), 'yyyy-MM-dd'),
-                  startDate: data.startDate.toISOString(),
-                  endDate: data.endDate.toISOString(),
-                  createdAt,
-                  stageChangedAt: createdAt,
-                  ownerId: selectedClient.ownerId || orderCreatedBy || userInfo.id,
-              },
-              userInfo.id,
-              userInfo.name,
-              selectedClient.ownerName || userInfo.name,
-          );
+          finalOppId = await createOpportunityRecord({
+              title: newOpportunityTitle,
+              clientId: data.clientId,
+              clientName: selectedClient.razonSocial || selectedClient.denominacion || "Cliente",
+              value: campaignValue,
+              stage: "Cerrado - Ganado",
+              closeDate: format(new Date(), 'yyyy-MM-dd'),
+              startDate: data.startDate.toISOString(),
+              endDate: data.endDate.toISOString(),
+              createdAt,
+              stageChangedAt: createdAt,
+              ownerId: selectedClient.ownerId || orderCreatedBy || userInfo.id,
+          });
           oppTitle = newOpportunityTitle;
           setValue("opportunityId", finalOppId);
           setValue("newOpportunityTitle", "");

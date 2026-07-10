@@ -2,23 +2,12 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import {
-    getAdvertisingOrder,
-    getPrograms,
-    getBillingRequestsByOrder,
-    getSocialMediaRequestsByOrderId,
-    getCommercialNotesByOrderId,
-    getWebNotesByOrderId,
-    getCommercialNotesByClientId,
-    getSocialMediaRequestsByClientId,
-    getWebNotesByClientId,
-    linkCommercialNoteToOrder,
-    linkSocialMediaRequestToOrder,
-    linkWebNoteToOrder,
-    unlinkCommercialNoteFromOrder,
-    unlinkSocialMediaRequestFromOrder,
-    unlinkWebNoteFromOrder,
-} from '@/lib/firebase-service';
+import { getAdvertisingOrder } from '@/lib/api/advertising-orders';
+import { getBillingRequestsByOrder } from '@/lib/api/billing-requests';
+import { getCommercialNotesByClientId, getCommercialNotesByOrderId, linkCommercialNoteToOrder, unlinkCommercialNoteFromOrder } from '@/lib/api/commercial-notes';
+import { getPrograms } from '@/lib/api/programs';
+import { getSocialMediaRequestsByClientId, getSocialMediaRequestsByOrderId, linkSocialMediaRequestToOrder, unlinkSocialMediaRequestFromOrder } from '@/lib/api/social-media-requests';
+import { getWebNotesByClientId, getWebNotesByOrderId, linkWebNoteToOrder, unlinkWebNoteFromOrder } from '@/lib/api/web-notes';
 import type { AdvertisingOrder, Program, CommercialNote, SocialMediaRequest, WebNote } from '@/lib/types';
 import { Spinner } from '@/components/ui/spinner';
 import { Header } from '@/components/layout/header';
@@ -320,15 +309,15 @@ export default function AdvertisingOrderDetailPage() {
         try {
             const orderTitle = getOrderLinkTitle();
             if (kind === 'note') {
-                await linkCommercialNoteToOrder(item.id, order.id, orderTitle, userInfo.id, userInfo.name);
+                await linkCommercialNoteToOrder(item.id, order.id, orderTitle);
                 setUnlinkedNotes(prev => prev.filter(note => note.id !== item.id));
                 setLinkedNotes(prev => [{ ...(item as CommercialNote), orderId: order.id, orderTitle }, ...prev]);
             } else if (kind === 'social') {
-                await linkSocialMediaRequestToOrder(item.id, order.id, orderTitle, userInfo.id, userInfo.name);
+                await linkSocialMediaRequestToOrder(item.id, order.id, orderTitle);
                 setUnlinkedSocial(prev => prev.filter(request => request.id !== item.id));
                 setLinkedSocial(prev => [{ ...(item as SocialMediaRequest), orderId: order.id, orderTitle }, ...prev]);
             } else {
-                await linkWebNoteToOrder(item.id, order.id, orderTitle, userInfo.id, userInfo.name);
+                await linkWebNoteToOrder(item.id, order.id, orderTitle);
                 setUnlinkedWebNotes(prev => prev.filter(note => note.id !== item.id));
                 setLinkedWebNotes(prev => [{ ...(item as WebNote), orderId: order.id, orderTitle }, ...prev]);
             }
@@ -353,15 +342,15 @@ export default function AdvertisingOrderDetailPage() {
         setLinkingId(`${kind}-${item.id}`);
         try {
             if (kind === 'note') {
-                await unlinkCommercialNoteFromOrder(item.id, userInfo.id, userInfo.name, reason);
+                await unlinkCommercialNoteFromOrder(item.id, reason);
                 setLinkedNotes(prev => prev.filter(note => note.id !== item.id));
                 setUnlinkedNotes(prev => [{ ...(item as CommercialNote), orderId: undefined, orderTitle: undefined }, ...prev]);
             } else if (kind === 'social') {
-                await unlinkSocialMediaRequestFromOrder(item.id, userInfo.id, userInfo.name, reason);
+                await unlinkSocialMediaRequestFromOrder(item.id, reason);
                 setLinkedSocial(prev => prev.filter(request => request.id !== item.id));
                 setUnlinkedSocial(prev => [{ ...(item as SocialMediaRequest), orderId: undefined, orderTitle: undefined }, ...prev]);
             } else {
-                await unlinkWebNoteFromOrder(item.id, userInfo.id, userInfo.name, reason);
+                await unlinkWebNoteFromOrder(item.id, reason);
                 setLinkedWebNotes(prev => prev.filter(note => note.id !== item.id));
                 setUnlinkedWebNotes(prev => [{ ...(item as WebNote), orderId: undefined, orderTitle: undefined }, ...prev]);
             }

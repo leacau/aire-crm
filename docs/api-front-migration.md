@@ -519,6 +519,15 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los imports a `firebase-service.ts` bajan de 5 a 4 en `src`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Quincuagesimo octavo corte aplicado
+
+- Publicidad deja de importar desde `firebase-service.ts` en el formulario y en el detalle de orden.
+- El formulario usa APIs directas para clientes, agencias, programas, oportunidades, ordenes, billing requests, usuarios y workflow.
+- El detalle de orden usa APIs directas para ordenes, billing requests, programas, notas comerciales, redes y notas web.
+- Los vinculos y desvinculos de acciones asociadas a la orden delegan usuario/auditoria al servidor.
+- Los imports a `firebase-service.ts` bajan de 4 a 2 en `src`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
