@@ -604,6 +604,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Dashboard solo dispara esa limpieza automatica para perfiles de gestion, evitando errores 403 en areas livianas.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Septuagesimo corte aplicado
+
+- Billing Requests filtra en servidor: gestion/receptores ven toda la bandeja, asesores solo sus pedidos.
+- Los cambios de estado de pedidos de facturacion validan el workflow en API: asesor solicita, receptor eleva y receptor/facturador asienta comprobante.
+- La pantalla de Billing Requests alinea la vista completa con perfiles de gestion.
+- Se centraliza la lectura normalizada de asignaciones de workflow en `src/lib/server/workflow-assignments.ts`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

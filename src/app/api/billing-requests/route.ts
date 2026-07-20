@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { serializeDocument } from '@/lib/server/firestore';
+import { getWorkflowAssignmentsServer } from '@/lib/server/workflow-assignments';
 import type { AdvertisingOrder, BillingRequest, Client } from '@/lib/types';
 
 export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const [requestsSnap, ordersSnap, clientsSnap] = await Promise.all([
+  const [requestsSnap, ordersSnap, clientsSnap, assignments] = await Promise.all([
     dbAdmin.collection('billing_requests').get(),
     dbAdmin.collection('advertising_orders').get(),
     dbAdmin.collection('clients').get(),
+    getWorkflowAssignmentsServer(),
   ]);
 
   const ordersMap = new Map(
@@ -21,6 +23,7 @@ export async function GET(request: Request) {
     clientsSnap.docs.map(doc => [doc.id, serializeDocument<Client>(doc.id, doc.data())]),
   );
 
+  const canSeeAll = hasServerManagementPrivileges(requester) || assignments.billingReceptors.includes(requester.uid);
   const requests = requestsSnap.docs
     .map(doc => {
       const billing = serializeDocument<BillingRequest>(doc.id, doc.data());
@@ -39,6 +42,7 @@ export async function GET(request: Request) {
         invoiceNumber: (billing as any).invoiceNumber || '',
       };
     })
+    .filter(request => canSeeAll || request.advisorId === requester.uid)
     .sort((a, b) => new Date(a.date || '').getTime() - new Date(b.date || '').getTime());
 
   return NextResponse.json({ requests });

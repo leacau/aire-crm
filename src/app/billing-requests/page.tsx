@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { getAllBillingRequestsWithMetadata, updateBillingRequestStatus } from '@/lib/api/billing-requests';
 import { getWorkflowAssignments } from '@/lib/api/system';
+import { hasManagementPrivileges } from '@/lib/role-utils';
 import { format } from 'date-fns';
 import { Clock, Send, CheckCircle2, Link, FileCheck2, Loader2 } from 'lucide-react'; 
 import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer';
@@ -29,7 +30,7 @@ export default function BillingRequestsPage() {
     useEffect(() => {
         if (userInfo) {
             getWorkflowAssignments().then(config => {
-                setIsReceptor(config.billingReceptors.includes(userInfo.id));
+                setIsReceptor(config.billingReceptors.includes(userInfo.id) || hasManagementPrivileges(userInfo));
                 loadData();
             });
         }
