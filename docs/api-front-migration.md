@@ -572,6 +572,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los servicios cliente de Gmail/Calendar y facturacion de objetivos Tango reutilizan la misma autenticacion API con reintento ante 401.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Sexagesimo quinto corte aplicado
+
+- Commander completa el agendado de tareas para clientes, ademas de prospectos.
+- `src/lib/server/commander-crm.ts` expone lectura servidor de clientes para resolver coincidencias por denominacion o razon social.
+- Se elimina el TODO de busqueda de clientes en `scheduleTask`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

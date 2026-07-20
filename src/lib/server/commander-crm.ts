@@ -34,9 +34,18 @@ function mapProspect(id: string, data: FirebaseFirestore.DocumentData | undefine
   return serializeDocument<Prospect>(id, data);
 }
 
+function mapClient(id: string, data: FirebaseFirestore.DocumentData | undefined): Client {
+  return serializeDocument<Client>(id, data);
+}
+
 export async function getCommanderProspects(): Promise<Prospect[]> {
   const snapshot = await dbAdmin.collection('prospects').orderBy('createdAt', 'desc').get();
   return snapshot.docs.map(doc => mapProspect(doc.id, doc.data()));
+}
+
+export async function getCommanderClients(): Promise<Client[]> {
+  const snapshot = await dbAdmin.collection('clients').orderBy('denominacion').get();
+  return snapshot.docs.map(doc => mapClient(doc.id, doc.data()));
 }
 
 export async function createCommanderClient(

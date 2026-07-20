@@ -8,9 +8,10 @@ import {
   createCommanderClient,
   createCommanderClientActivity,
   createCommanderProspect,
+  getCommanderClients,
   getCommanderProspects,
 } from '@/lib/server/commander-crm';
-import type { Prospect, ClientActivity, User, Client } from '@/lib/types';
+import type { ClientActivity, User } from '@/lib/types';
 import { z } from 'zod';
 import { findBestMatch } from 'string-similarity';
 
@@ -19,6 +20,27 @@ type CommanderContext = {
   userId: string;
   userName: string;
 };
+
+function findBestNamedMatch<T>(
+  search: string,
+  items: T[],
+  getNames: (item: T) => string[],
+): { item: T; name: string; rating: number } | null {
+  const candidates = items.flatMap(item => (
+    getNames(item)
+      .map(name => name.trim())
+      .filter(Boolean)
+      .map(name => ({ item, name }))
+  ));
+
+  if (candidates.length === 0) return null;
+
+  const bestMatch = findBestMatch(search, candidates.map(candidate => candidate.name));
+  if (bestMatch.bestMatch.rating <= 0.6) return null;
+
+  const candidate = candidates[bestMatch.bestMatchIndex];
+  return { ...candidate, rating: bestMatch.bestMatch.rating };
+}
 
 // Define tools for the AI to use
 const createClientTool = ai.defineTool(
@@ -97,18 +119,25 @@ const scheduleTaskTool = ai.defineTool(
     let entityId = '';
     let entityName = '';
 
-    // Find the entity ID based on its name and type
     if (input.entityType === 'prospect') {
-      const prospects = await getCommanderProspects(); // This should be optimized if it gets slow
-      const prospectNames = prospects.map(p => p.companyName);
-      const bestMatch = findBestMatch(input.entityName, prospectNames);
-      if (bestMatch.bestMatch.rating > 0.6) {
-        const matchedProspect = prospects[bestMatch.bestMatchIndex];
-        entityId = matchedProspect.id;
-        entityName = matchedProspect.companyName;
+      const prospects = await getCommanderProspects();
+      const match = findBestNamedMatch(input.entityName, prospects, prospect => [prospect.companyName]);
+      if (match) {
+        entityId = match.item.id;
+        entityName = match.item.companyName;
       }
-    } 
-    // TODO: Add client search logic here
+    } else {
+      const clients = await getCommanderClients();
+      const match = findBestNamedMatch(input.entityName, clients, client => [
+        client.denominacion,
+        client.razonSocial,
+        client.razonSocialTango || '',
+      ]);
+      if (match) {
+        entityId = match.item.id;
+        entityName = match.item.denominacion || match.name;
+      }
+    }
     
     if (!entityId) {
       throw new Error(`Could not find a ${input.entityType} named "${input.entityName}".`);
