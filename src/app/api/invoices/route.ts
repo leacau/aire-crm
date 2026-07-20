@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { canAccessInvoiceMutationByOpportunity } from '@/lib/server/invoice-access';
 import {
   buildInvoiceCreatePayload,
   buildMonthlyBillingIncrement,
@@ -50,6 +51,10 @@ export async function POST(request: Request) {
 
   if (!invoiceData?.invoiceNumber || !invoiceData.opportunityId) {
     return NextResponse.json({ error: 'Numero de factura y oportunidad son obligatorios.' }, { status: 400 });
+  }
+
+  if (!(await canAccessInvoiceMutationByOpportunity(invoiceData.opportunityId, requester))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const dataToSave = buildInvoiceCreatePayload(invoiceData);

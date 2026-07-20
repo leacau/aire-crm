@@ -700,6 +700,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `TANGO_INVOICE_PDF_PROCESS` permite sobrescribir el proceso de Tango; por defecto usa `14077`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Octogesimo tercer corte aplicado
+
+- Se agrega `src/lib/server/invoice-access.ts` para validar mutaciones de facturas por oportunidad/cliente propio o gestion/admin.
+- La creacion y edicion de facturas dejan de depender solo de una sesion valida.
+- La reasignacion de oportunidad de una factura queda reservada a gestion/admin.
+- El borrado valida acceso a la factura antes de eliminarla.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
