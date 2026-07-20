@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
+import { getAccessibleClient } from '@/lib/server/client-access';
 import { toTitleCase } from '@/lib/utils';
 import {
   cleanObject,
@@ -22,11 +23,9 @@ export async function GET(request: Request, context: RouteContext) {
   if (isServerResponse(requester)) return requester;
 
   const { clientId } = await context.params;
-  const snap = await dbAdmin.collection('clients').doc(clientId).get();
+  const client = await getAccessibleClient(clientId, requester);
 
-  return NextResponse.json({
-    client: snap.exists ? mapClient(snap.id, snap.data()) : null,
-  });
+  return NextResponse.json({ client });
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
@@ -87,4 +86,3 @@ export async function DELETE(request: Request, context: RouteContext) {
     return NextResponse.json({ error: error.message || 'No se pudo eliminar el cliente.' }, { status: 404 });
   }
 }
-

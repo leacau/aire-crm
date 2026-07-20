@@ -612,6 +612,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se centraliza la lectura normalizada de asignaciones de workflow en `src/lib/server/workflow-assignments.ts`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Septuagesimo primer corte aplicado
+
+- Las rutas de detalle por cliente validan acceso en servidor con `src/lib/server/client-access.ts`.
+- Actividades, oportunidades, facturas, personas, ordenes y pedidos asociados a un cliente ya no se exponen solo por conocer el `clientId`.
+- Gestion/admin conserva acceso completo; asesores acceden a clientes propios.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

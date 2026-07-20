@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { getAccessibleClient } from '@/lib/server/client-access';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { BillingRequest } from '@/lib/types';
 
@@ -14,6 +15,8 @@ export async function GET(request: Request, context: RouteContext) {
 
   const { clientId } = await context.params;
   if (!clientId) return NextResponse.json({ billingRequests: [] });
+  const client = await getAccessibleClient(clientId, requester);
+  if (!client) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const snapshot = await dbAdmin.collection('billing_requests').where('clientId', '==', clientId).get();
   const billingRequests = snapshot.docs
