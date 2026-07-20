@@ -633,6 +633,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La pantalla de Mapeo Tango mantiene su contrato API sin exponer operaciones administrativas a cualquier sesion valida.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Septuagesimo cuarto corte aplicado
+
+- Se agrega `src/lib/server/screen-permissions.ts` para validar permisos de pantalla en API con la misma configuracion que usa el front.
+- La creacion y eliminacion de programas requiere permiso de edicion sobre Grilla en servidor.
+- La edicion de programas separa permisos: tarifas requiere Rates, y datos/schedules del programa requieren Grilla.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

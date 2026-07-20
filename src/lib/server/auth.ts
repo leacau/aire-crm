@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authAdmin, dbAdmin } from '@/lib/firebase-admin';
+import type { ScreenName, ScreenPermission } from '@/lib/types';
 
 export type ServerUser = {
   uid: string;
@@ -7,6 +8,7 @@ export type ServerUser = {
   name?: string;
   role?: string;
   area?: string;
+  permissions?: Partial<Record<ScreenName, ScreenPermission>>;
   sellerConfig?: Array<{ companyName: string; codes: string[] }>;
 };
 
@@ -33,6 +35,7 @@ export async function requireServerUser(request: Request): Promise<ServerUser | 
       name: profile?.name,
       role: profile?.role,
       area: profile?.area,
+      permissions: profile?.permissions || {},
       sellerConfig: profile?.sellerConfig || [],
     };
   } catch {

@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
+import { hasServerScreenPermission } from '@/lib/server/screen-permissions';
 import { getRequesterName } from '@/app/api/clients/utils';
 import { mapProgram, stripLegacyScheduleFields } from '@/app/api/programs/utils';
 import type { Program } from '@/lib/types';
@@ -30,6 +31,18 @@ export async function PATCH(request: Request, context: RouteContext) {
   const { programId } = await context.params;
   const body = await request.json();
   const programData = (body?.programData || {}) as Partial<Omit<Program, 'id'>>;
+  const updateKeys = Object.keys(programData);
+  const touchesRates = updateKeys.includes('rates');
+  const touchesProgramConfig = updateKeys.some(key => key !== 'rates');
+
+  if (touchesRates && !(await hasServerScreenPermission(requester, 'Rates', 'edit'))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (touchesProgramConfig && !(await hasServerScreenPermission(requester, 'Grilla', 'edit'))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const docRef = dbAdmin.collection('programs').doc(programId);
   const originalSnap = await docRef.get();
 
@@ -65,6 +78,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 export async function DELETE(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
+  if (!(await hasServerScreenPermission(requester, 'Grilla', 'edit'))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const { programId } = await context.params;
   const docRef = dbAdmin.collection('programs').doc(programId);
