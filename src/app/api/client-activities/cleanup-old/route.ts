@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { isServerResponse, requireServerManagement } from '@/lib/server/auth';
 
 export async function POST(request: Request) {
-  const requester = await requireServerUser(request);
+  const requester = await requireServerManagement(request);
   if (isServerResponse(requester)) return requester;
 
   const sixtyDaysAgo = new Date();

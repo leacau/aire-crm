@@ -598,6 +598,12 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se reduce superficie financiera expuesta sin cambiar flujos de pantalla.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Sexagesimo noveno corte aplicado
+
+- La limpieza de actividades antiguas completadas (`/api/client-activities/cleanup-old`) pasa a requerir permisos de gestion/admin.
+- Dashboard solo dispara esa limpieza automatica para perfiles de gestion, evitando errores 403 en areas livianas.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

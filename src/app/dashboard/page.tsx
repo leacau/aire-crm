@@ -240,7 +240,11 @@ export default function DashboardPage() {
         setClients(c);
         setTasks(t);
         
-        cleanupOldActivities();
+        if (isBoss) {
+            void cleanupOldActivities().catch(error => {
+                console.error('Error cleaning old completed activities:', error);
+            });
+        }
 
         if (isLightWeightArea && !isBoss) {
             setLoadingData(false);
