@@ -591,6 +591,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La actualizacion puntual de registros de mora conserva autenticacion de usuario para no bloquear el seguimiento operativo.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Sexagesimo octavo corte aplicado
+
+- Se elimina `/api/monthly-billing-stats` y su cliente `src/lib/api/monthly-billing-stats.ts` porque ya no tienen consumidores.
+- Las estadisticas mensuales quedan actualizadas desde las rutas de facturas y oportunidades, junto con la creacion de comprobantes.
+- Se reduce superficie financiera expuesta sin cambiar flujos de pantalla.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
