@@ -3,7 +3,10 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { logServerActivity } from '@/lib/server/activity';
+import {
+  canAssignCommercialNoteAdvisor,
+  filterAccessibleCommercialNotes,
+} from '@/lib/server/commercial-note-access';
 import {
   cleanCommercialNotePayload,
   compareCommercialNotesByCreatedAtDesc,
@@ -42,6 +45,8 @@ export async function GET(request: Request) {
     notes = await getFilteredNotes();
   }
 
+  notes = await filterAccessibleCommercialNotes(notes, requester);
+
   return NextResponse.json({ notes });
 }
 
@@ -57,10 +62,18 @@ export async function POST(request: Request) {
   }
 
   const requesterName = getRequesterName(requester);
+  const advisorId = canAssignCommercialNoteAdvisor(requester) && noteData.advisorId
+    ? noteData.advisorId
+    : requester.uid;
+  const advisorName = canAssignCommercialNoteAdvisor(requester) && noteData.advisorName
+    ? noteData.advisorName
+    : requesterName;
   const batch = dbAdmin.batch();
   const noteRef = dbAdmin.collection('commercial_notes').doc();
   const dataToSave = {
     ...cleanCommercialNotePayload(noteData as unknown as Record<string, unknown>),
+    advisorId,
+    advisorName,
     createdAt: FieldValue.serverTimestamp(),
   };
 
@@ -88,7 +101,7 @@ export async function POST(request: Request) {
     entityId: noteRef.id,
     entityName: 'Nota Comercial',
     details: `creo una nota comercial para <strong>${noteData.clientName}</strong>`,
-    ownerName: noteData.advisorName,
+    ownerName: advisorName,
     timestamp: FieldValue.serverTimestamp(),
   });
 

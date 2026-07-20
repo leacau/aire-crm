@@ -654,6 +654,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se mantiene el contrato funcional de cada endpoint; solo cambia la fuente de verdad para la identidad del usuario.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Septuagesimo septimo corte aplicado
+
+- Las APIs de notas comerciales filtran resultados en servidor: gestion/revisores ven todo; asesores ven notas propias o de clientes propios.
+- La creacion de notas ya no permite asignar otro asesor salvo perfiles de gestion/admin.
+- La edicion y vinculacion con ordenes validan acceso a la nota antes de modificarla; el borrado queda reservado a gestion/admin.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

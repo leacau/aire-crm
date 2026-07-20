@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { cleanCommercialNotePayload, mapCommercialNote } from '@/app/api/commercial-notes/utils';
+import { canAccessCommercialNote, canAssignCommercialNoteAdvisor } from '@/lib/server/commercial-note-access';
 import type { CommercialNote } from '@/lib/types';
 
 type RouteContext = {
@@ -32,6 +33,19 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   if (!snap.exists) {
     return NextResponse.json({ error: 'Nota no encontrada' }, { status: 404 });
+  }
+
+  const originalNote = mapCommercialNote(snap.id, snap.data());
+  if (!(await canAccessCommercialNote(originalNote, requester))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const changesAdvisor =
+    (noteData.advisorId !== undefined && noteData.advisorId !== originalNote.advisorId) ||
+    (noteData.advisorName !== undefined && noteData.advisorName !== originalNote.advisorName);
+
+  if (!canAssignCommercialNoteAdvisor(requester) && changesAdvisor) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const updateData = {
@@ -73,6 +87,10 @@ export async function DELETE(request: Request, context: RouteContext) {
 
   if (!snap.exists) {
     return NextResponse.json({ error: 'Nota no encontrada' }, { status: 404 });
+  }
+
+  if (!hasServerManagementPrivileges(requester)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const noteData = snap.data() || {};
