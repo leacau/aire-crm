@@ -619,6 +619,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Gestion/admin conserva acceso completo; asesores acceden a clientes propios.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Septuagesimo segundo corte aplicado
+
+- La creacion de clientes ya no acepta reasignacion de propietario desde usuarios sin permisos de gestion/admin.
+- La edicion puntual de clientes valida en servidor que el usuario sea propietario o tenga permisos de gestion.
+- La reasignacion de propietario y el borrado puntual de clientes quedan reservados a perfiles de gestion/admin.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

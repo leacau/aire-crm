@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import {
+  hasServerManagementPrivileges,
+  isServerResponse,
+  requireServerManagement,
+  requireServerUser,
+} from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { getAccessibleClient } from '@/lib/server/client-access';
 import { toTitleCase } from '@/lib/utils';
@@ -43,6 +48,16 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const originalData = mapClient(originalDoc.id, originalDoc.data());
+  const canManageClients = hasServerManagementPrivileges(requester);
+
+  if (!canManageClients && originalData.ownerId !== requester.uid) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (!canManageClients && (data.ownerId !== undefined || data.ownerName !== undefined)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const updateData = cleanObject({
     ...data,
     denominacion: data.denominacion ? toTitleCase(data.denominacion) : data.denominacion,
@@ -61,7 +76,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
-  const requester = await requireServerUser(request);
+  const requester = await requireServerManagement(request);
   if (isServerResponse(requester)) return requester;
 
   const { clientId } = await context.params;

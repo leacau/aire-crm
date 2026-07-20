@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { toTitleCase } from '@/lib/utils';
 import {
@@ -28,8 +28,9 @@ export async function POST(request: Request) {
   const body = await request.json();
   const clientData = body?.clientData || {};
   const requesterName = getRequesterName(requester);
-  const ownerId = body?.ownerId || requester.uid;
-  const ownerName = body?.ownerName || requesterName;
+  const canAssignOwner = hasServerManagementPrivileges(requester);
+  const ownerId = canAssignOwner && body?.ownerId ? String(body.ownerId) : requester.uid;
+  const ownerName = canAssignOwner && body?.ownerName ? String(body.ownerName) : requesterName;
 
   const denominacion = toTitleCase(String(clientData.denominacion || '').trim());
   if (!denominacion) {
@@ -65,4 +66,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ id: docRef.id });
 }
-
