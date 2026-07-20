@@ -4,6 +4,7 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { serializeDocument } from '@/lib/server/firestore';
 import { logServerActivity } from '@/lib/server/activity';
+import { hasServerScreenPermission } from '@/lib/server/screen-permissions';
 import { getRequesterName } from '@/app/api/clients/utils';
 import type { Agency } from '@/lib/types';
 
@@ -20,6 +21,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
+  if (!(await hasServerScreenPermission(requester, 'Opportunities', 'edit'))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const body = await request.json();
   const agencyData = body?.agencyData as Omit<Agency, 'id'> | undefined;
@@ -50,4 +54,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ id: docRef.id });
 }
-

@@ -685,6 +685,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La lectura/edicion puntual valida acceso a la orden y el borrado queda reservado a gestion/admin.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Octogesimo primer corte aplicado
+
+- La creacion de agencias valida permiso `Opportunities/edit` en servidor.
+- La lectura del catalogo de agencias conserva autenticacion simple para combos y pantallas operativas.
+- El catalogo compartido deja de poder crecer desde cualquier sesion autenticada sin permiso comercial.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
