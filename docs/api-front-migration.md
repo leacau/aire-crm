@@ -669,6 +669,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los borrados puntuales de Redes/Web quedan reservados a gestion/admin.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Septuagesimo noveno corte aplicado
+
+- La creacion de oportunidades valida en servidor que el cliente pertenezca al usuario o que tenga permisos de gestion/admin.
+- La edicion de oportunidades requiere cliente propio o gestion/admin, bloqueando cambios de cliente y fecha de creacion para usuarios sin gestion.
+- `manageContractPeriods` queda reservado a gestion/admin desde la API, no solo desde la UI.
+- El borrado de oportunidades queda reservado a gestion/admin.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

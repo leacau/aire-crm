@@ -119,6 +119,10 @@ export async function POST(request: Request) {
   }
 
   const client = mapClient(clientSnap.id, clientSnap.data());
+  if (!hasServerManagementPrivileges(requester) && client.ownerId !== requester.uid) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const dataToSave = cleanObject({
     ...(opportunityData as unknown as Record<string, unknown>),
     pautados: undefined,

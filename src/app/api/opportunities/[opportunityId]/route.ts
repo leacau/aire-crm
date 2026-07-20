@@ -3,7 +3,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { parseISO } from 'date-fns';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { cleanObject, getRequesterName, mapClient } from '@/app/api/clients/utils';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import {
@@ -319,6 +319,27 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const client = mapClient(clientSnap.id, clientSnap.data());
+  const canManageOpportunity = hasServerManagementPrivileges(requester);
+  const isClientOwner = client.ownerId === requester.uid;
+  if (!canManageOpportunity && !isClientOwner) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const changesClient =
+    (data.clientId !== undefined && data.clientId !== originalData.clientId) ||
+    (data.clientName !== undefined && data.clientName !== originalData.clientName);
+  if (!canManageOpportunity && changesClient) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (!canManageOpportunity && manageContractPeriods) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (!canManageOpportunity && data.createdAt !== undefined && data.createdAt !== originalData.createdAt) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const requesterName = getRequesterName(requester);
   let updateResult: ReturnType<typeof buildOpportunityUpdatePayload>;
   try {
@@ -373,6 +394,10 @@ export async function DELETE(request: Request, context: RouteContext) {
   }
 
   const opportunity = serializeDocument<Opportunity>(opportunitySnap.id, opportunitySnap.data());
+  if (!hasServerManagementPrivileges(requester)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const invoicesSnap = await dbAdmin.collection('invoices').where('opportunityId', '==', opportunityId).get();
 
   const refsToDelete: FirebaseFirestore.DocumentReference[] = [
