@@ -585,6 +585,12 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La API queda alineada con la UI, que ya limita seleccion masiva, reasignacion y borrado a perfiles de gestion.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Sexagesimo septimo corte aplicado
+
+- La importacion y eliminacion masiva de mora (`POST` y `DELETE` en `/api/payments`) pasan a requerir permisos de gestion/admin.
+- La actualizacion puntual de registros de mora conserva autenticacion de usuario para no bloquear el seguimiento operativo.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

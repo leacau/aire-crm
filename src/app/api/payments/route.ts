@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { isServerResponse, requireServerManagement, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { buildPaymentImportPayload, mapPaymentEntry, type PaymentImportRow } from '@/app/api/payments/utils';
 import type { PaymentStatus } from '@/lib/types';
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const requester = await requireServerUser(request);
+  const requester = await requireServerManagement(request);
   if (isServerResponse(requester)) return requester;
 
   const body = await request.json();
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const requester = await requireServerUser(request);
+  const requester = await requireServerManagement(request);
   if (isServerResponse(requester)) return requester;
 
   const body = await request.json().catch(() => null);
