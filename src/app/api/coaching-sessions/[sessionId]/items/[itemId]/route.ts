@@ -11,6 +11,10 @@ type RouteContext = {
   params: Promise<{ sessionId: string; itemId: string }>;
 };
 
+function getRequesterName(requester: { name?: string; email?: string }) {
+  return requester.name || requester.email || 'Usuario';
+}
+
 function errorResponse(error: unknown) {
   if (error instanceof CoachingApiError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
@@ -31,8 +35,8 @@ export async function PATCH(request: Request, context: RouteContext) {
       sessionId,
       itemId,
       body?.updates as Partial<CoachingItem>,
-      String(body?.userId || requester.uid),
-      String(body?.userName || requester.name || requester.email || 'Usuario'),
+      requester.uid,
+      getRequesterName(requester),
       requester,
     );
     return NextResponse.json({ ok: true });

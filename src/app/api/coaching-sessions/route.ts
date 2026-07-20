@@ -7,6 +7,10 @@ import {
 } from '@/lib/server/coaching';
 import type { CoachingSession } from '@/lib/types';
 
+function getRequesterName(requester: { name?: string; email?: string }) {
+  return requester.name || requester.email || 'Usuario';
+}
+
 function errorResponse(error: unknown) {
   if (error instanceof CoachingApiError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
@@ -38,8 +42,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const id = await createCoachingSessionServer(
       body?.sessionData as Omit<CoachingSession, 'id' | 'createdAt' | 'status'>,
-      String(body?.userId || requester.uid),
-      String(body?.userName || requester.name || requester.email || 'Usuario'),
+      requester.uid,
+      getRequesterName(requester),
       requester,
     );
     return NextResponse.json({ id });

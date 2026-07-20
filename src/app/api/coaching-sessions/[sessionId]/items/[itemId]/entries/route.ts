@@ -8,6 +8,10 @@ type RouteContext = {
 
 type FollowUpField = 'followUpDone' | 'followUpCurrent' | 'followUpNext';
 
+function getRequesterName(requester: { name?: string; email?: string }) {
+  return requester.name || requester.email || 'Usuario';
+}
+
 function errorResponse(error: unknown) {
   if (error instanceof CoachingApiError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
@@ -29,8 +33,8 @@ export async function POST(request: Request, context: RouteContext) {
       itemId,
       body?.field as FollowUpField,
       String(body?.text || ''),
-      String(body?.userId || requester.uid),
-      String(body?.userName || requester.name || requester.email || 'Usuario'),
+      requester.uid,
+      getRequesterName(requester),
       requester,
     );
     return NextResponse.json({ entry });

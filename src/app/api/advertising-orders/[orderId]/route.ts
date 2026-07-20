@@ -46,8 +46,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     await updateAdvertisingOrderServer(
       orderId,
       body?.orderData as Partial<Omit<AdvertisingOrder, 'id' | 'createdAt'>>,
-      String(body?.userId || requester.uid),
-      String(body?.userName || requesterName),
+      requester.uid,
+      requesterName,
       body?.options,
     );
     return NextResponse.json({ ok: true });

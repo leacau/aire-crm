@@ -12,6 +12,10 @@ type RouteContext = {
 
 type FollowUpField = 'followUpDone' | 'followUpCurrent' | 'followUpNext';
 
+function getRequesterName(requester: { name?: string; email?: string }) {
+  return requester.name || requester.email || 'Usuario';
+}
+
 function errorResponse(error: unknown) {
   if (error instanceof CoachingApiError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
@@ -34,8 +38,8 @@ export async function PATCH(request: Request, context: RouteContext) {
       body?.field as FollowUpField,
       entryId,
       String(body?.text || ''),
-      String(body?.userId || requester.uid),
-      String(body?.userName || requester.name || requester.email || 'Usuario'),
+      requester.uid,
+      getRequesterName(requester),
       requester,
     );
     return NextResponse.json({ ok: true });
@@ -56,8 +60,8 @@ export async function DELETE(request: Request, context: RouteContext) {
       itemId,
       body?.field as FollowUpField,
       entryId,
-      String(body?.userId || requester.uid),
-      String(body?.userName || requester.name || requester.email || 'Usuario'),
+      requester.uid,
+      getRequesterName(requester),
       requester,
     );
     return NextResponse.json({ ok: true });

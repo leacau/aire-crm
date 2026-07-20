@@ -647,6 +647,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La lectura de elementos y series conserva autenticacion simple para no afectar la visualizacion de Programacion/Grilla.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Septuagesimo sexto corte aplicado
+
+- Las rutas de Coaching y actualizacion de ordenes de publicidad dejan de confiar en `userId`/`userName` enviados por el cliente para auditoria.
+- Los logs y campos de actor usan la identidad verificada por `requireServerUser`, evitando suplantacion desde payloads del front.
+- Se mantiene el contrato funcional de cada endpoint; solo cambia la fuente de verdad para la identidad del usuario.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

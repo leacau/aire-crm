@@ -11,6 +11,10 @@ type RouteContext = {
   params: Promise<{ sessionId: string }>;
 };
 
+function getRequesterName(requester: { name?: string; email?: string }) {
+  return requester.name || requester.email || 'Usuario';
+}
+
 function errorResponse(error: unknown) {
   if (error instanceof CoachingApiError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
@@ -40,11 +44,10 @@ export async function DELETE(request: Request, context: RouteContext) {
 
   try {
     const { sessionId } = await context.params;
-    const body = await request.json().catch(() => ({}));
     await deleteCoachingSessionServer(
       sessionId,
-      String(body?.userId || requester.uid),
-      String(body?.userName || requester.name || requester.email || 'Usuario'),
+      requester.uid,
+      getRequesterName(requester),
       requester,
     );
     return NextResponse.json({ ok: true });
