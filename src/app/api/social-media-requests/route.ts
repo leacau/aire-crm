@@ -5,6 +5,10 @@ import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import {
+  canAssignAdvisorScopedOwner,
+  filterAccessibleAdvisorScopedRecords,
+} from '@/lib/server/advisor-scoped-access';
+import {
   cleanSocialMediaPayload,
   compareSocialMediaRequestsByCreatedAtDesc,
   mapSocialMediaRequest,
@@ -39,6 +43,8 @@ export async function GET(request: Request) {
     requests = await getFilteredRequests();
   }
 
+  requests = await filterAccessibleAdvisorScopedRecords(requests, requester);
+
   return NextResponse.json({ requests });
 }
 
@@ -53,13 +59,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Cliente y tipo de contenido son obligatorios.' }, { status: 400 });
   }
 
+  const requesterName = getRequesterName(requester);
+  const advisorId = canAssignAdvisorScopedOwner(requester) && requestData.advisorId
+    ? requestData.advisorId
+    : requester.uid;
+  const advisorName = canAssignAdvisorScopedOwner(requester) && requestData.advisorName
+    ? requestData.advisorName
+    : requesterName;
   const dataToSave = {
     ...cleanSocialMediaPayload(requestData as unknown as Record<string, unknown>),
+    advisorId,
+    advisorName,
     createdAt: FieldValue.serverTimestamp(),
   };
 
   const docRef = await dbAdmin.collection('social_media_requests').add(dataToSave);
-  const requesterName = getRequesterName(requester);
 
   await logServerActivity({
     userId: requester.uid,
@@ -69,7 +83,7 @@ export async function POST(request: Request) {
     entityId: docRef.id,
     entityName: requestData.clientName,
     details: `creo un pedido de redes para <strong>${requestData.clientName}</strong> (${requestData.contentType})`,
-    ownerName: requestData.advisorName,
+    ownerName: advisorName,
   });
 
   return NextResponse.json({ id: docRef.id });

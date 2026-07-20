@@ -4,6 +4,8 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
+import { canAccessAdvisorScopedRecord } from '@/lib/server/advisor-scoped-access';
+import { mapWebNote } from '@/app/api/web-notes/utils';
 
 type RouteContext = {
   params: Promise<{ noteId: string }>;
@@ -26,6 +28,11 @@ export async function PATCH(request: Request, context: RouteContext) {
   const snap = await docRef.get();
   if (!snap.exists) {
     return NextResponse.json({ error: 'Nota Web no encontrada' }, { status: 404 });
+  }
+
+  const note = mapWebNote(snap.id, snap.data());
+  if (!(await canAccessAdvisorScopedRecord(note, requester))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   await docRef.update({
@@ -65,6 +72,11 @@ export async function DELETE(request: Request, context: RouteContext) {
   const snap = await docRef.get();
   if (!snap.exists) {
     return NextResponse.json({ error: 'Nota Web no encontrada' }, { status: 404 });
+  }
+
+  const note = mapWebNote(snap.id, snap.data());
+  if (!(await canAccessAdvisorScopedRecord(note, requester))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const requesterName = getRequesterName(requester);

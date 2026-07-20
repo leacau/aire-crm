@@ -2,9 +2,14 @@ import { NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { buildSocialMediaUpdatePayload, mapSocialMediaRequest } from '@/app/api/social-media-requests/utils';
+import {
+  canAccessAdvisorScopedRecord,
+  canAssignAdvisorScopedOwner,
+  changesAdvisorScopedOwner,
+} from '@/lib/server/advisor-scoped-access';
 import type { SocialMediaRequest } from '@/lib/types';
 
 type RouteContext = {
@@ -17,9 +22,17 @@ export async function GET(request: Request, context: RouteContext) {
 
   const { requestId } = await context.params;
   const snap = await dbAdmin.collection('social_media_requests').doc(requestId).get();
+  if (!snap.exists) {
+    return NextResponse.json({ request: null });
+  }
+
+  const requestData = mapSocialMediaRequest(snap.id, snap.data());
+  if (!(await canAccessAdvisorScopedRecord(requestData, requester))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   return NextResponse.json({
-    request: snap.exists ? mapSocialMediaRequest(snap.id, snap.data()) : null,
+    request: requestData,
   });
 }
 
@@ -38,6 +51,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const originalData = mapSocialMediaRequest(snap.id, snap.data());
+  if (!(await canAccessAdvisorScopedRecord(originalData, requester))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (!canAssignAdvisorScopedOwner(requester) && changesAdvisorScopedOwner(data, originalData)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const updateData = buildSocialMediaUpdatePayload(data as Record<string, unknown>);
 
   if (Array.isArray(data.approvalHistory)) {
@@ -74,6 +95,10 @@ export async function DELETE(request: Request, context: RouteContext) {
 
   if (!snap.exists) {
     return NextResponse.json({ ok: true });
+  }
+
+  if (!hasServerManagementPrivileges(requester)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const data = snap.data() || {};

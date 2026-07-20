@@ -2,9 +2,14 @@ import { NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { cleanWebNotePayload, mapWebNote } from '@/app/api/web-notes/utils';
+import {
+  canAccessAdvisorScopedRecord,
+  canAssignAdvisorScopedOwner,
+  changesAdvisorScopedOwner,
+} from '@/lib/server/advisor-scoped-access';
 import type { WebNote } from '@/lib/types';
 
 type RouteContext = {
@@ -17,9 +22,17 @@ export async function GET(request: Request, context: RouteContext) {
 
   const { noteId } = await context.params;
   const snap = await dbAdmin.collection('web_notes').doc(noteId).get();
+  if (!snap.exists) {
+    return NextResponse.json({ note: null });
+  }
+
+  const note = mapWebNote(snap.id, snap.data());
+  if (!(await canAccessAdvisorScopedRecord(note, requester))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   return NextResponse.json({
-    note: snap.exists ? mapWebNote(snap.id, snap.data()) : null,
+    note,
   });
 }
 
@@ -38,6 +51,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const originalData = mapWebNote(snap.id, snap.data());
+  if (!(await canAccessAdvisorScopedRecord(originalData, requester))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (!canAssignAdvisorScopedOwner(requester) && changesAdvisorScopedOwner(data, originalData)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const updateData = {
     ...cleanWebNotePayload(data as Record<string, unknown>),
     updatedAt: FieldValue.serverTimestamp(),
@@ -82,6 +103,10 @@ export async function DELETE(request: Request, context: RouteContext) {
   }
 
   const noteData = mapWebNote(snap.id, snap.data());
+  if (!hasServerManagementPrivileges(requester)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   await docRef.delete();
 
   const requesterName = getRequesterName(requester);

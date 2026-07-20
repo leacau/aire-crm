@@ -661,6 +661,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La edicion y vinculacion con ordenes validan acceso a la nota antes de modificarla; el borrado queda reservado a gestion/admin.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Septuagesimo octavo corte aplicado
+
+- Se agrega `src/lib/server/advisor-scoped-access.ts` para reutilizar reglas de acceso en entidades con `advisorId` y `clientId`.
+- Pedidos de Redes y Notas Web/Gacetillas filtran listados en servidor y validan acceso antes de leer, editar o vincular ordenes.
+- La creacion de estos pedidos ya no permite reasignar asesor desde usuarios sin permisos de gestion/admin.
+- Los borrados puntuales de Redes/Web quedan reservados a gestion/admin.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

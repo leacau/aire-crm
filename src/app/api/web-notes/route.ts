@@ -4,6 +4,10 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
+import {
+  canAssignAdvisorScopedOwner,
+  filterAccessibleAdvisorScopedRecords,
+} from '@/lib/server/advisor-scoped-access';
 import { cleanWebNotePayload, compareWebNotesByCreatedAtDesc, mapWebNote } from '@/app/api/web-notes/utils';
 import type { WebNote } from '@/lib/types';
 
@@ -35,6 +39,8 @@ export async function GET(request: Request) {
     notes = await getFilteredWebNotes();
   }
 
+  notes = await filterAccessibleAdvisorScopedRecords(notes, requester);
+
   return NextResponse.json({ notes });
 }
 
@@ -49,13 +55,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Cliente y formato son obligatorios.' }, { status: 400 });
   }
 
+  const requesterName = getRequesterName(requester);
+  const advisorId = canAssignAdvisorScopedOwner(requester) && noteData.advisorId
+    ? noteData.advisorId
+    : requester.uid;
+  const advisorName = canAssignAdvisorScopedOwner(requester) && noteData.advisorName
+    ? noteData.advisorName
+    : requesterName;
   const dataToSave = {
     ...cleanWebNotePayload(noteData as unknown as Record<string, unknown>),
+    advisorId,
+    advisorName,
     createdAt: FieldValue.serverTimestamp(),
   };
 
   const docRef = await dbAdmin.collection('web_notes').add(dataToSave);
-  const requesterName = getRequesterName(requester);
 
   await logServerActivity({
     userId: requester.uid,
@@ -65,7 +79,7 @@ export async function POST(request: Request) {
     entityId: docRef.id,
     entityName: noteData.clientName,
     details: `cargo un pedido de Nota Web / Gacetilla para <strong>${noteData.clientName}</strong>`,
-    ownerName: noteData.advisorName,
+    ownerName: advisorName,
   });
 
   return NextResponse.json({ id: docRef.id });

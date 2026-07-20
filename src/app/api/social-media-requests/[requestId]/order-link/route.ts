@@ -4,6 +4,8 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
+import { canAccessAdvisorScopedRecord } from '@/lib/server/advisor-scoped-access';
+import { mapSocialMediaRequest } from '@/app/api/social-media-requests/utils';
 
 type RouteContext = {
   params: Promise<{ requestId: string }>;
@@ -26,6 +28,11 @@ export async function PATCH(request: Request, context: RouteContext) {
   const snap = await docRef.get();
   if (!snap.exists) {
     return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
+  }
+
+  const socialRequest = mapSocialMediaRequest(snap.id, snap.data());
+  if (!(await canAccessAdvisorScopedRecord(socialRequest, requester))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   await docRef.update({
@@ -65,6 +72,11 @@ export async function DELETE(request: Request, context: RouteContext) {
   const snap = await docRef.get();
   if (!snap.exists) {
     return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
+  }
+
+  const socialRequest = mapSocialMediaRequest(snap.id, snap.data());
+  if (!(await canAccessAdvisorScopedRecord(socialRequest, requester))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const requesterName = getRequesterName(requester);
