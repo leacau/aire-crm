@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { hasServerScreenPermission } from '@/lib/server/screen-permissions';
 import { mapCommercialItem, normalizeCommercialDate, sanitizeCommercialRelations } from '@/app/api/commercial-items/utils';
 import type { CommercialItem } from '@/lib/types';
 
@@ -29,6 +30,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
+  if (!(await hasServerScreenPermission(requester, 'Grilla', 'edit'))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const body = await request.json();
   const itemData = body?.itemData as Omit<CommercialItem, 'id'> | undefined;

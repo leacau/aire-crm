@@ -5,6 +5,7 @@ import { getRequesterName } from '@/app/api/clients/utils';
 import { mapCommercialItem, normalizeCommercialDate, sanitizeCommercialRelations } from '@/app/api/commercial-items/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
+import { hasServerScreenPermission } from '@/lib/server/screen-permissions';
 import type { CommercialItem } from '@/lib/types';
 
 type SaveSeriesBody = {
@@ -27,6 +28,9 @@ async function getItemsBySeries(seriesId: string): Promise<CommercialItem[]> {
 export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
+  if (!(await hasServerScreenPermission(requester, 'Grilla', 'edit'))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const body = (await request.json()) as SaveSeriesBody;
   const item = body?.item;

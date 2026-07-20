@@ -5,6 +5,7 @@ import { getRequesterName } from '@/app/api/clients/utils';
 import { mapCommercialItem, prepareCommercialItemUpdate } from '@/app/api/commercial-items/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
+import { hasServerScreenPermission } from '@/lib/server/screen-permissions';
 import type { CommercialItem } from '@/lib/types';
 
 type RouteContext = {
@@ -14,6 +15,9 @@ type RouteContext = {
 export async function PATCH(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
+  if (!(await hasServerScreenPermission(requester, 'Grilla', 'edit'))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const { itemId } = await context.params;
   const body = await request.json();

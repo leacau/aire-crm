@@ -640,6 +640,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La edicion de programas separa permisos: tarifas requiere Rates, y datos/schedules del programa requieren Grilla.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Septuagesimo quinto corte aplicado
+
+- Las escrituras de elementos comerciales de Grilla (`commercial-items`) validan permiso `Grilla/edit` en servidor.
+- La creacion puntual, la edicion, el guardado de series y el borrado masivo dejan de depender solo del bloqueo visual del front.
+- La lectura de elementos y series conserva autenticacion simple para no afectar la visualizacion de Programacion/Grilla.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
