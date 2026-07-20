@@ -692,6 +692,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El catalogo compartido deja de poder crecer desde cualquier sesion autenticada sin permiso comercial.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Octogesimo segundo corte aplicado
+
+- Se agrega `/api/tango/invoices/pdf` para descargar PDFs de facturas Tango desde servidor usando `TANGO_API_AUTHORIZATION`.
+- La pestaña de facturas Tango suma un boton `PDF` por comprobante, tomando `Company` de la fila y normalizando `NRO_COMPROBANTE` como `id`.
+- La descarga queda reservada a perfiles de gestion/admin para no exponer comprobantes desde URLs directas a usuarios limitados por vendedor.
+- `TANGO_INVOICE_PDF_PROCESS` permite sobrescribir el proceso de Tango; por defecto usa `14077`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

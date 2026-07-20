@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth } from 'date-fns';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -177,6 +177,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
   const [page, setPage] = useState(1);
   const [users, setUsers] = useState<User[]>([]);
   const [skippedCompanies, setSkippedCompanies] = useState<Array<{ label: string; reason: string }>>([]);
+  const [downloadingInvoiceKey, setDownloadingInvoiceKey] = useState<string | null>(null);
 
   const canSeeAllInvoices = Boolean(
     isBoss
@@ -309,6 +310,64 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
     }
   };
 
+  const getInvoicePdfId = (invoice: TangoInvoice) => {
+    const invoiceNumber = String(invoice.NRO_COMPROBANTE || '').trim();
+    if (invoiceNumber) {
+      return invoiceNumber.includes('-')
+        ? invoiceNumber.split('-').pop()?.trim() || invoiceNumber
+        : invoiceNumber;
+    }
+
+    return String(invoice.ID_GVA12 || invoice.ID_GVA23 || invoice.ID_GVA38 || '').trim();
+  };
+
+  const handleDownloadInvoice = async (invoice: TangoInvoice) => {
+    const invoiceCompany = invoice._companyId || company;
+    const invoiceId = getInvoicePdfId(invoice);
+    const downloadKey = `${invoiceCompany}-${invoiceId}`;
+
+    if (!invoiceCompany || invoiceCompany === 'all' || !invoiceId) {
+      toast({
+        title: 'No se puede descargar',
+        description: 'Tango no informo Company o ID de factura para este comprobante.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setDownloadingInvoiceKey(downloadKey);
+    try {
+      const params = new URLSearchParams({ company: invoiceCompany, id: invoiceId });
+      const response = await apiFetch(`/api/tango/invoices/pdf?${params.toString()}`, {
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.details || payload?.error || 'Tango no pudo generar el PDF.');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `factura-tango-${invoiceCompany}-${invoiceId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading Tango invoice:', error);
+      toast({
+        title: 'No se pudo descargar la factura',
+        description: error instanceof Error ? error.message : 'Error desconocido',
+        variant: 'destructive',
+      });
+    } finally {
+      setDownloadingInvoiceKey(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 rounded-md border bg-white p-4 md:grid-cols-2 xl:grid-cols-[160px_160px_160px_1fr_1fr_1fr_auto] xl:items-end">
@@ -378,13 +437,16 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
               <TableHead className="text-right">Bonificado</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>IDs Tango</TableHead>
+              <TableHead className="text-right">PDF</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={12} className="h-32 text-center"><Spinner size="large" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={13} className="h-32 text-center"><Spinner size="large" /></TableCell></TableRow>
             ) : visibleInvoices.length > 0 ? visibleInvoices.map((invoice, index) => {
               const invoiceCompany = invoice._companyId || company;
+              const invoicePdfId = getInvoicePdfId(invoice);
+              const downloadKey = `${invoiceCompany}-${invoicePdfId}`;
               const clientCodeField = getClientCodeField(invoiceCompany);
               const crmClient = clients.find(item => normalizeCode((item as any)[clientCodeField]) === normalizeCode(invoice.COD_CLIENTE));
               const sellerCompanySearch = getSellerCompanySearch(invoiceCompany);
@@ -422,10 +484,30 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
                 <TableCell className="text-xs text-muted-foreground">
                   GVA14: {invoice.ID_GVA14 ?? '-'} | GVA12: {invoice.ID_GVA12 ?? '-'} | GVA23: {invoice.ID_GVA23 ?? '-'} | GVA38: {invoice.ID_GVA38 ?? '-'}
                 </TableCell>
+                <TableCell className="text-right">
+                  {canSeeAllInvoices ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownloadInvoice(invoice)}
+                      disabled={!invoicePdfId || downloadingInvoiceKey === downloadKey}
+                    >
+                      {downloadingInvoiceKey === downloadKey ? (
+                        <Spinner size="small" className="mr-2" />
+                      ) : (
+                        <Download className="mr-2 h-4 w-4" />
+                      )}
+                      PDF
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Sin permiso</span>
+                  )}
+                </TableCell>
               </TableRow>;
             }) : (
               <TableRow>
-                <TableCell colSpan={12} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={13} className="h-28 text-center text-muted-foreground">
                   {hasSearched ? 'No se encontraron comprobantes con esos filtros.' : 'Elegí rango, compania y consulta Tango.'}
                 </TableCell>
               </TableRow>
