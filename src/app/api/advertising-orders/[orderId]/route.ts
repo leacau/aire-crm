@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
 import { mapAdvertisingOrder } from '@/app/api/advertising-orders/utils';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
+import { canAccessAdvertisingOrder } from '@/lib/server/advertising-order-access';
 import {
   AdvertisingOrderApiError,
   updateAdvertisingOrderServer,
@@ -29,9 +30,17 @@ export async function GET(request: Request, context: RouteContext) {
 
   const { orderId } = await context.params;
   const snap = await dbAdmin.collection('advertising_orders').doc(orderId).get();
+  if (!snap.exists) {
+    return NextResponse.json({ order: null });
+  }
+
+  const order = mapAdvertisingOrder(snap.id, snap.data());
+  if (!(await canAccessAdvertisingOrder(order, requester))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   return NextResponse.json({
-    order: snap.exists ? mapAdvertisingOrder(snap.id, snap.data()) : null,
+    order,
   });
 }
 
@@ -42,6 +51,15 @@ export async function PATCH(request: Request, context: RouteContext) {
   try {
     const { orderId } = await context.params;
     const body = await request.json();
+    const snap = await dbAdmin.collection('advertising_orders').doc(orderId).get();
+    if (!snap.exists) {
+      return NextResponse.json({ error: 'Orden no encontrada' }, { status: 404 });
+    }
+    const order = mapAdvertisingOrder(snap.id, snap.data());
+    if (!(await canAccessAdvertisingOrder(order, requester))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const requesterName = getRequesterName(requester);
     await updateAdvertisingOrderServer(
       orderId,
@@ -69,6 +87,10 @@ export async function DELETE(request: Request, context: RouteContext) {
   }
 
   const order = mapAdvertisingOrder(snap.id, snap.data());
+  if (!hasServerManagementPrivileges(requester)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   await docRef.delete();
 
   const requesterName = getRequesterName(requester);

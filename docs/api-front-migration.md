@@ -677,6 +677,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El borrado de oportunidades queda reservado a gestion/admin.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Octogesimo corte aplicado
+
+- Se agrega `src/lib/server/advertising-order-access.ts` para validar acceso a ordenes de publicidad por gestion/Pautado, creador o cliente propio.
+- Los listados de ordenes se filtran en servidor segun acceso del usuario antes de responder al front.
+- La creacion valida acceso al cliente y usa la identidad verificada para auditoria; usuarios sin gestion no pueden forzar `createdBy`.
+- La lectura/edicion puntual valida acceso a la orden y el borrado queda reservado a gestion/admin.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

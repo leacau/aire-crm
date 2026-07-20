@@ -2,11 +2,14 @@ import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import {
+  canCreateAdvertisingOrderForClient,
+  filterAccessibleAdvertisingOrders,
+} from '@/lib/server/advertising-order-access';
+import {
   AdvertisingOrderApiError,
   createAdvertisingOrderServer,
 } from '@/lib/server/advertising-orders';
 import {
-  compareByCreatedAtDesc,
   compareByStartDateDesc,
   isApprovedForProgramming,
   mapAdvertisingOrder,
@@ -40,16 +43,22 @@ export async function GET(request: Request) {
 
   if (opportunityId) {
     const snapshot = await dbAdmin.collection('advertising_orders').where('opportunityId', '==', opportunityId).get();
-    const orders = snapshot.docs.map(doc => mapAdvertisingOrder(doc.id, doc.data()));
+    const orders = await filterAccessibleAdvertisingOrders(
+      snapshot.docs.map(doc => mapAdvertisingOrder(doc.id, doc.data())),
+      requester,
+    );
     return NextResponse.json({ orders });
   }
 
   if (withEvent) {
     const snapshot = await dbAdmin.collection('advertising_orders').where('event', '!=', '').get();
-    const orders = snapshot.docs
-      .map(doc => mapAdvertisingOrder(doc.id, doc.data()))
-      .filter(order => Boolean(order.event?.trim()))
-      .sort(compareByStartDateDesc);
+    const orders = await filterAccessibleAdvertisingOrders(
+      snapshot.docs
+        .map(doc => mapAdvertisingOrder(doc.id, doc.data()))
+        .filter(order => Boolean(order.event?.trim()))
+        .sort(compareByStartDateDesc),
+      requester,
+    );
     return NextResponse.json({ orders });
   }
 
@@ -63,7 +72,10 @@ export async function GET(request: Request) {
       .orderBy('createdAt', 'desc')
       .get();
 
-    const orders = snapshot.docs.map(doc => mapAdvertisingOrder(doc.id, doc.data()));
+    const orders = await filterAccessibleAdvertisingOrders(
+      snapshot.docs.map(doc => mapAdvertisingOrder(doc.id, doc.data())),
+      requester,
+    );
     return NextResponse.json({ orders });
   }
 
@@ -74,13 +86,16 @@ export async function GET(request: Request) {
       .orderBy('startDate', 'desc')
       .get();
 
-    const orders = snapshot.docs
-      .map(doc => mapAdvertisingOrder(doc.id, doc.data()))
-      .filter((order: AdvertisingOrder) => {
-        const orderEnd = order.endDate || order.startDate;
-        return Boolean(orderEnd && orderEnd >= rangeStart && isApprovedForProgramming(order));
-      })
-      .sort(compareByStartDateDesc);
+    const orders = await filterAccessibleAdvertisingOrders(
+      snapshot.docs
+        .map(doc => mapAdvertisingOrder(doc.id, doc.data()))
+        .filter((order: AdvertisingOrder) => {
+          const orderEnd = order.endDate || order.startDate;
+          return Boolean(orderEnd && orderEnd >= rangeStart && isApprovedForProgramming(order));
+        })
+        .sort(compareByStartDateDesc),
+      requester,
+    );
 
     return NextResponse.json({ orders });
   }
@@ -94,7 +109,11 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const id = await createAdvertisingOrderServer(body?.orderData as Omit<AdvertisingOrder, 'id' | 'createdAt'>);
+    const orderData = body?.orderData as Omit<AdvertisingOrder, 'id' | 'createdAt'>;
+    if (!(await canCreateAdvertisingOrderForClient(orderData?.clientId, requester))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    const id = await createAdvertisingOrderServer(orderData, requester);
     return NextResponse.json({ id });
   } catch (error) {
     return errorResponse(error);

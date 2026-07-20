@@ -2,6 +2,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
+import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/auth';
 import { buildAdvertisingOrderChanges } from '@/lib/advertising-order-history';
 import { getAdvertisingOrderFinancialSummary } from '@/lib/advertising-order-utils';
 import type { AdvertisingOrder, ApprovalHistoryItem, BillingRequest } from '@/lib/types';
@@ -90,6 +91,7 @@ function collectBillingByCompany(snapshot: FirebaseFirestore.QuerySnapshot) {
 
 export async function createAdvertisingOrderServer(
   orderData: Omit<AdvertisingOrder, 'id' | 'createdAt'>,
+  requester: ServerUser,
 ): Promise<string> {
   if (!orderData?.clientId || !orderData.product) {
     throw new AdvertisingOrderApiError('Cliente y producto son obligatorios.', 400);
@@ -102,6 +104,7 @@ export async function createAdvertisingOrderServer(
 
   batch.set(docRef, {
     ...restOrderData,
+    createdBy: hasServerManagementPrivileges(requester) && restOrderData.createdBy ? restOrderData.createdBy : requester.uid,
     createdAt: new Date().toISOString(),
   });
 
@@ -127,8 +130,8 @@ export async function createAdvertisingOrderServer(
   await batch.commit();
 
   await logServerActivity({
-    userId: restOrderData.createdBy || '',
-    userName: restOrderData.accountExecutive || 'Usuario',
+    userId: requester.uid,
+    userName: requester.name || requester.email || 'Usuario',
     entityType: 'client',
     entityId: clientId,
     entityName: restOrderData.clientName || 'Cliente',
