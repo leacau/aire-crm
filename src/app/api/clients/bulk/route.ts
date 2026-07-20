@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { isServerResponse, requireServerManagement } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import {
   cleanObject,
@@ -11,7 +11,7 @@ import {
 import type { Client } from '@/lib/types';
 
 export async function DELETE(request: Request) {
-  const requester = await requireServerUser(request);
+  const requester = await requireServerManagement(request);
   if (isServerResponse(requester)) return requester;
 
   const body = await request.json();
@@ -37,7 +37,7 @@ export async function DELETE(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const requester = await requireServerUser(request);
+  const requester = await requireServerManagement(request);
   if (isServerResponse(requester)) return requester;
 
   const body = await request.json();
@@ -72,4 +72,3 @@ export async function PATCH(request: Request) {
 
   return NextResponse.json({ ok: true });
 }
-

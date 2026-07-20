@@ -579,6 +579,12 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se elimina el TODO de busqueda de clientes en `scheduleTask`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Sexagesimo sexto corte aplicado
+
+- Las operaciones masivas de clientes (`/api/clients/bulk`) pasan a requerir permisos de gestion/admin en servidor.
+- La API queda alineada con la UI, que ya limita seleccion masiva, reasignacion y borrado a perfiles de gestion.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
