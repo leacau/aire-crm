@@ -626,6 +626,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La reasignacion de propietario y el borrado puntual de clientes quedan reservados a perfiles de gestion/admin.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Septuagesimo tercer corte aplicado
+
+- La ruta de mapeo Tango por cliente separa permisos: datos fiscales basicos quedan disponibles para el asesor propietario o gestion.
+- La vinculacion de IDs Tango, el marcado de sincronizacion y la desvinculacion quedan reservados a gestion/admin.
+- La pantalla de Mapeo Tango mantiene su contrato API sin exponer operaciones administrativas a cualquier sesion valida.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
