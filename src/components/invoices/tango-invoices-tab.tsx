@@ -331,7 +331,6 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
     setDownloadingInvoiceKey(downloadKey);
     try {
       const params = new URLSearchParams({ company: invoiceCompany, id: invoiceId });
-      if (invoice.NRO_COMPROBANTE) params.set('number', String(invoice.NRO_COMPROBANTE));
       const response = await apiFetch(`/api/tango/invoices/pdf?${params.toString()}`, {
         cache: 'no-store',
       });

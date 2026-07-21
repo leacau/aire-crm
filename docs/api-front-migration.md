@@ -723,23 +723,10 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 
 ## Octogesimo sexto corte aplicado
 
-- La descarga de PDFs de Tango reintenta automaticamente con `ID_GVA12` rellenado con ceros a 7 posiciones cuando Tango no encuentra el PDF con el valor crudo.
-- La ruta permite configurar procesos por empresa con `TANGO_INVOICE_PDF_PROCESS_4`, `TANGO_INVOICE_PDF_PROCESS_5` o `TANGO_INVOICE_PDF_PROCESS_6` si Tango requiere un proceso distinto por compania.
-- `ID_GVA12` queda tipado como texto o numero para preservar ceros a la izquierda cuando Tango los informe en la consulta.
-- `firestore.rules` y `netlify.toml` siguen intactos.
-
-## Octogesimo septimo corte aplicado
-
-- La descarga de PDFs ahora envia al backend el numero de comprobante de Tango como contexto adicional, manteniendo `ID_GVA12` como primer candidato.
-- El proxy prueba candidatos derivados de `NRO_COMPROBANTE` cuando Tango rechaza `ID_GVA12`: numero numerico completo, ultimos 8 digitos y ultimos 7 digitos.
-- Las variables `TANGO_INVOICE_PDF_PROCESS`, `TANGO_INVOICE_PDF_PROCESS_4`, `TANGO_INVOICE_PDF_PROCESS_5` y `TANGO_INVOICE_PDF_PROCESS_6` aceptan una lista separada por coma/espacio para probar mas de un proceso.
-- `firestore.rules` y `netlify.toml` siguen intactos.
-
-## Octogesimo octavo corte aplicado
-
-- `/api/auth/session` ya no corta el login si falla la lectura/escritura secundaria de permisos globales o whitelist; usa fallbacks seguros y registra el detalle en logs.
-- La sesion puede responder con perfil minimo desde Firebase Auth si Firestore no devuelve el perfil, evitando expulsiones por fallos transitorios de lectura.
-- El extractor de PDFs Tango reconoce la respuesta real de `GetPdf` en `fileResult.fileContents` y la convierte desde base64 a binario.
+- Se revierte `/api/auth/session` al comportamiento previo para evitar sesiones parciales que luego generen 401 en el resto de las APIs.
+- La descarga de PDF de Tango vuelve al flujo confirmado por curl: `GET /Api/GetPdf?process=14077&id=ID_GVA12`, headers `ApiAuthorization` y `Company`.
+- El proxy lee la respuesta JSON de Tango, extrae `fileResult.fileContents`, convierte el base64 a binario y entrega `application/pdf`.
+- Se retiran los reintentos con IDs derivados de `NRO_COMPROBANTE`, padding y procesos multiples.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
 ## Proximos cortes recomendados
