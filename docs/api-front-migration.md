@@ -759,9 +759,9 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 
 ## Nonagesimo primer corte aplicado
 
-- Los errores de descarga PDF Tango informan `process`, `company`, `pdfCompany` e `id` usados, sin exponer secretos.
+- Los errores de descarga PDF Tango informan `process`, `company` e `id` usados, sin exponer secretos.
 - El boton PDF muestra en tooltip el `Company` y `ID_GVA12` de la fila para contrastarlo con curls manuales.
-- Se agrega soporte opcional para `TANGO_INVOICE_PDF_COMPANY_OVERRIDE_4`, `_5` o `_6` si Tango requiere descargar con una compania distinta a la usada para listar.
+- La descarga queda estrictamente atada al `Company` de la fila y al `ID_GVA12` del comprobante.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
 ## Proximos cortes recomendados
