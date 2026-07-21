@@ -4,6 +4,7 @@ import { hasServerManagementPrivileges, isServerResponse, requireServerUser } fr
 const ALLOWED_COMPANIES = ['4', '5', '6'];
 const DEFAULT_PDF_PROCESS = '14077';
 const DEFAULT_PDF_ID_PAD_LENGTH = 7;
+const INVOICE_NUMBER_SUFFIX_LENGTHS = [8, 7];
 const PDF_SIGNATURE = '%PDF-';
 const ERROR_PREVIEW_LENGTH = 600;
 const BASE64_RESPONSE_KEYS = [
@@ -42,19 +43,46 @@ function buildPdfFileName(company: string, invoiceId: string) {
   return `factura-tango-${company}-${cleanId}.pdf`;
 }
 
-function getTangoPdfProcessId(company: string) {
-  return process.env[`TANGO_INVOICE_PDF_PROCESS_${company}`]?.trim()
-    || process.env.TANGO_INVOICE_PDF_PROCESS?.trim()
-    || DEFAULT_PDF_PROCESS;
+function parseCandidateList(value?: string) {
+  return String(value || '')
+    .split(/[,\s]+/)
+    .map(item => item.trim())
+    .filter(Boolean);
 }
 
-function getInvoiceIdCandidates(invoiceId: string) {
-  const cleanId = invoiceId.trim();
-  const candidates = new Set([cleanId]);
+function getTangoPdfProcessCandidates(company: string) {
+  const candidates = [
+    ...parseCandidateList(process.env[`TANGO_INVOICE_PDF_PROCESS_${company}`]),
+    ...parseCandidateList(process.env.TANGO_INVOICE_PDF_PROCESS),
+    DEFAULT_PDF_PROCESS,
+  ];
+
+  return Array.from(new Set(candidates));
+}
+
+function addPaddedCandidate(candidates: Set<string>, value: string) {
+  const cleanValue = value.trim();
   const padLength = Number(process.env.TANGO_INVOICE_PDF_ID_PAD_LENGTH || DEFAULT_PDF_ID_PAD_LENGTH);
 
-  if (/^\d+$/.test(cleanId) && Number.isInteger(padLength) && padLength > cleanId.length) {
-    candidates.add(cleanId.padStart(padLength, '0'));
+  if (/^\d+$/.test(cleanValue) && Number.isInteger(padLength) && padLength > cleanValue.length) {
+    candidates.add(cleanValue.padStart(padLength, '0'));
+  }
+}
+
+function getInvoiceIdCandidates(invoiceId: string, invoiceNumber: string) {
+  const cleanId = invoiceId.trim();
+  const cleanInvoiceNumber = invoiceNumber.trim();
+  const candidates = new Set([cleanId]);
+  addPaddedCandidate(candidates, cleanId);
+
+  const numericInvoiceNumber = cleanInvoiceNumber.replace(/\D/g, '');
+  if (numericInvoiceNumber) {
+    candidates.add(numericInvoiceNumber);
+    INVOICE_NUMBER_SUFFIX_LENGTHS.forEach(length => {
+      if (numericInvoiceNumber.length > length) {
+        candidates.add(numericInvoiceNumber.slice(-length));
+      }
+    });
   }
 
   return Array.from(candidates).filter(Boolean);
@@ -173,6 +201,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const company = searchParams.get('company') || '';
   const invoiceId = searchParams.get('id') || '';
+  const invoiceNumber = searchParams.get('number') || '';
   const apiAuthorization = process.env.TANGO_API_AUTHORIZATION;
 
   if (!ALLOWED_COMPANIES.includes(company)) {
@@ -188,52 +217,54 @@ export async function GET(request: Request) {
   }
 
   try {
-    const processId = getTangoPdfProcessId(company);
-    const idCandidates = getInvoiceIdCandidates(invoiceId);
+    const processCandidates = getTangoPdfProcessCandidates(company);
+    const idCandidates = getInvoiceIdCandidates(invoiceId, invoiceNumber);
     const errors: string[] = [];
 
-    for (const idCandidate of idCandidates) {
-      const tangoUrl = getTangoPdfEndpoint();
-      tangoUrl.searchParams.set('process', processId);
-      tangoUrl.searchParams.set('id', idCandidate);
+    for (const processId of processCandidates) {
+      for (const idCandidate of idCandidates) {
+        const tangoUrl = getTangoPdfEndpoint();
+        tangoUrl.searchParams.set('process', processId);
+        tangoUrl.searchParams.set('id', idCandidate);
 
-      const response = await fetch(tangoUrl, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/pdf, application/json;q=0.9, text/plain;q=0.8, */*;q=0.7',
-          ApiAuthorization: apiAuthorization,
-          Company: company,
-        },
-        cache: 'no-store',
-      });
-
-      const contentType = response.headers.get('content-type') || 'application/pdf';
-      const contentDisposition = response.headers.get('content-disposition');
-      const body = Buffer.from(await response.arrayBuffer());
-
-      if (!response.ok) {
-        errors.push(`${idCandidate}: Tango respondio ${response.status}: ${getTangoErrorMessage(body)}`);
-        continue;
-      }
-
-      try {
-        const pdfBuffer = extractPdfBuffer(body, contentType.toLowerCase());
-
-        return new NextResponse(new Uint8Array(pdfBuffer), {
-          status: 200,
+        const response = await fetch(tangoUrl, {
+          method: 'GET',
           headers: {
-            'Cache-Control': 'no-store',
-            'Content-Type': 'application/pdf',
-            'Content-Disposition': contentDisposition || `attachment; filename="${buildPdfFileName(company, idCandidate)}"`,
-            'Content-Length': String(pdfBuffer.byteLength),
+            Accept: 'application/pdf, application/json;q=0.9, text/plain;q=0.8, */*;q=0.7',
+            ApiAuthorization: apiAuthorization,
+            Company: company,
           },
+          cache: 'no-store',
         });
-      } catch (error) {
-        errors.push(`${idCandidate}: ${error instanceof Error ? error.message : getTangoErrorMessage(body)}`);
+
+        const contentType = response.headers.get('content-type') || 'application/pdf';
+        const contentDisposition = response.headers.get('content-disposition');
+        const body = Buffer.from(await response.arrayBuffer());
+
+        if (!response.ok) {
+          errors.push(`process ${processId}, id ${idCandidate}: Tango respondio ${response.status}: ${getTangoErrorMessage(body)}`);
+          continue;
+        }
+
+        try {
+          const pdfBuffer = extractPdfBuffer(body, contentType.toLowerCase());
+
+          return new NextResponse(new Uint8Array(pdfBuffer), {
+            status: 200,
+            headers: {
+              'Cache-Control': 'no-store',
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': contentDisposition || `attachment; filename="${buildPdfFileName(company, idCandidate)}"`,
+              'Content-Length': String(pdfBuffer.byteLength),
+            },
+          });
+        } catch (error) {
+          errors.push(`process ${processId}, id ${idCandidate}: ${error instanceof Error ? error.message : getTangoErrorMessage(body)}`);
+        }
       }
     }
 
-    throw new Error(`No se pudo obtener el PDF con los IDs probados (${idCandidates.join(', ')}). ${errors.join(' | ')}`);
+    throw new Error(`No se pudo obtener el PDF con procesos (${processCandidates.join(', ')}) e IDs (${idCandidates.join(', ')}). ${errors.join(' | ')}`);
   } catch (error) {
     console.error('Error downloading Tango invoice PDF:', error);
     return NextResponse.json({

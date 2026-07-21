@@ -728,6 +728,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `ID_GVA12` queda tipado como texto o numero para preservar ceros a la izquierda cuando Tango los informe en la consulta.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Octogesimo septimo corte aplicado
+
+- La descarga de PDFs ahora envia al backend el numero de comprobante de Tango como contexto adicional, manteniendo `ID_GVA12` como primer candidato.
+- El proxy prueba candidatos derivados de `NRO_COMPROBANTE` cuando Tango rechaza `ID_GVA12`: numero numerico completo, ultimos 8 digitos y ultimos 7 digitos.
+- Las variables `TANGO_INVOICE_PDF_PROCESS`, `TANGO_INVOICE_PDF_PROCESS_4`, `TANGO_INVOICE_PDF_PROCESS_5` y `TANGO_INVOICE_PDF_PROCESS_6` aceptan una lista separada por coma/espacio para probar mas de un proceso.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
