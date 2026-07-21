@@ -736,6 +736,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El front ya no ejecuta `signOut` ante errores 500 de inicializacion de sesion; solo cierra sesion ante 401/403.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Octogesimo octavo corte aplicado
+
+- `requireServerUser` separa la verificacion del ID token de la lectura del perfil en Firestore.
+- Si el token es valido pero falla la lectura del perfil, las APIs reciben un usuario minimo basado en Firebase Auth en vez de un falso `401 Invalid authentication token`.
+- Las rutas que requieren gestion siguen protegidas porque el usuario minimo no obtiene rol administrativo.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

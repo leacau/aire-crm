@@ -24,8 +24,18 @@ export async function requireServerUser(request: Request): Promise<ServerUser | 
     return NextResponse.json({ error: 'Missing authentication token' }, { status: 401 });
   }
 
+  let decoded: Awaited<ReturnType<typeof authAdmin.verifyIdToken>>;
   try {
-    const decoded = await authAdmin.verifyIdToken(token);
+    decoded = await authAdmin.verifyIdToken(token);
+  } catch (error: any) {
+    console.error('SERVER AUTH TOKEN ERROR:', {
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({ error: 'Invalid authentication token' }, { status: 401 });
+  }
+
+  try {
     const userSnap = await dbAdmin.collection('users').doc(decoded.uid).get();
     const profile = userSnap.exists ? userSnap.data() : {};
 
@@ -38,8 +48,20 @@ export async function requireServerUser(request: Request): Promise<ServerUser | 
       permissions: profile?.permissions || {},
       sellerConfig: profile?.sellerConfig || [],
     };
-  } catch {
-    return NextResponse.json({ error: 'Invalid authentication token' }, { status: 401 });
+  } catch (error: any) {
+    console.error('SERVER USER PROFILE FALLBACK:', {
+      uid: decoded.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+
+    return {
+      uid: decoded.uid,
+      email: decoded.email,
+      name: decoded.name,
+      permissions: {},
+      sellerConfig: [],
+    };
   }
 }
 
