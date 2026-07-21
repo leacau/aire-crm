@@ -3738,8 +3738,7 @@ export const updateOpportunity = async (
     const originalHistory = Array.isArray(originalData.periodHistory) ? originalData.periodHistory : [];
     if (
         (originalData.stage as string) === 'Ganado (Recurrente)'
-        && Array.isArray(data.periodHistory)
-        && data.periodHistory.length >= originalHistory.length
+        && (!data.stage || (data.stage as string) === 'Ganado (Recurrente)')
     ) {
         updateData.stage = 'Cerrado - Ganado';
     }
