@@ -12,6 +12,8 @@ const BASE64_RESPONSE_KEYS = [
   'file',
   'data',
   'content',
+  'fileResult',
+  'fileContents',
   'result',
   'resultData',
   'value',

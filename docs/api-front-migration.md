@@ -735,6 +735,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las variables `TANGO_INVOICE_PDF_PROCESS`, `TANGO_INVOICE_PDF_PROCESS_4`, `TANGO_INVOICE_PDF_PROCESS_5` y `TANGO_INVOICE_PDF_PROCESS_6` aceptan una lista separada por coma/espacio para probar mas de un proceso.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Octogesimo octavo corte aplicado
+
+- `/api/auth/session` ya no corta el login si falla la lectura/escritura secundaria de permisos globales o whitelist; usa fallbacks seguros y registra el detalle en logs.
+- La sesion puede responder con perfil minimo desde Firebase Auth si Firestore no devuelve el perfil, evitando expulsiones por fallos transitorios de lectura.
+- El extractor de PDFs Tango reconoce la respuesta real de `GetPdf` en `fileResult.fileContents` y la convierte desde base64 a binario.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

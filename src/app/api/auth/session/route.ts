@@ -9,21 +9,59 @@ const AREA_PERMISSIONS_DOC_ID = 'area_permissions';
 const EMAIL_WHITELIST_DOC_ID = 'email_whitelist';
 
 async function getPermissions() {
-  const docRef = dbAdmin.collection('system_config').doc(AREA_PERMISSIONS_DOC_ID);
-  const snap = await docRef.get();
+  try {
+    const docRef = dbAdmin.collection('system_config').doc(AREA_PERMISSIONS_DOC_ID);
+    const snap = await docRef.get();
 
-  if (snap.exists) {
-    return snap.data()?.permissions || defaultPermissions;
+    if (snap.exists) {
+      return snap.data()?.permissions || defaultPermissions;
+    }
+
+    await docRef.set({ permissions: defaultPermissions });
+  } catch (error: any) {
+    console.error('AUTH SESSION PERMISSIONS FALLBACK:', {
+      code: error?.code,
+      message: error?.message,
+    });
   }
 
-  await docRef.set({ permissions: defaultPermissions });
   return defaultPermissions;
 }
 
 async function getEmailWhitelist(): Promise<string[]> {
-  const snap = await dbAdmin.collection('system_config').doc(EMAIL_WHITELIST_DOC_ID).get();
-  const emails = snap.exists ? snap.data()?.emails : [];
-  return Array.isArray(emails) ? emails : [];
+  try {
+    const snap = await dbAdmin.collection('system_config').doc(EMAIL_WHITELIST_DOC_ID).get();
+    const emails = snap.exists ? snap.data()?.emails : [];
+    return Array.isArray(emails) ? emails : [];
+  } catch (error: any) {
+    console.error('AUTH SESSION WHITELIST FALLBACK:', {
+      code: error?.code,
+      message: error?.message,
+    });
+    return [];
+  }
+}
+
+async function getUserProfile(uid: string) {
+  try {
+    const userRef = dbAdmin.collection('users').doc(uid);
+    const userSnap = await userRef.get();
+    return {
+      userRef,
+      profile: userSnap.exists ? userSnap.data() || {} : null,
+      readFailed: false,
+    };
+  } catch (error: any) {
+    console.error('AUTH SESSION USER PROFILE FALLBACK:', {
+      code: error?.code,
+      message: error?.message,
+    });
+    return {
+      userRef: dbAdmin.collection('users').doc(uid),
+      profile: null,
+      readFailed: true,
+    };
+  }
 }
 
 export async function POST(request: Request) {
@@ -35,9 +73,7 @@ export async function POST(request: Request) {
   try {
     const decoded = await authAdmin.verifyIdToken(token);
     const email = (decoded.email || '').toLowerCase();
-    const userRef = dbAdmin.collection('users').doc(decoded.uid);
-    const userSnap = await userRef.get();
-    const profile = userSnap.exists ? userSnap.data() || {} : null;
+    const { userRef, profile, readFailed } = await getUserProfile(decoded.uid);
 
     const isAuthorizedDomain = email.endsWith('@airedesantafe.com.ar') || email.endsWith('@airedigital.com');
     const isHardcodedException = email === 'leandrochena@gmail.com';
@@ -65,7 +101,16 @@ export async function POST(request: Request) {
         photoURL: decoded.picture || null,
         createdAt: FieldValue.serverTimestamp(),
       };
-      await userRef.set(finalProfile);
+      if (!readFailed) {
+        try {
+          await userRef.set(finalProfile);
+        } catch (error: any) {
+          console.error('AUTH SESSION USER CREATE FALLBACK:', {
+            code: error?.code,
+            message: error?.message,
+          });
+        }
+      }
       finalProfile = {
         ...finalProfile,
         createdAt: new Date().toISOString(),
