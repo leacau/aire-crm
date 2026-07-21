@@ -46,7 +46,7 @@ function buildDefaultProfile(decoded: Awaited<ReturnType<typeof authAdmin.verify
   return {
     name: decoded.name || decoded.email?.split('@')[0] || 'Usuario',
     email,
-    role: 'Asesor',
+    role: email === 'leandrochena@gmail.com' ? 'Admin' : 'Asesor',
     photoURL: decoded.picture || null,
     createdAt: new Date().toISOString(),
   };

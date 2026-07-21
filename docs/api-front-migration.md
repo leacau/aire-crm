@@ -750,6 +750,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El login solo debe fallar cuando Firebase Admin no puede verificar el ID token o cuando el correo no esta autorizado.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Nonagesimo corte aplicado
+
+- `/api/users` normaliza el ordenamiento por nombre y devuelve errores JSON trazables si falla la carga de usuarios, evitando romper silenciosamente el mapeo de vendedores CRM.
+- La descarga PDF en Facturas Tango vuelve a mostrarse como accion disponible; la autorizacion queda en la API server-side.
+- La excepcion operativa `leandrochena@gmail.com` conserva permisos de gestion en fallbacks de sesion y validaciones server-side.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

@@ -71,6 +71,7 @@ export function isServerResponse(value: ServerUser | NextResponse): value is Nex
 
 export function hasServerManagementPrivileges(user: ServerUser): boolean {
   if (user.email?.toLowerCase() === 'lchena@airedesantafe.com.ar') return true;
+  if (user.email?.toLowerCase() === 'leandrochena@gmail.com') return true;
   return user.role === 'Jefe' || user.role === 'Gerencia' || user.role === 'Administracion' || user.role === 'Admin';
 }
 

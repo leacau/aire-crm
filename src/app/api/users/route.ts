@@ -9,19 +9,31 @@ export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { searchParams } = new URL(request.url);
-  const role = searchParams.get('role') as UserRole | null;
+  try {
+    const { searchParams } = new URL(request.url);
+    const role = searchParams.get('role') as UserRole | null;
 
-  const snapshot = await dbAdmin.collection('users').get();
-  let users = snapshot.docs.map(doc => serializeDocument<User>(doc.id, doc.data()));
+    const snapshot = await dbAdmin.collection('users').get();
+    let users = snapshot.docs.map(doc => serializeDocument<User>(doc.id, doc.data()));
 
-  if (role) {
-    users = users.filter(user => user.role === role);
+    if (role) {
+      users = users.filter(user => user.role === role);
+    }
+
+    users.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
+    return NextResponse.json({ users });
+  } catch (error: any) {
+    console.error('USERS LIST ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudieron cargar los usuarios.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
   }
-
-  users.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-
-  return NextResponse.json({ users });
 }
 
 export async function POST(request: Request) {

@@ -478,24 +478,20 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
                   GVA14: {invoice.ID_GVA14 ?? '-'} | GVA12: {invoice.ID_GVA12 ?? '-'} | GVA23: {invoice.ID_GVA23 ?? '-'} | GVA38: {invoice.ID_GVA38 ?? '-'}
                 </TableCell>
                 <TableCell className="text-right">
-                  {canSeeAllInvoices ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDownloadInvoice(invoice)}
-                      disabled={!invoicePdfId || downloadingInvoiceKey === downloadKey}
-                    >
-                      {downloadingInvoiceKey === downloadKey ? (
-                        <Spinner size="small" className="mr-2" />
-                      ) : (
-                        <Download className="mr-2 h-4 w-4" />
-                      )}
-                      PDF
-                    </Button>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Sin permiso</span>
-                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDownloadInvoice(invoice)}
+                    disabled={!invoicePdfId || downloadingInvoiceKey === downloadKey}
+                  >
+                    {downloadingInvoiceKey === downloadKey ? (
+                      <Spinner size="small" className="mr-2" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    PDF
+                  </Button>
                 </TableCell>
               </TableRow>;
             }) : (
