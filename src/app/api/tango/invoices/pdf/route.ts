@@ -3,6 +3,7 @@ import { hasServerManagementPrivileges, isServerResponse, requireServerUser } fr
 
 const ALLOWED_COMPANIES = ['4', '5', '6'];
 const DEFAULT_PDF_PROCESS = '14077';
+const DEFAULT_PDF_ID_PAD_LENGTH = 7;
 const PDF_SIGNATURE = '%PDF-';
 const ERROR_PREVIEW_LENGTH = 600;
 const BASE64_RESPONSE_KEYS = [
@@ -39,6 +40,24 @@ const getTangoPdfEndpoint = () => {
 function buildPdfFileName(company: string, invoiceId: string) {
   const cleanId = invoiceId.replace(/[^a-zA-Z0-9_-]/g, '_') || 'factura';
   return `factura-tango-${company}-${cleanId}.pdf`;
+}
+
+function getTangoPdfProcessId(company: string) {
+  return process.env[`TANGO_INVOICE_PDF_PROCESS_${company}`]?.trim()
+    || process.env.TANGO_INVOICE_PDF_PROCESS?.trim()
+    || DEFAULT_PDF_PROCESS;
+}
+
+function getInvoiceIdCandidates(invoiceId: string) {
+  const cleanId = invoiceId.trim();
+  const candidates = new Set([cleanId]);
+  const padLength = Number(process.env.TANGO_INVOICE_PDF_ID_PAD_LENGTH || DEFAULT_PDF_ID_PAD_LENGTH);
+
+  if (/^\d+$/.test(cleanId) && Number.isInteger(padLength) && padLength > cleanId.length) {
+    candidates.add(cleanId.padStart(padLength, '0'));
+  }
+
+  return Array.from(candidates).filter(Boolean);
 }
 
 function isPdfBuffer(buffer: Buffer) {
@@ -106,8 +125,9 @@ function extractPdfBuffer(body: Buffer, contentType: string) {
 
   const text = body.toString('utf8').trim();
   const candidates = [text];
+  const looksLikeJson = contentType.includes('json') || text.startsWith('{') || text.startsWith('[') || text.startsWith('"');
 
-  if (contentType.includes('json') || text.startsWith('{') || text.startsWith('[') || text.startsWith('"')) {
+  if (looksLikeJson) {
     try {
       candidates.push(...collectStringCandidates(JSON.parse(text)));
     } catch {
@@ -120,7 +140,26 @@ function extractPdfBuffer(body: Buffer, contentType: string) {
     if (pdfBuffer) return pdfBuffer;
   }
 
+  if (looksLikeJson) {
+    throw new Error(`Tango rechazo la descarga: ${getTangoErrorMessage(body)}`);
+  }
+
   throw new Error(`Tango no devolvio un PDF valido. Respuesta: ${getTextPreview(body) || 'sin contenido'}`);
+}
+
+function getTangoErrorMessage(body: Buffer) {
+  const text = getTextPreview(body);
+  if (!text) return 'sin contenido';
+
+  try {
+    const payload = JSON.parse(body.toString('utf8'));
+    const messages = Array.isArray(payload?.exceptionInfo?.messages)
+      ? payload.exceptionInfo.messages.filter(Boolean).join(' ')
+      : '';
+    return messages || payload?.message || text;
+  } catch {
+    return text;
+  }
 }
 
 export async function GET(request: Request) {
@@ -134,7 +173,6 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const company = searchParams.get('company') || '';
   const invoiceId = searchParams.get('id') || '';
-  const processId = process.env.TANGO_INVOICE_PDF_PROCESS?.trim() || DEFAULT_PDF_PROCESS;
   const apiAuthorization = process.env.TANGO_API_AUTHORIZATION;
 
   if (!ALLOWED_COMPANIES.includes(company)) {
@@ -150,40 +188,52 @@ export async function GET(request: Request) {
   }
 
   try {
-    const tangoUrl = getTangoPdfEndpoint();
-    tangoUrl.searchParams.set('process', processId);
-    tangoUrl.searchParams.set('id', invoiceId.trim());
+    const processId = getTangoPdfProcessId(company);
+    const idCandidates = getInvoiceIdCandidates(invoiceId);
+    const errors: string[] = [];
 
-    const response = await fetch(tangoUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/pdf, application/json;q=0.9, text/plain;q=0.8, */*;q=0.7',
-        ApiAuthorization: apiAuthorization,
-        Company: company,
-      },
-      cache: 'no-store',
-    });
+    for (const idCandidate of idCandidates) {
+      const tangoUrl = getTangoPdfEndpoint();
+      tangoUrl.searchParams.set('process', processId);
+      tangoUrl.searchParams.set('id', idCandidate);
 
-    const contentType = response.headers.get('content-type') || 'application/pdf';
-    const contentDisposition = response.headers.get('content-disposition');
-    const body = Buffer.from(await response.arrayBuffer());
+      const response = await fetch(tangoUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/pdf, application/json;q=0.9, text/plain;q=0.8, */*;q=0.7',
+          ApiAuthorization: apiAuthorization,
+          Company: company,
+        },
+        cache: 'no-store',
+      });
 
-    if (!response.ok) {
-      const details = getTextPreview(body);
-      throw new Error(`Tango respondio ${response.status}: ${details}`);
+      const contentType = response.headers.get('content-type') || 'application/pdf';
+      const contentDisposition = response.headers.get('content-disposition');
+      const body = Buffer.from(await response.arrayBuffer());
+
+      if (!response.ok) {
+        errors.push(`${idCandidate}: Tango respondio ${response.status}: ${getTangoErrorMessage(body)}`);
+        continue;
+      }
+
+      try {
+        const pdfBuffer = extractPdfBuffer(body, contentType.toLowerCase());
+
+        return new NextResponse(new Uint8Array(pdfBuffer), {
+          status: 200,
+          headers: {
+            'Cache-Control': 'no-store',
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': contentDisposition || `attachment; filename="${buildPdfFileName(company, idCandidate)}"`,
+            'Content-Length': String(pdfBuffer.byteLength),
+          },
+        });
+      } catch (error) {
+        errors.push(`${idCandidate}: ${error instanceof Error ? error.message : getTangoErrorMessage(body)}`);
+      }
     }
 
-    const pdfBuffer = extractPdfBuffer(body, contentType.toLowerCase());
-
-    return new NextResponse(new Uint8Array(pdfBuffer), {
-      status: 200,
-      headers: {
-        'Cache-Control': 'no-store',
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': contentDisposition || `attachment; filename="${buildPdfFileName(company, invoiceId)}"`,
-        'Content-Length': String(pdfBuffer.byteLength),
-      },
-    });
+    throw new Error(`No se pudo obtener el PDF con los IDs probados (${idCandidates.join(', ')}). ${errors.join(' | ')}`);
   } catch (error) {
     console.error('Error downloading Tango invoice PDF:', error);
     return NextResponse.json({

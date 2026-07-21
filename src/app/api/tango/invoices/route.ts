@@ -46,7 +46,7 @@ type TangoInvoice = {
   TOTAL_BONIFICADO?: number | string | null;
   TOTAL?: number | string | null;
   ID_GVA14?: number | null;
-  ID_GVA12?: number | null;
+  ID_GVA12?: string | number | null;
   ID_GVA23?: number | null;
   ID_GVA38?: number | null;
   _companyId?: string;

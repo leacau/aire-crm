@@ -721,6 +721,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Si Tango devuelve JSON, texto o HTML de error, la API responde un error legible en vez de descargar un archivo PDF corrupto.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Octogesimo sexto corte aplicado
+
+- La descarga de PDFs de Tango reintenta automaticamente con `ID_GVA12` rellenado con ceros a 7 posiciones cuando Tango no encuentra el PDF con el valor crudo.
+- La ruta permite configurar procesos por empresa con `TANGO_INVOICE_PDF_PROCESS_4`, `TANGO_INVOICE_PDF_PROCESS_5` o `TANGO_INVOICE_PDF_PROCESS_6` si Tango requiere un proceso distinto por compania.
+- `ID_GVA12` queda tipado como texto o numero para preservar ceros a la izquierda cuando Tango los informe en la consulta.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
