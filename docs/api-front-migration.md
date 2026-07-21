@@ -743,6 +743,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las rutas que requieren gestion siguen protegidas porque el usuario minimo no obtiene rol administrativo.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Octogesimo noveno corte aplicado
+
+- `/api/auth/session` separa la verificacion del token del resto de lecturas Firestore.
+- Si falla whitelist, permisos globales, lectura de perfil o creacion inicial del usuario, la sesion responde con fallbacks seguros en vez de devolver 500.
+- El login solo debe fallar cuando Firebase Admin no puede verificar el ID token o cuando el correo no esta autorizado.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
