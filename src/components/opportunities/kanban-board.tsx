@@ -42,9 +42,10 @@ import { es } from 'date-fns/locale';
 import { Label } from '../ui/label';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 
-type KanbanStage = OpportunityStage | 'Negociación Alta' | 'Ganado (Recurrente)';
+const HIGH_PROBABILITY_STAGE = 'Negociación Alta' as const;
+const RECURRING_WON_STAGE = 'Ganado (Recurrente)' as const;
 
-const HIGH_PROBABILITY_STAGE: KanbanStage = 'Negociación Alta';
+type KanbanStage = OpportunityStage | typeof HIGH_PROBABILITY_STAGE | typeof RECURRING_WON_STAGE;
 
 const stageColors: Record<KanbanStage, string> = {
   'Nuevo': 'border-blue-500',
@@ -53,7 +54,7 @@ const stageColors: Record<KanbanStage, string> = {
   'Negociación Alta': 'border-emerald-500',
   'Negociación a Aprobar': 'border-purple-500',
   'Cerrado - Ganado': 'border-green-500',
-  'Ganado (Recurrente)': 'border-teal-500',
+  [RECURRING_WON_STAGE]: 'border-teal-500',
   'Cerrado - Perdido': 'border-red-500',
   'Cerrado - No Definido': 'border-gray-500',
 };
@@ -134,7 +135,7 @@ const KanbanColumn = ({
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if(stage === 'Ganado (Recurrente)') return;
+    if(stage === RECURRING_WON_STAGE) return;
 
     if (stage === HIGH_PROBABILITY_STAGE) {
         onCardDrop(e, 'Negociación', true);
@@ -549,7 +550,7 @@ export function KanbanBoard({
       'Negociación Alta': [],
       'Negociación a Aprobar': [],
       'Cerrado - Ganado': [],
-      'Ganado (Recurrente)': [],
+      [RECURRING_WON_STAGE]: [],
       'Cerrado - No Definido': [],
       'Cerrado - Perdido': [],
     };
@@ -562,7 +563,7 @@ export function KanbanBoard({
         if ((!activeContractPeriod || activeContractPeriod.source === 'initial') && wonReferenceDate && isSameMonth(wonReferenceDate, dateRange.from)) {
           groups['Cerrado - Ganado'].push(opp);
         } else {
-          groups['Ganado (Recurrente)'].push(opp);
+          groups[RECURRING_WON_STAGE].push(opp);
         }
       } else if (opp.stage === 'Negociación' && opp.highCloseProbability) {
         groups[HIGH_PROBABILITY_STAGE].push(opp);
@@ -571,7 +572,7 @@ export function KanbanBoard({
       }
     });
 
-    const recurringTotal = groups['Ganado (Recurrente)'].reduce((sum, opp) => sum + Number(opp.value || 0), 0);
+    const recurringTotal = groups[RECURRING_WON_STAGE].reduce((sum, opp) => sum + Number(opp.value || 0), 0);
     const newWinsTotal = groups['Cerrado - Ganado'].reduce((sum, opp) => sum + Number(opp.value || 0), 0);
 
     Object.values(groups).forEach(group => {
@@ -595,9 +596,11 @@ export function KanbanBoard({
 
 
   const kanbanStages = useMemo<KanbanStage[]>(() => {
-    return opportunityStages.flatMap((stage) => (
-      stage === 'Negociación' ? [stage, HIGH_PROBABILITY_STAGE] : [stage]
-    ));
+    return opportunityStages.flatMap((stage) => {
+      if (stage === 'Negociación') return [stage, HIGH_PROBABILITY_STAGE];
+      if (stage === 'Cerrado - Ganado') return [stage, RECURRING_WON_STAGE];
+      return [stage];
+    });
   }, []);
 
   const handleCardDrop = async (e: React.DragEvent<HTMLDivElement>, newStage: OpportunityStage, highCloseProbability = false) => {
@@ -687,7 +690,7 @@ export function KanbanBoard({
       </div>
       <div className="p-4 md:p-6 lg:p-8 flex-1 flex gap-6 overflow-x-auto">
       {kanbanStages.map((stage) => {
-          if (stage === 'Ganado (Recurrente)') {
+          if (stage === RECURRING_WON_STAGE) {
              return <KanbanColumn
               key={stage}
               stage={stage}
