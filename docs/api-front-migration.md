@@ -714,6 +714,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El numero de comprobante queda solo como dato visible de la tabla y ya no se usa como fallback para descargar.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Octogesimo quinto corte aplicado
+
+- El proxy `/api/tango/invoices/pdf` valida que Tango devuelva un PDF real antes de responder al front.
+- Si Tango devuelve el PDF como base64, se decodifica en servidor y se entrega como `application/pdf`.
+- Si Tango devuelve JSON, texto o HTML de error, la API responde un error legible en vez de descargar un archivo PDF corrupto.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
