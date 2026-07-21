@@ -66,83 +66,107 @@ export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { searchParams } = new URL(request.url);
-  const scope = searchParams.get('scope') || 'active';
+  try {
+    const { searchParams } = new URL(request.url);
+    const scope = searchParams.get('scope') || 'active';
 
-  if (scope === 'all') {
-    if (!hasServerManagementPrivileges(requester)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (scope === 'all') {
+      if (!hasServerManagementPrivileges(requester)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      return NextResponse.json({ opportunities: await getAllOpportunities() });
     }
-    return NextResponse.json({ opportunities: await getAllOpportunities() });
-  }
 
-  if (scope === 'user') {
-    const userId = searchParams.get('userId') || requester.uid;
-    if (userId !== requester.uid && !hasServerManagementPrivileges(requester)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (scope === 'user') {
+      const userId = searchParams.get('userId') || requester.uid;
+      if (userId !== requester.uid && !hasServerManagementPrivileges(requester)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      return NextResponse.json({ opportunities: await getOpportunitiesForUser(userId) });
     }
-    return NextResponse.json({ opportunities: await getOpportunitiesForUser(userId) });
-  }
 
-  return NextResponse.json({ opportunities: await getActiveOpportunities() });
+    return NextResponse.json({ opportunities: await getActiveOpportunities() });
+  } catch (error: any) {
+    console.error('OPPORTUNITIES LIST ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudieron cargar las oportunidades.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
+  }
 }
 
 export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const body = await request.json();
-  const opportunityData = body?.opportunityData as Omit<Opportunity, 'id'> | undefined;
+  try {
+    const body = await request.json();
+    const opportunityData = body?.opportunityData as Omit<Opportunity, 'id'> | undefined;
 
-  if (!opportunityData?.clientId || !opportunityData.title) {
-    return NextResponse.json({ error: 'Cliente y titulo son obligatorios.' }, { status: 400 });
-  }
-
-  if (opportunityData.stage === 'Cerrado - Ganado') {
-    if (!opportunityData.startDate || !opportunityData.endDate) {
-      return NextResponse.json(
-        { error: 'La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.' },
-        { status: 400 },
-      );
+    if (!opportunityData?.clientId || !opportunityData.title) {
+      return NextResponse.json({ error: 'Cliente y titulo son obligatorios.' }, { status: 400 });
     }
-    if (parseISO(opportunityData.endDate) < parseISO(opportunityData.startDate)) {
-      return NextResponse.json(
-        { error: 'La fecha de fin del contrato no puede ser anterior a la fecha de inicio.' },
-        { status: 400 },
-      );
+
+    if (opportunityData.stage === 'Cerrado - Ganado') {
+      if (!opportunityData.startDate || !opportunityData.endDate) {
+        return NextResponse.json(
+          { error: 'La vigencia del contrato es obligatoria para cerrar una oportunidad como ganada.' },
+          { status: 400 },
+        );
+      }
+      if (parseISO(opportunityData.endDate) < parseISO(opportunityData.startDate)) {
+        return NextResponse.json(
+          { error: 'La fecha de fin del contrato no puede ser anterior a la fecha de inicio.' },
+          { status: 400 },
+        );
+      }
     }
+
+    const clientSnap = await dbAdmin.collection('clients').doc(opportunityData.clientId).get();
+    if (!clientSnap.exists) {
+      return NextResponse.json({ error: 'Cliente no encontrado para crear la oportunidad.' }, { status: 404 });
+    }
+
+    const client = mapClient(clientSnap.id, clientSnap.data());
+    if (!hasServerManagementPrivileges(requester) && client.ownerId !== requester.uid) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const dataToSave = cleanObject({
+      ...(opportunityData as unknown as Record<string, unknown>),
+      pautados: undefined,
+      createdAt: FieldValue.serverTimestamp(),
+      stageChangedAt: FieldValue.serverTimestamp(),
+    });
+
+    const docRef = await dbAdmin.collection('opportunities').add(dataToSave);
+    const requesterName = getRequesterName(requester);
+
+    await logServerActivity({
+      userId: requester.uid,
+      userName: requesterName,
+      type: 'create',
+      entityType: 'opportunity',
+      entityId: docRef.id,
+      entityName: opportunityData.title,
+      details: `creo la oportunidad <strong>${opportunityData.title}</strong> para el cliente <a href="/clients/${opportunityData.clientId}" class="font-bold text-primary hover:underline">${opportunityData.clientName}</a>`,
+      ownerName: client.ownerName,
+    });
+
+    return NextResponse.json({ id: docRef.id });
+  } catch (error: any) {
+    console.error('OPPORTUNITY CREATE ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudo crear la oportunidad.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
   }
-
-  const clientSnap = await dbAdmin.collection('clients').doc(opportunityData.clientId).get();
-  if (!clientSnap.exists) {
-    return NextResponse.json({ error: 'Cliente no encontrado para crear la oportunidad.' }, { status: 404 });
-  }
-
-  const client = mapClient(clientSnap.id, clientSnap.data());
-  if (!hasServerManagementPrivileges(requester) && client.ownerId !== requester.uid) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const dataToSave = cleanObject({
-    ...(opportunityData as unknown as Record<string, unknown>),
-    pautados: undefined,
-    createdAt: FieldValue.serverTimestamp(),
-    stageChangedAt: FieldValue.serverTimestamp(),
-  });
-
-  const docRef = await dbAdmin.collection('opportunities').add(dataToSave);
-  const requesterName = getRequesterName(requester);
-
-  await logServerActivity({
-    userId: requester.uid,
-    userName: requesterName,
-    type: 'create',
-    entityType: 'opportunity',
-    entityId: docRef.id,
-    entityName: opportunityData.title,
-    details: `creo la oportunidad <strong>${opportunityData.title}</strong> para el cliente <a href="/clients/${opportunityData.clientId}" class="font-bold text-primary hover:underline">${opportunityData.clientName}</a>`,
-    ownerName: client.ownerName,
-  });
-
-  return NextResponse.json({ id: docRef.id });
 }

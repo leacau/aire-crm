@@ -771,6 +771,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - No se cambia la superficie funcional ni permisos de estas rutas; queda preparado para endurecimiento posterior.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Nonagesimo tercer corte aplicado
+
+- `/api/clients` envuelve listado y alta de clientes con errores JSON consistentes y logs server-side.
+- `/api/opportunities` aplica el mismo tratamiento para listados por alcance y creacion de oportunidades.
+- Se mantienen sin cambios los permisos, validaciones funcionales y reglas de negocio existentes; el corte solo reduce 500 opacos durante la migracion.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
