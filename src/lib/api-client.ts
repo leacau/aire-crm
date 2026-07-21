@@ -16,6 +16,18 @@ const AUTH_READY_TIMEOUT_MS = 5000;
 
 let authReadyPromise: Promise<FirebaseUser | null> | null = null;
 
+export class ApiError extends Error {
+  status: number;
+  payload: any;
+
+  constructor(message: string, status: number, payload: any) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
 function waitForAuthUser(): Promise<FirebaseUser | null> {
   if (auth.currentUser) {
     return Promise.resolve(auth.currentUser);
@@ -94,7 +106,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   }
 
   if (!response.ok) {
-    throw new Error(payload?.error || 'La API no pudo completar la solicitud.');
+    throw new ApiError(payload?.error || 'La API no pudo completar la solicitud.', response.status, payload);
   }
 
   return payload as T;

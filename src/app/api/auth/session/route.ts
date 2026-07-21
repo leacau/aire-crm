@@ -9,14 +9,22 @@ const AREA_PERMISSIONS_DOC_ID = 'area_permissions';
 const EMAIL_WHITELIST_DOC_ID = 'email_whitelist';
 
 async function getPermissions() {
-  const docRef = dbAdmin.collection('system_config').doc(AREA_PERMISSIONS_DOC_ID);
-  const snap = await docRef.get();
+  try {
+    const docRef = dbAdmin.collection('system_config').doc(AREA_PERMISSIONS_DOC_ID);
+    const snap = await docRef.get();
 
-  if (snap.exists) {
-    return snap.data()?.permissions || defaultPermissions;
+    if (snap.exists) {
+      return snap.data()?.permissions || defaultPermissions;
+    }
+
+    await docRef.set({ permissions: defaultPermissions });
+  } catch (error: any) {
+    console.error('AUTH SESSION PERMISSIONS FALLBACK:', {
+      code: error?.code,
+      message: error?.message,
+    });
   }
 
-  await docRef.set({ permissions: defaultPermissions });
   return defaultPermissions;
 }
 
@@ -90,7 +98,7 @@ export async function POST(request: Request) {
       code: error?.code,
       message: error?.message,
     });
-    const status = error?.code === 'auth/id-token-expired' ? 401 : 500;
+    const status = typeof error?.code === 'string' && error.code.startsWith('auth/') ? 401 : 500;
     return NextResponse.json(
       { error: status === 401 ? 'Sesion vencida.' : 'No se pudo validar la sesion.' },
       { status },

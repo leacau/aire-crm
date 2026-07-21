@@ -10,6 +10,7 @@ import { validateGoogleServicesAccess } from '@/lib/google-service-check';
 import { useToast } from '@/hooks/use-toast';
 import { getAuthSession } from '@/lib/api/auth';
 import { hydratePermissionsCache } from '@/lib/permissions';
+import { ApiError } from '@/lib/api-client';
 
 const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service', '/'];
 
@@ -89,15 +90,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsBoss(session.user.role === 'Jefe' || session.user.role === 'Gerencia');
         } catch (error) {
           console.error('Error al inicializar el usuario:', error);
-          await auth.signOut();
           clearStoredToken();
-          setUser(null);
           setUserInfo(null);
           setIsBoss(false);
           setLoading(false);
+
+          if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+            await auth.signOut();
+            setUser(null);
+            toast({
+              title: 'Acceso Denegado',
+              description: error.message || 'No se pudo validar tu acceso.',
+              variant: 'destructive',
+            });
+            return;
+          }
+
           toast({
-            title: 'Acceso Denegado',
-            description: error instanceof Error ? error.message : 'No se pudo validar tu acceso.',
+            title: 'No se pudo iniciar la sesion',
+            description: error instanceof Error ? error.message : 'Hubo un error temporal validando tu sesion.',
             variant: 'destructive',
           });
           return;

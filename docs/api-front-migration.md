@@ -729,6 +729,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se retiran los reintentos con IDs derivados de `NRO_COMPROBANTE`, padding y procesos multiples.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Octogesimo septimo corte aplicado
+
+- `/api/auth/session` conserva token y perfil como validaciones obligatorias, pero usa `defaultPermissions` si falla la lectura/escritura de permisos globales.
+- Los errores `auth/*` de Firebase Admin se responden como 401 para que el cliente fuerce refresh del ID token antes de cerrar sesion.
+- El front ya no ejecuta `signOut` ante errores 500 de inicializacion de sesion; solo cierra sesion ante 401/403.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
