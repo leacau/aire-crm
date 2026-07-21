@@ -311,14 +311,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
   };
 
   const getInvoicePdfId = (invoice: TangoInvoice) => {
-    const invoiceNumber = String(invoice.NRO_COMPROBANTE || '').trim();
-    if (invoiceNumber) {
-      return invoiceNumber.includes('-')
-        ? invoiceNumber.split('-').pop()?.trim() || invoiceNumber
-        : invoiceNumber;
-    }
-
-    return String(invoice.ID_GVA12 || invoice.ID_GVA23 || invoice.ID_GVA38 || '').trim();
+    return String(invoice.ID_GVA12 || '').trim();
   };
 
   const handleDownloadInvoice = async (invoice: TangoInvoice) => {
@@ -329,7 +322,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
     if (!invoiceCompany || invoiceCompany === 'all' || !invoiceId) {
       toast({
         title: 'No se puede descargar',
-        description: 'Tango no informo Company o ID de factura para este comprobante.',
+        description: 'Tango no informo Company o ID_GVA12 para este comprobante.',
         variant: 'destructive',
       });
       return;
