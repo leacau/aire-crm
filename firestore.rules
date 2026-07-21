@@ -152,19 +152,26 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/opportunities/$(request.resource.data.opportunityId)).data.clientId == request.resource.data.clientId;
     }
 
-    function legacyAdvertisingOrderEntersReapproval() {
-      return resource.data.get('status', null) != null
-        || resource.data.get('approvalHistory', []).size() > 0
-        || (request.resource.data.status == 'Pendiente de Modificación'
-          && request.resource.data.approvalHistory is list
-          && request.resource.data.approvalHistory.size() > 0
-          && request.resource.data.revisionHistory is list
-          && request.resource.data.revisionHistory.size() > 0);
-    }
-
     function hasEditableAdvertisingOrderStatus() {
       return request.resource.data.get('status', '') != 'Aprobado'
         && request.resource.data.get('status', '') != 'Devuelto';
+    }
+
+    function approvedAdvertisingOrderEntersReapproval() {
+      return resource.data.get('status', '') != 'Aprobado'
+        || (request.resource.data.status == 'Pendiente de Modificación'
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasAll(['status', 'approvalHistory', 'revisionHistory'])
+          && request.resource.data.get('approvalHistory', []).size()
+            > resource.data.get('approvalHistory', []).size()
+          && request.resource.data.get('revisionHistory', []).size()
+            > resource.data.get('revisionHistory', []).size()
+          && request.resource.data.revisionHistory[
+            request.resource.data.revisionHistory.size() - 1
+          ].reason is string
+          && request.resource.data.revisionHistory[
+            request.resource.data.revisionHistory.size() - 1
+          ].reason.size() > 0);
     }
 
     function hasValidWonContractPeriod() {
@@ -300,6 +307,7 @@ service cloud.firestore {
       allow update: if linksWonOpportunityForOrder()
         && (isManagement()
           || (hasEditableAdvertisingOrderStatus()
+            && approvedAdvertisingOrderEntersReapproval()
             && (isActorOnResource() || ownsClientOnResource()
               || (isCanjeOperator() && resource.data.canjeId is string && canOperateCanjeClient(resource.data.clientId)))));
       allow delete: if isActorOnResource() || ownsClientOnResource() || isManagement();
