@@ -47,35 +47,59 @@ export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { searchParams } = new URL(request.url);
-  const tasksOnly = searchParams.get('tasks') === 'true';
-  let query: FirebaseFirestore.Query = dbAdmin.collection('client-activities');
+  try {
+    const { searchParams } = new URL(request.url);
+    const tasksOnly = searchParams.get('tasks') === 'true';
+    let query: FirebaseFirestore.Query = dbAdmin.collection('client-activities');
 
-  if (tasksOnly) {
-    query = query.where('isTask', '==', true);
+    if (tasksOnly) {
+      query = query.where('isTask', '==', true);
+    }
+
+    const snapshot = await query.orderBy('timestamp', 'desc').get();
+
+    const activities = snapshot.docs.map(doc => mapClientActivity(doc.id, doc.data()));
+    return NextResponse.json({ activities });
+  } catch (error: any) {
+    console.error('CLIENT ACTIVITIES LIST ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudieron cargar las actividades.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
   }
-
-  const snapshot = await query.orderBy('timestamp', 'desc').get();
-
-  const activities = snapshot.docs.map(doc => mapClientActivity(doc.id, doc.data()));
-  return NextResponse.json({ activities });
 }
 
 export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const body = await request.json();
-  const activityData = body?.activityData as Omit<ClientActivity, 'id' | 'timestamp'> | undefined;
+  try {
+    const body = await request.json();
+    const activityData = body?.activityData as Omit<ClientActivity, 'id' | 'timestamp'> | undefined;
 
-  if (!activityData?.type || !activityData.observation?.trim()) {
-    return NextResponse.json({ error: 'Tipo y observacion son obligatorios.' }, { status: 400 });
+    if (!activityData?.type || !activityData.observation?.trim()) {
+      return NextResponse.json({ error: 'Tipo y observacion son obligatorios.' }, { status: 400 });
+    }
+
+    const requesterName = getRequesterName(requester);
+    const docRef = await dbAdmin.collection('client-activities').add(
+      buildClientActivityCreatePayload(activityData, requester.uid, requesterName),
+    );
+
+    return NextResponse.json({ id: docRef.id });
+  } catch (error: any) {
+    console.error('CLIENT ACTIVITY CREATE ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudo crear la actividad.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
   }
-
-  const requesterName = getRequesterName(requester);
-  const docRef = await dbAdmin.collection('client-activities').add(
-    buildClientActivityCreatePayload(activityData, requester.uid, requesterName),
-  );
-
-  return NextResponse.json({ id: docRef.id });
 }

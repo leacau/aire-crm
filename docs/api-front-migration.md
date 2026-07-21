@@ -764,6 +764,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La descarga queda estrictamente atada al `Company` de la fila y al `ID_GVA12` del comprobante.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Nonagesimo segundo corte aplicado
+
+- `/api/agencies` y `/api/client-activities` envuelven lecturas y escrituras Firestore con errores JSON consistentes y logs server-side.
+- Dashboard, tareas, oportunidades, clientes y publicidad reciben mensajes trazables si falla una API de soporte, en vez de errores genericos del runtime.
+- No se cambia la superficie funcional ni permisos de estas rutas; queda preparado para endurecimiento posterior.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
