@@ -482,6 +482,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
                     type="button"
                     variant="outline"
                     size="sm"
+                    title={`PDF Tango - Company ${invoiceCompany} - ID_GVA12 ${invoicePdfId || 'sin informar'}`}
                     onClick={() => handleDownloadInvoice(invoice)}
                     disabled={!invoicePdfId || downloadingInvoiceKey === downloadKey}
                   >

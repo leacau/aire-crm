@@ -29,6 +29,11 @@ function buildPdfFileName(company: string, invoiceId: string) {
   return `factura-tango-${company}-${cleanId}.pdf`;
 }
 
+function getPdfCompany(company: string) {
+  const override = process.env[`TANGO_INVOICE_PDF_COMPANY_OVERRIDE_${company}`]?.trim();
+  return override || company;
+}
+
 function isPdfBuffer(buffer: Buffer) {
   return buffer.subarray(0, PDF_SIGNATURE.length).toString('latin1') === PDF_SIGNATURE;
 }
@@ -97,9 +102,14 @@ export async function GET(request: Request) {
   const invoiceId = searchParams.get('id') || '';
   const processId = process.env.TANGO_INVOICE_PDF_PROCESS?.trim() || DEFAULT_PDF_PROCESS;
   const apiAuthorization = process.env.TANGO_API_AUTHORIZATION;
+  const pdfCompany = getPdfCompany(company);
 
   if (!ALLOWED_COMPANIES.includes(company)) {
     return NextResponse.json({ error: 'Company no permitida' }, { status: 400 });
+  }
+
+  if (!ALLOWED_COMPANIES.includes(pdfCompany)) {
+    return NextResponse.json({ error: 'Company de descarga no permitida' }, { status: 400 });
   }
 
   if (!invoiceId.trim()) {
@@ -119,7 +129,7 @@ export async function GET(request: Request) {
       method: 'GET',
       headers: {
         ApiAuthorization: apiAuthorization,
-        Company: company,
+        Company: pdfCompany,
       },
       cache: 'no-store',
     });
@@ -144,9 +154,11 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('Error downloading Tango invoice PDF:', error);
+    const details = error instanceof Error ? error.message : 'Error desconocido';
+    const context = `process=${processId}, company=${company}, pdfCompany=${pdfCompany}, id=${invoiceId.trim()}`;
     return NextResponse.json({
       error: 'No se pudo descargar el PDF de Tango',
-      details: error instanceof Error ? error.message : 'Error desconocido',
+      details: `${details} (${context})`,
     }, { status: 502 });
   }
 }
