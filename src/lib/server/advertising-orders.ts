@@ -21,6 +21,13 @@ export class AdvertisingOrderApiError extends Error {
   }
 }
 
+export function mapAdvertisingOrder(
+  id: string,
+  data: FirebaseFirestore.DocumentData | undefined,
+): AdvertisingOrder {
+  return serializeDocument<AdvertisingOrder>(id, data);
+}
+
 function splitOrderPayload<T extends OrderPayload>(orderData: T = {} as T) {
   const {
     billingRequestsSrl,

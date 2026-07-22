@@ -1,12 +1,6 @@
-import { serializeDocument } from '@/lib/server/firestore';
 import type { AdvertisingOrder } from '@/lib/types';
 
-export function mapAdvertisingOrder(
-  id: string,
-  data: FirebaseFirestore.DocumentData | undefined,
-): AdvertisingOrder {
-  return serializeDocument<AdvertisingOrder>(id, data);
-}
+export { mapAdvertisingOrder } from '@/lib/server/advertising-orders';
 
 export function isApprovedForProgramming(order: AdvertisingOrder): boolean {
   const status = order.status || 'Aprobado';

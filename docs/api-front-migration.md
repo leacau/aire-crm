@@ -974,6 +974,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las respuestas y errores Tango quedan normalizados en una sola libreria de front.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo vigesimo segundo corte aplicado
+
+- `src/lib/server/convenios.ts` deja de importar utilidades desde `src/app/api`.
+- El mapeo de ordenes publicitarias se expone desde `src/lib/server/advertising-orders.ts`.
+- La limpieza de payloads de alta de Canjes vive en `src/lib/server/canjes.ts` y la API la reexporta para mantener compatibilidad.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

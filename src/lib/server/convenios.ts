@@ -1,9 +1,9 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { logServerActivity } from '@/lib/server/activity';
+import { mapAdvertisingOrder } from '@/lib/server/advertising-orders';
+import { cleanCanjeCreatePayload } from '@/lib/server/canjes';
 import { serializeDocument } from '@/lib/server/firestore';
-import { cleanCanjeCreatePayload } from '@/app/api/canjes/utils';
-import { mapAdvertisingOrder } from '@/app/api/advertising-orders/utils';
 import type { AdvertisingOrder, Canje, ConvenioCanje, Opportunity } from '@/lib/types';
 
 export class ConvenioApiError extends Error {

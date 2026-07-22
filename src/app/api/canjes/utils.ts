@@ -1,6 +1,9 @@
 import { FieldValue } from 'firebase-admin/firestore';
+import { cleanCanjeCreatePayload } from '@/lib/server/canjes';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { Canje, HistorialMensualItem, Invoice } from '@/lib/types';
+
+export { cleanCanjeCreatePayload };
 
 export function normalizeDateOnly(value: unknown): string | undefined {
   if (!value) return undefined;
@@ -30,14 +33,6 @@ export function mapCanje(id: string, data: FirebaseFirestore.DocumentData | unde
       ?.map(normalizeCanjeHistoryItem)
       .sort((a, b) => b.mes.localeCompare(a.mes)),
   };
-}
-
-export function cleanCanjeCreatePayload(payload: Record<string, unknown>) {
-  const cleaned = Object.fromEntries(
-    Object.entries(payload).filter(([key, value]) => key !== 'id' && value !== undefined),
-  );
-  delete cleaned.fechaCreacion;
-  return cleaned;
 }
 
 export function cleanCanjeUpdatePayload(payload: Record<string, unknown>, deleteKeys: string[] = []) {
