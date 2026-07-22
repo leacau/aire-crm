@@ -946,6 +946,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/tango-mapping/upload` encapsula errores de form-data, lectura XLSX y armado de preview/busqueda.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo decimoctavo corte aplicado
+
+- `/api/users` y `/api/users/[userId]` cubren alta, lectura, actualizacion y borrado con errores JSON trazables.
+- `/api/users/[userId]/monthly-closure` mantiene validaciones 400/404 y normaliza fallas de escritura/logging.
+- `/api/admin/users/sync` captura fallas de Firebase Auth/Firestore durante la sincronizacion masiva.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

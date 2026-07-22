@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { serializeDocument } from '@/lib/server/firestore';
+import { userErrorResponse } from '@/app/api/users/errors';
 import type { User, UserRole } from '@/lib/types';
 
 export async function GET(request: Request) {
@@ -40,27 +41,35 @@ export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const body = await request.json();
-  const uid = String(body?.uid || requester.uid);
+  try {
+    const body = await request.json();
+    const uid = String(body?.uid || requester.uid);
 
-  if (uid !== requester.uid && !hasServerManagementPrivileges(requester)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (uid !== requester.uid && !hasServerManagementPrivileges(requester)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const name = String(body?.name || requester.name || requester.email || 'Usuario').trim();
+    const email = String(body?.email || requester.email || '').trim().toLowerCase();
+
+    if (!name || !email) {
+      return NextResponse.json({ error: 'Nombre y email son obligatorios.' }, { status: 400 });
+    }
+
+    await dbAdmin.collection('users').doc(uid).set({
+      name,
+      email,
+      role: 'Asesor',
+      photoURL: body?.photoURL || null,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return userErrorResponse(error, {
+      action: 'CREATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo guardar el usuario.',
+    });
   }
-
-  const name = String(body?.name || requester.name || requester.email || 'Usuario').trim();
-  const email = String(body?.email || requester.email || '').trim().toLowerCase();
-
-  if (!name || !email) {
-    return NextResponse.json({ error: 'Nombre y email son obligatorios.' }, { status: 400 });
-  }
-
-  await dbAdmin.collection('users').doc(uid).set({
-    name,
-    email,
-    role: 'Asesor',
-    photoURL: body?.photoURL || null,
-    createdAt: FieldValue.serverTimestamp(),
-  });
-
-  return NextResponse.json({ ok: true });
 }
