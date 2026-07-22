@@ -17,8 +17,14 @@ function errorResponse(error: unknown) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
 
-  console.error('Convenio API error:', error);
-  return NextResponse.json({ error: 'No se pudo completar la operacion.' }, { status: 500 });
+  const details = error instanceof Error ? error.message : 'Error desconocido';
+  console.error('CONVENIO API ERROR:', {
+    message: details,
+  });
+  return NextResponse.json({
+    error: 'No se pudo completar la operacion del convenio.',
+    details,
+  }, { status: 502 });
 }
 
 export async function PATCH(request: Request, context: RouteContext) {

@@ -806,6 +806,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/canjes/[canjeId]/advertising-orders` y `/api/canjes/[canjeId]/invoices` devuelven errores legibles para las vistas de detalle del canje.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Nonagesimo octavo corte aplicado
+
+- `/api/convenios`, `/api/convenios/[convenioId]` y `/api/convenios/migrate-to-canjes` devuelven contratos 502 trazables para fallas no controladas.
+- `/api/approvals` encapsula listado y cambio de estado con errores JSON legibles y logs server-side.
+- Aprobaciones mantiene las colecciones, estados y permisos existentes, pero evita 500 opacos ante fallas de Firestore o actualizacion.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

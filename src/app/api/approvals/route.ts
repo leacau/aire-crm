@@ -85,61 +85,85 @@ export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const approvals = (await Promise.all(
-    (Object.keys(APPROVAL_COLLECTIONS) as ApprovalCollectionName[])
-      .map(collectionName => loadCollectionApprovals(collectionName, requester)),
-  ))
-    .flat()
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  try {
+    const approvals = (await Promise.all(
+      (Object.keys(APPROVAL_COLLECTIONS) as ApprovalCollectionName[])
+        .map(collectionName => loadCollectionApprovals(collectionName, requester)),
+    ))
+      .flat()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  return NextResponse.json({ approvals });
+    return NextResponse.json({ approvals });
+  } catch (error: any) {
+    console.error('APPROVALS LIST ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudieron cargar las aprobaciones.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
+  }
 }
 
 export async function PATCH(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const body = await request.json();
-  const collectionName = body?.collectionName;
-  const itemId = body?.itemId;
-  const status = body?.status as ApprovalStatus | undefined;
+  try {
+    const body = await request.json();
+    const collectionName = body?.collectionName;
+    const itemId = body?.itemId;
+    const status = body?.status as ApprovalStatus | undefined;
 
-  if (!isApprovalCollection(collectionName) || typeof itemId !== 'string' || !status) {
-    return NextResponse.json({ error: 'Solicitud de aprobación inválida.' }, { status: 400 });
+    if (!isApprovalCollection(collectionName) || typeof itemId !== 'string' || !status) {
+      return NextResponse.json({ error: 'Solicitud de aprobación inválida.' }, { status: 400 });
+    }
+
+    if (!['Aprobado', 'Devuelto'].includes(status)) {
+      return NextResponse.json({ error: 'Estado de aprobación no soportado.' }, { status: 400 });
+    }
+
+    const docRef = dbAdmin.collection(collectionName).doc(itemId);
+    const snap = await docRef.get();
+    if (!snap.exists) {
+      return NextResponse.json({ error: 'Documento no encontrado.' }, { status: 404 });
+    }
+
+    const data = snap.data() || {};
+    if (!isReviewer(requester) && !isOwner(collectionName, data, requester.uid)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const incomingHistory = body?.historyItem || {};
+    const historyItem: ApprovalHistoryItem = {
+      ...incomingHistory,
+      status,
+      userId: requester.uid,
+      userName: requester.name || requester.email || 'Usuario',
+      userRole: requester.role || incomingHistory.userRole || '',
+    };
+
+    await docRef.update({
+      status,
+      adminComments: body?.adminComments || '',
+      approvedAt: FieldValue.serverTimestamp(),
+      approvedBy: requester.uid,
+      approvedByName: requester.name || requester.email || 'Usuario',
+      approvalHistory: FieldValue.arrayUnion(historyItem),
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error: any) {
+    console.error('APPROVAL STATUS UPDATE ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudo actualizar la aprobacion.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
   }
-
-  if (!['Aprobado', 'Devuelto'].includes(status)) {
-    return NextResponse.json({ error: 'Estado de aprobación no soportado.' }, { status: 400 });
-  }
-
-  const docRef = dbAdmin.collection(collectionName).doc(itemId);
-  const snap = await docRef.get();
-  if (!snap.exists) {
-    return NextResponse.json({ error: 'Documento no encontrado.' }, { status: 404 });
-  }
-
-  const data = snap.data() || {};
-  if (!isReviewer(requester) && !isOwner(collectionName, data, requester.uid)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const incomingHistory = body?.historyItem || {};
-  const historyItem: ApprovalHistoryItem = {
-    ...incomingHistory,
-    status,
-    userId: requester.uid,
-    userName: requester.name || requester.email || 'Usuario',
-    userRole: requester.role || incomingHistory.userRole || '',
-  };
-
-  await docRef.update({
-    status,
-    adminComments: body?.adminComments || '',
-    approvedAt: FieldValue.serverTimestamp(),
-    approvedBy: requester.uid,
-    approvedByName: requester.name || requester.email || 'Usuario',
-    approvalHistory: FieldValue.arrayUnion(historyItem),
-  });
-
-  return NextResponse.json({ ok: true });
 }
