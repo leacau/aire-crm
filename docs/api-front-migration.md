@@ -897,6 +897,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La vista de detalle de cliente queda menos expuesta a excepciones crudas de Firestore en cargas auxiliares.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo undecimo corte aplicado
+
+- `/api/clients/bulk` cubre borrado y actualizacion masiva con errores JSON trazables y mantiene permisos de gestion.
+- `/api/clients/merge` conserva las validaciones de IDs y ahora captura fallas de migracion de referencias entre colecciones.
+- `/api/clients/[clientId]/tango-mapping` normaliza errores de alta y baja de mapeo Tango sin cambiar los 400/403/404 esperados por el front.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
