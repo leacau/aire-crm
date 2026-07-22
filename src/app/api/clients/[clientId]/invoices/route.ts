@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { clientErrorResponse } from '@/app/api/clients/errors';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { getAccessibleClient } from '@/lib/server/client-access';
 import { serializeDocument } from '@/lib/server/firestore';
@@ -23,32 +24,40 @@ export async function GET(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { clientId } = await context.params;
-  if (!clientId) return NextResponse.json({ invoices: [] });
-  const client = await getAccessibleClient(clientId, requester);
-  if (!client) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  try {
+    const { clientId } = await context.params;
+    if (!clientId) return NextResponse.json({ invoices: [] });
+    const client = await getAccessibleClient(clientId, requester);
+    if (!client) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const oppsSnap = await dbAdmin.collection('opportunities').where('clientId', '==', clientId).get();
-  const opportunityIds = oppsSnap.docs.map(doc => doc.id);
-  if (opportunityIds.length === 0) return NextResponse.json({ invoices: [] });
+    const oppsSnap = await dbAdmin.collection('opportunities').where('clientId', '==', clientId).get();
+    const opportunityIds = oppsSnap.docs.map(doc => doc.id);
+    if (opportunityIds.length === 0) return NextResponse.json({ invoices: [] });
 
-  const invoices: Invoice[] = [];
-  for (let index = 0; index < opportunityIds.length; index += 30) {
-    const chunk = opportunityIds.slice(index, index + 30);
-    const snapshot = await dbAdmin.collection('invoices').where('opportunityId', 'in', chunk).get();
-    invoices.push(
-      ...snapshot.docs.map(doc => {
-        const invoice = serializeDocument<Invoice>(doc.id, doc.data());
-        return {
-          ...invoice,
-          amount: normalizeInvoiceAmount(invoice.amount),
-          isCreditNote: Boolean(invoice.isCreditNote),
-        };
-      }),
-    );
+    const invoices: Invoice[] = [];
+    for (let index = 0; index < opportunityIds.length; index += 30) {
+      const chunk = opportunityIds.slice(index, index + 30);
+      const snapshot = await dbAdmin.collection('invoices').where('opportunityId', 'in', chunk).get();
+      invoices.push(
+        ...snapshot.docs.map(doc => {
+          const invoice = serializeDocument<Invoice>(doc.id, doc.data());
+          return {
+            ...invoice,
+            amount: normalizeInvoiceAmount(invoice.amount),
+            isCreditNote: Boolean(invoice.isCreditNote),
+          };
+        }),
+      );
+    }
+
+    invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
+
+    return NextResponse.json({ invoices });
+  } catch (error) {
+    return clientErrorResponse(error, {
+      action: 'INVOICES LIST',
+      requesterId: requester.uid,
+      publicError: 'No se pudieron cargar las facturas del cliente.',
+    });
   }
-
-  invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
-
-  return NextResponse.json({ invoices });
 }

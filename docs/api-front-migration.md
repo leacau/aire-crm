@@ -890,6 +890,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/client-activities/cleanup-old` mantiene permisos de gestion y ahora informa fallas de batch sin romper con excepciones opacas.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo decimo corte aplicado
+
+- `/api/clients/[clientId]` cubre detalle, actualizacion y borrado con errores JSON trazables.
+- Subrutas de cliente para actividades, ordenes de publicidad, pedidos de facturacion, facturas, oportunidades y contactos conservan `getAccessibleClient` y agregan contratos 502 controlados.
+- La vista de detalle de cliente queda menos expuesta a excepciones crudas de Firestore en cargas auxiliares.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
