@@ -1,6 +1,6 @@
 'use client';
 
-import { apiRequest } from '@/lib/api-client';
+import { apiRequest, publicApiRequest } from '@/lib/api-client';
 import type { Program } from '@/lib/types';
 
 export async function getPrograms(): Promise<Program[]> {
@@ -9,16 +9,10 @@ export async function getPrograms(): Promise<Program[]> {
 }
 
 export async function getPublicPrograms(): Promise<Program[]> {
-  const response = await fetch('/api/public/programs', {
+  const result = await publicApiRequest<{ programs: Program[] }>('/api/public/programs', {
     method: 'GET',
   });
-  const payload = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(payload?.error || 'No se pudieron cargar los programas.');
-  }
-
-  return payload?.programs || [];
+  return result.programs || [];
 }
 
 export async function getProgram(id: string): Promise<Program | null> {

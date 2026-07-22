@@ -116,6 +116,17 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   return payload as T;
 }
 
+export async function publicApiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(path, options);
+  const payload = await readPayload(response);
+
+  if (!response.ok) {
+    throw new ApiError(payload?.error || 'La API no pudo completar la solicitud.', response.status, payload);
+  }
+
+  return payload as T;
+}
+
 export async function apiFetch(path: string, options: ApiFetchOptions = {}): Promise<Response> {
   const { user, headers, ...init } = options;
 

@@ -960,6 +960,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se reduce otro acoplamiento del front con Firebase fuera de la capa de autenticacion/API compartida.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo vigesimo corte aplicado
+
+- `src/lib/api-client.ts` suma `publicApiRequest()` para llamadas publicas JSON sin token, reutilizando `ApiError`.
+- `src/lib/api/commercial-notes.ts` reemplaza el `fetch` publico manual por `publicApiRequest()`.
+- `src/lib/api/programs.ts` usa el mismo helper para `/api/public/programs`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

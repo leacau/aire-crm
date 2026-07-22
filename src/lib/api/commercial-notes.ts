@@ -1,19 +1,14 @@
 'use client';
 
-import { apiRequest, getApiAuthUser } from '@/lib/api-client';
+import { apiRequest, getApiAuthUser, publicApiRequest } from '@/lib/api-client';
 import type { CommercialNote } from '@/lib/types';
 
 async function fetchPublicCommercialNote(noteId: string): Promise<CommercialNote | null> {
-  const response = await fetch(`/api/commercial-notes/${encodeURIComponent(noteId)}`, {
-    method: 'GET',
-  });
-  const payload = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(payload?.error || 'No se pudo cargar la nota comercial.');
-  }
-
-  return payload?.note || null;
+  const result = await publicApiRequest<{ note: CommercialNote | null }>(
+    `/api/commercial-notes/${encodeURIComponent(noteId)}`,
+    { method: 'GET' },
+  );
+  return result.note;
 }
 
 async function getCommercialNotes(params?: Record<string, string>): Promise<CommercialNote[]> {
