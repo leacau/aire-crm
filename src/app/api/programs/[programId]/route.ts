@@ -5,6 +5,7 @@ import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { hasServerScreenPermission } from '@/lib/server/screen-permissions';
 import { getRequesterName } from '@/app/api/clients/utils';
+import { programErrorResponse } from '@/app/api/programs/errors';
 import { mapProgram, stripLegacyScheduleFields } from '@/app/api/programs/utils';
 import type { Program } from '@/lib/types';
 
@@ -16,63 +17,79 @@ export async function GET(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { programId } = await context.params;
-  const snap = await dbAdmin.collection('programs').doc(programId).get();
+  try {
+    const { programId } = await context.params;
+    const snap = await dbAdmin.collection('programs').doc(programId).get();
 
-  return NextResponse.json({
-    program: snap.exists ? mapProgram(snap.id, snap.data()) : null,
-  });
+    return NextResponse.json({
+      program: snap.exists ? mapProgram(snap.id, snap.data()) : null,
+    });
+  } catch (error) {
+    return programErrorResponse(error, {
+      action: 'DETAIL',
+      requesterId: requester.uid,
+      publicError: 'No se pudo cargar el programa.',
+    });
+  }
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { programId } = await context.params;
-  const body = await request.json();
-  const programData = (body?.programData || {}) as Partial<Omit<Program, 'id'>>;
-  const updateKeys = Object.keys(programData);
-  const touchesRates = updateKeys.includes('rates');
-  const touchesProgramConfig = updateKeys.some(key => key !== 'rates');
+  try {
+    const { programId } = await context.params;
+    const body = await request.json();
+    const programData = (body?.programData || {}) as Partial<Omit<Program, 'id'>>;
+    const updateKeys = Object.keys(programData);
+    const touchesRates = updateKeys.includes('rates');
+    const touchesProgramConfig = updateKeys.some(key => key !== 'rates');
 
-  if (touchesRates && !(await hasServerScreenPermission(requester, 'Rates', 'edit'))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (touchesRates && !(await hasServerScreenPermission(requester, 'Rates', 'edit'))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (touchesProgramConfig && !(await hasServerScreenPermission(requester, 'Grilla', 'edit'))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const docRef = dbAdmin.collection('programs').doc(programId);
+    const originalSnap = await docRef.get();
+
+    if (!originalSnap.exists) {
+      return NextResponse.json({ error: 'Program not found' }, { status: 404 });
+    }
+
+    const originalProgram = mapProgram(originalSnap.id, originalSnap.data());
+    const dataToUpdate = stripLegacyScheduleFields({
+      ...programData,
+      updatedBy: requester.uid,
+      updatedAt: FieldValue.serverTimestamp() as any,
+    } as Partial<Program>);
+
+    await docRef.update(dataToUpdate);
+
+    const requesterName = getRequesterName(requester);
+    const programName = programData.name || originalProgram.name;
+    await logServerActivity({
+      userId: requester.uid,
+      userName: requesterName,
+      type: 'update',
+      entityType: 'program' as any,
+      entityId: programId,
+      entityName: programName,
+      details: `actualizo el programa <strong>${programName}</strong>`,
+      ownerName: requesterName,
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return programErrorResponse(error, {
+      action: 'UPDATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo actualizar el programa.',
+    });
   }
-
-  if (touchesProgramConfig && !(await hasServerScreenPermission(requester, 'Grilla', 'edit'))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const docRef = dbAdmin.collection('programs').doc(programId);
-  const originalSnap = await docRef.get();
-
-  if (!originalSnap.exists) {
-    return NextResponse.json({ error: 'Program not found' }, { status: 404 });
-  }
-
-  const originalProgram = mapProgram(originalSnap.id, originalSnap.data());
-  const dataToUpdate = stripLegacyScheduleFields({
-    ...programData,
-    updatedBy: requester.uid,
-    updatedAt: FieldValue.serverTimestamp() as any,
-  } as Partial<Program>);
-
-  await docRef.update(dataToUpdate);
-
-  const requesterName = getRequesterName(requester);
-  const programName = programData.name || originalProgram.name;
-  await logServerActivity({
-    userId: requester.uid,
-    userName: requesterName,
-    type: 'update',
-    entityType: 'program' as any,
-    entityId: programId,
-    entityName: programName,
-    details: `actualizo el programa <strong>${programName}</strong>`,
-    ownerName: requesterName,
-  });
-
-  return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
@@ -82,28 +99,36 @@ export async function DELETE(request: Request, context: RouteContext) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { programId } = await context.params;
-  const docRef = dbAdmin.collection('programs').doc(programId);
-  const originalSnap = await docRef.get();
+  try {
+    const { programId } = await context.params;
+    const docRef = dbAdmin.collection('programs').doc(programId);
+    const originalSnap = await docRef.get();
 
-  if (!originalSnap.exists) {
-    return NextResponse.json({ error: 'Program not found' }, { status: 404 });
+    if (!originalSnap.exists) {
+      return NextResponse.json({ error: 'Program not found' }, { status: 404 });
+    }
+
+    const originalProgram = mapProgram(originalSnap.id, originalSnap.data());
+    await docRef.delete();
+
+    const requesterName = getRequesterName(requester);
+    await logServerActivity({
+      userId: requester.uid,
+      userName: requesterName,
+      type: 'delete',
+      entityType: 'program' as any,
+      entityId: programId,
+      entityName: originalProgram.name,
+      details: `elimino el programa <strong>${originalProgram.name}</strong>`,
+      ownerName: requesterName,
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return programErrorResponse(error, {
+      action: 'DELETE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo eliminar el programa.',
+    });
   }
-
-  const originalProgram = mapProgram(originalSnap.id, originalSnap.data());
-  await docRef.delete();
-
-  const requesterName = getRequesterName(requester);
-  await logServerActivity({
-    userId: requester.uid,
-    userName: requesterName,
-    type: 'delete',
-    entityType: 'program' as any,
-    entityId: programId,
-    entityName: originalProgram.name,
-    details: `elimino el programa <strong>${originalProgram.name}</strong>`,
-    ownerName: requesterName,
-  });
-
-  return NextResponse.json({ ok: true });
 }

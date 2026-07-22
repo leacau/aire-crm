@@ -876,6 +876,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El front mantiene el mismo contrato `{ orders }`, pero la API ya no devuelve ordenes de publicidad fuera del alcance del usuario autenticado.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo octavo corte aplicado
+
+- `/api/programs`, `/api/programs/[programId]` y `/api/public/programs` devuelven errores JSON trazables ante fallas de Firestore.
+- `/api/commercial-items`, series, borrado masivo y actualizacion individual quedan cubiertos con contratos 502 controlados.
+- `/api/pnts/scheduled` mantiene la marca de PNTs vigentes por dia/programa, pero ahora falla de forma legible si la consulta de ordenes no puede completarse.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
