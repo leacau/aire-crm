@@ -981,6 +981,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La limpieza de payloads de alta de Canjes vive en `src/lib/server/canjes.ts` y la API la reexporta para mantener compatibilidad.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo vigesimo tercer corte aplicado
+
+- Se agrega `src/lib/api/google-services.ts` como cliente unico de front para Gmail y Google Calendar.
+- `src/lib/google-gmail-service.ts` queda como shim de compatibilidad, sin construir llamadas HTTP directas.
+- Envio de correos y eventos de calendario normalizan errores desde una libreria de API de front.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
