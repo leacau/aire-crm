@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/app/api/clients/utils';
+import { activityErrorResponse } from '@/app/api/activities/errors';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
@@ -72,56 +73,72 @@ export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { searchParams } = new URL(request.url);
-  const scope = searchParams.get('scope');
-  const entityType = searchParams.get('entityType');
-  const entityId = searchParams.get('entityId');
-  const activityLimit = parseLimit(searchParams.get('limit'), 20);
+  try {
+    const { searchParams } = new URL(request.url);
+    const scope = searchParams.get('scope');
+    const entityType = searchParams.get('entityType');
+    const entityId = searchParams.get('entityId');
+    const activityLimit = parseLimit(searchParams.get('limit'), 20);
 
-  if (scope === 'client-graph') {
-    if (!entityId) return NextResponse.json({ activities: [] });
-    return NextResponse.json({ activities: await getClientGraphActivities(entityId) });
-  }
+    if (scope === 'client-graph') {
+      if (!entityId) return NextResponse.json({ activities: [] });
+      return NextResponse.json({ activities: await getClientGraphActivities(entityId) });
+    }
 
-  if (entityType && entityId) {
-    const snapshot = await dbAdmin
-      .collection('activities')
-      .where('entityType', '==', entityType)
-      .where('entityId', '==', entityId)
+    const collectionRef = dbAdmin.collection('activities');
+
+    if (entityType && entityId) {
+      const filteredSnapshot = await collectionRef
+        .where('entityType', '==', entityType)
+        .where('entityId', '==', entityId)
+        .orderBy('timestamp', 'desc')
+        .limit(activityLimit)
+        .get();
+      return NextResponse.json({ activities: filteredSnapshot.docs.map(doc => mapActivity(doc.id, doc.data())) });
+    }
+
+    const latestSnapshot = await collectionRef
       .orderBy('timestamp', 'desc')
       .limit(activityLimit)
       .get();
-    return NextResponse.json({ activities: snapshot.docs.map(doc => mapActivity(doc.id, doc.data())) });
+
+    return NextResponse.json({ activities: latestSnapshot.docs.map(doc => mapActivity(doc.id, doc.data())) });
+  } catch (error) {
+    return activityErrorResponse(error, {
+      action: 'LIST',
+      requesterId: requester.uid,
+      publicError: 'No se pudieron cargar las actividades.',
+    });
   }
-
-  const snapshot = await dbAdmin
-    .collection('activities')
-    .orderBy('timestamp', 'desc')
-    .limit(activityLimit)
-    .get();
-
-  return NextResponse.json({ activities: snapshot.docs.map(doc => mapActivity(doc.id, doc.data())) });
 }
 
 export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const body = await request.json();
-  if (!body?.type || !body?.entityType || !body?.entityId || !body?.entityName || !body?.details) {
-    return NextResponse.json({ error: 'Faltan datos para registrar la actividad.' }, { status: 400 });
+  try {
+    const body = await request.json();
+    if (!body?.type || !body?.entityType || !body?.entityId || !body?.entityName || !body?.details) {
+      return NextResponse.json({ error: 'Faltan datos para registrar la actividad.' }, { status: 400 });
+    }
+
+    await logServerActivity({
+      userId: requester.uid,
+      userName: getRequesterName(requester),
+      type: body.type,
+      entityType: body.entityType,
+      entityId: String(body.entityId),
+      entityName: String(body.entityName),
+      details: String(body.details),
+      ownerName: body.ownerName ? String(body.ownerName) : undefined,
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return activityErrorResponse(error, {
+      action: 'CREATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo registrar la actividad.',
+    });
   }
-
-  await logServerActivity({
-    userId: requester.uid,
-    userName: getRequesterName(requester),
-    type: body.type,
-    entityType: body.entityType,
-    entityId: String(body.entityId),
-    entityName: String(body.entityName),
-    details: String(body.details),
-    ownerName: body.ownerName ? String(body.ownerName) : undefined,
-  });
-
-  return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { activityErrorResponse } from '@/app/api/activities/errors';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import type { ClientActivity } from '@/lib/types';
 
@@ -41,12 +42,19 @@ export async function PATCH(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { activityId } = await context.params;
-  const body = await request.json();
-  const data = (body?.data || {}) as Partial<Omit<ClientActivity, 'id'>>;
+  try {
+    const { activityId } = await context.params;
+    const body = await request.json();
+    const data = (body?.data || {}) as Partial<Omit<ClientActivity, 'id'>>;
 
-  await dbAdmin.collection('client-activities').doc(activityId).update(buildActivityUpdate(data));
+    await dbAdmin.collection('client-activities').doc(activityId).update(buildActivityUpdate(data));
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return activityErrorResponse(error, {
+      action: 'CLIENT ACTIVITY UPDATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo actualizar la actividad.',
+    });
+  }
 }
-

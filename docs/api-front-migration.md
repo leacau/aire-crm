@@ -883,6 +883,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/pnts/scheduled` mantiene la marca de PNTs vigentes por dia/programa, pero ahora falla de forma legible si la consulta de ordenes no puede completarse.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo noveno corte aplicado
+
+- `/api/activities` cubre listados generales, por entidad y grafo de cliente con errores JSON trazables.
+- `/api/client-activities/[activityId]`, completar y reprogramar tareas devuelven contratos controlados ante fallas de actualizacion.
+- `/api/client-activities/cleanup-old` mantiene permisos de gestion y ahora informa fallas de batch sin romper con excepciones opacas.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
