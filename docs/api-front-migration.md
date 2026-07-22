@@ -939,6 +939,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/reports/advisors` encapsula las consultas paralelas de usuarios, clientes, oportunidades, pagos y coaching.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo decimoseptimo corte aplicado
+
+- Vinculos de ordenes para notas comerciales y pedidos de redes normalizan fallas de link/unlink sin cambiar 400/403/404.
+- `/api/system/workflow-assignments` cubre lectura y guardado con el helper compartido de sistema.
+- `/api/tango-mapping/upload` encapsula errores de form-data, lectura XLSX y armado de preview/busqueda.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
