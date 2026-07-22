@@ -12,27 +12,39 @@ export async function GET(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { canjeId } = await context.params;
-  if (!canjeId) return NextResponse.json({ orders: [] });
+  try {
+    const { canjeId } = await context.params;
+    if (!canjeId) return NextResponse.json({ orders: [] });
 
-  const { searchParams } = new URL(request.url);
-  const legacyOrderIds = searchParams.getAll('legacyOrderId').filter(Boolean);
-  const snapshot = await dbAdmin.collection('advertising_orders').where('canjeId', '==', canjeId).get();
-  const orders = snapshot.docs.map(doc => serializeDocument<AdvertisingOrder>(doc.id, doc.data()));
-  const foundIds = new Set(orders.map(order => order.id));
-  const missingLegacyIds = legacyOrderIds.filter(orderId => !foundIds.has(orderId));
+    const { searchParams } = new URL(request.url);
+    const legacyOrderIds = searchParams.getAll('legacyOrderId').filter(Boolean);
+    const snapshot = await dbAdmin.collection('advertising_orders').where('canjeId', '==', canjeId).get();
+    const orders = snapshot.docs.map(doc => serializeDocument<AdvertisingOrder>(doc.id, doc.data()));
+    const foundIds = new Set(orders.map(order => order.id));
+    const missingLegacyIds = legacyOrderIds.filter(orderId => !foundIds.has(orderId));
 
-  const legacySnapshots = await Promise.all(
-    missingLegacyIds.map(orderId => dbAdmin.collection('advertising_orders').doc(orderId).get()),
-  );
+    const legacySnapshots = await Promise.all(
+      missingLegacyIds.map(orderId => dbAdmin.collection('advertising_orders').doc(orderId).get()),
+    );
 
-  legacySnapshots.forEach(orderSnapshot => {
-    if (orderSnapshot.exists) {
-      orders.push(serializeDocument<AdvertisingOrder>(orderSnapshot.id, orderSnapshot.data()));
-    }
-  });
+    legacySnapshots.forEach(orderSnapshot => {
+      if (orderSnapshot.exists) {
+        orders.push(serializeDocument<AdvertisingOrder>(orderSnapshot.id, orderSnapshot.data()));
+      }
+    });
 
-  orders.sort((a, b) => (b.startDate || b.createdAt || '').localeCompare(a.startDate || a.createdAt || ''));
+    orders.sort((a, b) => (b.startDate || b.createdAt || '').localeCompare(a.startDate || a.createdAt || ''));
 
-  return NextResponse.json({ orders });
+    return NextResponse.json({ orders });
+  } catch (error: any) {
+    console.error('CANJE ADVERTISING ORDERS ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudieron cargar las ordenes del canje.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
+  }
 }

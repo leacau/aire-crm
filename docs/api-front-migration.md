@@ -799,6 +799,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los errores no esperados de publicidad dejan de responder como 500 generico y pasan a contratos 502 con mensaje legible para el front.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Nonagesimo septimo corte aplicado
+
+- `/api/canjes` encapsula listado y alta de canjes con errores JSON trazables y logs server-side.
+- `/api/canjes/[canjeId]` cubre actualizacion y borrado con respuestas controladas ante fallas de Firestore o actividad.
+- `/api/canjes/[canjeId]/advertising-orders` y `/api/canjes/[canjeId]/invoices` devuelven errores legibles para las vistas de detalle del canje.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

@@ -11,13 +11,25 @@ export async function GET(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { canjeId } = await context.params;
-  if (!canjeId) return NextResponse.json({ invoices: [] });
+  try {
+    const { canjeId } = await context.params;
+    if (!canjeId) return NextResponse.json({ invoices: [] });
 
-  const snapshot = await dbAdmin.collection('invoices').where('canjeId', '==', canjeId).get();
-  const invoices = snapshot.docs
-    .map(doc => mapInvoice(doc.id, doc.data()))
-    .sort((a, b) => (b.date || b.dateGenerated || '').localeCompare(a.date || a.dateGenerated || ''));
+    const snapshot = await dbAdmin.collection('invoices').where('canjeId', '==', canjeId).get();
+    const invoices = snapshot.docs
+      .map(doc => mapInvoice(doc.id, doc.data()))
+      .sort((a, b) => (b.date || b.dateGenerated || '').localeCompare(a.date || a.dateGenerated || ''));
 
-  return NextResponse.json({ invoices });
+    return NextResponse.json({ invoices });
+  } catch (error: any) {
+    console.error('CANJE INVOICES ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudieron cargar las facturas del canje.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
+  }
 }
