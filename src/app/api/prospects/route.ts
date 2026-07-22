@@ -30,45 +30,69 @@ export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const snapshot = await dbAdmin.collection('prospects').orderBy('createdAt', 'desc').get();
-  const prospects = snapshot.docs.map(doc => mapProspect(doc.id, doc.data()));
+  try {
+    const snapshot = await dbAdmin.collection('prospects').orderBy('createdAt', 'desc').get();
+    const prospects = snapshot.docs.map(doc => mapProspect(doc.id, doc.data()));
 
-  return NextResponse.json({ prospects });
+    return NextResponse.json({ prospects });
+  } catch (error: any) {
+    console.error('PROSPECTS LIST ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudieron cargar los prospectos.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
+  }
 }
 
 export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const body = await request.json();
-  const prospectData = body?.prospectData as Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'> | undefined;
+  try {
+    const body = await request.json();
+    const prospectData = body?.prospectData as Omit<Prospect, 'id' | 'createdAt' | 'ownerId' | 'ownerName'> | undefined;
 
-  if (!prospectData?.companyName?.trim()) {
-    return NextResponse.json({ error: 'El nombre de la empresa es obligatorio.' }, { status: 400 });
+    if (!prospectData?.companyName?.trim()) {
+      return NextResponse.json({ error: 'El nombre de la empresa es obligatorio.' }, { status: 400 });
+    }
+
+    const requesterName = getRequesterName(requester);
+    const dataToSave = {
+      ...cleanProspectPayload(prospectData),
+      ownerId: requester.uid,
+      ownerName: requesterName,
+      creatorId: requester.uid,
+      creatorName: requesterName,
+      createdAt: FieldValue.serverTimestamp(),
+    };
+
+    const docRef = await dbAdmin.collection('prospects').add(dataToSave);
+
+    await logServerActivity({
+      userId: requester.uid,
+      userName: requesterName,
+      type: 'create',
+      entityType: 'prospect',
+      entityId: docRef.id,
+      entityName: prospectData.companyName,
+      details: `creo el prospecto <strong>${prospectData.companyName}</strong>`,
+      ownerName: requesterName,
+    });
+
+    return NextResponse.json({ id: docRef.id });
+  } catch (error: any) {
+    console.error('PROSPECT CREATE ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudo crear el prospecto.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
   }
-
-  const requesterName = getRequesterName(requester);
-  const dataToSave = {
-    ...cleanProspectPayload(prospectData),
-    ownerId: requester.uid,
-    ownerName: requesterName,
-    creatorId: requester.uid,
-    creatorName: requesterName,
-    createdAt: FieldValue.serverTimestamp(),
-  };
-
-  const docRef = await dbAdmin.collection('prospects').add(dataToSave);
-
-  await logServerActivity({
-    userId: requester.uid,
-    userName: requesterName,
-    type: 'create',
-    entityType: 'prospect',
-    entityId: docRef.id,
-    entityName: prospectData.companyName,
-    details: `creo el prospecto <strong>${prospectData.companyName}</strong>`,
-    ownerName: requesterName,
-  });
-
-  return NextResponse.json({ id: docRef.id });
 }

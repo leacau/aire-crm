@@ -73,16 +73,25 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  await logServerActivity({
-    userId: requester.uid,
-    userName: requesterName,
-    type: 'update',
-    entityType: 'prospect',
-    entityId: prospectId,
-    entityName: prospectName,
-    details: `solicito reclamar el prospecto <strong>${prospectName}</strong>`,
-    ownerName: 'Sin Asignar',
-  });
+  try {
+    await logServerActivity({
+      userId: requester.uid,
+      userName: requesterName,
+      type: 'update',
+      entityType: 'prospect',
+      entityId: prospectId,
+      entityName: prospectName,
+      details: `solicito reclamar el prospecto <strong>${prospectName}</strong>`,
+      ownerName: 'Sin Asignar',
+    });
+  } catch (error: any) {
+    console.error('PROSPECT CLAIM ACTIVITY ERROR:', {
+      requester: requester.uid,
+      prospectId,
+      code: error?.code,
+      message: error?.message,
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

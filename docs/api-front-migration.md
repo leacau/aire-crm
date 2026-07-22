@@ -827,6 +827,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/web-notes/[noteId]/order-link` controla fallas al vincular o desvincular notas con ordenes de publicidad.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo primer corte aplicado
+
+- `/api/prospects` encapsula listado y alta de prospectos con errores JSON trazables.
+- `/api/prospects/[prospectId]` cubre actualizacion y borrado con logs server-side y respuestas controladas.
+- `/api/prospects/notifications`, `/api/prospects/bulk-release` y reclamos de prospectos reducen fallas opacas en operaciones batch y aprobaciones.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
