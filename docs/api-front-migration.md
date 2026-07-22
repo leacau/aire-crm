@@ -785,6 +785,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Contable queda mejor preparado para consumir contratos de API estables desde el front, sin exponer detalles de Firestore al cliente.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Nonagesimo quinto corte aplicado
+
+- `/api/billing-requests` encapsula la carga integral de pedidos, ordenes, clientes y asignaciones con errores JSON trazables.
+- `/api/billing-requests/[requestId]` devuelve errores controlados al actualizar estados de facturacion, manteniendo las transiciones y permisos existentes.
+- `/api/billing-requests/order/[orderId]` valida acceso server-side antes de exponer pedidos por orden: usuarios del workflow contable/aprobaciones o usuarios con acceso a la orden.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
