@@ -26,61 +26,85 @@ export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { searchParams } = new URL(request.url);
-  const clientId = searchParams.get('clientId');
-  const orderId = searchParams.get('orderId');
+  try {
+    const { searchParams } = new URL(request.url);
+    const clientId = searchParams.get('clientId');
+    const orderId = searchParams.get('orderId');
 
-  let notes: WebNote[];
-  if (clientId) {
-    notes = await getFilteredWebNotes('clientId', clientId);
-  } else if (orderId) {
-    notes = await getFilteredWebNotes('orderId', orderId);
-  } else {
-    notes = await getFilteredWebNotes();
+    let notes: WebNote[];
+    if (clientId) {
+      notes = await getFilteredWebNotes('clientId', clientId);
+    } else if (orderId) {
+      notes = await getFilteredWebNotes('orderId', orderId);
+    } else {
+      notes = await getFilteredWebNotes();
+    }
+
+    notes = await filterAccessibleAdvisorScopedRecords(notes, requester);
+
+    return NextResponse.json({ notes });
+  } catch (error: any) {
+    console.error('WEB NOTES LIST ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudieron cargar las notas web.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
   }
-
-  notes = await filterAccessibleAdvisorScopedRecords(notes, requester);
-
-  return NextResponse.json({ notes });
 }
 
 export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const body = await request.json();
-  const noteData = body?.noteData as Omit<WebNote, 'id' | 'createdAt'> | undefined;
+  try {
+    const body = await request.json();
+    const noteData = body?.noteData as Omit<WebNote, 'id' | 'createdAt'> | undefined;
 
-  if (!noteData?.clientId || !noteData.clientName || !noteData.format) {
-    return NextResponse.json({ error: 'Cliente y formato son obligatorios.' }, { status: 400 });
+    if (!noteData?.clientId || !noteData.clientName || !noteData.format) {
+      return NextResponse.json({ error: 'Cliente y formato son obligatorios.' }, { status: 400 });
+    }
+
+    const requesterName = getRequesterName(requester);
+    const advisorId = canAssignAdvisorScopedOwner(requester) && noteData.advisorId
+      ? noteData.advisorId
+      : requester.uid;
+    const advisorName = canAssignAdvisorScopedOwner(requester) && noteData.advisorName
+      ? noteData.advisorName
+      : requesterName;
+    const dataToSave = {
+      ...cleanWebNotePayload(noteData as unknown as Record<string, unknown>),
+      advisorId,
+      advisorName,
+      createdAt: FieldValue.serverTimestamp(),
+    };
+
+    const docRef = await dbAdmin.collection('web_notes').add(dataToSave);
+
+    await logServerActivity({
+      userId: requester.uid,
+      userName: requesterName,
+      type: 'create',
+      entityType: 'commercial_note' as any,
+      entityId: docRef.id,
+      entityName: noteData.clientName,
+      details: `cargo un pedido de Nota Web / Gacetilla para <strong>${noteData.clientName}</strong>`,
+      ownerName: advisorName,
+    });
+
+    return NextResponse.json({ id: docRef.id });
+  } catch (error: any) {
+    console.error('WEB NOTE CREATE ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudo crear la nota web.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
   }
-
-  const requesterName = getRequesterName(requester);
-  const advisorId = canAssignAdvisorScopedOwner(requester) && noteData.advisorId
-    ? noteData.advisorId
-    : requester.uid;
-  const advisorName = canAssignAdvisorScopedOwner(requester) && noteData.advisorName
-    ? noteData.advisorName
-    : requesterName;
-  const dataToSave = {
-    ...cleanWebNotePayload(noteData as unknown as Record<string, unknown>),
-    advisorId,
-    advisorName,
-    createdAt: FieldValue.serverTimestamp(),
-  };
-
-  const docRef = await dbAdmin.collection('web_notes').add(dataToSave);
-
-  await logServerActivity({
-    userId: requester.uid,
-    userName: requesterName,
-    type: 'create',
-    entityType: 'commercial_note' as any,
-    entityId: docRef.id,
-    entityName: noteData.clientName,
-    details: `cargo un pedido de Nota Web / Gacetilla para <strong>${noteData.clientName}</strong>`,
-    ownerName: advisorName,
-  });
-
-  return NextResponse.json({ id: docRef.id });
 }

@@ -820,6 +820,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/social-media-requests` y `/api/social-media-requests/[requestId]` cubren listados, alta, detalle, actualizacion y borrado con respuestas controladas.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo corte aplicado
+
+- `/api/web-notes` encapsula listados y alta de notas web/gacetillas con errores JSON trazables.
+- `/api/web-notes/[noteId]` cubre detalle, actualizacion y borrado con respuestas controladas y logs server-side.
+- `/api/web-notes/[noteId]/order-link` controla fallas al vincular o desvincular notas con ordenes de publicidad.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
