@@ -2,22 +2,13 @@ import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import {
   approveVacationRequestServer,
-  VacationRequestApiError,
 } from '@/lib/server/vacation-requests';
+import { vacationRequestErrorResponse } from '@/app/api/vacation-requests/utils';
 import type { VacationRequestStatus } from '@/lib/types';
 
 type RouteContext = {
   params: Promise<{ requestId: string }>;
 };
-
-function errorResponse(error: unknown) {
-  if (error instanceof VacationRequestApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-
-  console.error('Vacation request status API error:', error);
-  return NextResponse.json({ error: 'No se pudo completar la operacion.' }, { status: 500 });
-}
 
 export async function PATCH(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
@@ -35,6 +26,10 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
     return NextResponse.json(result);
   } catch (error) {
-    return errorResponse(error);
+    return vacationRequestErrorResponse(error, {
+      action: 'STATUS UPDATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo cambiar el estado de la solicitud de licencia.',
+    });
   }
 }

@@ -3,18 +3,9 @@ import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import {
   createVacationRequestServer,
   listVacationRequests,
-  VacationRequestApiError,
 } from '@/lib/server/vacation-requests';
+import { vacationRequestErrorResponse } from '@/app/api/vacation-requests/utils';
 import type { VacationRequest } from '@/lib/types';
-
-function errorResponse(error: unknown) {
-  if (error instanceof VacationRequestApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-
-  console.error('Vacation requests API error:', error);
-  return NextResponse.json({ error: 'No se pudo completar la operacion.' }, { status: 500 });
-}
 
 export async function GET(request: Request) {
   const requester = await requireServerUser(request);
@@ -24,7 +15,11 @@ export async function GET(request: Request) {
     const requests = await listVacationRequests(requester);
     return NextResponse.json({ requests });
   } catch (error) {
-    return errorResponse(error);
+    return vacationRequestErrorResponse(error, {
+      action: 'LIST',
+      requesterId: requester.uid,
+      publicError: 'No se pudieron cargar las solicitudes de licencia.',
+    });
   }
 }
 
@@ -41,6 +36,10 @@ export async function POST(request: Request) {
     );
     return NextResponse.json(result);
   } catch (error) {
-    return errorResponse(error);
+    return vacationRequestErrorResponse(error, {
+      action: 'CREATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo crear la solicitud de licencia.',
+    });
   }
 }

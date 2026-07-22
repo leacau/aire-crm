@@ -841,6 +841,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/coaching-sessions/auto-update` queda alineada al mismo contrato sin cambiar permisos ni comportamiento funcional.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo tercer corte aplicado
+
+- `/api/vacation-requests` encapsula listado, alta, actualizacion, borrado, aprobacion y anulacion de licencias con errores JSON trazables.
+- `/api/users/[userId]/vacation-days` reutiliza el mismo contrato para ajustes de saldo, preservando errores de negocio como saldo invalido o permisos.
+- `/api/system/holidays` cubre lectura y guardado de feriados con respuestas controladas, ya que alimenta el calculo de dias habiles.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

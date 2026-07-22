@@ -19,38 +19,74 @@ function normalizeDates(rawDates: unknown): string[] {
     .sort();
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Error desconocido';
+}
+
+function getErrorCode(error: unknown) {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code || '')
+    : undefined;
+}
+
 export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const snap = await dbAdmin.collection('system_config').doc(HOLIDAYS_DOC_ID).get();
-  const dates = snap.exists ? normalizeDates(snap.data()?.dates) : [];
+  try {
+    const snap = await dbAdmin.collection('system_config').doc(HOLIDAYS_DOC_ID).get();
+    const dates = snap.exists ? normalizeDates(snap.data()?.dates) : [];
 
-  return NextResponse.json({ dates });
+    return NextResponse.json({ dates });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('SYSTEM HOLIDAYS LIST ERROR:', {
+      requester: requester.uid,
+      code: getErrorCode(error),
+      message,
+    });
+    return NextResponse.json({
+      error: 'No se pudieron cargar los feriados del sistema.',
+      details: message,
+    }, { status: 502 });
+  }
 }
 
 export async function PUT(request: Request) {
   const requester = await requireServerManagement(request);
   if (isServerResponse(requester)) return requester;
 
-  const body = await request.json();
-  if (!Array.isArray(body?.dates)) {
-    return NextResponse.json({ error: 'La lista de feriados es obligatoria.' }, { status: 400 });
+  try {
+    const body = await request.json();
+    if (!Array.isArray(body?.dates)) {
+      return NextResponse.json({ error: 'La lista de feriados es obligatoria.' }, { status: 400 });
+    }
+
+    const dates = normalizeDates(body.dates);
+    await dbAdmin.collection('system_config').doc(HOLIDAYS_DOC_ID).set({ dates }, { merge: true });
+
+    await logServerActivity({
+      userId: requester.uid,
+      userName: requester.name || requester.email || 'Usuario',
+      type: 'update',
+      entityType: 'system_config',
+      entityId: HOLIDAYS_DOC_ID,
+      entityName: 'Feriados',
+      details: 'actualizo la lista de feriados del sistema.',
+      ownerName: 'Sistema',
+    });
+
+    return NextResponse.json({ dates });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('SYSTEM HOLIDAYS SAVE ERROR:', {
+      requester: requester.uid,
+      code: getErrorCode(error),
+      message,
+    });
+    return NextResponse.json({
+      error: 'No se pudieron guardar los feriados del sistema.',
+      details: message,
+    }, { status: 502 });
   }
-
-  const dates = normalizeDates(body.dates);
-  await dbAdmin.collection('system_config').doc(HOLIDAYS_DOC_ID).set({ dates }, { merge: true });
-
-  await logServerActivity({
-    userId: requester.uid,
-    userName: requester.name || requester.email || 'Usuario',
-    type: 'update',
-    entityType: 'system_config',
-    entityId: HOLIDAYS_DOC_ID,
-    entityName: 'Feriados',
-    details: 'actualizo la lista de feriados del sistema.',
-    ownerName: 'Sistema',
-  });
-
-  return NextResponse.json({ dates });
 }
