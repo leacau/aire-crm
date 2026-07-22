@@ -17,11 +17,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Eye, CheckCircle2, XCircle, Clock, Edit3, ArrowRight, History, Send } from 'lucide-react';
-import type { ApprovalStatus, Program, Client, ApprovalHistoryItem } from '@/lib/types';
-import { getPrograms, getUserById, getClient, getBillingRequestsByOrder } from '@/lib/firebase-service';
+import type { ApprovalStatus, Program, Client, Person, ApprovalHistoryItem } from '@/lib/types';
+import { getPrograms, getUserById, getClient, getPeopleByClientId, getBillingRequestsByOrder } from '@/lib/firebase-service';
 import { sendEmail } from '@/lib/google-gmail-service';
 import dynamic from 'next/dynamic';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
+import { ClientPdf } from '@/components/clients/client-pdf';
 
 const AdvertisingOrderPdf = dynamic(() => import('@/components/publicidad/advertising-pdf').then(mod => mod.AdvertisingOrderPdf), { ssr: false });
 const AdvertisingRevisionHistory = dynamic(() => import('@/components/publicidad/advertising-revision-history').then(mod => mod.AdvertisingRevisionHistory), { ssr: false });
@@ -63,7 +64,9 @@ function ApprovalsPageComponent() {
 
   // 🟢 ESTADOS PARA LA RENOTIFICACIÓN
   const [renotifyingItem, setRenotifyingItem] = useState<UnifiedApprovalItem | null>(null);
+  const [clientPdfData, setClientPdfData] = useState<{ client: Client; contact: Person | null } | null>(null);
   const hiddenDocumentContainerRef = useRef<HTMLDivElement>(null);
+  const clientPdfRef = useRef<HTMLDivElement>(null);
 
   const searchParams = useSearchParams();
   const initialTab = searchParams.get('tab') || 'pending';
@@ -248,29 +251,50 @@ function ApprovalsPageComponent() {
     }
   };
 
+  const waitForPdfRender = () => new Promise<void>(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+
+  const waitForImages = async (element: HTMLElement) => {
+    const images = Array.from(element.querySelectorAll('img'));
+    await Promise.all(images.map(image => {
+      if (image.complete) return Promise.resolve();
+      return new Promise<void>(resolve => {
+        image.onload = () => resolve();
+        image.onerror = () => resolve();
+      });
+    }));
+  };
+
   const generateClientSummaryPdfBase64 = async (client: Client): Promise<string> => {
-    const { default: jsPDF } = await import('jspdf');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFillColor(240, 244, 248);
-    pdf.rect(0, 0, 210, 40, 'F');
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(18);
-    pdf.setTextColor(29, 78, 216);
-    pdf.text('ALTA DE DATOS COMERCIALES', 15, 25);
-    
-    let y = 60;
-    const addField = (label: string, value: string) => {
-      pdf.setFont('helvetica', 'bold'); pdf.text(`${label}:`, 15, y);
-      pdf.setFont('helvetica', 'normal'); pdf.text(value || '-', 65, y);
-      y += 12;
-    };
-    addField('Anunciante', client.denominacion);
-    addField('Razón Social', client.razonSocial);
-    addField('CUIT', client.cuit || '-');
-    addField('Condición de IVA', client.condicionIVA);
-    addField('ID Tango', client.idTango || 'No asignado');
-    return pdf.output('datauristring').split(',')[1];
+    const [{ default: html2canvas }, { default: jsPDF }, people] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+      getPeopleByClientId(client.id),
+    ]);
+    setClientPdfData({ client, contact: people[0] || null });
+    await waitForPdfRender();
+
+    try {
+      const element = clientPdfRef.current;
+      if (!element) throw new Error('No se pudo preparar el PDF de alta del cliente.');
+      await waitForImages(element);
+
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const ratio = canvas.width / canvas.height;
+      const widthInPdf = pdfWidth;
+      const heightInPdf = widthInPdf / ratio;
+      const y = heightInPdf < pdfHeight ? (pdfHeight - heightInPdf) / 2 : 0;
+
+      pdf.addImage(imgData, 'PNG', 0, y, widthInPdf, heightInPdf);
+      return pdf.output('datauristring').split(',')[1];
+    } finally {
+      setClientPdfData(null);
+    }
   };
 
   // 🟢 MOTOR AVANZADO DE GENERACIÓN DE PDF PARA LA APROBACIÓN Y RENOTIFICACIÓN
@@ -688,6 +712,16 @@ function ApprovalsPageComponent() {
           {renotifyingItem?.type === 'Orden de Publicidad' && <AdvertisingOrderPdf order={renotifyingItem.rawData} programs={programs} />}
           {renotifyingItem?.type === 'Nota Web / Gacetilla' && <WebNotePdf note={renotifyingItem.rawData} />}
         </div>
+      </div>
+
+      <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
+        {clientPdfData && (
+          <ClientPdf
+            ref={clientPdfRef}
+            client={clientPdfData.client}
+            contact={clientPdfData.contact}
+          />
+        )}
       </div>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
