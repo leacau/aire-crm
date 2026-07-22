@@ -1,20 +1,12 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { addItemsToSessionServer, CoachingApiError } from '@/lib/server/coaching';
+import { addItemsToSessionServer } from '@/lib/server/coaching';
+import { coachingErrorResponse } from '@/app/api/coaching-sessions/utils';
 import type { CoachingItem } from '@/lib/types';
 
 type RouteContext = {
   params: Promise<{ sessionId: string }>;
 };
-
-function errorResponse(error: unknown) {
-  if (error instanceof CoachingApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-
-  console.error('Coaching session items API error:', error);
-  return NextResponse.json({ error: 'No se pudo completar la operacion.' }, { status: 500 });
-}
 
 export async function POST(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
@@ -26,6 +18,10 @@ export async function POST(request: Request, context: RouteContext) {
     await addItemsToSessionServer(sessionId, (body?.newItems || []) as CoachingItem[], requester);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return errorResponse(error);
+    return coachingErrorResponse(error, {
+      action: 'ITEMS ADD',
+      requesterId: requester.uid,
+      publicError: 'No se pudieron agregar items a la sesion de coaching.',
+    });
   }
 }

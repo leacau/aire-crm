@@ -834,6 +834,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/prospects/notifications`, `/api/prospects/bulk-release` y reclamos de prospectos reducen fallas opacas en operaciones batch y aprobaciones.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo segundo corte aplicado
+
+- `/api/coaching-sessions` encapsula listado y alta de sesiones con errores JSON trazables.
+- `/api/coaching-sessions/[sessionId]` y sus rutas de items/seguimientos comparten un helper de errores para preservar errores de negocio y devolver 502 controlado ante fallas no previstas.
+- `/api/coaching-sessions/auto-update` queda alineada al mismo contrato sin cambiar permisos ni comportamiento funcional.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

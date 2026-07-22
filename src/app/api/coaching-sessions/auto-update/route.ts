@@ -1,17 +1,9 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { autoUpdateCoachingSessionServer, CoachingApiError } from '@/lib/server/coaching';
+import { autoUpdateCoachingSessionServer } from '@/lib/server/coaching';
+import { coachingErrorResponse } from '@/app/api/coaching-sessions/utils';
 
 type AutoCoachingEntityType = 'client' | 'prospect';
-
-function errorResponse(error: unknown) {
-  if (error instanceof CoachingApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-
-  console.error('Coaching auto-update API error:', error);
-  return NextResponse.json({ error: 'No se pudo completar la operacion.' }, { status: 500 });
-}
 
 export async function POST(request: Request) {
   const requester = await requireServerUser(request);
@@ -31,6 +23,10 @@ export async function POST(request: Request) {
     );
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return errorResponse(error);
+    return coachingErrorResponse(error, {
+      action: 'AUTO UPDATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo actualizar automaticamente la sesion de coaching.',
+    });
   }
 }

@@ -1,24 +1,11 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import {
-  CoachingApiError,
   createCoachingSessionServer,
   listCoachingSessions,
 } from '@/lib/server/coaching';
+import { coachingErrorResponse, getRequesterName } from '@/app/api/coaching-sessions/utils';
 import type { CoachingSession } from '@/lib/types';
-
-function getRequesterName(requester: { name?: string; email?: string }) {
-  return requester.name || requester.email || 'Usuario';
-}
-
-function errorResponse(error: unknown) {
-  if (error instanceof CoachingApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-
-  console.error('Coaching sessions API error:', error);
-  return NextResponse.json({ error: 'No se pudo completar la operacion.' }, { status: 500 });
-}
 
 export async function GET(request: Request) {
   const requester = await requireServerUser(request);
@@ -30,7 +17,11 @@ export async function GET(request: Request) {
     const sessions = await listCoachingSessions(advisorId, requester);
     return NextResponse.json({ sessions });
   } catch (error) {
-    return errorResponse(error);
+    return coachingErrorResponse(error, {
+      action: 'SESSIONS LIST',
+      requesterId: requester.uid,
+      publicError: 'No se pudieron cargar las sesiones de coaching.',
+    });
   }
 }
 
@@ -48,6 +39,10 @@ export async function POST(request: Request) {
     );
     return NextResponse.json({ id });
   } catch (error) {
-    return errorResponse(error);
+    return coachingErrorResponse(error, {
+      action: 'SESSION CREATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo crear la sesion de coaching.',
+    });
   }
 }
