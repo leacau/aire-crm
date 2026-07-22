@@ -6,23 +6,14 @@ import { hasServerManagementPrivileges, isServerResponse, requireServerUser } fr
 import { logServerActivity } from '@/lib/server/activity';
 import { canAccessAdvertisingOrder } from '@/lib/server/advertising-order-access';
 import {
-  AdvertisingOrderApiError,
   updateAdvertisingOrderServer,
 } from '@/lib/server/advertising-orders';
+import { advertisingOrderErrorResponse } from '@/app/api/advertising-orders/errors';
 import type { AdvertisingOrder } from '@/lib/types';
 
 type RouteContext = {
   params: Promise<{ orderId: string }>;
 };
-
-function errorResponse(error: unknown) {
-  if (error instanceof AdvertisingOrderApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-
-  console.error('Advertising order API error:', error);
-  return NextResponse.json({ error: 'No se pudo completar la operacion.' }, { status: 502 });
-}
 
 export async function GET(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
@@ -82,7 +73,11 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return errorResponse(error);
+    return advertisingOrderErrorResponse(error, {
+      action: 'UPDATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo actualizar la orden de publicidad.',
+    });
   }
 }
 

@@ -2,26 +2,11 @@ import { NextResponse } from 'next/server';
 import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import {
-  ConvenioApiError,
   listConveniosCanjeServer,
   saveConvenioCanjeServer,
 } from '@/lib/server/convenios';
+import { convenioErrorResponse } from '@/app/api/convenios/utils';
 import type { ConvenioCanje } from '@/lib/types';
-
-function errorResponse(error: unknown) {
-  if (error instanceof ConvenioApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-
-  const details = error instanceof Error ? error.message : 'Error desconocido';
-  console.error('CONVENIOS API ERROR:', {
-    message: details,
-  });
-  return NextResponse.json({
-    error: 'No se pudo completar la operacion de convenios.',
-    details,
-  }, { status: 502 });
-}
 
 export async function GET(request: Request) {
   const requester = await requireServerUser(request);
@@ -31,7 +16,11 @@ export async function GET(request: Request) {
     const convenios = await listConveniosCanjeServer();
     return NextResponse.json({ convenios });
   } catch (error) {
-    return errorResponse(error);
+    return convenioErrorResponse(error, {
+      action: 'LIST',
+      requesterId: requester.uid,
+      publicError: 'No se pudieron cargar los convenios.',
+    });
   }
 }
 
@@ -48,6 +37,10 @@ export async function POST(request: Request) {
     );
     return NextResponse.json({ id });
   } catch (error) {
-    return errorResponse(error);
+    return convenioErrorResponse(error, {
+      action: 'SAVE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo guardar el convenio.',
+    });
   }
 }

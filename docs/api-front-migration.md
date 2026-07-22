@@ -848,6 +848,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/system/holidays` cubre lectura y guardado de feriados con respuestas controladas, ya que alimenta el calculo de dias habiles.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo cuarto corte aplicado
+
+- `/api/advertising-orders` centraliza errores de alta y actualizacion para preservar errores de negocio y devolver 502 trazable ante fallas no previstas.
+- `/api/convenios`, `/api/convenios/[convenioId]` y `/api/convenios/migrate-to-canjes` comparten un helper de errores con contexto de accion y usuario.
+- Se mantiene intacta la logica funcional de Publicidad, Convenios y migracion legacy; el cambio solo normaliza contratos de API.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

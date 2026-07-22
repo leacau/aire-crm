@@ -2,30 +2,15 @@ import { NextResponse } from 'next/server';
 import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import {
-  ConvenioApiError,
   deleteConvenioCanjeServer,
   updateConvenioCanjeServer,
 } from '@/lib/server/convenios';
+import { convenioErrorResponse } from '@/app/api/convenios/utils';
 import type { ConvenioCanje } from '@/lib/types';
 
 type RouteContext = {
   params: Promise<{ convenioId: string }>;
 };
-
-function errorResponse(error: unknown) {
-  if (error instanceof ConvenioApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-
-  const details = error instanceof Error ? error.message : 'Error desconocido';
-  console.error('CONVENIO API ERROR:', {
-    message: details,
-  });
-  return NextResponse.json({
-    error: 'No se pudo completar la operacion del convenio.',
-    details,
-  }, { status: 502 });
-}
 
 export async function PATCH(request: Request, context: RouteContext) {
   const requester = await requireServerUser(request);
@@ -42,7 +27,11 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return errorResponse(error);
+    return convenioErrorResponse(error, {
+      action: 'UPDATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo actualizar el convenio.',
+    });
   }
 }
 
@@ -61,6 +50,10 @@ export async function DELETE(request: Request, context: RouteContext) {
     );
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return errorResponse(error);
+    return convenioErrorResponse(error, {
+      action: 'DELETE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo eliminar el convenio.',
+    });
   }
 }

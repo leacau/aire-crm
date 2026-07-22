@@ -6,24 +6,15 @@ import {
   filterAccessibleAdvertisingOrders,
 } from '@/lib/server/advertising-order-access';
 import {
-  AdvertisingOrderApiError,
   createAdvertisingOrderServer,
 } from '@/lib/server/advertising-orders';
+import { advertisingOrderErrorResponse } from '@/app/api/advertising-orders/errors';
 import {
   compareByStartDateDesc,
   isApprovedForProgramming,
   mapAdvertisingOrder,
 } from '@/app/api/advertising-orders/utils';
 import type { AdvertisingOrder } from '@/lib/types';
-
-function errorResponse(error: unknown) {
-  if (error instanceof AdvertisingOrderApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-
-  console.error('Advertising orders API error:', error);
-  return NextResponse.json({ error: 'No se pudo completar la operacion.' }, { status: 502 });
-}
 
 function getDateParam(value: string | null): string | null {
   if (!value) return null;
@@ -128,6 +119,10 @@ export async function POST(request: Request) {
     const id = await createAdvertisingOrderServer(orderData, requester);
     return NextResponse.json({ id });
   } catch (error) {
-    return errorResponse(error);
+    return advertisingOrderErrorResponse(error, {
+      action: 'CREATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo crear la orden de publicidad.',
+    });
   }
 }
