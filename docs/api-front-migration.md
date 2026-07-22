@@ -904,6 +904,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/clients/[clientId]/tango-mapping` normaliza errores de alta y baja de mapeo Tango sin cambiar los 400/403/404 esperados por el front.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo duodecimo corte aplicado
+
+- `/api/people` encapsula el alta de contactos, actualizacion de `personIds` y logs por cliente con errores JSON trazables.
+- `/api/people/[personId]` normaliza errores de edicion y borrado manteniendo el 404 cuando el contacto no existe.
+- El front de contactos queda menos expuesto a respuestas 500 opacas durante operaciones de cliente.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
