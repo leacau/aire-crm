@@ -925,6 +925,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/payments/[paymentId]/explanation` devuelve errores JSON trazables al solicitar aclaraciones a asesores.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo decimoquinto corte aplicado
+
+- `/api/supervisor-comments` cubre listados por entidad/usuario y creacion con errores JSON trazables.
+- Borrado, respuesta y marcado como visto de comentarios mantienen 400/403/404 y normalizan fallas internas.
+- El front de seguimiento de supervisores queda menos expuesto a respuestas opacas ante errores de Firestore.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
