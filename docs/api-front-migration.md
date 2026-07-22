@@ -918,6 +918,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se agrega helper compartido para errores de `/api/system` sin modificar `holidays`, que ya estaba protegido.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo decimocuarto corte aplicado
+
+- `/api/invoices/[invoiceId]` cubre actualizacion y borrado de facturas con contratos 502 controlados, preservando 403/404.
+- `/api/payments/[paymentId]` normaliza fallas al actualizar mora y registrar auditoria.
+- `/api/payments/[paymentId]/explanation` devuelve errores JSON trazables al solicitar aclaraciones a asesores.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
