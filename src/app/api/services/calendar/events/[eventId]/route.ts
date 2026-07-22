@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { externalServiceErrorResponse } from '@/app/api/services/utils';
 
 function encodeCalendarId(calendarId: string) {
   return encodeURIComponent(calendarId || 'primary');
@@ -33,8 +34,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ eventI
     }
 
     return NextResponse.json(await response.json());
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return externalServiceErrorResponse(error, {
+      service: 'GOOGLE CALENDAR',
+      action: 'UPDATE EVENT',
+      publicError: 'No se pudo actualizar el evento en Google Calendar.',
+    });
   }
 }
 
@@ -64,7 +69,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ event
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return externalServiceErrorResponse(error, {
+      service: 'GOOGLE CALENDAR',
+      action: 'DELETE EVENT',
+      publicError: 'No se pudo eliminar el evento en Google Calendar.',
+    });
   }
 }

@@ -7,13 +7,13 @@ import {
     calculateBusinessDays 
 } from '@/lib/server/cron-service';
 import { parseISO, format } from 'date-fns';
+import { cronErrorResponse, isAuthorizedCronRequest } from '@/app/api/cron/utils';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
     try {
-        const authHeader = request.headers.get('authorization');
-        if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        if (!isAuthorizedCronRequest(request)) {
              return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
         }
 
@@ -96,7 +96,6 @@ export async function GET(request: Request) {
         });
 
     } catch (error) {
-        console.error("Error en CRON job de prospectos:", error);
-        return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
+        return cronErrorResponse(error, 'RELEASE PROSPECTS');
     }
 }

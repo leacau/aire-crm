@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { externalServiceErrorResponse } from '@/app/api/services/utils';
 
 function encodeCalendarId(calendarId: string) {
     return encodeURIComponent(calendarId || 'primary');
@@ -32,7 +33,11 @@ export async function POST(req: Request) {
 
         const data = await response.json();
         return NextResponse.json(data);
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error) {
+        return externalServiceErrorResponse(error, {
+            service: 'GOOGLE CALENDAR',
+            action: 'CREATE EVENT',
+            publicError: 'No se pudo crear el evento en Google Calendar.',
+        });
     }
 }

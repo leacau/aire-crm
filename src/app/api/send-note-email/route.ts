@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { externalServiceErrorResponse } from '@/app/api/services/utils';
 
 export const runtime = 'nodejs';
 
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
 
         if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
             console.error('SMTP credentials missing');
-            return NextResponse.json({ error: 'Configuracion de correo faltante en el servidor' }, { status: 500 });
+            return NextResponse.json({ error: 'Configuracion de correo faltante en el servidor' }, { status: 503 });
         }
 
         const transporter = nodemailer.createTransport({
@@ -79,8 +80,11 @@ export async function POST(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
-        console.error('Error sending email:', error);
-        return NextResponse.json({ error: error.message || 'Error desconocido al enviar correo' }, { status: 500 });
+    } catch (error: unknown) {
+        return externalServiceErrorResponse(error, {
+            service: 'NOTE EMAIL',
+            action: 'SEND',
+            publicError: 'No se pudo enviar el correo de la nota.',
+        });
     }
 }

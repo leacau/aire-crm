@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { externalServiceErrorResponse } from '@/app/api/services/utils';
 
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 
@@ -32,7 +33,7 @@ function normalizeSmtpError(error: any) {
 
     return {
         code: error?.code || 'SMTP_SEND_FAILED',
-        status: 500,
+        status: 502,
         message: message || 'No se pudo enviar el correo por SMTP.',
     };
 }
@@ -194,10 +195,11 @@ export async function POST(req: Request) {
         return NextResponse.json(data);
 
     } catch (error: any) {
-        console.error('Error sending email:', error);
-        return NextResponse.json(
-            { error: error.message || 'No se pudo enviar el correo.', code: error.code || 'EMAIL_SEND_FAILED' },
-            { status: error.status || 500 },
-        );
+        return externalServiceErrorResponse(error, {
+            service: 'GMAIL',
+            action: 'SEND',
+            publicError: error?.message || 'No se pudo enviar el correo.',
+            status: error?.status || 502,
+        });
     }
 }

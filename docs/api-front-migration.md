@@ -855,6 +855,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se mantiene intacta la logica funcional de Publicidad, Convenios y migracion legacy; el cambio solo normaliza contratos de API.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo quinto corte aplicado
+
+- `/api/send-note-email` y `/api/services/gmail/send` diferencian configuracion faltante o fallas externas de correo con respuestas 502/503 trazables.
+- `/api/services/calendar/events` y `/api/services/calendar/events/[eventId]` devuelven errores controlados para altas, actualizaciones y borrados en Google Calendar.
+- `/api/cron/release-prospects`, `/api/cron/notify-tasks` y `/api/cron/notify-proposals` comparten validacion de secreto y manejo de errores sin exponer valores sensibles.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
