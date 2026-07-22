@@ -15,45 +15,14 @@ import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { apiFetch } from '@/lib/api-client';
 import { getClients } from '@/lib/api/clients';
+import { getTangoCollections, getTangoInvoices, type TangoCollectionRecord, type TangoInvoiceRecord } from '@/lib/api/tango';
 import type { Client } from '@/lib/types';
 
 type CollectionStatus = 'paid' | 'pending';
 type CollectionsTab = CollectionStatus | 'monthly';
 
-type TangoCollectionRecord = {
-  id: string;
-  status: CollectionStatus;
-  companyLabel: string;
-  issueDate: string;
-  dueDate: string;
-  paymentDate: string;
-  voucherType: string;
-  voucherNumber: string;
-  clientCode: string;
-  clientName: string;
-  sellerCode: string;
-  sellerName: string;
-  daysLate: number | null;
-  amount: number | null;
-  invoiceTotal: number | null;
-  imputedAmount: number | null;
-  pendingAmount: number | null;
-};
-
-type TangoInvoice = {
-  FECHA_DE_EMISION?: string;
-  TIPO_COMPROBANTE?: string;
-  NRO_COMPROBANTE?: string;
-  COD_VENDEDOR?: string;
-  NOMBRE_VENDEDOR?: string;
-  COD_CLIENTE?: string;
-  RAZON_SOCIAL?: string;
-  NOMBRE_COMERCIAL?: string;
-  TOTAL?: number | null;
-  _companyId?: string;
-};
+type TangoInvoice = TangoInvoiceRecord;
 
 type FilterOption = {
   value: string;
@@ -242,18 +211,14 @@ export default function CollectionsPage() {
     resetFilters();
 
     try {
-      const params = new URLSearchParams({ status });
+      const params: Record<string, string> = { status };
       if (status === 'paid') {
-        params.set('fromDate', fromDate);
-        params.set('toDate', toDate);
+        params.fromDate = fromDate;
+        params.toDate = toDate;
       }
-      const response = await apiFetch(`/api/tango/collections?${params.toString()}`, {
-        cache: 'no-store',
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.details || payload.error || 'Error al consultar Tango');
+      const payload = await getTangoCollections(params);
 
-      setRecords(Array.isArray(payload.list) ? payload.list : []);
+      setRecords(payload.list);
       setSourceTotalCount(Number(payload.sourceTotalCount) || 0);
       setCanSeeAll(Boolean(payload.canSeeAll));
       setTruncated(Boolean(payload.truncated));
@@ -282,18 +247,13 @@ export default function CollectionsPage() {
     setSelectedSellers([]);
 
     try {
-      const params = new URLSearchParams({
+      const payload = await getTangoInvoices<TangoInvoice>({
         company: 'all',
         fromDate: `${selectedYear}-01-01`,
         toDate: `${selectedYear}-12-31`,
       });
-      const response = await apiFetch(`/api/tango/invoices?${params.toString()}`, {
-        cache: 'no-store',
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.details || payload.error || 'Error al consultar Tango');
 
-      setMonthlyInvoices(Array.isArray(payload.list) ? payload.list : []);
+      setMonthlyInvoices(payload.list);
       setSourceTotalCount(Number(payload.sourceTotalCount) || 0);
       setTruncated(Boolean(payload.truncated));
       if (payload.truncated) {

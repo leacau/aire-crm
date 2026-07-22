@@ -1,16 +1,16 @@
 import { format } from 'date-fns';
-import { apiFetch } from '@/lib/api-client';
+import { getTangoInvoices, type TangoInvoiceRecord } from '@/lib/api/tango';
 import type { SellerCompanyConfig, User } from '@/lib/types';
 
-export type TangoObjectiveInvoice = {
-  FECHA_DE_EMISION?: string;
-  TIPO_COMPROBANTE?: string;
-  COD_VENDEDOR?: string;
-  NOMBRE_VENDEDOR?: string;
-  TOTAL?: number | null;
-  _companyId?: string;
-  _companyLabel?: string;
-};
+export type TangoObjectiveInvoice = Pick<TangoInvoiceRecord,
+  | 'FECHA_DE_EMISION'
+  | 'TIPO_COMPROBANTE'
+  | 'COD_VENDEDOR'
+  | 'NOMBRE_VENDEDOR'
+  | 'TOTAL'
+  | '_companyId'
+  | '_companyLabel'
+>;
 
 export type TangoBillingSummary = {
   total: number;
@@ -68,21 +68,13 @@ const getAdvisorCodeIndex = (advisors: User[]) => {
 };
 
 export async function fetchTangoObjectiveInvoices(fromDate: Date, toDate: Date) {
-  const params = new URLSearchParams({
+  const payload = await getTangoInvoices<TangoObjectiveInvoice>({
     company: 'all',
     fromDate: format(fromDate, 'yyyy-MM-dd'),
     toDate: format(toDate, 'yyyy-MM-dd'),
   });
 
-  const response = await apiFetch(`/api/tango/invoices?${params.toString()}`, {
-    cache: 'no-store',
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload?.details || payload?.error || `Tango respondio ${response.status}`);
-  }
-
-  return (Array.isArray(payload.list) ? payload.list : []) as TangoObjectiveInvoice[];
+  return payload.list;
 }
 
 export function summarizeTangoObjectiveBilling(

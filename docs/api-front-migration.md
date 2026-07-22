@@ -967,6 +967,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/lib/api/programs.ts` usa el mismo helper para `/api/public/programs`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo vigesimo primer corte aplicado
+
+- Se agrega `src/lib/api/tango.ts` como cliente unico para clientes, facturas, cobranzas y PDF de Tango.
+- Mapeo Tango, Facturas Tango, facturas por cliente, Cobranzas y objetivos dejan de construir `apiFetch` directo contra `/api/tango`.
+- Las respuestas y errores Tango quedan normalizados en una sola libreria de front.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

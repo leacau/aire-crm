@@ -13,22 +13,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { apiFetch } from '@/lib/api-client';
+import { getTangoInvoices, type TangoInvoiceRecord } from '@/lib/api/tango';
 import type { Client } from '@/lib/types';
 
-type TangoInvoice = {
-  FECHA_DE_EMISION?: string;
-  TIPO_COMPROBANTE?: string;
-  NRO_COMPROBANTE?: string;
-  COD_VENDEDOR?: string;
-  NOMBRE_VENDEDOR?: string;
-  COD_CLIENTE?: string;
-  RAZON_SOCIAL?: string;
-  NOMBRE_COMERCIAL?: string;
-  TOTAL?: number | string | null;
-  _company?: string;
-  _companyId?: string;
-};
+type TangoInvoice = TangoInvoiceRecord;
 
 type CompanyOption = {
   id: string;
@@ -223,15 +211,9 @@ export function ClientTangoInvoices({ client }: { client: Client }) {
         });
 
         try {
-          const response = await apiFetch(`/api/tango/invoices?${params.toString()}`, {
-            cache: 'no-store',
-          });
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok) {
-            throw new Error(payload?.details || payload?.error || `Tango respondio ${response.status}`);
-          }
+          const payload = await getTangoInvoices<TangoInvoice>(Object.fromEntries(params.entries()));
 
-          return (Array.isArray(payload.list) ? payload.list : []).map((invoice: TangoInvoice) => ({
+          return payload.list.map((invoice: TangoInvoice) => ({
             ...invoice,
             _company: company.label,
             _companyId: company.id,

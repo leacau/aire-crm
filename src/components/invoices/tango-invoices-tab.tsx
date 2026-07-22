@@ -14,31 +14,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { apiFetch } from '@/lib/api-client';
+import { getTangoInvoicePdf, getTangoInvoices, type TangoInvoiceRecord } from '@/lib/api/tango';
 import { getAllUsers } from '@/lib/api/users';
 import type { Client, User } from '@/lib/types';
 
-type TangoInvoice = {
-  FECHA_DE_EMISION?: string;
-  TIPO_COMPROBANTE?: string;
-  NRO_COMPROBANTE?: string;
-  COD_VENDEDOR?: string;
-  NOMBRE_VENDEDOR?: string;
-  COD_CLIENTE?: string;
-  RAZON_SOCIAL?: string;
-  NOMBRE_COMERCIAL?: string;
-  SUBTOTAL?: number | null;
-  IVA?: number | null;
-  TOTAL_SIN_IMPUESTOS?: number | null;
-  TOTAL_BONIFICADO?: number | null;
-  ID_GVA14?: number | null;
-  TOTAL?: number | null;
-  ID_GVA12?: string | number | null;
-  ID_GVA23?: number | null;
-  ID_GVA38?: number | null;
-  _companyId?: string;
-  _companyLabel?: string;
-};
+type TangoInvoice = TangoInvoiceRecord;
 
 type FilterOption = {
   value: string;
@@ -274,14 +254,9 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
     setSelectedSellers([]);
     setSelectedClients([]);
     try {
-      const params = new URLSearchParams({ company, fromDate, toDate });
-      const response = await apiFetch(`/api/tango/invoices?${params.toString()}`, {
-        cache: 'no-store',
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.details || payload.error || 'Error al consultar Tango');
+      const payload = await getTangoInvoices<TangoInvoice>({ company, fromDate, toDate });
 
-      setInvoices(Array.isArray(payload.list) ? payload.list : []);
+      setInvoices(payload.list);
       setSourceTotalCount(Number(payload.sourceTotalCount) || 0);
       setSkippedCompanies(Array.isArray(payload.skippedCompanies) ? payload.skippedCompanies : []);
       setPage(1);
@@ -330,17 +305,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
 
     setDownloadingInvoiceKey(downloadKey);
     try {
-      const params = new URLSearchParams({ company: invoiceCompany, id: invoiceId });
-      const response = await apiFetch(`/api/tango/invoices/pdf?${params.toString()}`, {
-        cache: 'no-store',
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(payload?.details || payload?.error || 'Tango no pudo generar el PDF.');
-      }
-
-      const blob = await response.blob();
+      const blob = await getTangoInvoicePdf(invoiceCompany, invoiceId);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

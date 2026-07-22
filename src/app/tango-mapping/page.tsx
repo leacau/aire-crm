@@ -9,24 +9,15 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { apiFetch } from '@/lib/api-client';
 import { getClients, undoClientTangoMapping, updateClientTangoMapping } from '@/lib/api/clients';
+import { getTangoClients, type TangoClientRecord } from '@/lib/api/tango';
 import { getAllUsers, updateUserProfile } from '@/lib/api/users';
 import type { Client, SellerCompanyConfig, User } from '@/lib/types';
 import { RefreshCcw, CheckCircle2, Save, Undo2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 
-interface TangoClient {
-  COD_CLIENTE: string;
-  RAZON_SOCIAL: string;
-  NUMERO: string;
-  ACTIVIDAD: string | null;
-  DOMICILIO: string;
-  LOCALIDAD: string;
-  TELEFONO: string | null;
-  TELEFONO_DEL_CONTACTO: string | null;
-}
+type TangoClient = TangoClientRecord;
 
 type TangoCompanyKey = 'aire' | 'srl' | 'sas';
 
@@ -230,13 +221,8 @@ export default function TangoMappingPage() {
       const responses = await Promise.all(
         TANGO_COMPANIES.map(async company => {
           try {
-            const response = await apiFetch(`/api/tango/clients?company=${company.id}`);
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok) {
-              const message = payload?.details || payload?.error || `Tango respondio ${response.status}`;
-              return [company.key, [], message] as const;
-            }
-            return [company.key, processMatches(crmData, payload.resultData?.list || [], company), ''] as const;
+            const tangoClients = await getTangoClients(company.id);
+            return [company.key, processMatches(crmData, tangoClients, company), ''] as const;
           } catch (error) {
             const message = error instanceof Error ? error.message : 'No se pudo consultar Tango';
             return [company.key, [], message] as const;
