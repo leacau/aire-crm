@@ -792,6 +792,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/billing-requests/order/[orderId]` valida acceso server-side antes de exponer pedidos por orden: usuarios del workflow contable/aprobaciones o usuarios con acceso a la orden.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Nonagesimo sexto corte aplicado
+
+- `/api/advertising-orders` encapsula los listados por oportunidad, eventos, recientes y rango de programacion con errores JSON trazables.
+- `/api/advertising-orders/[orderId]` cubre detalle y borrado con logs server-side y respuestas controladas ante fallas de Firestore o permisos.
+- Los errores no esperados de publicidad dejan de responder como 500 generico y pasan a contratos 502 con mensaje legible para el front.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
