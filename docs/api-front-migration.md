@@ -778,6 +778,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se mantienen sin cambios los permisos, validaciones funcionales y reglas de negocio existentes; el corte solo reduce 500 opacos durante la migracion.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Nonagesimo cuarto corte aplicado
+
+- `/api/invoices` encapsula listados y alta de facturas CRM con errores JSON trazables y logs server-side.
+- `/api/payments` aplica el mismo patron a lectura, importacion y borrado de pagos, incluyendo operaciones batch.
+- Contable queda mejor preparado para consumir contratos de API estables desde el front, sin exponer detalles de Firestore al cliente.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
