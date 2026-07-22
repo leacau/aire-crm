@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { tangoErrorResponse, tangoMissingConfigResponse } from '@/app/api/tango/utils';
 
 const PAGE_SIZE = 2000;
 const PAGE_BATCH_SIZE = 5;
@@ -172,7 +173,7 @@ export async function GET(request: Request) {
   }
   const apiAuthorization = process.env.TANGO_API_AUTHORIZATION;
   if (!apiAuthorization) {
-    return NextResponse.json({ error: 'Falta configurar TANGO_API_AUTHORIZATION' }, { status: 500 });
+    return tangoMissingConfigResponse('TANGO_API_AUTHORIZATION');
   }
 
   try {
@@ -284,10 +285,10 @@ export async function GET(request: Request) {
       skippedCompanies,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    console.error('Error consulting Tango invoices:', error);
-    return NextResponse.json({
-      error: 'No se pudieron consultar las facturas de Tango',
-      details: error instanceof Error ? error.message : 'Error desconocido',
-    }, { status: 502 });
+    return tangoErrorResponse(error, {
+      action: 'INVOICES LIST',
+      requesterId: serverUser.uid,
+      publicError: 'No se pudieron consultar las facturas de Tango',
+    });
   }
 }

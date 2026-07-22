@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerManagement } from '@/lib/server/auth';
+import { tangoErrorResponse, tangoMissingConfigResponse } from '@/app/api/tango/utils';
 
 const ALLOWED_COMPANIES = ['4', '5', '6'];
 
@@ -38,11 +39,10 @@ export async function GET(request: Request) {
     }
 
     if (!apiAuthorization) {
-        return NextResponse.json({ error: 'Configuracion de Tango incompleta' }, { status: 500 });
+        return tangoMissingConfigResponse('TANGO_API_AUTHORIZATION');
     }
 
     try {
-        // 🟢 CORRECCIÓN: Tango usa GET y los datos viajan en la URL (por el flag -G)
         const tangoUrl = getTangoEndpoint();
         tangoUrl.searchParams.set('process', '17961');
         tangoUrl.searchParams.set('fromDate', '');
@@ -51,33 +51,29 @@ export async function GET(request: Request) {
         tangoUrl.searchParams.set('pageIndex', '0');
         tangoUrl.searchParams.set('customQuery', '0');
 
-        console.log(`Conectando a Tango (Company ${company})... URL: ${tangoUrl.toString()}`);
+        console.log(`Conectando a Tango (Company ${company})...`);
 
         const response = await fetch(tangoUrl, {
             method: 'GET',
             headers: {
-                'ApiAuthorization': apiAuthorization,
-                'Company': company,
+                ApiAuthorization: apiAuthorization,
+                Company: company,
             },
-            // fetch en Next.js a veces cachea de forma agresiva. Le pedimos que siempre traiga datos frescos:
-            cache: 'no-store' 
+            cache: 'no-store',
         });
 
         if (!response.ok) {
             const textError = await response.text();
-            throw new Error(`Tango rechazó la conexión (Status ${response.status}). Detalles: ${textError}`);
+            throw new Error(`Tango rechazo la conexion (Status ${response.status}). Detalles: ${textError}`);
         }
 
         const data = await response.json();
         return NextResponse.json(data);
-
-    } catch (error: any) {
-        console.error('🔥 Error crítico conectando a Tango:', error);
-        
-        return NextResponse.json({ 
-            error: 'Fallo de conexión con Tango', 
-            details: error.message,
-            hint: 'Si el error dice "ENOTFOUND srv-tango-n", significa que el CRM está alojado en la nube y no tiene acceso a la red local de la radio. Debes reemplazar "srv-tango-n" por la IP Pública del servidor.'
-        }, { status: 500 });
+    } catch (error) {
+        return tangoErrorResponse(error, {
+            action: 'CLIENTS LIST',
+            requesterId: serverUser.uid,
+            publicError: 'Fallo de conexion con Tango',
+        });
     }
 }

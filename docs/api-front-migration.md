@@ -862,6 +862,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/cron/release-prospects`, `/api/cron/notify-tasks` y `/api/cron/notify-proposals` comparten validacion de secreto y manejo de errores sin exponer valores sensibles.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo sexto corte aplicado
+
+- `/api/tango/clients`, `/api/tango/collections` y `/api/tango/invoices` diferencian configuracion faltante de Tango con 503 y fallas externas con 502 trazable.
+- `/api/tango/invoices/pdf` mantiene el flujo probado de `GetPdf`, `Company` e `ID_GVA12`, pero centraliza el error sin exponer secretos.
+- Se elimino un log de URL completa en clientes Tango para reducir ruido y superficie de diagnostico en produccion.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

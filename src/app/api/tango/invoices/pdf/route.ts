@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { tangoErrorResponse, tangoMissingConfigResponse } from '@/app/api/tango/utils';
 
 const ALLOWED_COMPANIES = ['4', '5', '6'];
 const DEFAULT_PDF_PROCESS = '14077';
@@ -107,7 +108,7 @@ export async function GET(request: Request) {
   }
 
   if (!apiAuthorization) {
-    return NextResponse.json({ error: 'Falta configurar TANGO_API_AUTHORIZATION' }, { status: 500 });
+    return tangoMissingConfigResponse('TANGO_API_AUTHORIZATION');
   }
 
   try {
@@ -143,12 +144,12 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    console.error('Error downloading Tango invoice PDF:', error);
     const details = error instanceof Error ? error.message : 'Error desconocido';
     const context = `process=${processId}, company=${company}, id=${invoiceId.trim()}`;
-    return NextResponse.json({
-      error: 'No se pudo descargar el PDF de Tango',
-      details: `${details} (${context})`,
-    }, { status: 502 });
+    return tangoErrorResponse(new Error(`${details} (${context})`), {
+      action: 'INVOICE PDF DOWNLOAD',
+      requesterId: serverUser.uid,
+      publicError: 'No se pudo descargar el PDF de Tango',
+    });
   }
 }
