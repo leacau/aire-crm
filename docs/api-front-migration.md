@@ -953,6 +953,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/admin/users/sync` captura fallas de Firebase Auth/Firestore durante la sincronizacion masiva.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo decimonoveno corte aplicado
+
+- `src/lib/api-client.ts` expone `getApiAuthUser()` para centralizar la espera del estado de Firebase Auth.
+- `src/lib/api/commercial-notes.ts` deja de importar `auth` directamente y usa el helper comun antes de decidir entre API autenticada y lectura sin token.
+- Se reduce otro acoplamiento del front con Firebase fuera de la capa de autenticacion/API compartida.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

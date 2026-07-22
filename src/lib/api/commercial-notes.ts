@@ -1,7 +1,6 @@
 'use client';
 
-import { apiRequest } from '@/lib/api-client';
-import { auth } from '@/lib/firebase';
+import { apiRequest, getApiAuthUser } from '@/lib/api-client';
 import type { CommercialNote } from '@/lib/types';
 
 async function fetchPublicCommercialNote(noteId: string): Promise<CommercialNote | null> {
@@ -51,7 +50,7 @@ export async function getCommercialNotesByOrderId(orderId: string): Promise<Comm
 }
 
 export async function getCommercialNote(noteId: string): Promise<CommercialNote | null> {
-  if (!auth.currentUser) {
+  if (!(await getApiAuthUser())) {
     return fetchPublicCommercialNote(noteId);
   }
 

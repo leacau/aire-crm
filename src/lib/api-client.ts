@@ -63,6 +63,10 @@ function waitForAuthUser(): Promise<FirebaseUser | null> {
   return authReadyPromise;
 }
 
+export function getApiAuthUser(): Promise<FirebaseUser | null> {
+  return waitForAuthUser();
+}
+
 async function getToken(user: FirebaseUser | null | undefined, forceRefresh: boolean) {
   const currentUser = user ?? (await waitForAuthUser());
   const token = await currentUser?.getIdToken(forceRefresh);
