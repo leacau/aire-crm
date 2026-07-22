@@ -813,6 +813,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Aprobaciones mantiene las colecciones, estados y permisos existentes, pero evita 500 opacos ante fallas de Firestore o actualizacion.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Nonagesimo noveno corte aplicado
+
+- `/api/commercial-notes` encapsula listados y alta de notas comerciales con errores JSON trazables.
+- `/api/commercial-notes/[noteId]` exige sesion y permisos tambien en el detalle, cerrando una lectura directa por ID.
+- `/api/social-media-requests` y `/api/social-media-requests/[requestId]` cubren listados, alta, detalle, actualizacion y borrado con respuestas controladas.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

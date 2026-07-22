@@ -29,83 +29,107 @@ export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const { searchParams } = new URL(request.url);
-  const clientId = searchParams.get('clientId');
-  const advisorId = searchParams.get('advisorId');
-  const orderId = searchParams.get('orderId');
+  try {
+    const { searchParams } = new URL(request.url);
+    const clientId = searchParams.get('clientId');
+    const advisorId = searchParams.get('advisorId');
+    const orderId = searchParams.get('orderId');
 
-  let notes: CommercialNote[];
-  if (clientId) {
-    notes = await getFilteredNotes('clientId', clientId);
-  } else if (advisorId) {
-    notes = await getFilteredNotes('advisorId', advisorId);
-  } else if (orderId) {
-    notes = await getFilteredNotes('orderId', orderId);
-  } else {
-    notes = await getFilteredNotes();
+    let notes: CommercialNote[];
+    if (clientId) {
+      notes = await getFilteredNotes('clientId', clientId);
+    } else if (advisorId) {
+      notes = await getFilteredNotes('advisorId', advisorId);
+    } else if (orderId) {
+      notes = await getFilteredNotes('orderId', orderId);
+    } else {
+      notes = await getFilteredNotes();
+    }
+
+    notes = await filterAccessibleCommercialNotes(notes, requester);
+
+    return NextResponse.json({ notes });
+  } catch (error: any) {
+    console.error('COMMERCIAL NOTES LIST ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudieron cargar las notas comerciales.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
   }
-
-  notes = await filterAccessibleCommercialNotes(notes, requester);
-
-  return NextResponse.json({ notes });
 }
 
 export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const body = await request.json();
-  const noteData = body?.noteData as Omit<CommercialNote, 'id' | 'createdAt'> | undefined;
+  try {
+    const body = await request.json();
+    const noteData = body?.noteData as Omit<CommercialNote, 'id' | 'createdAt'> | undefined;
 
-  if (!noteData?.clientId || !noteData.clientName) {
-    return NextResponse.json({ error: 'Cliente obligatorio para crear la nota.' }, { status: 400 });
+    if (!noteData?.clientId || !noteData.clientName) {
+      return NextResponse.json({ error: 'Cliente obligatorio para crear la nota.' }, { status: 400 });
+    }
+
+    const requesterName = getRequesterName(requester);
+    const advisorId = canAssignCommercialNoteAdvisor(requester) && noteData.advisorId
+      ? noteData.advisorId
+      : requester.uid;
+    const advisorName = canAssignCommercialNoteAdvisor(requester) && noteData.advisorName
+      ? noteData.advisorName
+      : requesterName;
+    const batch = dbAdmin.batch();
+    const noteRef = dbAdmin.collection('commercial_notes').doc();
+    const dataToSave = {
+      ...cleanCommercialNotePayload(noteData as unknown as Record<string, unknown>),
+      advisorId,
+      advisorName,
+      createdAt: FieldValue.serverTimestamp(),
+    };
+
+    batch.set(noteRef, dataToSave);
+
+    const activityRef = dbAdmin.collection('client-activities').doc();
+    batch.set(activityRef, {
+      clientId: noteData.clientId,
+      clientName: noteData.clientName,
+      userId: requester.uid,
+      userName: requesterName,
+      type: 'Otra',
+      observation: `Genero una Nota Comercial: "${noteData.title || 'Sin titulo'}" (Valor: $${Number(noteData.totalValue || 0).toLocaleString()})`,
+      timestamp: FieldValue.serverTimestamp(),
+      isTask: false,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    const systemLogRef = dbAdmin.collection('activities').doc();
+    batch.set(systemLogRef, {
+      userId: requester.uid,
+      userName: requesterName,
+      type: 'create',
+      entityType: 'commercial_note',
+      entityId: noteRef.id,
+      entityName: 'Nota Comercial',
+      details: `creo una nota comercial para <strong>${noteData.clientName}</strong>`,
+      ownerName: advisorName,
+      timestamp: FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+
+    return NextResponse.json({ id: noteRef.id });
+  } catch (error: any) {
+    console.error('COMMERCIAL NOTE CREATE ERROR:', {
+      requester: requester.uid,
+      code: error?.code,
+      message: error?.message,
+    });
+    return NextResponse.json({
+      error: 'No se pudo crear la nota comercial.',
+      details: error?.message || 'Error desconocido',
+    }, { status: 502 });
   }
-
-  const requesterName = getRequesterName(requester);
-  const advisorId = canAssignCommercialNoteAdvisor(requester) && noteData.advisorId
-    ? noteData.advisorId
-    : requester.uid;
-  const advisorName = canAssignCommercialNoteAdvisor(requester) && noteData.advisorName
-    ? noteData.advisorName
-    : requesterName;
-  const batch = dbAdmin.batch();
-  const noteRef = dbAdmin.collection('commercial_notes').doc();
-  const dataToSave = {
-    ...cleanCommercialNotePayload(noteData as unknown as Record<string, unknown>),
-    advisorId,
-    advisorName,
-    createdAt: FieldValue.serverTimestamp(),
-  };
-
-  batch.set(noteRef, dataToSave);
-
-  const activityRef = dbAdmin.collection('client-activities').doc();
-  batch.set(activityRef, {
-    clientId: noteData.clientId,
-    clientName: noteData.clientName,
-    userId: requester.uid,
-    userName: requesterName,
-    type: 'Otra',
-    observation: `Genero una Nota Comercial: "${noteData.title || 'Sin titulo'}" (Valor: $${Number(noteData.totalValue || 0).toLocaleString()})`,
-    timestamp: FieldValue.serverTimestamp(),
-    isTask: false,
-    createdAt: FieldValue.serverTimestamp(),
-  });
-
-  const systemLogRef = dbAdmin.collection('activities').doc();
-  batch.set(systemLogRef, {
-    userId: requester.uid,
-    userName: requesterName,
-    type: 'create',
-    entityType: 'commercial_note',
-    entityId: noteRef.id,
-    entityName: 'Nota Comercial',
-    details: `creo una nota comercial para <strong>${noteData.clientName}</strong>`,
-    ownerName: advisorName,
-    timestamp: FieldValue.serverTimestamp(),
-  });
-
-  await batch.commit();
-
-  return NextResponse.json({ id: noteRef.id });
 }
