@@ -4,6 +4,7 @@ import { hasServerManagementPrivileges, isServerResponse, requireServerUser } fr
 import { serializeDocument } from '@/lib/server/firestore';
 import { mapClient } from '@/app/api/clients/utils';
 import { mapPaymentEntry } from '@/app/api/payments/utils';
+import { reportErrorResponse } from '@/app/api/reports/errors';
 import type { Client, CoachingSession, Opportunity, PaymentEntry, PaymentStatus, User } from '@/lib/types';
 
 const ACTIVE_OPPORTUNITY_STAGES = [
@@ -116,47 +117,55 @@ export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const body = await request.json().catch(() => null);
-  const rawAdvisorIds: string[] = Array.isArray(body?.advisorIds)
-    ? body.advisorIds.filter((id: unknown): id is string => typeof id === 'string' && Boolean(id))
-    : [];
-  const advisorIds = Array.from(new Set<string>(rawAdvisorIds));
+  try {
+    const body = await request.json().catch(() => null);
+    const rawAdvisorIds: string[] = Array.isArray(body?.advisorIds)
+      ? body.advisorIds.filter((id: unknown): id is string => typeof id === 'string' && Boolean(id))
+      : [];
+    const advisorIds = Array.from(new Set<string>(rawAdvisorIds));
 
-  if (advisorIds.length === 0) {
-    return NextResponse.json({ reports: [] });
+    if (advisorIds.length === 0) {
+      return NextResponse.json({ reports: [] });
+    }
+
+    if (!hasServerManagementPrivileges(requester) && (advisorIds.length > 1 || advisorIds[0] !== requester.uid)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const [usersById, clients, opportunities, payments, coachingByAdvisor] = await Promise.all([
+      getUsersByIds(advisorIds),
+      getClientsForAdvisors(advisorIds),
+      getActiveOpportunities(),
+      getPendingPayments(),
+      getOpenCoachingSessions(advisorIds),
+    ]);
+
+    const clientsByAdvisor = clients.reduce((acc, client) => {
+      if (!client.ownerId) return acc;
+      if (!acc.has(client.ownerId)) acc.set(client.ownerId, []);
+      acc.get(client.ownerId)!.push(client);
+      return acc;
+    }, new Map<string, Client[]>());
+
+    const reports: AdvisorReportData[] = advisorIds.flatMap((advisorId) => {
+      const advisor = usersById.get(advisorId);
+      if (!advisor) return [];
+
+      const clientIds = new Set((clientsByAdvisor.get(advisorId) || []).map(client => client.id));
+      return [{
+        advisor,
+        opportunities: opportunities.filter(opportunity => clientIds.has(opportunity.clientId)),
+        payments: payments.filter(payment => payment.advisorId === advisorId),
+        coaching: coachingByAdvisor.get(advisorId) || null,
+      }];
+    });
+
+    return NextResponse.json({ reports });
+  } catch (error) {
+    return reportErrorResponse(error, {
+      action: 'ADVISORS',
+      requesterId: requester.uid,
+      publicError: 'No se pudo generar el reporte de asesores.',
+    });
   }
-
-  if (!hasServerManagementPrivileges(requester) && (advisorIds.length > 1 || advisorIds[0] !== requester.uid)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const [usersById, clients, opportunities, payments, coachingByAdvisor] = await Promise.all([
-    getUsersByIds(advisorIds),
-    getClientsForAdvisors(advisorIds),
-    getActiveOpportunities(),
-    getPendingPayments(),
-    getOpenCoachingSessions(advisorIds),
-  ]);
-
-  const clientsByAdvisor = clients.reduce((acc, client) => {
-    if (!client.ownerId) return acc;
-    if (!acc.has(client.ownerId)) acc.set(client.ownerId, []);
-    acc.get(client.ownerId)!.push(client);
-    return acc;
-  }, new Map<string, Client[]>());
-
-  const reports: AdvisorReportData[] = advisorIds.flatMap((advisorId) => {
-    const advisor = usersById.get(advisorId);
-    if (!advisor) return [];
-
-    const clientIds = new Set((clientsByAdvisor.get(advisorId) || []).map(client => client.id));
-    return [{
-      advisor,
-      opportunities: opportunities.filter(opportunity => clientIds.has(opportunity.clientId)),
-      payments: payments.filter(payment => payment.advisorId === advisorId),
-      coaching: coachingByAdvisor.get(advisorId) || null,
-    }];
-  });
-
-  return NextResponse.json({ reports });
 }

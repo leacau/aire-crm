@@ -932,6 +932,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El front de seguimiento de supervisores queda menos expuesto a respuestas opacas ante errores de Firestore.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo decimosexto corte aplicado
+
+- `/api/pipeline-interactions` cubre listado, alta individual e importacion masiva con errores JSON trazables.
+- `/api/pipeline-interactions/[interactionId]` mantiene validaciones 400/404 y normaliza fallas de update/delete.
+- `/api/reports/advisors` encapsula las consultas paralelas de usuarios, clientes, oportunidades, pagos y coaching.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
