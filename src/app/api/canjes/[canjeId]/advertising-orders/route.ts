@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { filterAccessibleAdvertisingOrders } from '@/lib/server/advertising-order-access';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { AdvertisingOrder } from '@/lib/types';
 
@@ -17,7 +18,7 @@ export async function GET(request: Request, context: RouteContext) {
     if (!canjeId) return NextResponse.json({ orders: [] });
 
     const { searchParams } = new URL(request.url);
-    const legacyOrderIds = searchParams.getAll('legacyOrderId').filter(Boolean);
+    const legacyOrderIds = Array.from(new Set(searchParams.getAll('legacyOrderId').filter(Boolean)));
     const snapshot = await dbAdmin.collection('advertising_orders').where('canjeId', '==', canjeId).get();
     const orders = snapshot.docs.map(doc => serializeDocument<AdvertisingOrder>(doc.id, doc.data()));
     const foundIds = new Set(orders.map(order => order.id));
@@ -33,9 +34,10 @@ export async function GET(request: Request, context: RouteContext) {
       }
     });
 
-    orders.sort((a, b) => (b.startDate || b.createdAt || '').localeCompare(a.startDate || a.createdAt || ''));
+    const accessibleOrders = await filterAccessibleAdvertisingOrders(orders, requester);
+    accessibleOrders.sort((a, b) => (b.startDate || b.createdAt || '').localeCompare(a.startDate || a.createdAt || ''));
 
-    return NextResponse.json({ orders });
+    return NextResponse.json({ orders: accessibleOrders });
   } catch (error: any) {
     console.error('CANJE ADVERTISING ORDERS ERROR:', {
       requester: requester.uid,

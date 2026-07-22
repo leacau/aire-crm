@@ -869,6 +869,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se elimino un log de URL completa en clientes Tango para reducir ruido y superficie de diagnostico en produccion.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo septimo corte aplicado
+
+- `/api/canjes/[canjeId]/advertising-orders` aplica el filtro server-side de acceso de Publicidad tambien a ordenes legacy recibidas por ID.
+- Se deduplican los `legacyOrderId` de la query antes de consultar Firestore para evitar lecturas repetidas.
+- El front mantiene el mismo contrato `{ orders }`, pero la API ya no devuelve ordenes de publicidad fuera del alcance del usuario autenticado.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
