@@ -911,6 +911,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El front de contactos queda menos expuesto a respuestas 500 opacas durante operaciones de cliente.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo decimotercer corte aplicado
+
+- Configuraciones de sistema para lista blanca, permisos, visibilidad de objetivos y alertas de oportunidades devuelven errores JSON trazables.
+- Tarifarios de productos SAS y formatos SRL mantienen defaults y validaciones, pero capturan fallas de Firestore/logging.
+- Se agrega helper compartido para errores de `/api/system` sin modificar `holidays`, que ya estaba protegido.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

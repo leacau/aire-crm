@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { isServerResponse, requireServerManagement, requireServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
+import { systemErrorResponse } from '@/app/api/system/errors';
 import type { SasProductConfig } from '@/lib/types';
 
 const SAS_PRODUCTS_DOC_ID = 'sas_products';
@@ -31,34 +32,50 @@ export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
-  const snap = await dbAdmin.collection('system_config').doc(SAS_PRODUCTS_DOC_ID).get();
-  const products = snap.exists ? normalizeProducts(snap.data()?.products) : [];
+  try {
+    const snap = await dbAdmin.collection('system_config').doc(SAS_PRODUCTS_DOC_ID).get();
+    const products = snap.exists ? normalizeProducts(snap.data()?.products) : [];
 
-  return NextResponse.json({ products });
+    return NextResponse.json({ products });
+  } catch (error) {
+    return systemErrorResponse(error, {
+      action: 'SAS PRODUCTS GET',
+      requesterId: requester.uid,
+      publicError: 'No se pudo cargar el tarifario de productos digitales.',
+    });
+  }
 }
 
 export async function PUT(request: Request) {
   const requester = await requireServerManagement(request);
   if (isServerResponse(requester)) return requester;
 
-  const body = await request.json();
-  if (!Array.isArray(body?.products)) {
-    return NextResponse.json({ error: 'La lista de productos es obligatoria.' }, { status: 400 });
+  try {
+    const body = await request.json();
+    if (!Array.isArray(body?.products)) {
+      return NextResponse.json({ error: 'La lista de productos es obligatoria.' }, { status: 400 });
+    }
+
+    const products = normalizeProducts(body.products);
+    await dbAdmin.collection('system_config').doc(SAS_PRODUCTS_DOC_ID).set({ products }, { merge: true });
+
+    await logServerActivity({
+      userId: requester.uid,
+      userName: requester.name || requester.email || 'Usuario',
+      type: 'update',
+      entityType: 'system_config',
+      entityId: SAS_PRODUCTS_DOC_ID,
+      entityName: 'Productos Digitales SAS',
+      details: 'actualizo el tarifario de productos digitales.',
+      ownerName: 'Sistema',
+    });
+
+    return NextResponse.json({ products });
+  } catch (error) {
+    return systemErrorResponse(error, {
+      action: 'SAS PRODUCTS SAVE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo guardar el tarifario de productos digitales.',
+    });
   }
-
-  const products = normalizeProducts(body.products);
-  await dbAdmin.collection('system_config').doc(SAS_PRODUCTS_DOC_ID).set({ products }, { merge: true });
-
-  await logServerActivity({
-    userId: requester.uid,
-    userName: requester.name || requester.email || 'Usuario',
-    type: 'update',
-    entityType: 'system_config',
-    entityId: SAS_PRODUCTS_DOC_ID,
-    entityName: 'Productos Digitales SAS',
-    details: 'actualizo el tarifario de productos digitales.',
-    ownerName: 'Sistema',
-  });
-
-  return NextResponse.json({ products });
 }
