@@ -1066,6 +1066,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los errores de dominio de contactos devuelven status HTTP especifico desde el handler compartido.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo trigesimo quinto corte aplicado
+
+- `src/lib/server/system-config.ts` concentra listas de configuracion del sistema: whitelist, feriados, formatos SRL y productos SAS.
+- Las rutas `/api/system/email-whitelist`, `/api/system/holidays`, `/api/system/srl-ad-types` y `/api/system/sas-products` dejan de operar Firestore directo.
+- Los normalizadores y auditorias de estas configuraciones quedan en la capa server.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
