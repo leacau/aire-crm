@@ -1052,6 +1052,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/programs/utils.ts` queda como reexport de compatibilidad hacia la capa server.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo trigesimo tercer corte aplicado
+
+- `src/lib/server/pipeline-interactions.ts` concentra listado, alta simple/masiva, edicion, borrado y limpieza de payloads.
+- Las rutas `/api/pipeline-interactions` y `/api/pipeline-interactions/[interactionId]` dejan de operar Firestore directo.
+- Los errores de dominio de pipeline devuelven status HTTP especifico desde el handler compartido.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
