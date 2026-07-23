@@ -1143,6 +1143,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/web-notes/utils.ts` queda como reexport de compatibilidad para consumidores existentes.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo cuadragesimo sexto corte aplicado
+
+- `src/lib/server/payments.ts` concentra listado, importacion masiva, borrado, actualizacion, solicitud de aclaracion y normalizacion de fechas/mora.
+- Las rutas `/api/payments`, `/api/payments/[paymentId]` y `/api/payments/[paymentId]/explanation` dejan de operar Firestore directo.
+- `src/app/api/payments/utils.ts` queda como reexport de compatibilidad para reportes y consumidores existentes.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
