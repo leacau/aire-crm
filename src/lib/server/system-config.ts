@@ -1,16 +1,31 @@
+import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { defaultPermissions } from '@/lib/data';
 import { logServerActivity } from '@/lib/server/activity';
 import type { ServerUser } from '@/lib/server/auth';
-import type { SasProductConfig } from '@/lib/types';
+import { serializeDocument } from '@/lib/server/firestore';
+import type {
+  AreaType,
+  ObjectiveVisibilityConfig,
+  OpportunityAlertsConfig,
+  SasProductConfig,
+  ScreenName,
+  ScreenPermission,
+} from '@/lib/types';
 
 const SYSTEM_CONFIG_COLLECTION = 'system_config';
 
+export const AREA_PERMISSIONS_DOC_ID = 'area_permissions';
 export const EMAIL_WHITELIST_DOC_ID = 'email_whitelist';
 export const HOLIDAYS_DOC_ID = 'holidays';
+export const OBJECTIVE_VISIBILITY_DOC_ID = 'objective_visibility';
+export const OPPORTUNITY_ALERTS_DOC_ID = 'opportunity_alerts';
 export const SRL_AD_TYPES_DOC_ID = 'srl_ad_types';
 export const SAS_PRODUCTS_DOC_ID = 'sas_products';
 
 export const DEFAULT_SRL_AD_TYPES = ['Spot', 'PNT', 'Auspicio', 'Nota Comercial', 'Sorteo', 'Juego'];
+
+export type AreaPermissions = Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>;
 
 export class SystemConfigApiError extends Error {
   constructor(
@@ -54,6 +69,12 @@ export function normalizeEmails(rawEmails: unknown): string[] {
   return Array.isArray(rawEmails)
     ? rawEmails.map((email: unknown) => String(email).trim().toLowerCase()).filter(Boolean)
     : [];
+}
+
+export function normalizeAreaPermissions(rawPermissions: unknown): AreaPermissions {
+  return rawPermissions && typeof rawPermissions === 'object'
+    ? rawPermissions as AreaPermissions
+    : defaultPermissions;
 }
 
 export function normalizeHolidayDates(rawDates: unknown): string[] {
@@ -102,6 +123,52 @@ export function normalizeSasProducts(rawProducts: unknown): SasProductConfig[] {
       cpm: normalizeNumber(item.cpm),
     };
   }).filter(product => product.id && product.format);
+}
+
+export function normalizeOpportunityAlertsConfig(rawConfig: unknown): OpportunityAlertsConfig {
+  if (!rawConfig || typeof rawConfig !== 'object') return {};
+
+  return Object.fromEntries(
+    Object.entries(rawConfig as Record<string, unknown>)
+      .map(([key, value]) => [key, Number(value)])
+      .filter(([, value]) => Number.isFinite(value)),
+  ) as OpportunityAlertsConfig;
+}
+
+export function normalizeObjectiveVisibilityConfig(rawConfig: unknown): ObjectiveVisibilityConfig {
+  if (!rawConfig || typeof rawConfig !== 'object') return {};
+
+  const data = rawConfig as ObjectiveVisibilityConfig;
+  return {
+    activeMonthKey: typeof data.activeMonthKey === 'string' ? data.activeMonthKey : undefined,
+    visibleUntil: typeof data.visibleUntil === 'string' ? data.visibleUntil : undefined,
+    updatedByName: typeof data.updatedByName === 'string' ? data.updatedByName : undefined,
+    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : undefined,
+  };
+}
+
+export async function getAreaPermissionsServer(): Promise<AreaPermissions> {
+  const docRef = dbAdmin.collection(SYSTEM_CONFIG_COLLECTION).doc(AREA_PERMISSIONS_DOC_ID);
+  const snap = await docRef.get();
+
+  if (snap.exists) {
+    return normalizeAreaPermissions(snap.data()?.permissions);
+  }
+
+  await docRef.set({ permissions: defaultPermissions });
+  return defaultPermissions;
+}
+
+export async function saveAreaPermissionsServer(
+  rawPermissions: unknown,
+): Promise<AreaPermissions> {
+  if (!rawPermissions || typeof rawPermissions !== 'object') {
+    throw new SystemConfigApiError('Permissions payload is required', 400);
+  }
+
+  const permissions = normalizeAreaPermissions(rawPermissions);
+  await dbAdmin.collection(SYSTEM_CONFIG_COLLECTION).doc(AREA_PERMISSIONS_DOC_ID).set({ permissions }, { merge: true });
+  return permissions;
 }
 
 export async function getEmailWhitelistServer(): Promise<string[]> {
@@ -189,4 +256,64 @@ export async function saveSasProductsServer(
     },
   );
   return products;
+}
+
+export async function getOpportunityAlertsConfigServer(): Promise<OpportunityAlertsConfig> {
+  const snap = await dbAdmin.collection(SYSTEM_CONFIG_COLLECTION).doc(OPPORTUNITY_ALERTS_DOC_ID).get();
+  return snap.exists ? normalizeOpportunityAlertsConfig(snap.data()) : {};
+}
+
+export async function saveOpportunityAlertsConfigServer(
+  rawConfig: unknown,
+  requester: ServerUser,
+): Promise<OpportunityAlertsConfig> {
+  const config = normalizeOpportunityAlertsConfig(rawConfig);
+
+  await dbAdmin.collection(SYSTEM_CONFIG_COLLECTION).doc(OPPORTUNITY_ALERTS_DOC_ID).set(config, { merge: true });
+
+  await logServerActivity({
+    userId: requester.uid,
+    userName: getRequesterName(requester),
+    type: 'update',
+    entityType: 'opportunity_alerts_config',
+    entityId: OPPORTUNITY_ALERTS_DOC_ID,
+    entityName: 'Configuracion de Alertas de Oportunidades',
+    details: 'actualizo la configuracion de alertas de oportunidades.',
+    ownerName: getRequesterName(requester),
+  });
+
+  return config;
+}
+
+export async function getObjectiveVisibilityConfigServer(): Promise<ObjectiveVisibilityConfig> {
+  const snap = await dbAdmin.collection(SYSTEM_CONFIG_COLLECTION).doc(OBJECTIVE_VISIBILITY_DOC_ID).get();
+  return snap.exists
+    ? normalizeObjectiveVisibilityConfig(serializeDocument<ObjectiveVisibilityConfig>(snap.id, snap.data()))
+    : {};
+}
+
+export async function saveObjectiveVisibilityConfigServer(
+  rawConfig: unknown,
+  requester: ServerUser,
+): Promise<ObjectiveVisibilityConfig> {
+  const config = normalizeObjectiveVisibilityConfig(rawConfig);
+
+  await dbAdmin.collection(SYSTEM_CONFIG_COLLECTION).doc(OBJECTIVE_VISIBILITY_DOC_ID).set({
+    ...config,
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedByName: getRequesterName(requester),
+  }, { merge: true });
+
+  await logServerActivity({
+    userId: requester.uid,
+    userName: getRequesterName(requester),
+    type: 'update',
+    entityType: 'system_config',
+    entityId: OBJECTIVE_VISIBILITY_DOC_ID,
+    entityName: 'Visibilidad de objetivos',
+    details: 'actualizo la fecha de visibilidad de objetivos.',
+    ownerName: getRequesterName(requester),
+  });
+
+  return config;
 }

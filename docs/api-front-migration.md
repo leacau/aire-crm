@@ -1073,6 +1073,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los normalizadores y auditorias de estas configuraciones quedan en la capa server.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo trigesimo sexto corte aplicado
+
+- `src/lib/server/system-config.ts` suma permisos por area, alertas de oportunidades y visibilidad de objetivos.
+- Las rutas `/api/system/permissions`, `/api/system/opportunity-alerts` y `/api/system/objective-visibility` dejan de operar Firestore directo.
+- `src/lib/server/screen-permissions.ts` reutiliza la lectura server compartida de permisos para evitar un segundo camino de persistencia.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

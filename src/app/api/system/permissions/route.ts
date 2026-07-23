@@ -1,25 +1,14 @@
 import { NextResponse } from 'next/server';
-import { dbAdmin } from '@/lib/firebase-admin';
-import { defaultPermissions } from '@/lib/data';
 import { isServerResponse, requireServerManagement, requireServerUser } from '@/lib/server/auth';
+import { getAreaPermissionsServer, saveAreaPermissionsServer } from '@/lib/server/system-config';
 import { systemErrorResponse } from '@/app/api/system/errors';
-
-const AREA_PERMISSIONS_DOC_ID = 'area_permissions';
 
 export async function GET(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
 
   try {
-    const docRef = dbAdmin.collection('system_config').doc(AREA_PERMISSIONS_DOC_ID);
-    const snap = await docRef.get();
-
-    if (snap.exists) {
-      return NextResponse.json({ permissions: snap.data()?.permissions || defaultPermissions });
-    }
-
-    await docRef.set({ permissions: defaultPermissions });
-    return NextResponse.json({ permissions: defaultPermissions });
+    return NextResponse.json({ permissions: await getAreaPermissionsServer() });
   } catch (error) {
     return systemErrorResponse(error, {
       action: 'PERMISSIONS GET',
@@ -35,16 +24,7 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json();
-    if (!body?.permissions || typeof body.permissions !== 'object') {
-      return NextResponse.json({ error: 'Permissions payload is required' }, { status: 400 });
-    }
-
-    await dbAdmin
-      .collection('system_config')
-      .doc(AREA_PERMISSIONS_DOC_ID)
-      .set({ permissions: body.permissions }, { merge: true });
-
-    return NextResponse.json({ permissions: body.permissions });
+    return NextResponse.json({ permissions: await saveAreaPermissionsServer(body?.permissions) });
   } catch (error) {
     return systemErrorResponse(error, {
       action: 'PERMISSIONS SAVE',
