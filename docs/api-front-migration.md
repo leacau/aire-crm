@@ -1087,6 +1087,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/activities` deja de operar Firestore directo y queda como handler de autenticacion, parametros y respuesta HTTP.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo trigesimo octavo corte aplicado
+
+- `src/lib/server/client-activities.ts` concentra listado, alta, edicion, completado, reprogramacion y limpieza de tareas/actividades.
+- Las rutas `/api/client-activities`, `/api/client-activities/[activityId]`, completar, reprogramar y cleanup dejan de operar Firestore directo.
+- Las validaciones de dominio de tareas pasan a la capa server y conservan respuestas HTTP controladas.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

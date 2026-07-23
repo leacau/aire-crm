@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
-import { dbAdmin } from '@/lib/firebase-admin';
 import { activityErrorResponse } from '@/app/api/activities/errors';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { logServerActivity } from '@/lib/server/activity';
-import { getRequesterName } from '@/app/api/clients/utils';
+import { completeClientActivityServer } from '@/lib/server/client-activities';
 
 type RouteContext = {
   params: Promise<{ activityId: string }>;
@@ -16,26 +13,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   try {
     const { activityId } = await context.params;
-    const requesterName = getRequesterName(requester);
-
-    await dbAdmin.collection('client-activities').doc(activityId).update({
-      completed: true,
-      completedAt: FieldValue.serverTimestamp(),
-      completedByUserId: requester.uid,
-      completedByUserName: requesterName,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    await logServerActivity({
-      userId: requester.uid,
-      userName: requesterName,
-      type: 'update',
-      entityType: 'client_activity' as any,
-      entityId: activityId,
-      entityName: 'Tarea completada',
-      details: 'marco la tarea como finalizada',
-      ownerName: requesterName,
-    });
+    await completeClientActivityServer(activityId, requester);
 
     return NextResponse.json({ ok: true });
   } catch (error) {
