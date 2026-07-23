@@ -1150,6 +1150,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/payments/utils.ts` queda como reexport de compatibilidad para reportes y consumidores existentes.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo cuadragesimo septimo corte aplicado
+
+- `src/lib/server/billing-requests.ts` concentra listado enriquecido, listado por orden y cambios de estado con permisos de workflow.
+- Las rutas `/api/billing-requests`, `/api/billing-requests/[requestId]` y `/api/billing-requests/order/[orderId]` dejan de operar Firestore directo.
+- `src/app/api/billing-requests/errors.ts` unifica respuestas controladas para permisos, validaciones y fallas server.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
