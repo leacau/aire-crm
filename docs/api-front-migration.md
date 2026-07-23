@@ -1023,6 +1023,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las rutas API y `src/lib/server/workflow-assignments.ts` consumen tipos desde una capa neutral.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo vigesimo noveno corte aplicado
+
+- `src/app/api/agencies/route.ts` queda como handler fino de autenticacion, permisos y respuesta HTTP.
+- La lectura, alta y auditoria de agencias pasan a `src/lib/server/agencies.ts`.
+- Se empieza a aplicar el patron API route delgada + servicio server en entidades simples.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
