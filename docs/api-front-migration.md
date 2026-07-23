@@ -1178,6 +1178,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las rutas `/api/reports/advisors` y `/api/pnts/scheduled` dejan de operar Firestore directo.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo quincuagesimo primer corte aplicado
+
+- `src/lib/server/canjes.ts` concentra CRUD de canjes, normalizadores, listado de ordenes asociadas y facturas por canje.
+- Las rutas `/api/canjes`, `/api/canjes/[canjeId]`, `advertising-orders` e `invoices` dejan de operar Firestore directo.
+- `src/app/api/canjes/utils.ts` queda como reexport de compatibilidad para consumidores existentes.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

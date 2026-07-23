@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { dbAdmin } from '@/lib/firebase-admin';
-import { mapInvoice } from '@/app/api/canjes/utils';
+import { canjeErrorResponse } from '@/app/api/canjes/errors';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { listCanjeInvoicesServer } from '@/lib/server/canjes';
 
 type RouteContext = {
   params: Promise<{ canjeId: string }>;
@@ -13,23 +13,12 @@ export async function GET(request: Request, context: RouteContext) {
 
   try {
     const { canjeId } = await context.params;
-    if (!canjeId) return NextResponse.json({ invoices: [] });
-
-    const snapshot = await dbAdmin.collection('invoices').where('canjeId', '==', canjeId).get();
-    const invoices = snapshot.docs
-      .map(doc => mapInvoice(doc.id, doc.data()))
-      .sort((a, b) => (b.date || b.dateGenerated || '').localeCompare(a.date || a.dateGenerated || ''));
-
-    return NextResponse.json({ invoices });
-  } catch (error: any) {
-    console.error('CANJE INVOICES ERROR:', {
-      requester: requester.uid,
-      code: error?.code,
-      message: error?.message,
+    return NextResponse.json({ invoices: await listCanjeInvoicesServer(canjeId) });
+  } catch (error) {
+    return canjeErrorResponse(error, {
+      action: 'INVOICES',
+      requesterId: requester.uid,
+      publicError: 'No se pudieron cargar las facturas del canje.',
     });
-    return NextResponse.json({
-      error: 'No se pudieron cargar las facturas del canje.',
-      details: error?.message || 'Error desconocido',
-    }, { status: 502 });
   }
 }

@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
-import { dbAdmin } from '@/lib/firebase-admin';
+import { canjeErrorResponse } from '@/app/api/canjes/errors';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { filterAccessibleAdvertisingOrders } from '@/lib/server/advertising-order-access';
-import { serializeDocument } from '@/lib/server/firestore';
-import type { AdvertisingOrder } from '@/lib/types';
+import { listCanjeAdvertisingOrdersServer } from '@/lib/server/canjes';
 
 type RouteContext = {
   params: Promise<{ canjeId: string }>;
@@ -15,38 +13,14 @@ export async function GET(request: Request, context: RouteContext) {
 
   try {
     const { canjeId } = await context.params;
-    if (!canjeId) return NextResponse.json({ orders: [] });
-
     const { searchParams } = new URL(request.url);
-    const legacyOrderIds = Array.from(new Set(searchParams.getAll('legacyOrderId').filter(Boolean)));
-    const snapshot = await dbAdmin.collection('advertising_orders').where('canjeId', '==', canjeId).get();
-    const orders = snapshot.docs.map(doc => serializeDocument<AdvertisingOrder>(doc.id, doc.data()));
-    const foundIds = new Set(orders.map(order => order.id));
-    const missingLegacyIds = legacyOrderIds.filter(orderId => !foundIds.has(orderId));
-
-    const legacySnapshots = await Promise.all(
-      missingLegacyIds.map(orderId => dbAdmin.collection('advertising_orders').doc(orderId).get()),
-    );
-
-    legacySnapshots.forEach(orderSnapshot => {
-      if (orderSnapshot.exists) {
-        orders.push(serializeDocument<AdvertisingOrder>(orderSnapshot.id, orderSnapshot.data()));
-      }
+    const legacyOrderIds = searchParams.getAll('legacyOrderId').filter(Boolean);
+    return NextResponse.json({ orders: await listCanjeAdvertisingOrdersServer(canjeId, legacyOrderIds, requester) });
+  } catch (error) {
+    return canjeErrorResponse(error, {
+      action: 'ADVERTISING ORDERS',
+      requesterId: requester.uid,
+      publicError: 'No se pudieron cargar las ordenes del canje.',
     });
-
-    const accessibleOrders = await filterAccessibleAdvertisingOrders(orders, requester);
-    accessibleOrders.sort((a, b) => (b.startDate || b.createdAt || '').localeCompare(a.startDate || a.createdAt || ''));
-
-    return NextResponse.json({ orders: accessibleOrders });
-  } catch (error: any) {
-    console.error('CANJE ADVERTISING ORDERS ERROR:', {
-      requester: requester.uid,
-      code: error?.code,
-      message: error?.message,
-    });
-    return NextResponse.json({
-      error: 'No se pudieron cargar las ordenes del canje.',
-      details: error?.message || 'Error desconocido',
-    }, { status: 502 });
   }
 }
