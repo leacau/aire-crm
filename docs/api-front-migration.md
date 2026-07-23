@@ -1206,6 +1206,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/users/errors.ts` respeta errores de dominio 400/403/404 para validaciones y permisos.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo quincuagesimo quinto corte aplicado
+
+- `src/lib/server/auth-session.ts` concentra validacion de token, perfil, whitelist, usuario externo y permisos por area.
+- La ruta `/api/auth/session` deja de operar Firebase directo y conserva los fallbacks de sesion existentes.
+- El escaneo de rutas API queda sin handlers que importen `firebase-admin` directamente.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
