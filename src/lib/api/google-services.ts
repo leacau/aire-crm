@@ -156,3 +156,16 @@ export async function uploadAvatarToDrive(accessToken: string, file: File): Prom
   const payload = await response.json();
   return payload.url;
 }
+
+export async function validateGoogleServicesAccess(accessToken: string): Promise<void> {
+  const response = await apiFetch('/api/services/google/access-check', {
+    method: 'POST',
+    headers: {
+      'x-google-access-token': accessToken,
+    },
+  });
+
+  if (!response.ok) {
+    throw await readServiceError(response, 'No se pudo validar el acceso a los servicios de Google.');
+  }
+}

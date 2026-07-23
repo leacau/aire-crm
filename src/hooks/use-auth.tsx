@@ -6,7 +6,7 @@ import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
 import type { User } from '@/lib/types';
-import { validateGoogleServicesAccess } from '@/lib/google-service-check';
+import { validateGoogleServicesAccess } from '@/lib/api/google-services';
 import { useToast } from '@/hooks/use-toast';
 import { getAuthSession } from '@/lib/api/auth';
 import { hydratePermissionsCache } from '@/lib/permissions';

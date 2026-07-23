@@ -1009,6 +1009,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La API usa el UID autenticado para nombrar la imagen, evitando confiar en un `userId` enviado desde el front.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo vigesimo septimo corte aplicado
+
+- El chequeo silencioso de accesos Google pasa por `POST /api/services/google/access-check`.
+- `use-auth` deja de importar `src/lib/google-service-check.ts` y usa `validateGoogleServicesAccess()` desde el cliente API de Google.
+- Se elimina otro `fetch` directo del front contra APIs externas de Google.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
