@@ -1122,6 +1122,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/invoices/utils.ts` queda como reexport de compatibilidad para dominios que todavia consumen esos helpers.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo cuadragesimo tercer corte aplicado
+
+- `src/lib/server/commercial-notes.ts` concentra listado, alta, lectura, edicion, borrado y vinculo/desvinculo con ordenes de publicidad.
+- Las rutas `/api/commercial-notes`, `/api/commercial-notes/[noteId]` y `/api/commercial-notes/[noteId]/order-link` dejan de operar Firestore directo.
+- `src/app/api/commercial-notes/utils.ts` queda como reexport de compatibilidad para consumidores existentes.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
