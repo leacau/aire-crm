@@ -1199,6 +1199,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/approvals/errors.ts` respeta errores de dominio 400/403/404 y centraliza fallas server.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo quincuagesimo cuarto corte aplicado
+
+- `src/lib/server/users.ts` concentra listado, alta/edicion/borrado de usuarios, cierre mensual, alta externa y sincronizacion desde Firebase Auth.
+- Las rutas `/api/users`, `/api/users/[userId]`, `/api/users/[userId]/monthly-closure`, `/api/admin/users/external` y `/api/admin/users/sync` dejan de operar Firebase directo.
+- `src/app/api/users/errors.ts` respeta errores de dominio 400/403/404 para validaciones y permisos.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { UserApiError } from '@/lib/server/users';
 
 type UserErrorContext = {
   action: string;
@@ -18,6 +19,10 @@ function getErrorCode(error: unknown) {
 }
 
 export function userErrorResponse(error: unknown, context: UserErrorContext) {
+  if (error instanceof UserApiError) {
+    return NextResponse.json({ error: error.message }, { status: error.status });
+  }
+
   const message = getErrorMessage(error);
   console.error(`USERS ${context.action} ERROR:`, {
     requester: context.requesterId,
