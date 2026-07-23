@@ -995,6 +995,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La capa de integraciones Google queda alineada con el patron de clientes API de front.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo vigesimo quinto corte aplicado
+
+- La lectura de eventos de Google Calendar pasa por `GET /api/services/calendar/events`.
+- `src/lib/api/google-services.ts` suma `getCalendarEvents()` y centraliza tambien el listado.
+- Se elimina `src/lib/google-calendar-service.ts`, que consultaba Google Calendar directo desde el front.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

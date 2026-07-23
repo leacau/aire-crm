@@ -19,6 +19,21 @@ export interface EmailParams {
   replyTo?: string;
 }
 
+export type GoogleCalendarEvent = {
+  id?: string;
+  summary?: string;
+  description?: string;
+  start?: {
+    date?: string;
+    dateTime?: string;
+  };
+  end?: {
+    date?: string;
+    dateTime?: string;
+  };
+  [key: string]: unknown;
+};
+
 async function readServiceError(response: Response, fallback: string): Promise<Error & { code?: string }> {
   const errorText = await response.text();
 
@@ -46,6 +61,27 @@ export async function sendEmail(params: EmailParams) {
   }
 
   return response.json();
+}
+
+export async function getCalendarEvents(
+  accessToken: string,
+  calendarId: string = 'primary',
+): Promise<GoogleCalendarEvent[]> {
+  const params = new URLSearchParams({ calendarId });
+  const response = await apiFetch(`/api/services/calendar/events?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      'x-google-access-token': accessToken,
+    },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    throw await readServiceError(response, 'No se pudieron cargar los eventos de Google Calendar.');
+  }
+
+  const payload = await response.json();
+  return Array.isArray(payload.items) ? payload.items : [];
 }
 
 export async function createCalendarEvent(accessToken: string, event: object, calendarId: string = 'primary') {
