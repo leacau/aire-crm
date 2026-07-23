@@ -17,6 +17,13 @@ function getErrorCode(error: unknown) {
     : undefined;
 }
 
+function getErrorStatus(error: unknown, fallbackStatus?: number) {
+  if (fallbackStatus) return fallbackStatus;
+  return typeof error === 'object' && error !== null && 'status' in error
+    ? Number((error as { status?: unknown }).status) || 502
+    : 502;
+}
+
 export function peopleErrorResponse(error: unknown, context: PeopleErrorContext) {
   const message = getErrorMessage(error);
   console.error(`PEOPLE ${context.action} ERROR:`, {
@@ -28,5 +35,5 @@ export function peopleErrorResponse(error: unknown, context: PeopleErrorContext)
   return NextResponse.json({
     error: context.publicError,
     details: message,
-  }, { status: context.status || 502 });
+  }, { status: getErrorStatus(error, context.status) });
 }

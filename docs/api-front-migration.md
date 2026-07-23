@@ -1059,6 +1059,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Los errores de dominio de pipeline devuelven status HTTP especifico desde el handler compartido.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo trigesimo cuarto corte aplicado
+
+- `src/lib/server/people.ts` concentra alta, edicion, borrado, relacion con clientes y auditoria de contactos.
+- Las rutas `/api/people` y `/api/people/[personId]` dejan de operar Firestore directo.
+- Los errores de dominio de contactos devuelven status HTTP especifico desde el handler compartido.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
