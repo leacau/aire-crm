@@ -1016,6 +1016,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se elimina otro `fetch` directo del front contra APIs externas de Google.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo vigesimo octavo corte aplicado
+
+- Se agrega `src/lib/api-contracts.ts` para contratos compartidos entre front API clients, rutas API y servicios server.
+- Workflow assignments y tipos de mapeo Tango dejan de depender de archivos `src/lib/api/*` marcados como cliente.
+- Las rutas API y `src/lib/server/workflow-assignments.ts` consumen tipos desde una capa neutral.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

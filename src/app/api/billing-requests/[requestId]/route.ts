@@ -4,8 +4,8 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { serializeDocument } from '@/lib/server/firestore';
 import { getWorkflowAssignmentsServer } from '@/lib/server/workflow-assignments';
+import type { WorkflowAssignments } from '@/lib/api-contracts';
 import type { AdvertisingOrder, BillingRequest } from '@/lib/types';
-import type { WorkflowAssignments } from '@/lib/api/system';
 
 type RouteContext = {
   params: Promise<{ requestId: string }>;

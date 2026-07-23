@@ -10,8 +10,8 @@ import { logServerActivity } from '@/lib/server/activity';
 import { toTitleCase } from '@/lib/utils';
 import { clientErrorResponse } from '@/app/api/clients/errors';
 import { cleanObject, FieldValue, getRequesterName, mapClient } from '@/app/api/clients/utils';
+import type { ClientTangoIdField, ClientTangoSyncedField, ClientTangoUpdate } from '@/lib/api-contracts';
 import type { Client } from '@/lib/types';
-import type { ClientTangoIdField, ClientTangoSyncedField, ClientTangoUpdate } from '@/lib/api/clients';
 
 type RouteContext = {
   params: Promise<{ clientId: string }>;

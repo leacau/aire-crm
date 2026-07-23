@@ -2,33 +2,19 @@
 
 import { apiRequest } from '@/lib/api-client';
 import type { AdvertisingOrder, BillingRequest, Client, ClientActivity, Invoice, Opportunity, Person } from '@/lib/types';
+import type {
+  ClientTangoIdField,
+  ClientTangoMappingOptions,
+  ClientTangoSyncedField,
+  ClientTangoUpdate,
+} from '@/lib/api-contracts';
 
-export type ClientTangoUpdate = {
-  cuit?: string;
-  tangoCompanyId?: string;
-  idTango?: string;
-  email?: string;
-  phone?: string;
-  rubro?: string;
-  razonSocial?: string;
-  razonSocialTango?: string;
-  denominacion?: string;
-  idAireSrl?: string;
-  idAireDigital?: string;
-  idAire?: string;
-  condicionIVA?: string;
-  provincia?: string;
-  localidad?: string;
-  tipoEntidad?: string;
-  observaciones?: string;
-};
-
-export type ClientTangoIdField = 'idAire' | 'idAireSrl' | 'idAireDigital';
-export type ClientTangoSyncedField = 'isTangoSyncedAire' | 'isTangoSyncedSrl' | 'isTangoSyncedSas';
-
-export type ClientTangoMappingOptions = {
-  markSyncedField?: ClientTangoSyncedField;
-};
+export type {
+  ClientTangoIdField,
+  ClientTangoMappingOptions,
+  ClientTangoSyncedField,
+  ClientTangoUpdate,
+} from '@/lib/api-contracts';
 
 export async function getClients(): Promise<Client[]> {
   const result = await apiRequest<{ clients: Client[] }>('/api/clients', { method: 'GET' });

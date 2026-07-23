@@ -6,7 +6,6 @@ import {
   saveWorkflowAssignmentsServer,
 } from '@/lib/server/workflow-assignments';
 import { systemErrorResponse } from '@/app/api/system/errors';
-import type { WorkflowAssignments } from '@/lib/api/system';
 
 export async function GET(request: Request) {
   const requester = await requireServerUser(request);

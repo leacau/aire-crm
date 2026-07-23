@@ -9,6 +9,7 @@ import type {
   ScreenName,
   ScreenPermission,
 } from '@/lib/types';
+import type { WorkflowAssignments } from '@/lib/api-contracts';
 
 type PermissionsMap = Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>;
 
@@ -37,16 +38,7 @@ export async function updateEmailWhitelist(emails: string[]): Promise<string[]> 
   return result.emails;
 }
 
-export type WorkflowAssignments = {
-  approvers: string[];
-  billingReceptors: string[];
-  tangoInvoicers: string[];
-  needLoaders: string[];
-  needRequestReceivers: string[];
-  canjeRequestReceivers: string[];
-  canjeManagementApprovers: string[];
-  canjeCommercialReferents: string[];
-};
+export type { WorkflowAssignments } from '@/lib/api-contracts';
 
 export async function getWorkflowAssignments(): Promise<WorkflowAssignments> {
   const result = await apiRequest<{ assignments: WorkflowAssignments }>('/api/system/workflow-assignments', {

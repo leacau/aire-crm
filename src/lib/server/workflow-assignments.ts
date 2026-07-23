@@ -1,5 +1,5 @@
 import { dbAdmin } from '@/lib/firebase-admin';
-import type { WorkflowAssignments } from '@/lib/api/system';
+import type { WorkflowAssignments } from '@/lib/api-contracts';
 
 const WORKFLOW_ASSIGNMENTS_DOC_ID = 'workflow_assignments';
 
