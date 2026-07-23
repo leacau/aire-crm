@@ -16,8 +16,15 @@ function getErrorCode(error: unknown) {
     : undefined;
 }
 
+function getErrorStatus(error: unknown) {
+  return typeof error === 'object' && error !== null && 'status' in error
+    ? Number((error as { status?: unknown }).status) || 502
+    : 502;
+}
+
 export function activityErrorResponse(error: unknown, context: ActivityErrorContext) {
   const message = getErrorMessage(error);
+  const status = getErrorStatus(error);
   console.error(`ACTIVITIES ${context.action} ERROR:`, {
     requester: context.requesterId,
     code: getErrorCode(error),
@@ -25,7 +32,7 @@ export function activityErrorResponse(error: unknown, context: ActivityErrorCont
   });
 
   return NextResponse.json({
-    error: context.publicError,
+    error: status < 500 ? message : context.publicError,
     details: message,
-  }, { status: 502 });
+  }, { status });
 }

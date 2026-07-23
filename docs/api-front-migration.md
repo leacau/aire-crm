@@ -1080,6 +1080,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/lib/server/screen-permissions.ts` reutiliza la lectura server compartida de permisos para evitar un segundo camino de persistencia.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo trigesimo septimo corte aplicado
+
+- `src/lib/server/activity.ts` concentra listados de actividades, historial por entidad y grafo de cliente.
+- `POST /api/activities` delega el registro de logs en la capa server y conserva errores de validacion con status 400.
+- `/api/activities` deja de operar Firestore directo y queda como handler de autenticacion, parametros y respuesta HTTP.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
