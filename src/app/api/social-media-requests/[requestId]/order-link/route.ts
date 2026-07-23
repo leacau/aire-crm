@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
-import { dbAdmin } from '@/lib/firebase-admin';
-import { getRequesterName } from '@/app/api/clients/utils';
+import { socialMediaRequestErrorResponse } from '@/app/api/social-media-requests/errors';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { logServerActivity } from '@/lib/server/activity';
-import { canAccessAdvisorScopedRecord } from '@/lib/server/advisor-scoped-access';
-import { mapSocialMediaRequest } from '@/app/api/social-media-requests/utils';
-import { orderLinkErrorResponse } from '@/app/api/order-links/errors';
+import {
+  linkSocialMediaRequestOrderServer,
+  unlinkSocialMediaRequestOrderServer,
+} from '@/lib/server/social-media-requests';
 
 type RouteContext = {
   params: Promise<{ requestId: string }>;
@@ -19,46 +17,11 @@ export async function PATCH(request: Request, context: RouteContext) {
   try {
     const { requestId } = await context.params;
     const body = await request.json();
-    const orderId = typeof body?.orderId === 'string' ? body.orderId.trim() : '';
-    const orderTitle = typeof body?.orderTitle === 'string' ? body.orderTitle.trim() : '';
-
-    if (!orderId || !orderTitle) {
-      return NextResponse.json({ error: 'Orden obligatoria para vincular el pedido.' }, { status: 400 });
-    }
-
-    const docRef = dbAdmin.collection('social_media_requests').doc(requestId);
-    const snap = await docRef.get();
-    if (!snap.exists) {
-      return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
-    }
-
-    const socialRequest = mapSocialMediaRequest(snap.id, snap.data());
-    if (!(await canAccessAdvisorScopedRecord(socialRequest, requester))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    await docRef.update({
-      orderId,
-      orderTitle,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    const requesterName = getRequesterName(requester);
-    await logServerActivity({
-      userId: requester.uid,
-      userName: requesterName,
-      type: 'update',
-      entityType: 'social_media_request' as any,
-      entityId: requestId,
-      entityName: 'Pedido de Redes',
-      details: `vinculo un pedido de redes a la orden <strong>${orderTitle}</strong>`,
-      ownerName: requesterName,
-    });
-
+    await linkSocialMediaRequestOrderServer(requestId, body, requester);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return orderLinkErrorResponse(error, {
-      action: 'SOCIAL MEDIA REQUEST LINK',
+    return socialMediaRequestErrorResponse(error, {
+      action: 'ORDER LINK',
       requesterId: requester.uid,
       publicError: 'No se pudo vincular el pedido de redes con la orden.',
     });
@@ -72,49 +35,11 @@ export async function DELETE(request: Request, context: RouteContext) {
   try {
     const { requestId } = await context.params;
     const body = await request.json().catch(() => null);
-    const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
-
-    if (!reason) {
-      return NextResponse.json({ error: 'Debe indicar el motivo de la desvinculacion.' }, { status: 400 });
-    }
-
-    const docRef = dbAdmin.collection('social_media_requests').doc(requestId);
-    const snap = await docRef.get();
-    if (!snap.exists) {
-      return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
-    }
-
-    const socialRequest = mapSocialMediaRequest(snap.id, snap.data());
-    if (!(await canAccessAdvisorScopedRecord(socialRequest, requester))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const requesterName = getRequesterName(requester);
-    await docRef.update({
-      orderId: FieldValue.delete(),
-      orderTitle: FieldValue.delete(),
-      orderUnlinkedAt: FieldValue.serverTimestamp(),
-      orderUnlinkedById: requester.uid,
-      orderUnlinkedByName: requesterName,
-      orderUnlinkReason: reason,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    await logServerActivity({
-      userId: requester.uid,
-      userName: requesterName,
-      type: 'update',
-      entityType: 'social_media_request' as any,
-      entityId: requestId,
-      entityName: 'Pedido de Redes',
-      details: 'quito la vinculacion de un pedido de redes con una orden de publicidad',
-      ownerName: requesterName,
-    });
-
+    await unlinkSocialMediaRequestOrderServer(requestId, body, requester);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return orderLinkErrorResponse(error, {
-      action: 'SOCIAL MEDIA REQUEST UNLINK',
+    return socialMediaRequestErrorResponse(error, {
+      action: 'ORDER UNLINK',
       requesterId: requester.uid,
       publicError: 'No se pudo desvincular el pedido de redes de la orden.',
     });

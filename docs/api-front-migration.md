@@ -1129,6 +1129,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/commercial-notes/utils.ts` queda como reexport de compatibilidad para consumidores existentes.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo cuadragesimo cuarto corte aplicado
+
+- `src/lib/server/social-media-requests.ts` concentra listado, alta, lectura, edicion, borrado y vinculo/desvinculo con ordenes.
+- Las rutas `/api/social-media-requests`, `/api/social-media-requests/[requestId]` y `/api/social-media-requests/[requestId]/order-link` dejan de operar Firestore directo.
+- `src/app/api/social-media-requests/utils.ts` queda como reexport de compatibilidad para consumidores existentes.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
