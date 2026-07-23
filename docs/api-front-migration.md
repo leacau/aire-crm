@@ -1094,6 +1094,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las validaciones de dominio de tareas pasan a la capa server y conservan respuestas HTTP controladas.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo trigesimo noveno corte aplicado
+
+- `src/lib/server/clients.ts` concentra CRUD de clientes, borrado en grafo, bulk update/delete, merge, relaciones y mapeo Tango.
+- Las rutas `/api/clients`, `/api/clients/[clientId]`, `bulk`, `merge` y subrutas de actividades/personas/oportunidades/facturas/pedidos/ordenes/Tango dejan de operar Firestore directo.
+- `src/app/api/clients/utils.ts` queda como reexport de compatibilidad para dominios que aun migraran luego.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
