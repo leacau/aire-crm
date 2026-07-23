@@ -1171,6 +1171,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/supervisor-comments/errors.ts` ahora respeta errores de dominio 400/403/404.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo quincuagesimo corte aplicado
+
+- `src/lib/server/advisor-reports.ts` concentra la generacion de reportes por asesor.
+- `src/lib/server/scheduled-pnts.ts` concentra la lectura de PNTs vigentes desde ordenes de publicidad.
+- Las rutas `/api/reports/advisors` y `/api/pnts/scheduled` dejan de operar Firestore directo.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
