@@ -1164,6 +1164,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/commercial-items/utils.ts` queda como reexport de compatibilidad para consumidores existentes.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo cuadragesimo noveno corte aplicado
+
+- `src/lib/server/supervisor-comments.ts` concentra listado por entidad/inbox, alta, borrado, respuestas y marcado como visto.
+- Las rutas `/api/supervisor-comments`, `/api/supervisor-comments/[commentId]`, `reply` y `seen` dejan de operar Firestore directo.
+- `src/app/api/supervisor-comments/errors.ts` ahora respeta errores de dominio 400/403/404.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
