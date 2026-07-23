@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { ClientDetails } from '@/components/clients/client-details';
@@ -31,7 +31,7 @@ export default function ClientPage() {
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [loadingClient, setLoadingClient] = useState(true);
 
-  const fetchClientData = async () => {
+  const fetchClientData = useCallback(async () => {
     if (!id) return;
     setLoadingClient(true);
     try {
@@ -54,12 +54,12 @@ export default function ClientPage() {
     } finally {
       setLoadingClient(false);
     }
-  };
+  }, [id, router, toast]);
 
 
   useEffect(() => {
     fetchClientData();
-  }, [id, router, toast]);
+  }, [fetchClientData]);
 
   const userHasAccess = useMemo(() => {
     if (!client || !userInfo) return false;

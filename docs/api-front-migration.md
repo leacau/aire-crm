@@ -1030,6 +1030,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se empieza a aplicar el patron API route delgada + servicio server en entidades simples.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo trigesimo corte aplicado
+
+- Se corrigen los alerts del deploy de Vercel limpiando warnings de hooks en pantallas y componentes compartidos.
+- `next.config.ts` filtra de forma localizada el warning conocido de OpenTelemetry generado por Genkit.
+- Grilla PDF usa `next/image` para el logo y memoiza los dias semanales usados para cargar disponibilidad.
+- `use-auth` mantiene estable el flujo de tokens Google sin cambiar la validacion de sesion.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

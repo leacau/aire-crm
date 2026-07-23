@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -79,7 +79,7 @@ function ApprovalsPageComponent() {
     return new Date();
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!userInfo) return;
     setLoading(true);
     try {
@@ -94,13 +94,13 @@ function ApprovalsPageComponent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, userInfo]);
 
   useEffect(() => {
     if (userInfo) {
       fetchData();
     }
-  }, [userInfo]);
+  }, [fetchData, userInfo]);
 
   const ensureProgramsLoaded = async () => {
     if (programs.length > 0) return;

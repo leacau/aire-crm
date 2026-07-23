@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
@@ -57,27 +57,8 @@ export default function DataCleanupPage() {
     // Seguridad: Solo Jefes y Gerencia
     const canAccess = userInfo && (isBoss || userInfo.role === 'Gerencia' || userInfo.role === 'Jefe');
 
-    useEffect(() => {
-        if (canAccess) {
-            loadData();
-        }
-    }, [canAccess]);
-
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            const data = await getClients();
-            setClients(data);
-            runDuplicateDetection(data);
-        } catch (e) {
-            toast({ title: 'Error al cargar datos', variant: 'destructive' });
-        } finally {
-            setLoading(false);
-        }
-    };
-
     // 🟢 MOTOR DE DETECCIÓN AUTOMÁTICA DE DUPLICADOS
-    const runDuplicateDetection = (allClients: Client[]) => {
+    const runDuplicateDetection = useCallback((allClients: Client[]) => {
         const groups: DuplicateGroup[] = [];
         const processedPairs = new Set<string>();
 
@@ -143,7 +124,26 @@ export default function DataCleanupPage() {
         }
 
         setDuplicateGroups(groups);
-    };
+    }, []);
+
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const data = await getClients();
+            setClients(data);
+            runDuplicateDetection(data);
+        } catch (e) {
+            toast({ title: 'Error al cargar datos', variant: 'destructive' });
+        } finally {
+            setLoading(false);
+        }
+    }, [runDuplicateDetection, toast]);
+
+    useEffect(() => {
+        if (canAccess) {
+            loadData();
+        }
+    }, [canAccess, loadData]);
 
     // Filtros para la búsqueda manual
     const filteredTargets = useMemo(() => {

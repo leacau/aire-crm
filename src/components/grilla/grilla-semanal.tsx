@@ -22,8 +22,8 @@ interface GrillaSemanalProps {
 }
 
 export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeleteProgram, canManage, currentDate }: GrillaSemanalProps) {
-  const startOfGivenWeek = startOfWeek(currentDate, { weekStartsOn: 1 }); // Monday
-  const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(startOfGivenWeek, i));
+  const startOfGivenWeek = useMemo(() => startOfWeek(currentDate, { weekStartsOn: 1 }), [currentDate]); // Monday
+  const weekDays = useMemo(() => Array.from({ length: 7 }).map((_, i) => addDays(startOfGivenWeek, i)), [startOfGivenWeek]);
 
   const [availability, setAvailability] = useState<Record<string, boolean>>({});
 
@@ -48,7 +48,7 @@ export function GrillaSemanal({ programs, onDayClick, onEditProgram, onDeletePro
     };
 
     fetchAvailability();
-  }, [currentDate, programs]);
+  }, [programs, weekDays]);
 
 
   return (

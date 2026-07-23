@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -64,7 +64,7 @@ export function CommentThread({
 
   const canStartThread = allowedStarterRoles.includes(currentUser.role);
 
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
     if (!entityId) return;
     setLoading(true);
     try {
@@ -81,11 +81,11 @@ export function CommentThread({
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser, entityId, entityType, onMarkedSeen]);
 
   useEffect(() => {
     loadComments();
-  }, [entityId, entityType]);
+  }, [loadComments]);
 
   const notifyUser = async (userId?: string, subject?: string, body?: string) => {
     if (!userId || !subject || !body) return;

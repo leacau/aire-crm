@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { getBillingRequestsByClient, getInvoicesForClient, getOpportunitiesByClientId } from '@/lib/api/clients';
 import { createInvoice, updateInvoice } from '@/lib/api/invoices';
@@ -47,15 +47,11 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
     const canEditAdminFields = isBoss || isAdmin; // Jefe o Admin
     const canEditFacturaFields = isBoss || isAsesor || isAdmin; // Ambos pueden completar la factura
 
-    useEffect(() => {
-        loadData();
-    }, [clientId]);
-
-    const calculateStatus = (orderNumber?: string, invoiceNumber?: string, date?: string): CarpetaBillingStatus => {
+    const calculateStatus = useCallback((orderNumber?: string, invoiceNumber?: string, date?: string): CarpetaBillingStatus => {
         if (invoiceNumber && date) return 'Facturado';
         if (orderNumber) return 'Pedido Realizado';
         return 'Pendiente de Pedido';
-    };
+    }, []);
 
     const getStatusBadge = (status: CarpetaBillingStatus) => {
         switch (status) {
@@ -68,7 +64,7 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
         }
     };
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
 
         const [allOpps, allInvoices, allBillingRequests] = await Promise.all([
@@ -137,7 +133,11 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
 
         setRows(newRows);
         setLoading(false);
-    };
+    }, [calculateStatus, clientId]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     const handleRowChange = (index: number, field: keyof RowData, value: string | number) => {
         const newRows = [...rows];
