@@ -299,11 +299,11 @@ function ApprovalsPageComponent() {
       await waitForImages(element);
 
       const canvas = await withTimeout(
-        html2canvas(element, { scale: 2, useCORS: true }),
+        html2canvas(element, { scale: 1.4, useCORS: true }),
         CLIENT_PDF_TIMEOUT_MS,
         'No se pudo generar el PDF de alta del cliente a tiempo.'
       );
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/jpeg', 0.72);
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
@@ -312,7 +312,7 @@ function ApprovalsPageComponent() {
       const heightInPdf = widthInPdf / ratio;
       const y = heightInPdf < pdfHeight ? (pdfHeight - heightInPdf) / 2 : 0;
 
-      pdf.addImage(imgData, 'PNG', 0, y, widthInPdf, heightInPdf);
+      pdf.addImage(imgData, 'JPEG', 0, y, widthInPdf, heightInPdf);
       return pdf.output('datauristring').split(',')[1];
     } finally {
       setClientPdfData(null);
@@ -322,7 +322,7 @@ function ApprovalsPageComponent() {
   // 🟢 MOTOR AVANZADO DE GENERACIÓN DE PDF PARA LA APROBACIÓN Y RENOTIFICACIÓN
   const generateAdvancedPdf = async (containerElement: HTMLElement, itemType: ApprovalItemType) => {
       if (itemType !== 'Orden de Publicidad') {
-        return generatePaginatedPdfFromElement(containerElement);
+        return generatePaginatedPdfFromElement(containerElement, { scale: 1.25, imageQuality: 0.72 });
       }
 
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
@@ -374,13 +374,13 @@ function ApprovalsPageComponent() {
       });
 
       const canvas = await html2canvas(containerElement, { 
-          scale: 1.5, 
+          scale: 1.15,
           useCORS: true, 
           logging: false,
           backgroundColor: '#ffffff' 
       });
       
-      const imgData = canvas.toDataURL('image/jpeg', 0.8);
+      const imgData = canvas.toDataURL('image/jpeg', 0.68);
       const ratio = canvas.width / canvas.height;
       const mappedHeight = pdfWidthMm / ratio;
 
