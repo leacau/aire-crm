@@ -20,7 +20,7 @@ import { getBillingRequestsByOrder } from '@/lib/api/billing-requests';
 import { getClient } from '@/lib/api/clients';
 import { getPrograms } from '@/lib/api/programs';
 import { getUserById } from '@/lib/api/users';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail } from '@/lib/api/google-services';
 import dynamic from 'next/dynamic';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 import { getApprovals, updateApprovalStatus } from '@/lib/api/approvals';

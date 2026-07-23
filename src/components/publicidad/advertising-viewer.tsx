@@ -12,7 +12,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { sendEmail } from "@/lib/google-gmail-service";
+import { sendEmail } from "@/lib/api/google-services";
 import { getBillingRequestsByOrder } from "@/lib/api/billing-requests";
 import { getClient } from "@/lib/api/clients";
 import { deleteWebNote, getWebNotesByOrderId } from "@/lib/api/web-notes";

@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { NotePdf } from '@/components/notas/note-pdf';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail } from '@/lib/api/google-services';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 

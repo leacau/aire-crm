@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail } from '@/lib/api/google-services';
 import { format } from 'date-fns';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';

@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 import { AdvisorAlertsPanel } from '@/components/objectives/advisor-alerts-panel';
 import { buildAdvisorAlerts, type AdvisorAlert } from '@/lib/advisor-alerts';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail } from '@/lib/api/google-services';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useNotifications } from '@/hooks/use-notifications';

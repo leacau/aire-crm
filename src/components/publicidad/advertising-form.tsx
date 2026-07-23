@@ -30,7 +30,7 @@ import { getWorkflowAssignments } from "@/lib/api/system";
 import { getAllUsers } from "@/lib/api/users";
 import { Client, Agency, AdvertisingOrder, User, ApprovalStatus, Opportunity } from "@/lib/types";
 import { useAuth } from "@/hooks/use-auth";
-import { sendEmail } from "@/lib/google-gmail-service";
+import { sendEmail } from "@/lib/api/google-services";
 import { hasManagementPrivileges } from "@/lib/role-utils";
 
 import { SrlSection } from "./srl-section";

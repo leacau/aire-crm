@@ -988,6 +988,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Envio de correos y eventos de calendario normalizan errores desde una libreria de API de front.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo vigesimo cuarto corte aplicado
+
+- Las pantallas y servicios que envian correos o eventos de calendario importan directo desde `src/lib/api/google-services.ts`.
+- Se elimina el shim legacy `src/lib/google-gmail-service.ts`.
+- La capa de integraciones Google queda alineada con el patron de clientes API de front.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

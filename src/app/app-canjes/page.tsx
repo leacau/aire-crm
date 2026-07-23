@@ -10,7 +10,7 @@ import { createOpportunity, getOpportunityById, updateOpportunity } from '@/lib/
 import { getPrograms } from '@/lib/api/programs';
 import { getProspects } from '@/lib/api/prospects';
 import type { Client, Program, Prospect, ConvenioCanje, CondicionIVA, TipoEntidad, AdvertisingOrder } from '@/lib/types';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail } from '@/lib/api/google-services';
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';

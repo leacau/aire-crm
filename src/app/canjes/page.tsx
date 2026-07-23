@@ -14,7 +14,7 @@ import { migrateLegacyConveniosToCanjes } from '@/lib/api/convenios';
 import { getWorkflowAssignments } from '@/lib/api/system';
 import { getAllUsers } from '@/lib/api/users';
 import { useToast } from '@/hooks/use-toast';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail } from '@/lib/api/google-services';
 import { ResizableDataTable } from '@/components/ui/resizable-data-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';

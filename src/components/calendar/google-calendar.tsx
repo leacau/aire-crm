@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { getCalendarEvents } from '@/lib/google-calendar-service';
 // CORRECCIÓN: Importamos updateCalendarEvent
-import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/lib/google-gmail-service';
+import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/lib/api/google-services';
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

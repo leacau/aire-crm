@@ -1,7 +1,7 @@
 'use client';
 
 import { apiRequest } from '@/lib/api-client';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail } from '@/lib/api/google-services';
 import { getWorkflowAssignments } from '@/lib/api/system';
 import { getUserById } from '@/lib/api/users';
 import { format } from 'date-fns';

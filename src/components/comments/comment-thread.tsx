@@ -17,7 +17,7 @@ import {
   markSupervisorCommentThreadSeen,
 } from '@/lib/api/supervisor-comments';
 import { getUserById } from '@/lib/api/users';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail } from '@/lib/api/google-services';
 import type { SupervisorComment, User } from '@/lib/types';
 
 interface CommentThreadProps {

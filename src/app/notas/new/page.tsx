@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { NotePdf } from '@/components/notas/note-pdf';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail } from '@/lib/api/google-services';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 import { ClientCombobox } from '@/components/clients/client-combobox';

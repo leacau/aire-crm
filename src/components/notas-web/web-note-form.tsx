@@ -9,7 +9,7 @@ import { getAdvertisingOrdersByClientId, getClients } from '@/lib/api/clients';
 import { getAllUsers } from '@/lib/api/users';
 import { getWebNote, saveWebNote, updateWebNote } from '@/lib/api/web-notes';
 import { AdvertisingOrder, Client, WebNote, User, WebNoteFormat, WebNoteImageSupport } from '@/lib/types';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail } from '@/lib/api/google-services';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 
 import { Button } from '@/components/ui/button';

@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { CalendarIcon, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createClientActivity } from '@/lib/api/client-activities';
-import { createCalendarEvent } from '@/lib/google-gmail-service';
+import { createCalendarEvent } from '@/lib/api/google-services';
 import type { Opportunity, ClientActivity, User } from '@/lib/types';
 import { Spinner } from '../ui/spinner';
 

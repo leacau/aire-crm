@@ -82,7 +82,7 @@ import { deleteOpportunity, updateOpportunity } from '@/lib/api/opportunities';
 import { createPerson, deletePerson, updatePerson } from '@/lib/api/people';
 import { getPrograms } from '@/lib/api/programs';
 import { getAllUsers } from '@/lib/api/users';
-import { sendEmail, createCalendarEvent, deleteCalendarEvent } from '@/lib/google-gmail-service';
+import { sendEmail, createCalendarEvent, deleteCalendarEvent } from '@/lib/api/google-services';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';

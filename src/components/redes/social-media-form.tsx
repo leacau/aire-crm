@@ -11,7 +11,7 @@ import { getAdvertisingOrdersByClientId, getClients } from '@/lib/api/clients';
 import { getAllUsers } from '@/lib/api/users';
 import { getSocialMediaRequest, saveSocialMediaRequest, updateSocialMediaRequest } from '@/lib/api/social-media-requests';
 import { AdvertisingOrder, Client, SocialMediaRequest, User, CarouselSlide } from '@/lib/types';
-import { sendEmail } from '@/lib/google-gmail-service';
+import { sendEmail } from '@/lib/api/google-services';
 import { hasManagementPrivileges } from '@/lib/role-utils';
 import { advertisingOrderSupportsExecution, getSuggestedSocialMediaType } from '@/lib/advertising-order-utils';
 
