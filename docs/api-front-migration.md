@@ -1038,6 +1038,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `use-auth` mantiene estable el flujo de tokens Google sin cambiar la validacion de sesion.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo trigesimo primer corte aplicado
+
+- Se regenera `package-lock.json` para eliminar el warning de Vercel sobre lockfile dañado y dependencias SWC faltantes.
+- `next` y los binarios SWC Linux quedan fijados en `15.5.19` para evitar subidas de patch no validadas durante deploy.
+- Las paginas legales se marcan como cliente porque usan `Button asChild` de Radix en el primer render.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
