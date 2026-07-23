@@ -1002,6 +1002,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se elimina `src/lib/google-calendar-service.ts`, que consultaba Google Calendar directo desde el front.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo vigesimo sexto corte aplicado
+
+- La subida de avatar a Google Drive pasa por `POST /api/services/drive/avatar`.
+- `src/lib/api/google-services.ts` suma `uploadAvatarToDrive()` y `settings` deja de importar un servicio Drive legacy.
+- La API usa el UID autenticado para nombrar la imagen, evitando confiar en un `userId` enviado desde el front.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

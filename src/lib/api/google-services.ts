@@ -136,3 +136,23 @@ export async function deleteCalendarEvent(accessToken: string, eventId: string, 
 
   return response.json();
 }
+
+export async function uploadAvatarToDrive(accessToken: string, file: File): Promise<string> {
+  const formData = new FormData();
+  formData.set('file', file);
+
+  const response = await apiFetch('/api/services/drive/avatar', {
+    method: 'POST',
+    headers: {
+      'x-google-access-token': accessToken,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw await readServiceError(response, 'No se pudo subir la imagen de perfil.');
+  }
+
+  const payload = await response.json();
+  return payload.url;
+}

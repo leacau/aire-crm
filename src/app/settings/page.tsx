@@ -15,7 +15,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { ArrowLeft, Shield, UploadCloud, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useDropzone } from 'react-dropzone';
-import { uploadAvatarToDrive } from '@/lib/google-avatar-service';
+import { uploadAvatarToDrive } from '@/lib/api/google-services';
 import { getEmailWhitelist, updateEmailWhitelist } from '@/lib/api/system';
 import { createExternalCanjeUser, updateUserProfile } from '@/lib/api/users';
 import { hasManagementPrivileges } from '@/lib/role-utils';
@@ -131,7 +131,7 @@ export default function SettingsPage() {
             throw new Error("No se pudo obtener el token de acceso de Google. Intenta iniciar sesión de nuevo.");
         }
 
-        const fileUrl = await uploadAvatarToDrive(token, file, user.uid);
+        const fileUrl = await uploadAvatarToDrive(token, file);
         
         await updateProfile(user, { photoURL: fileUrl });
         await updateUserProfile(user.uid, { photoURL: fileUrl });
