@@ -1,20 +1,23 @@
 'use client';
 
-import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import {
+  getCurrentAuthUser,
+  onAuthUserChanged,
+  type AuthClientUser,
+} from '@/lib/auth-client';
 
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
-  user?: FirebaseUser | null;
+  user?: AuthClientUser | null;
 };
 
 type ApiFetchOptions = RequestInit & {
-  user?: FirebaseUser | null;
+  user?: AuthClientUser | null;
 };
 
 const AUTH_READY_TIMEOUT_MS = 5000;
 
-let authReadyPromise: Promise<FirebaseUser | null> | null = null;
+let authReadyPromise: Promise<AuthClientUser | null> | null = null;
 
 export class ApiError extends Error {
   status: number;
@@ -28,21 +31,22 @@ export class ApiError extends Error {
   }
 }
 
-function waitForAuthUser(): Promise<FirebaseUser | null> {
-  if (auth.currentUser) {
-    return Promise.resolve(auth.currentUser);
+function waitForAuthUser(): Promise<AuthClientUser | null> {
+  const currentUser = getCurrentAuthUser();
+  if (currentUser) {
+    return Promise.resolve(currentUser);
   }
 
   if (authReadyPromise) {
     return authReadyPromise;
   }
 
-  authReadyPromise = new Promise<FirebaseUser | null>((resolve) => {
+  authReadyPromise = new Promise<AuthClientUser | null>((resolve) => {
     let settled = false;
     let unsubscribe: (() => void) | undefined;
     let timeoutId: number | undefined;
 
-    const finish = (user: FirebaseUser | null) => {
+    const finish = (user: AuthClientUser | null) => {
       if (settled) return;
       settled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
@@ -50,11 +54,10 @@ function waitForAuthUser(): Promise<FirebaseUser | null> {
       resolve(user);
     };
 
-    timeoutId = window.setTimeout(() => finish(auth.currentUser), AUTH_READY_TIMEOUT_MS);
-    unsubscribe = onAuthStateChanged(
-      auth,
+    timeoutId = window.setTimeout(() => finish(getCurrentAuthUser()), AUTH_READY_TIMEOUT_MS);
+    unsubscribe = onAuthUserChanged(
       (user) => finish(user),
-      () => finish(auth.currentUser),
+      () => finish(getCurrentAuthUser()),
     );
   }).finally(() => {
     authReadyPromise = null;
@@ -63,11 +66,11 @@ function waitForAuthUser(): Promise<FirebaseUser | null> {
   return authReadyPromise;
 }
 
-export function getApiAuthUser(): Promise<FirebaseUser | null> {
+export function getApiAuthUser(): Promise<AuthClientUser | null> {
   return waitForAuthUser();
 }
 
-async function getToken(user: FirebaseUser | null | undefined, forceRefresh: boolean) {
+async function getToken(user: AuthClientUser | null | undefined, forceRefresh: boolean) {
   const currentUser = user ?? (await waitForAuthUser());
   const token = await currentUser?.getIdToken(forceRefresh);
   return token || null;

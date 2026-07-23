@@ -1,7 +1,7 @@
 'use client';
 
-import type { User as FirebaseUser } from 'firebase/auth';
 import { apiRequest } from '@/lib/api-client';
+import type { AuthClientUser } from '@/lib/auth-client';
 import type { AreaType, ScreenName, ScreenPermission, User } from '@/lib/types';
 
 export type AuthSession = {
@@ -9,10 +9,9 @@ export type AuthSession = {
   permissions: Record<AreaType, Partial<Record<ScreenName, ScreenPermission>>>;
 };
 
-export function getAuthSession(user: FirebaseUser) {
+export function getAuthSession(user: AuthClientUser) {
   return apiRequest<AuthSession>('/api/auth/session', {
     method: 'POST',
     user,
   });
 }
-

@@ -18,8 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from '@/hooks/use-auth';
-import { auth } from '@/lib/firebase';
-import { signOut } from 'firebase/auth';
+import { signOutCurrentUser } from '@/lib/auth-client';
 import Link from 'next/link';
 import { LogOut, Settings } from "lucide-react";
 
@@ -28,7 +27,7 @@ export function UserNav() {
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      await signOutCurrentUser();
       sessionStorage.clear(); 
     } catch (error) {
       console.error('Error signing out', error);

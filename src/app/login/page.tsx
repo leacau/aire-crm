@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithPopup, signInWithEmailAndPassword, GoogleAuthProvider } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { signInExternalUser, signInWithGoogle } from '@/lib/auth-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
@@ -22,13 +21,7 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-
-      provider.setCustomParameters({
-        prompt: 'select_account',
-      });
-
-      await signInWithPopup(auth, provider);
+      await signInWithGoogle();
       localStorage.removeItem('google_api_token');
       localStorage.removeItem('google_api_token_expiry');
       sessionStorage.removeItem('google-access-token');
@@ -56,7 +49,7 @@ export default function LoginPage() {
     if (!externalEmail.trim() || !externalPassword) return;
     setExternalLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, externalEmail.trim().toLowerCase(), externalPassword);
+      await signInExternalUser(externalEmail, externalPassword);
       router.push('/');
     } catch {
       toast({

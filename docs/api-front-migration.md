@@ -1213,6 +1213,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - El escaneo de rutas API queda sin handlers que importen `firebase-admin` directamente.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo quincuagesimo sexto corte aplicado
+
+- `src/lib/auth-client.ts` encapsula login Google, login externo, logout, escucha de sesion, update de perfil y scopes Google.
+- Login, Settings, UserNav, `use-auth` y `api-client` dejan de importar Firebase Auth directo.
+- `src/lib/firebase.ts` deja de inicializar Firestore en el cliente; el front mantiene solo Firebase Auth como proveedor de identidad.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

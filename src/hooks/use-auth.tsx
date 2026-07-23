@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
-import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
 import type { User } from '@/lib/types';
@@ -11,11 +9,18 @@ import { useToast } from '@/hooks/use-toast';
 import { getAuthSession } from '@/lib/api/auth';
 import { hydratePermissionsCache } from '@/lib/permissions';
 import { ApiError } from '@/lib/api-client';
+import {
+  getCurrentAuthUser,
+  onAuthUserChanged,
+  requestGoogleServicesAccessToken,
+  signOutCurrentUser,
+  type AuthClientUser,
+} from '@/lib/auth-client';
 
 const publicRoutes = ['/login', '/register', '/privacy-policy', '/terms-of-service', '/'];
 
 interface AuthContextType {
-  user: FirebaseUser | null;
+  user: AuthClientUser | null;
   userInfo: User | null;
   loading: boolean;
   isBoss: boolean;
@@ -35,7 +40,7 @@ const AuthContext = createContext<AuthContextType>({
 let googleAccessTokenMemory: { token: string; expiresAt: number } | null = null;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [user, setUser] = useState<AuthClientUser | null>(null);
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -79,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearStoredToken]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onAuthUserChanged(async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
 
@@ -96,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false);
 
           if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-            await auth.signOut();
+            await signOutCurrentUser();
             setUser(null);
             toast({
               title: 'Acceso Denegado',
@@ -159,25 +164,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (options?.silent) return null;
 
-    if (auth.currentUser) {
-      const provider = new GoogleAuthProvider();
-
-      provider.setCustomParameters({
-        include_granted_scopes: 'true',
-      });
-
-      provider.addScope('https://www.googleapis.com/auth/calendar.events');
-      provider.addScope('https://www.googleapis.com/auth/gmail.send');
-
+    if (getCurrentAuthUser()) {
       try {
-        const result = await signInWithPopup(auth, provider);
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        const token = credential?.accessToken;
-        // @ts-ignore
-        const expiresIn = result._tokenResponse?.oauthExpiresIn ? parseInt(result._tokenResponse.oauthExpiresIn) : 3600;
+        const { token, expiresInSeconds } = await requestGoogleServicesAccessToken();
 
         if (token) {
-          saveTokenToStorage(token, expiresIn);
+          saveTokenToStorage(token, expiresInSeconds);
           sessionStorage.setItem('google-access-validated', 'true');
           return token;
         }

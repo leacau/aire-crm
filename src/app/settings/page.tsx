@@ -2,8 +2,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { updateProfile } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { updateAuthProfile } from '@/lib/auth-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -49,7 +48,7 @@ export default function SettingsPage() {
     if (!user || !userInfo) return;
     setLoading(true);
     try {
-      await updateProfile(user, { displayName: name });
+      await updateAuthProfile(user, { displayName: name });
       await updateUserProfile(user.uid, { name });
       toast({
         title: 'Perfil actualizado',
@@ -133,7 +132,7 @@ export default function SettingsPage() {
 
         const fileUrl = await uploadAvatarToDrive(token, file);
         
-        await updateProfile(user, { photoURL: fileUrl });
+        await updateAuthProfile(user, { photoURL: fileUrl });
         await updateUserProfile(user.uid, { photoURL: fileUrl });
         window.location.reload(); 
     } catch (error: any) {
