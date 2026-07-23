@@ -1108,6 +1108,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/prospects/errors.ts` unifica respuestas controladas para errores de dominio y fallas server.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo cuadragesimo primer corte aplicado
+
+- `src/lib/server/opportunities.ts` concentra listado por scope, alta, lectura, edicion, borrado, validacion de vigencias, renovaciones, generacion de pautas y facturas pendientes.
+- Las rutas `/api/opportunities` y `/api/opportunities/[opportunityId]` dejan de operar Firestore directo.
+- `src/app/api/opportunities/errors.ts` unifica respuestas controladas para validaciones, permisos y fallas server.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
