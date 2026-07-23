@@ -1045,6 +1045,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Las paginas legales se marcan como cliente porque usan `Button asChild` de Radix en el primer render.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo trigesimo segundo corte aplicado
+
+- `src/lib/server/programs.ts` concentra lectura, alta, edicion, borrado, mapeo legacy y auditoria de programas.
+- Las rutas `/api/programs`, `/api/programs/[programId]` y `/api/public/programs` quedan como handlers finos.
+- `src/app/api/programs/utils.ts` queda como reexport de compatibilidad hacia la capa server.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

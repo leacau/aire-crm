@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
-import { dbAdmin } from '@/lib/firebase-admin';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { logServerActivity } from '@/lib/server/activity';
 import { hasServerScreenPermission } from '@/lib/server/screen-permissions';
-import { getRequesterName } from '@/app/api/clients/utils';
 import { programErrorResponse } from '@/app/api/programs/errors';
-import { mapProgram, stripLegacyScheduleFields } from '@/app/api/programs/utils';
+import { createProgramServer, listProgramsServer } from '@/lib/server/programs';
 import type { Program } from '@/lib/types';
 
 export async function GET(request: Request) {
@@ -14,10 +10,7 @@ export async function GET(request: Request) {
   if (isServerResponse(requester)) return requester;
 
   try {
-    const snapshot = await dbAdmin.collection('programs').orderBy('name').get();
-    const programs = snapshot.docs.map(doc => mapProgram(doc.id, doc.data()));
-
-    return NextResponse.json({ programs });
+    return NextResponse.json({ programs: await listProgramsServer() });
   } catch (error) {
     return programErrorResponse(error, {
       action: 'LIST',
@@ -37,34 +30,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const programData = body?.programData as Omit<Program, 'id'> | undefined;
-    const name = programData?.name?.trim();
-
-    if (!name) {
-      return NextResponse.json({ error: 'El nombre del programa es obligatorio.' }, { status: 400 });
-    }
-
-    const requesterName = getRequesterName(requester);
-    const dataToSave = stripLegacyScheduleFields({
-      ...programData,
-      name,
-      createdBy: requester.uid,
-      createdAt: FieldValue.serverTimestamp() as any,
-    } as Partial<Program>);
-
-    const docRef = await dbAdmin.collection('programs').add(dataToSave);
-
-    await logServerActivity({
-      userId: requester.uid,
-      userName: requesterName,
-      type: 'create',
-      entityType: 'program' as any,
-      entityId: docRef.id,
-      entityName: name,
-      details: `creo el programa <strong>${name}</strong>`,
-      ownerName: requesterName,
-    });
-
-    return NextResponse.json({ id: docRef.id });
+    return NextResponse.json({ id: await createProgramServer(programData, requester) });
   } catch (error) {
     return programErrorResponse(error, {
       action: 'CREATE',

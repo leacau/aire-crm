@@ -16,6 +16,12 @@ function getErrorCode(error: unknown) {
     : undefined;
 }
 
+function getErrorStatus(error: unknown) {
+  return typeof error === 'object' && error !== null && 'status' in error
+    ? Number((error as { status?: unknown }).status) || 502
+    : 502;
+}
+
 export function programErrorResponse(error: unknown, context: ProgramErrorContext) {
   const message = getErrorMessage(error);
   console.error(`PROGRAMS ${context.action} ERROR:`, {
@@ -27,5 +33,5 @@ export function programErrorResponse(error: unknown, context: ProgramErrorContex
   return NextResponse.json({
     error: context.publicError,
     details: message,
-  }, { status: 502 });
+  }, { status: getErrorStatus(error) });
 }
