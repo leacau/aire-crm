@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
-import { dbAdmin } from '@/lib/firebase-admin';
 import { isServerResponse, requireServerManagement } from '@/lib/server/auth';
-import { logServerActivity } from '@/lib/server/activity';
-import { serializeDocument } from '@/lib/server/firestore';
-import type { Prospect } from '@/lib/types';
+import { prospectErrorResponse } from '@/app/api/prospects/errors';
+import { rejectProspectClaimServer } from '@/lib/server/prospects';
 
 type RouteContext = {
   params: Promise<{ prospectId: string }>;
@@ -16,43 +13,14 @@ export async function POST(request: Request, context: RouteContext) {
 
   try {
     const { prospectId } = await context.params;
-    const docRef = dbAdmin.collection('prospects').doc(prospectId);
-    const snapshot = await docRef.get();
-    if (!snapshot.exists) {
-      return NextResponse.json({ error: 'Prospecto no encontrado.' }, { status: 404 });
-    }
-
-    const prospect = serializeDocument<Prospect>(snapshot.id, snapshot.data());
-
-    await docRef.update({
-      claimStatus: FieldValue.delete(),
-      claimantId: FieldValue.delete(),
-      claimantName: FieldValue.delete(),
-      claimedAt: FieldValue.delete(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    await logServerActivity({
-      userId: requester.uid,
-      userName: requester.name || requester.email || 'Usuario',
-      type: 'update',
-      entityType: 'prospect',
-      entityId: prospectId,
-      entityName: prospect.companyName,
-      details: `rechazo la solicitud de reclamo de <strong>${prospect.claimantName || prospect.companyName}</strong>`,
-      ownerName: 'Sin Asignar',
-    });
+    await rejectProspectClaimServer(prospectId, requester);
 
     return NextResponse.json({ ok: true });
-  } catch (error: any) {
-    console.error('PROSPECT CLAIM REJECT ERROR:', {
-      requester: requester.uid,
-      code: error?.code,
-      message: error?.message,
+  } catch (error) {
+    return prospectErrorResponse(error, {
+      action: 'CLAIM REJECT',
+      requesterId: requester.uid,
+      publicError: 'No se pudo rechazar el reclamo del prospecto.',
     });
-    return NextResponse.json({
-      error: 'No se pudo rechazar el reclamo del prospecto.',
-      details: error?.message || 'Error desconocido',
-    }, { status: 502 });
   }
 }

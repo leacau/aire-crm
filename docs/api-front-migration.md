@@ -1101,6 +1101,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/clients/utils.ts` queda como reexport de compatibilidad para dominios que aun migraran luego.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo cuadragesimo corte aplicado
+
+- `src/lib/server/prospects.ts` concentra listado, alta, edicion, borrado, reclamos, aprobaciones, rechazos, liberacion masiva y registro de notificaciones.
+- Las rutas `/api/prospects`, `/api/prospects/[prospectId]`, `claim`, `claim/approve`, `claim/reject`, `bulk-release` y `notifications` dejan de operar Firestore directo.
+- `src/app/api/prospects/errors.ts` unifica respuestas controladas para errores de dominio y fallas server.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
