@@ -1,26 +1,7 @@
 import { NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
-import { dbAdmin } from '@/lib/firebase-admin';
-import { getRequesterName } from '@/app/api/clients/utils';
+import { webNoteErrorResponse } from '@/app/api/web-notes/errors';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { logServerActivity } from '@/lib/server/activity';
-import {
-  canAssignAdvisorScopedOwner,
-  filterAccessibleAdvisorScopedRecords,
-} from '@/lib/server/advisor-scoped-access';
-import { cleanWebNotePayload, compareWebNotesByCreatedAtDesc, mapWebNote } from '@/app/api/web-notes/utils';
-import type { WebNote } from '@/lib/types';
-
-async function getFilteredWebNotes(field?: string, value?: string): Promise<WebNote[]> {
-  const collectionRef = dbAdmin.collection('web_notes');
-  const snapshot = field && value
-    ? await collectionRef.where(field, '==', value).get()
-    : await collectionRef.get();
-
-  return snapshot.docs
-    .map(doc => mapWebNote(doc.id, doc.data()))
-    .sort(compareWebNotesByCreatedAtDesc);
-}
+import { createWebNoteServer, listWebNotesServer } from '@/lib/server/web-notes';
 
 export async function GET(request: Request) {
   const requester = await requireServerUser(request);
@@ -28,31 +9,18 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const clientId = searchParams.get('clientId');
-    const orderId = searchParams.get('orderId');
-
-    let notes: WebNote[];
-    if (clientId) {
-      notes = await getFilteredWebNotes('clientId', clientId);
-    } else if (orderId) {
-      notes = await getFilteredWebNotes('orderId', orderId);
-    } else {
-      notes = await getFilteredWebNotes();
-    }
-
-    notes = await filterAccessibleAdvisorScopedRecords(notes, requester);
-
-    return NextResponse.json({ notes });
-  } catch (error: any) {
-    console.error('WEB NOTES LIST ERROR:', {
-      requester: requester.uid,
-      code: error?.code,
-      message: error?.message,
-    });
     return NextResponse.json({
-      error: 'No se pudieron cargar las notas web.',
-      details: error?.message || 'Error desconocido',
-    }, { status: 502 });
+      notes: await listWebNotesServer({
+        clientId: searchParams.get('clientId'),
+        orderId: searchParams.get('orderId'),
+      }, requester),
+    });
+  } catch (error) {
+    return webNoteErrorResponse(error, {
+      action: 'LIST',
+      requesterId: requester.uid,
+      publicError: 'No se pudieron cargar las notas web.',
+    });
   }
 }
 
@@ -62,49 +30,12 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const noteData = body?.noteData as Omit<WebNote, 'id' | 'createdAt'> | undefined;
-
-    if (!noteData?.clientId || !noteData.clientName || !noteData.format) {
-      return NextResponse.json({ error: 'Cliente y formato son obligatorios.' }, { status: 400 });
-    }
-
-    const requesterName = getRequesterName(requester);
-    const advisorId = canAssignAdvisorScopedOwner(requester) && noteData.advisorId
-      ? noteData.advisorId
-      : requester.uid;
-    const advisorName = canAssignAdvisorScopedOwner(requester) && noteData.advisorName
-      ? noteData.advisorName
-      : requesterName;
-    const dataToSave = {
-      ...cleanWebNotePayload(noteData as unknown as Record<string, unknown>),
-      advisorId,
-      advisorName,
-      createdAt: FieldValue.serverTimestamp(),
-    };
-
-    const docRef = await dbAdmin.collection('web_notes').add(dataToSave);
-
-    await logServerActivity({
-      userId: requester.uid,
-      userName: requesterName,
-      type: 'create',
-      entityType: 'commercial_note' as any,
-      entityId: docRef.id,
-      entityName: noteData.clientName,
-      details: `cargo un pedido de Nota Web / Gacetilla para <strong>${noteData.clientName}</strong>`,
-      ownerName: advisorName,
+    return NextResponse.json({ id: await createWebNoteServer(body, requester) });
+  } catch (error) {
+    return webNoteErrorResponse(error, {
+      action: 'CREATE',
+      requesterId: requester.uid,
+      publicError: 'No se pudo crear la nota web.',
     });
-
-    return NextResponse.json({ id: docRef.id });
-  } catch (error: any) {
-    console.error('WEB NOTE CREATE ERROR:', {
-      requester: requester.uid,
-      code: error?.code,
-      message: error?.message,
-    });
-    return NextResponse.json({
-      error: 'No se pudo crear la nota web.',
-      details: error?.message || 'Error desconocido',
-    }, { status: 502 });
   }
 }
