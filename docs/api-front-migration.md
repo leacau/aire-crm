@@ -1185,6 +1185,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/canjes/utils.ts` queda como reexport de compatibilidad para consumidores existentes.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo quincuagesimo segundo corte aplicado
+
+- `src/lib/server/advertising-orders.ts` concentra listados por oportunidad/evento/recientes/rango, detalle, alta, edicion y borrado de ordenes.
+- Las rutas `/api/advertising-orders` y `/api/advertising-orders/[orderId]` dejan de operar Firestore directo y conservan permisos con `advertising-order-access`.
+- `src/app/api/advertising-orders/utils.ts` queda como reexport de compatibilidad para consumidores existentes.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

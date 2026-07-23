@@ -3,6 +3,12 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/auth';
+import {
+  canAccessAdvertisingOrder,
+  canCreateAdvertisingOrderForClient,
+  filterAccessibleAdvertisingOrders,
+} from '@/lib/server/advertising-order-access';
+import { getRequesterName } from '@/lib/server/clients';
 import { buildAdvertisingOrderChanges } from '@/lib/advertising-order-history';
 import { getAdvertisingOrderFinancialSummary } from '@/lib/advertising-order-utils';
 import type { AdvertisingOrder, ApprovalHistoryItem, BillingRequest } from '@/lib/types';
@@ -27,6 +33,27 @@ export function mapAdvertisingOrder(
 ): AdvertisingOrder {
   return serializeDocument<AdvertisingOrder>(id, data);
 }
+
+export function isApprovedForProgramming(order: AdvertisingOrder): boolean {
+  const status = order.status || 'Aprobado';
+  return status === 'Aprobado' || status.startsWith('Pendiente de Mod');
+}
+
+export function compareByCreatedAtDesc(left: AdvertisingOrder, right: AdvertisingOrder): number {
+  return (right.createdAt || '').localeCompare(left.createdAt || '');
+}
+
+export function compareByStartDateDesc(left: AdvertisingOrder, right: AdvertisingOrder): number {
+  return (right.startDate || right.createdAt || '').localeCompare(left.startDate || left.createdAt || '');
+}
+
+type AdvertisingOrderListFilters = {
+  opportunityId?: string | null;
+  withEvent?: boolean;
+  recent?: boolean;
+  rangeStart?: string | null;
+  rangeEnd?: string | null;
+};
 
 function splitOrderPayload<T extends OrderPayload>(orderData: T = {} as T) {
   const {
@@ -96,12 +123,95 @@ function collectBillingByCompany(snapshot: FirebaseFirestore.QuerySnapshot) {
   return { billingRequestsSrl, billingRequestsSas, billingRequestsAvion };
 }
 
+export async function listAdvertisingOrdersServer(
+  filters: AdvertisingOrderListFilters,
+  requester: ServerUser,
+): Promise<AdvertisingOrder[]> {
+  if (filters.opportunityId) {
+    const snapshot = await dbAdmin
+      .collection('advertising_orders')
+      .where('opportunityId', '==', filters.opportunityId)
+      .get();
+    return filterAccessibleAdvertisingOrders(
+      snapshot.docs.map(doc => mapAdvertisingOrder(doc.id, doc.data())),
+      requester,
+    );
+  }
+
+  if (filters.withEvent) {
+    const snapshot = await dbAdmin.collection('advertising_orders').where('event', '!=', '').get();
+    return filterAccessibleAdvertisingOrders(
+      snapshot.docs
+        .map(doc => mapAdvertisingOrder(doc.id, doc.data()))
+        .filter(order => Boolean(order.event?.trim()))
+        .sort(compareByStartDateDesc),
+      requester,
+    );
+  }
+
+  if (filters.recent) {
+    const twoMonthsAgo = new Date();
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+
+    const snapshot = await dbAdmin
+      .collection('advertising_orders')
+      .where('createdAt', '>=', twoMonthsAgo.toISOString())
+      .orderBy('createdAt', 'desc')
+      .get();
+
+    return filterAccessibleAdvertisingOrders(
+      snapshot.docs.map(doc => mapAdvertisingOrder(doc.id, doc.data())),
+      requester,
+    );
+  }
+
+  if (filters.rangeStart && filters.rangeEnd) {
+    const snapshot = await dbAdmin
+      .collection('advertising_orders')
+      .where('startDate', '<=', filters.rangeEnd)
+      .orderBy('startDate', 'desc')
+      .get();
+
+    return filterAccessibleAdvertisingOrders(
+      snapshot.docs
+        .map(doc => mapAdvertisingOrder(doc.id, doc.data()))
+        .filter(order => {
+          const orderEnd = order.endDate || order.startDate;
+          return Boolean(orderEnd && orderEnd >= filters.rangeStart! && isApprovedForProgramming(order));
+        })
+        .sort(compareByStartDateDesc),
+      requester,
+    );
+  }
+
+  throw new AdvertisingOrderApiError('Filtro de ordenes no soportado.', 400);
+}
+
+export async function getAdvertisingOrderServer(
+  orderId: string,
+  requester: ServerUser,
+): Promise<AdvertisingOrder | null> {
+  const snap = await dbAdmin.collection('advertising_orders').doc(orderId).get();
+  if (!snap.exists) return null;
+
+  const order = mapAdvertisingOrder(snap.id, snap.data());
+  if (!(await canAccessAdvertisingOrder(order, requester))) {
+    throw new AdvertisingOrderApiError('Forbidden', 403);
+  }
+
+  return order;
+}
+
 export async function createAdvertisingOrderServer(
   orderData: Omit<AdvertisingOrder, 'id' | 'createdAt'>,
   requester: ServerUser,
 ): Promise<string> {
   if (!orderData?.clientId || !orderData.product) {
     throw new AdvertisingOrderApiError('Cliente y producto son obligatorios.', 400);
+  }
+
+  if (!(await canCreateAdvertisingOrderForClient(orderData.clientId, requester))) {
+    throw new AdvertisingOrderApiError('Forbidden', 403);
   }
 
   const { billingRequestsSrl, billingRequestsSas, billingRequestsAvion, restOrderData } =
@@ -153,8 +263,7 @@ export async function createAdvertisingOrderServer(
 export async function updateAdvertisingOrderServer(
   orderId: string,
   orderData: OrderPayload,
-  userId: string,
-  userName: string,
+  requester: ServerUser,
   options?: {
     modificationReason?: string;
     userRole?: string;
@@ -172,6 +281,11 @@ export async function updateAdvertisingOrderServer(
   if (!docSnap.exists) throw new AdvertisingOrderApiError('Orden no encontrada.', 404);
 
   const previousOrder = serializeDocument<AdvertisingOrder>(docSnap.id, docSnap.data());
+  if (!(await canAccessAdvertisingOrder(previousOrder, requester))) {
+    throw new AdvertisingOrderApiError('Forbidden', 403);
+  }
+
+  const userName = getRequesterName(requester);
   const existingBrSnap = await dbAdmin.collection('billing_requests').where('orderId', '==', orderId).get();
   const previousBilling = collectBillingByCompany(existingBrSnap);
   const wasEverApproved =
@@ -223,7 +337,7 @@ export async function updateAdvertisingOrderServer(
     updatePayload.approvedByName = FieldValue.delete();
     updatePayload.revisionHistory = FieldValue.arrayUnion({
       timestamp: new Date().toISOString(),
-      userId,
+      userId: requester.uid,
       userName,
       userRole: options?.userRole || '',
       reason,
@@ -273,7 +387,7 @@ export async function updateAdvertisingOrderServer(
   await batch.commit();
 
   await logServerActivity({
-    userId,
+    userId: requester.uid,
     userName,
     type: 'update',
     entityType: 'opportunity' as any,
@@ -281,5 +395,35 @@ export async function updateAdvertisingOrderServer(
     entityName: 'Orden de Publicidad',
     details: `edito la orden de publicidad del cliente <strong>${restOrderData.clientName || previousOrder.clientName || 'Cliente'}</strong>`,
     ownerName: restOrderData.accountExecutive || previousOrder.accountExecutive || userName,
+  });
+}
+
+export async function deleteAdvertisingOrderServer(
+  orderId: string,
+  requester: ServerUser,
+): Promise<void> {
+  const docRef = dbAdmin.collection('advertising_orders').doc(orderId);
+  const snap = await docRef.get();
+
+  if (!snap.exists) {
+    throw new AdvertisingOrderApiError('Orden no encontrada', 404);
+  }
+
+  if (!hasServerManagementPrivileges(requester)) {
+    throw new AdvertisingOrderApiError('Forbidden', 403);
+  }
+
+  const order = mapAdvertisingOrder(snap.id, snap.data());
+  await docRef.delete();
+
+  await logServerActivity({
+    userId: requester.uid,
+    userName: getRequesterName(requester),
+    type: 'delete',
+    entityType: 'opportunity' as any,
+    entityId: orderId,
+    entityName: 'Orden de Publicidad',
+    details: `elimino una orden de publicidad del cliente <strong>${order.clientName || 'Cliente'}</strong>`,
+    ownerName: 'Sistema',
   });
 }
