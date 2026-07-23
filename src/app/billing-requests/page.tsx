@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
@@ -25,16 +25,7 @@ export default function BillingRequestsPage() {
     const [isReceptor, setIsReceptor] = useState(false);
     const [invoiceNumbers, setInvoiceNumbers] = useState<Record<string, string>>({});
 
-    useEffect(() => {
-        if (userInfo) {
-            getWorkflowAssignments().then(config => {
-                setIsReceptor(config.billingReceptors.includes(userInfo.id));
-                loadData();
-            });
-        }
-    }, [userInfo]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         try {
             const data = await getAllBillingRequestsWithMetadata();
@@ -44,7 +35,16 @@ export default function BillingRequestsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast]);
+
+    useEffect(() => {
+        if (userInfo) {
+            getWorkflowAssignments().then(config => {
+                setIsReceptor(config.billingReceptors.includes(userInfo.id));
+                loadData();
+            });
+        }
+    }, [loadData, userInfo]);
 
     // 1. ASESOR -> RECEPTOR (Pasa a Solicitado y notifica por mail)
     const handleRequestBilling = async (id: string) => {

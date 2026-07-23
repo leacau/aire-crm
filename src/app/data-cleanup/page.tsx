@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
@@ -35,6 +35,70 @@ interface DuplicateGroup {
     clients: Client[];
 }
 
+function detectDuplicateGroups(allClients: Client[]): DuplicateGroup[] {
+    const groups: DuplicateGroup[] = [];
+    const processedPairs = new Set<string>();
+
+    const addGroup = (reason: string, groupClients: Client[]) => {
+        if (groupClients.length < 2) return;
+        const key = groupClients.map(c => c.id).sort().join('-');
+        if (processedPairs.has(key)) return;
+        processedPairs.add(key);
+        groups.push({ id: key, reason, clients: groupClients });
+    };
+
+    const byCuit: Record<string, Client[]> = {};
+    allClients.forEach(c => {
+        if (c.cuit && c.cuit.trim().length > 6) {
+            const cleanCuit = c.cuit.replace(/[^0-9]/g, '');
+            if (!byCuit[cleanCuit]) byCuit[cleanCuit] = [];
+            byCuit[cleanCuit].push(c);
+        }
+    });
+    Object.entries(byCuit).forEach(([cuit, arr]) => {
+        if (arr.length > 1) addGroup(`Mismo CUIT (${cuit})`, arr);
+    });
+
+    const bySrl: Record<string, Client[]> = {};
+    allClients.forEach(c => {
+        if (c.idAireSrl && c.idAireSrl.toString().trim() !== '') {
+            const id = c.idAireSrl.toString().trim();
+            if (!bySrl[id]) bySrl[id] = [];
+            bySrl[id].push(c);
+        }
+    });
+    Object.entries(bySrl).forEach(([id, arr]) => {
+        if (arr.length > 1) addGroup(`Mismo ID SRL (${id})`, arr);
+    });
+
+    const bySas: Record<string, Client[]> = {};
+    allClients.forEach(c => {
+        if (c.idAireDigital && c.idAireDigital.toString().trim() !== '') {
+            const id = c.idAireDigital.toString().trim();
+            if (!bySas[id]) bySas[id] = [];
+            bySas[id].push(c);
+        }
+    });
+    Object.entries(bySas).forEach(([id, arr]) => {
+        if (arr.length > 1) addGroup(`Mismo ID Digital (${id})`, arr);
+    });
+
+    for (let i = 0; i < allClients.length; i++) {
+        const similars: Client[] = [allClients[i]];
+        for (let j = i + 1; j < allClients.length; j++) {
+            const score = stringSimilarity(allClients[i].denominacion, allClients[j].denominacion);
+            if (score > 85) {
+                similars.push(allClients[j]);
+            }
+        }
+        if (similars.length > 1) {
+            addGroup(`Nombres muy similares (${allClients[i].denominacion})`, similars);
+        }
+    }
+
+    return groups;
+}
+
 export default function DataCleanupPage() {
     const { userInfo, isBoss } = useAuth();
     const { toast } = useToast();
@@ -57,93 +121,24 @@ export default function DataCleanupPage() {
     // Seguridad: Solo Jefes y Gerencia
     const canAccess = userInfo && (isBoss || userInfo.role === 'Gerencia' || userInfo.role === 'Jefe');
 
-    useEffect(() => {
-        if (canAccess) {
-            loadData();
-        }
-    }, [canAccess]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         try {
             const data = await getClients();
             setClients(data);
-            runDuplicateDetection(data);
+            setDuplicateGroups(detectDuplicateGroups(data));
         } catch (e) {
             toast({ title: 'Error al cargar datos', variant: 'destructive' });
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast]);
 
-    // 🟢 MOTOR DE DETECCIÓN AUTOMÁTICA DE DUPLICADOS
-    const runDuplicateDetection = (allClients: Client[]) => {
-        const groups: DuplicateGroup[] = [];
-        const processedPairs = new Set<string>();
-
-        const addGroup = (reason: string, groupClients: Client[]) => {
-            if (groupClients.length < 2) return;
-            const key = groupClients.map(c => c.id).sort().join('-');
-            if (processedPairs.has(key)) return;
-            processedPairs.add(key);
-            groups.push({ id: key, reason, clients: groupClients });
-        };
-
-        // 1. Detección por CUIT
-        const byCuit: Record<string, Client[]> = {};
-        allClients.forEach(c => {
-            if (c.cuit && c.cuit.trim().length > 6) {
-                const cleanCuit = c.cuit.replace(/[^0-9]/g, '');
-                if (!byCuit[cleanCuit]) byCuit[cleanCuit] = [];
-                byCuit[cleanCuit].push(c);
-            }
-        });
-        Object.entries(byCuit).forEach(([cuit, arr]) => {
-            if (arr.length > 1) addGroup(`Mismo CUIT (${cuit})`, arr);
-        });
-
-        // 2. Detección por ID SRL
-        const bySrl: Record<string, Client[]> = {};
-        allClients.forEach(c => {
-            if (c.idAireSrl && c.idAireSrl.toString().trim() !== '') {
-                const id = c.idAireSrl.toString().trim();
-                if (!bySrl[id]) bySrl[id] = [];
-                bySrl[id].push(c);
-            }
-        });
-        Object.entries(bySrl).forEach(([id, arr]) => {
-            if (arr.length > 1) addGroup(`Mismo ID SRL (${id})`, arr);
-        });
-
-        // 3. Detección por ID SAS
-        const bySas: Record<string, Client[]> = {};
-        allClients.forEach(c => {
-            if (c.idAireDigital && c.idAireDigital.toString().trim() !== '') {
-                const id = c.idAireDigital.toString().trim();
-                if (!bySas[id]) bySas[id] = [];
-                bySas[id].push(c);
-            }
-        });
-        Object.entries(bySas).forEach(([id, arr]) => {
-            if (arr.length > 1) addGroup(`Mismo ID Digital (${id})`, arr);
-        });
-
-        // 4. Detección por Similitud de Texto (>85%)
-        for (let i = 0; i < allClients.length; i++) {
-            const similars: Client[] = [allClients[i]];
-            for (let j = i + 1; j < allClients.length; j++) {
-                const score = stringSimilarity(allClients[i].denominacion, allClients[j].denominacion);
-                if (score > 85) {
-                    similars.push(allClients[j]);
-                }
-            }
-            if (similars.length > 1) {
-                addGroup(`Nombres muy similares (${allClients[i].denominacion})`, similars);
-            }
+    useEffect(() => {
+        if (canAccess) {
+            loadData();
         }
-
-        setDuplicateGroups(groups);
-    };
+    }, [canAccess, loadData]);
 
     // Filtros para la búsqueda manual
     const filteredTargets = useMemo(() => {

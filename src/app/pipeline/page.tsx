@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
@@ -35,15 +35,7 @@ export default function PipelinePage() {
     // RESTRICCIÓN DE SEGURIDAD: Solo Jefes y Gerencia
     const canAccess = userInfo && (isBoss || userInfo.role === 'Gerencia' || userInfo.role === 'Jefe');
 
-    useEffect(() => {
-        if (canAccess) {
-            loadData();
-        } else if (userInfo) {
-            setLoading(false); 
-        }
-    }, [canAccess, userInfo]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         try {
             const data = await getPipelineInteractions();
@@ -53,7 +45,15 @@ export default function PipelinePage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast]);
+
+    useEffect(() => {
+        if (canAccess) {
+            loadData();
+        } else if (userInfo) {
+            setLoading(false);
+        }
+    }, [canAccess, loadData, userInfo]);
 
     // ==========================================
     // 🟢 LÓGICA DE IMPORTACIÓN MASIVA EXCEL/CSV

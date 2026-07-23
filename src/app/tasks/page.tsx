@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
@@ -38,7 +38,7 @@ export default function TasksPage() {
   // Estado para búsqueda
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     if (!userInfo) return;
     setLoading(true);
     try {
@@ -54,11 +54,11 @@ export default function TasksPage() {
     } finally {
         setLoading(false);
     }
-  };
+  }, [userInfo]);
 
   useEffect(() => {
     if (!authLoading) fetchTasks();
-  }, [userInfo, authLoading]);
+  }, [authLoading, fetchTasks]);
 
   const handleComplete = async (task: ClientActivity) => {
       if (!userInfo) return;

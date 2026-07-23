@@ -130,7 +130,7 @@ export function AppSidebar() {
     return () => { active = false; };
   }, [userInfo?.id]);
 
-  const rawSidebarEntries: SidebarEntry[] = [
+  const rawSidebarEntries = useMemo<SidebarEntry[]>(() => [
     { title: 'Dashboard', href: '/', icon: LayoutDashboard, screenName: 'Dashboard' },
     { title: 'Necesidades', href: '/canjes', icon: Repeat, screenName: 'Canjes' },
     { title: 'App Móvil Canjes', href: '/app-canjes', icon: Smartphone, screenName: 'AppCanjes' },
@@ -192,7 +192,7 @@ export function AppSidebar() {
         { title: 'Configuración Roles', href: '/admin/workflow-assignments', icon: Settings, screenName: 'WorkflowAssignments' },
       ]
     },
-  ];
+  ], []);
 
   const filteredEntries = useMemo(() => {
     if (!userInfo) return [];
@@ -257,7 +257,7 @@ export function AppSidebar() {
       }
       return acc;
     }, []);
-  }, [userInfo, canAccessNeeds]);
+  }, [userInfo, canAccessNeeds, rawSidebarEntries]);
 
   useEffect(() => {
     if (state === 'collapsed') return; 

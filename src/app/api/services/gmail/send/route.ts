@@ -3,6 +3,8 @@ import nodemailer from 'nodemailer';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+const GMAIL_API_TIMEOUT_MS = 25000;
+const SMTP_TIMEOUT_MS = 30000;
 
 function cleanHeader(value: unknown): string {
     return String(value || '').replace(/[\r\n]/g, ' ').trim();
@@ -46,11 +48,25 @@ function getSmtpTransporter() {
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
         port: Number(process.env.SMTP_PORT) || 465,
         secure: Number(process.env.SMTP_PORT || 465) === 465,
+        connectionTimeout: SMTP_TIMEOUT_MS,
+        greetingTimeout: SMTP_TIMEOUT_MS,
+        socketTimeout: SMTP_TIMEOUT_MS,
         auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS,
         },
     });
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 async function sendViaSmtp(params: {
@@ -167,14 +183,28 @@ export async function POST(req: Request) {
         
         const raw = Buffer.from(message.join('\r\n')).toString('base64url');
 
-        const response = await fetch('https://www.googleapis.com/gmail/v1/users/me/messages/send', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ raw }),
-        });
+        let response: Response;
+        try {
+            response = await fetchWithTimeout('https://www.googleapis.com/gmail/v1/users/me/messages/send', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ raw }),
+            }, GMAIL_API_TIMEOUT_MS);
+        } catch (error: any) {
+            if (error?.name !== 'AbortError') throw error;
+            try {
+                await sendViaSmtp({ to, subject, body, attachments, fromName, fromEmail, replyTo });
+                return NextResponse.json({ success: true, provider: 'smtp-fallback', gmailError: { error: 'Gmail API timeout' } });
+            } catch (smtpError: any) {
+                return NextResponse.json(
+                    { error: smtpError.message || 'SMTP fallback failed', code: smtpError.code || 'SMTP_FALLBACK_FAILED', gmailError: { error: 'Gmail API timeout' } },
+                    { status: smtpError.status || 504 },
+                );
+            }
+        }
 
         if (!response.ok) {
             const errorData = await response.json();

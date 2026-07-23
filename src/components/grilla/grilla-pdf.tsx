@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import type { Program, CommercialItem } from '@/lib/types';
 import { addDays, startOfWeek, format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -63,8 +64,11 @@ const DayColumn = ({ day, programs, items, options }: { day: Date, programs: any
 
 
 export const GrillaPdf = React.forwardRef<HTMLDivElement, GrillaPdfProps>(({ programs, currentDate, options }, ref) => {
-    const startOfGivenWeek = startOfWeek(currentDate, { weekStartsOn: 1 });
-    const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(startOfGivenWeek, i));
+    const weekDays = useMemo(() => {
+        const startOfGivenWeek = startOfWeek(currentDate, { weekStartsOn: 1 });
+        return Array.from({ length: 7 }).map((_, i) => addDays(startOfGivenWeek, i));
+    }, [currentDate]);
+    const startOfGivenWeek = weekDays[0];
 
     const [weekItems, setWeekItems] = useState<Record<string, CommercialItem[]>>({});
     const [loading, setLoading] = useState(true);
@@ -87,7 +91,7 @@ export const GrillaPdf = React.forwardRef<HTMLDivElement, GrillaPdfProps>(({ pro
             setLoading(false);
         };
         fetchAllWeekItems();
-    }, [currentDate, options.includeItems]);
+    }, [currentDate, options.includeItems, weekDays]);
 
     return (
       <div ref={ref} className="bg-white p-4">
@@ -99,7 +103,7 @@ export const GrillaPdf = React.forwardRef<HTMLDivElement, GrillaPdfProps>(({ pro
                 </h2>
             </div>
             <div className="w-12 h-auto">
-                 <img src="/logo.webp" alt="Logo AIRE" style={{width: '50px', height: 'auto' }} />
+                 <Image src="/logo.webp" alt="Logo AIRE" width={50} height={50} unoptimized style={{ width: '50px', height: 'auto' }} />
             </div>
         </header>
 

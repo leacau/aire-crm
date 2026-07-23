@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
@@ -23,7 +23,8 @@ export default function RedesPage() {
     const [requests, setRequests] = useState<SocialMediaRequest[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
+        if (!userInfo) return;
         try {
             const data = await getSocialMediaRequests();
             const isManagement = isBoss || userInfo?.role === 'Administracion' || userInfo?.role === 'Admin';
@@ -39,11 +40,11 @@ export default function RedesPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [isBoss, userInfo]);
 
     useEffect(() => {
-        if (userInfo) loadData();
-    }, [userInfo, isBoss]);
+        loadData();
+    }, [loadData]);
 
     // 🟢 ACCIÓN BORRADO CON REFRESH DE DATATABLE
     const handleDeleteRequest = async (id: string) => {

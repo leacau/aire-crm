@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { getInvoicesForClient, getOpportunitiesByClientId, createInvoice, updateInvoice, getClient, getBillingRequestsByClient } from '@/lib/firebase-service';
 import type { Invoice, Opportunity, CarpetaBillingStatus } from '@/lib/types';
@@ -30,6 +30,12 @@ interface RowData {
     status: CarpetaBillingStatus;
 }
 
+const calculateStatus = (orderNumber?: string, invoiceNumber?: string, date?: string): CarpetaBillingStatus => {
+    if (invoiceNumber && date) return 'Facturado';
+    if (orderNumber) return 'Pedido Realizado';
+    return 'Pendiente de Pedido';
+};
+
 export function CarpetaTable({ clientId, clientName }: { clientId: string, clientName: string }) {
     const { userInfo, isBoss } = useAuth();
     const { toast } = useToast();
@@ -46,16 +52,6 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
     const canEditAdminFields = isBoss || isAdmin; // Jefe o Admin
     const canEditFacturaFields = isBoss || isAsesor || isAdmin; // Ambos pueden completar la factura
 
-    useEffect(() => {
-        loadData();
-    }, [clientId]);
-
-    const calculateStatus = (orderNumber?: string, invoiceNumber?: string, date?: string): CarpetaBillingStatus => {
-        if (invoiceNumber && date) return 'Facturado';
-        if (orderNumber) return 'Pedido Realizado';
-        return 'Pendiente de Pedido';
-    };
-
     const getStatusBadge = (status: CarpetaBillingStatus) => {
         switch (status) {
             case 'Facturado':
@@ -67,7 +63,7 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
         }
     };
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
 
         const [allOpps, allInvoices, allBillingRequests] = await Promise.all([
@@ -136,7 +132,11 @@ export function CarpetaTable({ clientId, clientName }: { clientId: string, clien
 
         setRows(newRows);
         setLoading(false);
-    };
+    }, [clientId]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     const handleRowChange = (index: number, field: keyof RowData, value: string | number) => {
         const newRows = [...rows];

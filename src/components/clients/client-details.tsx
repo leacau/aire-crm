@@ -1,6 +1,6 @@
 'use client'
 import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice, CommercialNote, Program } from '@/lib/types';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Card,
@@ -197,7 +197,7 @@ export function ClientDetails({
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [alertConfig, setAlertConfig] = useState<{ title: string, description: string, onConfirm: () => void} | null>(null);
 
-  const fetchClientData = async () => {
+  const fetchClientData = useCallback(async () => {
       if(!userInfo) return;
       try {
         const [clientPeople, clientOpportunities, clientInvoices, activities, systemLogs, allUsers, clientNotes, allPrograms] = await Promise.all([
@@ -222,11 +222,11 @@ export function ClientDetails({
         console.error("Error fetching client data:", error);
         toast({ title: "Error al cargar los datos del cliente", variant: "destructive" });
       }
-  }
+  }, [client.id, toast, userInfo]);
 
   useEffect(() => {
     fetchClientData();
-  }, [client.id, userInfo]);
+  }, [fetchClientData]);
 
   const usersMap = users.reduce((acc, user) => {
     acc[user.id] = user;

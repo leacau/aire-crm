@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -47,6 +47,26 @@ interface UnifiedApprovalItem {
   approvalHistory?: ApprovalHistoryItem[];
 }
 
+const PDF_RENDER_WAIT_MS = 5000;
+const DOCUMENT_PDF_TIMEOUT_MS = 30000;
+const CLIENT_PDF_TIMEOUT_MS = 20000;
+const GMAIL_AUTH_TIMEOUT_MS = 45000;
+
+const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 function ApprovalsPageComponent() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const { toast } = useToast();
@@ -73,14 +93,14 @@ function ApprovalsPageComponent() {
 
   const documentContainerRef = useRef<HTMLDivElement>(null);
 
-  const parseDate = (val: any): Date => {
+  const parseDate = useCallback((val: any): Date => {
     if (!val) return new Date();
     if (typeof val === 'string') return new Date(val);
     if (val.toDate) return val.toDate();
     return new Date();
-  };
+  }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!userInfo) return;
     setLoading(true);
     try {
@@ -188,13 +208,11 @@ function ApprovalsPageComponent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isBoss, parseDate, toast, userInfo]);
 
   useEffect(() => {
-    if (userInfo) {
-      fetchData();
-    }
-  }, [userInfo]);
+    fetchData();
+  }, [fetchData]);
 
   const ensureProgramsLoaded = async () => {
     if (programs.length > 0) return;
@@ -259,10 +277,10 @@ function ApprovalsPageComponent() {
     const images = Array.from(element.querySelectorAll('img'));
     await Promise.all(images.map(image => {
       if (image.complete) return Promise.resolve();
-      return new Promise<void>(resolve => {
+      return withTimeout(new Promise<void>(resolve => {
         image.onload = () => resolve();
         image.onerror = () => resolve();
-      });
+      }), PDF_RENDER_WAIT_MS, 'Se agotó el tiempo esperando imágenes del PDF.').catch(() => undefined);
     }));
   };
 
@@ -280,7 +298,11 @@ function ApprovalsPageComponent() {
       if (!element) throw new Error('No se pudo preparar el PDF de alta del cliente.');
       await waitForImages(element);
 
-      const canvas = await html2canvas(element, { scale: 2 });
+      const canvas = await withTimeout(
+        html2canvas(element, { scale: 2, useCORS: true }),
+        CLIENT_PDF_TIMEOUT_MS,
+        'No se pudo generar el PDF de alta del cliente a tiempo.'
+      );
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -410,13 +432,23 @@ function ApprovalsPageComponent() {
       if (sellerProfile?.email) sellerEmail = sellerProfile.email;
     }
 
-    const docPdf = await generateAdvancedPdf(containerElement, item.type);
+    const docPdf = await withTimeout(
+      generateAdvancedPdf(containerElement, item.type),
+      DOCUMENT_PDF_TIMEOUT_MS,
+      'No se pudo generar el PDF del documento a tiempo.'
+    );
     const orderBase64 = docPdf.output('datauristring').split(',')[1];
 
     let clientBase64 = '';
     if (item.clientId) {
       const clientObj = await getClient(item.clientId);
-      if (clientObj) clientBase64 = await generateClientSummaryPdfBase64(clientObj);
+      if (clientObj) {
+        clientBase64 = await withTimeout(
+          generateClientSummaryPdfBase64(clientObj),
+          CLIENT_PDF_TIMEOUT_MS,
+          'No se pudo generar el PDF de alta del cliente a tiempo.'
+        );
+      }
     }
 
     const attachments = [
@@ -490,7 +522,11 @@ function ApprovalsPageComponent() {
 
       if (actionType === 'Devuelto') {
         try {
-            const accessToken = await getGoogleAccessToken();
+            const accessToken = await withTimeout(
+              getGoogleAccessToken(),
+              GMAIL_AUTH_TIMEOUT_MS,
+              'No se pudo obtener acceso a Gmail a tiempo.'
+            );
             if (!accessToken) throw new Error('No se pudo obtener acceso a Gmail para enviar la notificacion.');
             const sellerId = selectedItem.rawData.advisorId || selectedItem.rawData.createdBy || selectedItem.rawData.creatorId;
             let sellerEmail = userInfo.email; 
@@ -526,7 +562,11 @@ function ApprovalsPageComponent() {
         }
       } else if (actionType === 'Aprobado' && documentContainerRef.current) {
         try {
-          const accessToken = await getGoogleAccessToken();
+          const accessToken = await withTimeout(
+            getGoogleAccessToken(),
+            GMAIL_AUTH_TIMEOUT_MS,
+            'No se pudo obtener acceso a Gmail a tiempo.'
+          );
           if (!accessToken) throw new Error('No se pudo obtener acceso a Gmail para enviar la notificacion.');
           const elementToCapture = documentContainerRef.current.firstChild as HTMLElement;
           await dispatchApprovalEmail(selectedItem, elementToCapture, accessToken, false);
@@ -553,36 +593,38 @@ function ApprovalsPageComponent() {
 
   // 🟢 LÓGICA DE RENOTIFICACIÓN
   const handleRenotify = async (item: UnifiedApprovalItem) => {
-    if (item.type === 'Nota Comercial' || item.type === 'Orden de Publicidad') {
-      await ensureProgramsLoaded();
-    }
-    const accessToken = await getGoogleAccessToken();
-    if (!accessToken) {
-      toast({ title: 'No se pudo acceder a Gmail', description: 'Volve a intentar y acepta el permiso de Gmail para enviar la notificacion.', variant: 'destructive' });
-      return;
-    }
-    const hydratedItem = await withOrderBilling(item);
-    setRenotifyingItem(hydratedItem);
-    
-    // Dejamos un pequeño delay para que React dibuje el PDF oculto en el DOM
-    setTimeout(async () => {
-      try {
-        if (hiddenDocumentContainerRef.current && hiddenDocumentContainerRef.current.firstChild) {
-          const elementToCapture = hiddenDocumentContainerRef.current.firstChild as HTMLElement;
-          await dispatchApprovalEmail(hydratedItem, elementToCapture, accessToken, true);
-          toast({ title: 'Notificación reenviada correctamente.' });
-        } else {
-          throw new Error("No se pudo generar el documento.");
-        }
-      } catch (error) {
-        console.error("Error al renotificar:", error);
-        toast({ title: 'Error al reenviar el correo', description: getNotificationErrorMessage(error), variant: 'destructive' });
-      } finally {
-        setRenotifyingItem(null);
+    try {
+      if (item.type === 'Nota Comercial' || item.type === 'Orden de Publicidad') {
+        await ensureProgramsLoaded();
       }
-    }, 800);
-  };
+      const accessToken = await withTimeout(
+        getGoogleAccessToken(),
+        GMAIL_AUTH_TIMEOUT_MS,
+        'No se pudo obtener acceso a Gmail a tiempo.'
+      );
+      if (!accessToken) {
+        toast({ title: 'No se pudo acceder a Gmail', description: 'Volve a intentar y acepta el permiso de Gmail para enviar la notificacion.', variant: 'destructive' });
+        return;
+      }
 
+      const hydratedItem = await withOrderBilling(item);
+      setRenotifyingItem(hydratedItem);
+      await delay(800);
+
+      if (hiddenDocumentContainerRef.current && hiddenDocumentContainerRef.current.firstChild) {
+        const elementToCapture = hiddenDocumentContainerRef.current.firstChild as HTMLElement;
+        await dispatchApprovalEmail(hydratedItem, elementToCapture, accessToken, true);
+        toast({ title: 'Notificacion reenviada correctamente.' });
+      } else {
+        throw new Error('No se pudo generar el documento.');
+      }
+    } catch (error) {
+      console.error('Error al renotificar:', error);
+      toast({ title: 'Error al reenviar el correo', description: getNotificationErrorMessage(error), variant: 'destructive' });
+    } finally {
+      setRenotifyingItem(null);
+    }
+  };
   const getTypeColorClass = (type: ApprovalItemType) => {
     switch(type) {
       case 'Nota Comercial': return 'bg-blue-100 text-blue-800 border-blue-200';

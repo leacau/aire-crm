@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
 import { onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter, usePathname } from 'next/navigation';
@@ -51,29 +51,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
-  const saveTokenToStorage = (token: string, expiresInSeconds: number = 3600) => {
+  const saveTokenToStorage = useCallback((token: string, expiresInSeconds: number = 3600) => {
     googleAccessTokenMemory = {
       token,
       expiresAt: Date.now() + (expiresInSeconds * 1000) - (5 * 60 * 1000),
     };
-  };
+  }, []);
 
-  const clearStoredToken = () => {
+  const clearStoredToken = useCallback(() => {
     if (typeof window === 'undefined') return;
     googleAccessTokenMemory = null;
     localStorage.removeItem('google_api_token');
     localStorage.removeItem('google_api_token_expiry');
     sessionStorage.removeItem('google-access-validated');
-  };
+  }, []);
 
-  const getStoredToken = (): string | null => {
+  const getStoredToken = useCallback((): string | null => {
     if (!googleAccessTokenMemory) return null;
     if (Date.now() > googleAccessTokenMemory.expiresAt) {
         clearStoredToken();
         return null;
     }
     return googleAccessTokenMemory.token;
-  };
+  }, [clearStoredToken]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -164,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [toast]);
+  }, [clearStoredToken, toast]);
 
   useEffect(() => {
     if (loading || !user) return;
@@ -190,9 +190,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     runCheck();
-  }, [loading, user]);
+  }, [clearStoredToken, getStoredToken, loading, user]);
 
-    const getGoogleAccessToken = async (options?: { silent?: boolean }): Promise<string | null> => {
+    const getGoogleAccessToken = useCallback(async (options?: { silent?: boolean }): Promise<string | null> => {
         if (typeof window === 'undefined') return null;
 
         const storedToken = getStoredToken();
@@ -232,13 +232,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
         }
         return null;
-    };
+    }, [getStoredToken, saveTokenToStorage]);
 
-    const ensureGoogleAccessToken = async (): Promise<string | null> => {
+    const ensureGoogleAccessToken = useCallback(async (): Promise<string | null> => {
         const token = await getGoogleAccessToken({ silent: true });
         if (token) return token;
         return await getGoogleAccessToken({ silent: false });
-    };
+    }, [getGoogleAccessToken]);
 
   if (loading && !publicRoutes.includes(pathname) && !pathname.startsWith('/public/')) {
     return (

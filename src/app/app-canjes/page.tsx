@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { 
     getClients, createClient, createOpportunity, saveConvenioCanje, createAdvertisingOrder, createCanje, updateCanje,
@@ -118,12 +118,8 @@ export default function AppCanjesMobile() {
     const pautadoPdfRef = useRef<HTMLDivElement>(null);
     const clientPdfRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
+    const loadData = useCallback(async () => {
         if (!userInfo) return;
-        loadData();
-    }, [userInfo]);
-
-    const loadData = async () => {
         setLoading(true);
         try {
             const [c, p, pros, allConvenios] = await Promise.all([getClients(), getPrograms(), getProspects(), getConveniosCanje()]);
@@ -143,7 +139,11 @@ export default function AppCanjesMobile() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast, userInfo]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     const searchResults = React.useMemo(() => {
         if (searchQuery.length < 3) return [];

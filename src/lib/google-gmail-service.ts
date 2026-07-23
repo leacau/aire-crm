@@ -17,6 +17,8 @@ export interface EmailParams {
     replyTo?: string;
 }
 
+const EMAIL_REQUEST_TIMEOUT_MS = 60000;
+
 async function getCrmIdToken(): Promise<string> {
     const idToken = await auth.currentUser?.getIdToken();
     if (!idToken) {
@@ -27,14 +29,28 @@ async function getCrmIdToken(): Promise<string> {
 
 export async function sendEmail(params: EmailParams) {
     const idToken = await getCrmIdToken();
-    const response = await fetch('/api/services/gmail/send', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
-        },
-        body: JSON.stringify(params),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), EMAIL_REQUEST_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+        response = await fetch('/api/services/gmail/send', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`,
+            },
+            body: JSON.stringify(params),
+            signal: controller.signal,
+        });
+    } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new Error('El envio del correo demoro demasiado y fue cancelado. Reintenta o revisa la configuracion de Gmail/SMTP.');
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
         const errorText = await response.text();
