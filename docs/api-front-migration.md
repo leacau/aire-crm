@@ -1192,6 +1192,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/advertising-orders/utils.ts` queda como reexport de compatibilidad para consumidores existentes.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo quincuagesimo tercer corte aplicado
+
+- `src/lib/server/approvals.ts` concentra lectura consolidada de aprobaciones y cambio de estado con historial.
+- La ruta `/api/approvals` deja de operar Firestore directo y mantiene permisos de revisor/owner por coleccion.
+- `src/app/api/approvals/errors.ts` respeta errores de dominio 400/403/404 y centraliza fallas server.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
