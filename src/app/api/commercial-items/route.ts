@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
-import { dbAdmin } from '@/lib/firebase-admin';
-import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { hasServerScreenPermission } from '@/lib/server/screen-permissions';
 import { commercialItemErrorResponse } from '@/app/api/commercial-items/errors';
-import { mapCommercialItem, normalizeCommercialDate, sanitizeCommercialRelations } from '@/app/api/commercial-items/utils';
-import type { CommercialItem } from '@/lib/types';
+import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { createCommercialItemServer, listCommercialItemsByDateServer } from '@/lib/server/commercial-items';
 
 export async function GET(request: Request) {
   const requester = await requireServerUser(request);
@@ -13,20 +9,7 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const date = searchParams.get('date');
-
-    if (!date) {
-      return NextResponse.json({ error: 'La fecha es obligatoria.' }, { status: 400 });
-    }
-
-    const snapshot = await dbAdmin
-      .collection('commercial_items')
-      .where('date', '==', normalizeCommercialDate(date))
-      .get();
-
-    const items = snapshot.docs.map(doc => mapCommercialItem(doc.id, doc.data()));
-
-    return NextResponse.json({ items });
+    return NextResponse.json({ items: await listCommercialItemsByDateServer(searchParams.get('date')) });
   } catch (error) {
     return commercialItemErrorResponse(error, {
       action: 'LIST',
@@ -39,28 +22,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const requester = await requireServerUser(request);
   if (isServerResponse(requester)) return requester;
-  if (!(await hasServerScreenPermission(requester, 'Grilla', 'edit'))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
 
   try {
     const body = await request.json();
-    const itemData = body?.itemData as Omit<CommercialItem, 'id'> | undefined;
-
-    if (!itemData?.programId || !itemData.date) {
-      return NextResponse.json({ error: 'Programa y fecha son obligatorios.' }, { status: 400 });
-    }
-
-    const dataToSave = {
-      ...sanitizeCommercialRelations(itemData as unknown as Record<string, unknown>),
-      date: normalizeCommercialDate(itemData.date),
-      createdBy: requester.uid,
-      createdAt: FieldValue.serverTimestamp(),
-    };
-
-    const docRef = await dbAdmin.collection('commercial_items').add(dataToSave);
-
-    return NextResponse.json({ id: docRef.id });
+    return NextResponse.json({ id: await createCommercialItemServer(body, requester) });
   } catch (error) {
     return commercialItemErrorResponse(error, {
       action: 'CREATE',

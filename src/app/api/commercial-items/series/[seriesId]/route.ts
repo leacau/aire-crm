@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { dbAdmin } from '@/lib/firebase-admin';
 import { commercialItemErrorResponse } from '@/app/api/commercial-items/errors';
-import { mapCommercialItem } from '@/app/api/commercial-items/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { listCommercialItemsBySeriesServer } from '@/lib/server/commercial-items';
 
 type RouteContext = {
   params: Promise<{ seriesId: string }>;
@@ -14,16 +13,7 @@ export async function GET(request: Request, context: RouteContext) {
 
   try {
     const { seriesId } = await context.params;
-    const snapshot = await dbAdmin
-      .collection('commercial_items')
-      .where('seriesId', '==', seriesId)
-      .get();
-
-    const items = snapshot.docs
-      .map(doc => mapCommercialItem(doc.id, doc.data()))
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    return NextResponse.json({ items });
+    return NextResponse.json({ items: await listCommercialItemsBySeriesServer(seriesId) });
   } catch (error) {
     return commercialItemErrorResponse(error, {
       action: 'SERIES DETAIL',

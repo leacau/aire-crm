@@ -1157,6 +1157,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/billing-requests/errors.ts` unifica respuestas controladas para permisos, validaciones y fallas server.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo cuadragesimo octavo corte aplicado
+
+- `src/lib/server/commercial-items.ts` concentra listado por fecha, alta, edicion, eliminacion masiva, lectura y guardado de series.
+- Las rutas `/api/commercial-items`, `/api/commercial-items/[itemId]`, `bulk-delete`, `series` y `series/[seriesId]` dejan de operar Firestore directo.
+- `src/app/api/commercial-items/utils.ts` queda como reexport de compatibilidad para consumidores existentes.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
