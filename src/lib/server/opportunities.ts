@@ -9,7 +9,7 @@ import {
   buildInvoiceCreatePayload,
   buildMonthlyBillingIncrement,
   normalizeInvoiceAmount,
-} from '@/app/api/invoices/utils';
+} from '@/lib/server/invoices';
 import type { Client, CommercialItem, Invoice, Opportunity, Program } from '@/lib/types';
 
 export class OpportunityApiError extends Error {

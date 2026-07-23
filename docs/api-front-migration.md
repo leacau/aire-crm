@@ -1115,6 +1115,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/opportunities/errors.ts` unifica respuestas controladas para validaciones, permisos y fallas server.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo cuadragesimo segundo corte aplicado
+
+- `src/lib/server/invoices.ts` concentra listado, alta, edicion, borrado, normalizacion de importes, payloads y acumulacion mensual.
+- Las rutas `/api/invoices` y `/api/invoices/[invoiceId]` dejan de operar Firestore directo.
+- `src/app/api/invoices/utils.ts` queda como reexport de compatibilidad para dominios que todavia consumen esos helpers.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
