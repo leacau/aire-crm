@@ -1248,6 +1248,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se eliminaron copias locales duplicadas de `getRequesterName` en dominios como agencias, programas, prospectos, usuarios, actividad y configuracion del sistema.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo sexagesimo primer corte aplicado
+
+- Se eliminaron `utils.ts` legacy sin referencias en dominios API ya migrados: advertising-orders, canjes, clients, commercial-items, commercial-notes, invoices, payments, programs, social-media-requests y web-notes.
+- Esos archivos solo reexportaban helpers desde `src/lib/server/*`; las rutas actuales ya consumen los servicios server directamente.
+- La carpeta `/api` conserva menos fachadas muertas y queda mas clara la separacion entre handler HTTP y logica server.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
