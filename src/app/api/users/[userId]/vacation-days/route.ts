@@ -3,7 +3,7 @@ import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import {
   adjustVacationDaysServer,
 } from '@/lib/server/vacation-requests';
-import { vacationRequestErrorResponse } from '@/app/api/vacation-requests/utils';
+import { userErrorResponse } from '@/app/api/users/errors';
 
 type RouteContext = {
   params: Promise<{ userId: string }>;
@@ -25,7 +25,7 @@ export async function POST(request: Request, context: RouteContext) {
     );
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return vacationRequestErrorResponse(error, {
+    return userErrorResponse(error, {
       action: 'DAYS ADJUST',
       requesterId: requester.uid,
       publicError: 'No se pudo ajustar el saldo de licencias.',

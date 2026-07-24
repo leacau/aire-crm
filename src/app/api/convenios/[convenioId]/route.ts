@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getRequesterName } from '@/app/api/clients/utils';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { getRequesterName } from '@/lib/server/clients';
 import {
   deleteConvenioCanjeServer,
   updateConvenioCanjeServer,

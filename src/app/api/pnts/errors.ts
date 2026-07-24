@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { UserApiError } from '@/lib/server/users';
+import { ScheduledPntApiError } from '@/lib/server/scheduled-pnts';
 
-type UserErrorContext = {
+type PntErrorContext = {
   action: string;
   requesterId?: string;
   publicError: string;
-  status?: number;
 };
 
 function getErrorMessage(error: unknown) {
@@ -18,31 +17,20 @@ function getErrorCode(error: unknown) {
     : undefined;
 }
 
-function getErrorStatus(error: unknown) {
-  return typeof error === 'object' && error !== null && 'status' in error
-    ? Number((error as { status?: unknown }).status)
-    : null;
-}
-
-export function userErrorResponse(error: unknown, context: UserErrorContext) {
-  if (error instanceof UserApiError) {
+export function pntErrorResponse(error: unknown, context: PntErrorContext) {
+  if (error instanceof ScheduledPntApiError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
 
   const message = getErrorMessage(error);
-  const status = getErrorStatus(error);
-  console.error(`USERS ${context.action} ERROR:`, {
+  console.error(`PNTS ${context.action} ERROR:`, {
     requester: context.requesterId,
     code: getErrorCode(error),
     message,
   });
 
-  if (status && Number.isFinite(status)) {
-    return NextResponse.json({ error: message }, { status });
-  }
-
   return NextResponse.json({
     error: context.publicError,
     details: message,
-  }, { status: context.status || 502 });
+  }, { status: 502 });
 }

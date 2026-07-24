@@ -1227,6 +1227,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/app/api/tango/utils.ts` respeta errores de dominio 400/503 sin convertirlos en fallas genericas.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo quincuagesimo octavo corte aplicado
+
+- `/api/convenios` deja de importar helpers desde `/api/clients` y usa `getRequesterName` desde `src/lib/server/clients.ts`.
+- `/api/pnts/scheduled` incorpora `src/app/api/pnts/errors.ts` para manejar errores propios de PNTs sin depender de commercial-items.
+- `/api/users/[userId]/vacation-days` usa `userErrorResponse`, que ahora respeta errores de dominio con `status`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
