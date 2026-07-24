@@ -1234,6 +1234,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/users/[userId]/vacation-days` usa `userErrorResponse`, que ahora respeta errores de dominio con `status`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo quincuagesimo noveno corte aplicado
+
+- Las rutas de `/api/coaching-sessions` dejan de importar `getRequesterName` desde su `utils.ts`.
+- `getRequesterName` se consume desde `src/lib/server/clients.ts`, manteniendo `coaching-sessions/utils.ts` solo para respuestas HTTP de coaching.
+- Se reduce otro cruce de helpers de ruta hacia logica compartida server.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

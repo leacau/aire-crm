@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
+import { getRequesterName } from '@/lib/server/clients';
 import {
   createCoachingSessionServer,
   listCoachingSessions,
 } from '@/lib/server/coaching';
-import { coachingErrorResponse, getRequesterName } from '@/app/api/coaching-sessions/utils';
+import { coachingErrorResponse } from '@/app/api/coaching-sessions/utils';
 import type { CoachingSession } from '@/lib/types';
 
 export async function GET(request: Request) {

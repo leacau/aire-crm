@@ -7,10 +7,6 @@ type CoachingErrorContext = {
   publicError: string;
 };
 
-export function getRequesterName(requester: { name?: string | null; email?: string | null }) {
-  return requester.name || requester.email || 'Usuario';
-}
-
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Error desconocido';
 }
