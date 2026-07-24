@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { notifyExpiringProposalsServer } from '@/lib/server/cron-service';
-import { cronErrorResponse, isAuthorizedCronRequest } from '@/app/api/cron/utils';
+import { isAuthorizedCronRequest } from '@/app/api/cron/auth';
+import { cronErrorResponse } from '@/app/api/cron/errors';
 
 export const dynamic = 'force-dynamic';
 

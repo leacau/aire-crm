@@ -7,7 +7,8 @@ import {
     calculateBusinessDays 
 } from '@/lib/server/cron-service';
 import { parseISO, format } from 'date-fns';
-import { cronErrorResponse, isAuthorizedCronRequest } from '@/app/api/cron/utils';
+import { isAuthorizedCronRequest } from '@/app/api/cron/auth';
+import { cronErrorResponse } from '@/app/api/cron/errors';
 
 export const dynamic = 'force-dynamic';
 

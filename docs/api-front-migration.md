@@ -1262,6 +1262,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `cron/utils.ts` queda pendiente porque todavia combina validacion de autorizacion del cron con respuesta de error.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo sexagesimo tercer corte aplicado
+
+- `cron/utils.ts` se separa en `cron/auth.ts` para autorizacion del job y `cron/errors.ts` para respuestas HTTP de error.
+- Las rutas `/api/cron/notify-proposals`, `/api/cron/notify-tasks` y `/api/cron/release-prospects` dejan de depender de un `utils.ts` mixto.
+- Con este corte ya no quedan archivos `utils.ts` dentro de `src/app/api`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

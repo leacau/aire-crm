@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
 
-export function isAuthorizedCronRequest(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  return !process.env.CRON_SECRET || authHeader === `Bearer ${process.env.CRON_SECRET}`;
-}
-
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Error desconocido';
 }
