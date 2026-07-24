@@ -4,7 +4,7 @@ import {
   deleteCoachingItemServer,
   updateCoachingItemServer,
 } from '@/lib/server/coaching';
-import { getRequesterName } from '@/lib/server/clients';
+import { getRequesterName } from '@/lib/server/requester';
 import { coachingErrorResponse } from '@/app/api/coaching-sessions/utils';
 import type { CoachingItem } from '@/lib/types';
 

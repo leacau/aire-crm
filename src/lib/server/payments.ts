@@ -1,7 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { differenceInCalendarDays, parse, parseISO } from 'date-fns';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { getRequesterName } from '@/lib/server/clients';
+import { getRequesterName } from '@/lib/server/requester';
 import { type ServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';

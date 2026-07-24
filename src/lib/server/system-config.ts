@@ -12,6 +12,7 @@ import type {
   ScreenName,
   ScreenPermission,
 } from '@/lib/types';
+import { getRequesterName } from '@/lib/server/requester';
 
 const SYSTEM_CONFIG_COLLECTION = 'system_config';
 
@@ -36,9 +37,6 @@ export class SystemConfigApiError extends Error {
   }
 }
 
-function getRequesterName(requester: ServerUser) {
-  return requester.name || requester.email || 'Usuario';
-}
 
 async function getSystemConfigDoc<T>(docId: string, field: string, fallback: T): Promise<T> {
   const snap = await dbAdmin.collection(SYSTEM_CONFIG_COLLECTION).doc(docId).get();

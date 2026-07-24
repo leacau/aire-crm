@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { appendCoachingFollowUpEntryServer } from '@/lib/server/coaching';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { getRequesterName } from '@/lib/server/clients';
+import { getRequesterName } from '@/lib/server/requester';
 import { coachingErrorResponse } from '@/app/api/coaching-sessions/utils';
 
 type RouteContext = {

@@ -4,6 +4,7 @@ import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/aut
 import { getAccessibleClient } from '@/lib/server/client-access';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument, serializeFirestoreValue } from '@/lib/server/firestore';
+import { getRequesterName } from '@/lib/server/requester';
 import { toTitleCase } from '@/lib/utils';
 import type { ClientTangoIdField, ClientTangoSyncedField, ClientTangoUpdate } from '@/lib/api-contracts';
 import type {
@@ -57,10 +58,6 @@ export function cleanObject<T extends Record<string, unknown>>(value: T): Partia
   return Object.fromEntries(
     Object.entries(value).filter(([, nestedValue]) => nestedValue !== undefined),
   ) as Partial<T>;
-}
-
-export function getRequesterName(user: ServerUser) {
-  return user.name || user.email || 'Usuario';
 }
 
 export function clientResponseValue(value: unknown) {

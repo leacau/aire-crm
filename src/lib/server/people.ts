@@ -4,6 +4,7 @@ import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { ServerUser } from '@/lib/server/auth';
 import type { Client, Person } from '@/lib/types';
+import { getRequesterName } from '@/lib/server/requester';
 
 export class PeopleApiError extends Error {
   constructor(
@@ -14,9 +15,6 @@ export class PeopleApiError extends Error {
   }
 }
 
-function getRequesterName(requester: ServerUser) {
-  return requester.name || requester.email || 'Usuario';
-}
 
 async function getClient(clientId: string): Promise<Client | null> {
   const clientSnap = await dbAdmin.collection('clients').doc(clientId).get();

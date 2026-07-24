@@ -1,6 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { getRequesterName } from '@/lib/server/clients';
+import { getRequesterName } from '@/lib/server/requester';
 import { type ServerUser } from '@/lib/server/auth';
 import { filterAccessibleAdvertisingOrders } from '@/lib/server/advertising-order-access';
 import { logServerActivity } from '@/lib/server/activity';

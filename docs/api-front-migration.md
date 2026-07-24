@@ -1241,6 +1241,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se reduce otro cruce de helpers de ruta hacia logica compartida server.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo sexagesimo corte aplicado
+
+- `src/lib/server/requester.ts` concentra `getRequesterName` como helper server neutral.
+- Servicios server y rutas que necesitaban el nombre visible del usuario dejan de depender de `src/lib/server/clients.ts` para esa responsabilidad transversal.
+- Se eliminaron copias locales duplicadas de `getRequesterName` en dominios como agencias, programas, prospectos, usuarios, actividad y configuracion del sistema.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

@@ -3,6 +3,7 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import type { ServerUser } from '@/lib/server/auth';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { ActivityLog } from '@/lib/types';
+import { getRequesterName } from '@/lib/server/requester';
 
 type LogActivityPayload = Omit<ActivityLog, 'id' | 'timestamp' | 'ownerName'> & {
   ownerName?: string;
@@ -18,9 +19,6 @@ export class ActivityApiError extends Error {
   }
 }
 
-function getRequesterName(requester: ServerUser) {
-  return requester.name || requester.email || 'Usuario';
-}
 
 function mapActivity(id: string, data: FirebaseFirestore.DocumentData | undefined): ActivityLog {
   return serializeDocument<ActivityLog>(id, data);

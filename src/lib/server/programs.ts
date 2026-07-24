@@ -4,6 +4,7 @@ import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { ServerUser } from '@/lib/server/auth';
 import type { Program } from '@/lib/types';
+import { getRequesterName } from '@/lib/server/requester';
 
 export class ProgramApiError extends Error {
   constructor(
@@ -14,9 +15,6 @@ export class ProgramApiError extends Error {
   }
 }
 
-function getRequesterName(requester: ServerUser) {
-  return requester.name || requester.email || 'Usuario';
-}
 
 export function mapProgram(id: string, data: FirebaseFirestore.DocumentData | undefined): Program {
   const program = serializeDocument<Program>(id, data);

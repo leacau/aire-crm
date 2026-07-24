@@ -8,7 +8,7 @@ import {
   canCreateAdvertisingOrderForClient,
   filterAccessibleAdvertisingOrders,
 } from '@/lib/server/advertising-order-access';
-import { getRequesterName } from '@/lib/server/clients';
+import { getRequesterName } from '@/lib/server/requester';
 import { buildAdvertisingOrderChanges } from '@/lib/advertising-order-history';
 import { getAdvertisingOrderFinancialSummary } from '@/lib/advertising-order-utils';
 import type { AdvertisingOrder, ApprovalHistoryItem, BillingRequest } from '@/lib/types';

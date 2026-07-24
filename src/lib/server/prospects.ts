@@ -5,6 +5,7 @@ import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/aut
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { Prospect } from '@/lib/types';
+import { getRequesterName } from '@/lib/server/requester';
 
 export class ProspectApiError extends Error {
   constructor(
@@ -15,9 +16,6 @@ export class ProspectApiError extends Error {
   }
 }
 
-function getRequesterName(requester: ServerUser) {
-  return requester.name || requester.email || 'Usuario';
-}
 
 function mapProspect(id: string, data: FirebaseFirestore.DocumentData | undefined): Prospect {
   return serializeDocument<Prospect>(id, data);

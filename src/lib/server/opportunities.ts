@@ -1,7 +1,8 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { parseISO } from 'date-fns';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { cleanObject, getRequesterName, mapClient } from '@/lib/server/clients';
+import { cleanObject, mapClient } from '@/lib/server/clients';
+import { getRequesterName } from '@/lib/server/requester';
 import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';

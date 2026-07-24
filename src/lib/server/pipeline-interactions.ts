@@ -4,6 +4,7 @@ import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { ServerUser } from '@/lib/server/auth';
 import type { PipelineInteraction } from '@/lib/types';
+import { getRequesterName } from '@/lib/server/requester';
 
 export class PipelineInteractionApiError extends Error {
   constructor(
@@ -14,9 +15,6 @@ export class PipelineInteractionApiError extends Error {
   }
 }
 
-function getRequesterName(requester: ServerUser) {
-  return requester.name || requester.email || 'Usuario';
-}
 
 export function mapPipelineInteraction(
   id: string,

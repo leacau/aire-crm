@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { getRequesterName } from '@/lib/server/clients';
+import { getRequesterName } from '@/lib/server/requester';
 import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/auth';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { SupervisorComment, SupervisorCommentReply } from '@/lib/types';

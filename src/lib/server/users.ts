@@ -4,6 +4,7 @@ import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/aut
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { User, UserRole } from '@/lib/types';
+import { getRequesterName } from '@/lib/server/requester';
 
 const DEFAULT_ROLE: UserRole = 'Asesor';
 
@@ -16,9 +17,6 @@ export class UserApiError extends Error {
   }
 }
 
-function getRequesterName(requester: ServerUser): string {
-  return requester.name || requester.email || 'Usuario';
-}
 
 export async function listUsersServer(role?: UserRole | null): Promise<User[]> {
   const snapshot = await dbAdmin.collection('users').get();

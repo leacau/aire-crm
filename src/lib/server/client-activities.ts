@@ -4,6 +4,7 @@ import type { ServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { ClientActivity } from '@/lib/types';
+import { getRequesterName } from '@/lib/server/requester';
 
 export class ClientActivityApiError extends Error {
   constructor(
@@ -14,9 +15,6 @@ export class ClientActivityApiError extends Error {
   }
 }
 
-function getRequesterName(requester: ServerUser) {
-  return requester.name || requester.email || 'Usuario';
-}
 
 function mapClientActivity(id: string, data: FirebaseFirestore.DocumentData | undefined): ClientActivity {
   return serializeDocument<ClientActivity>(id, data);
