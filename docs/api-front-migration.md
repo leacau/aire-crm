@@ -1312,6 +1312,15 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La API deja de confiar en `userId`, `userName`, `completedByUserId` y `completedByUserName` enviados desde el front para cambios de actividades.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo sexagesimo noveno corte aplicado
+
+- Se agrega `mobile/` como base Expo + React Native + TypeScript para un front interno 100% mobile.
+- La app mobile usa Firebase Auth nativo y valida la sesion contra `/api/auth/session`, manteniendo el criterio de dominios corporativos y whitelist en backend.
+- El cliente API mobile envia `Authorization: Bearer <Firebase ID token>` y reintenta una vez con refresh del token ante 401.
+- Se agregan pantallas piloto de Inicio, Tareas y Clientes consumiendo la API privada, sin acceso directo a Firestore.
+- Se documenta la arquitectura mobile inicial en `docs/mobile-front.md` y `mobile/README.md`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

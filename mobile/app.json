@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Aire CRM",
+    "slug": "aire-crm-mobile",
+    "scheme": "airecrm",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.airedesantafe.crm",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.airedesantafe.crm",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a"
+      }
+    },
+    "plugins": [
+      "@react-native-google-signin/google-signin"
+    ],
+    "extra": {
+      "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}"
+    }
+  }
+}

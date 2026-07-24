@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+mobile/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -40,6 +41,14 @@ next-env.d.ts
 .genkit/*
 .env*
 !.env.example
+!mobile/.env.example
+
+# expo / react native
+mobile/.expo
+mobile/dist
+mobile/web-build
+mobile/.env.local
+mobile/.env.*.local
 
 # firebase
 firebase-debug.log
