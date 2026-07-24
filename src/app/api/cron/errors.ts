@@ -1,21 +1,8 @@
 import { NextResponse } from 'next/server';
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Error desconocido';
-}
-
-function getErrorCode(error: unknown) {
-  return typeof error === 'object' && error !== null && 'code' in error
-    ? String((error as { code?: unknown }).code || '')
-    : undefined;
-}
+import { logRouteError } from '@/lib/server/route-errors';
 
 export function cronErrorResponse(error: unknown, jobName: string) {
-  const message = getErrorMessage(error);
-  console.error(`CRON ${jobName} ERROR:`, {
-    code: getErrorCode(error),
-    message,
-  });
+  const { message } = logRouteError(error, 'CRON', { action: jobName });
 
   return NextResponse.json({
     success: false,

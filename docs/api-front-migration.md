@@ -1269,6 +1269,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Con este corte ya no quedan archivos `utils.ts` dentro de `src/app/api`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo sexagesimo cuarto corte aplicado
+
+- `src/lib/server/route-errors.ts` centraliza obtencion de mensaje, codigo, status, logging y respuesta HTTP generica para rutas API.
+- Los `errors.ts` de dominios productivos dejan de duplicar `getErrorMessage`, `getErrorCode` y `getErrorStatus`.
+- Se mantiene el comportamiento existente para errores de dominio, errores con `status`, errores de Tango, cron y servicios externos.
+- La auditoria de front no encontro accesos directos a Firestore fuera de Firebase Auth; las pantallas siguen pasando por `src/lib/api/*` y `api-client`.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

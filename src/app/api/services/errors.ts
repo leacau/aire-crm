@@ -1,31 +1,13 @@
 import { NextResponse } from 'next/server';
+import { getRouteErrorCode, logRouteError, type RouteErrorContext } from '@/lib/server/route-errors';
 
-type ServiceErrorContext = {
+type ServiceErrorContext = RouteErrorContext & {
   service: string;
-  action: string;
-  requesterId?: string;
-  publicError: string;
-  status?: number;
 };
 
-export function getRouteErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Error desconocido';
-}
-
-export function getRouteErrorCode(error: unknown) {
-  return typeof error === 'object' && error !== null && 'code' in error
-    ? String((error as { code?: unknown }).code || '')
-    : undefined;
-}
-
 export function externalServiceErrorResponse(error: unknown, context: ServiceErrorContext) {
-  const message = getRouteErrorMessage(error);
   const code = getRouteErrorCode(error);
-  console.error(`${context.service} ${context.action} ERROR:`, {
-    requester: context.requesterId,
-    code,
-    message,
-  });
+  const { message } = logRouteError(error, context.service, context);
 
   return NextResponse.json({
     error: context.publicError,

@@ -1,41 +1,21 @@
 import { NextResponse } from 'next/server';
+import {
+  getRouteErrorStatus,
+  logRouteError,
+  routeApiErrorResponse,
+  type RouteErrorContext,
+} from '@/lib/server/route-errors';
 import { UserApiError } from '@/lib/server/users';
 
-type UserErrorContext = {
-  action: string;
-  requesterId?: string;
-  publicError: string;
-  status?: number;
-};
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Error desconocido';
-}
-
-function getErrorCode(error: unknown) {
-  return typeof error === 'object' && error !== null && 'code' in error
-    ? String((error as { code?: unknown }).code || '')
-    : undefined;
-}
-
-function getErrorStatus(error: unknown) {
-  return typeof error === 'object' && error !== null && 'status' in error
-    ? Number((error as { status?: unknown }).status)
-    : null;
-}
+type UserErrorContext = RouteErrorContext;
 
 export function userErrorResponse(error: unknown, context: UserErrorContext) {
   if (error instanceof UserApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
+    return routeApiErrorResponse(error);
   }
 
-  const message = getErrorMessage(error);
-  const status = getErrorStatus(error);
-  console.error(`USERS ${context.action} ERROR:`, {
-    requester: context.requesterId,
-    code: getErrorCode(error),
-    message,
-  });
+  const { message } = logRouteError(error, 'USERS', context);
+  const status = getRouteErrorStatus(error, undefined, null);
 
   if (status && Number.isFinite(status)) {
     return NextResponse.json({ error: message }, { status });

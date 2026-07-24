@@ -1,39 +1,12 @@
-import { NextResponse } from 'next/server';
+import { routeApiErrorResponse, routeErrorResponse, type RouteErrorContext } from '@/lib/server/route-errors';
 import { AdvertisingOrderApiError } from '@/lib/server/advertising-orders';
 
-type AdvertisingOrderErrorContext = {
-  action: string;
-  requesterId?: string;
-  publicError: string;
-};
+type AdvertisingOrderErrorContext = RouteErrorContext;
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Error desconocido';
-}
-
-function getErrorCode(error: unknown) {
-  return typeof error === 'object' && error !== null && 'code' in error
-    ? String((error as { code?: unknown }).code || '')
-    : undefined;
-}
-
-export function advertisingOrderErrorResponse(
-  error: unknown,
-  context: AdvertisingOrderErrorContext,
-) {
+export function advertisingOrderErrorResponse(error: unknown, context: AdvertisingOrderErrorContext) {
   if (error instanceof AdvertisingOrderApiError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
+    return routeApiErrorResponse(error);
   }
 
-  const message = getErrorMessage(error);
-  console.error(`ADVERTISING ORDER ${context.action} ERROR:`, {
-    requester: context.requesterId,
-    code: getErrorCode(error),
-    message,
-  });
-
-  return NextResponse.json({
-    error: context.publicError,
-    details: message,
-  }, { status: 502 });
+  return routeErrorResponse(error, 'ADVERTISING ORDER', context);
 }

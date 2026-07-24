@@ -1,16 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getBearerToken } from '@/lib/server/auth';
 import { AuthSessionApiError, validateAuthSessionServer } from '@/lib/server/auth-session';
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Error desconocido';
-}
-
-function getErrorCode(error: unknown) {
-  return typeof error === 'object' && error !== null && 'code' in error
-    ? String((error as { code?: unknown }).code || '')
-    : undefined;
-}
+import { logRouteError, routeApiErrorResponse } from '@/lib/server/route-errors';
 
 export async function POST(request: Request) {
   const token = getBearerToken(request);
@@ -23,14 +14,10 @@ export async function POST(request: Request) {
     return NextResponse.json(session);
   } catch (error) {
     if (error instanceof AuthSessionApiError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return routeApiErrorResponse(error);
     }
 
-    const message = getErrorMessage(error);
-    console.error('AUTH SESSION ROUTE ERROR:', {
-      code: getErrorCode(error),
-      message,
-    });
+    const { message } = logRouteError(error, 'AUTH SESSION', { action: 'ROUTE' });
 
     return NextResponse.json({
       error: 'No se pudo validar la sesion.',
