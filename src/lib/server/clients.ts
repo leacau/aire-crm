@@ -170,7 +170,14 @@ async function updateMatchingDocs(
   }
 }
 
-export async function listClientsServer(): Promise<Client[]> {
+export async function listClientsServer(requester?: ServerUser): Promise<Client[]> {
+  if (requester && !hasServerManagementPrivileges(requester)) {
+    const snapshot = await dbAdmin.collection(CLIENT_COLLECTION).where('ownerId', '==', requester.uid).get();
+    return snapshot.docs
+      .map(doc => mapClient(doc.id, doc.data()))
+      .sort((a, b) => (a.denominacion || '').localeCompare(b.denominacion || '', 'es'));
+  }
+
   const snapshot = await dbAdmin.collection(CLIENT_COLLECTION).orderBy('denominacion').get();
   return snapshot.docs.map(doc => mapClient(doc.id, doc.data()));
 }

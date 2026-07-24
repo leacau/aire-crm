@@ -1321,6 +1321,15 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se documenta la arquitectura mobile inicial en `docs/mobile-front.md` y `mobile/README.md`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo septuagesimo corte aplicado
+
+- `/api/clients` pasa el requester al servicio server y `listClientsServer` filtra clientes por owner para usuarios sin privilegios de gestion.
+- Se agregan endpoints BFF mobile: `/api/mobile/bootstrap`, `/api/mobile/tasks` y `/api/mobile/clients`.
+- Las rutas mobile validan la sesion completa con dominio corporativo/lista blanca antes de cargar datos, no solo la firma del token Firebase.
+- `mobile/` consume `/api/mobile/bootstrap` al iniciar sesion y reutiliza esos datos para Inicio, Tareas y Clientes.
+- La app mobile reduce llamadas iniciales y queda desacoplada de rutas internas del front web.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

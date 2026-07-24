@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   if (isServerResponse(requester)) return requester;
 
   try {
-    return NextResponse.json({ clients: await listClientsServer() });
+    return NextResponse.json({ clients: await listClientsServer(requester) });
   } catch (error) {
     return clientErrorResponse(error, {
       action: 'LIST',

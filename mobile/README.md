@@ -7,6 +7,7 @@ App mobile privada para usuarios autorizados de Aire CRM.
 - Expo + React Native + TypeScript.
 - Firebase Auth como proveedor de identidad.
 - API privada existente de Aire CRM con `Authorization: Bearer <Firebase ID token>`.
+- Endpoints mobile `/api/mobile/*` como fachada estable para la app.
 
 ## Configuracion
 
@@ -37,5 +38,6 @@ npm run ios
 
 - Login Google corporativo y login externo email/password.
 - Validacion de sesion contra `/api/auth/session`.
+- Bootstrap inicial contra `/api/mobile/bootstrap`.
 - Cliente API mobile con refresh de token ante `401`.
 - Pantallas piloto: Inicio, Tareas y Clientes.

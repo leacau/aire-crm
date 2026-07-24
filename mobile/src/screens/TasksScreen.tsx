@@ -6,7 +6,7 @@ import type { ClientActivity } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
 
 export function TasksScreen() {
-  const { firebaseUser } = useAuth();
+  const { bootstrap, firebaseUser } = useAuth();
   const [tasks, setTasks] = useState<ClientActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -18,10 +18,16 @@ export function TasksScreen() {
   }, [firebaseUser]);
 
   useEffect(() => {
+    if (bootstrap?.tasks) {
+      setTasks(bootstrap.tasks);
+      setLoading(false);
+      return;
+    }
+
     loadTasks().catch(error => {
       Alert.alert('No se pudieron cargar tareas', error instanceof Error ? error.message : 'Intenta nuevamente.');
     }).finally(() => setLoading(false));
-  }, [loadTasks]);
+  }, [bootstrap?.tasks, loadTasks]);
 
   const refresh = async () => {
     setRefreshing(true);

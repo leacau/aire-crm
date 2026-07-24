@@ -6,7 +6,7 @@ import type { Client } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
 
 export function ClientsScreen() {
-  const { firebaseUser } = useAuth();
+  const { bootstrap, firebaseUser } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -19,10 +19,16 @@ export function ClientsScreen() {
   }, [firebaseUser]);
 
   useEffect(() => {
+    if (bootstrap?.clients) {
+      setClients(bootstrap.clients);
+      setLoading(false);
+      return;
+    }
+
     loadClients().catch(error => {
       Alert.alert('No se pudieron cargar clientes', error instanceof Error ? error.message : 'Intenta nuevamente.');
     }).finally(() => setLoading(false));
-  }, [loadClients]);
+  }, [bootstrap?.clients, loadClients]);
 
   const filteredClients = useMemo(() => {
     const normalized = query.trim().toLowerCase();

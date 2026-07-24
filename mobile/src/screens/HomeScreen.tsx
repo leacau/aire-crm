@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../auth/AuthProvider';
 
 export function HomeScreen({ onOpenTab }: { onOpenTab: (tab: 'tasks' | 'clients') => void }) {
-  const { session } = useAuth();
+  const { bootstrap, session } = useAuth();
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -18,11 +18,15 @@ export function HomeScreen({ onOpenTab }: { onOpenTab: (tab: 'tasks' | 'clients'
       <View style={styles.grid}>
         <Pressable style={styles.actionCard} onPress={() => onOpenTab('tasks')}>
           <Text style={styles.actionTitle}>Tareas</Text>
-          <Text style={styles.actionCopy}>Ver tareas pendientes y completarlas desde el celular.</Text>
+          <Text style={styles.actionCopy}>
+            {bootstrap ? `${bootstrap.stats.pendingTasks} pendientes para completar desde el celular.` : 'Ver tareas pendientes y completarlas desde el celular.'}
+          </Text>
         </Pressable>
         <Pressable style={styles.actionCard} onPress={() => onOpenTab('clients')}>
           <Text style={styles.actionTitle}>Clientes</Text>
-          <Text style={styles.actionCopy}>Consultar cartera accesible segun permisos del usuario.</Text>
+          <Text style={styles.actionCopy}>
+            {bootstrap ? `${bootstrap.stats.visibleClients} clientes visibles segun permisos.` : 'Consultar cartera accesible segun permisos del usuario.'}
+          </Text>
         </Pressable>
       </View>
     </ScrollView>

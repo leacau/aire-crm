@@ -14,6 +14,16 @@ export type AuthSession = {
   permissions: Record<string, unknown>;
 };
 
+export type MobileBootstrap = {
+  session: AuthSession;
+  tasks: ClientActivity[];
+  clients: Client[];
+  stats: {
+    pendingTasks: number;
+    visibleClients: number;
+  };
+};
+
 export type ClientActivity = {
   id: string;
   clientId?: string;
