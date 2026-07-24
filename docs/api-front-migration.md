@@ -1303,6 +1303,15 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Edicion y borrado de convenios validan acceso al registro antes de modificar o eliminar convenio, oportunidad, facturas y ordenes asociadas.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo sexagesimo octavo corte aplicado
+
+- Las mutaciones de contactos (`people`) validan que el requester tenga acceso a todos los clientes asociados antes de crear, editar o borrar.
+- El alta de contactos normaliza `clientIds` en servidor y evita crear contactos huerfanos sin cliente.
+- `/api/client-activities` filtra actividades y tareas por requester: management ve todo; asesores ven lo propio o lo asociado a clientes, prospectos u oportunidades propias.
+- Las mutaciones de actividades cargan la actividad en servidor y validan acceso antes de editar, completar o reprogramar.
+- La API deja de confiar en `userId`, `userName`, `completedByUserId` y `completedByUserName` enviados desde el front para cambios de actividades.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

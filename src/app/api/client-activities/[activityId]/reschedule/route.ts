@@ -14,7 +14,7 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const { activityId } = await context.params;
     const body = await request.json();
-    await rescheduleClientActivityServer(activityId, body?.dueDate);
+    await rescheduleClientActivityServer(activityId, body?.dueDate, requester);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

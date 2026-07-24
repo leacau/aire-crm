@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const tasksOnly = searchParams.get('tasks') === 'true';
-    return NextResponse.json({ activities: await listClientActivitiesServer(tasksOnly) });
+    return NextResponse.json({ activities: await listClientActivitiesServer(tasksOnly, requester) });
   } catch (error) {
     return activityErrorResponse(error, {
       action: 'CLIENT ACTIVITIES LIST',

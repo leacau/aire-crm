@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { logServerActivity } from '@/lib/server/activity';
+import { hasServerManagementPrivileges } from '@/lib/server/auth';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { ServerUser } from '@/lib/server/auth';
 import type { Client, Person } from '@/lib/types';
@@ -26,19 +27,44 @@ async function getFirstClient(clientIds?: string[]): Promise<Client | null> {
   return clientId ? getClient(clientId) : null;
 }
 
+function normalizeClientIds(clientIds: unknown): string[] {
+  return Array.isArray(clientIds)
+    ? Array.from(new Set(clientIds.map(clientId => String(clientId).trim()).filter(Boolean)))
+    : [];
+}
+
+async function requireClientIdsAccess(clientIds: string[], requester: ServerUser) {
+  if (clientIds.length === 0) {
+    throw new PeopleApiError('El contacto debe estar asociado a un cliente.', 400);
+  }
+
+  if (hasServerManagementPrivileges(requester)) return;
+
+  for (const clientId of clientIds) {
+    const client = await getClient(clientId);
+    if (!client || client.ownerId !== requester.uid) {
+      throw new PeopleApiError('Forbidden', 403);
+    }
+  }
+}
+
 export async function createPersonServer(
   personData: Omit<Person, 'id'> | undefined,
   requester: ServerUser,
 ): Promise<string> {
   const name = personData?.name?.trim();
+  const clientIds = normalizeClientIds(personData?.clientIds);
 
   if (!name) {
     throw new PeopleApiError('El nombre del contacto es obligatorio.', 400);
   }
 
+  await requireClientIdsAccess(clientIds, requester);
+
   const docRef = await dbAdmin.collection('people').add({
     ...personData,
     name,
+    clientIds,
     createdAt: FieldValue.serverTimestamp(),
   });
 
@@ -76,9 +102,18 @@ export async function updatePersonServer(
     throw new PeopleApiError('Person not found', 404);
   }
 
-  const originalData = originalDoc.data() as Person;
+  const originalData = { id: originalDoc.id, ...originalDoc.data() } as Person;
+  const nextClientIds = data.clientIds !== undefined
+    ? normalizeClientIds(data.clientIds)
+    : normalizeClientIds(originalData.clientIds);
+  await requireClientIdsAccess(
+    Array.from(new Set([...normalizeClientIds(originalData.clientIds), ...nextClientIds])),
+    requester,
+  );
+
   await personRef.update({
     ...data,
+    ...(data.clientIds !== undefined ? { clientIds: nextClientIds } : {}),
     updatedAt: FieldValue.serverTimestamp(),
   });
 
@@ -106,7 +141,9 @@ export async function deletePersonServer(personId: string, requester: ServerUser
     throw new PeopleApiError('Person not found', 404);
   }
 
-  const personData = personSnap.data() as Person;
+  const personData = { id: personSnap.id, ...personSnap.data() } as Person;
+  await requireClientIdsAccess(normalizeClientIds(personData.clientIds), requester);
+
   await personRef.delete();
 
   const clientId = personData.clientIds?.[0];

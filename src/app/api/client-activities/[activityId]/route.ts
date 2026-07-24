@@ -14,7 +14,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   try {
     const { activityId } = await context.params;
     const body = await request.json();
-    await updateClientActivityServer(activityId, body?.data);
+    await updateClientActivityServer(activityId, body?.data, requester);
 
     return NextResponse.json({ ok: true });
   } catch (error) {
