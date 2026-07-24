@@ -2,7 +2,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { differenceInCalendarDays, parse, parseISO } from 'date-fns';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/lib/server/requester';
-import { type ServerUser } from '@/lib/server/auth';
+import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import type { PaymentEntry, PaymentStatus } from '@/lib/types';
@@ -102,13 +102,33 @@ export function buildPaymentImportPayload(row: PaymentImportRow, advisorId: stri
   };
 }
 
-export async function listPaymentsServer(options: { pending?: boolean }) {
+function canAccessPaymentEntry(payment: PaymentEntry, requester: ServerUser) {
+  return hasServerManagementPrivileges(requester) || payment.advisorId === requester.uid;
+}
+
+async function getPaymentEntryOrFail(paymentId: string) {
+  const docRef = dbAdmin.collection('payment_entries').doc(paymentId);
+  const snap = await docRef.get();
+
+  if (!snap.exists) {
+    throw new PaymentApiError('Pago no encontrado.', 404);
+  }
+
+  return {
+    docRef,
+    payment: mapPaymentEntry(snap.id, snap.data()),
+  };
+}
+
+export async function listPaymentsServer(options: { pending?: boolean; requester: ServerUser }) {
   const collectionRef = dbAdmin.collection('payment_entries');
   const snapshot = options.pending
     ? await collectionRef.where('status', 'in', PENDING_STATUSES).orderBy('createdAt', 'desc').get()
     : await collectionRef.orderBy('createdAt', 'desc').get();
 
-  return snapshot.docs.map(doc => mapPaymentEntry(doc.id, doc.data()));
+  return snapshot.docs
+    .map(doc => mapPaymentEntry(doc.id, doc.data()))
+    .filter(payment => canAccessPaymentEntry(payment, options.requester));
 }
 
 export async function importPaymentsServer(rawBody: unknown, requester: ServerUser) {
@@ -211,8 +231,13 @@ export async function updatePaymentServer(paymentId: string, rawBody: unknown, r
   const updates = (body.updates || {}) as Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt' | 'pendingAmount'>>;
   const audit = (body.audit || {}) as PaymentAudit;
   const shouldAudit = Boolean(body.audit && typeof body.audit === 'object');
+  const { docRef, payment } = await getPaymentEntryOrFail(paymentId);
 
-  await dbAdmin.collection('payment_entries').doc(paymentId).update({
+  if (!canAccessPaymentEntry(payment, requester)) {
+    throw new PaymentApiError('Forbidden', 403);
+  }
+
+  await docRef.update({
     ...updates,
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -238,8 +263,13 @@ export async function requestPaymentExplanationServer(paymentId: string, rawBody
   const note = typeof body.note === 'string' ? body.note : '';
   const comprobanteNumber = typeof body.comprobanteNumber === 'string' ? body.comprobanteNumber : null;
   const requesterName = getRequesterName(requester);
+  const { docRef, payment } = await getPaymentEntryOrFail(paymentId);
 
-  await dbAdmin.collection('payment_entries').doc(paymentId).update({
+  if (!canAccessPaymentEntry(payment, requester)) {
+    throw new PaymentApiError('Forbidden', 403);
+  }
+
+  await docRef.update({
     lastExplanationRequestAt: FieldValue.serverTimestamp(),
     lastExplanationRequestById: requester.uid,
     lastExplanationRequestByName: requesterName,

@@ -9,7 +9,12 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    return NextResponse.json({ payments: await listPaymentsServer({ pending: searchParams.get('pending') === 'true' }) });
+    return NextResponse.json({
+      payments: await listPaymentsServer({
+        pending: searchParams.get('pending') === 'true',
+        requester,
+      }),
+    });
   } catch (error) {
     return paymentErrorResponse(error, {
       action: 'LIST',

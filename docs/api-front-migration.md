@@ -1277,6 +1277,14 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La auditoria de front no encontro accesos directos a Firestore fuera de Firebase Auth; las pantallas siguen pasando por `src/lib/api/*` y `api-client`.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo sexagesimo quinto corte aplicado
+
+- `src/lib/server/payments.ts` filtra registros de mora por usuario cuando el requester no tiene privilegios de gestion.
+- Las mutaciones puntuales de mora validan existencia y acceso al registro antes de actualizar o solicitar aclaracion.
+- Management conserva visibilidad y operacion global; cada asesor queda limitado a sus propios registros.
+- Se evita crear nuevos indices de Firestore: el filtrado se mantiene del lado server sobre las queries existentes.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front
