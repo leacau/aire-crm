@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   if (isServerResponse(requester)) return requester;
 
   try {
-    return NextResponse.json({ canjes: await listCanjesServer() });
+    return NextResponse.json({ canjes: await listCanjesServer(requester) });
   } catch (error) {
     return canjeErrorResponse(error, {
       action: 'LIST',

@@ -1285,6 +1285,15 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - Se evita crear nuevos indices de Firestore: el filtrado se mantiene del lado server sobre las queries existentes.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo sexagesimo sexto corte aplicado
+
+- `/api/invoices` recibe el requester autenticado y filtra facturas CRM en servidor.
+- Management conserva visibilidad global; asesores solo ven facturas de oportunidades propias o de clientes propios.
+- `src/lib/server/invoice-access.ts` agrega cache de oportunidades/clientes para no duplicar lecturas durante el filtrado.
+- `/api/canjes` replica en servidor la visibilidad que ya aplicaba el front: roles de gestion/responsables configurados ven todo; el resto queda limitado a canjes propios, creados por el usuario o asociados a clientes propios.
+- `/api/canjes/[canjeId]/invoices` valida acceso al canje antes de devolver facturas relacionadas.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

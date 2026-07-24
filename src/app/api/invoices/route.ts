@@ -13,6 +13,7 @@ export async function GET(request: Request) {
       invoices: await listInvoicesServer({
         opportunityId: searchParams.get('opportunityId'),
         dashboard: searchParams.get('dashboard') === 'true',
+        requester,
       }),
     });
   } catch (error) {

@@ -4,7 +4,11 @@ import { getRequesterName } from '@/lib/server/requester';
 import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
-import { canAccessInvoiceMutation, canAccessInvoiceMutationByOpportunity } from '@/lib/server/invoice-access';
+import {
+  canAccessInvoiceMutation,
+  canAccessInvoiceMutationByOpportunity,
+  filterAccessibleInvoices,
+} from '@/lib/server/invoice-access';
 import type { Invoice } from '@/lib/types';
 
 export class InvoiceApiError extends Error {
@@ -97,6 +101,7 @@ export function buildMonthlyBillingIncrement(monthKey: string, amountToAdd: numb
 export async function listInvoicesServer(options: {
   opportunityId?: string | null;
   dashboard?: boolean;
+  requester: ServerUser;
 }) {
   const collectionRef = dbAdmin.collection('invoices');
   let snapshot: FirebaseFirestore.QuerySnapshot;
@@ -114,9 +119,11 @@ export async function listInvoicesServer(options: {
     snapshot = await collectionRef.orderBy('dateGenerated', 'desc').get();
   }
 
-  return snapshot.docs
+  const invoices = snapshot.docs
     .map(doc => mapInvoice(doc.id, doc.data()))
     .sort(compareInvoicesByGeneratedDesc);
+
+  return filterAccessibleInvoices(invoices, options.requester);
 }
 
 export async function createInvoiceServer(rawBody: unknown, requester: ServerUser) {

@@ -1,11 +1,12 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { getRequesterName } from '@/lib/server/requester';
-import { type ServerUser } from '@/lib/server/auth';
+import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/auth';
 import { filterAccessibleAdvertisingOrders } from '@/lib/server/advertising-order-access';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
 import { mapInvoice } from '@/lib/server/invoices';
+import { getWorkflowAssignmentsServer } from '@/lib/server/workflow-assignments';
 import type { AdvertisingOrder, Canje, HistorialMensualItem } from '@/lib/types';
 
 export class CanjeApiError extends Error {
@@ -83,9 +84,45 @@ export function cleanCanjeUpdatePayload(payload: Record<string, unknown>, delete
   return cleaned;
 }
 
-export async function listCanjesServer() {
+async function canViewAllCanjes(requester: ServerUser) {
+  if (hasServerManagementPrivileges(requester)) return true;
+
+  const assignments = await getWorkflowAssignmentsServer();
+  return [
+    ...assignments.needRequestReceivers,
+    ...assignments.canjeRequestReceivers,
+    ...assignments.canjeManagementApprovers,
+    ...assignments.canjeCommercialReferents,
+  ].includes(requester.uid);
+}
+
+async function getOwnedClientIds(requesterId: string) {
+  const clientsSnap = await dbAdmin.collection('clients').where('ownerId', '==', requesterId).get();
+  return new Set(clientsSnap.docs.map(doc => doc.id));
+}
+
+function canAccessCanje(canje: Canje, requester: ServerUser, ownedClientIds: Set<string>) {
+  return canje.asesorId === requester.uid
+    || canje.creadoPorId === requester.uid
+    || Boolean(canje.clienteId && ownedClientIds.has(canje.clienteId));
+}
+
+async function getCanjeOrFail(canjeId: string) {
+  const canjeSnap = await dbAdmin.collection('canjes').doc(canjeId).get();
+  if (!canjeSnap.exists) {
+    throw new CanjeApiError('Canje not found', 404);
+  }
+  return mapCanje(canjeSnap.id, canjeSnap.data());
+}
+
+export async function listCanjesServer(requester: ServerUser) {
   const snapshot = await dbAdmin.collection('canjes').orderBy('fechaCreacion', 'desc').get();
-  return snapshot.docs.map(doc => mapCanje(doc.id, doc.data()));
+  const canjes = snapshot.docs.map(doc => mapCanje(doc.id, doc.data()));
+
+  if (await canViewAllCanjes(requester)) return canjes;
+
+  const ownedClientIds = await getOwnedClientIds(requester.uid);
+  return canjes.filter(canje => canAccessCanje(canje, requester, ownedClientIds));
 }
 
 export async function createCanjeServer(rawBody: unknown, requester: ServerUser) {
@@ -134,6 +171,13 @@ export async function updateCanjeServer(canjeId: string, rawBody: unknown, reque
   }
 
   const originalData = mapCanje(originalDoc.id, originalDoc.data());
+  if (!(await canViewAllCanjes(requester))) {
+    const ownedClientIds = await getOwnedClientIds(requester.uid);
+    if (!canAccessCanje(originalData, requester, ownedClientIds)) {
+      throw new CanjeApiError('Forbidden', 403);
+    }
+  }
+
   const requesterName = getRequesterName(requester);
   const updateData = cleanCanjeUpdatePayload(data as Record<string, unknown>, deleteKeys);
 
@@ -176,6 +220,10 @@ export async function deleteCanjeServer(canjeId: string, requester: ServerUser) 
   }
 
   const canjeData = mapCanje(canjeSnap.id, canjeSnap.data());
+  if (!hasServerManagementPrivileges(requester)) {
+    throw new CanjeApiError('Forbidden', 403);
+  }
+
   await docRef.delete();
 
   const requesterName = getRequesterName(requester);
@@ -218,8 +266,15 @@ export async function listCanjeAdvertisingOrdersServer(
   return accessibleOrders.sort((a, b) => (b.startDate || b.createdAt || '').localeCompare(a.startDate || a.createdAt || ''));
 }
 
-export async function listCanjeInvoicesServer(canjeId: string) {
+export async function listCanjeInvoicesServer(canjeId: string, requester: ServerUser) {
   if (!canjeId) return [];
+  const canje = await getCanjeOrFail(canjeId);
+  if (!(await canViewAllCanjes(requester))) {
+    const ownedClientIds = await getOwnedClientIds(requester.uid);
+    if (!canAccessCanje(canje, requester, ownedClientIds)) {
+      throw new CanjeApiError('Forbidden', 403);
+    }
+  }
 
   const snapshot = await dbAdmin.collection('invoices').where('canjeId', '==', canjeId).get();
   return snapshot.docs

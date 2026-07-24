@@ -13,7 +13,7 @@ export async function GET(request: Request, context: RouteContext) {
 
   try {
     const { canjeId } = await context.params;
-    return NextResponse.json({ invoices: await listCanjeInvoicesServer(canjeId) });
+    return NextResponse.json({ invoices: await listCanjeInvoicesServer(canjeId, requester) });
   } catch (error) {
     return canjeErrorResponse(error, {
       action: 'INVOICES',
