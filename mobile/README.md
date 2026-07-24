@@ -34,6 +34,18 @@ npm run android
 npm run ios
 ```
 
+## APK Android
+
+El perfil `preview` de EAS genera un APK instalable fuera de Play Store:
+
+```bash
+cd mobile
+npx eas-cli login
+npm run build:android:apk
+```
+
+Antes de construir, cargar las variables `EXPO_PUBLIC_*` en EAS o en el entorno de build. Sin esos valores la app no puede inicializar Firebase ni llamar a la API.
+
 ## Primer alcance
 
 - Login Google corporativo y login externo email/password.
