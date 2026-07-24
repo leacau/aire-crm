@@ -1220,6 +1220,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `src/lib/firebase.ts` deja de inicializar Firestore en el cliente; el front mantiene solo Firebase Auth como proveedor de identidad.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo quincuagesimo septimo corte aplicado
+
+- `src/lib/server/tango.ts` concentra endpoints, paginado, normalizacion, filtros por vendedor y descarga PDF de Tango.
+- Las rutas `/api/tango/clients`, `/api/tango/invoices`, `/api/tango/collections` y `/api/tango/invoices/pdf` quedan como handlers delgados.
+- `src/app/api/tango/utils.ts` respeta errores de dominio 400/503 sin convertirlos en fallas genericas.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

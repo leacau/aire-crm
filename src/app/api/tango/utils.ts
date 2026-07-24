@@ -16,6 +16,12 @@ function getErrorCode(error: unknown) {
     : undefined;
 }
 
+function getErrorStatus(error: unknown) {
+  return typeof error === 'object' && error !== null && 'status' in error
+    ? Number((error as { status?: unknown }).status)
+    : null;
+}
+
 export function tangoMissingConfigResponse(variableName: string) {
   return NextResponse.json({
     error: `Falta configurar ${variableName}`,
@@ -32,6 +38,11 @@ export function tangoErrorResponse(error: unknown, context: TangoErrorContext) {
     code: getErrorCode(error),
     message,
   });
+
+  const status = getErrorStatus(error);
+  if (status && Number.isFinite(status)) {
+    return NextResponse.json({ error: message }, { status });
+  }
 
   return NextResponse.json({
     error: context.publicError,
