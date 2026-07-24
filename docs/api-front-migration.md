@@ -1255,6 +1255,13 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La carpeta `/api` conserva menos fachadas muertas y queda mas clara la separacion entre handler HTTP y logica server.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo sexagesimo segundo corte aplicado
+
+- Los helpers HTTP de errores de convenios, vacaciones, coaching, Tango y servicios externos pasan de `utils.ts` a `errors.ts`.
+- Las rutas mantienen el mismo comportamiento, pero la nomenclatura separa mejor respuestas HTTP de utilidades de dominio o servicios server.
+- `cron/utils.ts` queda pendiente porque todavia combina validacion de autorizacion del cron con respuesta de error.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

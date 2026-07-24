@@ -5,7 +5,7 @@ import {
   listConveniosCanjeServer,
   saveConvenioCanjeServer,
 } from '@/lib/server/convenios';
-import { convenioErrorResponse } from '@/app/api/convenios/utils';
+import { convenioErrorResponse } from '@/app/api/convenios/errors';
 import type { ConvenioCanje } from '@/lib/types';
 
 export async function GET(request: Request) {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { externalServiceErrorResponse } from '@/app/api/services/utils';
+import { externalServiceErrorResponse } from '@/app/api/services/errors';
 
 const DRIVE_API_URL = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files';

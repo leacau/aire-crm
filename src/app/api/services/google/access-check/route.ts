@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { externalServiceErrorResponse } from '@/app/api/services/utils';
+import { externalServiceErrorResponse } from '@/app/api/services/errors';
 
 const SERVICE_CHECKS = [
   { name: 'calendar', url: 'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1' },

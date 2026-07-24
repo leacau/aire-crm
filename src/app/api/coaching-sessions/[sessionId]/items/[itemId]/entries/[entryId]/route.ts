@@ -5,7 +5,7 @@ import {
 } from '@/lib/server/coaching';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { getRequesterName } from '@/lib/server/requester';
-import { coachingErrorResponse } from '@/app/api/coaching-sessions/utils';
+import { coachingErrorResponse } from '@/app/api/coaching-sessions/errors';
 
 type RouteContext = {
   params: Promise<{ sessionId: string; itemId: string; entryId: string }>;

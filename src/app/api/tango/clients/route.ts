@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerManagement } from '@/lib/server/auth';
 import { listTangoClientsServer } from '@/lib/server/tango';
-import { tangoErrorResponse } from '@/app/api/tango/utils';
+import { tangoErrorResponse } from '@/app/api/tango/errors';
 
 export async function GET(request: Request) {
   const serverUser = await requireServerManagement(request);

@@ -3,7 +3,7 @@ import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import {
   approveVacationRequestServer,
 } from '@/lib/server/vacation-requests';
-import { vacationRequestErrorResponse } from '@/app/api/vacation-requests/utils';
+import { vacationRequestErrorResponse } from '@/app/api/vacation-requests/errors';
 import type { VacationRequestStatus } from '@/lib/types';
 
 type RouteContext = {

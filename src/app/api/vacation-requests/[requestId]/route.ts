@@ -4,7 +4,7 @@ import {
   deleteVacationRequestServer,
   updateVacationRequestServer,
 } from '@/lib/server/vacation-requests';
-import { vacationRequestErrorResponse } from '@/app/api/vacation-requests/utils';
+import { vacationRequestErrorResponse } from '@/app/api/vacation-requests/errors';
 import type { VacationRequest } from '@/lib/types';
 
 type RouteContext = {

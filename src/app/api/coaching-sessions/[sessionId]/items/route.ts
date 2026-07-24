@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { addItemsToSessionServer } from '@/lib/server/coaching';
-import { coachingErrorResponse } from '@/app/api/coaching-sessions/utils';
+import { coachingErrorResponse } from '@/app/api/coaching-sessions/errors';
 import type { CoachingItem } from '@/lib/types';
 
 type RouteContext = {

@@ -5,7 +5,7 @@ import {
   updateCoachingItemServer,
 } from '@/lib/server/coaching';
 import { getRequesterName } from '@/lib/server/requester';
-import { coachingErrorResponse } from '@/app/api/coaching-sessions/utils';
+import { coachingErrorResponse } from '@/app/api/coaching-sessions/errors';
 import type { CoachingItem } from '@/lib/types';
 
 type RouteContext = {

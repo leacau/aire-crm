@@ -4,7 +4,7 @@ import {
   createVacationRequestServer,
   listVacationRequests,
 } from '@/lib/server/vacation-requests';
-import { vacationRequestErrorResponse } from '@/app/api/vacation-requests/utils';
+import { vacationRequestErrorResponse } from '@/app/api/vacation-requests/errors';
 import type { VacationRequest } from '@/lib/types';
 
 export async function GET(request: Request) {

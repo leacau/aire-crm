@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { externalServiceErrorResponse } from '@/app/api/services/utils';
+import { externalServiceErrorResponse } from '@/app/api/services/errors';
 
 export const runtime = 'nodejs';
 

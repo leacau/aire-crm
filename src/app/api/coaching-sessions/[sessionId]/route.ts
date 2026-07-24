@@ -5,7 +5,7 @@ import {
   deleteCoachingSessionServer,
   updateCoachingSessionServer,
 } from '@/lib/server/coaching';
-import { coachingErrorResponse } from '@/app/api/coaching-sessions/utils';
+import { coachingErrorResponse } from '@/app/api/coaching-sessions/errors';
 import type { CoachingSession } from '@/lib/types';
 
 type RouteContext = {

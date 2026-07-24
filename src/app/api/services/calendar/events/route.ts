@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { externalServiceErrorResponse } from '@/app/api/services/utils';
+import { externalServiceErrorResponse } from '@/app/api/services/errors';
 
 function encodeCalendarId(calendarId: string) {
     return encodeURIComponent(calendarId || 'primary');

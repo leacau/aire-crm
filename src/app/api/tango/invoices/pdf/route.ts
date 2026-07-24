@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { hasServerManagementPrivileges, isServerResponse, requireServerUser } from '@/lib/server/auth';
 import { downloadTangoInvoicePdfServer, TangoApiError } from '@/lib/server/tango';
-import { tangoErrorResponse } from '@/app/api/tango/utils';
+import { tangoErrorResponse } from '@/app/api/tango/errors';
 
 export async function GET(request: Request) {
   const serverUser = await requireServerUser(request);

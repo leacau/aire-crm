@@ -4,7 +4,7 @@ import { getRequesterName } from '@/lib/server/requester';
 import {
   migrateLegacyConveniosToCanjesServer,
 } from '@/lib/server/convenios';
-import { convenioErrorResponse } from '@/app/api/convenios/utils';
+import { convenioErrorResponse } from '@/app/api/convenios/errors';
 
 export async function POST(request: Request) {
   const requester = await requireServerManagement(request);
