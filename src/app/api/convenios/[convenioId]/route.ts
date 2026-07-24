@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { getRequesterName } from '@/lib/server/requester';
 import {
   deleteConvenioCanjeServer,
   updateConvenioCanjeServer,
@@ -22,8 +21,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     await updateConvenioCanjeServer(
       convenioId,
       body?.data as Partial<Omit<ConvenioCanje, 'id' | 'createdAt'>>,
-      requester.uid,
-      getRequesterName(requester),
+      requester,
     );
     return NextResponse.json({ ok: true });
   } catch (error) {
@@ -45,8 +43,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     await deleteConvenioCanjeServer(
       convenioId,
       body?.opportunityId ? String(body.opportunityId) : undefined,
-      requester.uid,
-      getRequesterName(requester),
+      requester,
     );
     return NextResponse.json({ ok: true });
   } catch (error) {

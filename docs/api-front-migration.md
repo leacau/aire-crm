@@ -1294,6 +1294,15 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - `/api/canjes/[canjeId]/invoices` valida acceso al canje antes de devolver facturas relacionadas.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo sexagesimo septimo corte aplicado
+
+- `updateCanjeServer` separa permisos de lectura y escritura: usuarios con vista global por workflow ya no pueden mutar canjes ajenos si no son gestion, asesor asignado o creador.
+- Las APIs de convenios reciben el `requester` completo y resuelven identidad/autoria dentro del servicio server.
+- `/api/convenios` filtra convenios en servidor: management ve todo; asesores solo ven los propios.
+- Altas de convenios fijan `advisorId` y `advisorName` desde la sesion autenticada, evitando confiar en datos enviados desde el front.
+- Edicion y borrado de convenios validan acceso al registro antes de modificar o eliminar convenio, oportunidad, facturas y ordenes asociadas.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

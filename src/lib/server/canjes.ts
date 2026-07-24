@@ -107,6 +107,12 @@ function canAccessCanje(canje: Canje, requester: ServerUser, ownedClientIds: Set
     || Boolean(canje.clienteId && ownedClientIds.has(canje.clienteId));
 }
 
+function canMutateCanje(canje: Canje, requester: ServerUser) {
+  return hasServerManagementPrivileges(requester)
+    || canje.asesorId === requester.uid
+    || canje.creadoPorId === requester.uid;
+}
+
 async function getCanjeOrFail(canjeId: string) {
   const canjeSnap = await dbAdmin.collection('canjes').doc(canjeId).get();
   if (!canjeSnap.exists) {
@@ -171,11 +177,8 @@ export async function updateCanjeServer(canjeId: string, rawBody: unknown, reque
   }
 
   const originalData = mapCanje(originalDoc.id, originalDoc.data());
-  if (!(await canViewAllCanjes(requester))) {
-    const ownedClientIds = await getOwnedClientIds(requester.uid);
-    if (!canAccessCanje(originalData, requester, ownedClientIds)) {
-      throw new CanjeApiError('Forbidden', 403);
-    }
+  if (!canMutateCanje(originalData, requester)) {
+    throw new CanjeApiError('Forbidden', 403);
   }
 
   const requesterName = getRequesterName(requester);

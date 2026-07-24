@@ -4,6 +4,8 @@ import { logServerActivity } from '@/lib/server/activity';
 import { mapAdvertisingOrder } from '@/lib/server/advertising-orders';
 import { cleanCanjeCreatePayload } from '@/lib/server/canjes';
 import { serializeDocument } from '@/lib/server/firestore';
+import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/auth';
+import { getRequesterName } from '@/lib/server/requester';
 import type { AdvertisingOrder, Canje, ConvenioCanje, Opportunity } from '@/lib/types';
 
 export class ConvenioApiError extends Error {
@@ -31,6 +33,16 @@ function cleanUpdatePayload(payload: Record<string, unknown>) {
   }
 
   return cleaned;
+}
+
+function canAccessConvenio(convenio: ConvenioCanje, requester: ServerUser): boolean {
+  return hasServerManagementPrivileges(requester) || convenio.advisorId === requester.uid;
+}
+
+function requireConvenioAccess(convenio: ConvenioCanje, requester: ServerUser): void {
+  if (!canAccessConvenio(convenio, requester)) {
+    throw new ConvenioApiError('Forbidden', 403);
+  }
 }
 
 async function getAdvertisingOrdersByOpportunity(opportunityId: string): Promise<AdvertisingOrder[]> {
@@ -130,35 +142,40 @@ async function createCanjeFromConvenio(
   return docRef.id;
 }
 
-export async function listConveniosCanjeServer(): Promise<ConvenioCanje[]> {
+export async function listConveniosCanjeServer(requester: ServerUser): Promise<ConvenioCanje[]> {
   const snapshot = await dbAdmin.collection('convenios').orderBy('createdAt', 'desc').get();
-  return snapshot.docs.map(doc => mapConvenio(doc.id, doc.data()));
+  const convenios = snapshot.docs.map(doc => mapConvenio(doc.id, doc.data()));
+  return hasServerManagementPrivileges(requester)
+    ? convenios
+    : convenios.filter(convenio => canAccessConvenio(convenio, requester));
 }
 
 export async function saveConvenioCanjeServer(
   convenioData: Omit<ConvenioCanje, 'id' | 'createdAt'>,
-  userId: string,
-  userName: string,
+  requester: ServerUser,
 ): Promise<string> {
   if (!convenioData?.clientId || !convenioData.clientName) {
     throw new ConvenioApiError('Cliente obligatorio para el convenio.', 400);
   }
 
+  const requesterName = getRequesterName(requester);
   const dataToSave = {
     ...convenioData,
+    advisorId: requester.uid,
+    advisorName: requesterName,
     createdAt: FieldValue.serverTimestamp(),
   };
   const docRef = await dbAdmin.collection('convenios').add(dataToSave);
 
   await logServerActivity({
-    userId,
-    userName,
+    userId: requester.uid,
+    userName: requesterName,
     type: 'create',
     entityType: 'canje' as any,
     entityId: docRef.id,
     entityName: `Convenio: ${convenioData.clientName}`,
     details: `creo un nuevo Convenio de Canje para <strong>${convenioData.clientName}</strong>`,
-    ownerName: userName,
+    ownerName: requesterName,
   });
 
   return docRef.id;
@@ -167,41 +184,48 @@ export async function saveConvenioCanjeServer(
 export async function updateConvenioCanjeServer(
   id: string,
   data: Partial<Omit<ConvenioCanje, 'id' | 'createdAt'>>,
-  userId: string,
-  userName: string,
+  requester: ServerUser,
 ): Promise<void> {
   const docRef = dbAdmin.collection('convenios').doc(id);
   const snap = await docRef.get();
   if (!snap.exists) throw new ConvenioApiError('Convenio no encontrado.', 404);
 
+  const originalData = mapConvenio(snap.id, snap.data());
+  requireConvenioAccess(originalData, requester);
+  const requesterName = getRequesterName(requester);
+
   await docRef.update({
     ...cleanUpdatePayload(data as Record<string, unknown>),
+    ...(hasServerManagementPrivileges(requester) ? {} : {
+      advisorId: originalData.advisorId,
+      advisorName: originalData.advisorName,
+    }),
     updatedAt: FieldValue.serverTimestamp(),
   });
 
   await logServerActivity({
-    userId,
-    userName,
+    userId: requester.uid,
+    userName: requesterName,
     type: 'update',
     entityType: 'canje' as any,
     entityId: id,
-    entityName: data.clientName || 'Convenio de Canje',
-    details: `actualizo un Convenio de Canje para <strong>${data.clientName || 'Cliente'}</strong>`,
-    ownerName: userName,
+    entityName: data.clientName || originalData.clientName || 'Convenio de Canje',
+    details: `actualizo un Convenio de Canje para <strong>${data.clientName || originalData.clientName || 'Cliente'}</strong>`,
+    ownerName: requesterName,
   });
 }
 
 export async function deleteConvenioCanjeServer(
   canjeId: string,
   opportunityId: string | undefined,
-  userId: string,
-  userName: string,
+  requester: ServerUser,
 ): Promise<void> {
   const convenioRef = dbAdmin.collection('convenios').doc(canjeId);
   const convenioSnap = await convenioRef.get();
   if (!convenioSnap.exists) throw new ConvenioApiError('Convenio no encontrado.', 404);
 
   const convenio = mapConvenio(convenioSnap.id, convenioSnap.data());
+  requireConvenioAccess(convenio, requester);
   const oppId = opportunityId || convenio.opportunityId;
   const batch = dbAdmin.batch();
 
@@ -221,15 +245,16 @@ export async function deleteConvenioCanjeServer(
 
   await batch.commit();
 
+  const requesterName = getRequesterName(requester);
   await logServerActivity({
-    userId,
-    userName,
+    userId: requester.uid,
+    userName: requesterName,
     type: 'delete',
     entityType: 'canje' as any,
     entityId: canjeId,
     entityName: 'Convenio de Canje',
     details: 'elimino un Convenio de Canje y su Orden de Publicidad asociada',
-    ownerName: userName,
+    ownerName: requesterName,
   });
 }
 

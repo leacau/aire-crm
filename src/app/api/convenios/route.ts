@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { isServerResponse, requireServerUser } from '@/lib/server/auth';
-import { getRequesterName } from '@/lib/server/requester';
 import {
   listConveniosCanjeServer,
   saveConvenioCanjeServer,
@@ -13,7 +12,7 @@ export async function GET(request: Request) {
   if (isServerResponse(requester)) return requester;
 
   try {
-    const convenios = await listConveniosCanjeServer();
+    const convenios = await listConveniosCanjeServer(requester);
     return NextResponse.json({ convenios });
   } catch (error) {
     return convenioErrorResponse(error, {
@@ -32,8 +31,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const id = await saveConvenioCanjeServer(
       body?.convenioData as Omit<ConvenioCanje, 'id' | 'createdAt'>,
-      requester.uid,
-      getRequesterName(requester),
+      requester,
     );
     return NextResponse.json({ id });
   } catch (error) {
