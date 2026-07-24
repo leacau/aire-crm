@@ -23,7 +23,10 @@
       "@react-native-google-signin/google-signin"
     ],
     "extra": {
-      "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}"
+      "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}",
+      "eas": {
+        "projectId": "00f4a315-5804-499a-b017-64038ce65cbe"
+      }
     }
   }
 }
