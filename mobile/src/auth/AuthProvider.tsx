@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
+import { hasMobileRuntimeConfig, missingMobileEnvNames } from '../config/env';
 import { auth } from '../lib/firebase';
 import { getMobileBootstrap } from '../lib/api';
 import type { AuthSession, MobileBootstrap } from '../lib/types';
@@ -11,6 +12,7 @@ type AuthContextValue = {
   session: AuthSession | null;
   bootstrap: MobileBootstrap | null;
   error: string | null;
+  canUseAuth: boolean;
   loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -25,6 +27,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [bootstrap, setBootstrap] = useState<MobileBootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const configError = hasMobileRuntimeConfig
+    ? null
+    : `Faltan variables de entorno en el build mobile: ${missingMobileEnvNames.join(', ')}.`;
 
   const loadSession = useCallback(async (user: FirebaseUser | null) => {
     setError(null);
@@ -47,6 +52,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!auth) {
+      setError(configError || 'La app mobile no esta configurada.');
+      setInitializing(false);
+      return undefined;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       await loadSession(user);
@@ -54,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return unsubscribe;
-  }, [loadSession]);
+  }, [configError, loadSession]);
 
   const loginWithGoogle = useCallback(async () => {
     setError(null);
@@ -74,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshSession = useCallback(async () => {
-    await loadSession(auth.currentUser);
+    await loadSession(auth?.currentUser || null);
   }, [loadSession]);
 
   const value = useMemo<AuthContextValue>(() => ({
@@ -83,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     bootstrap,
     error,
+    canUseAuth: Boolean(auth),
     loginWithGoogle,
     loginWithEmail,
     logout,

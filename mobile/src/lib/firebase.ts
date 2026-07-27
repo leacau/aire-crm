@@ -4,33 +4,39 @@ import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
   getAuth,
   initializeAuth,
-  type Auth,
   type Persistence,
 } from '@firebase/auth';
-import { env, requireEnv } from '../config/env';
+import type { Auth } from 'firebase/auth';
+import { env, hasMobileRuntimeConfig } from '../config/env';
 
-const firebaseConfig = {
-  apiKey: requireEnv(env.firebase.apiKey, 'EXPO_PUBLIC_FIREBASE_API_KEY'),
-  authDomain: requireEnv(env.firebase.authDomain, 'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN'),
-  projectId: requireEnv(env.firebase.projectId, 'EXPO_PUBLIC_FIREBASE_PROJECT_ID'),
-  storageBucket: requireEnv(env.firebase.storageBucket, 'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: requireEnv(env.firebase.messagingSenderId, 'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'),
-  appId: requireEnv(env.firebase.appId, 'EXPO_PUBLIC_FIREBASE_APP_ID'),
-};
+const firebaseConfig = hasMobileRuntimeConfig
+  ? {
+      apiKey: env.firebase.apiKey,
+      authDomain: env.firebase.authDomain,
+      projectId: env.firebase.projectId,
+      storageBucket: env.firebase.storageBucket,
+      messagingSenderId: env.firebase.messagingSenderId,
+      appId: env.firebase.appId,
+    }
+  : null;
 
-export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+export const firebaseApp = firebaseConfig
+  ? (getApps().length ? getApp() : initializeApp(firebaseConfig))
+  : null;
 
 const { getReactNativePersistence } = FirebaseAuth as typeof FirebaseAuth & {
   getReactNativePersistence: (storage: ReturnType<typeof createAsyncStorage>) => Persistence;
 };
 
-function createAuth(): Auth {
+function createAuth(): Auth | null {
+  if (!firebaseApp) return null;
+
   try {
     return initializeAuth(firebaseApp, {
       persistence: getReactNativePersistence(createAsyncStorage('aire-crm-mobile')),
-    });
+    }) as unknown as Auth;
   } catch {
-    return getAuth(firebaseApp);
+    return getAuth(firebaseApp) as unknown as Auth;
   }
 }
 

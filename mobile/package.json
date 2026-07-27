@@ -9,6 +9,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:android:apk": "eas build --platform android --profile preview",
+    "doctor:env": "node scripts/check-env.cjs",
+    "eas-build-pre-install": "node scripts/check-env.cjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

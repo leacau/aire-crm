@@ -46,6 +46,23 @@ npm run build:android:apk
 
 Antes de construir, cargar las variables `EXPO_PUBLIC_*` en EAS o en el entorno de build. Sin esos valores la app no puede inicializar Firebase ni llamar a la API.
 
+El build ejecuta `npm run doctor:env` automaticamente dentro de EAS para cortar temprano si falta alguna variable. Para revisar tu entorno local:
+
+```bash
+npm run doctor:env
+```
+
+Variables requeridas para el entorno `preview` de EAS:
+
+- `EXPO_PUBLIC_API_BASE_URL`
+- `EXPO_PUBLIC_FIREBASE_API_KEY`
+- `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `EXPO_PUBLIC_FIREBASE_PROJECT_ID`
+- `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+- `EXPO_PUBLIC_FIREBASE_APP_ID`
+- `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
+
 ## Primer alcance
 
 - Login Google corporativo y login externo email/password.

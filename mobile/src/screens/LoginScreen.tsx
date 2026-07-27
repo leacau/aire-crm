@@ -14,10 +14,11 @@ import { useAuth } from '../auth/AuthProvider';
 
 export function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { error, loginWithEmail, loginWithGoogle } = useAuth();
+  const { canUseAuth, error, loginWithEmail, loginWithGoogle } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const authDisabled = loading || !canUseAuth;
 
   const runLogin = async (mode: 'google' | 'email') => {
     setLoading(true);
@@ -46,7 +47,11 @@ export function LoginScreen() {
       </View>
 
       <View style={styles.card}>
-        <Pressable disabled={loading} style={styles.primaryButton} onPress={() => runLogin('google')}>
+        <Pressable
+          disabled={authDisabled}
+          style={[styles.primaryButton, authDisabled && styles.disabledButton]}
+          onPress={() => runLogin('google')}
+        >
           <Text style={styles.primaryButtonText}>{loading ? 'Ingresando...' : 'Ingresar con Google'}</Text>
         </Pressable>
 
@@ -70,7 +75,11 @@ export function LoginScreen() {
           value={password}
           onChangeText={setPassword}
         />
-        <Pressable disabled={loading || !email || !password} style={styles.secondaryButton} onPress={() => runLogin('email')}>
+        <Pressable
+          disabled={authDisabled || !email || !password}
+          style={[styles.secondaryButton, (authDisabled || !email || !password) && styles.disabledButton]}
+          onPress={() => runLogin('email')}
+        >
           <Text style={styles.secondaryButtonText}>Ingresar con email</Text>
         </Pressable>
 
@@ -152,6 +161,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#0f172a',
     paddingVertical: 13,
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
   secondaryButtonText: {
     color: '#0f172a',

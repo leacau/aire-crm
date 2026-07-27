@@ -5,7 +5,7 @@ import {
   signOut,
 } from 'firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import { env } from '../config/env';
+import { env, missingMobileEnvNames } from '../config/env';
 import { auth } from '../lib/firebase';
 
 GoogleSignin.configure({
@@ -13,6 +13,14 @@ GoogleSignin.configure({
   iosClientId: env.google.iosClientId || undefined,
   offlineAccess: false,
 });
+
+function requireMobileAuth() {
+  if (!auth) {
+    throw new Error(`La app mobile no esta configurada. Faltan: ${missingMobileEnvNames.join(', ')}.`);
+  }
+
+  return auth;
+}
 
 export async function signInWithGoogle() {
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -24,16 +32,16 @@ export async function signInWithGoogle() {
   }
 
   const credential = GoogleAuthProvider.credential(idToken);
-  await signInWithCredential(auth, credential);
+  await signInWithCredential(requireMobileAuth(), credential);
 }
 
 export async function signInExternalUser(email: string, password: string) {
-  await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+  await signInWithEmailAndPassword(requireMobileAuth(), email.trim().toLowerCase(), password);
 }
 
 export async function signOutMobileUser() {
   await Promise.allSettled([
     GoogleSignin.signOut(),
-    signOut(auth),
+    auth ? signOut(auth) : Promise.resolve(),
   ]);
 }
