@@ -45,6 +45,14 @@ import {
   Eye,
 } from 'lucide-react';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Table,
   TableBody,
   TableCell,
@@ -77,7 +85,13 @@ import { PersonFormDialog } from '@/components/people/person-form-dialog';
 import { createClientActivity, updateClientActivity } from '@/lib/api/client-activities';
 import { getActivitiesForEntity } from '@/lib/api/activities';
 import { getCommercialNotesByClientId, deleteCommercialNote } from '@/lib/api/commercial-notes';
-import { getClientActivities, getInvoicesForClient, getOpportunitiesByClientId, getPeopleByClientId } from '@/lib/api/clients';
+import {
+  getClientActivities,
+  getClientTangoBillingSummary,
+  getOpportunitiesByClientId,
+  getPeopleByClientId,
+  type ClientTangoBillingSummary,
+} from '@/lib/api/clients';
 import { deleteOpportunity, updateOpportunity } from '@/lib/api/opportunities';
 import { createPerson, deletePerson, updatePerson } from '@/lib/api/people';
 import { getPrograms } from '@/lib/api/programs';
@@ -147,6 +161,51 @@ const systemActivityIcons: Record<string, React.ReactNode> = {
 
 const getDefaultIcon = () => <Activity className="h-5 w-5 text-muted-foreground" />;
 
+const quickClientActions: Array<{
+  type: ClientActivityType;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}> = [
+  {
+    type: 'Llamada',
+    label: 'Telefono',
+    description: 'Registrar llamada',
+    icon: <PhoneCall className="h-5 w-5" />,
+  },
+  {
+    type: 'Mail',
+    label: 'Mail',
+    description: 'Registrar email',
+    icon: <MailIcon className="h-5 w-5" />,
+  },
+  {
+    type: 'WhatsApp',
+    label: 'WhatsApp',
+    description: 'Registrar WhatsApp',
+    icon: <MessageSquare className="h-5 w-5" />,
+  },
+  {
+    type: 'Visita a empresa',
+    label: 'Visita',
+    description: 'Registrar visita presencial',
+    icon: <Users className="h-5 w-5" />,
+  },
+  {
+    type: 'Meet',
+    label: 'Meet',
+    description: 'Registrar reunion virtual',
+    icon: <Video className="h-5 w-5" />,
+  },
+];
+
+const formatMoney = (value: number) => new Intl.NumberFormat('es-AR', {
+  style: 'currency',
+  currency: 'ARS',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+}).format(value);
+
 
 export function ClientDetails({
   client,
@@ -169,7 +228,9 @@ export function ClientDetails({
   
   const [people, setPeople] = useState<Person[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [tangoBillingSummary, setTangoBillingSummary] = useState<ClientTangoBillingSummary | null>(null);
+  const [isLoadingTangoBilling, setIsLoadingTangoBilling] = useState(false);
+  const [tangoBillingError, setTangoBillingError] = useState<string | null>(null);
   const [clientActivities, setClientActivities] = useState<ClientActivity[]>([]);
   const [systemActivities, setSystemActivities] = useState<ActivityLog[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -188,6 +249,9 @@ export function ClientDetails({
   const [dueDate, setDueDate] = useState<Date | undefined>();
   const [dueTime, setDueTime] = useState('09:00');
   const [isSavingActivity, setIsSavingActivity] = useState(false);
+  const [quickActivity, setQuickActivity] = useState<{ type: ClientActivityType; label: string } | null>(null);
+  const [quickActivityObservation, setQuickActivityObservation] = useState('');
+  const [isSavingQuickActivity, setIsSavingQuickActivity] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
@@ -207,10 +271,9 @@ export function ClientDetails({
   const fetchClientData = useCallback(async () => {
       if(!userInfo) return;
       try {
-        const [clientPeople, clientOpportunities, clientInvoices, activities, systemLogs, allUsers, clientNotes, allPrograms] = await Promise.all([
+        const [clientPeople, clientOpportunities, activities, systemLogs, allUsers, clientNotes, allPrograms] = await Promise.all([
             getPeopleByClientId(client.id),
             getOpportunitiesByClientId(client.id),
-            getInvoicesForClient(client.id),
             getClientActivities(client.id),
             getActivitiesForEntity(client.id),
             getAllUsers(),
@@ -219,7 +282,6 @@ export function ClientDetails({
         ]);
         setPeople(clientPeople);
         setOpportunities(clientOpportunities);
-        setInvoices(clientInvoices);
         setClientActivities(activities);
         setSystemActivities(systemLogs);
         setUsers(allUsers);
@@ -235,13 +297,30 @@ export function ClientDetails({
     fetchClientData();
   }, [fetchClientData]);
 
+  const fetchTangoBillingSummary = useCallback(async () => {
+    if (!userInfo) return;
+    setIsLoadingTangoBilling(true);
+    setTangoBillingError(null);
+
+    try {
+      setTangoBillingSummary(await getClientTangoBillingSummary(client.id));
+    } catch (error) {
+      console.error('Error fetching Tango billing summary:', error);
+      setTangoBillingSummary(null);
+      setTangoBillingError(error instanceof Error ? error.message : 'No se pudo cargar el total de Tango.');
+    } finally {
+      setIsLoadingTangoBilling(false);
+    }
+  }, [client.id, userInfo]);
+
+  useEffect(() => {
+    fetchTangoBillingSummary();
+  }, [fetchTangoBillingSummary]);
+
   const usersMap = users.reduce((acc, user) => {
     acc[user.id] = user;
     return acc;
   }, {} as Record<string, User>);
-
-  const totalPaidInvoices = invoices.filter(inv => inv.status === 'Pagada').reduce((sum, inv) => sum + inv.amount, 0);
-
 
   const canEditClient = isBoss || (userInfo?.id === client.ownerId);
   const canEditContact = isBoss || (userInfo?.id === client.ownerId);
@@ -408,6 +487,37 @@ export function ClientDetails({
         setIsSavingActivity(false);
     }
   }
+
+  const handleSaveQuickClientActivity = async () => {
+    if (!quickActivity || !userInfo) return;
+
+    setIsSavingQuickActivity(true);
+    try {
+      const observation = quickActivityObservation.trim()
+        || `${quickActivity.label} registrada automaticamente.`;
+
+      await createClientActivity({
+        clientId: client.id,
+        clientName: client.denominacion,
+        type: quickActivity.type,
+        observation,
+        userId: userInfo.id,
+        userName: userInfo.name,
+        isTask: false,
+        completed: false,
+      });
+
+      toast({ title: 'Accion registrada', description: `${quickActivity.label} asentada en el historial del cliente.` });
+      setQuickActivity(null);
+      setQuickActivityObservation('');
+      fetchClientData();
+    } catch (error) {
+      console.error('Error saving quick client activity:', error);
+      toast({ title: 'Error al registrar la accion', variant: 'destructive' });
+    } finally {
+      setIsSavingQuickActivity(false);
+    }
+  };
 
   const handleTaskCompleteToggle = async (activity: ClientActivity, currentStatus: boolean) => {
       if(!userInfo) return;
@@ -817,16 +927,78 @@ export function ClientDetails({
               )}
           </CardContent>
         </Card>
+        <Card className="border-primary/20 bg-primary/5">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                    <Activity className="h-5 w-5 text-primary" />
+                    Acciones rapidas
+                </CardTitle>
+                <CardDescription>Registra una interaccion de hoy con un solo toque.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {quickClientActions.map(action => (
+                        <Button
+                            key={action.type}
+                            type="button"
+                            variant="outline"
+                            className="h-auto flex-col items-start gap-2 border-primary/20 bg-white p-3 text-left hover:border-primary hover:bg-primary/10"
+                            onClick={() => {
+                                setQuickActivity({ type: action.type, label: action.label });
+                                setQuickActivityObservation('');
+                            }}
+                        >
+                            <span className="flex items-center gap-2 font-bold text-primary">
+                                {action.icon}
+                                {action.label}
+                            </span>
+                            <span className="text-xs font-normal text-muted-foreground">{action.description}</span>
+                        </Button>
+                    ))}
+                </div>
+            </CardContent>
+        </Card>
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                     <TrendingUp className="h-5 w-5 text-primary" />
                     Total Histórico Facturado
                 </CardTitle>
-                <CardDescription>Suma de todas las facturas pagadas de este cliente.</CardDescription>
+                <CardDescription>Comprobantes oficiales de Tango para todos los IDs vinculados del cliente.</CardDescription>
             </CardHeader>
-            <CardContent>
-                 <p className="text-3xl font-bold">${totalPaidInvoices.toLocaleString('es-AR')}</p>
+            <CardContent className="space-y-3">
+                {isLoadingTangoBilling ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Spinner size="small" />
+                        Consultando Tango...
+                    </div>
+                ) : tangoBillingError ? (
+                    <div className="space-y-2">
+                        <p className="text-sm font-medium text-destructive">No se pudo cargar Tango.</p>
+                        <p className="text-xs text-muted-foreground">{tangoBillingError}</p>
+                        <Button variant="outline" size="sm" onClick={fetchTangoBillingSummary}>Reintentar</Button>
+                    </div>
+                ) : (
+                    <>
+                        <p className="text-3xl font-bold">{formatMoney(tangoBillingSummary?.total || 0)}</p>
+                        <p className="text-xs text-muted-foreground">
+                            {tangoBillingSummary?.invoiceCount || 0} comprobantes sumados, incluyendo FAC, CDE, NC y otros tipos disponibles.
+                            {tangoBillingSummary?.truncated ? ' La consulta fue limitada por paginacion de Tango.' : ''}
+                        </p>
+                        {tangoBillingSummary && tangoBillingSummary.byCompany.length > 0 && (
+                            <div className="space-y-1 rounded-md bg-muted/60 p-3 text-xs">
+                                {tangoBillingSummary.byCompany.map(company => (
+                                    <div key={`${company.companyId}-${company.clientCode}`} className="flex justify-between gap-3">
+                                        <span className="text-muted-foreground">
+                                            {company.companyLabel} ({company.clientCode}) - {company.invoiceCount} comp.
+                                        </span>
+                                        <span className="font-semibold">{formatMoney(company.total)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
             </CardContent>
         </Card>
       </div>
@@ -1260,6 +1432,54 @@ export function ClientDetails({
         />
       )}
     </div>
+    <Dialog open={Boolean(quickActivity)} onOpenChange={(open) => {
+        if (!open && !isSavingQuickActivity) {
+            setQuickActivity(null);
+            setQuickActivityObservation('');
+        }
+    }}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Registrar {quickActivity?.label}</DialogTitle>
+                <DialogDescription>
+                    La accion quedara asentada con fecha de hoy para {client.denominacion}. La aclaracion es opcional.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 py-2">
+                <Label htmlFor="quick-activity-observation">Aclaracion opcional</Label>
+                <Textarea
+                    id="quick-activity-observation"
+                    value={quickActivityObservation}
+                    onChange={(event) => setQuickActivityObservation(event.target.value)}
+                    placeholder="Ej: Se converso sobre nueva propuesta, quedo en responder..."
+                    rows={4}
+                />
+            </div>
+            <DialogFooter>
+                <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSavingQuickActivity}
+                    onClick={() => {
+                        setQuickActivity(null);
+                        setQuickActivityObservation('');
+                    }}
+                >
+                    Cancelar
+                </Button>
+                <Button type="button" onClick={handleSaveQuickClientActivity} disabled={isSavingQuickActivity || !quickActivity}>
+                    {isSavingQuickActivity ? (
+                        <>
+                            <Spinner size="small" color="white" className="mr-2" />
+                            Guardando...
+                        </>
+                    ) : (
+                        'Guardar accion'
+                    )}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
     <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
         <AlertDialogContent>
             <AlertDialogHeader>

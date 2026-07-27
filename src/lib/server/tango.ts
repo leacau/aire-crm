@@ -1,4 +1,6 @@
 import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/auth';
+import { getClientServer } from '@/lib/server/clients';
+import type { Client } from '@/lib/types';
 
 const ALLOWED_COMPANIES = ['4', '5', '6'];
 const DEFAULT_PDF_PROCESS = '14077';
@@ -76,6 +78,27 @@ type TangoCollectionRecord = {
   imputedAmount: number | null;
   pendingAmount: number | null;
   source: Record<string, unknown>;
+};
+
+type ClientTangoCompanyMapping = {
+  companyId: string;
+  companyLabel: string;
+  clientCode: string;
+};
+
+export type ClientTangoBillingSummary = {
+  total: number;
+  invoiceCount: number;
+  truncated: boolean;
+  byCompany: Array<{
+    companyId: string;
+    companyLabel: string;
+    clientCode: string;
+    total: number;
+    invoiceCount: number;
+    truncated: boolean;
+  }>;
+  skippedCompanies: Array<{ companyId: string; label: string; reason: string }>;
 };
 
 export class TangoApiError extends Error {
@@ -337,6 +360,7 @@ export async function listTangoInvoicesServer({
   client,
   seller,
   requester,
+  skipSellerFilter = false,
 }: {
   company: string;
   fromDate: string;
@@ -344,6 +368,7 @@ export async function listTangoInvoicesServer({
   client?: string | null;
   seller?: string | null;
   requester: ServerUser;
+  skipSellerFilter?: boolean;
 }) {
   const companyIds = company === 'all' ? Object.keys(COMPANY_QUERIES) : [company];
   if (companyIds.some(companyId => !COMPANY_QUERIES[companyId])) {
@@ -356,7 +381,7 @@ export async function listTangoInvoicesServer({
   const apiAuthorization = getTangoAuthorization();
   const clientFilter = normalize(client);
   const sellerFilter = normalize(seller);
-  const canSeeAllInvoices = hasServerManagementPrivileges(requester);
+  const canSeeAllInvoices = skipSellerFilter || hasServerManagementPrivileges(requester);
   const skippedCompanies: Array<{ companyId: string; label: string; reason: string }> = [];
 
   const fetchCompanyInvoices = async (companyId: string) => {
@@ -419,6 +444,100 @@ export async function listTangoInvoicesServer({
     sourceTotalCount,
     filteredCount: filtered.length,
     truncated,
+    skippedCompanies,
+  };
+}
+
+function getClientTangoCompanyMappings(client: Client): ClientTangoCompanyMapping[] {
+  const mappings: ClientTangoCompanyMapping[] = [];
+
+  if (client.idAire) {
+    mappings.push({ companyId: '4', companyLabel: COMPANY_QUERIES['4'].label, clientCode: String(client.idAire) });
+  }
+
+  const srlClientCode = client.idAireSrl || client.idTango || client.tangoCompanyId;
+  if (srlClientCode) {
+    mappings.push({ companyId: '5', companyLabel: COMPANY_QUERIES['5'].label, clientCode: String(srlClientCode) });
+  }
+
+  if (client.idAireDigital) {
+    mappings.push({ companyId: '6', companyLabel: COMPANY_QUERIES['6'].label, clientCode: String(client.idAireDigital) });
+  }
+
+  return mappings;
+}
+
+export async function getClientTangoBillingSummaryServer(
+  clientId: string,
+  requester: ServerUser,
+): Promise<ClientTangoBillingSummary> {
+  const client = await getClientServer(clientId, requester);
+  const mappings = getClientTangoCompanyMappings(client);
+  const skippedCompanies: ClientTangoBillingSummary['skippedCompanies'] = [];
+
+  const emptySummary: ClientTangoBillingSummary = {
+    total: 0,
+    invoiceCount: 0,
+    truncated: false,
+    byCompany: [],
+    skippedCompanies,
+  };
+
+  if (mappings.length === 0) {
+    skippedCompanies.push({ companyId: 'all', label: 'Tango', reason: 'Cliente sin IDs de Tango vinculados' });
+    return emptySummary;
+  }
+
+  const companySummaries = await Promise.all(mappings.map(async mapping => {
+    try {
+      const result = await listTangoInvoicesServer({
+        company: mapping.companyId,
+        fromDate: '',
+        toDate: '',
+        client: null,
+        requester,
+        skipSellerFilter: true,
+      });
+      const expectedClientCode = normalizeCode(mapping.clientCode);
+      const invoices = result.list.filter(invoice => normalizeCode(invoice.COD_CLIENTE) === expectedClientCode);
+
+      return {
+        companyId: mapping.companyId,
+        companyLabel: mapping.companyLabel,
+        clientCode: mapping.clientCode,
+        total: invoices.reduce((sum, invoice) => sum + (parseTangoNumber(invoice.TOTAL) || 0), 0),
+        invoiceCount: invoices.length,
+        truncated: Boolean(result.truncated),
+        skippedCompanies: result.skippedCompanies || [],
+      };
+    } catch (error) {
+      skippedCompanies.push({
+        companyId: mapping.companyId,
+        label: mapping.companyLabel,
+        reason: error instanceof Error ? error.message : 'No se pudo consultar Tango',
+      });
+
+      return {
+        companyId: mapping.companyId,
+        companyLabel: mapping.companyLabel,
+        clientCode: mapping.clientCode,
+        total: 0,
+        invoiceCount: 0,
+        truncated: false,
+        skippedCompanies: [],
+      };
+    }
+  }));
+
+  companySummaries.forEach(summary => {
+    skippedCompanies.push(...summary.skippedCompanies);
+  });
+
+  return {
+    total: companySummaries.reduce((sum, summary) => sum + summary.total, 0),
+    invoiceCount: companySummaries.reduce((sum, summary) => sum + summary.invoiceCount, 0),
+    truncated: companySummaries.some(summary => summary.truncated),
+    byCompany: companySummaries.map(({ skippedCompanies: _skippedCompanies, ...summary }) => summary),
     skippedCompanies,
   };
 }

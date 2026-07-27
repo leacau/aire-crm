@@ -1330,6 +1330,15 @@ Separar progresivamente la aplicacion en una capa de API segura y un front mas l
 - La app mobile reduce llamadas iniciales y queda desacoplada de rutas internas del front web.
 - `firestore.rules` y `netlify.toml` siguen intactos.
 
+## Centesimo septuagesimo primer corte aplicado
+
+- El detalle de cliente incorpora acciones rapidas para registrar llamada, mail, WhatsApp, visita presencial y Meet.
+- Cada accion abre un modal con aclaracion opcional y registra una actividad del dia asociada al cliente.
+- Se agrega `/api/clients/[clientId]/tango-billing-summary` para calcular el total historico oficial desde Tango.
+- El resumen valida acceso al cliente antes de consultar Tango y suma todos los comprobantes disponibles por ID mapeado, respetando importes negativos.
+- La card de Total Historico Facturado deja de usar facturas CRM pagadas y muestra total, cantidad y desglose por company desde Tango.
+- `firestore.rules` y `netlify.toml` siguen intactos.
+
 ## Proximos cortes recomendados
 
 1. Imports del front

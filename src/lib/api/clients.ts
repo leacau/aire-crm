@@ -9,6 +9,21 @@ import type {
   ClientTangoUpdate,
 } from '@/lib/api-contracts';
 
+export type ClientTangoBillingSummary = {
+  total: number;
+  invoiceCount: number;
+  truncated: boolean;
+  byCompany: Array<{
+    companyId: string;
+    companyLabel: string;
+    clientCode: string;
+    total: number;
+    invoiceCount: number;
+    truncated: boolean;
+  }>;
+  skippedCompanies: Array<{ companyId: string; label: string; reason: string }>;
+};
+
 export type {
   ClientTangoIdField,
   ClientTangoMappingOptions,
@@ -144,4 +159,11 @@ export async function getClientActivities(clientId: string): Promise<ClientActiv
     { method: 'GET' },
   );
   return result.activities;
+}
+
+export async function getClientTangoBillingSummary(clientId: string): Promise<ClientTangoBillingSummary> {
+  return apiRequest<ClientTangoBillingSummary>(
+    `/api/clients/${encodeURIComponent(clientId)}/tango-billing-summary`,
+    { method: 'GET' },
+  );
 }
