@@ -46,7 +46,7 @@ npm run build:android:apk
 
 Antes de construir, cargar las variables `EXPO_PUBLIC_*` en EAS o en el entorno de build. Sin esos valores la app no puede inicializar Firebase ni llamar a la API.
 
-El build ejecuta `npm run doctor:env` automaticamente dentro de EAS para cortar temprano si falta alguna variable. Para revisar tu entorno local:
+El build ejecuta automaticamente el mismo chequeo dentro de EAS para cortar temprano si falta alguna variable. Para revisar tu entorno local:
 
 ```bash
 npm run doctor:env
