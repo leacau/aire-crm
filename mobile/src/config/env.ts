@@ -45,6 +45,10 @@ export const missingMobileEnvNames = requiredMobileEnvNames.filter(name => !requ
 
 export const hasMobileRuntimeConfig = missingMobileEnvNames.length === 0;
 
+export function isGoogleOAuthClientId(value: string): boolean {
+  return /^\d+-[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/.test(value);
+}
+
 export function requireEnv(value: string, name: string): string {
   if (!value) throw new Error(`Falta configurar ${name}.`);
   return value;

@@ -63,6 +63,16 @@ Variables requeridas para el entorno `preview` de EAS:
 - `EXPO_PUBLIC_FIREBASE_APP_ID`
 - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
 
+Para Google Sign-In en Android, el `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` debe ser el OAuth Client ID de tipo **Web application** y debe terminar en `.apps.googleusercontent.com`. Si se carga un numero de proyecto o un ID incompleto, Android responde con `DEVELOPER_ERROR`.
+
+Tambien se recomienda cargar `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` con el OAuth Client ID de tipo **Android** correspondiente al package:
+
+```text
+com.airedesantafe.crm
+```
+
+Ese cliente Android debe tener registrado el SHA-1 del keystore usado por EAS para firmar el APK preview. Si el SHA-1 no coincide, Google Sign-In tambien devuelve `DEVELOPER_ERROR`.
+
 ## Primer alcance
 
 - Login Google corporativo y login externo email/password.

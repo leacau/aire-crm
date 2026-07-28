@@ -10,6 +10,15 @@ const requiredEnvNames = [
 ];
 
 const missing = requiredEnvNames.filter((name) => !String(process.env[name] || '').trim());
+const oauthClientIdPattern = /^\d+-[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/;
+const invalidGoogleClientIds = [
+  'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID',
+  'EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID',
+  'EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID',
+].filter((name) => {
+  const value = String(process.env[name] || '').trim();
+  return value && !oauthClientIdPattern.test(value);
+});
 
 if (missing.length) {
   console.error('Missing required mobile build environment variables:');
@@ -18,6 +27,15 @@ if (missing.length) {
   }
   console.error('');
   console.error('Load them in the EAS preview environment before building the APK.');
+  process.exit(1);
+}
+
+if (invalidGoogleClientIds.length) {
+  console.error('Invalid Google OAuth client IDs:');
+  for (const name of invalidGoogleClientIds) {
+    console.error(`- ${name} must end with .apps.googleusercontent.com`);
+  }
+  console.error('Use OAuth 2.0 Client IDs from Google Cloud/Firebase, not project numbers.');
   process.exit(1);
 }
 
