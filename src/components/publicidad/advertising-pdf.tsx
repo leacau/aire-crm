@@ -105,6 +105,8 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       totalRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '11px' }
   };
 
+  const currency = (value?: number) => `$${Number(value || 0).toLocaleString('es-AR')}`;
+
   const renderClientInfo = () => {
     return (
         <div style={styles.clientInfoContainer}>
@@ -189,7 +191,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       if (hidePrices || sortedBrsSrl.length === 0 || !hasSRL) return null;
 
       return (
-          <div style={{ minWidth: '320px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#fef3c7', borderRadius: '4px' }}>
+          <div style={{ flex: 1, minWidth: '560px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#fef3c7', borderRadius: '4px' }}>
               <div style={{ fontWeight: 'bold', marginBottom: '6px', borderBottom: '1px solid #d1d5db', paddingBottom: '4px', color: '#9a3412', fontSize: '10px' }}>
                   FACTURACIÓN SRL
               </div>
@@ -197,6 +199,8 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                     <thead>
                         <tr>
                             <th style={{ textAlign: 'left', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Fecha</th>
+                            <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Bruto</th>
+                            <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Desajuste</th>
                             <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Neto</th>
                             <th style={{ textAlign: 'center', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Tipo</th>
                             <th style={{ textAlign: 'left', borderBottom: '1px solid #9ca3af', paddingBottom: '2px', paddingLeft: '4px' }}>Descripción / Canje</th>
@@ -206,7 +210,9 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                         {sortedBrsSrl.map((br, i) => (
                             <tr key={i}>
                                 <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db' }}>{formatDate(br.date)}</td>
-                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', fontWeight: 'bold', paddingRight: '4px' }}>${Number(br.amount || 0).toLocaleString('es-AR')}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', paddingRight: '4px' }}>{currency(br.grossAmount)}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', paddingRight: '4px' }}>{currency(br.adjustment)}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', fontWeight: 'bold', paddingRight: '4px' }}>{currency(br.amount)}</td>
                                 <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'center' }}><span style={{ backgroundColor: br.paymentType !== 'Se paga' ? '#fed7aa' : '#e2e8f0', padding: '1px 3px', borderRadius: '2px', fontSize: '8px' }}>{br.paymentType || 'Se paga'}</span></td>
                                 <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'left', paddingLeft: '4px', fontStyle: 'italic', color: '#4b5563' }}>{br.canjeDescription || '-'}</td>
                             </tr>
@@ -221,7 +227,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       if (hidePrices || sortedBrsSas.length === 0 || !hasSAS) return null;
 
       return (
-          <div style={{ minWidth: '320px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#fef3c7', borderRadius: '4px' }}>
+          <div style={{ flex: 1, minWidth: '610px', border: '1px solid #9ca3af', padding: '8px', backgroundColor: '#fef3c7', borderRadius: '4px' }}>
               <div style={{ fontWeight: 'bold', marginBottom: '6px', borderBottom: '1px solid #d1d5db', paddingBottom: '4px', color: '#9a3412', fontSize: '10px' }}>
                   FACTURACIÓN SAS
               </div>
@@ -229,6 +235,9 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                     <thead>
                         <tr>
                             <th style={{ textAlign: 'left', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Fecha</th>
+                            <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Bruto</th>
+                            <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Desajuste</th>
+                            <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>IVA</th>
                             <th style={{ textAlign: 'right', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Neto</th>
                             <th style={{ textAlign: 'center', borderBottom: '1px solid #9ca3af', paddingBottom: '2px' }}>Tipo</th>
                             <th style={{ textAlign: 'left', borderBottom: '1px solid #9ca3af', paddingBottom: '2px', paddingLeft: '4px' }}>Descripción / Canje</th>
@@ -238,7 +247,10 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                         {sortedBrsSas.map((br, i) => (
                             <tr key={i}>
                                 <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db' }}>{formatDate(br.date)}</td>
-                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', fontWeight: 'bold', paddingRight: '4px' }}>${Number(br.amount || 0).toLocaleString('es-AR')}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', paddingRight: '4px' }}>{currency(br.grossAmount)}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', paddingRight: '4px' }}>{currency(br.adjustment)}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', paddingRight: '4px' }}>{currency(br.ivaSas)}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'right', fontWeight: 'bold', paddingRight: '4px' }}>{currency(br.amount)}</td>
                                 <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'center' }}><span style={{ backgroundColor: br.paymentType !== 'Se paga' ? '#fed7aa' : '#e2e8f0', padding: '1px 3px', borderRadius: '2px', fontSize: '8px' }}>{br.paymentType || 'Se paga'}</span></td>
                                 <td style={{ padding: '3px 0', borderBottom: '1px dotted #d1d5db', textAlign: 'left', paddingLeft: '4px', fontStyle: 'italic', color: '#4b5563' }}>{br.canjeDescription || '-'}</td>
                             </tr>
@@ -254,7 +266,7 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
       if (hidePrices || sortedBrsAvion.length === 0) return null;
 
       return (
-          <div style={{ minWidth: '320px', border: '1px solid #cbd5e1', padding: '8px', backgroundColor: '#f1f5f9', borderRadius: '4px' }}>
+          <div style={{ flex: 1, minWidth: '560px', border: '1px solid #cbd5e1', padding: '8px', backgroundColor: '#f1f5f9', borderRadius: '4px' }}>
               <div style={{ fontWeight: 'bold', marginBottom: '6px', borderBottom: '1px solid #cbd5e1', paddingBottom: '4px', color: '#334155', fontSize: '10px' }}>
                   COMPROMISOS EN AVIÓN (NO SE EMITE)
               </div>
@@ -262,7 +274,9 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                     <thead>
                         <tr>
                             <th style={{ textAlign: 'left', borderBottom: '1px solid #94a3b8', paddingBottom: '2px' }}>Fecha</th>
-                            <th style={{ textAlign: 'right', borderBottom: '1px solid #94a3b8', paddingBottom: '2px' }}>Valor</th>
+                            <th style={{ textAlign: 'right', borderBottom: '1px solid #94a3b8', paddingBottom: '2px' }}>Bruto</th>
+                            <th style={{ textAlign: 'right', borderBottom: '1px solid #94a3b8', paddingBottom: '2px' }}>Desajuste</th>
+                            <th style={{ textAlign: 'right', borderBottom: '1px solid #94a3b8', paddingBottom: '2px' }}>Neto</th>
                             <th style={{ textAlign: 'center', borderBottom: '1px solid #94a3b8', paddingBottom: '2px' }}>Tipo</th>
                             <th style={{ textAlign: 'left', borderBottom: '1px solid #94a3b8', paddingBottom: '2px', paddingLeft: '4px' }}>Descripción / Canje</th>
                         </tr>
@@ -271,7 +285,9 @@ export const AdvertisingOrderPdf = forwardRef<HTMLDivElement, AdvertisingOrderPd
                         {sortedBrsAvion.map((br, i) => (
                             <tr key={i}>
                                 <td style={{ padding: '3px 0', borderBottom: '1px dotted #cbd5e1' }}>{formatDate(br.date)}</td>
-                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #cbd5e1', textAlign: 'right', fontWeight: 'bold', paddingRight: '4px' }}>${Number(br.amount || 0).toLocaleString('es-AR')}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #cbd5e1', textAlign: 'right', paddingRight: '4px' }}>{currency(br.grossAmount)}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #cbd5e1', textAlign: 'right', paddingRight: '4px' }}>{currency(br.adjustment)}</td>
+                                <td style={{ padding: '3px 0', borderBottom: '1px dotted #cbd5e1', textAlign: 'right', fontWeight: 'bold', paddingRight: '4px' }}>{currency(br.amount)}</td>
                                 <td style={{ padding: '3px 0', borderBottom: '1px dotted #cbd5e1', textAlign: 'center' }}><span style={{ backgroundColor: '#fef08a', color: '#854d0e', padding: '1px 3px', borderRadius: '2px', fontSize: '8px' }}>{br.paymentType || 'Canje'}</span></td>
                                 <td style={{ padding: '3px 0', borderBottom: '1px dotted #cbd5e1', textAlign: 'left', paddingLeft: '4px', fontStyle: 'italic', color: '#4b5563' }}>{br.canjeDescription || '-'}</td>
                             </tr>
