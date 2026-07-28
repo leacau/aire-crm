@@ -9,24 +9,25 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:android:apk": "eas build --platform android --profile preview",
+    "build:android:apk:local": "npm run doctor:env && expo prebuild --platform android --clean && node scripts/patch-android-local-build.cjs && cd android && gradlew.bat assembleRelease",
     "doctor:env": "node scripts/check-env.cjs",
     "eas-build-pre-install": "node scripts/check-env.cjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@firebase/auth": "^1.13.3",
-    "@react-native-async-storage/async-storage": "^3.1.1",
+    "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-google-signin/google-signin": "^16.1.2",
     "expo": "^57.0.8",
     "expo-status-bar": "^57.0.1",
     "firebase": "^12.16.0",
-    "react": "^19.1.0",
+    "react": "19.2.3",
     "react-native": "^0.86.0",
-    "react-native-safe-area-context": "^5.6.2"
+    "react-native-safe-area-context": "~5.7.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",
     "@types/react-native": "^0.72.8",
-    "typescript": "^5.9.3"
+    "typescript": "~6.0.3"
   }
 }

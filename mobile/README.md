@@ -52,6 +52,20 @@ El build ejecuta automaticamente el mismo chequeo dentro de EAS para cortar temp
 npm run doctor:env
 ```
 
+Para compilar el APK localmente en Windows, primero cargar las variables `EXPO_PUBLIC_*` en la sesion de PowerShell y luego ejecutar:
+
+```powershell
+npm run build:android:apk:local
+```
+
+El APK queda en:
+
+```text
+mobile\android\app\build\outputs\apk\release\app-release.apk
+```
+
+Si se firma con un keystore distinto al de EAS, hay que registrar el SHA-1 de ese keystore en Firebase/Google Cloud para que Google Sign-In no falle con `DEVELOPER_ERROR`.
+
 Variables requeridas para el entorno `preview` de EAS:
 
 - `EXPO_PUBLIC_API_BASE_URL`

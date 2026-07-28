@@ -1,4 +1,4 @@
-import { createAsyncStorage } from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FirebaseAuth from '@firebase/auth';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
@@ -25,7 +25,7 @@ export const firebaseApp = firebaseConfig
   : null;
 
 const { getReactNativePersistence } = FirebaseAuth as typeof FirebaseAuth & {
-  getReactNativePersistence: (storage: ReturnType<typeof createAsyncStorage>) => Persistence;
+  getReactNativePersistence: (storage: typeof AsyncStorage) => Persistence;
 };
 
 function createAuth(): Auth | null {
@@ -33,7 +33,7 @@ function createAuth(): Auth | null {
 
   try {
     return initializeAuth(firebaseApp, {
-      persistence: getReactNativePersistence(createAsyncStorage('aire-crm-mobile')),
+      persistence: getReactNativePersistence(AsyncStorage),
     }) as unknown as Auth;
   } catch {
     return getAuth(firebaseApp) as unknown as Auth;
