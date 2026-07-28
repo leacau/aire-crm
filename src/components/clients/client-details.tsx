@@ -16,9 +16,7 @@ import {
   Edit,
   Trash2,
   PhoneCall,
-  Users as UsersIcon,
   Building,
-  Home,
   MapPin,
   FileDigit,
   Building2,
@@ -30,7 +28,6 @@ import {
   MailIcon,
   CalendarIcon,
   CheckCircle,
-  FileText,
   Activity,
   ArrowRight,
   BellPlus,
@@ -43,6 +40,8 @@ import {
   ClipboardList,
   FileDown,
   Eye,
+  PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react';
 import {
   Dialog,
@@ -52,16 +51,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Button } from '../ui/button';
-import { opportunityStages } from '@/lib/data';
 import { clientActivityTypes } from '@/lib/types';
 import { OpportunityDetailsDialog } from '../opportunities/opportunity-details-dialog';
 import {
@@ -73,13 +63,6 @@ import {
 } from "@/components/ui/select";
 import type { OpportunityStage } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { MoreHorizontal } from 'lucide-react';
 import { ClientFormDialog } from './client-form-dialog';
 import { PersonFormDialog } from '@/components/people/person-form-dialog';
 import { createClientActivity, updateClientActivity } from '@/lib/api/client-activities';
@@ -254,6 +237,7 @@ export function ClientDetails({
   const [isSavingQuickActivity, setIsSavingQuickActivity] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isRightRailOpen, setIsRightRailOpen] = useState(true);
 
   
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
@@ -816,6 +800,18 @@ export function ClientDetails({
       </Popover>
     );
   };
+
+  const primaryContact = people[0] || null;
+  const openOpportunities = opportunities.filter(opp => !opp.stage.startsWith('Cerrado'));
+  const totalOpportunityValue = openOpportunities.reduce((total, opp) => total + (opp.value || 0), 0);
+  const recentClientActivities = [...clientActivities]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 5);
+  const pendingTasks = clientActivities
+    .filter(activity => activity.isTask && !activity.completed)
+    .sort((a, b) => new Date(a.dueDate || a.timestamp).getTime() - new Date(b.dueDate || b.timestamp).getTime())
+    .slice(0, 4);
+  const latestActivity = recentClientActivities[0];
   
   return (
     <>
@@ -834,574 +830,608 @@ export function ClientDetails({
         )}
     </div>
 
-    <div className="space-y-6">
-      <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
-        <Card className='md:col-span-2'>
-          <CardHeader>
-            <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="flex-1 min-w-0">
-                        <CardTitle className="text-2xl truncate">{client.denominacion}</CardTitle>
-                        <CardDescription className="truncate">{client.razonSocial}</CardDescription>
-                         <div className="flex items-center gap-2 mt-2">
-                          {client.isNewClient && client.newClientDate && (
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                              <Star className="h-3 w-3 mr-1" />
-                              Nuevo ({format(new Date(client.newClientDate), 'dd/MM/yy')})
-                            </Badge>
-                          )}
-                          {client.isDeactivated && (
-                            <Badge variant="destructive">
-                              <BadgeAlert className="h-3 w-3 mr-1" />
-                              Dado de Baja
-                              {client.deactivationHistory && client.deactivationHistory.length > 0 &&
-                                ` (${format(new Date(client.deactivationHistory[client.deactivationHistory.length - 1]), 'dd/MM/yy')})`
-                              }
-                            </Badge>
-                          )}
-                        </div>
-                    </div>
+    <div className="space-y-4">
+      <div
+        className={cn(
+          "grid gap-4 xl:items-start",
+          isRightRailOpen
+            ? "xl:grid-cols-[320px_minmax(0,1fr)_320px]"
+            : "xl:grid-cols-[320px_minmax(0,1fr)]"
+        )}
+      >
+        <aside className="space-y-4 xl:sticky xl:top-4">
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <CardTitle className="truncate text-xl">{client.denominacion}</CardTitle>
+                  <CardDescription className="truncate">{client.razonSocial}</CardDescription>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleGeneratePdf} disabled={isGeneratingPdf}>
-                        {isGeneratingPdf ? <Spinner size="small" /> : <FileDown className="h-4 w-4" />}
-                     </Button>
-                    {canEditClient && (
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setIsClientFormOpen(true)}>
-                            <Edit className="h-4 w-4" />
-                        </Button>
-                    )}
-                 </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-             {client.cuit && (
-              <div className="flex items-center gap-3">
-                <FileDigit className="h-4 w-4 text-muted-foreground" />
-                <span>{client.cuit}</span>
-              </div>
-             )}
-             <div className="flex items-center gap-3">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              <span>{client.condicionIVA}</span>
-            </div>
-            {(client.idAire || client.idAireSrl || client.idAireDigital || client.idTango || client.tangoCompanyId) && (
-              <div className="space-y-1">
-                <h4 className="font-medium text-sm">IDs Tango</h4>
-                <div className="flex flex-wrap gap-2">
-                  {client.idAire && <Badge variant="outline">Aire: {client.idAire}</Badge>}
-                  {client.idAireSrl && <Badge variant="outline">Aire SRL: {client.idAireSrl}</Badge>}
-                  {client.idAireDigital && <Badge variant="outline">Aire Digital: {client.idAireDigital}</Badge>}
-                  {!client.idAireSrl && client.idTango && <Badge variant="outline">ID Tango: {client.idTango}</Badge>}
-                  {!client.idAireDigital && client.tangoCompanyId && (
-                    <Badge variant="outline">ID Tango Alt: {client.tangoCompanyId}</Badge>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleGeneratePdf} disabled={isGeneratingPdf}>
+                    {isGeneratingPdf ? <Spinner size="small" /> : <FileDown className="h-4 w-4" />}
+                  </Button>
+                  {canEditClient && (
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setIsClientFormOpen(true)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
                   )}
                 </div>
               </div>
-            )}
-             <div className="flex items-center gap-3">
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-              <span>{client.rubro}</span>
-            </div>
-             <div className="flex items-center gap-3">
-              <Home className="h-4 w-4 text-muted-foreground" />
-              <span>{client.tipoEntidad}</span>
-            </div>
-             <div className="flex items-center gap-3">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
-              <span>{client.localidad}, {client.provincia}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Mail className="h-4 w-4 text-muted-foreground" />
-              <span>{client.email}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Phone className="h-4 w-4 text-muted-foreground" />
-              <span>{client.phone}</span>
-            </div>
-             {client.observaciones && (
-                <div className="space-y-1 pt-2">
-                    <h4 className="font-medium text-sm">Observaciones</h4>
-                    <p className="text-muted-foreground whitespace-pre-wrap">{client.observaciones}</p>
-                </div>
-              )}
-          </CardContent>
-        </Card>
-        <Card className="border-primary/20 bg-primary/5">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                    <Activity className="h-5 w-5 text-primary" />
-                    Acciones rapidas
-                </CardTitle>
-                <CardDescription>Registra una interaccion de hoy con un solo toque.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {quickClientActions.map(action => (
-                        <Button
-                            key={action.type}
-                            type="button"
-                            variant="outline"
-                            className="h-auto flex-col items-start gap-2 border-primary/20 bg-white p-3 text-left hover:border-primary hover:bg-primary/10"
-                            onClick={() => {
-                                setQuickActivity({ type: action.type, label: action.label });
-                                setQuickActivityObservation('');
-                            }}
-                        >
-                            <span className="flex items-center gap-2 font-bold text-primary">
-                                {action.icon}
-                                {action.label}
-                            </span>
-                            <span className="text-xs font-normal text-muted-foreground">{action.description}</span>
-                        </Button>
-                    ))}
-                </div>
-            </CardContent>
-        </Card>
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                    <TrendingUp className="h-5 w-5 text-primary" />
-                    Total Histórico Facturado
-                </CardTitle>
-                <CardDescription>Comprobantes oficiales de Tango para todos los IDs vinculados del cliente.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-                {isLoadingTangoBilling ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Spinner size="small" />
-                        Consultando Tango...
-                    </div>
-                ) : tangoBillingError ? (
-                    <div className="space-y-2">
-                        <p className="text-sm font-medium text-destructive">No se pudo cargar Tango.</p>
-                        <p className="text-xs text-muted-foreground">{tangoBillingError}</p>
-                        <Button variant="outline" size="sm" onClick={fetchTangoBillingSummary}>Reintentar</Button>
-                    </div>
-                ) : (
-                    <>
-                        <p className="text-3xl font-bold">{formatMoney(tangoBillingSummary?.total || 0)}</p>
-                        <p className="text-xs text-muted-foreground">
-                            {tangoBillingSummary?.invoiceCount || 0} comprobantes sumados, incluyendo FAC, CDE, NC y otros tipos disponibles.
-                            {tangoBillingSummary?.truncated ? ' La consulta fue limitada por paginacion de Tango.' : ''}
-                        </p>
-                        {tangoBillingSummary && tangoBillingSummary.byCompany.length > 0 && (
-                            <div className="space-y-1 rounded-md bg-muted/60 p-3 text-xs">
-                                {tangoBillingSummary.byCompany.map(company => (
-                                    <div key={`${company.companyId}-${company.clientCode}`} className="flex justify-between gap-3">
-                                        <span className="text-muted-foreground">
-                                            {company.companyLabel} ({company.clientCode}) - {company.invoiceCount} comp.
-                                        </span>
-                                        <span className="font-semibold">{formatMoney(company.total)}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </>
+              <div className="flex flex-wrap gap-2 pt-2">
+                {client.isNewClient && client.newClientDate && (
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    <Star className="mr-1 h-3 w-3" />
+                    Nuevo ({format(new Date(client.newClientDate), 'dd/MM/yy')})
+                  </Badge>
                 )}
-            </CardContent>
-        </Card>
-      </div>
-
-      {userInfo && (
-        <CommentThread
-          entityType="client"
-          entityId={client.id}
-          entityName={client.denominacion}
-          ownerId={client.ownerId}
-          ownerName={client.ownerName}
-          currentUser={userInfo}
-          getAccessToken={getGoogleAccessToken}
-        />
-      )}
-
-      <Tabs defaultValue="opportunities" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6">
-          <TabsTrigger value="opportunities">Oportunidades</TabsTrigger>
-          <TabsTrigger value="contacts">Contactos</TabsTrigger>
-          <TabsTrigger value="activity">Actividad</TabsTrigger>
-          <TabsTrigger value="notes">Notas Com.</TabsTrigger>
-          <TabsTrigger value="tango-invoices">Facturas Tango</TabsTrigger>
-          <TabsTrigger value="history">Historial</TabsTrigger>
-        </TabsList>
-        <TabsContent value="opportunities">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Oportunidades</CardTitle>
-              {canEditOpportunity && (
-                 <Button variant="outline" size="sm" onClick={() => handleOpenOpportunityForm()}>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Nueva
-                </Button>
-              )}
+                {client.isDeactivated && (
+                  <Badge variant="destructive">
+                    <BadgeAlert className="mr-1 h-3 w-3" />
+                    Dado de Baja
+                    {client.deactivationHistory && client.deactivationHistory.length > 0 &&
+                      ` (${format(new Date(client.deactivationHistory[client.deactivationHistory.length - 1]), 'dd/MM/yy')})`
+                    }
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Título</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead className="w-[150px]">Etapa</TableHead>
-                     { canDelete && <TableHead className="w-[50px]"></TableHead> }
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {opportunities.map((opp) => (
-                    <TableRow key={opp.id}>
-                      <TableCell 
-                        className='font-medium cursor-pointer hover:underline'
-                        onClick={() => handleOpenOpportunityForm(opp)}
-                      >
-                        {opp.title}
-                      </TableCell>
-                      <TableCell>${opp.value.toLocaleString('es-AR')}</TableCell>
-                      <TableCell>
-                         <Select
-                            value={opp.stage}
-                            onValueChange={(newStage: OpportunityStage) => handleStageChange(opp.id, newStage)}
-                            disabled={!canEditOpportunity}
-                          >
-                            <SelectTrigger className="w-full h-8 text-xs">
-                               <SelectValue>
-                                <div className="flex items-center gap-2">
-                                  <span className={`h-2 w-2 rounded-full ${stageColors[opp.stage]}`} />
-                                  {opp.stage}
-                                </div>
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {opportunityStages.map(stage => (
-                                <SelectItem key={stage} value={stage} className="text-xs">
-                                  <div className="flex items-center gap-2">
-                                     <span className={`h-2 w-2 rounded-full ${stageColors[stage]}`} />
-                                    {stage}
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                      </TableCell>
-                       {canDelete && (
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                              <DropdownMenuItem className="text-destructive" onClick={() => openDeleteDialog(opp, 'opportunity')}>Eliminar</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
-                   {opportunities.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={canDelete ? 4 : 3} className="h-24 text-center">
-                          No hay oportunidades para este cliente.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                </TableBody>
-              </Table>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center gap-3">
+                <Briefcase className="h-4 w-4 text-muted-foreground" />
+                <span className="truncate">{client.ownerName || 'Sin asesor asignado'}</span>
+              </div>
+              {client.cuit && (
+                <div className="flex items-center gap-3">
+                  <FileDigit className="h-4 w-4 text-muted-foreground" />
+                  <span>{client.cuit}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <span className="truncate">{client.rubro || 'Sin rubro'}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <MapPin className="h-4 w-4 text-muted-foreground" />
+                <span className="truncate">{client.localidad}, {client.provincia}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <span className="truncate">{client.email || 'Sin email'}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Phone className="h-4 w-4 text-muted-foreground" />
+                <span>{client.phone || 'Sin telefono'}</span>
+              </div>
             </CardContent>
           </Card>
-        </TabsContent>
-        <TabsContent value="contacts">
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Contactos</CardTitle>
-                {canEditContact && (
-                    <Button variant="outline" size="sm" onClick={() => handleOpenPersonForm()}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Nuevo
-                    </Button>
-                )}
-                </CardHeader>
-                <CardContent className="space-y-4">
-                {people.map(person => (
-                    <div key={person.id} className="flex items-start justify-between">
-                    <div>
-                        <p className="font-medium">{person.name}</p>
-                        {person.cargo && <p className="text-sm text-muted-foreground">{person.cargo}</p>}
-                        <p className="text-sm text-muted-foreground">{person.email}</p>
-                        <p className="text-sm text-muted-foreground">{person.phone}</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                        {person.phone && (
-                        <>
-                        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-                            <a href={`tel:${person.phone}`}>
-                                <PhoneCall className="h-4 w-4" />
-                            </a>
-                            </Button>
-                            <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-                            <a href={`https://wa.me/${person.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
-                                <MessageSquare className="h-4 w-4" />
-                            </a>
-                            </Button>
-                        </>
-                        )}
-                        {canEditContact && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenPersonForm(person)}><Edit className="h-4 w-4" /></Button>}
-                        {canDelete && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDeleteDialog(person, 'person')}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
-                    </div>
-                    </div>
-                ))}
-                {people.length === 0 && <p className="text-sm text-muted-foreground text-center">No hay contactos para este cliente.</p>}
-                </CardContent>
-            </Card>
-        </TabsContent>
-        <TabsContent value="activity">
-            <Card>
-                <CardHeader>
-                <CardTitle>Registro de Actividad</CardTitle>
-                <CardDescription>Añade y visualiza interacciones y tareas con el cliente.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4 p-4 border rounded-md">
-                        <h4 className="font-medium">Nueva Actividad</h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <Select value={newActivityType} onValueChange={(value) => setNewActivityType(value as ClientActivityType)}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Tipo de actividad" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {clientActivityTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                             <div className="flex items-center space-x-2">
-                                <Checkbox id="is-task" checked={isTask} onCheckedChange={(checked) => setIsTask(!!checked)} />
-                                <Label htmlFor="is-task" className='font-normal'>Crear como Tarea/Recordatorio</Label>
-                            </div>
-                        </div>
-                        <Textarea 
-                            placeholder="Escribe una observación..." 
-                            value={newActivityObservation}
-                            onChange={(e) => setNewActivityObservation(e.target.value)}
-                            className="sm:col-span-2"
-                        />
-                        {isTask && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Oportunidad (Opcional)</Label>
-                                    <Select value={newActivityOpportunityId} onValueChange={setNewActivityOpportunityId}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Asociar a oportunidad..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">Ninguna</SelectItem>
-                                            {opportunities.map(opp => <SelectItem key={opp.id} value={opp.id}>{opp.title}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="flex items-center gap-2 md:col-span-2">
-                                  <Popover>
-                                      <PopoverTrigger asChild>
-                                      <Button
-                                          variant={"outline"}
-                                          className={cn(
-                                          "w-full justify-start text-left font-normal",
-                                          !dueDate && "text-muted-foreground"
-                                          )}
-                                      >
-                                          <CalendarIcon className="mr-2 h-4 w-4" />
-                                          {dueDate ? format(dueDate, "PPP", { locale: es }) : <span>Fecha de vencimiento</span>}
-                                      </Button>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="w-auto p-0">
-                                          <Calendar
-                                              mode="single"
-                                              selected={dueDate}
-                                              onSelect={setDueDate}
-                                              initialFocus
-                                              locale={es}
-                                          />
-                                      </PopoverContent>
-                                  </Popover>
-                                  <div className="relative">
-                                    <Clock className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                        type="time"
-                                        value={dueTime}
-                                        onChange={(e) => setDueTime(e.target.value)}
-                                        className="pl-8 w-[120px]"
-                                    />
-                                   </div>
-                                </div>
-                            </div>
-                        )}
-                         <Button onClick={handleSaveClientActivity} disabled={isSavingActivity}>
-                            {isSavingActivity ? (
-                                <>
-                                <Spinner size="small" color="white" className="mr-2" />
-                                Guardando...
-                                </>
-                            ) : (
-                                "Guardar Actividad"
-                            )}
-                        </Button>
-                    </div>
 
-                    <div className="mt-6 space-y-4">
-                        {clientActivities.map(activity => {
-                            const userName = usersMap[activity.userId]?.name || activity.userName;
-                            const completedByUserName = activity.completedByUserId ? (usersMap[activity.completedByUserId]?.name || activity.completedByUserName) : undefined;
-                            return (
-                                <div key={activity.id} className="flex items-start gap-3">
-                                    {activity.isTask && (
-                                        <Checkbox 
-                                            id={`task-${activity.id}`}
-                                            checked={activity.completed}
-                                            onCheckedChange={() => handleTaskCompleteToggle(activity, !!activity.completed)}
-                                            className="mt-1"
-                                        />
-                                    )}
-                                    <div className={cn("p-2 bg-muted rounded-full", !activity.isTask && "mt-1")}>
-                                        {activityIcons[activity.type]}
-                                    </div>
-                                    <div className={cn('flex-1', activity.completed && 'line-through text-muted-foreground')}>
-                                        <div className="flex items-center justify-between">
-                                            <div className='flex items-center gap-2'>
-                                                <span className="font-semibold text-sm">{activity.type}</span>
-                                                {!activity.isTask && <ConvertToTaskPopover activity={activity} />}
-                                            </div>
-                                            <span className="text-xs">
-                                                {new Date(activity.timestamp).toLocaleDateString()}
-                                            </span>
-                                        </div>
-                                        <p className="text-sm">{activity.observation}</p>
-                                        {activity.opportunityTitle && (
-                                          <p className="text-xs mt-1 font-medium flex items-center text-muted-foreground">
-                                            <CircleDollarSign className="h-3 w-3 mr-1" />
-                                            Oportunidad: {activity.opportunityTitle}
-                                          </p>
-                                        )}
-                                        {activity.isTask && activity.dueDate && (
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-xs mt-1 font-medium flex items-center">
-                                                    <CalendarIcon className="h-3 w-3 mr-1" />
-                                                    Vence: {format(new Date(activity.dueDate), "PPP p", { locale: es })}
-                                                </p>
-                                                {!activity.completed && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-7 w-7 text-muted-foreground hover:text-primary mt-1"
-                                                        onClick={() => handleSendTaskEmail(activity)}
-                                                        disabled={isSendingEmail === activity.id}
-                                                    >
-                                                        {isSendingEmail === activity.id 
-                                                            ? <Spinner size="small" /> 
-                                                            : <Mail className="h-4 w-4" />
-                                                        }
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        )}
-                                        <p className="text-xs mt-1">Registrado por: {userName}</p>
-                                        {activity.completed && activity.completedAt && (
-                                            <div className='text-xs mt-1'>
-                                                <p className='font-medium flex items-center text-green-600'>
-                                                <CheckCircle className="h-3 w-3 mr-1"/>
-                                                Finalizada: {format(new Date(activity.completedAt), "PPP", { locale: es })}
-                                                </p>
-                                                <p className="text-muted-foreground">Por: {completedByUserName}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                        {clientActivities.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No hay actividades registradas.</p>}
-                    </div>
-                </CardContent>
-            </Card>
-        </TabsContent>
-        <TabsContent value="notes">
-            <Card>
-                <CardHeader><CardTitle>Notas Comerciales Históricas</CardTitle></CardHeader>
-                <CardContent>
-                    {notes.map(note => (
-                        <div key={note.id} className="p-4 border-b last:border-0 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                            <div>
-                                <p className="font-bold text-lg">{note.title}</p>
-                                <p className="text-sm text-muted-foreground">
-                                    {format(new Date(note.createdAt), "PPP", { locale: es })} - Por: {note.advisorName}
-                                </p>
-                            </div>
-                            <div className="flex gap-2">
-                                <Button variant="outline" size="sm" asChild>
-                                    <Link href={`/notas/${note.id}`} target="_blank">
-                                        <Eye className="mr-2 h-4 w-4" />
-                                        Ver Detalle
-                                    </Link>
-                                </Button>
-                                <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    onClick={() => handleDownloadNotePdf(note)}
-                                    disabled={downloadingNoteId === note.id}
-                                >
-                                    {downloadingNoteId === note.id ? <Spinner size="small" className="mr-2"/> : <FileDown className="mr-2 h-4 w-4" />}
-                                    PDF
-                                </Button>
-                                {isBoss && (
-                                    <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        onClick={() => openDeleteDialog(note, 'note')}
-                                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                    {notes.length === 0 && <p className="text-center py-4 text-muted-foreground">No hay notas registradas.</p>}
-                </CardContent>
-            </Card>
-        </TabsContent>
-        <TabsContent value="tango-invoices">
-            <ClientTangoInvoices client={client} />
-        </TabsContent>
-        <TabsContent value="history">
-            <Card>
+          <Card className="border-primary/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Activity className="h-4 w-4 text-primary" />
+                Acciones rapidas
+              </CardTitle>
+              <CardDescription>Asenta una actividad de hoy en pocos segundos.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-2">
+                {quickClientActions.map(action => (
+                  <Button
+                    key={action.type}
+                    type="button"
+                    variant="outline"
+                    className="h-auto flex-col items-center gap-2 px-2 py-3 text-center hover:border-primary hover:bg-primary/5"
+                    onClick={() => {
+                      setQuickActivity({ type: action.type, label: action.label });
+                      setQuickActivityObservation('');
+                    }}
+                  >
+                    <span className="rounded-full bg-primary/10 p-2 text-primary">{action.icon}</span>
+                    <span className="text-xs font-bold">{action.label}</span>
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Informacion clave</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div>
+                <p className="text-xs text-muted-foreground">Condicion IVA</p>
+                <p className="font-medium">{client.condicionIVA}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Tipo de entidad</p>
+                <p className="font-medium">{client.tipoEntidad}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Ultima actividad</p>
+                <p className="font-medium">
+                  {latestActivity ? format(new Date(latestActivity.timestamp), 'dd/MM/yyyy HH:mm') : 'Sin actividad registrada'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </aside>
+
+        <section className="min-w-0 space-y-4">
+          <Tabs defaultValue="highlights" className="w-full">
+            <div className="flex flex-col gap-3 rounded-md border bg-background p-2 lg:flex-row lg:items-center lg:justify-between">
+              <TabsList className="grid h-auto w-full grid-cols-2 bg-transparent p-0 md:grid-cols-4 lg:w-auto">
+                <TabsTrigger value="highlights" className="rounded-sm px-4 py-2">Informacion destacada</TabsTrigger>
+                <TabsTrigger value="info" className="rounded-sm px-4 py-2">Informacion</TabsTrigger>
+                <TabsTrigger value="activity" className="rounded-sm px-4 py-2">Actividades</TabsTrigger>
+                <TabsTrigger value="income" className="rounded-sm px-4 py-2">Ingresos</TabsTrigger>
+              </TabsList>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="hidden shrink-0 xl:inline-flex"
+                onClick={() => setIsRightRailOpen(current => !current)}
+              >
+                {isRightRailOpen ? <PanelRightClose className="mr-2 h-4 w-4" /> : <PanelRightOpen className="mr-2 h-4 w-4" />}
+                {isRightRailOpen ? 'Ocultar panel' : 'Mostrar panel'}
+              </Button>
+            </div>
+
+            <TabsContent value="highlights" className="mt-4 space-y-4">
+              <Card>
                 <CardHeader>
-                    <CardTitle>Historial de Cambios</CardTitle>
-                    <CardDescription>
-                        Un registro automático de las acciones realizadas sobre este cliente y sus entidades asociadas.
-                    </CardDescription>
+                  <CardTitle>Vista general</CardTitle>
+                  <CardDescription>Resumen comercial del cliente y su actividad reciente.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-md border bg-muted/30 p-4">
+                    <p className="text-xs uppercase text-muted-foreground">Facturacion Tango</p>
+                    {isLoadingTangoBilling ? (
+                      <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                        <Spinner size="small" />
+                        Consultando...
+                      </div>
+                    ) : (
+                      <>
+                        <p className="mt-1 text-2xl font-bold">{formatMoney(tangoBillingSummary?.total || 0)}</p>
+                        <p className="text-xs text-muted-foreground">{tangoBillingSummary?.invoiceCount || 0} comprobantes oficiales</p>
+                      </>
+                    )}
+                  </div>
+                  <div className="rounded-md border bg-muted/30 p-4">
+                    <p className="text-xs uppercase text-muted-foreground">Oportunidades abiertas</p>
+                    <p className="mt-1 text-2xl font-bold">{openOpportunities.length}</p>
+                    <p className="text-xs text-muted-foreground">{formatMoney(totalOpportunityValue)} en pipeline</p>
+                  </div>
+                  <div className="rounded-md border bg-muted/30 p-4">
+                    <p className="text-xs uppercase text-muted-foreground">Contactos</p>
+                    <p className="mt-1 text-2xl font-bold">{people.length}</p>
+                    <p className="text-xs text-muted-foreground">{primaryContact?.name || 'Sin contacto principal'}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-start justify-between gap-4">
+                  <div>
+                    <CardTitle>Interacciones recientes</CardTitle>
+                    <CardDescription>Ultimos movimientos asentados por el equipo comercial.</CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setQuickActivity({ type: 'Mail', label: 'Mail' })}>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Crear correo
+                  </Button>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-4">
-                        {systemActivities.map((activity) => (
-                        <div key={activity.id} className="flex items-start gap-4">
-                            <div className="p-2 bg-muted rounded-full">
-                            {systemActivityIcons[activity.type] || getDefaultIcon()}
-                            </div>
-                            <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm" dangerouslySetInnerHTML={{ __html: sanitizeActivityHtml(activity.details) }} />
-                                <p className="text-sm text-muted-foreground whitespace-nowrap">
-                                {new Date(activity.timestamp).toLocaleDateString()}
-                                </p>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                                Por: {usersMap[activity.userId]?.name || 'Usuario desconocido'}
-                            </p>
-                            </div>
-                        </div>
-                        ))}
-                         {systemActivities.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No hay historial de cambios para este cliente.</p>}
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-md border p-4">
+                      <h4 className="font-semibold">Entrantes</h4>
+                      <p className="mt-12 text-center text-sm text-muted-foreground">No hay actividad entrante diferenciada en este registro.</p>
                     </div>
+                    <div className="rounded-md border p-4">
+                      <h4 className="font-semibold">Salientes</h4>
+                      <div className="mt-4 space-y-4">
+                        {recentClientActivities.map(activity => (
+                          <div key={activity.id} className="flex gap-3">
+                            <div className="mt-0.5 rounded-full bg-muted p-2">{activityIcons[activity.type]}</div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold">{activity.type} registrada</p>
+                              <p className="text-xs text-muted-foreground">{format(new Date(activity.timestamp), 'dd/MM/yyyy')}</p>
+                              <p className="mt-1 text-sm text-muted-foreground">{activity.observation}</p>
+                            </div>
+                          </div>
+                        ))}
+                        {recentClientActivities.length === 0 && (
+                          <p className="py-10 text-center text-sm text-muted-foreground">No hay interacciones registradas.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Oportunidades principales</CardTitle>
+                  <CardDescription>Negocios abiertos asociados a este cliente.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {openOpportunities.slice(0, 4).map(opp => (
+                    <button
+                      key={opp.id}
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 rounded-md border p-3 text-left hover:bg-muted/50"
+                      onClick={() => handleOpenOpportunityForm(opp)}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{opp.title}</p>
+                        <p className="text-xs text-muted-foreground">{opp.stage}</p>
+                      </div>
+                      <p className="shrink-0 font-bold">{formatMoney(opp.value)}</p>
+                    </button>
+                  ))}
+                  {openOpportunities.length === 0 && (
+                    <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">No hay oportunidades abiertas.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="info" className="mt-4 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Informacion de la empresa</CardTitle>
+                  <CardDescription>Datos administrativos y comerciales del cliente.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 text-sm md:grid-cols-2">
+                  <div><p className="text-xs text-muted-foreground">Denominacion</p><p className="font-medium">{client.denominacion}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Razon social</p><p className="font-medium">{client.razonSocial}</p></div>
+                  <div><p className="text-xs text-muted-foreground">CUIT</p><p className="font-medium">{client.cuit || '-'}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Condicion IVA</p><p className="font-medium">{client.condicionIVA}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Rubro</p><p className="font-medium">{client.rubro || '-'}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Ubicacion</p><p className="font-medium">{client.localidad}, {client.provincia}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Email</p><p className="font-medium">{client.email || '-'}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Telefono</p><p className="font-medium">{client.phone || '-'}</p></div>
+                  <div className="md:col-span-2"><p className="text-xs text-muted-foreground">Observaciones</p><p className="whitespace-pre-wrap font-medium">{client.observaciones || '-'}</p></div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>IDs Tango</CardTitle>
+                  <CardDescription>Vinculos usados para mapear facturacion oficial.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {client.idAire && <Badge variant="outline">Aire: {client.idAire}</Badge>}
+                    {client.idAireSrl && <Badge variant="outline">Aire SRL: {client.idAireSrl}</Badge>}
+                    {client.idAireDigital && <Badge variant="outline">Aire Digital: {client.idAireDigital}</Badge>}
+                    {!client.idAireSrl && client.idTango && <Badge variant="outline">ID Tango: {client.idTango}</Badge>}
+                    {!client.idAireDigital && client.tangoCompanyId && <Badge variant="outline">ID Tango Alt: {client.tangoCompanyId}</Badge>}
+                    {!client.idAire && !client.idAireSrl && !client.idAireDigital && !client.idTango && !client.tangoCompanyId && (
+                      <p className="text-sm text-muted-foreground">Este cliente no tiene IDs Tango vinculados.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {userInfo && (
+                <CommentThread
+                  entityType="client"
+                  entityId={client.id}
+                  entityName={client.denominacion}
+                  ownerId={client.ownerId}
+                  ownerName={client.ownerName}
+                  currentUser={userInfo}
+                  getAccessToken={getGoogleAccessToken}
+                />
+              )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Notas comerciales</CardTitle>
+                  <CardDescription>Documentos y propuestas historicas asociadas al cliente.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {notes.map(note => (
+                    <div key={note.id} className="flex flex-col gap-3 border-b py-4 first:pt-0 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-bold">{note.title}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(note.createdAt), "PPP", { locale: es })} - Por: {note.advisorName}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/notas/${note.id}`} target="_blank">
+                            <Eye className="mr-2 h-4 w-4" />
+                            Ver
+                          </Link>
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDownloadNotePdf(note)} disabled={downloadingNoteId === note.id}>
+                          {downloadingNoteId === note.id ? <Spinner size="small" className="mr-2"/> : <FileDown className="mr-2 h-4 w-4" />}
+                          PDF
+                        </Button>
+                        {isBoss && (
+                          <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(note, 'note')} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {notes.length === 0 && <p className="text-center text-sm text-muted-foreground">No hay notas registradas.</p>}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Historial de cambios</CardTitle>
+                  <CardDescription>Registro automatico de cambios realizados sobre el cliente.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {systemActivities.slice(0, 8).map((activity) => (
+                      <div key={activity.id} className="flex items-start gap-4">
+                        <div className="rounded-full bg-muted p-2">
+                          {systemActivityIcons[activity.type] || getDefaultIcon()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                            <p className="text-sm" dangerouslySetInnerHTML={{ __html: sanitizeActivityHtml(activity.details) }} />
+                            <p className="text-xs text-muted-foreground sm:whitespace-nowrap">
+                              {new Date(activity.timestamp).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Por: {usersMap[activity.userId]?.name || 'Usuario desconocido'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    {systemActivities.length === 0 && <p className="text-center text-sm text-muted-foreground">No hay historial de cambios para este cliente.</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="activity" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Actividades</CardTitle>
+                  <CardDescription>Registra interacciones, crea tareas y revisa el historial del cliente.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4 rounded-md border p-4">
+                    <h4 className="font-medium">Nueva actividad</h4>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <Select value={newActivityType} onValueChange={(value) => setNewActivityType(value as ClientActivityType)}>
+                        <SelectTrigger><SelectValue placeholder="Tipo de actividad" /></SelectTrigger>
+                        <SelectContent>{clientActivityTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox id="new-is-task" checked={isTask} onCheckedChange={(checked) => setIsTask(!!checked)} />
+                        <Label htmlFor="new-is-task" className="font-normal">Crear como tarea/recordatorio</Label>
+                      </div>
+                    </div>
+                    <Textarea placeholder="Escribe una observacion..." value={newActivityObservation} onChange={(e) => setNewActivityObservation(e.target.value)} />
+                    {isTask && (
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label>Oportunidad (opcional)</Label>
+                          <Select value={newActivityOpportunityId} onValueChange={setNewActivityOpportunityId}>
+                            <SelectTrigger><SelectValue placeholder="Asociar a oportunidad..." /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Ninguna</SelectItem>
+                              {opportunities.map(opp => <SelectItem key={opp.id} value={opp.id}>{opp.title}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-center gap-2 md:col-span-2">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !dueDate && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {dueDate ? format(dueDate, "PPP", { locale: es }) : <span>Fecha de vencimiento</span>}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                              <Calendar mode="single" selected={dueDate} onSelect={setDueDate} initialFocus locale={es} />
+                            </PopoverContent>
+                          </Popover>
+                          <div className="relative">
+                            <Clock className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} className="w-[120px] pl-8" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <Button onClick={handleSaveClientActivity} disabled={isSavingActivity}>
+                      {isSavingActivity ? <><Spinner size="small" color="white" className="mr-2" />Guardando...</> : "Guardar actividad"}
+                    </Button>
+                  </div>
+
+                  <div className="mt-6 space-y-3">
+                    {clientActivities.map(activity => {
+                      const userName = usersMap[activity.userId]?.name || activity.userName;
+                      const completedByUserName = activity.completedByUserId ? (usersMap[activity.completedByUserId]?.name || activity.completedByUserName) : undefined;
+                      return (
+                        <div key={activity.id} className="rounded-md border bg-background p-4">
+                          <div className="flex items-start gap-3">
+                            {activity.isTask && (
+                              <Checkbox id={`new-task-${activity.id}`} checked={activity.completed} onCheckedChange={() => handleTaskCompleteToggle(activity, !!activity.completed)} className="mt-1" />
+                            )}
+                            <div className={cn("rounded-full bg-muted p-2", !activity.isTask && "mt-1")}>{activityIcons[activity.type]}</div>
+                            <div className={cn("min-w-0 flex-1", activity.completed && "text-muted-foreground line-through")}>
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold">{activity.type}</span>
+                                  {!activity.isTask && <ConvertToTaskPopover activity={activity} />}
+                                </div>
+                                <span className="text-xs text-muted-foreground">{format(new Date(activity.timestamp), "PPP p", { locale: es })}</span>
+                              </div>
+                              <p className="mt-1 text-sm">{activity.observation}</p>
+                              {activity.opportunityTitle && (
+                                <p className="mt-2 flex items-center text-xs font-medium text-muted-foreground">
+                                  <CircleDollarSign className="mr-1 h-3 w-3" />
+                                  Oportunidad: {activity.opportunityTitle}
+                                </p>
+                              )}
+                              {activity.isTask && activity.dueDate && (
+                                <div className="flex items-center gap-2">
+                                  <p className="mt-1 flex items-center text-xs font-medium">
+                                    <CalendarIcon className="mr-1 h-3 w-3" />
+                                    Vence: {format(new Date(activity.dueDate), "PPP p", { locale: es })}
+                                  </p>
+                                  {!activity.completed && (
+                                    <Button variant="ghost" size="icon" className="mt-1 h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => handleSendTaskEmail(activity)} disabled={isSendingEmail === activity.id}>
+                                      {isSendingEmail === activity.id ? <Spinner size="small" /> : <Mail className="h-4 w-4" />}
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                              <p className="mt-2 text-xs text-muted-foreground">Registrado por: {userName}</p>
+                              {activity.completed && activity.completedAt && (
+                                <div className="mt-1 text-xs">
+                                  <p className="flex items-center font-medium text-green-600"><CheckCircle className="mr-1 h-3 w-3"/>Finalizada: {format(new Date(activity.completedAt), "PPP", { locale: es })}</p>
+                                  <p className="text-muted-foreground">Por: {completedByUserName}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {clientActivities.length === 0 && <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">No hay actividades registradas.</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="income" className="mt-4 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    Total Historico Facturado
+                  </CardTitle>
+                  <CardDescription>Comprobantes oficiales de Tango para todos los IDs vinculados del cliente.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {isLoadingTangoBilling ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner size="small" />Consultando Tango...</div>
+                  ) : tangoBillingError ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-destructive">No se pudo cargar Tango.</p>
+                      <p className="text-xs text-muted-foreground">{tangoBillingError}</p>
+                      <Button variant="outline" size="sm" onClick={fetchTangoBillingSummary}>Reintentar</Button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-3xl font-bold">{formatMoney(tangoBillingSummary?.total || 0)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {tangoBillingSummary?.invoiceCount || 0} comprobantes sumados, incluyendo FAC, CDE, NC y otros tipos disponibles.
+                        {tangoBillingSummary?.truncated ? ' La consulta fue limitada por paginacion de Tango.' : ''}
+                      </p>
+                      {tangoBillingSummary && tangoBillingSummary.byCompany.length > 0 && (
+                        <div className="space-y-1 rounded-md bg-muted/60 p-3 text-xs">
+                          {tangoBillingSummary.byCompany.map(company => (
+                            <div key={`${company.companyId}-${company.clientCode}`} className="flex justify-between gap-3">
+                              <span className="text-muted-foreground">{company.companyLabel} ({company.clientCode}) - {company.invoiceCount} comp.</span>
+                              <span className="font-semibold">{formatMoney(company.total)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+              <ClientTangoInvoices client={client} />
+            </TabsContent>
+          </Tabs>
+        </section>
+
+        {isRightRailOpen && (
+          <aside className="space-y-4 xl:sticky xl:top-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                <CardTitle className="text-base">Contactos ({people.length})</CardTitle>
+                {canEditContact && <Button variant="ghost" size="sm" onClick={() => handleOpenPersonForm()}><PlusCircle className="mr-2 h-4 w-4" />Agregar</Button>}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {people.slice(0, 4).map(person => (
+                  <div key={person.id} className="rounded-md border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{person.name}</p>
+                        {person.cargo && <p className="text-xs text-muted-foreground">{person.cargo}</p>}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {person.phone && (
+                          <>
+                            <Button asChild variant="ghost" size="icon" className="h-7 w-7"><a href={`tel:${person.phone}`}><PhoneCall className="h-4 w-4" /></a></Button>
+                            <Button asChild variant="ghost" size="icon" className="h-7 w-7"><a href={`https://wa.me/${person.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"><MessageSquare className="h-4 w-4" /></a></Button>
+                          </>
+                        )}
+                        {canEditContact && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenPersonForm(person)}><Edit className="h-4 w-4" /></Button>}
+                        {canDelete && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openDeleteDialog(person, 'person')}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
+                      </div>
+                    </div>
+                    <p className="mt-2 truncate text-sm text-muted-foreground">{person.email || 'Sin email'}</p>
+                    <p className="truncate text-sm text-muted-foreground">{person.phone || 'Sin telefono'}</p>
+                  </div>
+                ))}
+                {people.length === 0 && <p className="rounded-md border border-dashed p-5 text-center text-sm text-muted-foreground">No hay contactos asociados.</p>}
+              </CardContent>
             </Card>
-        </TabsContent>
-      </Tabs>
-      
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                <CardTitle className="text-base">Negocios ({opportunities.length})</CardTitle>
+                {canEditOpportunity && <Button variant="ghost" size="sm" onClick={() => handleOpenOpportunityForm()}><PlusCircle className="mr-2 h-4 w-4" />Agregar</Button>}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {opportunities.slice(0, 4).map(opp => (
+                  <button key={opp.id} type="button" className="w-full rounded-md border p-3 text-left hover:bg-muted/50" onClick={() => handleOpenOpportunityForm(opp)}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate font-semibold">{opp.title}</p>
+                      <p className="shrink-0 text-sm font-bold">{formatMoney(opp.value)}</p>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className={`h-2 w-2 rounded-full ${stageColors[opp.stage]}`} />
+                      {opp.stage}
+                    </div>
+                  </button>
+                ))}
+                {opportunities.length === 0 && <p className="rounded-md border border-dashed p-5 text-center text-sm text-muted-foreground">No hay oportunidades asociadas.</p>}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Tareas pendientes ({pendingTasks.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {pendingTasks.map(task => (
+                  <div key={task.id} className="flex items-start gap-3 rounded-md border p-3">
+                    <Checkbox checked={task.completed} onCheckedChange={() => handleTaskCompleteToggle(task, !!task.completed)} className="mt-1" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">{task.observation}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{task.dueDate ? format(new Date(task.dueDate), "PPP p", { locale: es }) : 'Sin vencimiento'}</p>
+                    </div>
+                  </div>
+                ))}
+                {pendingTasks.length === 0 && <p className="rounded-md border border-dashed p-5 text-center text-sm text-muted-foreground">Sin tareas pendientes.</p>}
+              </CardContent>
+            </Card>
+          </aside>
+        )}
+      </div>
+    </div>
+
       {isOpportunityFormOpen && (
         <OpportunityDetailsDialog
           opportunity={selectedOpportunity}
@@ -1431,7 +1461,6 @@ export function ClientDetails({
             person={selectedPerson}
         />
       )}
-    </div>
     <Dialog open={Boolean(quickActivity)} onOpenChange={(open) => {
         if (!open && !isSavingQuickActivity) {
             setQuickActivity(null);
