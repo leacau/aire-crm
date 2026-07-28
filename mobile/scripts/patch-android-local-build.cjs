@@ -5,7 +5,7 @@ const { execFileSync } = require("child_process");
 
 function runNpmPack(packageName, destination) {
   if (process.platform === "win32") {
-    execFileSync("cmd.exe", ["/d", "/s", "/c", `npm pack ${packageName} --pack-destination "${destination}"`], {
+    execFileSync("cmd.exe", ["/d", "/c", "npm", "pack", packageName, "--pack-destination", destination], {
       stdio: "ignore",
     });
     return;
@@ -35,10 +35,42 @@ function ensureReactNativeGradleFiles() {
 
   const reactNativeVersion = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")).version;
   const requiredFiles = [
+    "build.gradle.kts",
     "gradle.properties",
     "gradle/libs.versions.toml",
+    "ReactAndroid/build.gradle.kts",
     "ReactAndroid/gradle.properties",
     "ReactAndroid/hermes-engine/gradle.properties",
+    "ReactAndroid/cmake-utils/default-app-setup/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/first-party/fbgloginit/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/first-party/hermes/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/first-party/jni-lib-merge/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/first-party/jni-lib-merge/SoMerging-utils.cmake",
+    "ReactAndroid/src/main/jni/first-party/yogajni/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/devsupport/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/fabric/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/featureflags/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/hermes/instrumentation/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/hermes/reactexecutor/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/hermes/tooling/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/jni/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/mapbuffer/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/newarchdefaults/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/reactnativeblob/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/reactperflogger/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/runtime/cxxreactpackage/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/runtime/hermes/jni/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/runtime/jni/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/tracing/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/turbomodule/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/react/uimanager/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/third-party/boost/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/third-party/double-conversion/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/third-party/fast_float/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/third-party/fmt/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/third-party/folly/CMakeLists.txt",
+    "ReactAndroid/src/main/jni/third-party/glog/CMakeLists.txt",
     "sdks/hermes-engine/version.properties",
   ];
 
