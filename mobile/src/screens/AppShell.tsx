@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/AuthProvider';
+import { ApprovalsScreen } from './ApprovalsScreen';
 import { BillingScreen } from './BillingScreen';
 import { ClientsScreen } from './ClientsScreen';
 import { HomeScreen } from './HomeScreen';
 import { OpportunitiesScreen } from './OpportunitiesScreen';
 import { TasksScreen } from './TasksScreen';
 
-export type AppTab = 'home' | 'tasks' | 'clients' | 'opportunities' | 'billing';
+export type AppTab = 'home' | 'tasks' | 'clients' | 'opportunities' | 'billing' | 'approvals';
 
 const tabs: Array<{ id: AppTab; label: string }> = [
   { id: 'home', label: 'Inicio' },
@@ -16,6 +17,7 @@ const tabs: Array<{ id: AppTab; label: string }> = [
   { id: 'clients', label: 'Clientes' },
   { id: 'opportunities', label: 'Ops' },
   { id: 'billing', label: 'Mora' },
+  { id: 'approvals', label: 'Aprob' },
 ];
 
 export function AppShell() {
@@ -41,6 +43,7 @@ export function AppShell() {
         {tab === 'clients' && <ClientsScreen />}
         {tab === 'opportunities' && <OpportunitiesScreen />}
         {tab === 'billing' && <BillingScreen />}
+        {tab === 'approvals' && <ApprovalsScreen />}
       </View>
 
       <View style={[styles.tabbar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -98,8 +101,8 @@ const styles = StyleSheet.create({
   },
   tabbar: {
     flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 10,
+    gap: 4,
+    paddingHorizontal: 8,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
@@ -116,7 +119,7 @@ const styles = StyleSheet.create({
   },
   tabText: {
     color: '#475569',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
   activeTabText: {

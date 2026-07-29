@@ -41,6 +41,12 @@ export function HomeScreen({ onOpenTab }: { onOpenTab: (tab: AppTab) => void }) 
             Consultar comprobantes pendientes, estados y notas de cobranza segun permisos.
           </Text>
         </Pressable>
+        <Pressable style={styles.actionCard} onPress={() => onOpenTab('approvals')}>
+          <Text style={styles.actionTitle}>Aprobaciones</Text>
+          <Text style={styles.actionCopy}>
+            Revisar pedidos pendientes y abrir la bandeja web para aprobar o devolver.
+          </Text>
+        </Pressable>
       </View>
     </ScrollView>
   );

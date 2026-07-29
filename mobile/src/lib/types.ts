@@ -50,6 +50,34 @@ export type BillingBootstrap = {
   payments: PaymentEntry[];
 };
 
+export type ApprovalStatus = 'Pendiente' | 'Aprobado' | 'Devuelto' | 'Borrador' | 'Pendiente de Modificación';
+
+export type ApprovalItemType = 'Nota Comercial' | 'Pedido de Redes' | 'Orden de Publicidad' | 'Nota Web / Gacetilla';
+
+export type ApprovalHistoryItem = {
+  timestamp: string;
+  status: ApprovalStatus;
+  userId: string;
+  userName: string;
+  userRole?: string;
+  comments?: string;
+};
+
+export type ApprovalItem = {
+  id: string;
+  type: ApprovalItemType;
+  clientId: string;
+  clientName: string;
+  advisorName: string;
+  title: string;
+  createdAt: string;
+  status: ApprovalStatus;
+  adminComments?: string;
+  collectionName: string;
+  rawData?: Record<string, unknown>;
+  approvalHistory?: ApprovalHistoryItem[];
+};
+
 export type ClientActivity = {
   id: string;
   clientId?: string;

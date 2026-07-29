@@ -1,6 +1,7 @@
 import type { User } from 'firebase/auth';
 import { apiRequest } from './api-client';
 import type {
+  ApprovalItem,
   AuthSession,
   BillingBootstrap,
   Client,
@@ -121,6 +122,13 @@ export function getOpportunityDetail(user: User, opportunityId: string) {
 
 export function getBillingBootstrap(user: User) {
   return apiRequest<BillingBootstrap>('/api/billing/bootstrap', {
+    method: 'GET',
+    user,
+  });
+}
+
+export function getApprovals(user: User) {
+  return apiRequest<{ approvals: ApprovalItem[] }>('/api/approvals', {
     method: 'GET',
     user,
   });
