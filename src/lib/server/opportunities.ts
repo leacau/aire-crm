@@ -228,6 +228,25 @@ async function getActiveOpportunities() {
   return opportunities;
 }
 
+function isActiveOpportunityForList(opportunity: Opportunity, threeMonthsAgo: Date) {
+  const activeStages = new Set([
+    'Nuevo',
+    'Propuesta',
+    'Negociacion',
+    'Negociación',
+    'Negociacion a Aprobar',
+    'Negociación a Aprobar',
+    'Cerrado - No Definido',
+    'Cerrado - Ganado',
+  ]);
+
+  if (activeStages.has(opportunity.stage)) return true;
+  if (opportunity.stage !== 'Cerrado - Perdido') return false;
+
+  const createdAt = opportunity.createdAt ? new Date(opportunity.createdAt) : null;
+  return Boolean(createdAt && !Number.isNaN(createdAt.getTime()) && createdAt >= threeMonthsAgo);
+}
+
 async function getAllOpportunities() {
   const snapshot = await dbAdmin.collection('opportunities').get();
   return snapshot.docs.map(doc => mapOpportunity(doc.id, doc.data()));
@@ -366,6 +385,13 @@ export async function listOpportunitiesServer(
       throw new OpportunityApiError('Forbidden', 403);
     }
     return getOpportunitiesForUser(requestedUserId);
+  }
+
+  if (scope === 'active' && !hasServerManagementPrivileges(requester)) {
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const opportunities = await getOpportunitiesForUser(requester.uid);
+    return opportunities.filter(opportunity => isActiveOpportunityForList(opportunity, threeMonthsAgo));
   }
 
   return getActiveOpportunities();

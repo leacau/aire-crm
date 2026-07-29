@@ -25,14 +25,10 @@ import {
 } from 'lucide-react';
 import type { Opportunity, Client, ClientActivity, User, Invoice, PaymentEntry } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
-import { getAgencies } from '@/lib/api/agencies';
-import { cleanupOldActivities, getDashboardTasks, updateClientActivity } from '@/lib/api/client-activities';
-import { getClients } from '@/lib/api/clients';
-import { getDashboardInvoices } from '@/lib/api/invoices';
-import { getOpportunities, updateOpportunity } from '@/lib/api/opportunities';
-import { getPendingPaymentEntries } from '@/lib/api/payments';
+import { cleanupOldActivities, updateClientActivity } from '@/lib/api/client-activities';
+import { getDashboardBootstrap } from '@/lib/api/dashboard';
+import { updateOpportunity } from '@/lib/api/opportunities';
 import { getReportDataForAdvisors } from '@/lib/api/reports';
-import { getAllUsers } from '@/lib/api/users';
 import { Spinner } from '@/components/ui/spinner';
 import type { DateRange } from 'react-day-picker';
 import { isWithinInterval, isToday, isTomorrow, startOfToday, format, startOfMonth, endOfMonth, parseISO, subMonths, eachMonthOfInterval, differenceInDays, startOfDay, addDays, isAfter, isBefore, addMonths } from 'date-fns';
@@ -233,12 +229,17 @@ export default function DashboardPage() {
     let isMounted = true;
     setLoadingData(true);
 
-    Promise.all([getAllUsers(), getClients(), getDashboardTasks(), getAgencies()]).then(([u, c, t, _]) => {
+    const includeHeavy = Boolean(!isLightWeightArea || isBoss);
+
+    getDashboardBootstrap(includeHeavy).then(async data => {
         if (!isMounted) return;
-        setUsers(u);
-        setAdvisors(u.filter(x => x.role === 'Asesor'));
-        setClients(c);
-        setTasks(t);
+        setUsers(data.users);
+        setAdvisors(data.users.filter(x => x.role === 'Asesor'));
+        setClients(data.clients);
+        setTasks(data.tasks);
+        setOpportunities(data.opportunities);
+        setInvoices(data.invoices);
+        setPaymentEntries(data.paymentEntries);
         
         if (isBoss) {
             void cleanupOldActivities().catch(error => {
@@ -246,37 +247,31 @@ export default function DashboardPage() {
             });
         }
 
-        if (isLightWeightArea && !isBoss) {
+        if (!includeHeavy) {
             setLoadingData(false);
             return;
         }
 
-        Promise.all([
-            getOpportunities(),
-            getDashboardInvoices(),
-            getPendingPaymentEntries(),
-            fetchTangoObjectiveInvoices(startOfMonth(subMonths(new Date(), 12)), endOfMonth(subMonths(new Date(), 1)))
-              .catch(error => {
-                console.error('Error fetching Tango billing history:', error);
-                return [] as TangoObjectiveInvoice[];
-              }),
-        ]).then(([o, i, p, tangoInvoices]) => {
-            if (!isMounted) return;
-            setOpportunities(o);
-            setInvoices(i);
-            setTangoBillingInvoices(tangoInvoices);
-            setPaymentEntries(p);
-            setLoadingData(false); 
-        }).catch(error => {
-            console.error("Error fetching heavy dashboard data:", error);
-            if (isMounted) setLoadingData(false);
-        });
+        const tangoInvoices = await fetchTangoObjectiveInvoices(startOfMonth(subMonths(new Date(), 12)), endOfMonth(subMonths(new Date(), 1)))
+          .catch(error => {
+            console.error('Error fetching Tango billing history:', error);
+            return [] as TangoObjectiveInvoice[];
+          });
 
-    }).catch(console.error);
+        if (isMounted) {
+            setTangoBillingInvoices(tangoInvoices);
+            setLoadingData(false);
+        }
+    }).catch(error => {
+        console.error("Error fetching dashboard data:", error);
+        if (isMounted) {
+            setLoadingData(false);
+        }
+    });
 
     return () => { isMounted = false; };
   }, [userInfo, isBoss, isLightWeightArea]);
-  
+
   const { 
     userOpportunities, 
     userClients, 
