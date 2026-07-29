@@ -10,6 +10,7 @@ import type {
   MobileClientDetail,
   MobileOpportunityDetail,
   Opportunity,
+  PaymentEntry,
 } from './types';
 
 export function validateSession(user: User) {
@@ -96,5 +97,22 @@ export function getBillingBootstrap(user: User) {
   return apiRequest<BillingBootstrap>('/api/billing/bootstrap', {
     method: 'GET',
     user,
+  });
+}
+
+export function updatePaymentEntry(
+  user: User,
+  paymentId: string,
+  updates: Partial<Pick<PaymentEntry, 'status' | 'notes' | 'nextContactAt' | 'pendingAmount'>>,
+) {
+  return apiRequest<{ ok: true }>(`/api/payments/${encodeURIComponent(paymentId)}`, {
+    method: 'PATCH',
+    user,
+    body: {
+      updates,
+      audit: {
+        details: 'Actualizo un registro de mora desde mobile',
+      },
+    },
   });
 }

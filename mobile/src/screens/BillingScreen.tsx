@@ -1,9 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  Modal,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useAuth } from '../auth/AuthProvider';
-import { getBillingBootstrap } from '../lib/api';
-import type { PaymentEntry } from '../lib/types';
+import { getBillingBootstrap, updatePaymentEntry } from '../lib/api';
+import type { PaymentEntry, PaymentStatus } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
+
+const statusOptions: PaymentStatus[] = ['Pendiente', 'Reclamado', 'Pagado', 'Incobrable'];
 
 function formatCurrency(value?: number) {
   return new Intl.NumberFormat('es-AR', {
@@ -33,6 +45,11 @@ export function BillingScreen() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentEntry | null>(null);
+  const [editStatus, setEditStatus] = useState<PaymentStatus>('Pendiente');
+  const [editNotes, setEditNotes] = useState('');
+  const [editNextContactAt, setEditNextContactAt] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const loadBilling = useCallback(async () => {
     if (!firebaseUser) return;
@@ -85,58 +102,142 @@ export function BillingScreen() {
     }
   };
 
+  const openPaymentEditor = (payment: PaymentEntry) => {
+    setSelectedPayment(payment);
+    setEditStatus(payment.status);
+    setEditNotes(payment.notes || '');
+    setEditNextContactAt(payment.nextContactAt ? payment.nextContactAt.slice(0, 10) : '');
+  };
+
+  const savePayment = async () => {
+    if (!firebaseUser || !selectedPayment) return;
+
+    setSaving(true);
+    try {
+      await updatePaymentEntry(firebaseUser, selectedPayment.id, {
+        status: editStatus,
+        notes: editNotes.trim(),
+        nextContactAt: editNextContactAt.trim() || null,
+      });
+      setSelectedPayment(null);
+      await loadBilling();
+      Alert.alert('Mora actualizada', 'Se guardaron los cambios.');
+    } catch (error) {
+      Alert.alert('No se pudo actualizar', error instanceof Error ? error.message : 'Intenta nuevamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) return <LoadingScreen label="Cargando mora..." />;
 
   return (
-    <FlatList
-      contentContainerStyle={styles.list}
-      data={visiblePayments}
-      keyExtractor={item => item.id}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-      ListHeaderComponent={(
-        <View style={styles.header}>
-          <Text style={styles.title}>Mora</Text>
-          <Text style={styles.subtitle}>{totals.count} pendientes · {formatCurrency(totals.pending)}</Text>
-          <TextInput
-            placeholder="Buscar por cliente, asesor o comprobante"
-            placeholderTextColor="#94a3b8"
-            style={styles.search}
-            value={query}
-            onChangeText={setQuery}
-          />
-        </View>
-      )}
-      ListEmptyComponent={<Text style={styles.empty}>No hay comprobantes de mora para mostrar.</Text>}
-      renderItem={({ item }) => (
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleGroup}>
-              <Text style={styles.client}>{item.razonSocial || 'Cliente sin nombre'}</Text>
-              <Text style={styles.meta}>{[item.tipo, item.comprobanteNumber, item.company].filter(Boolean).join(' · ') || 'Sin comprobante'}</Text>
+    <View style={styles.screen}>
+      <FlatList
+        contentContainerStyle={styles.list}
+        data={visiblePayments}
+        keyExtractor={item => item.id}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
+        ListHeaderComponent={(
+          <View style={styles.header}>
+            <Text style={styles.title}>Mora</Text>
+            <Text style={styles.subtitle}>{totals.count} pendientes - {formatCurrency(totals.pending)}</Text>
+            <TextInput
+              placeholder="Buscar por cliente, asesor o comprobante"
+              placeholderTextColor="#94a3b8"
+              style={styles.search}
+              value={query}
+              onChangeText={setQuery}
+            />
+          </View>
+        )}
+        ListEmptyComponent={<Text style={styles.empty}>No hay comprobantes de mora para mostrar.</Text>}
+        renderItem={({ item }) => (
+          <Pressable onPress={() => openPaymentEditor(item)} style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardTitleGroup}>
+                <Text style={styles.client}>{item.razonSocial || 'Cliente sin nombre'}</Text>
+                <Text style={styles.meta}>
+                  {[item.tipo, item.comprobanteNumber, item.company].filter(Boolean).join(' - ') || 'Sin comprobante'}
+                </Text>
+              </View>
+              <Text style={[styles.status, getStatusStyle(item.status)]}>{item.status}</Text>
             </View>
-            <Text style={[styles.status, getStatusStyle(item.status)]}>{item.status}</Text>
-          </View>
 
-          <View style={styles.amountRow}>
-            <Text style={styles.amount}>{formatCurrency(item.pendingAmount ?? item.amount)}</Text>
-            <Text style={styles.days}>{item.daysLate ?? 0} dias</Text>
-          </View>
+            <View style={styles.amountRow}>
+              <Text style={styles.amount}>{formatCurrency(item.pendingAmount ?? item.amount)}</Text>
+              <Text style={styles.days}>{item.daysLate ?? 0} dias</Text>
+            </View>
 
-          <View style={styles.detailGrid}>
-            <Text style={styles.meta}>Emision: {formatDate(item.issueDate)}</Text>
-            <Text style={styles.meta}>Vence: {formatDate(item.dueDate)}</Text>
-            <Text style={styles.meta}>Asesor: {item.advisorName || '-'}</Text>
-            <Text style={styles.meta}>Prox. contacto: {formatDate(item.nextContactAt)}</Text>
-          </View>
+            <View style={styles.detailGrid}>
+              <Text style={styles.meta}>Emision: {formatDate(item.issueDate)}</Text>
+              <Text style={styles.meta}>Vence: {formatDate(item.dueDate)}</Text>
+              <Text style={styles.meta}>Asesor: {item.advisorName || '-'}</Text>
+              <Text style={styles.meta}>Prox. contacto: {formatDate(item.nextContactAt)}</Text>
+            </View>
 
-          <Text style={styles.note}>Estado: {item.status}{item.notes ? `: ${item.notes}` : ''}</Text>
+            <Text style={styles.note}>Estado: {item.status}{item.notes ? `: ${item.notes}` : ''}</Text>
+            <Text style={styles.openHint}>Editar gestion</Text>
+          </Pressable>
+        )}
+      />
+
+      <Modal visible={Boolean(selectedPayment)} transparent animationType="fade" onRequestClose={() => setSelectedPayment(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Actualizar mora</Text>
+            <Text style={styles.modalSubtitle}>{selectedPayment?.razonSocial || 'Cliente sin nombre'}</Text>
+
+            <View style={styles.statusGrid}>
+              {statusOptions.map(status => (
+                <Pressable
+                  key={status}
+                  onPress={() => setEditStatus(status)}
+                  style={[styles.statusOption, editStatus === status && styles.statusOptionActive]}
+                >
+                  <Text style={[styles.statusOptionText, editStatus === status && styles.statusOptionTextActive]}>
+                    {status}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <TextInput
+              multiline
+              placeholder="Nota o aclaracion"
+              placeholderTextColor="#94a3b8"
+              style={styles.modalInput}
+              value={editNotes}
+              onChangeText={setEditNotes}
+            />
+
+            <TextInput
+              placeholder="Proximo contacto AAAA-MM-DD"
+              placeholderTextColor="#94a3b8"
+              style={styles.dateInput}
+              value={editNextContactAt}
+              onChangeText={setEditNextContactAt}
+            />
+
+            <View style={styles.modalActions}>
+              <Pressable disabled={saving} onPress={() => setSelectedPayment(null)} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Cancelar</Text>
+              </Pressable>
+              <Pressable disabled={saving} onPress={savePayment} style={[styles.primaryButton, saving && styles.disabledButton]}>
+                <Text style={styles.primaryButtonText}>{saving ? 'Guardando...' : 'Guardar'}</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
-      )}
-    />
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   list: {
     padding: 18,
     gap: 12,
@@ -241,5 +342,101 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontSize: 13,
     lineHeight: 18,
+  },
+  openHint: {
+    color: '#2563eb',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    padding: 18,
+  },
+  modalCard: {
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    padding: 18,
+    gap: 12,
+  },
+  modalTitle: {
+    color: '#0f172a',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  modalSubtitle: {
+    color: '#64748b',
+    fontSize: 13,
+  },
+  statusGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusOption: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  statusOptionActive: {
+    borderColor: '#0f172a',
+    backgroundColor: '#0f172a',
+  },
+  statusOptionText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  statusOptionTextActive: {
+    color: '#ffffff',
+  },
+  modalInput: {
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    color: '#0f172a',
+    padding: 12,
+    textAlignVertical: 'top',
+  },
+  dateInput: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    color: '#0f172a',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'flex-end',
+  },
+  secondaryButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+  },
+  secondaryButtonText: {
+    color: '#0f172a',
+    fontWeight: '900',
+  },
+  primaryButton: {
+    borderRadius: 999,
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontWeight: '900',
+  },
+  disabledButton: {
+    opacity: 0.65,
   },
 });
