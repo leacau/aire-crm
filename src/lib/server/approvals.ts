@@ -4,7 +4,19 @@ import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/aut
 import { serializeDocument } from '@/lib/server/firestore';
 import type { ApprovalHistoryItem, ApprovalStatus } from '@/lib/types';
 
-const STATUSES_TO_FETCH: ApprovalStatus[] = ['Pendiente', 'Aprobado', 'Devuelto', 'Borrador', 'Pendiente de Modificación'];
+const PENDING_MODIFICATION_STATUS: ApprovalStatus = 'Pendiente de Modificación';
+const LEGACY_PENDING_MODIFICATION_STATUS = 'Pendiente de Modificacion';
+const CANONICAL_APPROVAL_STATUSES: ApprovalStatus[] = [
+  'Pendiente',
+  'Aprobado',
+  'Devuelto',
+  'Borrador',
+  PENDING_MODIFICATION_STATUS,
+];
+const STATUSES_TO_FETCH = [
+  ...CANONICAL_APPROVAL_STATUSES,
+  LEGACY_PENDING_MODIFICATION_STATUS,
+] as const;
 
 export const APPROVAL_COLLECTIONS = {
   commercial_notes: 'Nota Comercial',
@@ -71,6 +83,14 @@ function getAdvisorName(type: ApprovalItemType, data: Record<string, any>): stri
   return type === 'Orden de Publicidad' ? data.accountExecutive : data.advisorName;
 }
 
+function normalizeApprovalStatus(status: unknown): ApprovalStatus {
+  if (status === LEGACY_PENDING_MODIFICATION_STATUS) return PENDING_MODIFICATION_STATUS;
+  if (typeof status === 'string' && CANONICAL_APPROVAL_STATUSES.includes(status as ApprovalStatus)) {
+    return status as ApprovalStatus;
+  }
+  return 'Pendiente';
+}
+
 function isApprovalCollection(value: unknown): value is ApprovalCollectionName {
   return typeof value === 'string' && value in APPROVAL_COLLECTIONS;
 }
@@ -98,7 +118,7 @@ async function loadCollectionApprovals(
       advisorName: getAdvisorName(type, rawData),
       title: getApprovalTitle(type, rawData),
       createdAt: parseCreatedAt(rawData.createdAt),
-      status: rawData.status || 'Pendiente',
+      status: normalizeApprovalStatus(rawData.status),
       adminComments: rawData.adminComments,
       collectionName,
       rawData,

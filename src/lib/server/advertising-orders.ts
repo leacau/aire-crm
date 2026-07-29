@@ -330,7 +330,7 @@ export async function updateAdvertisingOrderServer(
       throw new AdvertisingOrderApiError('No se detectaron cambios para registrar en la orden.', 400);
     }
 
-    updatePayload.status = 'Pendiente de Modificacion';
+    updatePayload.status = 'Pendiente de Modificación';
     updatePayload.adminComments = FieldValue.delete();
     updatePayload.approvedAt = FieldValue.delete();
     updatePayload.approvedBy = FieldValue.delete();
