@@ -35,6 +35,12 @@ export type MobileBootstrap = {
   };
 };
 
+export type MobileClientDetail = {
+  client: Client;
+  activities: ClientActivity[];
+  opportunities: Opportunity[];
+};
+
 export type ClientActivity = {
   id: string;
   clientId?: string;
@@ -53,12 +59,30 @@ export type ClientActivity = {
   completed?: boolean;
 };
 
+export type CreateClientActivityInput = {
+  clientId?: string;
+  clientName?: string;
+  prospectId?: string;
+  prospectName?: string;
+  opportunityId?: string;
+  opportunityTitle?: string;
+  type: string;
+  observation: string;
+  isTask: boolean;
+  dueDate?: string;
+};
+
 export type Client = {
   id: string;
   denominacion: string;
   razonSocial?: string;
   ownerId: string;
   ownerName: string;
+  cuit?: string;
+  condicionIVA?: string;
+  rubro?: string;
+  tipoEntidad?: string;
+  observaciones?: string;
   phone?: string;
   email?: string;
   localidad?: string;

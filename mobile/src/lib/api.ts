@@ -1,6 +1,14 @@
 import type { User } from 'firebase/auth';
 import { apiRequest } from './api-client';
-import type { AuthSession, Client, ClientActivity, MobileBootstrap, Opportunity } from './types';
+import type {
+  AuthSession,
+  Client,
+  ClientActivity,
+  CreateClientActivityInput,
+  MobileBootstrap,
+  MobileClientDetail,
+  Opportunity,
+} from './types';
 
 export function validateSession(user: User) {
   return apiRequest<AuthSession>('/api/auth/session', {
@@ -50,6 +58,21 @@ export function getClients(user: User) {
   return apiRequest<{ clients: Client[] }>('/api/mobile/clients', {
     method: 'GET',
     user,
+  });
+}
+
+export function getClientDetail(user: User, clientId: string) {
+  return apiRequest<MobileClientDetail>(`/api/mobile/clients/${encodeURIComponent(clientId)}`, {
+    method: 'GET',
+    user,
+  });
+}
+
+export function createClientActivity(user: User, activityData: CreateClientActivityInput) {
+  return apiRequest<{ id: string }>('/api/client-activities', {
+    method: 'POST',
+    user,
+    body: { activityData },
   });
 }
 

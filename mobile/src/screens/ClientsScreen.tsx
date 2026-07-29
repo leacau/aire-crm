@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../auth/AuthProvider';
 import { getClients } from '../lib/api';
 import type { Client } from '../lib/types';
+import { ClientDetailScreen } from './ClientDetailScreen';
 import { LoadingScreen } from './LoadingScreen';
 
 export function ClientsScreen() {
@@ -11,6 +12,7 @@ export function ClientsScreen() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   const loadClients = useCallback(async () => {
     if (!firebaseUser) return;
@@ -51,6 +53,16 @@ export function ClientsScreen() {
 
   if (loading) return <LoadingScreen label="Cargando clientes..." />;
 
+  if (selectedClient) {
+    return (
+      <ClientDetailScreen
+        clientId={selectedClient.id}
+        initialClient={selectedClient}
+        onBack={() => setSelectedClient(null)}
+      />
+    );
+  }
+
   return (
     <FlatList
       contentContainerStyle={styles.list}
@@ -72,12 +84,13 @@ export function ClientsScreen() {
       )}
       ListEmptyComponent={<Text style={styles.empty}>No hay clientes para mostrar.</Text>}
       renderItem={({ item }) => (
-        <View style={styles.card}>
+        <Pressable onPress={() => setSelectedClient(item)} style={styles.card}>
           <Text style={styles.name}>{item.denominacion || item.razonSocial}</Text>
           <Text style={styles.meta}>Asesor: {item.ownerName || '-'}</Text>
           <Text style={styles.meta}>{[item.localidad, item.provincia].filter(Boolean).join(', ') || 'Sin ubicacion'}</Text>
           {!!item.phone && <Text style={styles.meta}>Tel: {item.phone}</Text>}
-        </View>
+          <Text style={styles.openHint}>Ver detalle</Text>
+        </Pressable>
       )}
     />
   );
@@ -131,5 +144,11 @@ const styles = StyleSheet.create({
   meta: {
     color: '#64748b',
     fontSize: 13,
+  },
+  openHint: {
+    color: '#2563eb',
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 5,
   },
 });
