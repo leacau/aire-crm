@@ -32,6 +32,14 @@ function stopGradleDaemons() {
   run('gradlew.bat', ['--stop'], { cwd: androidDir, allowFailure: true });
 }
 
+function hasAndroidProject() {
+  return fs.existsSync(path.join(process.cwd(), 'android', 'gradlew.bat'));
+}
+
+function shouldSkipPrebuild() {
+  return process.argv.includes('--skip-prebuild') || process.env.SKIP_EXPO_PREBUILD === '1';
+}
+
 function runExpoPrebuildClean() {
   stopGradleDaemons();
 
@@ -46,7 +54,13 @@ function runExpoPrebuildClean() {
   if (secondAttempt.status === 0) return;
 
   console.error('');
-  console.error('No se pudo limpiar la carpeta android. Cierra Android Studio, emuladores, exploradores abiertos dentro de mobile/android y vuelve a intentar.');
+  if (hasAndroidProject()) {
+    console.error('No se pudo limpiar la carpeta android. Se reutilizara el proyecto Android existente para compilar el APK.');
+    console.error('Si cambiaste app.json, plugins nativos o dependencias nativas, cierra procesos que bloqueen mobile/android y vuelve a correr el build completo.');
+    return;
+  }
+
+  console.error('No se pudo limpiar la carpeta android y no existe un proyecto Android reutilizable. Cierra Android Studio, emuladores, exploradores abiertos dentro de mobile/android y vuelve a intentar.');
   process.exit(secondAttempt.status || 1);
 }
 
@@ -58,6 +72,14 @@ if (envFile) {
 process.env.NODE_ENV = process.env.NODE_ENV || 'production';
 
 run('node', ['scripts/check-env.cjs']);
-runExpoPrebuildClean();
+if (shouldSkipPrebuild()) {
+  if (!hasAndroidProject()) {
+    console.error('No existe mobile/android para reutilizar. Ejecuta primero el build completo sin --skip-prebuild.');
+    process.exit(1);
+  }
+  console.log('Skipping expo prebuild and reusing the existing android project.');
+} else {
+  runExpoPrebuildClean();
+}
 run('node', ['scripts/patch-android-local-build.cjs']);
 run('gradlew.bat', ['assembleRelease'], { cwd: path.join(process.cwd(), 'android') });

@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "build:android:apk": "eas build --platform android --profile preview",
     "build:android:apk:local": "node scripts/build-android-local.cjs",
+    "build:android:apk:local:reuse": "node scripts/build-android-local.cjs --skip-prebuild",
     "android:sha1:local": "keytool -list -v -keystore android/app/debug.keystore -alias androiddebugkey -storepass android -keypass android",
     "doctor:env": "node scripts/check-env.cjs",
     "eas-build-pre-install": "node scripts/check-env.cjs",

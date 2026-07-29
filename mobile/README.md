@@ -67,6 +67,14 @@ mobile\android\app\build\outputs\apk\release\app-release.apk
 
 Si Windows informa `EBUSY` al limpiar `mobile/android`, cierra Android Studio, emuladores y cualquier explorador abierto dentro de esa carpeta. El script intenta detener Gradle y reintentar automaticamente, pero otros procesos tambien pueden bloquear archivos `.dex`.
 
+Cuando solo cambiaste codigo JS/TS y ya existe `mobile/android`, podes evitar la limpieza de la carpeta nativa:
+
+```powershell
+npm run build:android:apk:local:reuse
+```
+
+Usa el build completo si cambiaste `app.json`, plugins nativos o dependencias nativas.
+
 Si se firma con un keystore distinto al de EAS, hay que registrar el SHA-1 de ese keystore en Firebase/Google Cloud para que Google Sign-In no falle con `DEVELOPER_ERROR`.
 
 Para el APK local generado con `npm run build:android:apk:local`, el build queda firmado con `mobile/android/app/debug.keystore`. Se puede consultar el fingerprint con:
