@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isMobileSessionResponse, requireMobileSession } from '@/lib/server/mobile-auth';
+import { getAccessibleClient } from '@/lib/server/client-access';
 import { listOpportunitiesServer } from '@/lib/server/opportunities';
 import { routeErrorResponse } from '@/lib/server/route-errors';
 
@@ -25,7 +26,11 @@ export async function GET(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'Oportunidad no encontrada.' }, { status: 404 });
     }
 
-    return NextResponse.json({ opportunity });
+    const client = opportunity.clientId
+      ? await getAccessibleClient(opportunity.clientId, sessionContext.requester)
+      : null;
+
+    return NextResponse.json({ opportunity, client });
   } catch (error) {
     return routeErrorResponse(error, 'MOBILE', {
       action: 'OPPORTUNITY DETAIL',

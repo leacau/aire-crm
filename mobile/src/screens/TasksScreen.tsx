@@ -13,8 +13,10 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthProvider';
 import { completeTask, getTasks, rescheduleTask } from '../lib/api';
-import type { ClientActivity } from '../lib/types';
+import type { Client, ClientActivity } from '../lib/types';
+import { ClientDetailScreen } from './ClientDetailScreen';
 import { LoadingScreen } from './LoadingScreen';
+import { OpportunityDetailScreen } from './OpportunityDetailScreen';
 
 function formatDate(value?: string) {
   if (!value) return '-';
@@ -42,6 +44,8 @@ export function TasksScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTask, setSelectedTask] = useState<ClientActivity | null>(null);
+  const [selectedClientContext, setSelectedClientContext] = useState<{ clientId: string; initialClient?: Client } | null>(null);
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
   const [dueDateInput, setDueDateInput] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -112,6 +116,27 @@ export function TasksScreen() {
 
   if (loading) return <LoadingScreen label="Cargando tareas..." />;
 
+  if (selectedClientContext) {
+    return (
+      <ClientDetailScreen
+        clientId={selectedClientContext.clientId}
+        initialClient={selectedClientContext.initialClient}
+        onBack={() => setSelectedClientContext(null)}
+      />
+    );
+  }
+
+  if (selectedOpportunityId) {
+    return (
+      <OpportunityDetailScreen
+        opportunityId={selectedOpportunityId}
+        onBack={() => setSelectedOpportunityId(null)}
+        backLabel="Volver a tareas"
+        onOpenClient={client => setSelectedClientContext({ clientId: client.id, initialClient: client })}
+      />
+    );
+  }
+
   return (
     <View style={styles.screen}>
       <FlatList
@@ -137,6 +162,26 @@ export function TasksScreen() {
             </View>
             <Text style={styles.observation}>{item.observation}</Text>
             {!!item.opportunityTitle && <Text style={styles.meta}>Oportunidad: {item.opportunityTitle}</Text>}
+            <View style={styles.contextActionsRow}>
+              {!!item.clientId && (
+                <Pressable
+                  style={styles.contextButton}
+                  onPress={() => setSelectedClientContext({ clientId: item.clientId || '' })}
+                >
+                  <MaterialCommunityIcons name="account-box-outline" size={18} color="#0f172a" />
+                  <Text style={styles.contextButtonText}>Cliente</Text>
+                </Pressable>
+              )}
+              {!!item.opportunityId && (
+                <Pressable
+                  style={styles.contextButton}
+                  onPress={() => setSelectedOpportunityId(item.opportunityId || '')}
+                >
+                  <MaterialCommunityIcons name="briefcase-outline" size={18} color="#0f172a" />
+                  <Text style={styles.contextButtonText}>Oportunidad</Text>
+                </Pressable>
+              )}
+            </View>
             <View style={styles.actionsRow}>
               <Pressable style={styles.rescheduleButton} onPress={() => openReschedule(item)}>
                 <MaterialCommunityIcons name="calendar-clock-outline" size={18} color="#0f172a" />
@@ -259,6 +304,27 @@ const styles = StyleSheet.create({
   meta: {
     color: '#64748b',
     fontSize: 12,
+  },
+  contextActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  contextButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  contextButtonText: {
+    color: '#0f172a',
+    fontSize: 12,
+    fontWeight: '900',
   },
   actionsRow: {
     flexDirection: 'row',

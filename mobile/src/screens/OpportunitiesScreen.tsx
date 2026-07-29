@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../auth/AuthProvider';
 import { getOpportunities } from '../lib/api';
-import type { Opportunity } from '../lib/types';
+import type { Client, Opportunity } from '../lib/types';
+import { ClientDetailScreen } from './ClientDetailScreen';
 import { LoadingScreen } from './LoadingScreen';
 import { OpportunityDetailScreen } from './OpportunityDetailScreen';
 
@@ -66,6 +67,7 @@ export function OpportunitiesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   const loadOpportunities = useCallback(async () => {
     if (!firebaseUser) return;
@@ -115,12 +117,23 @@ export function OpportunitiesScreen() {
 
   if (loading) return <LoadingScreen label="Cargando oportunidades..." />;
 
+  if (selectedClient) {
+    return (
+      <ClientDetailScreen
+        clientId={selectedClient.id}
+        initialClient={selectedClient}
+        onBack={() => setSelectedClient(null)}
+      />
+    );
+  }
+
   if (selectedOpportunity) {
     return (
       <OpportunityDetailScreen
         opportunityId={selectedOpportunity.id}
         initialOpportunity={selectedOpportunity}
         onBack={() => setSelectedOpportunity(null)}
+        onOpenClient={setSelectedClient}
       />
     );
   }

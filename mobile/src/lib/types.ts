@@ -59,6 +59,7 @@ export type ClientTangoBillingSummary = {
 
 export type MobileOpportunityDetail = {
   opportunity: Opportunity;
+  client?: Client | null;
 };
 
 export type BillingBootstrap = {

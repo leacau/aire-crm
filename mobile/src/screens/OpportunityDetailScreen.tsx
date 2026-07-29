@@ -13,7 +13,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthProvider';
 import { createClientActivity, getOpportunityDetail, updateOpportunity } from '../lib/api';
-import type { Opportunity, OpportunityStage } from '../lib/types';
+import type { Client, Opportunity, OpportunityStage } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
 
 type OpportunityDetailScreenProps = {
@@ -21,6 +21,7 @@ type OpportunityDetailScreenProps = {
   initialOpportunity?: Opportunity;
   onBack: () => void;
   backLabel?: string;
+  onOpenClient?: (client: Client) => void;
 };
 
 type QuickAction = {
@@ -82,9 +83,16 @@ function getStageStyle(stage: string) {
   return styles.stageNeutral;
 }
 
-export function OpportunityDetailScreen({ opportunityId, initialOpportunity, onBack, backLabel = 'Volver a oportunidades' }: OpportunityDetailScreenProps) {
+export function OpportunityDetailScreen({
+  opportunityId,
+  initialOpportunity,
+  onBack,
+  backLabel = 'Volver a oportunidades',
+  onOpenClient,
+}: OpportunityDetailScreenProps) {
   const { firebaseUser } = useAuth();
   const [opportunity, setOpportunity] = useState<Opportunity | undefined>(initialOpportunity);
+  const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(!initialOpportunity);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -105,6 +113,7 @@ export function OpportunityDetailScreen({ opportunityId, initialOpportunity, onB
     if (!firebaseUser) return;
     const response = await getOpportunityDetail(firebaseUser, opportunityId);
     setOpportunity(response.opportunity);
+    setClient(response.client || null);
   }, [firebaseUser, opportunityId]);
 
   useEffect(() => {
@@ -290,6 +299,13 @@ export function OpportunityDetailScreen({ opportunityId, initialOpportunity, onB
           <MaterialCommunityIcons name="pencil-outline" size={20} color="#ffffff" />
           <Text style={styles.editButtonText}>Actualizar oportunidad</Text>
         </Pressable>
+
+        {!!client && !!onOpenClient && (
+          <Pressable onPress={() => onOpenClient(client)} style={styles.clientButton}>
+            <MaterialCommunityIcons name="account-box-outline" size={20} color="#0f172a" />
+            <Text style={styles.clientButtonText}>Ver cliente</Text>
+          </Pressable>
+        )}
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Datos comerciales</Text>
@@ -560,6 +576,21 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     color: '#ffffff',
+    fontWeight: '900',
+  },
+  clientButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    paddingVertical: 13,
+  },
+  clientButtonText: {
+    color: '#0f172a',
     fontWeight: '900',
   },
   card: {
