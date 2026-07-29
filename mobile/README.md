@@ -52,9 +52,10 @@ El build ejecuta automaticamente el mismo chequeo dentro de EAS para cortar temp
 npm run doctor:env
 ```
 
-Para compilar el APK localmente en Windows, primero cargar las variables `EXPO_PUBLIC_*` en la sesion de PowerShell y luego ejecutar:
+Para compilar el APK localmente en Windows, usa `MOBILE_ENV_FILE` si el archivo de variables esta fuera de la carpeta `mobile`:
 
 ```powershell
+$env:MOBILE_ENV_FILE="C:\Users\leand\Documents\api\.env.preview"
 npm run build:android:apk:local
 ```
 
@@ -81,6 +82,7 @@ com.airedesantafe.crm
 Si descargaste un `google-services.json` desde Firebase, podes usarlo para validar que las variables del build coincidan con el package Android:
 
 ```powershell
+$env:MOBILE_ENV_FILE="C:\Users\leand\Documents\api\.env.preview"
 $env:GOOGLE_SERVICES_JSON_PATH="C:\Users\leand\Downloads\google-services.json"
 npm run doctor:env
 ```

@@ -9,7 +9,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:android:apk": "eas build --platform android --profile preview",
-    "build:android:apk:local": "npm run doctor:env && expo prebuild --platform android --clean && node scripts/patch-android-local-build.cjs && cd android && gradlew.bat assembleRelease",
+    "build:android:apk:local": "node scripts/build-android-local.cjs",
     "android:sha1:local": "keytool -list -v -keystore android/app/debug.keystore -alias androiddebugkey -storepass android -keypass android",
     "doctor:env": "node scripts/check-env.cjs",
     "eas-build-pre-install": "node scripts/check-env.cjs",

@@ -1,5 +1,16 @@
 const fs = require('fs');
 const path = require('path');
+const { loadMobileEnv } = require('./mobile-env.cjs');
+
+try {
+  const envFile = loadMobileEnv({ override: true });
+  if (envFile) {
+    console.log(`Loaded mobile environment from ${envFile}`);
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 const requiredEnvNames = [
   'EXPO_PUBLIC_API_BASE_URL',
