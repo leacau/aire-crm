@@ -6,6 +6,7 @@ import type {
   BillingBootstrap,
   Client,
   ClientActivity,
+  ClientTangoBillingSummary,
   CreateClientActivityInput,
   MobileBootstrap,
   MobileClientDetail,
@@ -76,6 +77,13 @@ export function getClients(user: User) {
 
 export function getClientDetail(user: User, clientId: string) {
   return apiRequest<MobileClientDetail>(`/api/mobile/clients/${encodeURIComponent(clientId)}`, {
+    method: 'GET',
+    user,
+  });
+}
+
+export function getClientTangoBillingSummary(user: User, clientId: string) {
+  return apiRequest<ClientTangoBillingSummary>(`/api/clients/${encodeURIComponent(clientId)}/tango-billing-summary`, {
     method: 'GET',
     user,
   });

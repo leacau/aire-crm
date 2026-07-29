@@ -42,6 +42,21 @@ export type MobileClientDetail = {
   people: Person[];
 };
 
+export type ClientTangoBillingSummary = {
+  total: number;
+  invoiceCount: number;
+  truncated: boolean;
+  byCompany: Array<{
+    companyId: string;
+    companyLabel: string;
+    clientCode: string;
+    total: number;
+    invoiceCount: number;
+    truncated: boolean;
+  }>;
+  skippedCompanies: Array<{ companyId: string; label: string; reason: string }>;
+};
+
 export type MobileOpportunityDetail = {
   opportunity: Opportunity;
 };

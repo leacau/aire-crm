@@ -13,8 +13,8 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthProvider';
-import { createClientActivity, createQuickOpportunity, getClientDetail } from '../lib/api';
-import type { Client, ClientActivity, Opportunity, Person } from '../lib/types';
+import { createClientActivity, createQuickOpportunity, getClientDetail, getClientTangoBillingSummary } from '../lib/api';
+import type { Client, ClientActivity, ClientTangoBillingSummary, Opportunity, Person } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
 
 type ClientDetailScreenProps = {
@@ -82,6 +82,9 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
   const [activities, setActivities] = useState<ClientActivity[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [billingSummary, setBillingSummary] = useState<ClientTangoBillingSummary | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingError, setBillingError] = useState('');
   const [loading, setLoading] = useState(!initialClient);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -92,6 +95,20 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
   const [taskDueDate, setTaskDueDate] = useState(addDays(1));
   const [opportunityModalOpen, setOpportunityModalOpen] = useState(false);
   const [opportunityTitle, setOpportunityTitle] = useState('');
+
+  const loadBillingSummary = useCallback(async () => {
+    if (!firebaseUser) return;
+    setBillingLoading(true);
+    setBillingError('');
+    try {
+      setBillingSummary(await getClientTangoBillingSummary(firebaseUser, clientId));
+    } catch (error) {
+      setBillingSummary(null);
+      setBillingError(error instanceof Error ? error.message : 'No se pudo consultar Tango.');
+    } finally {
+      setBillingLoading(false);
+    }
+  }, [clientId, firebaseUser]);
 
   const loadDetail = useCallback(async () => {
     if (!firebaseUser) return;
@@ -106,7 +123,8 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
     loadDetail().catch(error => {
       Alert.alert('No se pudo cargar el cliente', error instanceof Error ? error.message : 'Intenta nuevamente.');
     }).finally(() => setLoading(false));
-  }, [loadDetail]);
+    loadBillingSummary();
+  }, [loadBillingSummary, loadDetail]);
 
   const activeOpportunities = useMemo(
     () => opportunities.filter(opportunity => !opportunity.stage.includes('Perdido')),
@@ -129,7 +147,7 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
   const refresh = async () => {
     setRefreshing(true);
     try {
-      await loadDetail();
+      await Promise.all([loadDetail(), loadBillingSummary()]);
     } finally {
       setRefreshing(false);
     }
@@ -293,6 +311,44 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
           <InfoRow label="Tipo" value={client.tipoEntidad} />
           {!!client.observaciones && (
             <Text style={styles.observations}>{client.observaciones}</Text>
+          )}
+        </View>
+
+        <View style={[styles.card, styles.billingCard]}>
+          <View style={styles.billingHeader}>
+            <View>
+              <Text style={styles.cardTitle}>Facturacion Tango</Text>
+              <Text style={styles.cardSubtitle}>Total historico emitido para este cliente.</Text>
+            </View>
+            <MaterialCommunityIcons name="receipt-text-outline" size={26} color="#2563eb" />
+          </View>
+
+          <Text style={styles.billingTotal}>
+            {billingLoading ? 'Calculando...' : formatAmount(billingSummary?.total)}
+          </Text>
+          <Text style={styles.billingMeta}>
+            {billingSummary?.invoiceCount || 0} comprobantes
+            {billingSummary?.truncated ? ' - resumen parcial' : ''}
+          </Text>
+
+          {billingSummary?.byCompany.map(company => (
+            <View key={`${company.companyId}-${company.clientCode}`} style={styles.billingCompanyRow}>
+              <View style={styles.billingCompanyInfo}>
+                <Text style={styles.itemTitle}>{company.companyLabel}</Text>
+                <Text style={styles.itemMeta}>Codigo Tango {company.clientCode} - {company.invoiceCount} comprobantes</Text>
+              </View>
+              <Text style={styles.billingCompanyTotal}>{formatAmount(company.total)}</Text>
+            </View>
+          ))}
+
+          {!billingLoading && !billingError && billingSummary?.byCompany.length === 0 && (
+            <Text style={styles.muted}>Sin IDs de Tango vinculados para calcular facturacion.</Text>
+          )}
+          {!!billingError && <Text style={styles.warningText}>{billingError}</Text>}
+          {!!billingSummary?.skippedCompanies.length && (
+            <Text style={styles.warningText}>
+              Avisos: {billingSummary.skippedCompanies.slice(0, 2).map(item => `${item.label}: ${item.reason}`).join(' | ')}
+            </Text>
           )}
         </View>
 
@@ -565,6 +621,48 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     color: '#64748b',
     fontSize: 13,
+  },
+  billingCard: {
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+  },
+  billingHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  billingTotal: {
+    color: '#0f172a',
+    fontSize: 30,
+    fontWeight: '900',
+  },
+  billingMeta: {
+    color: '#2563eb',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  billingCompanyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#bfdbfe',
+    paddingTop: 10,
+  },
+  billingCompanyInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  billingCompanyTotal: {
+    color: '#0f172a',
+    fontWeight: '900',
+  },
+  warningText: {
+    color: '#b45309',
+    fontSize: 12,
+    lineHeight: 17,
   },
   infoRow: {
     gap: 3,
