@@ -63,6 +63,7 @@ export type MobileOpportunityDetail = {
 
 export type BillingBootstrap = {
   payments: PaymentEntry[];
+  clients?: Client[];
 };
 
 export type ApprovalStatus = 'Pendiente' | 'Aprobado' | 'Devuelto' | 'Borrador' | 'Pendiente de Modificación';

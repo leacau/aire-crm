@@ -10,9 +10,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthProvider';
 import { getBillingBootstrap, updatePaymentEntry } from '../lib/api';
-import type { PaymentEntry, PaymentStatus } from '../lib/types';
+import type { Client, PaymentEntry, PaymentStatus } from '../lib/types';
+import { ClientDetailScreen } from './ClientDetailScreen';
 import { LoadingScreen } from './LoadingScreen';
 
 const statusOptions: PaymentStatus[] = ['Pendiente', 'Reclamado', 'Pagado', 'Incobrable'];
@@ -39,13 +41,24 @@ function getStatusStyle(status: string) {
   return styles.statusPending;
 }
 
+function normalizeText(value?: string) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function BillingScreen() {
   const { firebaseUser } = useAuth();
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<PaymentEntry | null>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editStatus, setEditStatus] = useState<PaymentStatus>('Pendiente');
   const [editNotes, setEditNotes] = useState('');
   const [editNextContactAt, setEditNextContactAt] = useState('');
@@ -55,6 +68,7 @@ export function BillingScreen() {
     if (!firebaseUser) return;
     const response = await getBillingBootstrap(firebaseUser);
     setPayments(response.payments || []);
+    setClients(response.clients || []);
   }, [firebaseUser]);
 
   useEffect(() => {
@@ -93,6 +107,17 @@ export function BillingScreen() {
     }, { pending: 0, count: 0 });
   }, [visiblePayments]);
 
+  const clientsByName = useMemo(() => {
+    const entries = new Map<string, Client>();
+    clients.forEach(client => {
+      [client.razonSocial, client.denominacion].forEach(name => {
+        const normalized = normalizeText(name);
+        if (normalized && !entries.has(normalized)) entries.set(normalized, client);
+      });
+    });
+    return entries;
+  }, [clients]);
+
   const refresh = async () => {
     setRefreshing(true);
     try {
@@ -108,6 +133,8 @@ export function BillingScreen() {
     setEditNotes(payment.notes || '');
     setEditNextContactAt(payment.nextContactAt ? payment.nextContactAt.slice(0, 10) : '');
   };
+
+  const getPaymentClient = (payment: PaymentEntry) => clientsByName.get(normalizeText(payment.razonSocial));
 
   const savePayment = async () => {
     if (!firebaseUser || !selectedPayment) return;
@@ -131,6 +158,16 @@ export function BillingScreen() {
 
   if (loading) return <LoadingScreen label="Cargando mora..." />;
 
+  if (selectedClient) {
+    return (
+      <ClientDetailScreen
+        clientId={selectedClient.id}
+        initialClient={selectedClient}
+        onBack={() => setSelectedClient(null)}
+      />
+    );
+  }
+
   return (
     <View style={styles.screen}>
       <FlatList
@@ -152,34 +189,49 @@ export function BillingScreen() {
           </View>
         )}
         ListEmptyComponent={<Text style={styles.empty}>No hay comprobantes de mora para mostrar.</Text>}
-        renderItem={({ item }) => (
-          <Pressable onPress={() => openPaymentEditor(item)} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardTitleGroup}>
-                <Text style={styles.client}>{item.razonSocial || 'Cliente sin nombre'}</Text>
-                <Text style={styles.meta}>
-                  {[item.tipo, item.comprobanteNumber, item.company].filter(Boolean).join(' - ') || 'Sin comprobante'}
-                </Text>
+        renderItem={({ item }) => {
+          const paymentClient = getPaymentClient(item);
+
+          return (
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardTitleGroup}>
+                  <Text style={styles.client}>{item.razonSocial || 'Cliente sin nombre'}</Text>
+                  <Text style={styles.meta}>
+                    {[item.tipo, item.comprobanteNumber, item.company].filter(Boolean).join(' - ') || 'Sin comprobante'}
+                  </Text>
+                </View>
+                <Text style={[styles.status, getStatusStyle(item.status)]}>{item.status}</Text>
               </View>
-              <Text style={[styles.status, getStatusStyle(item.status)]}>{item.status}</Text>
-            </View>
 
-            <View style={styles.amountRow}>
-              <Text style={styles.amount}>{formatCurrency(item.pendingAmount ?? item.amount)}</Text>
-              <Text style={styles.days}>{item.daysLate ?? 0} dias</Text>
-            </View>
+              <View style={styles.amountRow}>
+                <Text style={styles.amount}>{formatCurrency(item.pendingAmount ?? item.amount)}</Text>
+                <Text style={styles.days}>{item.daysLate ?? 0} dias</Text>
+              </View>
 
-            <View style={styles.detailGrid}>
-              <Text style={styles.meta}>Emision: {formatDate(item.issueDate)}</Text>
-              <Text style={styles.meta}>Vence: {formatDate(item.dueDate)}</Text>
-              <Text style={styles.meta}>Asesor: {item.advisorName || '-'}</Text>
-              <Text style={styles.meta}>Prox. contacto: {formatDate(item.nextContactAt)}</Text>
-            </View>
+              <View style={styles.detailGrid}>
+                <Text style={styles.meta}>Emision: {formatDate(item.issueDate)}</Text>
+                <Text style={styles.meta}>Vence: {formatDate(item.dueDate)}</Text>
+                <Text style={styles.meta}>Asesor: {item.advisorName || '-'}</Text>
+                <Text style={styles.meta}>Prox. contacto: {formatDate(item.nextContactAt)}</Text>
+              </View>
 
-            <Text style={styles.note}>Estado: {item.status}{item.notes ? `: ${item.notes}` : ''}</Text>
-            <Text style={styles.openHint}>Editar gestion</Text>
-          </Pressable>
-        )}
+              <Text style={styles.note}>Estado: {item.status}{item.notes ? `: ${item.notes}` : ''}</Text>
+              <View style={styles.cardActions}>
+                <Pressable onPress={() => openPaymentEditor(item)} style={styles.cardActionButton}>
+                  <MaterialCommunityIcons name="pencil-outline" size={18} color="#0f172a" />
+                  <Text style={styles.cardActionText}>Editar</Text>
+                </Pressable>
+                {paymentClient && (
+                  <Pressable onPress={() => setSelectedClient(paymentClient)} style={styles.cardActionButton}>
+                    <MaterialCommunityIcons name="account-box-outline" size={18} color="#0f172a" />
+                    <Text style={styles.cardActionText}>Cliente</Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          );
+        }}
       />
 
       <Modal visible={Boolean(selectedPayment)} transparent animationType="fade" onRequestClose={() => setSelectedPayment(null)}>
@@ -343,9 +395,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  openHint: {
-    color: '#2563eb',
-    fontSize: 13,
+  cardActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  cardActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  cardActionText: {
+    color: '#0f172a',
+    fontSize: 12,
     fontWeight: '900',
   },
   modalOverlay: {
