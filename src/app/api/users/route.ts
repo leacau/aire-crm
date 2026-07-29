@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const role = searchParams.get('role') as UserRole | null;
-    const users = await listUsersServer(role);
+    const users = await listUsersServer(role, requester);
     return NextResponse.json({ users });
   } catch (error) {
     return userErrorResponse(error, {

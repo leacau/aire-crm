@@ -17,13 +17,30 @@ export class UserApiError extends Error {
   }
 }
 
+function toDirectoryUser(user: User): User {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    area: user.area,
+    initials: user.initials,
+    photoURL: user.photoURL,
+    deletedAt: user.deletedAt,
+    externalUser: user.externalUser,
+  };
+}
 
-export async function listUsersServer(role?: UserRole | null): Promise<User[]> {
+export async function listUsersServer(role: UserRole | null | undefined, requester: ServerUser): Promise<User[]> {
   const snapshot = await dbAdmin.collection('users').get();
   let users = snapshot.docs.map(doc => serializeDocument<User>(doc.id, doc.data()));
 
   if (role) {
     users = users.filter(user => user.role === role);
+  }
+
+  if (!hasServerManagementPrivileges(requester)) {
+    users = users.map(user => (user.id === requester.uid ? user : toDirectoryUser(user)));
   }
 
   return users.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
