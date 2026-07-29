@@ -355,7 +355,7 @@ export async function listOpportunitiesServer(
 ) {
   if (scope === 'all') {
     if (!hasServerManagementPrivileges(requester)) {
-      throw new OpportunityApiError('Forbidden', 403);
+      return getOpportunitiesForUser(requester.uid);
     }
     return getAllOpportunities();
   }
