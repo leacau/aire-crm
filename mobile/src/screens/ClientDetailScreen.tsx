@@ -58,6 +58,19 @@ function formatAmount(value?: number) {
   }).format(value || 0);
 }
 
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return toDateInputValue(date);
+}
+
 function resolveClientName(client?: Client) {
   return client?.denominacion || client?.razonSocial || 'Cliente';
 }
@@ -72,6 +85,9 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
   const [saving, setSaving] = useState(false);
   const [selectedAction, setSelectedAction] = useState<QuickAction | null>(null);
   const [observation, setObservation] = useState('');
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskObservation, setTaskObservation] = useState('');
+  const [taskDueDate, setTaskDueDate] = useState(addDays(1));
 
   const loadDetail = useCallback(async () => {
     if (!firebaseUser) return;
@@ -130,6 +146,43 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
     }
   };
 
+  const openTaskModal = () => {
+    setTaskObservation('');
+    setTaskDueDate(addDays(1));
+    setTaskModalOpen(true);
+  };
+
+  const saveTask = async () => {
+    if (!firebaseUser || !client) return;
+
+    const trimmedObservation = taskObservation.trim();
+    const trimmedDueDate = taskDueDate.trim();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDueDate)) {
+      Alert.alert('Fecha invalida', 'Usa el formato AAAA-MM-DD.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await createClientActivity(firebaseUser, {
+        clientId: client.id,
+        clientName: resolveClientName(client),
+        type: 'Otra',
+        observation: trimmedObservation || 'Tarea creada desde mobile.',
+        isTask: true,
+        dueDate: trimmedDueDate,
+      });
+      setTaskModalOpen(false);
+      await loadDetail();
+      Alert.alert('Tarea creada', `Vencimiento: ${formatDate(trimmedDueDate)}.`);
+    } catch (error) {
+      Alert.alert('No se pudo crear la tarea', error instanceof Error ? error.message : 'Intenta nuevamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) return <LoadingScreen label="Cargando cliente..." />;
 
   if (!client) {
@@ -173,6 +226,11 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
             </Pressable>
           ))}
         </View>
+
+        <Pressable onPress={openTaskModal} style={styles.taskButton}>
+          <MaterialCommunityIcons name="clipboard-check-outline" size={20} color="#0f172a" />
+          <Text style={styles.taskButtonText}>Crear tarea</Text>
+        </Pressable>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Datos de empresa</Text>
@@ -234,6 +292,49 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
                 <Text style={styles.secondaryButtonText}>Cancelar</Text>
               </Pressable>
               <Pressable disabled={saving} onPress={saveAction} style={[styles.primaryButton, saving && styles.disabledButton]}>
+                <Text style={styles.primaryButtonText}>{saving ? 'Guardando...' : 'Guardar'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={taskModalOpen} transparent animationType="fade" onRequestClose={() => setTaskModalOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Crear tarea</Text>
+            <Text style={styles.modalSubtitle}>Queda asociada a {resolveClientName(client)}.</Text>
+            <View style={styles.quickDates}>
+              <Pressable onPress={() => setTaskDueDate(addDays(0))} style={styles.quickDateButton}>
+                <Text style={styles.quickDateText}>Hoy</Text>
+              </Pressable>
+              <Pressable onPress={() => setTaskDueDate(addDays(1))} style={styles.quickDateButton}>
+                <Text style={styles.quickDateText}>Manana</Text>
+              </Pressable>
+              <Pressable onPress={() => setTaskDueDate(addDays(7))} style={styles.quickDateButton}>
+                <Text style={styles.quickDateText}>7 dias</Text>
+              </Pressable>
+            </View>
+            <TextInput
+              multiline
+              placeholder="Que hay que hacer"
+              placeholderTextColor="#94a3b8"
+              style={styles.modalInput}
+              value={taskObservation}
+              onChangeText={setTaskObservation}
+            />
+            <TextInput
+              placeholder="AAAA-MM-DD"
+              placeholderTextColor="#94a3b8"
+              style={styles.dateInput}
+              value={taskDueDate}
+              onChangeText={setTaskDueDate}
+            />
+            <View style={styles.modalActions}>
+              <Pressable disabled={saving} onPress={() => setTaskModalOpen(false)} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Cancelar</Text>
+              </Pressable>
+              <Pressable disabled={saving} onPress={saveTask} style={[styles.primaryButton, saving && styles.disabledButton]}>
                 <Text style={styles.primaryButtonText}>{saving ? 'Guardando...' : 'Guardar'}</Text>
               </Pressable>
             </View>
@@ -307,6 +408,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 14,
     backgroundColor: '#0f172a',
+  },
+  taskButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    paddingVertical: 13,
+  },
+  taskButtonText: {
+    color: '#0f172a',
+    fontWeight: '900',
   },
   card: {
     borderRadius: 14,
@@ -424,6 +540,31 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     padding: 12,
     textAlignVertical: 'top',
+  },
+  quickDates: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quickDateButton: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingVertical: 9,
+  },
+  quickDateText: {
+    color: '#0f172a',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  dateInput: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    color: '#0f172a',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
   },
   modalActions: {
     flexDirection: 'row',
