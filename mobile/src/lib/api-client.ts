@@ -6,6 +6,12 @@ type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   user: User;
 };
 
+type ParsedResponse = {
+  contentType: string;
+  payload: unknown;
+  text: string;
+};
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -23,7 +29,43 @@ function buildUrl(path: string) {
 }
 
 async function readPayload(response: Response) {
-  return response.json().catch(() => null);
+  const contentType = response.headers.get('content-type') || '';
+  const text = await response.text().catch(() => '');
+  if (!text) return { contentType, payload: null, text };
+
+  if (contentType.includes('application/json')) {
+    try {
+      return { contentType, payload: JSON.parse(text), text };
+    } catch {
+      return { contentType, payload: null, text };
+    }
+  }
+
+  return { contentType, payload: null, text };
+}
+
+function getApiErrorMessage(response: Response, parsed: ParsedResponse) {
+  const { payload, text, contentType } = parsed;
+
+  if (typeof payload === 'object' && payload && 'error' in payload) {
+    return String((payload as { error?: unknown }).error);
+  }
+
+  const location = response.headers.get('location') || '';
+  const preview = text.trim().slice(0, 120);
+  if (
+    response.status >= 300
+    && response.status < 400
+    && (location.includes('vercel.com/sso-api') || preview.includes('Redirecting'))
+  ) {
+    return 'La URL de API apunta a un deploy protegido por Vercel SSO. Usá la URL pública de producción o quitá la protección del deploy para endpoints API.';
+  }
+
+  if (contentType && !contentType.includes('application/json')) {
+    return `La API no devolvio JSON (${contentType}). Verifica EXPO_PUBLIC_API_BASE_URL.`;
+  }
+
+  return 'La API no pudo completar la solicitud.';
 }
 
 async function sendRequest(path: string, options: ApiRequestOptions, forceRefresh: boolean) {
@@ -38,6 +80,7 @@ async function sendRequest(path: string, options: ApiRequestOptions, forceRefres
 
   return fetch(buildUrl(path), {
     ...init,
+    redirect: 'manual',
     headers: requestHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -45,23 +88,20 @@ async function sendRequest(path: string, options: ApiRequestOptions, forceRefres
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions): Promise<T> {
   let response = await sendRequest(path, options, false);
-  let payload = await readPayload(response);
+  let parsed = await readPayload(response);
 
   if (response.status === 401) {
     response = await sendRequest(path, options, true);
-    payload = await readPayload(response);
+    parsed = await readPayload(response);
   }
 
   if (!response.ok) {
-    const message = typeof payload === 'object' && payload && 'error' in payload
-      ? String((payload as { error?: unknown }).error)
-      : 'La API no pudo completar la solicitud.';
-    throw new ApiError(message, response.status, payload);
+    throw new ApiError(getApiErrorMessage(response, parsed), response.status, parsed.payload);
   }
 
-  if (payload == null) {
-    throw new ApiError('La API devolvio una respuesta vacia.', response.status, payload);
+  if (parsed.payload == null) {
+    throw new ApiError(getApiErrorMessage(response, parsed), response.status, parsed.payload);
   }
 
-  return payload as T;
+  return parsed.payload as T;
 }

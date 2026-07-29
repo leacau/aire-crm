@@ -19,6 +19,12 @@ Variables clave:
 - `EXPO_PUBLIC_FIREBASE_*`: configuracion publica del proyecto Firebase.
 - `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID`: OAuth clients para Google Sign-In mobile.
 
+El `EXPO_PUBLIC_API_BASE_URL` del APK debe apuntar a un deploy que responda APIs sin Vercel SSO. Si usas un preview protegido, la app no puede llamar `/api/auth/session` desde Android. Para pruebas reales usa el dominio publico de produccion, por ejemplo:
+
+```env
+EXPO_PUBLIC_API_BASE_URL=https://aire-crm.vercel.app
+```
+
 ## Comandos
 
 ```bash
