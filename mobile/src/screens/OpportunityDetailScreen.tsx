@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthProvider';
-import { createClientActivity, getOpportunityDetail } from '../lib/api';
-import type { Opportunity } from '../lib/types';
+import { createClientActivity, getOpportunityDetail, updateOpportunity } from '../lib/api';
+import type { Opportunity, OpportunityStage } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
 
 type OpportunityDetailScreenProps = {
@@ -34,6 +34,15 @@ const quickActions: QuickAction[] = [
   { icon: 'email-outline', type: 'Mail', helper: 'correo', accessibilityLabel: 'Registrar mail' },
   { icon: 'chat-outline', type: 'WhatsApp', helper: 'WhatsApp', accessibilityLabel: 'Registrar WhatsApp' },
   { icon: 'video-outline', type: 'Meet', helper: 'reunion por Meet', accessibilityLabel: 'Registrar reunion por Meet' },
+];
+
+const editableStages: OpportunityStage[] = [
+  'Nuevo',
+  'Propuesta',
+  'Negociación',
+  'Negociación a Aprobar',
+  'Cerrado - No Definido',
+  'Cerrado - Perdido',
 ];
 
 function formatCurrency(value?: number) {
@@ -83,6 +92,13 @@ export function OpportunityDetailScreen({ opportunityId, initialOpportunity, onB
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [taskObservation, setTaskObservation] = useState('');
   const [taskDueDate, setTaskDueDate] = useState(addDays(1));
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editStage, setEditStage] = useState<OpportunityStage>('Propuesta');
+  const [editValue, setEditValue] = useState('');
+  const [editCloseDate, setEditCloseDate] = useState('');
+  const [editFollowUpCurrent, setEditFollowUpCurrent] = useState('');
+  const [editFollowUpNext, setEditFollowUpNext] = useState('');
+  const [editHighProbability, setEditHighProbability] = useState(false);
 
   const loadDetail = useCallback(async () => {
     if (!firebaseUser) return;
@@ -139,6 +155,50 @@ export function OpportunityDetailScreen({ opportunityId, initialOpportunity, onB
     setTaskObservation('');
     setTaskDueDate(addDays(1));
     setTaskModalOpen(true);
+  };
+
+  const openEditModal = () => {
+    if (!opportunity) return;
+    setEditStage(opportunity.stage);
+    setEditValue(String(opportunity.value || 0));
+    setEditCloseDate(opportunity.closeDate ? opportunity.closeDate.slice(0, 10) : '');
+    setEditFollowUpCurrent(opportunity.followUpCurrent || '');
+    setEditFollowUpNext(opportunity.followUpNext || '');
+    setEditHighProbability(Boolean(opportunity.highCloseProbability));
+    setEditModalOpen(true);
+  };
+
+  const saveOpportunityUpdate = async () => {
+    if (!firebaseUser || !opportunity) return;
+
+    const parsedValue = Number(editValue.replace(/\./g, '').replace(',', '.'));
+    if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+      Alert.alert('Valor invalido', 'Cargá un monto estimado válido.');
+      return;
+    }
+    if (editCloseDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(editCloseDate.trim())) {
+      Alert.alert('Fecha invalida', 'Usa el formato AAAA-MM-DD.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await updateOpportunity(firebaseUser, opportunity.id, {
+        stage: editStage,
+        value: parsedValue,
+        closeDate: editCloseDate.trim(),
+        followUpCurrent: editFollowUpCurrent.trim(),
+        followUpNext: editFollowUpNext.trim(),
+        highCloseProbability: editHighProbability,
+      });
+      setEditModalOpen(false);
+      await loadDetail();
+      Alert.alert('Oportunidad actualizada', 'Los cambios quedaron guardados.');
+    } catch (error) {
+      Alert.alert('No se pudo actualizar', error instanceof Error ? error.message : 'Intenta nuevamente.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveTask = async () => {
@@ -225,6 +285,11 @@ export function OpportunityDetailScreen({ opportunityId, initialOpportunity, onB
           <Text style={styles.taskButtonText}>Crear tarea</Text>
         </Pressable>
 
+        <Pressable onPress={openEditModal} style={styles.editButton}>
+          <MaterialCommunityIcons name="pencil-outline" size={20} color="#ffffff" />
+          <Text style={styles.editButtonText}>Actualizar oportunidad</Text>
+        </Pressable>
+
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Datos comerciales</Text>
           <InfoRow label="Valor" value={formatCurrency(opportunity.value)} />
@@ -303,6 +368,87 @@ export function OpportunityDetailScreen({ opportunityId, initialOpportunity, onB
                 <Text style={styles.secondaryButtonText}>Cancelar</Text>
               </Pressable>
               <Pressable disabled={saving} onPress={saveTask} style={[styles.primaryButton, saving && styles.disabledButton]}>
+                <Text style={styles.primaryButtonText}>{saving ? 'Guardando...' : 'Guardar'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={editModalOpen} transparent animationType="fade" onRequestClose={() => setEditModalOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Actualizar oportunidad</Text>
+            <Text style={styles.modalSubtitle}>Edición rápida para seguimiento comercial.</Text>
+
+            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+              <Text style={styles.fieldLabel}>Etapa</Text>
+              <View style={styles.stageGrid}>
+                {editableStages.map(stage => (
+                  <Pressable
+                    key={stage}
+                    onPress={() => setEditStage(stage)}
+                    style={[styles.stageOption, editStage === stage && styles.stageOptionActive]}
+                  >
+                    <Text style={[styles.stageOptionText, editStage === stage && styles.stageOptionTextActive]}>{stage}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={styles.fieldLabel}>Valor estimado</Text>
+              <TextInput
+                keyboardType="numeric"
+                placeholder="0"
+                placeholderTextColor="#94a3b8"
+                style={styles.dateInput}
+                value={editValue}
+                onChangeText={setEditValue}
+              />
+
+              <Text style={styles.fieldLabel}>Cierre estimado</Text>
+              <TextInput
+                placeholder="AAAA-MM-DD"
+                placeholderTextColor="#94a3b8"
+                style={styles.dateInput}
+                value={editCloseDate}
+                onChangeText={setEditCloseDate}
+              />
+
+              <Pressable onPress={() => setEditHighProbability(value => !value)} style={styles.probabilityToggle}>
+                <MaterialCommunityIcons
+                  name={editHighProbability ? 'checkbox-marked-circle-outline' : 'checkbox-blank-circle-outline'}
+                  size={21}
+                  color="#0f172a"
+                />
+                <Text style={styles.probabilityText}>Alta probabilidad de cierre</Text>
+              </Pressable>
+
+              <Text style={styles.fieldLabel}>Seguimiento actual</Text>
+              <TextInput
+                multiline
+                placeholder="Situación actual"
+                placeholderTextColor="#94a3b8"
+                style={styles.modalInput}
+                value={editFollowUpCurrent}
+                onChangeText={setEditFollowUpCurrent}
+              />
+
+              <Text style={styles.fieldLabel}>Próximo paso</Text>
+              <TextInput
+                multiline
+                placeholder="Próxima acción"
+                placeholderTextColor="#94a3b8"
+                style={styles.modalInput}
+                value={editFollowUpNext}
+                onChangeText={setEditFollowUpNext}
+              />
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <Pressable disabled={saving} onPress={() => setEditModalOpen(false)} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Cancelar</Text>
+              </Pressable>
+              <Pressable disabled={saving} onPress={saveOpportunityUpdate} style={[styles.primaryButton, saving && styles.disabledButton]}>
                 <Text style={styles.primaryButtonText}>{saving ? 'Guardando...' : 'Guardar'}</Text>
               </Pressable>
             </View>
@@ -402,6 +548,19 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     fontWeight: '900',
   },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    backgroundColor: '#2563eb',
+    paddingVertical: 13,
+  },
+  editButtonText: {
+    color: '#ffffff',
+    fontWeight: '900',
+  },
   card: {
     borderRadius: 14,
     borderWidth: 1,
@@ -494,10 +653,17 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   modalCard: {
+    maxHeight: '88%',
     borderRadius: 16,
     backgroundColor: '#ffffff',
     padding: 18,
     gap: 12,
+  },
+  modalScroll: {
+    maxHeight: 430,
+  },
+  modalScrollContent: {
+    gap: 10,
   },
   modalTitle: {
     color: '#0f172a',
@@ -516,6 +682,49 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     padding: 12,
     textAlignVertical: 'top',
+  },
+  fieldLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  stageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  stageOption: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+  },
+  stageOptionActive: {
+    borderColor: '#0f172a',
+    backgroundColor: '#0f172a',
+  },
+  stageOptionText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  stageOptionTextActive: {
+    color: '#ffffff',
+  },
+  probabilityToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    padding: 11,
+  },
+  probabilityText: {
+    color: '#0f172a',
+    fontWeight: '900',
   },
   quickDates: {
     flexDirection: 'row',

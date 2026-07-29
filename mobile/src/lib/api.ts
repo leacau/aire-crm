@@ -121,6 +121,18 @@ export function getOpportunityDetail(user: User, opportunityId: string) {
   });
 }
 
+export function updateOpportunity(
+  user: User,
+  opportunityId: string,
+  data: Partial<Pick<Opportunity, 'stage' | 'value' | 'closeDate' | 'followUpCurrent' | 'followUpNext' | 'highCloseProbability'>>,
+) {
+  return apiRequest<{ ok: true }>(`/api/opportunities/${encodeURIComponent(opportunityId)}`, {
+    method: 'PATCH',
+    user,
+    body: { data },
+  });
+}
+
 export function getBillingBootstrap(user: User) {
   return apiRequest<BillingBootstrap>('/api/billing/bootstrap', {
     method: 'GET',
