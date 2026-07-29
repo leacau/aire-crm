@@ -12,6 +12,7 @@ import type {
   MobileOpportunityDetail,
   Opportunity,
   PaymentEntry,
+  Prospect,
 } from './types';
 
 export function validateSession(user: User) {
@@ -130,6 +131,31 @@ export function getBillingBootstrap(user: User) {
 export function getApprovals(user: User) {
   return apiRequest<{ approvals: ApprovalItem[] }>('/api/approvals', {
     method: 'GET',
+    user,
+  });
+}
+
+export function getProspects(user: User) {
+  return apiRequest<{ prospects: Prospect[] }>('/api/prospects', {
+    method: 'GET',
+    user,
+  });
+}
+
+export function createProspect(
+  user: User,
+  prospectData: Pick<Prospect, 'companyName'> & Partial<Pick<Prospect, 'contactName' | 'contactPhone' | 'contactEmail' | 'sector' | 'notes' | 'status'>>,
+) {
+  return apiRequest<{ id: string }>('/api/prospects', {
+    method: 'POST',
+    user,
+    body: { prospectData },
+  });
+}
+
+export function claimProspect(user: User, prospectId: string) {
+  return apiRequest<{ ok: true }>(`/api/prospects/${encodeURIComponent(prospectId)}/claim`, {
+    method: 'POST',
     user,
   });
 }

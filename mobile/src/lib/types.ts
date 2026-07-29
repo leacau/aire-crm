@@ -136,6 +136,32 @@ export type Person = {
   clientIds?: string[];
 };
 
+export type ProspectStatus = 'Nuevo' | 'Contactado' | 'Calificado' | 'No Próspero' | 'Convertido';
+
+export type Prospect = {
+  id: string;
+  companyName: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  createdAt: string;
+  creatorId?: string;
+  creatorName?: string;
+  lastProspectNotificationAt?: string;
+  notes?: string;
+  ownerId?: string;
+  ownerName?: string;
+  sector?: string;
+  statusChangedAt?: string;
+  status: ProspectStatus;
+  previousOwnerId?: string;
+  unassignedAt?: string;
+  claimStatus?: 'Pendiente';
+  claimantId?: string;
+  claimantName?: string;
+  claimedAt?: string;
+};
+
 export type PaymentStatus = 'Pendiente' | 'Reclamado' | 'Pagado' | 'Incobrable';
 
 export type PaymentEntry = {

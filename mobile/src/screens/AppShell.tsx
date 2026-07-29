@@ -7,9 +7,10 @@ import { BillingScreen } from './BillingScreen';
 import { ClientsScreen } from './ClientsScreen';
 import { HomeScreen } from './HomeScreen';
 import { OpportunitiesScreen } from './OpportunitiesScreen';
+import { ProspectsScreen } from './ProspectsScreen';
 import { TasksScreen } from './TasksScreen';
 
-export type AppTab = 'home' | 'tasks' | 'clients' | 'opportunities' | 'billing' | 'approvals';
+export type AppTab = 'home' | 'tasks' | 'clients' | 'opportunities' | 'billing' | 'approvals' | 'prospects';
 
 const tabs: Array<{ id: AppTab; label: string }> = [
   { id: 'home', label: 'Inicio' },
@@ -44,6 +45,7 @@ export function AppShell() {
         {tab === 'opportunities' && <OpportunitiesScreen />}
         {tab === 'billing' && <BillingScreen />}
         {tab === 'approvals' && <ApprovalsScreen />}
+        {tab === 'prospects' && <ProspectsScreen />}
       </View>
 
       <View style={[styles.tabbar, { paddingBottom: Math.max(insets.bottom, 12) }]}>

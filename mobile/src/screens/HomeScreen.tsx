@@ -47,6 +47,12 @@ export function HomeScreen({ onOpenTab }: { onOpenTab: (tab: AppTab) => void }) 
             Revisar pedidos pendientes y abrir la bandeja web para aprobar o devolver.
           </Text>
         </Pressable>
+        <Pressable style={styles.actionCard} onPress={() => onOpenTab('prospects')}>
+          <Text style={styles.actionTitle}>Prospectos</Text>
+          <Text style={styles.actionCopy}>
+            Crear prospectos, consultar los propios y reclamar prospectos libres.
+          </Text>
+        </Pressable>
       </View>
     </ScrollView>
   );
