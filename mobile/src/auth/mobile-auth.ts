@@ -38,7 +38,7 @@ export async function signInWithGoogle() {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/DEVELOPER_ERROR|code:?\s*10|Developer console/i.test(message)) {
-      throw new Error('Google Sign-In no esta configurado para este APK. Verifica que el OAuth Web Client ID sea correcto y que Firebase/Google Cloud tenga un cliente Android para com.airedesantafe.crm con el SHA-1 del keystore de EAS.');
+      throw new Error('Google Sign-In no esta configurado para este APK. Verifica que el OAuth Web Client ID sea correcto y que Firebase/Google Cloud tenga un cliente Android para com.airedesantafe.crm con el SHA-1 del keystore usado para firmar este build.');
     }
 
     throw error;

@@ -66,6 +66,18 @@ mobile\android\app\build\outputs\apk\release\app-release.apk
 
 Si se firma con un keystore distinto al de EAS, hay que registrar el SHA-1 de ese keystore en Firebase/Google Cloud para que Google Sign-In no falle con `DEVELOPER_ERROR`.
 
+Para el APK local generado con `npm run build:android:apk:local`, el build queda firmado con `mobile/android/app/debug.keystore`. Se puede consultar el fingerprint con:
+
+```powershell
+npm run android:sha1:local
+```
+
+Ese SHA-1 debe cargarse en Firebase/Google Cloud para el cliente Android con package:
+
+```text
+com.airedesantafe.crm
+```
+
 Variables requeridas para el entorno `preview` de EAS:
 
 - `EXPO_PUBLIC_API_BASE_URL`
