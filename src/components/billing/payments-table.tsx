@@ -15,6 +15,7 @@ import * as XLSX from 'xlsx';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { getPaymentActivities } from '@/lib/api/activities';
+import { Eye, Trash2 } from 'lucide-react';
 
 type Props = {
   entries: PaymentEntry[];
@@ -314,6 +315,84 @@ const PaymentRow = ({
     onUpdate(entry, { pendingAmount: parsed ?? undefined }, { reason: 'pendingAmount' });
   };
 
+  if (isBossView) {
+    const statusNote = entry.notes?.trim() || 'Sin aclaracion cargada';
+
+    return (
+      <TableRow
+        key={entry.id}
+        style={rowColor ? { backgroundColor: rowColor } : undefined}
+        className={entry.status === 'Pagado' ? 'line-through text-muted-foreground/80' : undefined}
+      >
+        {(allowDelete || isBossView) && (
+          <TableCell className="align-top">
+            <Checkbox
+              aria-label="Seleccionar pago"
+              checked={selected}
+              onCheckedChange={(checked) => onToggleSelected(entry.id, Boolean(checked))}
+            />
+          </TableCell>
+        )}
+        <TableCell className="align-top">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <span className="font-semibold">{entry.comprobanteNumber || 'Sin comprobante'}</span>
+            <span>{entry.razonSocial || entry.company || 'Sin razon social'}</span>
+            <span className="text-muted-foreground">Emision: {formatDate(entry.issueDate) || '-'}</span>
+            <span className="text-muted-foreground">Vto: {formatDate(entry.dueDate) || '-'}</span>
+            <span className="font-medium">{formatCurrency(entry.pendingAmount)}</span>
+            <span className="text-muted-foreground">
+              {typeof daysLate === 'number' ? `${daysLate} dias de atraso` : 'Sin atraso informado'}
+            </span>
+          </div>
+          <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">Estado:</span> {entry.status}
+            <span className="mx-1">-</span>
+            <span className="font-semibold text-foreground">Nota/Aclaracion:</span> {statusNote}
+          </div>
+        </TableCell>
+        <TableCell className="align-top text-sm">{entry.advisorName || '-'}</TableCell>
+        <TableCell className="align-top">
+          <div className="flex justify-end gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              title="Ver detalle"
+              onClick={() => setDetailOpen(true)}
+            >
+              <Eye className="h-4 w-4" />
+              <span className="sr-only">Ver detalle</span>
+            </Button>
+            {(allowDelete || isBossView) && (
+              <Button
+                type="button"
+                variant="destructive"
+                size="icon"
+                className="h-8 w-8"
+                title="Eliminar"
+                onClick={() => {
+                  if (confirm('Eliminar este pago?')) onDelete([entry.id]);
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="sr-only">Eliminar</span>
+              </Button>
+            )}
+          </div>
+          <PaymentDetailDialog
+            entry={entry}
+            open={detailOpen}
+            onOpenChange={setDetailOpen}
+            isBossView={isBossView}
+            onUpdate={onUpdate}
+            onRequestExplanation={onRequestExplanation}
+          />
+        </TableCell>
+      </TableRow>
+    );
+  }
+
   return (
     <TableRow
       key={entry.id}
@@ -422,19 +501,9 @@ export function PaymentsTable({
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const allSelected = (allowDelete || isBossView) && entries.length > 0 && selectedIds.length === entries.length;
   
-  const columnCount =
-    (allowDelete || isBossView ? 1 : 0) +
-    (isBossView ? 0 : 1) +
-    1 +
-    1 +
-    1 +
-    1 +
-    (isBossView ? 1 : 0) +
-    (isBossView ? 0 : 1) +
-    1 +
-    1 +
-    1 +
-    1;
+  const columnCount = isBossView
+    ? ((allowDelete || isBossView) ? 4 : 3)
+    : (allowDelete || isBossView ? 1 : 0) + 10;
 
   const exportRows = useMemo(() => {
     return entries.map((entry) => {
@@ -563,6 +632,23 @@ export function PaymentsTable({
         <div className="overflow-x-auto" ref={tableContainerRef}>
           <Table>
             <TableHeader>
+              {isBossView ? (
+                <TableRow>
+                  {(allowDelete || isBossView) && (
+                    <TableHead className="w-10">
+                      <Checkbox
+                        aria-label="Seleccionar todos"
+                        checked={allSelected}
+                        onCheckedChange={(checked) => onToggleSelectAll(Boolean(checked))}
+                        indeterminate={(allowDelete || isBossView) && selectedIds.length > 0 && selectedIds.length < entries.length}
+                      />
+                    </TableHead>
+                  )}
+                  <TableHead>Comprobante pendiente</TableHead>
+                  <TableHead className="w-[180px]">Asesor responsable</TableHead>
+                  <TableHead className="w-[96px] text-right">Acciones</TableHead>
+                </TableRow>
+              ) : (
               <TableRow>
                 {(allowDelete || isBossView) && (
                 <TableHead className="w-10">
@@ -586,6 +672,7 @@ export function PaymentsTable({
               <TableHead>Nota/Aclaración</TableHead>
               <TableHead>Seguimiento</TableHead>
             </TableRow>
+              )}
           </TableHeader>
           <TableBody>
             {entries.map((entry) => (
