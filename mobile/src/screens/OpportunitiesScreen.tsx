@@ -1,10 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../auth/AuthProvider';
 import { getOpportunities } from '../lib/api';
 import type { Opportunity } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
 import { OpportunityDetailScreen } from './OpportunityDetailScreen';
+
+type OpportunityFilter = 'all' | 'active' | 'high' | 'proposal' | 'negotiation' | 'review' | 'won' | 'lost';
+
+const opportunityFilters: Array<{ id: OpportunityFilter; label: string }> = [
+  { id: 'all', label: 'Todas' },
+  { id: 'active', label: 'Activas' },
+  { id: 'high', label: 'Alta' },
+  { id: 'proposal', label: 'Propuesta' },
+  { id: 'negotiation', label: 'Negociacion' },
+  { id: 'review', label: 'A aprobar' },
+  { id: 'won', label: 'Ganadas' },
+  { id: 'lost', label: 'Perdidas' },
+];
 
 function formatCurrency(value?: number) {
   const amount = Number(value || 0);
@@ -30,10 +43,26 @@ function getStageStyle(stage: string) {
   return styles.stageNeutral;
 }
 
+function matchesStageFilter(opportunity: Opportunity, filter: OpportunityFilter) {
+  const stage = opportunity.stage || '';
+
+  if (filter === 'all') return true;
+  if (filter === 'high') return Boolean(opportunity.highCloseProbability);
+  if (filter === 'active') return !stage.includes('Cerrado') && !stage.includes('Perdido');
+  if (filter === 'proposal') return stage.includes('Propuesta');
+  if (filter === 'negotiation') return stage.includes('Negoci') && !stage.includes('Aprobar');
+  if (filter === 'review') return stage.includes('Aprobar');
+  if (filter === 'won') return stage.includes('Ganado');
+  if (filter === 'lost') return stage.includes('Perdido');
+
+  return true;
+}
+
 export function OpportunitiesScreen() {
   const { bootstrap, firebaseUser } = useAuth();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [query, setQuery] = useState('');
+  const [stageFilter, setStageFilter] = useState<OpportunityFilter>('active');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
@@ -58,13 +87,22 @@ export function OpportunitiesScreen() {
 
   const filteredOpportunities = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return opportunities;
-    return opportunities.filter(opportunity => (
-      opportunity.title?.toLowerCase().includes(normalized)
-      || opportunity.clientName?.toLowerCase().includes(normalized)
-      || opportunity.stage?.toLowerCase().includes(normalized)
-    ));
-  }, [opportunities, query]);
+    return opportunities
+      .filter(opportunity => matchesStageFilter(opportunity, stageFilter))
+      .filter(opportunity => (
+        !normalized
+        || opportunity.title?.toLowerCase().includes(normalized)
+        || opportunity.clientName?.toLowerCase().includes(normalized)
+        || opportunity.stage?.toLowerCase().includes(normalized)
+      ));
+  }, [opportunities, query, stageFilter]);
+
+  const filterTotals = useMemo(() => {
+    return opportunityFilters.reduce((acc, item) => {
+      acc[item.id] = opportunities.filter(opportunity => matchesStageFilter(opportunity, item.id)).length;
+      return acc;
+    }, {} as Record<OpportunityFilter, number>);
+  }, [opportunities]);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -96,7 +134,7 @@ export function OpportunitiesScreen() {
       ListHeaderComponent={(
         <View style={styles.header}>
           <Text style={styles.title}>Oportunidades</Text>
-          <Text style={styles.subtitle}>{filteredOpportunities.length} activas segun permisos.</Text>
+          <Text style={styles.subtitle}>{filteredOpportunities.length} oportunidades segun filtros y permisos.</Text>
           <TextInput
             placeholder="Buscar oportunidad"
             placeholderTextColor="#94a3b8"
@@ -104,6 +142,19 @@ export function OpportunitiesScreen() {
             value={query}
             onChangeText={setQuery}
           />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            {opportunityFilters.map(filter => (
+              <Pressable
+                key={filter.id}
+                onPress={() => setStageFilter(filter.id)}
+                style={[styles.filterChip, stageFilter === filter.id && styles.filterChipActive]}
+              >
+                <Text style={[styles.filterChipText, stageFilter === filter.id && styles.filterChipTextActive]}>
+                  {filter.label} {filterTotals[filter.id] ?? 0}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
       )}
       ListEmptyComponent={<Text style={styles.empty}>No hay oportunidades para mostrar.</Text>}
@@ -158,6 +209,30 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     paddingHorizontal: 13,
     paddingVertical: 12,
+  },
+  filterRow: {
+    gap: 8,
+    paddingRight: 18,
+  },
+  filterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  filterChipActive: {
+    borderColor: '#0f172a',
+    backgroundColor: '#0f172a',
+  },
+  filterChipText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
   },
   empty: {
     color: '#64748b',
