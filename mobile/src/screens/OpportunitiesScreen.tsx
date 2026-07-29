@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../auth/AuthProvider';
 import { getOpportunities } from '../lib/api';
 import type { Opportunity } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
+import { OpportunityDetailScreen } from './OpportunityDetailScreen';
 
 function formatCurrency(value?: number) {
   const amount = Number(value || 0);
@@ -35,6 +36,7 @@ export function OpportunitiesScreen() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
 
   const loadOpportunities = useCallback(async () => {
     if (!firebaseUser) return;
@@ -75,6 +77,16 @@ export function OpportunitiesScreen() {
 
   if (loading) return <LoadingScreen label="Cargando oportunidades..." />;
 
+  if (selectedOpportunity) {
+    return (
+      <OpportunityDetailScreen
+        opportunityId={selectedOpportunity.id}
+        initialOpportunity={selectedOpportunity}
+        onBack={() => setSelectedOpportunity(null)}
+      />
+    );
+  }
+
   return (
     <FlatList
       contentContainerStyle={styles.list}
@@ -96,7 +108,7 @@ export function OpportunitiesScreen() {
       )}
       ListEmptyComponent={<Text style={styles.empty}>No hay oportunidades para mostrar.</Text>}
       renderItem={({ item }) => (
-        <View style={styles.card}>
+        <Pressable onPress={() => setSelectedOpportunity(item)} style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.name}>{item.title || 'Oportunidad'}</Text>
             {item.highCloseProbability && <Text style={styles.hotBadge}>Alta</Text>}
@@ -113,7 +125,8 @@ export function OpportunitiesScreen() {
           </View>
           {!!item.followUpCurrent && <Text style={styles.note}>Actual: {item.followUpCurrent}</Text>}
           {!!item.followUpNext && <Text style={styles.note}>Proximo: {item.followUpNext}</Text>}
-        </View>
+          <Text style={styles.openHint}>Ver detalle</Text>
+        </Pressable>
       )}
     />
   );
@@ -236,5 +249,11 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontSize: 13,
     lineHeight: 18,
+  },
+  openHint: {
+    color: '#2563eb',
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 2,
   },
 });

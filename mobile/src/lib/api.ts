@@ -7,6 +7,7 @@ import type {
   CreateClientActivityInput,
   MobileBootstrap,
   MobileClientDetail,
+  MobileOpportunityDetail,
   Opportunity,
 } from './types';
 
@@ -78,6 +79,13 @@ export function createClientActivity(user: User, activityData: CreateClientActiv
 
 export function getOpportunities(user: User) {
   return apiRequest<{ opportunities: Opportunity[] }>('/api/mobile/opportunities', {
+    method: 'GET',
+    user,
+  });
+}
+
+export function getOpportunityDetail(user: User, opportunityId: string) {
+  return apiRequest<MobileOpportunityDetail>(`/api/mobile/opportunities/${encodeURIComponent(opportunityId)}`, {
     method: 'GET',
     user,
   });

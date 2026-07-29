@@ -41,6 +41,10 @@ export type MobileClientDetail = {
   opportunities: Opportunity[];
 };
 
+export type MobileOpportunityDetail = {
+  opportunity: Opportunity;
+};
+
 export type ClientActivity = {
   id: string;
   clientId?: string;
