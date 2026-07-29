@@ -6,11 +6,10 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
-import { getClients } from '@/lib/api/clients';
-import { getInvoices, updateInvoice, createInvoice, deleteInvoicesInBatches } from '@/lib/api/invoices';
-import { getAllOpportunities, updateOpportunity } from '@/lib/api/opportunities';
-import { getPaymentEntries, replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries } from '@/lib/api/payments';
-import { getAllUsers } from '@/lib/api/users';
+import { getBillingBootstrap } from '@/lib/api/billing';
+import { updateInvoice, createInvoice, deleteInvoicesInBatches } from '@/lib/api/invoices';
+import { updateOpportunity } from '@/lib/api/opportunities';
+import { replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries } from '@/lib/api/payments';
 import type { Opportunity, Client, User, Invoice, PaymentEntry } from '@/lib/types';
 import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity-details-dialog';
 import { useToast } from '@/hooks/use-toast';
@@ -520,18 +519,12 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       setLoading(true);
     }
     try {
-      const [allOpps, allClients, allAdvisors, allInvoices, paymentRows] = await Promise.all([
-        getAllOpportunities(),
-        getClients(),
-        getAllUsers('Asesor'),
-        getInvoices(),
-        getPaymentEntries(),
-      ]);
-      setOpportunities(allOpps);
-      setClients(allClients);
-      setAdvisors(allAdvisors);
-      setInvoices(allInvoices);
-      setPayments(paymentRows);
+      const bootstrap = await getBillingBootstrap();
+      setOpportunities(bootstrap.opportunities);
+      setClients(bootstrap.clients);
+      setAdvisors(bootstrap.advisors);
+      setInvoices(bootstrap.invoices);
+      setPayments(bootstrap.payments);
         
     } catch (error) {
       console.error("Error fetching billing data:", error);
