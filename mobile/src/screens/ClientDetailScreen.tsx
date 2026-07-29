@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthProvider';
-import { createClientActivity, getClientDetail } from '../lib/api';
+import { createClientActivity, createQuickOpportunity, getClientDetail } from '../lib/api';
 import type { Client, ClientActivity, Opportunity, Person } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
 
@@ -90,6 +90,8 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [taskObservation, setTaskObservation] = useState('');
   const [taskDueDate, setTaskDueDate] = useState(addDays(1));
+  const [opportunityModalOpen, setOpportunityModalOpen] = useState(false);
+  const [opportunityTitle, setOpportunityTitle] = useState('');
 
   const loadDetail = useCallback(async () => {
     if (!firebaseUser) return;
@@ -199,6 +201,33 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
     }
   };
 
+  const openOpportunityModal = () => {
+    setOpportunityTitle('');
+    setOpportunityModalOpen(true);
+  };
+
+  const saveOpportunity = async () => {
+    if (!firebaseUser || !client) return;
+
+    const trimmedTitle = opportunityTitle.trim();
+    if (!trimmedTitle) {
+      Alert.alert('Titulo obligatorio', 'Cargá un nombre para la oportunidad.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await createQuickOpportunity(firebaseUser, trimmedTitle, client);
+      setOpportunityModalOpen(false);
+      await loadDetail();
+      Alert.alert('Oportunidad creada', 'Se agrego al pipeline en estado Propuesta.');
+    } catch (error) {
+      Alert.alert('No se pudo crear', error instanceof Error ? error.message : 'Intenta nuevamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) return <LoadingScreen label="Cargando cliente..." />;
 
   if (!client) {
@@ -246,6 +275,11 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
         <Pressable onPress={openTaskModal} style={styles.taskButton}>
           <MaterialCommunityIcons name="clipboard-check-outline" size={20} color="#0f172a" />
           <Text style={styles.taskButtonText}>Crear tarea</Text>
+        </Pressable>
+
+        <Pressable onPress={openOpportunityModal} style={styles.opportunityButton}>
+          <MaterialCommunityIcons name="briefcase-plus-outline" size={20} color="#ffffff" />
+          <Text style={styles.opportunityButtonText}>Crear oportunidad</Text>
         </Pressable>
 
         <View style={styles.card}>
@@ -395,6 +429,30 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
           </View>
         </View>
       </Modal>
+
+      <Modal visible={opportunityModalOpen} transparent animationType="fade" onRequestClose={() => setOpportunityModalOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Crear oportunidad</Text>
+            <Text style={styles.modalSubtitle}>Se crea en estado Propuesta para {resolveClientName(client)}.</Text>
+            <TextInput
+              placeholder="Nombre de la oportunidad"
+              placeholderTextColor="#94a3b8"
+              style={styles.dateInput}
+              value={opportunityTitle}
+              onChangeText={setOpportunityTitle}
+            />
+            <View style={styles.modalActions}>
+              <Pressable disabled={saving} onPress={() => setOpportunityModalOpen(false)} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Cancelar</Text>
+              </Pressable>
+              <Pressable disabled={saving} onPress={saveOpportunity} style={[styles.primaryButton, saving && styles.disabledButton]}>
+                <Text style={styles.primaryButtonText}>{saving ? 'Guardando...' : 'Guardar'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -476,6 +534,19 @@ const styles = StyleSheet.create({
   },
   taskButtonText: {
     color: '#0f172a',
+    fontWeight: '900',
+  },
+  opportunityButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    backgroundColor: '#2563eb',
+    paddingVertical: 13,
+  },
+  opportunityButtonText: {
+    color: '#ffffff',
     fontWeight: '900',
   },
   card: {

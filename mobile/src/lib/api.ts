@@ -94,6 +94,24 @@ export function getOpportunities(user: User) {
   });
 }
 
+export function createQuickOpportunity(user: User, title: string, client: Pick<Client, 'id' | 'denominacion' | 'razonSocial'>) {
+  return apiRequest<{ id: string }>('/api/opportunities', {
+    method: 'POST',
+    user,
+    body: {
+      opportunityData: {
+        title,
+        clientId: client.id,
+        clientName: client.denominacion || client.razonSocial || 'Cliente',
+        stage: 'Propuesta',
+        value: 0,
+        closeDate: '',
+        createdAt: new Date().toISOString(),
+      },
+    },
+  });
+}
+
 export function getOpportunityDetail(user: User, opportunityId: string) {
   return apiRequest<MobileOpportunityDetail>(`/api/mobile/opportunities/${encodeURIComponent(opportunityId)}`, {
     method: 'GET',
