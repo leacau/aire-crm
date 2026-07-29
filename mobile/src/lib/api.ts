@@ -2,6 +2,7 @@ import type { User } from 'firebase/auth';
 import { apiRequest } from './api-client';
 import type {
   AuthSession,
+  BillingBootstrap,
   Client,
   ClientActivity,
   CreateClientActivityInput,
@@ -86,6 +87,13 @@ export function getOpportunities(user: User) {
 
 export function getOpportunityDetail(user: User, opportunityId: string) {
   return apiRequest<MobileOpportunityDetail>(`/api/mobile/opportunities/${encodeURIComponent(opportunityId)}`, {
+    method: 'GET',
+    user,
+  });
+}
+
+export function getBillingBootstrap(user: User) {
+  return apiRequest<BillingBootstrap>('/api/billing/bootstrap', {
     method: 'GET',
     user,
   });

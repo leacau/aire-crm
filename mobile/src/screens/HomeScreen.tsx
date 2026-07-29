@@ -35,6 +35,12 @@ export function HomeScreen({ onOpenTab }: { onOpenTab: (tab: AppTab) => void }) 
             {bootstrap ? `${bootstrap.stats.activeOpportunities} oportunidades activas para revisar.` : 'Ver pipeline activo, importes y proximos seguimientos.'}
           </Text>
         </Pressable>
+        <Pressable style={styles.actionCard} onPress={() => onOpenTab('billing')}>
+          <Text style={styles.actionTitle}>Mora</Text>
+          <Text style={styles.actionCopy}>
+            Consultar comprobantes pendientes, estados y notas de cobranza segun permisos.
+          </Text>
+        </Pressable>
       </View>
     </ScrollView>
   );

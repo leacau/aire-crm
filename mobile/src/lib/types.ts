@@ -45,6 +45,10 @@ export type MobileOpportunityDetail = {
   opportunity: Opportunity;
 };
 
+export type BillingBootstrap = {
+  payments: PaymentEntry[];
+};
+
 export type ClientActivity = {
   id: string;
   clientId?: string;
@@ -91,6 +95,28 @@ export type Client = {
   email?: string;
   localidad?: string;
   provincia?: string;
+};
+
+export type PaymentStatus = 'Pendiente' | 'Reclamado' | 'Pagado' | 'Incobrable';
+
+export type PaymentEntry = {
+  id: string;
+  advisorId: string;
+  advisorName: string;
+  company: string;
+  tipo?: string;
+  comprobanteNumber?: string;
+  razonSocial?: string;
+  amount?: number;
+  pendingAmount?: number;
+  issueDate?: string;
+  dueDate?: string;
+  daysLate?: number;
+  status: PaymentStatus;
+  notes?: string;
+  nextContactAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
 };
 
 export type Opportunity = {

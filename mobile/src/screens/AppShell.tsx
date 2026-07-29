@@ -2,18 +2,20 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/AuthProvider';
+import { BillingScreen } from './BillingScreen';
 import { ClientsScreen } from './ClientsScreen';
 import { HomeScreen } from './HomeScreen';
 import { OpportunitiesScreen } from './OpportunitiesScreen';
 import { TasksScreen } from './TasksScreen';
 
-export type AppTab = 'home' | 'tasks' | 'clients' | 'opportunities';
+export type AppTab = 'home' | 'tasks' | 'clients' | 'opportunities' | 'billing';
 
 const tabs: Array<{ id: AppTab; label: string }> = [
   { id: 'home', label: 'Inicio' },
   { id: 'tasks', label: 'Tareas' },
   { id: 'clients', label: 'Clientes' },
-  { id: 'opportunities', label: 'Oportunidades' },
+  { id: 'opportunities', label: 'Ops' },
+  { id: 'billing', label: 'Mora' },
 ];
 
 export function AppShell() {
@@ -38,6 +40,7 @@ export function AppShell() {
         {tab === 'tasks' && <TasksScreen />}
         {tab === 'clients' && <ClientsScreen />}
         {tab === 'opportunities' && <OpportunitiesScreen />}
+        {tab === 'billing' && <BillingScreen />}
       </View>
 
       <View style={[styles.tabbar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -95,8 +98,8 @@ const styles = StyleSheet.create({
   },
   tabbar: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 12,
+    gap: 6,
+    paddingHorizontal: 10,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
@@ -113,6 +116,7 @@ const styles = StyleSheet.create({
   },
   tabText: {
     color: '#475569',
+    fontSize: 12,
     fontWeight: '800',
   },
   activeTabText: {
