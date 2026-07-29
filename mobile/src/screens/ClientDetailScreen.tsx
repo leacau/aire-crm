@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthProvider';
 import { createClientActivity, getClientDetail } from '../lib/api';
 import type { Client, ClientActivity, Opportunity } from '../lib/types';
@@ -22,17 +23,18 @@ type ClientDetailScreenProps = {
 };
 
 type QuickAction = {
-  label: string;
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   type: string;
   helper: string;
+  accessibilityLabel: string;
 };
 
 const quickActions: QuickAction[] = [
-  { label: 'Tel', type: 'Llamada', helper: 'llamada' },
-  { label: 'Mail', type: 'Mail', helper: 'correo' },
-  { label: 'WA', type: 'WhatsApp', helper: 'WhatsApp' },
-  { label: 'Visita', type: 'Visita a empresa', helper: 'visita presencial' },
-  { label: 'Meet', type: 'Meet', helper: 'reunion por Meet' },
+  { icon: 'phone-outline', type: 'Llamada', helper: 'llamada', accessibilityLabel: 'Registrar llamada' },
+  { icon: 'email-outline', type: 'Mail', helper: 'correo', accessibilityLabel: 'Registrar mail' },
+  { icon: 'chat-outline', type: 'WhatsApp', helper: 'WhatsApp', accessibilityLabel: 'Registrar WhatsApp' },
+  { icon: 'car-outline', type: 'Visita a empresa', helper: 'visita presencial', accessibilityLabel: 'Registrar visita presencial' },
+  { icon: 'video-outline', type: 'Meet', helper: 'reunion por Meet', accessibilityLabel: 'Registrar reunion por Meet' },
 ];
 
 function formatDate(value?: string) {
@@ -160,8 +162,14 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
 
         <View style={styles.actionsRow}>
           {quickActions.map(action => (
-            <Pressable key={action.type} onPress={() => openAction(action)} style={styles.actionButton}>
-              <Text style={styles.actionLabel}>{action.label}</Text>
+            <Pressable
+              key={action.type}
+              accessibilityLabel={action.accessibilityLabel}
+              accessibilityRole="button"
+              onPress={() => openAction(action)}
+              style={styles.actionButton}
+            >
+              <MaterialCommunityIcons name={action.icon} size={25} color="#ffffff" />
             </Pressable>
           ))}
         </View>
@@ -299,10 +307,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 14,
     backgroundColor: '#0f172a',
-  },
-  actionLabel: {
-    color: '#ffffff',
-    fontWeight: '900',
   },
   card: {
     borderRadius: 14,
