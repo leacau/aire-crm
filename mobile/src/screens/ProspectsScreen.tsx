@@ -13,11 +13,12 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthProvider';
-import { claimProspect, createProspect, getProspects } from '../lib/api';
-import type { Prospect } from '../lib/types';
+import { claimProspect, createProspect, getProspects, updateProspect } from '../lib/api';
+import type { Prospect, ProspectStatus } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
 
 type ProspectFilter = 'mine' | 'free' | 'all';
+const statusOptions: ProspectStatus[] = ['Nuevo', 'Contactado', 'Calificado', 'No Próspero', 'Convertido'];
 
 function formatDate(value?: string) {
   if (!value) return '-';
@@ -62,6 +63,13 @@ export function ProspectsScreen() {
   const [contactEmail, setContactEmail] = useState('');
   const [sector, setSector] = useState('');
   const [notes, setNotes] = useState('');
+  const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
+  const [editStatus, setEditStatus] = useState<ProspectStatus>('Nuevo');
+  const [editContactName, setEditContactName] = useState('');
+  const [editContactPhone, setEditContactPhone] = useState('');
+  const [editContactEmail, setEditContactEmail] = useState('');
+  const [editSector, setEditSector] = useState('');
+  const [editNotes, setEditNotes] = useState('');
 
   const loadProspects = useCallback(async () => {
     if (!firebaseUser) return;
@@ -168,6 +176,39 @@ export function ProspectsScreen() {
     }
   };
 
+  const openEditModal = (prospect: Prospect) => {
+    setSelectedProspect(prospect);
+    setEditStatus(prospect.status || 'Nuevo');
+    setEditContactName(prospect.contactName || '');
+    setEditContactPhone(prospect.contactPhone || '');
+    setEditContactEmail(prospect.contactEmail || '');
+    setEditSector(prospect.sector || '');
+    setEditNotes(prospect.notes || '');
+  };
+
+  const saveProspectUpdate = async () => {
+    if (!firebaseUser || !selectedProspect) return;
+
+    setSaving(true);
+    try {
+      await updateProspect(firebaseUser, selectedProspect.id, {
+        status: editStatus,
+        contactName: editContactName.trim(),
+        contactPhone: editContactPhone.trim(),
+        contactEmail: editContactEmail.trim(),
+        sector: editSector.trim(),
+        notes: editNotes.trim(),
+      });
+      setSelectedProspect(null);
+      await loadProspects();
+      Alert.alert('Prospecto actualizado', 'Los cambios quedaron guardados.');
+    } catch (error) {
+      Alert.alert('No se pudo actualizar', error instanceof Error ? error.message : 'Intenta nuevamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) return <LoadingScreen label="Cargando prospectos..." />;
 
   return (
@@ -233,6 +274,11 @@ export function ProspectsScreen() {
                   <Text style={styles.claimButtonText}>Reclamar</Text>
                 </Pressable>
               )}
+              {item.ownerId === session?.user.id && (
+                <Pressable disabled={saving} onPress={() => openEditModal(item)} style={styles.claimButton}>
+                  <Text style={styles.claimButtonText}>Editar</Text>
+                </Pressable>
+              )}
             </View>
           </View>
         )}
@@ -260,6 +306,49 @@ export function ProspectsScreen() {
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </Pressable>
               <Pressable disabled={saving} onPress={saveProspect} style={[styles.saveButton, saving && styles.disabledButton]}>
+                <Text style={styles.saveButtonText}>{saving ? 'Guardando...' : 'Guardar'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(selectedProspect)} transparent animationType="fade" onRequestClose={() => setSelectedProspect(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Editar prospecto</Text>
+            <Text style={styles.modalSubtitle}>{selectedProspect?.companyName || 'Prospecto'}</Text>
+
+            <View style={styles.statusGrid}>
+              {statusOptions.map(status => (
+                <Pressable
+                  key={status}
+                  onPress={() => setEditStatus(status)}
+                  style={[styles.statusOption, editStatus === status && styles.statusOptionActive]}
+                >
+                  <Text style={[styles.statusOptionText, editStatus === status && styles.statusOptionTextActive]}>{status}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <TextInput placeholder="Contacto" placeholderTextColor="#94a3b8" style={styles.input} value={editContactName} onChangeText={setEditContactName} />
+            <TextInput placeholder="Telefono" placeholderTextColor="#94a3b8" style={styles.input} value={editContactPhone} onChangeText={setEditContactPhone} />
+            <TextInput placeholder="Email" placeholderTextColor="#94a3b8" style={styles.input} value={editContactEmail} onChangeText={setEditContactEmail} />
+            <TextInput placeholder="Sector" placeholderTextColor="#94a3b8" style={styles.input} value={editSector} onChangeText={setEditSector} />
+            <TextInput
+              multiline
+              placeholder="Notas"
+              placeholderTextColor="#94a3b8"
+              style={styles.notesInput}
+              value={editNotes}
+              onChangeText={setEditNotes}
+            />
+
+            <View style={styles.modalActions}>
+              <Pressable disabled={saving} onPress={() => setSelectedProspect(null)} style={styles.cancelButton}>
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </Pressable>
+              <Pressable disabled={saving} onPress={saveProspectUpdate} style={[styles.saveButton, saving && styles.disabledButton]}>
                 <Text style={styles.saveButtonText}>{saving ? 'Guardando...' : 'Guardar'}</Text>
               </Pressable>
             </View>
@@ -459,6 +548,34 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     fontSize: 20,
     fontWeight: '900',
+  },
+  modalSubtitle: {
+    color: '#64748b',
+    fontSize: 13,
+  },
+  statusGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusOption: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+  },
+  statusOptionActive: {
+    borderColor: '#0f172a',
+    backgroundColor: '#0f172a',
+  },
+  statusOptionText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  statusOptionTextActive: {
+    color: '#ffffff',
   },
   input: {
     borderWidth: 1,

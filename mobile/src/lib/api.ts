@@ -165,6 +165,18 @@ export function createProspect(
   });
 }
 
+export function updateProspect(
+  user: User,
+  prospectId: string,
+  data: Partial<Pick<Prospect, 'status' | 'sector' | 'notes' | 'contactName' | 'contactPhone' | 'contactEmail'>>,
+) {
+  return apiRequest<{ ok: true; originalData: Prospect }>(`/api/prospects/${encodeURIComponent(prospectId)}`, {
+    method: 'PATCH',
+    user,
+    body: { data },
+  });
+}
+
 export function claimProspect(user: User, prospectId: string) {
   return apiRequest<{ ok: true }>(`/api/prospects/${encodeURIComponent(prospectId)}/claim`, {
     method: 'POST',
