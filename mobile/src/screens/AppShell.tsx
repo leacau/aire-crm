@@ -4,20 +4,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/AuthProvider';
 import { ClientsScreen } from './ClientsScreen';
 import { HomeScreen } from './HomeScreen';
+import { OpportunitiesScreen } from './OpportunitiesScreen';
 import { TasksScreen } from './TasksScreen';
 
-type Tab = 'home' | 'tasks' | 'clients';
+export type AppTab = 'home' | 'tasks' | 'clients' | 'opportunities';
 
-const tabs: Array<{ id: Tab; label: string }> = [
+const tabs: Array<{ id: AppTab; label: string }> = [
   { id: 'home', label: 'Inicio' },
   { id: 'tasks', label: 'Tareas' },
   { id: 'clients', label: 'Clientes' },
+  { id: 'opportunities', label: 'Oportunidades' },
 ];
 
 export function AppShell() {
   const insets = useSafeAreaInsets();
   const { logout, session } = useAuth();
-  const [tab, setTab] = useState<Tab>('home');
+  const [tab, setTab] = useState<AppTab>('home');
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -35,6 +37,7 @@ export function AppShell() {
         {tab === 'home' && <HomeScreen onOpenTab={setTab} />}
         {tab === 'tasks' && <TasksScreen />}
         {tab === 'clients' && <ClientsScreen />}
+        {tab === 'opportunities' && <OpportunitiesScreen />}
       </View>
 
       <View style={[styles.tabbar, { paddingBottom: Math.max(insets.bottom, 12) }]}>

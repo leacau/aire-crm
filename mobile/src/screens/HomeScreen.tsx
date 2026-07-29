@@ -1,8 +1,9 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../auth/AuthProvider';
+import type { AppTab } from './AppShell';
 
-export function HomeScreen({ onOpenTab }: { onOpenTab: (tab: 'tasks' | 'clients') => void }) {
+export function HomeScreen({ onOpenTab }: { onOpenTab: (tab: AppTab) => void }) {
   const { bootstrap, session } = useAuth();
 
   return (
@@ -26,6 +27,12 @@ export function HomeScreen({ onOpenTab }: { onOpenTab: (tab: 'tasks' | 'clients'
           <Text style={styles.actionTitle}>Clientes</Text>
           <Text style={styles.actionCopy}>
             {bootstrap ? `${bootstrap.stats.visibleClients} clientes visibles segun permisos.` : 'Consultar cartera accesible segun permisos del usuario.'}
+          </Text>
+        </Pressable>
+        <Pressable style={styles.actionCard} onPress={() => onOpenTab('opportunities')}>
+          <Text style={styles.actionTitle}>Oportunidades</Text>
+          <Text style={styles.actionCopy}>
+            {bootstrap ? `${bootstrap.stats.activeOpportunities} oportunidades activas para revisar.` : 'Ver pipeline activo, importes y proximos seguimientos.'}
           </Text>
         </Pressable>
       </View>

@@ -1,6 +1,6 @@
 import type { User } from 'firebase/auth';
 import { apiRequest } from './api-client';
-import type { AuthSession, Client, ClientActivity, MobileBootstrap } from './types';
+import type { AuthSession, Client, ClientActivity, MobileBootstrap, Opportunity } from './types';
 
 export function validateSession(user: User) {
   return apiRequest<AuthSession>('/api/auth/session', {
@@ -48,6 +48,13 @@ export function completeTask(user: User, taskId: string) {
 
 export function getClients(user: User) {
   return apiRequest<{ clients: Client[] }>('/api/mobile/clients', {
+    method: 'GET',
+    user,
+  });
+}
+
+export function getOpportunities(user: User) {
+  return apiRequest<{ opportunities: Opportunity[] }>('/api/mobile/opportunities', {
     method: 'GET',
     user,
   });

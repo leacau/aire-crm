@@ -49,9 +49,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           session: fallbackSession,
           tasks: [],
           clients: [],
+          opportunities: [],
           stats: {
             pendingTasks: 0,
             visibleClients: 0,
+            activeOpportunities: 0,
           },
         };
         setError(bootstrapError instanceof Error ? bootstrapError.message : 'No se pudo cargar el inicio mobile completo.');

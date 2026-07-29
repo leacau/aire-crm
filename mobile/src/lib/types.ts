@@ -1,5 +1,14 @@
 export type UserRole = 'Asesor' | 'Administracion' | 'Admin' | 'Jefe' | 'Gerencia' | 'Import' | 'Asesor Canjes';
 
+export type OpportunityStage =
+  | 'Nuevo'
+  | 'Propuesta'
+  | 'Negociación'
+  | 'Negociación a Aprobar'
+  | 'Cerrado - No Definido'
+  | 'Cerrado - Ganado'
+  | 'Cerrado - Perdido';
+
 export type User = {
   id: string;
   name: string;
@@ -18,9 +27,11 @@ export type MobileBootstrap = {
   session: AuthSession;
   tasks: ClientActivity[];
   clients: Client[];
+  opportunities: Opportunity[];
   stats: {
     pendingTasks: number;
     visibleClients: number;
+    activeOpportunities: number;
   };
 };
 
@@ -52,4 +63,25 @@ export type Client = {
   email?: string;
   localidad?: string;
   provincia?: string;
+};
+
+export type Opportunity = {
+  id: string;
+  title: string;
+  clientName: string;
+  clientId: string;
+  value: number;
+  stage: OpportunityStage;
+  closeDate: string;
+  details?: string;
+  observaciones?: string;
+  followUpCurrent?: string;
+  followUpNext?: string;
+  createdAt: string;
+  updatedAt?: string;
+  ownerId?: string;
+  highCloseProbability?: boolean;
+  startDate?: string;
+  endDate?: string;
+  isCanje?: boolean;
 };
