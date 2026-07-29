@@ -3,8 +3,9 @@ import {
   signInWithCredential,
   signInWithEmailAndPassword,
   signOut,
+  type User as FirebaseUser,
 } from 'firebase/auth';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, isSuccessResponse } from '@react-native-google-signin/google-signin';
 import { env, isGoogleOAuthClientId, missingMobileEnvNames } from '../config/env';
 import { auth } from '../lib/firebase';
 
@@ -22,7 +23,7 @@ function requireMobileAuth() {
   return auth;
 }
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(): Promise<FirebaseUser> {
   if (!isGoogleOAuthClientId(env.google.webClientId)) {
     throw new Error('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID debe ser el Client ID OAuth tipo Web y terminar en .apps.googleusercontent.com.');
   }
@@ -44,18 +45,24 @@ export async function signInWithGoogle() {
     throw error;
   }
 
-  const idToken = result.data?.idToken;
+  if (!isSuccessResponse(result)) {
+    throw new Error('El inicio de sesion con Google fue cancelado o no se completo.');
+  }
+
+  const idToken = result.data.idToken || (await GoogleSignin.getTokens()).idToken;
 
   if (!idToken) {
     throw new Error('Google no devolvio un idToken valido.');
   }
 
   const credential = GoogleAuthProvider.credential(idToken);
-  await signInWithCredential(requireMobileAuth(), credential);
+  const userCredential = await signInWithCredential(requireMobileAuth(), credential);
+  return userCredential.user;
 }
 
-export async function signInExternalUser(email: string, password: string) {
-  await signInWithEmailAndPassword(requireMobileAuth(), email.trim().toLowerCase(), password);
+export async function signInExternalUser(email: string, password: string): Promise<FirebaseUser> {
+  const userCredential = await signInWithEmailAndPassword(requireMobileAuth(), email.trim().toLowerCase(), password);
+  return userCredential.user;
 }
 
 export async function signOutMobileUser() {

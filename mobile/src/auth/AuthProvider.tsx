@@ -31,23 +31,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ? null
     : `Faltan variables de entorno en el build mobile: ${missingMobileEnvNames.join(', ')}.`;
 
-  const loadSession = useCallback(async (user: FirebaseUser | null) => {
-    setError(null);
+  const loadSession = useCallback(async (user: FirebaseUser | null, options?: { throwOnError?: boolean }) => {
     if (!user) {
       setSession(null);
       setBootstrap(null);
       return;
     }
 
+    setError(null);
     try {
       const nextBootstrap = await getMobileBootstrap(user);
       setSession(nextBootstrap.session);
       setBootstrap(nextBootstrap);
     } catch (sessionError) {
+      const message = sessionError instanceof Error ? sessionError.message : 'No se pudo validar la sesion.';
       setSession(null);
       setBootstrap(null);
-      setError(sessionError instanceof Error ? sessionError.message : 'No se pudo validar la sesion.');
+      setError(message);
       await signOutMobileUser();
+      if (options?.throwOnError) {
+        throw new Error(message);
+      }
     }
   }, []);
 
@@ -69,15 +73,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithGoogle = useCallback(async () => {
     setError(null);
-    await signInWithGoogle();
-  }, []);
+    const signedInUser = await signInWithGoogle();
+    setFirebaseUser(signedInUser);
+    await loadSession(signedInUser, { throwOnError: true });
+  }, [loadSession]);
 
   const loginWithEmail = useCallback(async (email: string, password: string) => {
     setError(null);
-    await signInExternalUser(email, password);
-  }, []);
+    const signedInUser = await signInExternalUser(email, password);
+    setFirebaseUser(signedInUser);
+    await loadSession(signedInUser, { throwOnError: true });
+  }, [loadSession]);
 
   const logout = useCallback(async () => {
+    setError(null);
     setSession(null);
     setBootstrap(null);
     setFirebaseUser(null);
