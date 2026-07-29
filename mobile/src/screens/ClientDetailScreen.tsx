@@ -16,6 +16,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { createClientActivity, createQuickOpportunity, getClientDetail, getClientTangoBillingSummary } from '../lib/api';
 import type { Client, ClientActivity, ClientTangoBillingSummary, Opportunity, Person } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
+import { OpportunityDetailScreen } from './OpportunityDetailScreen';
 
 type ClientDetailScreenProps = {
   clientId: string;
@@ -95,6 +96,7 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
   const [taskDueDate, setTaskDueDate] = useState(addDays(1));
   const [opportunityModalOpen, setOpportunityModalOpen] = useState(false);
   const [opportunityTitle, setOpportunityTitle] = useState('');
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
 
   const loadBillingSummary = useCallback(async () => {
     if (!firebaseUser) return;
@@ -248,6 +250,17 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
 
   if (loading) return <LoadingScreen label="Cargando cliente..." />;
 
+  if (selectedOpportunity) {
+    return (
+      <OpportunityDetailScreen
+        opportunityId={selectedOpportunity.id}
+        initialOpportunity={selectedOpportunity}
+        onBack={() => setSelectedOpportunity(null)}
+        backLabel="Volver al cliente"
+      />
+    );
+  }
+
   if (!client) {
     return (
       <View style={styles.emptyState}>
@@ -356,10 +369,18 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
           <Text style={styles.cardTitle}>Oportunidades</Text>
           <Text style={styles.cardSubtitle}>{activeOpportunities.length} activas o visibles para este cliente.</Text>
           {opportunities.slice(0, 5).map(opportunity => (
-            <View key={opportunity.id} style={styles.compactItem}>
-              <Text style={styles.itemTitle}>{opportunity.title}</Text>
-              <Text style={styles.itemMeta}>{opportunity.stage} · {formatAmount(opportunity.value)}</Text>
-            </View>
+            <Pressable
+              key={opportunity.id}
+              onPress={() => setSelectedOpportunity(opportunity)}
+              style={styles.compactItem}
+            >
+              <View style={styles.opportunityItemHeader}>
+                <Text style={styles.itemTitle}>{opportunity.title}</Text>
+                <MaterialCommunityIcons name="chevron-right" size={20} color="#64748b" />
+              </View>
+              <Text style={styles.itemMeta}>{opportunity.stage} - {formatAmount(opportunity.value)}</Text>
+              {!!opportunity.followUpNext && <Text style={styles.activityText}>Proximo: {opportunity.followUpNext}</Text>}
+            </Pressable>
           ))}
           {opportunities.length === 0 && <Text style={styles.muted}>Sin oportunidades asociadas.</Text>}
         </View>
@@ -688,6 +709,11 @@ const styles = StyleSheet.create({
     borderTopColor: '#f1f5f9',
     paddingTop: 10,
     gap: 3,
+  },
+  opportunityItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   contactItem: {
     borderTopWidth: 1,

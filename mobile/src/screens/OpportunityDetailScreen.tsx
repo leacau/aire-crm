@@ -20,6 +20,7 @@ type OpportunityDetailScreenProps = {
   opportunityId: string;
   initialOpportunity?: Opportunity;
   onBack: () => void;
+  backLabel?: string;
 };
 
 type QuickAction = {
@@ -81,7 +82,7 @@ function getStageStyle(stage: string) {
   return styles.stageNeutral;
 }
 
-export function OpportunityDetailScreen({ opportunityId, initialOpportunity, onBack }: OpportunityDetailScreenProps) {
+export function OpportunityDetailScreen({ opportunityId, initialOpportunity, onBack, backLabel = 'Volver a oportunidades' }: OpportunityDetailScreenProps) {
   const { firebaseUser } = useAuth();
   const [opportunity, setOpportunity] = useState<Opportunity | undefined>(initialOpportunity);
   const [loading, setLoading] = useState(!initialOpportunity);
@@ -253,7 +254,7 @@ export function OpportunityDetailScreen({ opportunityId, initialOpportunity, onB
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
       >
         <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backText}>Volver a oportunidades</Text>
+          <Text style={styles.backText}>{backLabel}</Text>
         </Pressable>
 
         <View style={styles.hero}>
