@@ -4,6 +4,7 @@ import {
   getClientServer,
   listClientActivitiesForClientServer,
   listClientOpportunitiesServer,
+  listClientPeopleServer,
 } from '@/lib/server/clients';
 import { routeErrorResponse } from '@/lib/server/route-errors';
 
@@ -22,16 +23,18 @@ export async function GET(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'Cliente invalido.' }, { status: 400 });
     }
 
-    const [client, activities, opportunities] = await Promise.all([
+    const [client, activities, opportunities, people] = await Promise.all([
       getClientServer(clientId, sessionContext.requester),
       listClientActivitiesForClientServer(clientId, sessionContext.requester),
       listClientOpportunitiesServer(clientId, sessionContext.requester),
+      listClientPeopleServer(clientId, sessionContext.requester),
     ]);
 
     return NextResponse.json({
       client,
       activities: activities.slice(0, 30),
       opportunities: opportunities.slice(0, 20),
+      people: people.slice(0, 20),
     });
   } catch (error) {
     return routeErrorResponse(error, 'MOBILE', {

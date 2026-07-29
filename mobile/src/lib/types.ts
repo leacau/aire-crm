@@ -39,6 +39,7 @@ export type MobileClientDetail = {
   client: Client;
   activities: ClientActivity[];
   opportunities: Opportunity[];
+  people: Person[];
 };
 
 export type MobileOpportunityDetail = {
@@ -95,6 +96,16 @@ export type Client = {
   email?: string;
   localidad?: string;
   provincia?: string;
+};
+
+export type Person = {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  cargo?: string;
+  observaciones?: string;
+  clientIds?: string[];
 };
 
 export type PaymentStatus = 'Pendiente' | 'Reclamado' | 'Pagado' | 'Incobrable';

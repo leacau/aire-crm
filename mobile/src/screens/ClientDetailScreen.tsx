@@ -9,11 +9,12 @@ import {
   Text,
   TextInput,
   View,
+  Linking,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthProvider';
 import { createClientActivity, getClientDetail } from '../lib/api';
-import type { Client, ClientActivity, Opportunity } from '../lib/types';
+import type { Client, ClientActivity, Opportunity, Person } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
 
 type ClientDetailScreenProps = {
@@ -33,7 +34,7 @@ const quickActions: QuickAction[] = [
   { icon: 'phone-outline', type: 'Llamada', helper: 'llamada', accessibilityLabel: 'Registrar llamada' },
   { icon: 'email-outline', type: 'Mail', helper: 'correo', accessibilityLabel: 'Registrar mail' },
   { icon: 'chat-outline', type: 'WhatsApp', helper: 'WhatsApp', accessibilityLabel: 'Registrar WhatsApp' },
-  { icon: 'car-outline', type: 'Visita a empresa', helper: 'visita presencial', accessibilityLabel: 'Registrar visita presencial' },
+  { icon: 'map-marker-account-outline', type: 'Visita a empresa', helper: 'visita presencial', accessibilityLabel: 'Registrar visita presencial' },
   { icon: 'video-outline', type: 'Meet', helper: 'reunion por Meet', accessibilityLabel: 'Registrar reunion por Meet' },
 ];
 
@@ -80,6 +81,7 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
   const [client, setClient] = useState<Client | undefined>(initialClient);
   const [activities, setActivities] = useState<ClientActivity[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(!initialClient);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -95,6 +97,7 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
     setClient(response.client);
     setActivities(response.activities);
     setOpportunities(response.opportunities);
+    setPeople(response.people || []);
   }, [clientId, firebaseUser]);
 
   useEffect(() => {
@@ -107,6 +110,19 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
     () => opportunities.filter(opportunity => !opportunity.stage.includes('Perdido')),
     [opportunities],
   );
+
+  const openLink = async (url: string, fallbackMessage: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert('No se pudo abrir', fallbackMessage);
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('No se pudo abrir', fallbackMessage);
+    }
+  };
 
   const refresh = async () => {
     setRefreshing(true);
@@ -256,6 +272,44 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
             </View>
           ))}
           {opportunities.length === 0 && <Text style={styles.muted}>Sin oportunidades asociadas.</Text>}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Contactos</Text>
+          {people.slice(0, 8).map(person => (
+            <View key={person.id} style={styles.contactItem}>
+              <View style={styles.contactHeader}>
+                <View style={styles.contactInfo}>
+                  <Text style={styles.itemTitle}>{person.name || 'Contacto sin nombre'}</Text>
+                  {!!person.cargo && <Text style={styles.itemMeta}>{person.cargo}</Text>}
+                  {!!person.email && <Text style={styles.itemMeta}>{person.email}</Text>}
+                  {!!person.phone && <Text style={styles.itemMeta}>{person.phone}</Text>}
+                </View>
+                <View style={styles.contactActions}>
+                  {!!person.phone && (
+                    <Pressable
+                      accessibilityLabel={`Llamar a ${person.name}`}
+                      onPress={() => openLink(`tel:${person.phone}`, 'No se pudo iniciar la llamada.')}
+                      style={styles.contactActionButton}
+                    >
+                      <MaterialCommunityIcons name="phone-outline" size={20} color="#0f172a" />
+                    </Pressable>
+                  )}
+                  {!!person.email && (
+                    <Pressable
+                      accessibilityLabel={`Enviar mail a ${person.name}`}
+                      onPress={() => openLink(`mailto:${person.email}`, 'No se pudo abrir el correo.')}
+                      style={styles.contactActionButton}
+                    >
+                      <MaterialCommunityIcons name="email-outline" size={20} color="#0f172a" />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+              {!!person.observaciones && <Text style={styles.activityText}>{person.observaciones}</Text>}
+            </View>
+          ))}
+          {people.length === 0 && <Text style={styles.muted}>Sin contactos asociados.</Text>}
         </View>
 
         <View style={styles.card}>
@@ -465,6 +519,36 @@ const styles = StyleSheet.create({
     borderTopColor: '#f1f5f9',
     paddingTop: 10,
     gap: 3,
+  },
+  contactItem: {
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    paddingTop: 10,
+    gap: 6,
+  },
+  contactHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  contactInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  contactActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  contactActionButton: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
   },
   activityItem: {
     borderTopWidth: 1,
