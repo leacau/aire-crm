@@ -78,6 +78,15 @@ Ese SHA-1 debe cargarse en Firebase/Google Cloud para el cliente Android con pac
 com.airedesantafe.crm
 ```
 
+Si descargaste un `google-services.json` desde Firebase, podes usarlo para validar que las variables del build coincidan con el package Android:
+
+```powershell
+$env:GOOGLE_SERVICES_JSON_PATH="C:\Users\leand\Downloads\google-services.json"
+npm run doctor:env
+```
+
+`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` debe ser el OAuth client de tipo **Web application**. No uses en esa variable el OAuth client de tipo Android.
+
 Variables requeridas para el entorno `preview` de EAS:
 
 - `EXPO_PUBLIC_API_BASE_URL`
