@@ -9,11 +9,27 @@ export function validateSession(user: User) {
   });
 }
 
-export function getMobileBootstrap(user: User) {
-  return apiRequest<MobileBootstrap>('/api/mobile/bootstrap', {
+function isMobileBootstrap(value: unknown): value is MobileBootstrap {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && 'session' in value
+    && (value as { session?: unknown }).session
+    && typeof (value as { session?: unknown }).session === 'object',
+  );
+}
+
+export async function getMobileBootstrap(user: User) {
+  const bootstrap = await apiRequest<MobileBootstrap>('/api/mobile/bootstrap', {
     method: 'GET',
     user,
   });
+
+  if (!isMobileBootstrap(bootstrap)) {
+    throw new Error('La API mobile devolvio un inicio invalido.');
+  }
+
+  return bootstrap;
 }
 
 export function getTasks(user: User) {

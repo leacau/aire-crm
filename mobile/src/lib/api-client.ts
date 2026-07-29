@@ -59,5 +59,9 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions): P
     throw new ApiError(message, response.status, payload);
   }
 
+  if (payload == null) {
+    throw new ApiError('La API devolvio una respuesta vacia.', response.status, payload);
+  }
+
   return payload as T;
 }

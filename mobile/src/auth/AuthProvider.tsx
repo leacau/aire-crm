@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { hasMobileRuntimeConfig, missingMobileEnvNames } from '../config/env';
 import { auth } from '../lib/firebase';
-import { getMobileBootstrap } from '../lib/api';
+import { getMobileBootstrap, validateSession } from '../lib/api';
 import type { AuthSession, MobileBootstrap } from '../lib/types';
 import { signInExternalUser, signInWithGoogle, signOutMobileUser } from './mobile-auth';
 
@@ -40,7 +40,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setError(null);
     try {
-      const nextBootstrap = await getMobileBootstrap(user);
+      let nextBootstrap: MobileBootstrap;
+      try {
+        nextBootstrap = await getMobileBootstrap(user);
+      } catch (bootstrapError) {
+        const fallbackSession = await validateSession(user);
+        nextBootstrap = {
+          session: fallbackSession,
+          tasks: [],
+          clients: [],
+          stats: {
+            pendingTasks: 0,
+            visibleClients: 0,
+          },
+        };
+        setError(bootstrapError instanceof Error ? bootstrapError.message : 'No se pudo cargar el inicio mobile completo.');
+      }
       setSession(nextBootstrap.session);
       setBootstrap(nextBootstrap);
     } catch (sessionError) {
