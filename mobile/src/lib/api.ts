@@ -57,6 +57,14 @@ export function completeTask(user: User, taskId: string) {
   });
 }
 
+export function rescheduleTask(user: User, taskId: string, dueDate: string) {
+  return apiRequest<{ ok: true }>(`/api/client-activities/${encodeURIComponent(taskId)}/reschedule`, {
+    method: 'POST',
+    user,
+    body: { dueDate },
+  });
+}
+
 export function getClients(user: User) {
   return apiRequest<{ clients: Client[] }>('/api/mobile/clients', {
     method: 'GET',
