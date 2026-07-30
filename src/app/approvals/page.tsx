@@ -164,15 +164,49 @@ function ApprovalsPageComponent() {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });
 
+  const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+    let timeoutId: number | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeout]);
+    } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
+    }
+  };
+
+  const waitForHiddenDocument = async (
+    ref: React.RefObject<HTMLDivElement>,
+    errorMessage: string,
+    timeoutMs = 5000,
+  ): Promise<HTMLElement> => {
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      await waitForPdfRender();
+      const element = ref.current?.firstChild;
+      if (element instanceof HTMLElement) return element;
+    }
+
+    throw new Error(errorMessage);
+  };
+
   const waitForImages = async (element: HTMLElement) => {
     const images = Array.from(element.querySelectorAll('img'));
-    await Promise.all(images.map(image => {
-      if (image.complete) return Promise.resolve();
-      return new Promise<void>(resolve => {
+    await Promise.all(images.map(image => withTimeout(
+      new Promise<void>(resolve => {
+        if (image.complete) {
+          resolve();
+          return;
+        }
         image.onload = () => resolve();
         image.onerror = () => resolve();
-      });
-    }));
+      }),
+      5000,
+      'Una imagen del documento no termino de cargar a tiempo.',
+    ).catch(() => undefined)));
   };
 
   const generateClientSummaryPdfBase64 = async (client: Client): Promise<string> => {
@@ -341,17 +375,40 @@ function ApprovalsPageComponent() {
     const sellerId = item.rawData.advisorId || item.rawData.createdBy || item.rawData.creatorId;
     let sellerEmail = userInfo!.email; 
     if (sellerId) {
-      const sellerProfile = await getUserById(sellerId);
+      const sellerProfile = await withTimeout(
+        getUserById(sellerId),
+        10000,
+        'No se pudo consultar el usuario vendedor a tiempo.',
+      );
       if (sellerProfile?.email) sellerEmail = sellerProfile.email;
     }
 
-    const docPdf = await generateAdvancedPdf(containerElement, item.type);
+    const docPdf = await withTimeout(
+      generateAdvancedPdf(containerElement, item.type),
+      45000,
+      'No se pudo generar el PDF del documento a tiempo.',
+    );
     const orderBase64 = docPdf.output('datauristring').split(',')[1];
 
     let clientBase64 = '';
     if (item.clientId) {
-      const clientObj = await getClient(item.clientId);
-      if (clientObj) clientBase64 = await generateClientSummaryPdfBase64(clientObj);
+      const clientObj = await withTimeout(
+        getClient(item.clientId),
+        10000,
+        'No se pudo consultar el cliente a tiempo.',
+      );
+      if (clientObj) {
+        try {
+          clientBase64 = await withTimeout(
+            generateClientSummaryPdfBase64(clientObj),
+            25000,
+            'No se pudo generar el PDF de alta del cliente a tiempo.',
+          );
+        } catch (clientPdfError) {
+          console.warn('No se pudo generar el PDF moderno de cliente, se usa respaldo legacy:', clientPdfError);
+          clientBase64 = await generateLegacyClientSummaryPdfBase64(clientObj);
+        }
+      }
     }
 
     const attachments = [
@@ -373,16 +430,20 @@ function ApprovalsPageComponent() {
       </div>
     `;
 
-    await sendEmail({
-      accessToken,
-      to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar', sellerEmail],
-      subject: `INGRESO CORRECTO - ${item.type}: ${item.clientName}`,
-      body: approvalEmailBody,
-      attachments,
-      fromName: userInfo!.name,
-      fromEmail: userInfo!.email,
-      replyTo: sellerEmail,
-    });
+    await withTimeout(
+      sendEmail({
+        accessToken,
+        to: ['materiales@airedesantafe.com.ar', 'alucca@airedesantafe.com.ar', 'lchena@airedesantafe.com.ar', sellerEmail],
+        subject: `INGRESO CORRECTO - ${item.type}: ${item.clientName}`,
+        body: approvalEmailBody,
+        attachments,
+        fromName: userInfo!.name,
+        fromEmail: userInfo!.email,
+        replyTo: sellerEmail,
+      }),
+      80000,
+      'El envio de la notificacion demoro demasiado y fue cancelado.',
+    );
   };
 
   const getNotificationErrorMessage = (error: unknown) => (
@@ -428,7 +489,11 @@ function ApprovalsPageComponent() {
             const sellerId = selectedItem.rawData.advisorId || selectedItem.rawData.createdBy || selectedItem.rawData.creatorId;
             let sellerEmail = userInfo.email; 
             if (sellerId) {
-                const sellerProfile = await getUserById(sellerId);
+                const sellerProfile = await withTimeout(
+                  getUserById(sellerId),
+                  10000,
+                  'No se pudo consultar el usuario vendedor a tiempo.',
+                );
                 if (sellerProfile?.email) sellerEmail = sellerProfile.email;
             }
 
@@ -500,13 +565,12 @@ function ApprovalsPageComponent() {
     // Dejamos un pequeño delay para que React dibuje el PDF oculto en el DOM
     setTimeout(async () => {
       try {
-        if (hiddenDocumentContainerRef.current && hiddenDocumentContainerRef.current.firstChild) {
-          const elementToCapture = hiddenDocumentContainerRef.current.firstChild as HTMLElement;
-          await dispatchApprovalEmail(hydratedItem, elementToCapture, accessToken, true);
+        const elementToCapture = await waitForHiddenDocument(
+          hiddenDocumentContainerRef,
+          'No se pudo preparar el documento para reenviar la notificacion.',
+        );
+        await dispatchApprovalEmail(hydratedItem, elementToCapture, accessToken, true);
           toast({ title: 'Notificación reenviada correctamente.' });
-        } else {
-          throw new Error("No se pudo generar el documento.");
-        }
       } catch (error) {
         console.error("Error al renotificar:", error);
         toast({ title: 'Error al reenviar el correo', description: getNotificationErrorMessage(error), variant: 'destructive' });

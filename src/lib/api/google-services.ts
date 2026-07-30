@@ -20,6 +20,7 @@ export interface EmailParams {
 }
 
 const EMAIL_REQUEST_TIMEOUT_MS = 60000;
+const EMAIL_SERVICE_REQUEST_TIMEOUT_MS = 70000;
 const SERVER_EMAIL_PAYLOAD_LIMIT_BYTES = 3_500_000;
 
 function cleanHeader(value: unknown): string {
@@ -165,13 +166,27 @@ export async function sendEmail(params: EmailParams) {
     return sendEmailDirectlyWithGmail(params);
   }
 
-  const response = await apiFetch('/api/services/gmail/send', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(params),
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), EMAIL_SERVICE_REQUEST_TIMEOUT_MS);
+  let response: Response;
+
+  try {
+    response = await apiFetch('/api/services/gmail/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('El envio del correo demoro demasiado y fue cancelado. Revisa la configuracion Gmail/SMTP e intenta nuevamente.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     throw await readServiceError(response, 'No se pudo enviar el correo.');
