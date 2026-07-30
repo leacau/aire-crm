@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && tsc --noEmit"
+    "typecheck": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@genkit-ai/google-genai": "^1.1.0",
@@ -79,7 +81,8 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.7",
     "tailwindcss": "^3.4.17",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^4.1.10"
   },
   "optionalDependencies": {
     "@next/swc-linux-x64-gnu": "15.5.19",
