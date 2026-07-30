@@ -206,16 +206,22 @@ export async function createAdvertisingOrderServer(
   orderData: Omit<AdvertisingOrder, 'id' | 'createdAt'>,
   requester: ServerUser,
 ): Promise<string> {
-  if (!orderData?.clientId || !orderData.product) {
+  const normalizedProduct = String(orderData?.product || orderData?.opportunityTitle || '').trim();
+  const normalizedOrderData = {
+    ...orderData,
+    product: normalizedProduct,
+  };
+
+  if (!normalizedOrderData?.clientId || !normalizedOrderData.product) {
     throw new AdvertisingOrderApiError('Cliente y producto son obligatorios.', 400);
   }
 
-  if (!(await canCreateAdvertisingOrderForClient(orderData.clientId, requester))) {
+  if (!(await canCreateAdvertisingOrderForClient(normalizedOrderData.clientId, requester))) {
     throw new AdvertisingOrderApiError('Forbidden', 403);
   }
 
   const { billingRequestsSrl, billingRequestsSas, billingRequestsAvion, restOrderData } =
-    splitOrderPayload(orderData);
+    splitOrderPayload(normalizedOrderData);
   const docRef = dbAdmin.collection('advertising_orders').doc();
   const batch = dbAdmin.batch();
 

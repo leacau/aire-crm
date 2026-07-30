@@ -784,6 +784,7 @@ export function AdvertisingForm() {
       const selectedAgency = agencies.find(a => a.id === values.agencyId);
       const selectedOpp = opportunities.find(o => o.id === values.opportunityId);
       const oppTitle = selectedOpp?.title || values.newOpportunityTitle?.trim();
+      const productTitle = values.product?.trim() || oppTitle || "Campaña";
 
       const safeStartDate = (values.startDate && isValid(values.startDate)) ? values.startDate.toISOString() : new Date().toISOString();
       const safeEndDate = (values.endDate && isValid(values.endDate)) ? values.endDate.toISOString() : new Date().toISOString();
@@ -794,7 +795,7 @@ export function AdvertisingForm() {
           clientName: selectedClient?.razonSocial || selectedClient?.denominacion || "Cliente (Vista Previa)",
           agencyId: values.agencyId === "none" ? undefined : values.agencyId,
           agencyName: values.agencyId === "none" ? undefined : selectedAgency?.name,
-          product: "", 
+          product: productTitle,
           event: values.event || undefined,
           opportunityId: values.opportunityId || "",
           opportunityTitle: oppTitle || "Campaña",
