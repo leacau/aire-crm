@@ -16,6 +16,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { env, requireEnv } from '../config/env';
 import { getAdvertisingOrderDetail, getAdvertisingOrders } from '../lib/api';
 import type {
+  ApprovalHistoryItem,
   ApprovalStatus,
   MobileAdvertisingBillingRequest,
   MobileAdvertisingOrderDetail,
@@ -53,6 +54,19 @@ function formatDate(value?: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value.slice(0, 10);
   return parsed.toLocaleDateString('es-AR');
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function getStatusStyle(status: ApprovalStatus) {
@@ -317,7 +331,7 @@ function AdvertisingOrderDetail({
             <View key={`${item.programId}-${index}`} style={styles.compactItem}>
               <Text style={styles.itemTitle}>{item.type}</Text>
               <Text style={styles.meta}>
-                {[item.month, item.programId, item.seconds ? `${item.seconds}s` : '', `${item.repetitions} rep.`].filter(Boolean).join(' - ')}
+                {[item.month, item.programName || item.programId, item.seconds ? `${item.seconds}s` : '', `${item.repetitions} rep.`].filter(Boolean).join(' - ')}
               </Text>
               {!!item.unitRate && <Text style={styles.meta}>Tarifa: {formatCurrency(item.unitRate)}</Text>}
             </View>
@@ -375,6 +389,10 @@ function AdvertisingOrderDetail({
           <Text style={styles.itemText}>{order.adminComments}</Text>
         </View>
       )}
+
+      {!!order?.approvalHistory.length && (
+        <ApprovalHistoryCard history={order.approvalHistory} />
+      )}
     </ScrollView>
   );
 }
@@ -423,6 +441,30 @@ function BillingRequestRow({
       <Text style={styles.meta}>
         {item.paymentType || 'Se paga'}{item.canjeDescription ? `: ${item.canjeDescription}` : ''}
       </Text>
+    </View>
+  );
+}
+
+function ApprovalHistoryCard({ history }: { history: ApprovalHistoryItem[] }) {
+  const sortedHistory = [...history].sort((a, b) => (
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  ));
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>Historial de aprobacion</Text>
+      {sortedHistory.map((item, index) => (
+        <View key={`${item.timestamp}-${index}`} style={styles.compactItem}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.itemTitle}>{item.status}</Text>
+            <Text style={styles.meta}>{formatDateTime(item.timestamp)}</Text>
+          </View>
+          <Text style={styles.meta}>
+            {item.userName || 'Usuario'}{item.userRole ? ` - ${item.userRole}` : ''}
+          </Text>
+          {!!item.comments && <Text style={styles.itemText}>{item.comments}</Text>}
+        </View>
+      ))}
     </View>
   );
 }

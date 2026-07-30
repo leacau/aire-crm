@@ -95,6 +95,7 @@ export type MobileAdvertisingOrderDetail = MobileAdvertisingOrderSummary & {
   srlItems: Array<{
     month?: string;
     programId?: string;
+    programName?: string;
     type: string;
     seconds?: number;
     repetitions: number;

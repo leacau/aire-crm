@@ -30,12 +30,15 @@ describe('mobile-advertising-orders', () => {
   });
 
   it('maps detail items and billing requests for mobile order detail', () => {
-    const detail = toMobileAdvertisingOrderDetail(order());
+    const detail = toMobileAdvertisingOrderDetail(order(), {
+      programNamesById: new Map([['program-1', 'Programa Manana']]),
+    });
 
     expect(detail.srlItems).toEqual([
       {
         month: '2026-07',
         programId: 'program-1',
+        programName: 'Programa Manana',
         type: 'Spot',
         seconds: 15,
         repetitions: 3,

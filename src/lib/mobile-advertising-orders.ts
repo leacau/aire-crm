@@ -53,6 +53,7 @@ export type MobileAdvertisingOrderDetail = MobileAdvertisingOrderSummary & {
 export type MobileAdvertisingOrderSrlItem = {
   month?: string;
   programId?: string;
+  programName?: string;
   type: string;
   seconds?: number;
   repetitions: number;
@@ -135,7 +136,14 @@ export function toMobileAdvertisingOrderSummary(order: AdvertisingOrder): Mobile
   };
 }
 
-export function toMobileAdvertisingOrderDetail(order: AdvertisingOrder): MobileAdvertisingOrderDetail {
+type MobileAdvertisingOrderMapOptions = {
+  programNamesById?: Map<string, string>;
+};
+
+export function toMobileAdvertisingOrderDetail(
+  order: AdvertisingOrder,
+  options: MobileAdvertisingOrderMapOptions = {},
+): MobileAdvertisingOrderDetail {
   const summary = toMobileAdvertisingOrderSummary(order);
 
   return {
@@ -150,7 +158,7 @@ export function toMobileAdvertisingOrderDetail(order: AdvertisingOrder): MobileA
     adminComments: order.adminComments,
     approvedAt: order.approvedAt,
     approvedByName: order.approvedByName,
-    srlItems: (order.srlItems || []).map(toMobileSrlItem),
+    srlItems: (order.srlItems || []).map(item => toMobileSrlItem(item, options.programNamesById)),
     sasItems: (order.sasItems || []).map(toMobileSasItem),
     billingRequests: {
       srl: order.billingRequestsSrl || [],
@@ -161,10 +169,20 @@ export function toMobileAdvertisingOrderDetail(order: AdvertisingOrder): MobileA
   };
 }
 
-function toMobileSrlItem(item: AdvertisingOrderItemSrl): MobileAdvertisingOrderSrlItem {
+function resolveProgramName(programId: string | undefined, programNamesById?: Map<string, string>) {
+  if (!programId) return undefined;
+  if (programId === 'Personalizado') return 'Personalizado';
+  return programNamesById?.get(programId) || programId;
+}
+
+function toMobileSrlItem(
+  item: AdvertisingOrderItemSrl,
+  programNamesById?: Map<string, string>,
+): MobileAdvertisingOrderSrlItem {
   return {
     month: item.month,
     programId: item.programId,
+    programName: resolveProgramName(item.programId, programNamesById),
     type: item.customType || item.adType || 'Pauta SRL',
     seconds: item.seconds,
     repetitions: countRepetitions(item),

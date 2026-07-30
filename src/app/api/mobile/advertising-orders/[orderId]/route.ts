@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdvertisingOrderServer } from '@/lib/server/advertising-orders';
 import { isMobileSessionResponse, requireMobileSession } from '@/lib/server/mobile-auth';
+import { listProgramsServer } from '@/lib/server/programs';
 import { routeErrorResponse } from '@/lib/server/route-errors';
 import { toMobileAdvertisingOrderDetail } from '@/lib/mobile-advertising-orders';
 
@@ -24,7 +25,12 @@ export async function GET(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'Orden no encontrada.' }, { status: 404 });
     }
 
-    return NextResponse.json({ order: toMobileAdvertisingOrderDetail(order) });
+    const programs = await listProgramsServer();
+    const programNamesById = new Map(programs.map(program => [program.id, program.name]));
+
+    return NextResponse.json({
+      order: toMobileAdvertisingOrderDetail(order, { programNamesById }),
+    });
   } catch (error) {
     return routeErrorResponse(error, 'MOBILE', {
       action: 'ADVERTISING ORDER DETAIL',
