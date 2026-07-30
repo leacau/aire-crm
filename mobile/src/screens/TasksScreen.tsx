@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
   Modal,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,6 +18,15 @@ import type { Client, ClientActivity } from '../lib/types';
 import { ClientDetailScreen } from './ClientDetailScreen';
 import { LoadingScreen } from './LoadingScreen';
 import { OpportunityDetailScreen } from './OpportunityDetailScreen';
+
+type TaskFilter = 'all' | 'overdue' | 'today' | 'week';
+
+const taskFilters: Array<{ id: TaskFilter; label: string }> = [
+  { id: 'all', label: 'Todas' },
+  { id: 'overdue', label: 'Vencidas' },
+  { id: 'today', label: 'Hoy' },
+  { id: 'week', label: '7 dias' },
+];
 
 function formatDate(value?: string) {
   if (!value) return '-';
@@ -38,9 +48,42 @@ function addDays(days: number) {
   return toDateInputValue(date);
 }
 
+function toStartOfDay(date: Date) {
+  const nextDate = new Date(date);
+  nextDate.setHours(0, 0, 0, 0);
+  return nextDate;
+}
+
+function getTaskDueDate(task: ClientActivity) {
+  if (!task.dueDate) return null;
+  const parsed = new Date(task.dueDate);
+  return Number.isNaN(parsed.getTime()) ? null : toStartOfDay(parsed);
+}
+
+function matchesTaskFilter(task: ClientActivity, filter: TaskFilter) {
+  if (filter === 'all') return true;
+
+  const dueDate = getTaskDueDate(task);
+  if (!dueDate) return false;
+
+  const today = toStartOfDay(new Date());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const nextWeek = new Date(today);
+  nextWeek.setDate(nextWeek.getDate() + 8);
+
+  if (filter === 'overdue') return dueDate < today;
+  if (filter === 'today') return dueDate >= today && dueDate < tomorrow;
+  if (filter === 'week') return dueDate >= today && dueDate < nextWeek;
+
+  return true;
+}
+
 export function TasksScreen() {
   const { bootstrap, firebaseUser } = useAuth();
   const [tasks, setTasks] = useState<ClientActivity[]>([]);
+  const [query, setQuery] = useState('');
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTask, setSelectedTask] = useState<ClientActivity | null>(null);
@@ -114,6 +157,27 @@ export function TasksScreen() {
     }
   };
 
+  const visibleTasks = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return tasks
+      .filter(task => matchesTaskFilter(task, taskFilter))
+      .filter(task => (
+        !normalized
+        || task.clientName?.toLowerCase().includes(normalized)
+        || task.prospectName?.toLowerCase().includes(normalized)
+        || task.opportunityTitle?.toLowerCase().includes(normalized)
+        || task.observation?.toLowerCase().includes(normalized)
+        || task.type?.toLowerCase().includes(normalized)
+      ));
+  }, [query, taskFilter, tasks]);
+
+  const filterTotals = useMemo(() => {
+    return taskFilters.reduce((acc, filter) => {
+      acc[filter.id] = tasks.filter(task => matchesTaskFilter(task, filter.id)).length;
+      return acc;
+    }, {} as Record<TaskFilter, number>);
+  }, [tasks]);
+
   if (loading) return <LoadingScreen label="Cargando tareas..." />;
 
   if (selectedClientContext) {
@@ -141,13 +205,33 @@ export function TasksScreen() {
     <View style={styles.screen}>
       <FlatList
         contentContainerStyle={styles.list}
-        data={tasks}
+        data={visibleTasks}
         keyExtractor={item => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
         ListHeaderComponent={(
           <View style={styles.header}>
             <Text style={styles.title}>Tareas pendientes</Text>
-            <Text style={styles.subtitle}>{tasks.length} tareas accesibles para tu usuario.</Text>
+            <Text style={styles.subtitle}>{visibleTasks.length} tareas segun filtros.</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+              {taskFilters.map(filter => (
+                <Pressable
+                  key={filter.id}
+                  onPress={() => setTaskFilter(filter.id)}
+                  style={[styles.filterChip, taskFilter === filter.id && styles.filterChipActive]}
+                >
+                  <Text style={[styles.filterChipText, taskFilter === filter.id && styles.filterChipTextActive]}>
+                    {filter.label} {filterTotals[filter.id] ?? 0}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <TextInput
+              placeholder="Buscar tarea, cliente u oportunidad"
+              placeholderTextColor="#94a3b8"
+              style={styles.search}
+              value={query}
+              onChangeText={setQuery}
+            />
           </View>
         )}
         ListEmptyComponent={<Text style={styles.empty}>No hay tareas pendientes.</Text>}
@@ -246,6 +330,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   header: {
+    gap: 10,
     marginBottom: 4,
   },
   title: {
@@ -257,6 +342,39 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 14,
     marginTop: 4,
+  },
+  filterRow: {
+    gap: 8,
+    paddingRight: 18,
+  },
+  filterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  filterChipActive: {
+    borderColor: '#0f172a',
+    backgroundColor: '#0f172a',
+  },
+  filterChipText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
+  },
+  search: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    paddingHorizontal: 13,
+    paddingVertical: 12,
   },
   empty: {
     color: '#64748b',

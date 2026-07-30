@@ -5,6 +5,7 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +19,17 @@ import { ClientDetailScreen } from './ClientDetailScreen';
 import { LoadingScreen } from './LoadingScreen';
 
 const statusOptions: PaymentStatus[] = ['Pendiente', 'Reclamado', 'Pagado', 'Incobrable'];
+
+type BillingFilter = 'all' | 'pending' | 'claimed' | 'critical' | 'contact' | 'paid';
+
+const billingFilters: Array<{ id: BillingFilter; label: string }> = [
+  { id: 'all', label: 'Todas' },
+  { id: 'pending', label: 'Pendientes' },
+  { id: 'claimed', label: 'Reclamadas' },
+  { id: 'critical', label: 'Criticas 60+' },
+  { id: 'contact', label: 'Contactar' },
+  { id: 'paid', label: 'Pagadas' },
+];
 
 function formatCurrency(value?: number) {
   return new Intl.NumberFormat('es-AR', {
@@ -50,11 +62,32 @@ function normalizeText(value?: string) {
     .trim();
 }
 
+function isNextContactDue(value?: string | null) {
+  if (!value) return false;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return false;
+
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  return parsed <= today;
+}
+
+function matchesBillingFilter(payment: PaymentEntry, filter: BillingFilter) {
+  if (filter === 'all') return true;
+  if (filter === 'pending') return payment.status === 'Pendiente';
+  if (filter === 'claimed') return payment.status === 'Reclamado';
+  if (filter === 'paid') return payment.status === 'Pagado';
+  if (filter === 'critical') return payment.status !== 'Pagado' && Number(payment.daysLate || 0) >= 60;
+  if (filter === 'contact') return payment.status !== 'Pagado' && isNextContactDue(payment.nextContactAt);
+  return true;
+}
+
 export function BillingScreen() {
   const { firebaseUser } = useAuth();
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [query, setQuery] = useState('');
+  const [billingFilter, setBillingFilter] = useState<BillingFilter>('pending');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<PaymentEntry | null>(null);
@@ -86,16 +119,24 @@ export function BillingScreen() {
       return (b.daysLate || 0) - (a.daysLate || 0);
     });
 
-    if (!normalized) return pendingFirst;
+    return pendingFirst
+      .filter(payment => matchesBillingFilter(payment, billingFilter))
+      .filter(payment => (
+        !normalized
+        || payment.razonSocial?.toLowerCase().includes(normalized)
+        || payment.advisorName?.toLowerCase().includes(normalized)
+        || payment.comprobanteNumber?.toLowerCase().includes(normalized)
+        || payment.company?.toLowerCase().includes(normalized)
+        || payment.status?.toLowerCase().includes(normalized)
+      ));
+  }, [billingFilter, payments, query]);
 
-    return pendingFirst.filter(payment => (
-      payment.razonSocial?.toLowerCase().includes(normalized)
-      || payment.advisorName?.toLowerCase().includes(normalized)
-      || payment.comprobanteNumber?.toLowerCase().includes(normalized)
-      || payment.company?.toLowerCase().includes(normalized)
-      || payment.status?.toLowerCase().includes(normalized)
-    ));
-  }, [payments, query]);
+  const filterTotals = useMemo(() => {
+    return billingFilters.reduce((acc, filter) => {
+      acc[filter.id] = payments.filter(payment => matchesBillingFilter(payment, filter.id)).length;
+      return acc;
+    }, {} as Record<BillingFilter, number>);
+  }, [payments]);
 
   const totals = useMemo(() => {
     return visiblePayments.reduce((acc, payment) => {
@@ -179,6 +220,19 @@ export function BillingScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Mora</Text>
             <Text style={styles.subtitle}>{totals.count} pendientes - {formatCurrency(totals.pending)}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+              {billingFilters.map(filter => (
+                <Pressable
+                  key={filter.id}
+                  onPress={() => setBillingFilter(filter.id)}
+                  style={[styles.filterChip, billingFilter === filter.id && styles.filterChipActive]}
+                >
+                  <Text style={[styles.filterChipText, billingFilter === filter.id && styles.filterChipTextActive]}>
+                    {filter.label} {filterTotals[filter.id] ?? 0}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
             <TextInput
               placeholder="Buscar por cliente, asesor o comprobante"
               placeholderTextColor="#94a3b8"
@@ -216,6 +270,9 @@ export function BillingScreen() {
                 <Text style={styles.meta}>Prox. contacto: {formatDate(item.nextContactAt)}</Text>
               </View>
 
+              {isNextContactDue(item.nextContactAt) && item.status !== 'Pagado' && (
+                <Text style={styles.contactDueBadge}>Contactar hoy</Text>
+              )}
               <Text style={styles.note}>Estado: {item.status}{item.notes ? `: ${item.notes}` : ''}</Text>
               <View style={styles.cardActions}>
                 <Pressable onPress={() => openPaymentEditor(item)} style={styles.cardActionButton}>
@@ -307,6 +364,30 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 14,
   },
+  filterRow: {
+    gap: 8,
+    paddingRight: 18,
+  },
+  filterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  filterChipActive: {
+    borderColor: '#0f172a',
+    backgroundColor: '#0f172a',
+  },
+  filterChipText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
+  },
   search: {
     borderWidth: 1,
     borderColor: '#cbd5e1',
@@ -394,6 +475,17 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontSize: 13,
     lineHeight: 18,
+  },
+  contactDueBadge: {
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: '#fef3c7',
+    color: '#92400e',
+    fontSize: 11,
+    fontWeight: '900',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   cardActions: {
     flexDirection: 'row',
