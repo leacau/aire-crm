@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
+  Linking,
   Modal,
   Pressable,
   RefreshControl,
@@ -44,6 +45,34 @@ function formatDate(value?: string | null) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value.slice(0, 10);
   return parsed.toLocaleDateString('es-AR');
+}
+
+function parseAmountInput(value: string) {
+  const normalized = value
+    .replace(/\$/g, '')
+    .replace(/\s/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildWhatsAppUrl(phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  return digits ? `https://wa.me/${digits}` : '';
+}
+
+async function openLink(url: string, errorMessage: string) {
+  try {
+    const supported = await Linking.canOpenURL(url);
+    if (!supported) {
+      Alert.alert('No se pudo abrir', errorMessage);
+      return;
+    }
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert('No se pudo abrir', errorMessage);
+  }
 }
 
 function getStatusStyle(status: string) {
@@ -93,6 +122,7 @@ export function BillingScreen() {
   const [selectedPayment, setSelectedPayment] = useState<PaymentEntry | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editStatus, setEditStatus] = useState<PaymentStatus>('Pendiente');
+  const [editPendingAmount, setEditPendingAmount] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editNextContactAt, setEditNextContactAt] = useState('');
   const [saving, setSaving] = useState(false);
@@ -111,7 +141,7 @@ export function BillingScreen() {
   }, [loadBilling]);
 
   const visiblePayments = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = normalizeText(query);
     const pendingFirst = [...payments].sort((a, b) => {
       const statusWeight = (entry: PaymentEntry) => entry.status === 'Pagado' ? 1 : 0;
       const byStatus = statusWeight(a) - statusWeight(b);
@@ -123,11 +153,11 @@ export function BillingScreen() {
       .filter(payment => matchesBillingFilter(payment, billingFilter))
       .filter(payment => (
         !normalized
-        || payment.razonSocial?.toLowerCase().includes(normalized)
-        || payment.advisorName?.toLowerCase().includes(normalized)
-        || payment.comprobanteNumber?.toLowerCase().includes(normalized)
-        || payment.company?.toLowerCase().includes(normalized)
-        || payment.status?.toLowerCase().includes(normalized)
+        || normalizeText(payment.razonSocial).includes(normalized)
+        || normalizeText(payment.advisorName).includes(normalized)
+        || normalizeText(payment.comprobanteNumber).includes(normalized)
+        || normalizeText(payment.company).includes(normalized)
+        || normalizeText(payment.status).includes(normalized)
       ));
   }, [billingFilter, payments, query]);
 
@@ -171,6 +201,7 @@ export function BillingScreen() {
   const openPaymentEditor = (payment: PaymentEntry) => {
     setSelectedPayment(payment);
     setEditStatus(payment.status);
+    setEditPendingAmount(String(payment.pendingAmount ?? payment.amount ?? 0));
     setEditNotes(payment.notes || '');
     setEditNextContactAt(payment.nextContactAt ? payment.nextContactAt.slice(0, 10) : '');
   };
@@ -180,10 +211,17 @@ export function BillingScreen() {
   const savePayment = async () => {
     if (!firebaseUser || !selectedPayment) return;
 
+    const parsedPendingAmount = parseAmountInput(editPendingAmount);
+    if (parsedPendingAmount === null) {
+      Alert.alert('Importe invalido', 'Ingresa un importe pendiente valido.');
+      return;
+    }
+
     setSaving(true);
     try {
       await updatePaymentEntry(firebaseUser, selectedPayment.id, {
         status: editStatus,
+        pendingAmount: editStatus === 'Pagado' ? 0 : parsedPendingAmount,
         notes: editNotes.trim(),
         nextContactAt: editNextContactAt.trim() || null,
       });
@@ -275,6 +313,30 @@ export function BillingScreen() {
               )}
               <Text style={styles.note}>Estado: {item.status}{item.notes ? `: ${item.notes}` : ''}</Text>
               <View style={styles.cardActions}>
+                {!!paymentClient?.phone && (
+                  <>
+                    <Pressable
+                      onPress={() => openLink(`tel:${paymentClient.phone}`, 'No se pudo iniciar la llamada.')}
+                      style={styles.iconActionButton}
+                    >
+                      <MaterialCommunityIcons name="phone-outline" size={18} color="#0f172a" />
+                    </Pressable>
+                    <Pressable
+                      onPress={() => openLink(buildWhatsAppUrl(paymentClient.phone || ''), 'No se pudo abrir WhatsApp.')}
+                      style={styles.iconActionButton}
+                    >
+                      <MaterialCommunityIcons name="whatsapp" size={18} color="#16a34a" />
+                    </Pressable>
+                  </>
+                )}
+                {!!paymentClient?.email && (
+                  <Pressable
+                    onPress={() => openLink(`mailto:${paymentClient.email}`, 'No se pudo abrir el correo.')}
+                    style={styles.iconActionButton}
+                  >
+                    <MaterialCommunityIcons name="email-outline" size={18} color="#0f172a" />
+                  </Pressable>
+                )}
                 <Pressable onPress={() => openPaymentEditor(item)} style={styles.cardActionButton}>
                   <MaterialCommunityIcons name="pencil-outline" size={18} color="#0f172a" />
                   <Text style={styles.cardActionText}>Editar</Text>
@@ -311,6 +373,17 @@ export function BillingScreen() {
               ))}
             </View>
 
+            <Text style={styles.inputLabel}>Importe pendiente</Text>
+            <TextInput
+              keyboardType="numeric"
+              placeholder="Importe pendiente"
+              placeholderTextColor="#94a3b8"
+              style={styles.dateInput}
+              value={editPendingAmount}
+              onChangeText={setEditPendingAmount}
+            />
+
+            <Text style={styles.inputLabel}>Nota o aclaracion</Text>
             <TextInput
               multiline
               placeholder="Nota o aclaracion"
@@ -320,6 +393,7 @@ export function BillingScreen() {
               onChangeText={setEditNotes}
             />
 
+            <Text style={styles.inputLabel}>Proximo contacto</Text>
             <TextInput
               placeholder="Proximo contacto AAAA-MM-DD"
               placeholderTextColor="#94a3b8"
@@ -503,6 +577,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
+  iconActionButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+  },
   cardActionText: {
     color: '#0f172a',
     fontSize: 12,
@@ -552,6 +636,12 @@ const styles = StyleSheet.create({
   },
   statusOptionTextActive: {
     color: '#ffffff',
+  },
+  inputLabel: {
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   modalInput: {
     minHeight: 100,
