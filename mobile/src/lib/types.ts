@@ -141,6 +141,7 @@ export type Client = {
   email?: string;
   localidad?: string;
   provincia?: string;
+  isDeactivated?: boolean;
 };
 
 export type Person = {
