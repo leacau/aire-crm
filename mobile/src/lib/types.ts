@@ -62,6 +62,72 @@ export type MobileOpportunityDetail = {
   client?: Client | null;
 };
 
+export type MobileAdvertisingOrderSummary = {
+  id: string;
+  title: string;
+  clientId: string;
+  clientName: string;
+  opportunityId?: string;
+  opportunityTitle?: string;
+  accountExecutive: string;
+  status: ApprovalStatus;
+  createdAt: string;
+  startDate?: string;
+  endDate?: string;
+  event?: string;
+  totalSrl: number;
+  totalSas: number;
+  totalOrder: number;
+  srlItemCount: number;
+  sasItemCount: number;
+  billingRequestCount: number;
+  hasMaterial: boolean;
+};
+
+export type MobileAdvertisingOrderDetail = MobileAdvertisingOrderSummary & {
+  agencyName?: string;
+  materialUrl?: string;
+  materialUrls: string[];
+  observations?: string;
+  adminComments?: string;
+  approvedAt?: string;
+  approvedByName?: string;
+  srlItems: Array<{
+    month?: string;
+    programId?: string;
+    type: string;
+    seconds?: number;
+    repetitions: number;
+    unitRate?: number;
+  }>;
+  sasItems: Array<{
+    month?: string;
+    format?: string;
+    type: string;
+    detail?: string;
+    unitRate?: number;
+  }>;
+  billingRequests: {
+    srl: Array<MobileAdvertisingBillingRequest>;
+    sas: Array<MobileAdvertisingBillingRequest>;
+    avion: Array<MobileAdvertisingBillingRequest>;
+  };
+  approvalHistory: ApprovalHistoryItem[];
+};
+
+export type MobileAdvertisingBillingRequest = {
+  id?: string;
+  company?: 'SRL' | 'SAS' | 'AVION';
+  date?: string;
+  grossAmount?: number;
+  adjustment?: number;
+  ivaSas?: number;
+  amount?: number;
+  paymentType?: 'Se paga' | 'Canje' | 'Mixto';
+  canjeDescription?: string;
+  createdAt?: string;
+};
+
 export type BillingBootstrap = {
   payments: PaymentEntry[];
   clients?: Client[];

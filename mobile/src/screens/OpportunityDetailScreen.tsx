@@ -14,6 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthProvider';
 import { createClientActivity, getOpportunityDetail, updateOpportunity } from '../lib/api';
 import type { Client, Opportunity, OpportunityStage } from '../lib/types';
+import { AdvertisingOrdersScreen } from './AdvertisingOrdersScreen';
 import { LoadingScreen } from './LoadingScreen';
 
 type OpportunityDetailScreenProps = {
@@ -108,6 +109,7 @@ export function OpportunityDetailScreen({
   const [editFollowUpCurrent, setEditFollowUpCurrent] = useState('');
   const [editFollowUpNext, setEditFollowUpNext] = useState('');
   const [editHighProbability, setEditHighProbability] = useState(false);
+  const [advertisingOpen, setAdvertisingOpen] = useState(false);
 
   const loadDetail = useCallback(async () => {
     if (!firebaseUser) return;
@@ -245,6 +247,16 @@ export function OpportunityDetailScreen({
 
   if (loading) return <LoadingScreen label="Cargando oportunidad..." />;
 
+  if (advertisingOpen && opportunity) {
+    return (
+      <AdvertisingOrdersScreen
+        opportunityId={opportunity.id}
+        title={`Publicidad - ${opportunity.title || 'Oportunidad'}`}
+        onBack={() => setAdvertisingOpen(false)}
+      />
+    );
+  }
+
   if (!opportunity) {
     return (
       <View style={styles.emptyState}>
@@ -298,6 +310,11 @@ export function OpportunityDetailScreen({
         <Pressable onPress={openEditModal} style={styles.editButton}>
           <MaterialCommunityIcons name="pencil-outline" size={20} color="#ffffff" />
           <Text style={styles.editButtonText}>Actualizar oportunidad</Text>
+        </Pressable>
+
+        <Pressable onPress={() => setAdvertisingOpen(true)} style={styles.advertisingButton}>
+          <MaterialCommunityIcons name="radio-tower" size={20} color="#0f172a" />
+          <Text style={styles.advertisingButtonText}>Ver publicidad</Text>
         </Pressable>
 
         {!!client && !!onOpenClient && (
@@ -590,6 +607,21 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
   },
   clientButtonText: {
+    color: '#0f172a',
+    fontWeight: '900',
+  },
+  advertisingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    paddingVertical: 13,
+  },
+  advertisingButtonText: {
     color: '#0f172a',
     fontWeight: '900',
   },

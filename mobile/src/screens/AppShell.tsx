@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/AuthProvider';
+import { AdvertisingOrdersScreen } from './AdvertisingOrdersScreen';
 import { ApprovalsScreen } from './ApprovalsScreen';
 import { BillingScreen } from './BillingScreen';
 import { ClientsScreen } from './ClientsScreen';
@@ -10,13 +11,14 @@ import { OpportunitiesScreen } from './OpportunitiesScreen';
 import { ProspectsScreen } from './ProspectsScreen';
 import { TasksScreen } from './TasksScreen';
 
-export type AppTab = 'home' | 'tasks' | 'clients' | 'opportunities' | 'billing' | 'approvals' | 'prospects';
+export type AppTab = 'home' | 'tasks' | 'clients' | 'opportunities' | 'advertising' | 'billing' | 'approvals' | 'prospects';
 
 const tabs: Array<{ id: AppTab; label: string }> = [
   { id: 'home', label: 'Inicio' },
   { id: 'tasks', label: 'Tareas' },
   { id: 'clients', label: 'Clientes' },
   { id: 'opportunities', label: 'Ops' },
+  { id: 'advertising', label: 'Publi' },
   { id: 'billing', label: 'Mora' },
   { id: 'approvals', label: 'Aprob' },
 ];
@@ -43,6 +45,7 @@ export function AppShell() {
         {tab === 'tasks' && <TasksScreen />}
         {tab === 'clients' && <ClientsScreen />}
         {tab === 'opportunities' && <OpportunitiesScreen />}
+        {tab === 'advertising' && <AdvertisingOrdersScreen />}
         {tab === 'billing' && <BillingScreen />}
         {tab === 'approvals' && <ApprovalsScreen />}
         {tab === 'prospects' && <ProspectsScreen />}

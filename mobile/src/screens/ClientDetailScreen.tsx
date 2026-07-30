@@ -15,6 +15,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthProvider';
 import { createClientActivity, createQuickOpportunity, getClientDetail, getClientTangoBillingSummary } from '../lib/api';
 import type { Client, ClientActivity, ClientTangoBillingSummary, Opportunity, Person } from '../lib/types';
+import { AdvertisingOrdersScreen } from './AdvertisingOrdersScreen';
 import { LoadingScreen } from './LoadingScreen';
 import { OpportunityDetailScreen } from './OpportunityDetailScreen';
 
@@ -97,6 +98,7 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
   const [opportunityModalOpen, setOpportunityModalOpen] = useState(false);
   const [opportunityTitle, setOpportunityTitle] = useState('');
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [advertisingOpen, setAdvertisingOpen] = useState(false);
 
   const loadBillingSummary = useCallback(async () => {
     if (!firebaseUser) return;
@@ -261,6 +263,16 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
     );
   }
 
+  if (advertisingOpen && client) {
+    return (
+      <AdvertisingOrdersScreen
+        clientId={client.id}
+        title={`Publicidad - ${resolveClientName(client)}`}
+        onBack={() => setAdvertisingOpen(false)}
+      />
+    );
+  }
+
   if (!client) {
     return (
       <View style={styles.emptyState}>
@@ -311,6 +323,11 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
         <Pressable onPress={openOpportunityModal} style={styles.opportunityButton}>
           <MaterialCommunityIcons name="briefcase-plus-outline" size={20} color="#ffffff" />
           <Text style={styles.opportunityButtonText}>Crear oportunidad</Text>
+        </Pressable>
+
+        <Pressable onPress={() => setAdvertisingOpen(true)} style={styles.advertisingButton}>
+          <MaterialCommunityIcons name="radio-tower" size={20} color="#0f172a" />
+          <Text style={styles.advertisingButtonText}>Ver publicidad</Text>
         </Pressable>
 
         <View style={styles.card}>
@@ -624,6 +641,21 @@ const styles = StyleSheet.create({
   },
   opportunityButtonText: {
     color: '#ffffff',
+    fontWeight: '900',
+  },
+  advertisingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    paddingVertical: 13,
+  },
+  advertisingButtonText: {
+    color: '#0f172a',
     fontWeight: '900',
   },
   card: {

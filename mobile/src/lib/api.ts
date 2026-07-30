@@ -9,6 +9,8 @@ import type {
   ClientTangoBillingSummary,
   CreateClientActivityInput,
   MobileBootstrap,
+  MobileAdvertisingOrderDetail,
+  MobileAdvertisingOrderSummary,
   MobileClientDetail,
   MobileOpportunityDetail,
   Opportunity,
@@ -139,6 +141,35 @@ export function updateOpportunity(
     user,
     body: { data },
   });
+}
+
+export function getAdvertisingOrders(
+  user: User,
+  filters: { clientId?: string; opportunityId?: string; status?: string } = {},
+) {
+  const params = new URLSearchParams();
+  if (filters.clientId) params.set('clientId', filters.clientId);
+  if (filters.opportunityId) params.set('opportunityId', filters.opportunityId);
+  if (filters.status && filters.status !== 'all') params.set('status', filters.status);
+
+  const query = params.toString();
+  return apiRequest<{ orders: MobileAdvertisingOrderSummary[] }>(
+    `/api/mobile/advertising-orders${query ? `?${query}` : ''}`,
+    {
+      method: 'GET',
+      user,
+    },
+  );
+}
+
+export function getAdvertisingOrderDetail(user: User, orderId: string) {
+  return apiRequest<{ order: MobileAdvertisingOrderDetail }>(
+    `/api/mobile/advertising-orders/${encodeURIComponent(orderId)}`,
+    {
+      method: 'GET',
+      user,
+    },
+  );
 }
 
 export function getBillingBootstrap(user: User) {
