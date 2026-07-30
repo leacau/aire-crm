@@ -78,6 +78,11 @@ function resolveClientName(client?: Client) {
   return client?.denominacion || client?.razonSocial || 'Cliente';
 }
 
+function buildWhatsAppUrl(phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  return digits ? `https://wa.me/${digits}` : '';
+}
+
 export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDetailScreenProps) {
   const { firebaseUser } = useAuth();
   const [client, setClient] = useState<Client | undefined>(initialClient);
@@ -415,13 +420,22 @@ export function ClientDetailScreen({ clientId, initialClient, onBack }: ClientDe
                 </View>
                 <View style={styles.contactActions}>
                   {!!person.phone && (
-                    <Pressable
-                      accessibilityLabel={`Llamar a ${person.name}`}
-                      onPress={() => openLink(`tel:${person.phone}`, 'No se pudo iniciar la llamada.')}
-                      style={styles.contactActionButton}
-                    >
-                      <MaterialCommunityIcons name="phone-outline" size={20} color="#0f172a" />
-                    </Pressable>
+                    <>
+                      <Pressable
+                        accessibilityLabel={`Llamar a ${person.name}`}
+                        onPress={() => openLink(`tel:${person.phone}`, 'No se pudo iniciar la llamada.')}
+                        style={styles.contactActionButton}
+                      >
+                        <MaterialCommunityIcons name="phone-outline" size={20} color="#0f172a" />
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel={`Enviar WhatsApp a ${person.name}`}
+                        onPress={() => openLink(buildWhatsAppUrl(person.phone || ''), 'No se pudo abrir WhatsApp.')}
+                        style={styles.contactActionButton}
+                      >
+                        <MaterialCommunityIcons name="whatsapp" size={20} color="#16a34a" />
+                      </Pressable>
+                    </>
                   )}
                   {!!person.email && (
                     <Pressable

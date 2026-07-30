@@ -380,7 +380,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
       )}
 
       <div className="overflow-x-auto rounded-md border bg-white">
-        <Table className="min-w-[1680px]">
+        <Table className="min-w-[1540px]">
           <TableHeader>
             <TableRow>
               <TableHead>Compania</TableHead>
@@ -394,13 +394,12 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
               <TableHead className="text-right">Sin impuestos</TableHead>
               <TableHead className="text-right">Bonificado</TableHead>
               <TableHead className="text-right">Total</TableHead>
-              <TableHead>IDs Tango</TableHead>
               <TableHead className="text-right">PDF</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={13} className="h-32 text-center"><Spinner size="large" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={12} className="h-32 text-center"><Spinner size="large" /></TableCell></TableRow>
             ) : visibleInvoices.length > 0 ? visibleInvoices.map((invoice, index) => {
               const invoiceCompany = invoice._companyId || company;
               const invoicePdfId = getInvoicePdfId(invoice);
@@ -439,9 +438,6 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
                 <TableCell className="text-right">{invoice.TOTAL_SIN_IMPUESTOS == null ? 'No informado' : formatCurrency(invoice.TOTAL_SIN_IMPUESTOS)}</TableCell>
                 <TableCell className="text-right">{invoice.TOTAL_BONIFICADO == null ? 'No informado' : formatCurrency(invoice.TOTAL_BONIFICADO)}</TableCell>
                 <TableCell className="text-right font-semibold">{invoice.TOTAL == null ? 'No informado' : formatCurrency(invoice.TOTAL)}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  GVA14: {invoice.ID_GVA14 ?? '-'} | GVA12: {invoice.ID_GVA12 ?? '-'} | GVA23: {invoice.ID_GVA23 ?? '-'} | GVA38: {invoice.ID_GVA38 ?? '-'}
-                </TableCell>
                 <TableCell className="text-right">
                   <Button
                     type="button"
@@ -462,7 +458,7 @@ export function TangoInvoicesTab({ clients }: { clients: Client[] }) {
               </TableRow>;
             }) : (
               <TableRow>
-                <TableCell colSpan={13} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={12} className="h-28 text-center text-muted-foreground">
                   {hasSearched ? 'No se encontraron comprobantes con esos filtros.' : 'Elegí rango, compania y consulta Tango.'}
                 </TableCell>
               </TableRow>
