@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,8 +18,18 @@ import { claimProspect, createProspect, getProspects, updateProspect } from '../
 import type { Prospect, ProspectStatus } from '../lib/types';
 import { LoadingScreen } from './LoadingScreen';
 
-type ProspectFilter = 'mine' | 'free' | 'all';
+type ProspectFilter = 'mine' | 'free' | 'claims' | 'active' | 'converted' | 'lost' | 'all';
 const statusOptions: ProspectStatus[] = ['Nuevo', 'Contactado', 'Calificado', 'No Próspero', 'Convertido'];
+
+const prospectFilters: Array<{ id: ProspectFilter; label: string }> = [
+  { id: 'mine', label: 'Mios' },
+  { id: 'free', label: 'Libres' },
+  { id: 'claims', label: 'Reclamos' },
+  { id: 'active', label: 'Activos' },
+  { id: 'converted', label: 'Convertidos' },
+  { id: 'lost', label: 'No prosperos' },
+  { id: 'all', label: 'Todos' },
+];
 
 function formatDate(value?: string) {
   if (!value) return '-';
@@ -33,6 +44,28 @@ function getStatusStyle(status: string) {
   if (status === 'Contactado') return styles.statusContacted;
   if (status.includes('No')) return styles.statusLost;
   return styles.statusNew;
+}
+
+function isLostProspect(prospect: Prospect) {
+  return String(prospect.status || '').includes('No');
+}
+
+function isConvertedProspect(prospect: Prospect) {
+  return prospect.status === 'Convertido';
+}
+
+function isActiveProspect(prospect: Prospect) {
+  return !isLostProspect(prospect) && !isConvertedProspect(prospect);
+}
+
+function matchesProspectFilter(prospect: Prospect, filter: ProspectFilter, currentUserId?: string) {
+  if (filter === 'mine') return Boolean(currentUserId) && prospect.ownerId === currentUserId;
+  if (filter === 'free') return !prospect.ownerId;
+  if (filter === 'claims') return Boolean(prospect.claimStatus);
+  if (filter === 'active') return isActiveProspect(prospect);
+  if (filter === 'converted') return isConvertedProspect(prospect);
+  if (filter === 'lost') return isLostProspect(prospect);
+  return true;
 }
 
 async function openLink(url: string, fallbackMessage: string) {
@@ -52,6 +85,7 @@ export function ProspectsScreen() {
   const { firebaseUser, session } = useAuth();
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [filter, setFilter] = useState<ProspectFilter>('mine');
+  const [sectorFilter, setSectorFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -87,29 +121,38 @@ export function ProspectsScreen() {
     const normalized = query.trim().toLowerCase();
     const currentUserId = session?.user.id;
 
-    const scoped = prospects.filter(prospect => {
-      if (filter === 'mine') return Boolean(currentUserId) && prospect.ownerId === currentUserId;
-      if (filter === 'free') return !prospect.ownerId;
-      return true;
-    });
+    const scoped = prospects
+      .filter(prospect => matchesProspectFilter(prospect, filter, currentUserId))
+      .filter(prospect => sectorFilter === 'all' || (prospect.sector || '').toLowerCase() === sectorFilter);
 
     const searched = normalized
       ? scoped.filter(prospect => (
         prospect.companyName?.toLowerCase().includes(normalized)
         || prospect.contactName?.toLowerCase().includes(normalized)
+        || prospect.contactEmail?.toLowerCase().includes(normalized)
+        || prospect.contactPhone?.toLowerCase().includes(normalized)
         || prospect.sector?.toLowerCase().includes(normalized)
         || prospect.ownerName?.toLowerCase().includes(normalized)
+        || prospect.claimantName?.toLowerCase().includes(normalized)
+        || prospect.notes?.toLowerCase().includes(normalized)
       ))
       : scoped;
 
     return searched.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [filter, prospects, query, session?.user.id]);
+  }, [filter, prospects, query, sectorFilter, session?.user.id]);
 
-  const counts = useMemo(() => ({
-    mine: prospects.filter(prospect => prospect.ownerId === session?.user.id).length,
-    free: prospects.filter(prospect => !prospect.ownerId).length,
-    all: prospects.length,
-  }), [prospects, session?.user.id]);
+  const counts = useMemo(() => {
+    return prospectFilters.reduce((acc, item) => {
+      acc[item.id] = prospects.filter(prospect => matchesProspectFilter(prospect, item.id, session?.user.id)).length;
+      return acc;
+    }, {} as Record<ProspectFilter, number>);
+  }, [prospects, session?.user.id]);
+
+  const sectors = useMemo(() => {
+    return Array.from(new Set(prospects.map(prospect => prospect.sector?.trim()).filter(Boolean) as string[]))
+      .sort((a, b) => a.localeCompare(b))
+      .slice(0, 12);
+  }, [prospects]);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -222,13 +265,40 @@ export function ProspectsScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Prospectos</Text>
             <Text style={styles.subtitle}>{visibleProspects.length} visibles en esta vista.</Text>
-            <View style={styles.filterRow}>
-              <FilterButton active={filter === 'mine'} label={`Mios ${counts.mine}`} onPress={() => setFilter('mine')} />
-              <FilterButton active={filter === 'free'} label={`Libres ${counts.free}`} onPress={() => setFilter('free')} />
-              <FilterButton active={filter === 'all'} label={`Todos ${counts.all}`} onPress={() => setFilter('all')} />
-            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+              {prospectFilters.map(item => (
+                <FilterButton
+                  key={item.id}
+                  active={filter === item.id}
+                  label={`${item.label} ${counts[item.id] ?? 0}`}
+                  onPress={() => setFilter(item.id)}
+                />
+              ))}
+            </ScrollView>
+            {!!sectors.length && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                <Pressable
+                  onPress={() => setSectorFilter('all')}
+                  style={[styles.sectorChip, sectorFilter === 'all' && styles.sectorChipActive]}
+                >
+                  <Text style={[styles.sectorChipText, sectorFilter === 'all' && styles.sectorChipTextActive]}>Todos los sectores</Text>
+                </Pressable>
+                {sectors.map(sectorName => {
+                  const normalizedSector = sectorName.toLowerCase();
+                  return (
+                    <Pressable
+                      key={sectorName}
+                      onPress={() => setSectorFilter(normalizedSector)}
+                      style={[styles.sectorChip, sectorFilter === normalizedSector && styles.sectorChipActive]}
+                    >
+                      <Text style={[styles.sectorChipText, sectorFilter === normalizedSector && styles.sectorChipTextActive]}>{sectorName}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
             <TextInput
-              placeholder="Buscar prospecto"
+              placeholder="Buscar prospecto, contacto o sector"
               placeholderTextColor="#94a3b8"
               style={styles.search}
               value={query}
@@ -253,6 +323,7 @@ export function ProspectsScreen() {
 
             {!!item.contactName && <Text style={styles.meta}>Contacto: {item.contactName}</Text>}
             {!!item.ownerName && <Text style={styles.meta}>Asesor: {item.ownerName}</Text>}
+            {!item.ownerId && <Text style={styles.freeBadge}>Libre para reclamar</Text>}
             {!!item.claimStatus && <Text style={styles.claim}>Reclamo pendiente: {item.claimantName || '-'}</Text>}
             {!!item.notes && <Text style={styles.notes}>{item.notes}</Text>}
 
@@ -389,15 +460,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   filterRow: {
-    flexDirection: 'row',
     gap: 8,
+    paddingRight: 18,
   },
   filterButton: {
-    flex: 1,
     alignItems: 'center',
     borderRadius: 999,
     borderWidth: 1,
     borderColor: '#cbd5e1',
+    paddingHorizontal: 12,
     paddingVertical: 9,
   },
   filterButtonActive: {
@@ -410,6 +481,26 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   filterTextActive: {
+    color: '#ffffff',
+  },
+  sectorChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  sectorChipActive: {
+    borderColor: '#2563eb',
+    backgroundColor: '#2563eb',
+  },
+  sectorChipText: {
+    color: '#1d4ed8',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  sectorChipTextActive: {
     color: '#ffffff',
   },
   search: {
@@ -474,6 +565,17 @@ const styles = StyleSheet.create({
     color: '#92400e',
     fontSize: 12,
     fontWeight: '900',
+  },
+  freeBadge: {
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: '#dcfce7',
+    color: '#166534',
+    fontSize: 11,
+    fontWeight: '900',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   status: {
     overflow: 'hidden',
