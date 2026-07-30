@@ -20,8 +20,8 @@ import {
   Briefcase,
   TrendingDown,
   Clock,
-  FileDown, // 🟢 IMPORTACIÓN NUEVA
-  Users as UsersIcon // 🟢 IMPORTACIÓN NUEVA
+  FileDown,
+  Users as UsersIcon
 } from 'lucide-react';
 import type { Opportunity, Client, ClientActivity, User, Invoice, PaymentEntry } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
@@ -80,7 +80,6 @@ interface TaskSectionProps {
     usersMap: Record<string, User>;
 }
 
-// 🟢 CORRECCIÓN: Agregada la barra en '@/components...'
 const DynamicMonthYearPicker = dynamic(() => import('@/components/ui/month-year-picker').then(mod => mod.MonthYearPicker), {
   ssr: false,
   loading: () => <Skeleton className="h-10 w-[260px]" />,
@@ -210,7 +209,6 @@ export default function DashboardPage() {
   const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   
-  // 🟢 ESTADO PARA DESCARGA DE PDF
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const tasksSectionRef = useRef<HTMLDivElement>(null);
@@ -452,7 +450,6 @@ export default function DashboardPage() {
       }
   };
 
-  // 🟢 FUNCIONES DE REPORTE PDF
   const handleDownloadMyReport = async () => {
     if (!userInfo) return;
     setIsGeneratingPdf(true);
@@ -685,7 +682,6 @@ export default function DashboardPage() {
     )}
     <div className="flex flex-col h-full">
       <Header title="Panel">
-        {/* 🟢 BOTONES DE REPORTE */}
         <div className="flex gap-2 items-center mr-2">
             <Button 
                 variant="outline" 
